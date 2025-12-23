@@ -40,9 +40,9 @@
         "./agents/team-lead.md",
         "./agents/stakeholder.md"
       ],
-      "rules": [
-        "./rules/workflow.md",
-        "./rules/task-folder-organization.md"
+      "skills": [
+        "./skills/workflow.md",
+        "./skills/task-folder-organization.md"
       ]
     }
   ]

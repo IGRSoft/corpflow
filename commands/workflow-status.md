@@ -88,5 +88,5 @@ Escalation: D → T → A → P → USER
 
 ## Related
 
-- [Workflow System](../rules/workflow.md) - Complete workflow rules
+- [Workflow System](../skills/workflow.md) - Complete workflow documentation
 - [workflow-engineer](../agents/workflow-engineer.md) - Troubleshooting

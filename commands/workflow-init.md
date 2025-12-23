@@ -108,6 +108,6 @@ After initialization:
 
 ## Related
 
-- [Workflow System](../rules/workflow.md) - Complete workflow rules
-- [Task Folder Organization](../rules/task-folder-organization.md) - Folder structure
+- [Workflow System](../skills/workflow.md) - Complete workflow documentation
+- [Task Folder Organization](../skills/task-folder-organization.md) - Folder structure
 - [workflow-engineer](../agents/workflow-engineer.md) - Troubleshooting
