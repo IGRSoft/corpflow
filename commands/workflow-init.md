@@ -1,0 +1,113 @@
+# Workflow Init Command
+
+Initialize a new workflow task with proper folder structure, state management, and TodoWrite integration.
+
+## Usage
+
+```
+/workflow-init "Task Title" [options]
+```
+
+## Options
+
+- `--priority [High|Medium|Low]` - Task priority (default: Medium)
+- `--platform [iOS|macOS|All|...]` - Target platform (default: All)
+- `--mode [async|sync]` - Execution mode (default: async)
+- `--fast` - Use fast workflow (skip P3 approval gate)
+
+## Examples
+
+```
+/workflow-init "Add dark mode support"
+/workflow-init "Fix login crash" --priority High --platform iOS
+/workflow-init "Refactor database layer" --fast
+```
+
+## What This Command Does
+
+1. **Creates Task Folder**
+   - Location: `tasks/YYYYMMDD-task-title/`
+   - Creates `images/` subdirectory for visual assets
+
+2. **Initializes task-state.json**
+   ```json
+   {
+     "task_id": "YYYYMMDD-task-title",
+     "title": "Task Title",
+     "state": { "current": "planning:preparing", "statusCode": "0", "agent": "P" },
+     "priority": "medium",
+     "platform": "all",
+     "retries": { "P": 0, "A": 0, "T": 0, "D": 0, "Q": 0, "W": 0, "F": 0, "S": 0, "max": 3 }
+   }
+   ```
+
+3. **Creates planning.md Template**
+   - Problem statement section
+   - Requirements (functional and non-functional)
+   - Acceptance criteria
+   - Success metrics
+   - Constraints and dependencies
+
+4. **Initializes TodoWrite**
+   ```typescript
+   TodoWrite({
+     todos: [
+       { content: "P1: Planning", status: "in_progress", activeForm: "Planning task requirements" },
+       { content: "A0: Architecture", status: "pending", activeForm: "Architecting solution" },
+       { content: "T0: Team Lead", status: "pending", activeForm: "Coordinating team" },
+       { content: "D0: Development", status: "pending", activeForm: "Implementing code" },
+       { content: "Q0: QA Testing", status: "pending", activeForm: "Testing solution" },
+       { content: "W0: Documentation", status: "pending", activeForm: "Writing technical documentation" },
+       { content: "F0: Finalization", status: "pending", activeForm: "Finalizing release" },
+       { content: "S0: Stakeholder", status: "pending", activeForm: "Awaiting approval" }
+     ]
+   });
+   ```
+
+5. **Starts Planning Phase**
+   - Prompts for requirements gathering
+   - Guides through planning.md completion
+
+## Workflow Modes
+
+### Standard Workflow
+- Full 8-stage process: P → A → T → D → Q → W → F → S
+- Stops at P3 for user approval before continuing
+- Use for: Major features, architectural changes, security-sensitive work
+
+### Fast Workflow (`--fast`)
+- Same 8 stages but skips P3 approval gate
+- Planning auto-approves and continues to Architecture
+- Use for: Trusted tasks, bug fixes, well-defined features
+
+### Quick Workflow (3 stages)
+- Use `micro:` or `quick:` triggers instead
+- P → D → Q only
+- Use for: Small fixes, simple features
+
+## Output
+
+```
+Workflow Initiated (Standard)
+
+Task: Add dark mode support
+Task ID: 20251223-add-dark-mode-support
+Location: tasks/20251223-add-dark-mode-support/
+Mode: Standard (will pause at P3 for approval)
+
+I've initiated the workflow. Starting planning...
+```
+
+## Next Steps
+
+After initialization:
+1. Complete planning.md with requirements and acceptance criteria
+2. P3 approval gate (standard workflow) or auto-continue (fast workflow)
+3. Architecture stage begins
+4. Continue through remaining stages
+
+## Related
+
+- [Workflow System](../rules/workflow.md) - Complete workflow rules
+- [Task Folder Organization](../rules/task-folder-organization.md) - Folder structure
+- [workflow-engineer](../agents/workflow-engineer.md) - Troubleshooting

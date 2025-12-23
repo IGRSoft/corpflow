@@ -1,0 +1,49 @@
+{
+  "name": "company-workflow",
+  "owner": {
+    "name": "igrsoft",
+    "url": "https://github.com/igrsoft"
+  },
+  "metadata": {
+    "description": "Comprehensive 8-stage workflow system for task management with TodoWrite integration, stage transitions, and structured persistence",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "company-workflow",
+      "source": "./",
+      "description": "8-stage workflow system (P→A→T→D→Q→W→F→S) with TodoWrite integration for task management, stage transitions, approval gates, error handling, and escalation chains",
+      "version": "1.0.0",
+      "author": {
+        "name": "igrsoft",
+        "url": "https://github.com/igrsoft"
+      },
+      "license": "MIT",
+      "keywords": [
+        "workflow",
+        "task-management",
+        "todowrite",
+        "project-management",
+        "agile",
+        "stages",
+        "approval-gates"
+      ],
+      "category": "workflows",
+      "strict": true,
+      "commands": [
+        "./commands/workflow-init.md",
+        "./commands/workflow-status.md"
+      ],
+      "agents": [
+        "./agents/workflow-engineer.md",
+        "./agents/project-manager.md",
+        "./agents/team-lead.md",
+        "./agents/stakeholder.md"
+      ],
+      "rules": [
+        "./rules/workflow.md",
+        "./rules/task-folder-organization.md"
+      ]
+    }
+  ]
+}
