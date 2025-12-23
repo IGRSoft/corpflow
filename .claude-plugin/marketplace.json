@@ -42,7 +42,8 @@
       ],
       "skills": [
         "./skills/workflow.md",
-        "./skills/task-folder-organization.md"
+        "./skills/task-folder-organization.md",
+        "./skills/five-whys.md"
       ]
     }
   ]
