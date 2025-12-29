@@ -70,10 +70,10 @@ fworkflow: Fix login button typo
 | 2 | error | in_progress |
 | 3 | done | completed |
 
-## Task Folder Structure
+## Context Folder Structure
 
 ```
-tasks/YYYYMMDD-short-title/
+.context/
 ├── task-state.json          # State management
 ├── planning.md              # P stage
 ├── analyzing.md             # A stage

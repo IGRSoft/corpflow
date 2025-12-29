@@ -234,9 +234,11 @@ S → F → Q → D → T → A → P → USER
 
 ## task-state.json Structure
 
+Located at `.context/task-state.json`:
+
 ```json
 {
-  "task_id": "20250102-example-task",
+  "task_id": "current-task",
   "title": "Example Task",
   "created_date": "2025-01-02T10:00:00Z",
   "updated_date": "2025-01-02T10:30:00Z",
@@ -299,7 +301,7 @@ Tasks wait for dependencies to complete (F3 or S1):
 ## Best Practices
 
 ### DO
-- Create task folder before any work
+- Create `.context/` folder before any work
 - Initialize TodoWrite at task start
 - Update TodoWrite at every stage transition
 - Keep task-state.json synchronized

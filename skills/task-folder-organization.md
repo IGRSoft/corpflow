@@ -10,61 +10,39 @@ This rule establishes the required organizational structure for tasks, ensuring 
 
 ## The Rule
 
-**Every task MUST have its own dedicated folder** with a standardized structure and naming convention.
+**Every project MUST have a `.context/` folder** for workflow artifacts with a standardized structure.
 
-### Why Dedicated Folders?
+### Why `.context/` Folder?
 
-1. **Isolation**: Each task's documentation, artifacts, and history remain separate
+1. **Simplicity**: Single location for all workflow artifacts
 2. **Traceability**: Complete audit trail from planning through deployment
 3. **Context Preservation**: Future developers can understand decision-making process
 4. **State Management**: Clear tracking of progress and completion status
-5. **Searchability**: Organized folder structure enables quick location of past work
+5. **Git Integration**: `.context/` can be gitignored or committed as needed
 
-## Naming Convention
+## Location
 
-### Format
-
-```
-YYYYMMDD-short-title/
-```
-
-### Components
-
-1. **Date (YYYYMMDD)**: Creation date in ISO format
-   - Example: `20251123` for November 23, 2025
-
-2. **Hyphen**: Single hyphen separator (`-`)
-
-3. **Short Title**: Concise, descriptive title
-   - Use kebab-case (lowercase with hyphens)
-   - Maximum 3-5 words
-   - Describe WHAT, not HOW
-
-### Good Examples
+The `.context/` folder is located at the project root:
 
 ```
-20251123-fix-mcp-config
-20251120-user-authentication
-20251118-payment-gateway-integration
-```
-
-### Bad Examples
-
-```
-fix-mcp              # No date
-20251123_fix_mcp     # Wrong separator (underscores)
-20251123-Fix-MCP     # Not kebab-case
-task-001             # Not descriptive, no date
+project-root/
+├── .context/           # Workflow artifacts
+│   ├── task-state.json
+│   ├── planning.md
+│   └── images/
+├── src/
+├── tests/
+└── ...
 ```
 
 ## Folder Structure
 
 ### Flat Layout
 
-All markdown files are stored directly in the task folder root (no subfolders except for images):
+All markdown files are stored directly in `.context/` (no subfolders except for images):
 
 ```
-tasks/YYYYMMDD-short-title/
+.context/
 ├── task-state.json          # State management (single source of truth)
 ├── planning.md              # Requirements, acceptance criteria (P stage)
 ├── analyzing.md             # Technical design, architecture (A stage)
@@ -87,7 +65,7 @@ State management and metadata tracking:
 
 ```json
 {
-  "task_id": "YYYYMMDD-short-title",
+  "task_id": "current-task",
   "title": "Human Readable Task Title",
   "created_date": "YYYY-MM-DD",
   "execution_mode": "async",
@@ -131,19 +109,19 @@ The only subdirectory - contains visual references, mockups, screenshots, and us
 
 ## User-Attached Images
 
-When a user attaches images during a workflow task, copy them to the task's `images/` folder.
+When a user attaches images during a workflow task, copy them to `.context/images/`.
 
 ### Image Handling Process
 
 1. **Detect attached images**: Screenshots, mockups, diagrams
-2. **Copy to task folder**: `tasks/YYYYMMDD-task-name/images/`
+2. **Copy to context folder**: `.context/images/`
 3. **Use descriptive names**: `login-screen-mockup.png`, `error-screenshot-01.png`
 4. **Reference in documentation**: Link to images in markdown files
 
 ### Naming Convention for Images
 
 ```
-images/
+.context/images/
 ├── mockup-login-screen.png
 ├── screenshot-error-state.png
 ├── diagram-architecture.png
@@ -154,7 +132,7 @@ images/
 
 ### Flat Structure by Stage
 
-Files are named by **workflow stage** and stored in the task folder root:
+Files are named by **workflow stage** and stored in `.context/`:
 
 | File | Stage | Owner |
 |------|-------|-------|
@@ -184,7 +162,7 @@ All markdown files should include:
 ### Example 1: Simple Bug Fix
 
 ```
-tasks/20251123-fix-login-timeout/
+.context/
 ├── task-state.json
 ├── planning.md
 ├── development.md
@@ -194,7 +172,7 @@ tasks/20251123-fix-login-timeout/
 ### Example 2: Feature Development
 
 ```
-tasks/20251120-user-authentication/
+.context/
 ├── task-state.json
 ├── planning.md
 ├── analyzing.md
@@ -211,7 +189,7 @@ tasks/20251120-user-authentication/
 ### Example 3: Task with Errors
 
 ```
-tasks/20251125-api-integration/
+.context/
 ├── task-state.json
 ├── planning.md
 ├── analyzing.md
@@ -225,18 +203,17 @@ tasks/20251125-api-integration/
 
 ### DON'T
 
-1. **No dedicated folder**: Documenting in random locations
-2. **Inconsistent naming**: Different formats for different tasks
-3. **Missing task-state.json**: No way to track progress
-4. **Creating subfolders**: Keep all .md files in task root (except images/)
-5. **Poor naming**: `task-1`, `temp-fix`, `test-123`
-6. **Ignoring errors**: Always create error.md when escalation is needed
+1. **No .context folder**: Documenting in random locations
+2. **Missing task-state.json**: No way to track progress
+3. **Creating subfolders**: Keep all .md files in .context/ root (except images/)
+4. **Ignoring errors**: Always create error.md when escalation is needed
+5. **Multiple context folders**: Only one .context/ per project
 
 ### DO
 
-1. **Always create folder**: Even for small tasks
-2. **Follow naming convention**: YYYYMMDD-short-title
-3. **Document decisions**: Explain WHY, not just WHAT
-4. **Update state**: Keep task-state.json current
-5. **Flat structure**: All .md files in task root (images/ only subdirectory)
-6. **Log errors**: Create error.md when issues require escalation
+1. **Always create .context/**: Even for small tasks
+2. **Document decisions**: Explain WHY, not just WHAT
+3. **Update state**: Keep task-state.json current
+4. **Flat structure**: All .md files in .context/ (images/ only subdirectory)
+5. **Log errors**: Create error.md when issues require escalation
+6. **Clean up**: Archive or clear .context/ when starting new tasks
