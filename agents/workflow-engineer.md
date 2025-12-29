@@ -14,7 +14,7 @@ Specialist for workflow system operations including initialization, state manage
 
 ### Workflow Initialization
 - Detect workflow triggers (`workflow:` / `fworkflow:`)
-- Create task folder structure
+- Create `.context/` folder structure
 - Initialize TodoWrite with mandatory stage code format
 - Set up task-state.json with proper structure
 - Auto-detect priority, platform, and dependencies from task description
@@ -131,7 +131,7 @@ TodoWrite({
 
 **Solutions**:
 - P3 is an approval gate for standard workflows
-- User must review `task/planning.md` and approve
+- User must review `.context/planning.md` and approve
 - After approval: Update to `P3: Planning Approved`, transition to A1
 - For fast workflows (`fworkflow:`): This gate is skipped automatically
 

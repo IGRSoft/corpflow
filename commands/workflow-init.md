@@ -25,14 +25,14 @@ Initialize a new workflow task with proper folder structure, state management, a
 
 ## What This Command Does
 
-1. **Creates Task Folder**
-   - Location: `tasks/YYYYMMDD-task-title/`
+1. **Creates Context Folder**
+   - Location: `.context/`
    - Creates `images/` subdirectory for visual assets
 
 2. **Initializes task-state.json**
    ```json
    {
-     "task_id": "YYYYMMDD-task-title",
+     "task_id": "current-task",
      "title": "Task Title",
      "state": { "current": "planning:preparing", "statusCode": "0", "agent": "P" },
      "priority": "medium",
@@ -91,8 +91,7 @@ Initialize a new workflow task with proper folder structure, state management, a
 Workflow Initiated (Standard)
 
 Task: Add dark mode support
-Task ID: 20251223-add-dark-mode-support
-Location: tasks/20251223-add-dark-mode-support/
+Location: .context/
 Mode: Standard (will pause at P3 for approval)
 
 I've initiated the workflow. Starting planning...
