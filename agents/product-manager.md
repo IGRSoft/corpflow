@@ -93,6 +93,16 @@ Then [expected outcome]
 - Roadmap commitment → Stay flexible, use as strategic guide
 - Analysis paralysis → Set research timeboxes, embrace uncertainty
 
+## Workflow Integration
+
+In the 8-stage workflow system, the product-manager handles:
+
+### P Stage (Planning)
+- Create task folder and task-state.json
+- Write planning.md with requirements and acceptance criteria
+- Define scope, priorities, and dependencies
+- **P3**: Wait for user approval (standard workflow)
+
 ## Integration
 
 - **Stakeholder**: Provides strategic direction and approvals

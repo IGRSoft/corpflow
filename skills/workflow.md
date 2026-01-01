@@ -51,12 +51,12 @@ P → A → T → D → Q → W → F → S
 
 | Code | Stage | Agent | Purpose | Artifact |
 |------|-------|-------|---------|----------|
-| P | Planning | project-manager | Define requirements | planning.md |
-| A | Architecture | architect-review | Design solution | analyzing.md |
+| P | Planning | product-manager | Define requirements | planning.md |
+| A | Architecture | software-architector | Design solution | analyzing.md |
 | T | Team Lead | team-lead | Coordinate approach | task-state.json |
 | D | Development | [language-pro] | Implement solution | development.md |
-| Q | QA | test-automator | Test and validate | testing.md |
-| W | Documentation | docs-architect | Write technical docs | documentation.md |
+| Q | QA | qa-engineer | Test and validate | testing.md |
+| W | Documentation | technical-writer | Write technical docs | documentation.md |
 | F | Finalization | project-manager | Prepare release | complete.md |
 | S | Stakeholder | stakeholder | Final approval | Terminal state |
 
@@ -143,12 +143,12 @@ TodoWrite({
 
 ## Agent Responsibilities
 
-### Planning (P) - project-manager
+### Planning (P) - product-manager
 - Create task folder and task-state.json
 - Write planning.md with requirements, acceptance criteria
 - **P3**: Wait for user approval (standard) or auto-continue (fast)
 
-### Architecture (A) - architect-review
+### Architecture (A) - software-architector
 - Review requirements, design technical solution
 - Create analyzing.md with architecture decisions
 - **Skip path**: A0 → T0 for simple tasks (no architectural impact)
@@ -164,13 +164,13 @@ TodoWrite({
 - **D2**: Run code formatter on modified files (pre-D3 check)
 - **D3**: Verify build passes, complete implementation notes
 
-### QA (Q) - test-automator
+### QA (Q) - qa-engineer
 - **Q0**: Analyze requirements, discover existing tests, create test plan
 - **Q1**: Implement/update tests, execute test suite
 - **Q2**: Handle test failures (retry or escalate)
 - **Q3**: All tests pass, document results
 
-### Documentation (W) - docs-architect
+### Documentation (W) - technical-writer
 - **W0**: Analyze artifacts, discover documentation needing updates
 - **W1**: Update code docs, README, ARCHITECTURE files
 - **W3**: All documentation updated

@@ -52,12 +52,12 @@ fworkflow: Fix login button typo
 
 | Code | Stage | Agent | Purpose |
 |------|-------|-------|---------|
-| P | Planning | project-manager | Define requirements |
-| A | Architecture | architect-review | Design solution |
+| P | Planning | product-manager | Define requirements |
+| A | Architecture | software-architector | Design solution |
 | T | Team Lead | team-lead | Coordinate approach |
 | D | Development | [language-pro] | Implement solution |
-| Q | QA | test-automator | Test and validate |
-| W | Documentation | docs-architect | Write technical docs |
+| Q | QA | qa-engineer | Test and validate |
+| W | Documentation | technical-writer | Write technical docs |
 | F | Finalization | project-manager | Prepare release |
 | S | Stakeholder | stakeholder | Final approval |
 
@@ -89,9 +89,13 @@ fworkflow: Fix login button typo
 
 ### Agents
 - `workflow-engineer` - Workflow system expert
-- `project-manager` - Planning and finalization
-- `team-lead` - Team coordination
-- `stakeholder` - Business approval
+- `product-manager` - Planning (P stage)
+- `project-manager` - Finalization (F stage)
+- `software-architector` - Architecture (A stage)
+- `team-lead` - Team coordination (T stage)
+- `qa-engineer` - QA testing (Q stage)
+- `technical-writer` - Documentation (W stage)
+- `stakeholder` - Business approval (S stage)
 
 ### Commands
 - `/workflow-init` - Initialize a new workflow task
