@@ -43,10 +43,8 @@
       "skills": [
         "./skills/workflow.md",
         "./skills/task-folder-organization.md",
-        "./skills/five-whys.md"
-      ],
-      "rules": [
-        "./rules/workflow-triggers.md"
+        "./skills/five-whys.md",
+        "./skills/workflow-triggers.md"
       ]
     }
   ]
