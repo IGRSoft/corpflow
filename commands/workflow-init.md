@@ -14,6 +14,7 @@ Initialize a new workflow task with proper folder structure, state management, a
 - `--platform [iOS|macOS|All|...]` - Target platform (default: All)
 - `--mode [async|sync]` - Execution mode (default: async)
 - `--fast` - Use fast workflow (skip P3 approval gate)
+- `--quick` - Use quick 3-stage workflow (P → D → Q only)
 
 ## Examples
 
@@ -21,6 +22,7 @@ Initialize a new workflow task with proper folder structure, state management, a
 /workflow-init "Add dark mode support"
 /workflow-init "Fix login crash" --priority High --platform iOS
 /workflow-init "Refactor database layer" --fast
+/workflow-init "Add form validation" --quick
 ```
 
 ## What This Command Does
@@ -80,10 +82,21 @@ Initialize a new workflow task with proper folder structure, state management, a
 - Planning auto-approves and continues to Architecture
 - Use for: Trusted tasks, bug fixes, well-defined features
 
-### Quick Workflow (3 stages)
-- Use `micro:` or `quick:` triggers instead
-- P → D → Q only
-- Use for: Small fixes, simple features
+### Quick Workflow (`--quick`)
+- 3-stage process: P → D → Q only
+- Skips Architecture (A), Team Lead (T), Documentation (W), Finalization (F), Stakeholder (S)
+- Use for: Small fixes, simple features, focused changes
+
+```typescript
+// Quick workflow TodoWrite initialization
+TodoWrite({
+  todos: [
+    { content: "P1: Planning", status: "in_progress", activeForm: "Planning task requirements" },
+    { content: "D0: Development", status: "pending", activeForm: "Implementing code" },
+    { content: "Q0: QA Testing", status: "pending", activeForm: "Testing solution" }
+  ]
+});
+```
 
 ## Output
 

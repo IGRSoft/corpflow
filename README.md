@@ -27,16 +27,35 @@ claude plugins add /path/to/company-workflow
 
 ### Workflow Triggers
 
+Simply prefix your task with one of these triggers:
+
 ```
 workflow: [task description]   # Standard - stops at P3 for user approval
 fworkflow: [task description]  # Fast - skips P3 approval, auto-continues
+quick: [task description]      # 3-stage workflow: P → D → Q
+micro: [task description]      # Direct execution, no workflow
 ```
+
+When Claude detects these prefixes, it automatically invokes `/company-workflow:workflow-init` to set up the workflow context, TodoWrite integration, and stage management.
 
 ### Examples
 
 ```
 workflow: Add dark mode to settings
 fworkflow: Fix login button typo
+workflow: /apple-developer:code-legacy-modernize migrate @StateObject to @Environment
+quick: Add validation to login form
+```
+
+### Combining with Other Commands
+
+You can embed slash commands within workflow triggers. The workflow system will:
+1. Set up the context and planning
+2. Execute the embedded command during the appropriate stage
+
+```
+workflow: /apple-developer:code-refactor src/Views/SettingsView.swift
+fworkflow: /code-review PR #123
 ```
 
 ## Workflow Tiers
@@ -101,9 +120,13 @@ fworkflow: Fix login button typo
 - `/workflow-init` - Initialize a new workflow task
 - `/workflow-status` - Display current task status
 
-### Rules
-- `workflow.md` - Complete workflow system rules
+### Skills
+- `workflow.md` - Complete workflow system documentation
 - `task-folder-organization.md` - Task folder structure
+- `five-whys.md` - Root cause analysis technique
+
+### Rules
+- `workflow-triggers.md` - Automatic trigger detection and workflow-init invocation
 
 ### Tools
 - `setup-task.py` - Python script for task initialization
