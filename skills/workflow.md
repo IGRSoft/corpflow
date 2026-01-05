@@ -2,6 +2,39 @@
 
 Single source of truth for task workflow management using TodoWrite for UI visibility and task-state.json for structured persistence.
 
+## CRITICAL: Trigger Behavior (MUST EXECUTE)
+
+**When you see user input starting with these prefixes, you MUST immediately invoke the corresponding slash command using the SlashCommand tool:**
+
+| User Input Prefix | SlashCommand to Invoke |
+|-------------------|------------------------|
+| `workflow: [task]` | `/company-workflow:workflow-init "[task]"` |
+| `fworkflow: [task]` | `/company-workflow:workflow-init "[task]" --fast` |
+| `quick: [task]` | `/company-workflow:workflow-init "[task]" --quick` |
+
+**Execution Order:**
+1. **Detect prefix** - Check if user message starts with `workflow:`, `fworkflow:`, or `quick:`
+2. **Extract task** - Everything after the prefix (including any embedded slash commands like `/apple-developer:...`)
+3. **Invoke workflow-init FIRST** - Use SlashCommand tool to run `/company-workflow:workflow-init "[extracted task]"`
+4. **Workflow handles the rest** - The workflow-init command sets up the context, then orchestrates the stages including any embedded commands
+
+**Example Flow:**
+```
+User: workflow: /apple-developer:code-legacy-modernize migrate @StateObject to @Environment
+
+Claude MUST:
+1. Detect "workflow:" prefix
+2. Extract task: "/apple-developer:code-legacy-modernize migrate @StateObject to @Environment"
+3. Invoke: SlashCommand("/company-workflow:workflow-init \"/apple-developer:code-legacy-modernize migrate @StateObject to @Environment\"")
+4. Workflow-init creates .context/, task-state.json, planning.md
+5. Planning stage (product-manager) captures requirements
+6. Architecture stage can then invoke /apple-developer:code-legacy-modernize
+```
+
+**For `micro: [task]`**: No workflow initialization. Execute the task directly without TodoWrite or stage management.
+
+---
+
 ## Quick Start: Triggers
 
 Start workflows with these prefixes:
