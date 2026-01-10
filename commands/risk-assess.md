@@ -1,0 +1,225 @@
+# Risk Assessment Command
+
+Identify, assess, and document project risks with mitigation strategies.
+
+## Usage
+
+```
+/risk-assess
+/risk-assess "Feature or project description"
+/risk-assess --update
+/risk-assess --report
+```
+
+## Options
+
+- `--update` - Update existing risk register
+- `--report` - Generate risk report
+- `--category [technical|schedule|resource|external]` - Filter by category
+- `--threshold [low|medium|high]` - Show risks above threshold
+
+## Examples
+
+```
+/risk-assess
+/risk-assess "SSO Implementation Project"
+/risk-assess --report --threshold high
+```
+
+## Output Format
+
+```markdown
+# Risk Assessment: SSO Implementation
+
+## Risk Summary
+
+| Category | High | Medium | Low | Total |
+|----------|------|--------|-----|-------|
+| Technical | 2 | 3 | 1 | 6 |
+| Schedule | 1 | 2 | 0 | 3 |
+| Resource | 0 | 2 | 1 | 3 |
+| External | 1 | 1 | 0 | 2 |
+| **Total** | **4** | **8** | **2** | **14** |
+
+## Risk Matrix
+
+```
+         │ Low Impact │ Med Impact │ High Impact │
+─────────┼────────────┼────────────┼─────────────┤
+High Prob│    R-08    │   R-03     │    R-01     │
+─────────┼────────────┼────────────┼─────────────┤
+Med Prob │    R-14    │ R-04, R-05 │ R-02, R-06  │
+─────────┼────────────┼────────────┼─────────────┤
+Low Prob │    R-12    │   R-09     │    R-07     │
+─────────┴────────────┴────────────┴─────────────┘
+```
+
+---
+
+## High Priority Risks 🔴
+
+### R-01: OAuth Provider API Breaking Changes
+| Attribute | Value |
+|-----------|-------|
+| Category | External |
+| Probability | High (70%) |
+| Impact | High |
+| Risk Score | 9/10 |
+| Owner | Tech Lead |
+
+**Description**: OAuth providers (Okta, Azure AD) may release breaking API changes during implementation.
+
+**Triggers**:
+- Provider announces deprecation
+- API version upgrade required
+- Authentication failures in production
+
+**Impact Analysis**:
+- 2-4 week delay if major changes
+- Potential security vulnerabilities
+- Customer trust impact
+
+**Mitigation Strategies**:
+1. **Avoid**: Abstract provider interface for easy switching
+2. **Reduce**: Subscribe to provider changelogs
+3. **Transfer**: Use well-maintained SDK libraries
+4. **Accept**: Plan contingency time in schedule
+
+**Contingency Plan**:
+- Fallback to basic auth temporarily
+- Escalate to provider support
+- Communicate delays to stakeholders
+
+**Status**: Actively monitored
+
+---
+
+### R-02: Key Developer Unavailability
+| Attribute | Value |
+|-----------|-------|
+| Category | Resource |
+| Probability | Medium (40%) |
+| Impact | High |
+| Risk Score | 7/10 |
+| Owner | Project Manager |
+
+**Description**: Lead SSO developer may become unavailable (illness, resignation, competing priorities).
+
+**Mitigation Strategies**:
+1. **Reduce**: Pair programming for knowledge sharing
+2. **Reduce**: Document decisions and implementation details
+3. **Transfer**: Cross-train backup developer
+
+**Contingency Plan**:
+- Backup developer takes over
+- Extend timeline by 1-2 weeks
+- Bring in contractor if needed
+
+**Status**: Mitigation in progress
+
+---
+
+## Medium Priority Risks ⚠️
+
+### R-03: Integration Testing Delays
+| Attribute | Value |
+|-----------|-------|
+| Category | Technical |
+| Probability | High (60%) |
+| Impact | Medium |
+| Risk Score | 6/10 |
+
+**Description**: Integration testing with enterprise identity providers may take longer than estimated.
+
+**Mitigation**:
+- Set up test tenants early
+- Create mock providers for development
+- Parallel testing with multiple providers
+
+---
+
+### R-04: Scope Creep from Stakeholders
+| Attribute | Value |
+|-----------|-------|
+| Category | Schedule |
+| Probability | Medium (50%) |
+| Impact | Medium |
+| Risk Score | 5/10 |
+
+**Description**: Additional requirements may be added during development.
+
+**Mitigation**:
+- Clear PRD sign-off before development
+- Change control process
+- MVP-first approach
+
+---
+
+## Risk Register
+
+| ID | Risk | Category | Prob | Impact | Score | Owner | Status |
+|----|------|----------|------|--------|-------|-------|--------|
+| R-01 | OAuth API changes | External | H | H | 9 | Tech Lead | Monitor |
+| R-02 | Dev unavailability | Resource | M | H | 7 | PM | Mitigate |
+| R-03 | Testing delays | Technical | H | M | 6 | QA Lead | Mitigate |
+| R-04 | Scope creep | Schedule | M | M | 5 | PM | Mitigate |
+| R-05 | Security vulnerabilities | Technical | M | M | 5 | Security | Monitor |
+| R-06 | Performance impact | Technical | M | H | 7 | Dev Lead | Mitigate |
+| R-07 | Data migration issues | Technical | L | H | 5 | DBA | Accept |
+| R-08 | Documentation gaps | Technical | H | L | 4 | Tech Writer | Accept |
+
+---
+
+## Risk Response Summary
+
+| Response | Count | Risks |
+|----------|-------|-------|
+| Avoid | 1 | R-01 |
+| Reduce | 6 | R-02, R-03, R-04, R-05, R-06, R-08 |
+| Transfer | 2 | R-01, R-07 |
+| Accept | 3 | R-07, R-08, R-14 |
+
+---
+
+## Monitoring Plan
+
+| Risk | Trigger | Monitor Frequency | Escalation |
+|------|---------|-------------------|------------|
+| R-01 | API deprecation notice | Weekly | Immediate to Tech Lead |
+| R-02 | Resource allocation change | Daily | Within 24h to PM |
+| R-03 | Test failures > 20% | Daily | Same day to QA Lead |
+| R-06 | Response time > 500ms | Continuous | Within 1h to Dev Lead |
+
+---
+
+## Action Items
+
+| Priority | Action | Owner | Due Date |
+|----------|--------|-------|----------|
+| High | Set up OAuth provider test tenants | DevOps | Jan 10 |
+| High | Document SSO architecture decisions | Tech Lead | Jan 12 |
+| Medium | Create SSO knowledge transfer doc | Alice | Jan 15 |
+| Medium | Define change control process | PM | Jan 13 |
+```
+
+## Risk Scoring
+
+| Score | Level | Action Required |
+|-------|-------|-----------------|
+| 8-10 | Critical | Immediate mitigation |
+| 5-7 | High | Active management |
+| 3-4 | Medium | Monitor regularly |
+| 1-2 | Low | Accept and track |
+
+## Integration
+
+This command works with:
+- `/sprint-plan` - Include risk buffer
+- `/release-notes` - Document known issues
+- `/business-case` - Risk section
+
+## Related
+
+- [project-manager](../agents/project-manager.md) - Project management
+- [sprint-plan](./sprint-plan.md) - Sprint planning
+- [stakeholder](../agents/stakeholder.md) - Risk escalation
