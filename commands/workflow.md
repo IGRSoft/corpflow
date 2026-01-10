@@ -1,11 +1,11 @@
-# Workflow Init Command
+# Workflow Command
 
 Initialize a new workflow task with proper folder structure, state management, and TodoWrite integration.
 
 ## Usage
 
 ```
-/workflow-init "Task Title" [options]
+/workflow "Task Title" [options]
 ```
 
 ## Options
@@ -19,10 +19,10 @@ Initialize a new workflow task with proper folder structure, state management, a
 ## Examples
 
 ```
-/workflow-init "Add dark mode support"
-/workflow-init "Fix login crash" --priority High --platform iOS
-/workflow-init "Refactor database layer" --fast
-/workflow-init "Add form validation" --quick
+/workflow "Add dark mode support"
+/workflow "Fix login crash" --priority High --platform iOS
+/workflow "Refactor database layer" --fast
+/workflow "Add form validation" --quick
 ```
 
 ## What This Command Does
