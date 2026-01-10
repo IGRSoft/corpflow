@@ -103,9 +103,36 @@ In the 8-stage workflow system, the product-manager handles:
 - Define scope, priorities, and dependencies
 - **P3**: Wait for user approval (standard workflow)
 
+### P Stage with Design (`--with-design`)
+When design integration is enabled, Product Manager collaborates with Designer:
+
+1. **Requirements Definition** (Product Manager)
+   - Problem statement and user needs
+   - Functional and non-functional requirements
+   - Acceptance criteria and success metrics
+
+2. **Design Input** (Designer - via Task tool)
+   - UX requirements and user flow analysis
+   - Component and design system requirements
+   - Accessibility considerations
+   - Wireframe concepts (if needed)
+
+3. **Combined Output**
+   - planning.md includes both product and design requirements
+   - Design section added to planning.md template:
+   ```markdown
+   ## Design Requirements
+   ### User Experience
+   - [UX considerations]
+   ### UI Components
+   - [Component needs]
+   ### Accessibility
+   - [A11y requirements]
+   ```
+
 ## Integration
 
 - **Stakeholder**: Provides strategic direction and approvals
 - **Project Manager**: Executes on product roadmap
-- **UX Designer**: Creates user experiences
+- **Designer**: Collaborates on UX/UI planning (when `--with-design`)
 - **Architect**: Validates technical feasibility
