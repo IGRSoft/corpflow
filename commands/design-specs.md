@@ -1,0 +1,161 @@
+# Design Specifications Command
+
+Generate developer-ready design specifications for components, screens, or features.
+
+## Usage
+
+```
+/design-specs [target] [options]
+```
+
+## Options
+
+- `--format [markdown|figma|json]` - Output format (default: markdown)
+- `--platform [iOS|macOS|web|all]` - Target platform (default: all)
+- `--include-assets` - Include asset export list
+
+## Examples
+
+```
+/design-specs ProfileCard
+/design-specs "Onboarding flow" --platform iOS --include-assets
+/design-specs NavigationBar --format json
+```
+
+## What This Command Does
+
+1. **Analyzes Target**
+   - Identifies component or screen structure
+   - Maps to design system tokens
+   - Identifies platform-specific variations
+
+2. **Generates Specifications**
+   - Detailed measurements and spacing
+   - Color and typography tokens
+   - Interaction states and behaviors
+   - Responsive breakpoints
+
+3. **Creates Handoff Documentation**
+   - Developer-ready specs
+   - Asset requirements
+   - Implementation notes
+
+## Specification Template
+
+```markdown
+# Design Specifications: [Component/Screen]
+
+## Overview
+- **Component**: [Name]
+- **Version**: [Design system version]
+- **Last Updated**: [Date]
+- **Designer**: [Name/Agent]
+
+## Visual Specifications
+
+### Layout
+- Width: [value/constraint]
+- Height: [value/constraint]
+- Padding: [top, right, bottom, left]
+- Margin: [top, right, bottom, left]
+
+### Typography
+- Font: [token or specific font]
+- Size: [token or value]
+- Weight: [token or value]
+- Line Height: [token or value]
+- Color: [token]
+
+### Colors
+- Background: [token]
+- Text: [token]
+- Border: [token]
+- Accent: [token]
+
+### Spacing
+- Internal spacing: [token]
+- External spacing: [token]
+
+## States
+
+### Default
+- [Visual description]
+
+### Hover (if applicable)
+- [Visual changes]
+
+### Active/Pressed
+- [Visual changes]
+
+### Disabled
+- [Visual changes]
+- Opacity: [value]
+
+### Error (if applicable)
+- Border color: [token]
+- Helper text color: [token]
+
+## Responsive Behavior
+
+### Compact (< 375pt)
+- [Adjustments]
+
+### Regular (375-768pt)
+- [Default behavior]
+
+### Large (> 768pt)
+- [Adjustments]
+
+## Accessibility
+
+- Min touch target: 44x44pt
+- Color contrast: [ratio]
+- Screen reader label: [text]
+- Focus indicator: [description]
+
+## Animation (if applicable)
+
+- Duration: [ms]
+- Easing: [curve]
+- Properties: [what animates]
+
+## Implementation Notes
+
+- [Platform-specific considerations]
+- [Known edge cases]
+- [Dependencies]
+
+## Assets Required
+
+- [ ] [Asset name] - [format/size]
+- [ ] [Asset name] - [format/size]
+```
+
+## Platform-Specific Sections
+
+### iOS/macOS
+- SwiftUI component mapping
+- UIKit considerations
+- Dynamic Type support
+- Safe area handling
+
+### Web
+- CSS tokens
+- Breakpoint values
+- Browser support notes
+
+## Workflow Integration
+
+Use this command:
+- After design approval in P stage
+- Before D stage implementation
+- For design-to-code handoff
+- When updating existing components
+
+## Related
+
+- [designer](../agents/designer.md) - Designer agent
+- [design-review](design-review.md) - Review existing designs
+- [api-docs](api-docs.md) - API documentation generation
+
+Target: $ARGUMENTS

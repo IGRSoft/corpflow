@@ -15,14 +15,16 @@ Initialize a new workflow task with proper folder structure, state management, a
 - `--mode [async|sync]` - Execution mode (default: async)
 - `--fast` - Use fast workflow (skip P3 approval gate)
 - `--quick` - Use quick 3-stage workflow (P → D → Q only)
+- `--with-design` - Include designer in planning phase (P stage)
 
 ## Examples
 
 ```
-/workflow "Add dark mode support"
+/workflow "Add dark mode support" --with-design
 /workflow "Fix login crash" --priority High --platform iOS
 /workflow "Refactor database layer" --fast
 /workflow "Add form validation" --quick
+/workflow "Redesign settings screen" --with-design --platform iOS
 ```
 
 ## What This Command Does
@@ -98,6 +100,49 @@ TodoWrite({
 });
 ```
 
+### Design-Integrated Workflow (`--with-design`)
+- Adds designer to P stage for UX/UI planning input
+- Designer provides: user flow analysis, component requirements, accessibility considerations
+- Use for: UI features, user-facing changes, design system updates
+
+When `--with-design` is enabled:
+
+1. **P Stage Enhanced** - Product Manager + Designer collaborate:
+   - Product Manager defines requirements and acceptance criteria
+   - Designer adds UX requirements, wireframes, component needs
+   - Combined output in planning.md with design section
+
+2. **A Stage Design Alignment** - Architecture includes:
+   - UI component architecture review
+   - Design system compatibility check
+   - Animation/interaction feasibility
+
+3. **D Stage Design Support** - Developer gets:
+   - Design specifications
+   - Asset requirements
+   - Interaction behavior definitions
+
+4. **Q Stage Design QA** - Testing includes:
+   - Visual regression criteria
+   - Accessibility compliance checks
+   - Cross-platform consistency
+
+```typescript
+// Design-integrated workflow TodoWrite initialization
+TodoWrite({
+  todos: [
+    { content: "P1: Planning + Design", status: "in_progress", activeForm: "Planning requirements with design input" },
+    { content: "A0: Architecture", status: "pending", activeForm: "Architecting solution with design alignment" },
+    { content: "T0: Team Lead", status: "pending", activeForm: "Coordinating team" },
+    { content: "D0: Development", status: "pending", activeForm: "Implementing code with design specs" },
+    { content: "Q0: QA + Design QA", status: "pending", activeForm: "Testing solution and design fidelity" },
+    { content: "W0: Documentation", status: "pending", activeForm: "Writing technical documentation" },
+    { content: "F0: Finalization", status: "pending", activeForm: "Finalizing release" },
+    { content: "S0: Stakeholder", status: "pending", activeForm: "Awaiting approval" }
+  ]
+});
+```
+
 ## Output
 
 ```
@@ -123,3 +168,8 @@ After initialization:
 - [Workflow System](../skills/workflow.md) - Complete workflow documentation
 - [Task Folder Organization](../skills/task-folder-organization.md) - Folder structure
 - [workflow-engineer](../agents/workflow-engineer.md) - Troubleshooting
+- [designer](../agents/designer.md) - Designer agent for `--with-design` workflows
+- [design-review](design-review.md) - Design review command
+- [design-specs](design-specs.md) - Generate design specifications
+- [ux-flow](ux-flow.md) - Create user experience flows
+- [a11y-audit](a11y-audit.md) - Accessibility audit command
