@@ -85,6 +85,48 @@ Then [expected outcome]
 **Communication**: Write clearly, use visuals, document decisions, update proactively
 **Collaboration**: Partner with engineering early, work closely with design, enable sales/marketing
 
+## Estimation Integration
+
+When working with `/estimate` command or estimation workflows:
+
+### T-Shirt Sizing Rules
+- Use SP × 6h for hours calculation (senior developer default)
+- Include tests in each subtask with "+ tests" suffix
+- Maximum 4 weeks (~160h) per phase
+
+### Complexity Assessment
+Apply 5-factor analysis (1-5 each, 25 max):
+1. **Technical Complexity** - Algorithm difficulty, new technologies
+2. **Integration Points** - APIs, SDKs, databases affected
+3. **Risk Level** - Security, data integrity, user impact
+4. **Unknowns** - Unclear requirements, new domain
+5. **Domain Expertise** - Specialized knowledge required
+
+Overall Score Interpretation:
+- 0-10: LOW complexity
+- 11-17: MEDIUM complexity
+- 18-25: HIGH complexity
+
+### Phase Planning
+- Each phase ≤ 160 hours (4 weeks)
+- Tests integrated in subtasks, not separate phase
+- Dependencies mapped between phases
+- Buffer: 15% added to total base hours
+
+### Budget Calculation
+```
+Base Hours = Total SP × 6h
+Buffer = Base Hours × 0.15
+Total Hours = Base Hours + Buffer
+Budget = Total Hours × Hourly Rate
+```
+
+### Estimation Artifacts
+Generate or contribute to:
+- features_breakdown.csv (subtasks with SP/hours)
+- complexity_analysis.csv (5-factor scoring)
+- success_metrics.csv (KPIs, acceptance criteria)
+
 ## Anti-Patterns to Avoid
 
 - Feature factory → Focus on outcomes, measure results

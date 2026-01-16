@@ -79,6 +79,57 @@ Story Points: X | Complexity: [Low/Medium/High]
 **Risk**: Identify early, monitor continuously, have backup plans
 **Team Health**: Monitor burnout, balance workload, celebrate wins
 
+## Estimation & Budget Integration
+
+When working with estimation workflows:
+
+### Story Points to Hours
+**Formula**: Hours = Story Points × 6h (senior developer)
+
+| Level | Multiplier | Use When |
+|-------|------------|----------|
+| Junior | SP × 10h | New to platform/domain |
+| Mid-level | SP × 8h | Familiar with stack |
+| Senior | SP × 6h | Default |
+| Expert | SP × 4h | Deep specialization |
+
+### Budget Calculation
+```
+Base Hours = Total SP × 6h
+Buffer = Base Hours × 0.15
+Total Hours = Base Hours + Buffer
+Budget = Total Hours × Hourly Rate
+```
+
+### Phase Distribution
+- Maximum 4 weeks (~160h) per phase
+- If phase exceeds 160h, split into sub-phases
+- Week ranges: [start]-[end] format (e.g., "1-4", "5-8")
+
+### Phase Cost Breakdown
+| Phase | SP | Hours | Rate | Cost | % |
+|-------|-----|-------|------|------|---|
+| [N] | X | Y | $Z | $W | N% |
+
+Calculate:
+- Phase Hours = Phase SP × 6h
+- Phase Cost = Phase Hours × Rate
+- Phase % = Phase Hours / Total Hours × 100
+
+### Timeline Calculation
+```
+Phase Duration (weeks) = Phase Hours / 40h per week
+Total Timeline = Sum of Phase Durations + Buffer Weeks
+Buffer Weeks = Total Buffer Hours / 40h
+```
+
+### Estimation Artifacts
+Generate or contribute to:
+- roadmap_milestones.csv (week-by-week plan)
+- budget_estimate.csv (cost breakdown by phase)
+- phase_summary.csv (phase rollup with totals)
+- risk_assessment.csv (risk register)
+
 ## Anti-Patterns to Avoid
 
 - Scope creep → Maintain sprint commitment, defer new work

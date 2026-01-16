@@ -15,6 +15,9 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 - `--quick` - Quick estimation (T-shirt size only)
 - `--detailed` - Detailed estimation with full breakdown
 - `--compare` - Compare multiple approaches
+- `--export` - Generate 13 CSV files for Google Sheets
+- `--platform <ios|android|web>` - Platform-specific templates
+- `--multiplier <hours>` - Override SP multiplier (default: 6)
 
 ## Examples
 
@@ -78,24 +81,62 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 |------|-------------|--------|------------|
 | Token security issues | Medium | High | Security review in A stage |
 | OAuth provider changes | Low | Medium | Abstract provider interface |
+
+### Budget Calculation
+| Metric | Value |
+|--------|-------|
+| Base Hours | [SP × 6h] |
+| Buffer (15%) | [Base × 0.15] |
+| Total Hours | [Base + Buffer] |
+| Budget | $[Total × Rate] |
 ```
 
 ## Sizing Guide
 
 ### T-Shirt Sizes
-| Size | Story Points | Typical Effort | Workflow |
-|------|--------------|----------------|----------|
-| XS | 1 | < 2 hours | `micro:` |
-| S | 2-3 | 2-4 hours | `quick:` |
-| M | 5 | 1-2 days | `workflow:` |
-| L | 8 | 3-5 days | `workflow:` |
-| XL | 13+ | 1-2 weeks | `workflow:` (consider splitting) |
+| Size | Story Points | Hours (SP × 6h) | Workflow |
+|------|--------------|-----------------|----------|
+| XS | 1 | 6 | `micro:` |
+| S | 2-3 | 12-18 | `quick:` |
+| M | 5 | 30 | `workflow:` |
+| L | 8-10 | 48-60 | `workflow:` |
+| XL | 13+ | 78+ | `workflow:` (consider splitting) |
 
 ### Complexity Factors
 - **Technical Complexity**: Algorithm difficulty, new technologies
 - **Integration Points**: APIs, services, databases affected
 - **Risk Level**: Security, data integrity, user impact
 - **Unknowns**: Unclear requirements, new domain
+- **Domain Expertise**: Specialized knowledge required (5 = niche specialty)
+
+### Story Points to Hours
+
+**Formula**: Hours = Story Points × 6h (senior developer)
+
+| Level | Multiplier |
+|-------|------------|
+| Junior | SP × 10h |
+| Mid-level | SP × 8h |
+| Senior | SP × 6h (default) |
+| Expert | SP × 4h |
+
+### Phase Constraints
+
+- Maximum 4 weeks (~160h) per phase
+- If exceeds, split into sub-phases or redistribute
+- Each phase should be independently deliverable
+
+### Test Integration
+
+- Tests MUST be included in subtasks
+- Format: "[Task] + tests"
+- No separate testing phases allowed
+
+### Buffer Calculation
+
+- Add 15% buffer to base hours
+- Total = Base × 1.15
+- Budget = Total Hours × Hourly Rate
 
 ## Workflow Recommendation Logic
 
@@ -112,10 +153,12 @@ ELSE:
 
 ## Integration
 
-This command works well before:
+This command works well with:
 - `/workflow` - Use estimate to choose correct workflow tier
 - `/pm-prioritize` - Estimation feeds into RICE calculations
 - `/sprint-plan` - Story points for capacity planning
+- `/export-estimate` - Generate CSVs from estimation
+- `/senior-review` - Platform-specific review adjustments
 
 ## Related
 
