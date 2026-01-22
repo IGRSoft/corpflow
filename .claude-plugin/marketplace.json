@@ -1,5 +1,5 @@
 {
-  "name": "company-workflow",
+  "name": "igrsoft",
   "owner": {
     "name": "igrsoft",
     "url": "https://github.com/igrsoft"
@@ -10,7 +10,7 @@
   },
   "plugins": [
     {
-      "name": "company-workflow",
+      "name": "igrsoft",
       "source": "./",
       "description": "8-stage workflow system (P→A→T→D→Q→W→F→S) with TodoWrite integration for task management, stage transitions, approval gates, error handling, and escalation chains",
       "version": "1.0.0",
