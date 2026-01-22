@@ -16,6 +16,7 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 - `--threshold <n>` - Set coverage threshold (default: 80)
 - `--report` - Generate detailed HTML report
 - `--critical-only` - Focus on critical/high-risk areas
+- `--platform <apple|android|web|all>` - Target platform context (default: all)
 
 ## Examples
 

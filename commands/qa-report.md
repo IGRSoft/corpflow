@@ -16,6 +16,7 @@ Generate a comprehensive QA summary report for completed work, including test re
 - `--include-screenshots` - Include test failure screenshots
 - `--verbose` - Include all test details
 - `--summary-only` - Executive summary only
+- `--platform <apple|android|web|all>` - Target platform context (default: all)
 
 ## Examples
 

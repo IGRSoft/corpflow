@@ -12,7 +12,7 @@ Conduct a comprehensive design review for screens, components, or features using
 
 - `--focus [ui|ux|a11y|system]` - Review focus area (default: all)
 - `--depth [quick|standard|comprehensive]` - Review depth (default: standard)
-- `--platform [iOS|macOS|web|all]` - Target platform (default: all)
+- `--platform <apple|android|web|all>` - Target platform (default: all)
 
 ## Examples
 

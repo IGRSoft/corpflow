@@ -13,6 +13,7 @@ Create or analyze user experience flows for features, tasks, or user journeys.
 - `--mode [create|analyze|optimize]` - Operation mode (default: create)
 - `--depth [basic|detailed|comprehensive]` - Detail level (default: detailed)
 - `--include-edge-cases` - Include error states and edge cases
+- `--platform <apple|android|web|all>` - Target platform context (default: all)
 
 ## Examples
 

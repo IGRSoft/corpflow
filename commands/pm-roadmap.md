@@ -18,6 +18,7 @@ Create or update product roadmap with timeline, milestones, and dependencies.
 - `--move <id> --to <quarter>` - Move item between quarters
 - `--view <type>` - Display format (default: timeline)
 - `--export` - Export roadmap
+- `--platform <apple|android|web|all>` - Target platform context (default: all)
 
 ## Examples
 

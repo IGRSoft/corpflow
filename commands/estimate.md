@@ -16,7 +16,7 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 - `--detailed` - Detailed estimation with full breakdown
 - `--compare` - Compare multiple approaches
 - `--export` - Generate 13 CSV files for Google Sheets
-- `--platform <ios|android|web>` - Platform-specific templates
+- `--platform <apple|android|web|all>` - Platform-specific templates (default: all)
 - `--multiplier <hours>` - Override SP multiplier (default: 6)
 
 ## Examples

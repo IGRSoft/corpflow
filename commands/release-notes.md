@@ -18,6 +18,7 @@ Generate release notes from completed work, git history, or workflow artifacts.
 - `--from-workflow` - Generate from workflow artifacts
 - `--format <type>` - Output format (default: markdown)
 - `--audience [internal|external|all]` - Target audience
+- `--platform <apple|android|web|all>` - Target platform context (default: all)
 
 ## Examples
 

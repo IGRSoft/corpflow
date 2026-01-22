@@ -7,13 +7,13 @@ Generate 13 CSV files from estimation for Google Sheets import.
 ```
 /export-estimate
 /export-estimate --dir exports/
-/export-estimate --platform ios
+/export-estimate --platform apple
 ```
 
 ## Options
 
 - `--dir <path>` - Output directory (default: exports/)
-- `--platform <platform>` - Platform-specific templates (ios, android, web)
+- `--platform <apple|android|web|all>` - Platform-specific templates (default: all)
 - `--delimiter <char>` - CSV delimiter (default: ;)
 - `--validate` - Validate totals across files
 
@@ -21,7 +21,7 @@ Generate 13 CSV files from estimation for Google Sheets import.
 
 ```
 /export-estimate
-/export-estimate --dir exports/ --platform ios
+/export-estimate --dir exports/ --platform apple
 /export-estimate --validate
 ```
 

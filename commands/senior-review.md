@@ -6,13 +6,13 @@ Technical review of estimates by platform specialist.
 
 ```
 /senior-review
-/senior-review --platform ios
+/senior-review --platform apple
 /senior-review --focus ar,ble
 ```
 
 ## Options
 
-- `--platform <platform>` - Platform context (ios, android, web)
+- `--platform <apple|android|web|all>` - Platform context (default: all)
 - `--focus <areas>` - Comma-separated focus areas (ar, ble, vision, api, camera, sync)
 - `--update` - Auto-update estimation files with adjustments
 
@@ -20,7 +20,7 @@ Technical review of estimates by platform specialist.
 
 ```
 /senior-review
-/senior-review --platform ios --focus ar,ble
+/senior-review --platform apple --focus ar,ble
 /senior-review --platform android --update
 ```
 
