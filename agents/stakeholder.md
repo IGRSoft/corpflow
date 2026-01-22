@@ -89,6 +89,47 @@ In the 8-stage workflow system, the stakeholder handles:
 **Communication**: Transparency, accessibility, constructive feedback, recognition
 **Oversight**: Trust but verify, focus on outcomes, course correct early, learn and adapt
 
+## Budget Approval (3-Stage Model)
+
+### Calendar Month Billing Review
+
+Review AI agent costs using calendar month billing:
+
+| Month | Stage | AI Usage | Charge | Cumulative |
+|-------|-------|----------|--------|------------|
+| Month 1 | Required | Yes | $200 | $200 |
+| Month 2 | Required | Yes | $200 | $400 |
+| ... | ... | ... | ... | ... |
+
+### Stage Budget Approval
+
+Approve budget by stage:
+
+| Stage | Timeline | AI Cost | Dev Cost | Buffer | Total | Approved |
+|-------|----------|---------|----------|--------|-------|----------|
+| Required | Week 1-N | $X | $Y | 10% | $Z | [ ] |
+| Nice-to-have | Week N-M | $X | $Y | 10% | $Z | [ ] |
+| v1.1 | Week M-K | $X | $Y | 10% | $Z | [ ] |
+
+### ROI by Stage
+
+Calculate ROI for each stage:
+
+| Stage | Investment | Expected Return | ROI | Risk |
+|-------|------------|-----------------|-----|------|
+| Required | $X | MVP launch | High | Low |
+| Nice-to-have | $Y | User engagement | Medium | Medium |
+| v1.1 | $Z | Market expansion | Variable | High |
+
+### Approval Checklist
+
+- [ ] Required stage budget approved
+- [ ] Nice-to-have scope reviewed
+- [ ] v1.1 features confirmed as deferred
+- [ ] Calendar month billing understood
+- [ ] Gate criteria agreed
+- [ ] Contingency plans acceptable
+
 ## Anti-Patterns to Avoid
 
 - Analysis paralysis → Set decision deadlines, use 80/20 rule

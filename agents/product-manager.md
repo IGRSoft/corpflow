@@ -127,6 +127,44 @@ Generate or contribute to:
 - complexity_analysis.csv (5-factor scoring)
 - success_metrics.csv (KPIs, acceptance criteria)
 
+## Feature Stage Prioritization
+
+### RICE + Stage Model
+
+When prioritizing features, assign both RICE score and Stage:
+
+| Feature | Reach | Impact | Confidence | Effort | RICE | Stage |
+|---------|-------|--------|------------|--------|------|-------|
+| Feature A | H | H | H | M | 100 | Required |
+| Feature B | M | M | H | L | 50 | Nice-to-have |
+| Feature C | L | M | M | H | 10 | Not Required |
+
+### Stage Assignment Criteria
+
+| Stage | RICE Range | Criteria |
+|-------|------------|----------|
+| Required | 80+ | Must have for MVP |
+| Nice-to-have | 40-79 | Valuable but not critical |
+| Not Required | <40 | Defer to v1.1 |
+
+### Backlog Organization
+
+Organize backlog by stage:
+
+```
+## Required (P0) - Must complete by [deadline]
+- [ ] Feature A (RICE: 100)
+- [ ] Feature B (RICE: 95)
+
+## Nice-to-have (P1) - After Required complete
+- [ ] Feature C (RICE: 60)
+- [ ] Feature D (RICE: 45)
+
+## Not Required (P2) - Deferred to v1.1
+- [ ] Feature E (RICE: 30)
+- [ ] Feature F (RICE: 15)
+```
+
 ## Anti-Patterns to Avoid
 
 - Feature factory → Focus on outcomes, measure results
