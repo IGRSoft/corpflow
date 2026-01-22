@@ -16,6 +16,7 @@ Generate standup summary from recent work, git activity, and workflow progress.
 - `--format <type>` - Output format (default: markdown)
 - `--since <date>` - Custom date range
 - `--include-blockers` - Highlight blockers prominently
+- `--platform <apple|android|web|all>` - Target platform context (default: all)
 
 ## Examples
 

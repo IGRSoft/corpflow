@@ -11,14 +11,14 @@ Generate developer-ready design specifications for components, screens, or featu
 ## Options
 
 - `--format [markdown|figma|json]` - Output format (default: markdown)
-- `--platform [iOS|macOS|web|all]` - Target platform (default: all)
+- `--platform <apple|android|web|all>` - Target platform (default: all)
 - `--include-assets` - Include asset export list
 
 ## Examples
 
 ```
 /design-specs ProfileCard
-/design-specs "Onboarding flow" --platform iOS --include-assets
+/design-specs "Onboarding flow" --platform apple --include-assets
 /design-specs NavigationBar --format json
 ```
 

@@ -16,6 +16,7 @@ Create onboarding documentation for a task or feature area to help new team memb
 - `--level <level>` - Target experience level (default: intermediate)
 - `--include-exercises` - Add hands-on exercises
 - `--quick` - Generate abbreviated guide
+- `--platform <apple|android|web|all>` - Target platform context (default: all)
 
 ## Examples
 

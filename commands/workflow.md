@@ -11,7 +11,7 @@ Initialize a new workflow task with proper folder structure, state management, a
 ## Options
 
 - `--priority [High|Medium|Low]` - Task priority (default: Medium)
-- `--platform [iOS|macOS|All|...]` - Target platform (default: All)
+- `--platform <apple|android|web|all>` - Target platform (default: all)
 - `--mode [async|sync]` - Execution mode (default: async)
 - `--fast` - Use fast workflow (skip P3 approval gate)
 - `--quick` - Use quick 3-stage workflow (P → D → Q only)
@@ -21,10 +21,10 @@ Initialize a new workflow task with proper folder structure, state management, a
 
 ```
 /workflow "Add dark mode support" --with-design
-/workflow "Fix login crash" --priority High --platform iOS
+/workflow "Fix login crash" --priority High --platform apple
 /workflow "Refactor database layer" --fast
 /workflow "Add form validation" --quick
-/workflow "Redesign settings screen" --with-design --platform iOS
+/workflow "Redesign settings screen" --with-design --platform apple
 ```
 
 ## What This Command Does

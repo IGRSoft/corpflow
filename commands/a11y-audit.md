@@ -11,7 +11,7 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 ## Options
 
 - `--level [A|AA|AAA]` - WCAG conformance level (default: AA)
-- `--platform [iOS|macOS|web|all]` - Target platform (default: all)
+- `--platform <apple|android|web|all>` - Target platform (default: all)
 - `--scope [quick|standard|comprehensive]` - Audit scope (default: standard)
 
 ## Examples
@@ -19,7 +19,7 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 ```
 /a11y-audit LoginScreen
 /a11y-audit "Navigation component" --level AAA
-/a11y-audit --scope comprehensive --platform iOS
+/a11y-audit --scope comprehensive --platform apple
 ```
 
 ## What This Command Does

@@ -16,6 +16,7 @@ Generate a comprehensive test plan from requirements or code changes. Creates st
 - `--from-file <path>` - Generate from requirements file
 - `--coverage` - Include coverage targets
 - `--automation` - Focus on automation-ready test cases
+- `--platform <apple|android|web|all>` - Target platform context (default: all)
 
 ## Examples
 

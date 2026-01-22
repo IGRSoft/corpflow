@@ -17,6 +17,7 @@ Identify, assess, and document project risks with mitigation strategies.
 - `--report` - Generate risk report
 - `--category [technical|schedule|resource|external]` - Filter by category
 - `--threshold [low|medium|high]` - Show risks above threshold
+- `--platform <apple|android|web|all>` - Target platform context (default: all)
 
 ## Examples
 

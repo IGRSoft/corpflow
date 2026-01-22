@@ -16,6 +16,7 @@ Update README files based on code changes, keeping documentation in sync with im
 - `--section <name>` - Update specific section only
 - `--from-changes` - Generate from recent git changes
 - `--validate` - Check README accuracy without updating
+- `--platform <apple|android|web|all>` - Target platform context (default: all)
 
 ## Examples
 
