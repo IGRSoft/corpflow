@@ -102,6 +102,60 @@ Phase Percentage = Phase Hours / Total Hours × 100
 8. **Senior review**: Platform-specific adjustments
 9. **Export**: Generate CSVs for Google Sheets
 
+## AI Agent Cost Estimation
+
+### Token Estimation by Task Type
+
+| Task Type | Typical Tokens | Model Mix | Est. AI Cost |
+|-----------|----------------|-----------|--------------|
+| Trivial (micro:) | 5,000-10,000 | haiku/sonnet | $0.01-0.03 |
+| Simple (quick:) | 15,000-30,000 | sonnet | $0.05-0.10 |
+| Standard (workflow:) | 60,000-120,000 | mixed | $0.20-0.50 |
+| Complex (workflow:) | 150,000-300,000 | mixed | $0.50-1.50 |
+| Large (workflow:) | 300,000+ | mixed | $1.50+ |
+
+### Cost Factors
+
+| Factor | Impact on Cost | Example |
+|--------|----------------|---------|
+| Codebase size | +50-200% | Large monorepo vs small project |
+| Files touched | +10% per file | Multi-file refactoring |
+| Test requirements | +30-50% | Comprehensive test coverage |
+| Documentation depth | +20-40% | Full API documentation |
+| Iteration cycles | +20% per retry | Error recovery |
+| Context window usage | +10-30% | Large context requirements |
+
+### AI Budget Planning Formula
+
+```
+AI Cost = Base Tokens × Model Rate × (1 + Retry Factor) × Complexity Multiplier
+
+Where:
+- Base Tokens: From task type baseline
+- Model Rate: haiku ($0.25/1M), sonnet ($3/1M), opus ($15/1M)
+- Retry Factor: 0.1 (low), 0.2 (medium), 0.5 (high complexity)
+- Complexity Multiplier: 1.0 (standard), 1.5 (large codebase), 2.0 (novel domain)
+```
+
+### Combined Estimate Example
+
+For a medium feature (`workflow:`):
+```
+Human Development: 30 hours × $150/hr = $4,500
+AI Agent Cost: ~100K tokens × mixed = $0.35
+Total: $4,500.35
+
+AI adds: <0.01% to total project cost
+```
+
+### AI Cost vs Development Time Tradeoff
+
+| Approach | Dev Time | AI Cost | Best For |
+|----------|----------|---------|----------|
+| Minimal AI | 100% | ~$0 | Simple, familiar tasks |
+| Balanced | 70-80% | $0.20-0.50 | Standard features |
+| AI-Heavy | 50-60% | $0.50-2.00 | Complex, exploratory |
+
 ## Quick Reference
 
 | Metric | Formula |
@@ -111,3 +165,9 @@ Phase Percentage = Phase Hours / Total Hours × 100
 | Budget | Total Hours × Rate |
 | Phase Max | 160 hours (4 weeks) |
 | Complexity | Sum of 5 factors (25 max) |
+| AI Cost | Base Tokens × Model Rate × Factors |
+
+## Related Skills
+
+- `cost-optimization.md` - Detailed AI cost strategies
+- `workflow.md` - Workflow tier selection by complexity

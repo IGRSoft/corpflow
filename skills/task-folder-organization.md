@@ -78,9 +78,65 @@ State management and metadata tracking:
   },
   "dependencies": [],
   "blockers": [],
-  "retries": { "P": 0, "A": 0, "T": 0, "D": 0, "Q": 0, "W": 0, "F": 0, "S": 0, "max": 3 }
+  "retries": { "P": 0, "A": 0, "T": 0, "D": 0, "Q": 0, "W": 0, "F": 0, "S": 0, "max": 3 },
+
+  "cost_tracking": {
+    "total_estimated_tokens": 0,
+    "by_stage": {
+      "P": { "tokens": 0, "model": "sonnet", "cost": 0 },
+      "A": { "tokens": 0, "model": "opus", "cost": 0 },
+      "T": { "tokens": 0, "model": "sonnet", "cost": 0 },
+      "D": { "tokens": 0, "model": "sonnet", "cost": 0 },
+      "Q": { "tokens": 0, "model": "haiku", "cost": 0 },
+      "W": { "tokens": 0, "model": "haiku", "cost": 0 },
+      "F": { "tokens": 0, "model": "sonnet", "cost": 0 },
+      "S": { "tokens": 0, "model": "sonnet", "cost": 0 }
+    },
+    "budget_limit": null,
+    "budget_used_percent": 0,
+    "alerts": [],
+    "billing_month": "YYYY-MM"
+  },
+
+  "context_tracking": {
+    "last_compression": null,
+    "estimated_tokens": 0,
+    "compression_needed": false,
+    "artifact_references": []
+  },
+
+  "parallel_execution": {
+    "enabled": false,
+    "active_stages": [],
+    "safe_combinations": [["W", "Q"]],
+    "started_at": null,
+    "primary_for_conflicts": null
+  }
 }
 ```
+
+#### Schema Field Descriptions
+
+##### cost_tracking
+- **total_estimated_tokens**: Running total of tokens used across all stages
+- **by_stage**: Per-stage breakdown with tokens, model used, and cost
+- **budget_limit**: Optional budget cap (null = unlimited)
+- **budget_used_percent**: Percentage of budget consumed
+- **alerts**: Array of cost alert messages
+- **billing_month**: Current billing month (YYYY-MM format)
+
+##### context_tracking
+- **last_compression**: Timestamp of last context compression
+- **estimated_tokens**: Current estimated context size
+- **compression_needed**: Flag indicating compression is recommended
+- **artifact_references**: List of artifact paths in current context
+
+##### parallel_execution
+- **enabled**: Whether parallel execution is active
+- **active_stages**: Currently executing stages (e.g., ["W", "Q"])
+- **safe_combinations**: Pre-defined safe parallel combinations
+- **started_at**: Timestamp when parallel execution began
+- **primary_for_conflicts**: Which stage has priority for artifact conflicts
 
 #### 2. `planning.md`
 

@@ -331,6 +331,103 @@ Tasks wait for dependencies to complete (F3 or S1):
 }
 ```
 
+## Optimization Hooks
+
+### Pre-Stage Hooks
+
+Before starting any stage, perform these checks:
+
+| Check | Threshold | Action |
+|-------|-----------|--------|
+| Context size | > 50% window | Compress previous stages |
+| Budget usage | > 75% | Alert user, suggest optimizations |
+| Required artifacts | Missing | Block until available |
+
+### Post-Stage Hooks
+
+After completing any stage:
+
+| Action | Purpose |
+|--------|---------|
+| Compress context | Prepare handoff summary (50-100 tokens) |
+| Log token usage | Update cost_tracking in task-state.json |
+| Validate artifacts | Ensure required files created |
+
+### Stage-Specific Optimizations
+
+| Stage | Model | Optimization |
+|-------|-------|--------------|
+| P | sonnet | Use haiku for simple formatting |
+| A | opus | Full opus for decisions, haiku for diagrams |
+| T | sonnet | Brief coordination, reference artifacts |
+| D | opus | Sonnet for implementation, opus for complex logic |
+| Q | haiku | Haiku for test execution, sonnet for test design |
+| W | haiku | Template-based documentation |
+| F | sonnet | Brief validation checks |
+| S | sonnet | Concise approval review |
+
+## Parallel Execution Patterns
+
+### Safe Parallel Combinations
+
+| Combination | Condition | Time Savings |
+|-------------|-----------|--------------|
+| W + Q | W doesn't need test results | ~30-40% |
+| Early W during D | Core API stable | Documentation ready sooner |
+
+### Execution Protocol
+
+```
+1. Verify both stages have independent inputs
+2. Create separate TodoWrite entries
+3. Update task-state.json: "active_stages": ["W", "Q"]
+4. Execute concurrently
+5. Wait for both X3 before proceeding to F
+```
+
+### Never Parallelize
+
+| Combination | Reason |
+|-------------|--------|
+| A before P | Architecture needs requirements |
+| D before T | Development needs coordination |
+| Q before D | Can't test unwritten code |
+| S before F | Approval needs release package |
+
+## Command Chaining Patterns
+
+### Pre-Workflow Chain
+
+```
+/estimate "Task" → /pm-prioritize → workflow: "Task"
+```
+
+Estimate complexity and priority before starting full workflow.
+
+### Mid-Development Chain
+
+```
+/arch-review → /tech-debt --quick → /code-impl
+```
+
+Review architecture and tech debt before implementation.
+
+### Pre-Release Chain
+
+```
+/test-coverage → /doc-audit → /release-notes → /executive-summary
+```
+
+Validate coverage and docs before generating release notes.
+
+### Troubleshooting Chain
+
+```
+/workflow-debug → /workflow-reset --to D → /standup
+```
+
+Diagnose issues, reset to appropriate stage, generate status.
+
 ## Best Practices
 
 ### DO
@@ -340,6 +437,9 @@ Tasks wait for dependencies to complete (F3 or S1):
 - Keep task-state.json synchronized
 - Document errors in error.md (for escalation scenarios)
 - Check dependencies before starting
+- Compress context at stage handoffs
+- Use appropriate model tier for each task
+- Reference artifacts instead of duplicating content
 
 ### DON'T
 - Skip state transitions
@@ -347,6 +447,9 @@ Tasks wait for dependencies to complete (F3 or S1):
 - Bypass approval gates (standard workflow)
 - Create circular dependencies
 - Ignore rule check failures
+- Include full file content in handoffs (reference paths instead)
+- Use opus for simple formatting tasks
+- Duplicate context across stages
 
 ## When to Use Workflow
 
@@ -356,3 +459,10 @@ Tasks wait for dependencies to complete (F3 or S1):
 | New feature or multi-step fix | Typo, rename, docs tweak |
 | Security/permissions involved | One small test |
 | Cross-team coordination needed | Mechanical change |
+
+## Related Skills
+
+- `cost-optimization.md` - Cost tracking and budget management
+- `context-compression.md` - Context compression techniques
+- `agent-coordination.md` - Multi-agent coordination patterns
+- `estimation-methodology.md` - Task estimation framework
