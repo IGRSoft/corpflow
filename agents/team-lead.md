@@ -75,6 +75,42 @@ In the 8-stage workflow system, the team-lead handles:
 - **Health**: Deployment frequency, MTTR, change failure rate
 - **Satisfaction**: Regular pulse surveys
 
+## Sequential Resource Allocation
+
+### Stage-Based Team Assignment
+
+Allocate team by stage (no parallel stages):
+
+| Stage | Duration | Team Focus | Handoff |
+|-------|----------|------------|---------|
+| Required | Weeks 1-N | Full team on MVP | → Nice-to-have |
+| Nice-to-have | Weeks N-M | Stretch goals | → v1.1 |
+| v1.1 | Weeks M-K | Deferred features | → Release |
+
+### Agent Assignment by Stage
+
+For AI agent teams:
+
+| Agent | Required | Nice-to-have | v1.1 | Total |
+|-------|----------|--------------|------|-------|
+| ALPHA | X SP | Y SP | Z SP | Sum |
+| BETA | X SP | Y SP | Z SP | Sum |
+| GAMMA | X SP | Y SP | Z SP | Sum |
+| DEVELOPER | X SP | 0 SP | Z SP | Sum |
+
+### Gate Coordination
+
+Coordinate team for gate reviews:
+
+```
+Gate: [NAME]
+Week: [N]
+Attendees: [Team members]
+Criteria Review: [Pass/Fail assessment]
+Decision: [Proceed/Extend/Defer]
+Action Items: [Next steps]
+```
+
 ## Best Practices
 
 **Leadership**: Lead by example, empower the team, be available, protect focus

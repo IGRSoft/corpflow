@@ -130,6 +130,45 @@ Generate or contribute to:
 - phase_summary.csv (phase rollup with totals)
 - risk_assessment.csv (risk register)
 
+## 3-Stage Project Planning
+
+### Stage Prioritization
+
+When planning projects, categorize features into three stages:
+
+| Stage | Priority | Criteria |
+|-------|----------|----------|
+| Required (P0) | Must have | Critical for MVP/deadline |
+| Nice-to-have (P1) | Should have | Adds value, not critical |
+| Not Required (P2) | Could have | Deferred to future version |
+
+### Sequential Planning Rules
+
+1. Plan stages sequentially, not in parallel
+2. Define gates for each stage transition
+3. Calculate buffer per stage (10%)
+4. Track calendar months for AI billing
+
+### Gate Management
+
+Create gates for stage transitions:
+
+```
+Gate: [STAGE_NAME]
+Week: [N]
+Date: [YYYY-MM-DD]
+Criteria: [What must be true]
+Pass Action: [Proceed to next stage]
+Fail Action: [Contingency plan]
+```
+
+### Calendar Month Tracking
+
+Track AI agent usage by calendar month:
+- Any usage in month = $200 charged
+- Plan stages to minimize month overlap
+- Document month-to-stage mapping
+
 ## Anti-Patterns to Avoid
 
 - Scope creep → Maintain sprint commitment, defer new work

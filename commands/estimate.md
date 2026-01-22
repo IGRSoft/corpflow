@@ -14,10 +14,14 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 
 - `--quick` - Quick estimation (T-shirt size only)
 - `--detailed` - Detailed estimation with full breakdown
+- `--stages` - 3-stage breakdown (Required, Nice-to-have, v1.1)
+- `--sequential` - Force sequential stage planning (no parallel)
 - `--compare` - Compare multiple approaches
-- `--export` - Generate 13 CSV files for Google Sheets
+- `--export` - Generate 8 CSV files for Google Sheets
 - `--platform <apple|android|web|all>` - Platform-specific templates (default: all)
 - `--multiplier <hours>` - Override SP multiplier (default: 6)
+- `--ai-rate <amount>` - AI agent monthly rate (default: $200)
+- `--dev-rate <amount>` - Developer hourly rate (default: $1)
 
 ## Examples
 
@@ -137,6 +141,60 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 - Add 15% buffer to base hours
 - Total = Base × 1.15
 - Budget = Total Hours × Hourly Rate
+
+## 3-Stage Sequential Model
+
+| Stage | Priority | Description | When |
+|-------|----------|-------------|------|
+| **Required** | P0 | Must complete by deadline | Weeks 1-N |
+| **Nice-to-have** | P1 | Stretch goals | After Required complete |
+| **Not Required** | P2 | Deferred features | After Nice-to-have (v1.1) |
+
+### Sequential Rules
+
+1. **No parallel development** between stages
+2. Each stage starts only after previous stage completes
+3. Gates must pass before stage transition
+4. Buffer calculated per stage (10%)
+
+### Calendar Month Billing (AI Agents)
+
+| Rule | Description |
+|------|-------------|
+| Rate | $200 per calendar month |
+| Trigger | Any AI agent usage in month |
+| Billing | Full $200 charged for partial month |
+| Example | 1 day in May = $200 for May |
+
+### Stage Budget Template
+
+| Stage | SP | Hours | Weeks | New Months | AI Cost | Dev Cost | Buffer | Total |
+|-------|-----|-------|-------|------------|---------|----------|--------|-------|
+| Required | - | - | 1-N | N | $200×N | h×rate | 10% | - |
+| Nice-to-have | - | - | N+1 to M | +X | $200×X | h×rate | 10% | - |
+| v1.1 | - | - | M+1 to K | +Y | $200×Y | h×rate | 10% | - |
+| **TOTAL** | - | - | K | N+X+Y | - | - | - | - |
+
+### Gate Template
+
+| Gate | Week | Criteria | Pass Action | Fail Action |
+|------|------|----------|-------------|-------------|
+| DEMO | N | All Required working | Proceed to Nice-to-have | Extend MVP |
+| NICE-TO-HAVE | M | All Nice-to-have working | Proceed to v1.1 | Ship MVP only |
+| v1.1 RELEASE | K | All v1.1 working | Ship v1.1 | Extend or defer |
+
+## Export Structure (8 Core Reports)
+
+| # | File | Purpose |
+|---|------|---------|
+| 01 | project_summary.csv | Project metadata, timeline, team |
+| 02 | features_by_stage.csv | Features grouped by stage |
+| 03 | technology_stack.csv | Frameworks, SDKs, dependencies |
+| 04 | schedule_and_milestones.csv | Week-by-week schedule by stage |
+| 05 | budget_estimate.csv | Calendar month billing breakdown |
+| 06 | risk_assessment.csv | Risk register with mitigations |
+| 07 | agent_workflow.csv | Agent assignments and dependencies |
+| 08 | stage_completion_gates.csv | Gates, decision points, criteria |
 
 ## Workflow Recommendation Logic
 
