@@ -32,17 +32,21 @@ Reset stuck workflow to specific stage or clean state.
 # Workflow Reset
 
 ## Current State
-- **Stage**: D2 (Development - Error)
+- **Stage**: D2 (Development - Error, statusCode: "2")
 - **Retries**: 3/3 (Max reached)
 - **Issue**: Build failure after escalation
 
+**Status Code Reference**: 0=preparing, 1=executing, 2=error, 3=done
+
 ## Reset Options
 
-1. **Reset to D1** - Retry development from start
+1. **Reset to D1** - Retry development from start (statusCode: "1" = executing)
 2. **Reset to T1** - Go back to Team Lead coordination
 3. **Reset to A1** - Re-architecture the solution
 4. **Reset to P1** - Start over from planning
 5. **Clean Reset** - Remove all artifacts, fresh start
+
+**Shorthand**: `{STAGE}{CODE}` - e.g., D1 = Development:executing, T1 = TeamLead:executing
 
 ## Recommendation
 Given 3 failed retries with build errors, recommend:
@@ -56,14 +60,16 @@ Select option [1-5]:
 # Workflow Reset to D1
 
 ## Pre-Reset State
+Shorthand: **D2** (Development:error)
 ```json
 {
   "current": "development:error",
   "statusCode": "2",
   "agent": "D",
-  "retries": { "D": 3 }
+  "retries": { "4": 3 }
 }
 ```
+Note: `retries` uses task ID ("4") as key, not stage code
 
 ## Actions Taken
 1. ✅ Reset stage to D1 (Development - Executing)
@@ -73,12 +79,13 @@ Select option [1-5]:
 5. ✅ Logged reset in transitions
 
 ## Post-Reset State
+Shorthand: **D1** (Development:executing)
 ```json
 {
   "current": "development:executing",
   "statusCode": "1",
   "agent": "D",
-  "retries": { "D": 0 }
+  "retries": { "4": 0 }
 }
 ```
 

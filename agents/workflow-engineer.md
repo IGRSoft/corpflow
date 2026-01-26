@@ -282,6 +282,54 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 5. Reset retry counter after escalation
 6. Log error context in workflow-state.json
 
+## Status Code Quick Reference
+
+### Workflow State Status Codes
+
+| Code | Name | Task Status | Use When |
+|------|------|-------------|----------|
+| `"0"` | PREPARING | `in_progress` | Stage just initialized |
+| `"1"` | EXECUTING | `in_progress` | Active work in progress |
+| `"2"` | ERROR | `in_progress` | Stage failed (retry/escalate) |
+| `"3"` | DONE | `completed` | Stage finished successfully |
+
+### State Format Mapping
+
+| Canonical Format | Shorthand | Example |
+|------------------|-----------|---------|
+| `{stage}:preparing` | `{S}0` | `development:preparing` = `D0` |
+| `{stage}:executing` | `{S}1` | `qa:executing` = `Q1` |
+| `{stage}:error` | `{S}2` | `development:error` = `D2` |
+| `{stage}:done` | `{S}3` | `finalization:done` = `F3` |
+
+### Transition Examples
+
+```typescript
+// Stage initialization
+TaskUpdate({ taskId: "4", status: "in_progress", owner: "developer" });
+// workflow-state.json: statusCode = "0", current = "development:preparing"
+
+// Work begins
+// workflow-state.json: statusCode = "1", current = "development:executing"
+
+// Error occurs (task stays in_progress)
+// workflow-state.json: statusCode = "2", current = "development:error"
+// Increment retries["4"]
+
+// Stage completes
+TaskUpdate({ taskId: "4", status: "completed" });
+// workflow-state.json: statusCode = "3", current = "development:done"
+```
+
+### Transition Log Format
+
+```
+"[FROM] → [TO]"              // Simple: "D1 → D3"
+"[FROM] → [TO] ([note])"     // With note: "P3 → A1 (user approved)"
+```
+
+Common notes: `(user approved)`, `(error)`, `(retry)`, `(A,T skipped)`, `(escalated)`
+
 ## Best Practices
 
 - Use `TaskUpdate` for all status changes
@@ -294,6 +342,8 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 - Validate state before and after transitions
 - Never bypass P3 approval gate in standard workflows
 - Update both Task System AND workflow-state.json together
+- Use statusCode `"2"` for errors (task stays `in_progress`)
+- Only set `completed` when statusCode is `"3"`
 
 ## Constitutional Alignment
 

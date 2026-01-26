@@ -115,6 +115,190 @@ P → A → T → D → Q → W → F → S
 
 **Retry tracking** stored in workflow-state.json `retries` object
 
+## Status Code Reference
+
+This section defines the canonical status tracking system used throughout the workflow.
+
+### Dual-Layer Status System
+
+The workflow uses two complementary status tracking mechanisms:
+
+| Layer | Location | Values | Purpose |
+|-------|----------|--------|---------|
+| **Task System** | TaskUpdate/TaskGet | `pending`, `in_progress`, `completed` | UI visibility, user-facing progress |
+| **Workflow State** | workflow-state.json `statusCode` | `"0"`, `"1"`, `"2"`, `"3"` | Internal phase tracking within stages |
+
+**CRITICAL**: Both systems must be updated together at every state transition.
+
+### Workflow State Status Codes (statusCode)
+
+| Code | Name | Description | Task Status |
+|------|------|-------------|-------------|
+| `"0"` | PREPARING | Stage initialized, setup in progress | `in_progress` |
+| `"1"` | EXECUTING | Active work being performed | `in_progress` |
+| `"2"` | ERROR | Stage failed, awaiting retry/escalation | `in_progress` |
+| `"3"` | DONE | Stage completed successfully | `completed` |
+
+**Note**: statusCode is stored as a string in JSON (`"1"` not `1`).
+
+### Task Status to StatusCode Mapping
+
+| Task Status | Valid statusCodes | When to Use |
+|-------------|-------------------|-------------|
+| `pending` | n/a | Task blocked by dependencies |
+| `in_progress` | `"0"`, `"1"`, `"2"` | Stage active (preparing, executing, or error) |
+| `completed` | `"3"` | Stage finished successfully |
+
+### State String Format
+
+**Canonical format**: `{stage}:{phase}`
+
+| Component | Values |
+|-----------|--------|
+| stage | `planning`, `architecture`, `teamlead`, `development`, `qa`, `documentation`, `finalization`, `stakeholder` |
+| phase | `preparing`, `executing`, `error`, `done` |
+
+**Shorthand format**: `{STAGE_CODE}{STATUS_CODE}`
+
+| Component | Values |
+|-----------|--------|
+| STAGE_CODE | P, A, T, D, Q, W, F, S |
+| STATUS_CODE | 0, 1, 2, 3 |
+
+**Format Mapping Examples**:
+
+| Canonical | Shorthand | Description |
+|-----------|-----------|-------------|
+| `"development:executing"` | `D1` | Development stage actively working |
+| `"qa:error"` | `Q2` | QA stage encountered error |
+| `"finalization:done"` | `F3` | Finalization complete |
+| `"planning:preparing"` | `P0` | Planning stage initializing |
+
+### Stage Lifecycle State Machine
+
+```
+                    ┌──────────────────────────────────────────┐
+                    │            Stage Started                 │
+                    │     (TaskUpdate: in_progress)            │
+                    └──────────────────┬───────────────────────┘
+                                       ↓
+                    ┌──────────────────────────────────────────┐
+                    │     PREPARING (statusCode: "0")          │
+                    │     Task: in_progress                    │
+                    │     state.current: "{stage}:preparing"   │
+                    └──────────────────┬───────────────────────┘
+                                       ↓ Begin work
+                    ┌──────────────────────────────────────────┐
+                    │     EXECUTING (statusCode: "1")          │
+                    │     Task: in_progress                    │
+                    │     state.current: "{stage}:executing"   │
+                    └─────────┬───────────────────┬────────────┘
+                              │                   │
+                      Error   ↓           Success ↓
+         ┌──────────────────────────┐    ┌──────────────────────────┐
+         │  ERROR (statusCode: "2") │    │   DONE (statusCode: "3") │
+         │  Task: in_progress       │    │   Task: completed        │
+         │  state: "{stage}:error"  │    │   state: "{stage}:done"  │
+         └────────────┬─────────────┘    └────────────┬─────────────┘
+                      │                               │
+              Retry   ↓   Escalate                    ↓
+         ┌────────────┴────────────┐         Next Stage Starts
+         │ retries < max:          │         (PREPARING)
+         │   → EXECUTING ("1")     │
+         │ retries = max:          │
+         │   → Previous Stage      │
+         └─────────────────────────┘
+```
+
+### Transition Log Format
+
+Transitions are logged in `state.transitions` array using shorthand notation:
+
+```
+"[FROM_SHORTHAND] → [TO_SHORTHAND]"              // Simple transition
+"[FROM_SHORTHAND] → [TO_SHORTHAND] ([note])"     // With note
+```
+
+**Standard transition notes**:
+- `(user approved)` - User approved P3 gate
+- `(error)` - Error occurred
+- `(retry)` - Retry after error
+- `(A,T skipped)` - Stages skipped (quick workflow)
+- `(escalated)` - Escalated to previous stage
+
+**Examples**:
+```json
+"transitions": [
+  "P0 → P1",
+  "P1 → P3",
+  "P3 → A1 (user approved)",
+  "A1 → A3",
+  "A3 → T1",
+  "T1 → T3",
+  "T3 → D1",
+  "D1 → D2 (error)",
+  "D2 → D1 (retry)",
+  "D1 → D3",
+  "D3 → Q1"
+]
+```
+
+### Quick Workflow State Tracking
+
+For quick workflows (P→D→Q), skipped stages have `null` task_ids:
+
+```json
+{
+  "task_ids": {
+    "planning": "1",
+    "ethics": null,
+    "architecture": null,
+    "teamlead": null,
+    "development": "2",
+    "qa": "3",
+    "documentation": null,
+    "finalization": null,
+    "stakeholder": null
+  },
+  "state": {
+    "current": "development:executing",
+    "statusCode": "1",
+    "transitions": [
+      "P0 → P1",
+      "P1 → P3",
+      "P3 → D1 (A,T skipped)"
+    ]
+  }
+}
+```
+
+### Synchronization Rules
+
+**ALWAYS update both systems together**:
+
+```typescript
+// Stage starts
+TaskUpdate({ taskId: "4", status: "in_progress", owner: "developer" });
+// Update workflow-state.json: statusCode = "0", current = "development:preparing"
+
+// Stage executing
+// Update workflow-state.json: statusCode = "1", current = "development:executing"
+
+// Stage completes
+TaskUpdate({ taskId: "4", status: "completed" });
+// Update workflow-state.json: statusCode = "3", current = "development:done"
+```
+
+**Error handling**:
+```typescript
+// Error detected - Task stays in_progress
+// Update workflow-state.json: statusCode = "2", current = "development:error"
+// Increment retries["4"]
+
+// Retry - Task stays in_progress
+// Update workflow-state.json: statusCode = "1", current = "development:executing"
+```
+
 ## Task Tracking Integration (MANDATORY)
 
 ### Stage Code Format
