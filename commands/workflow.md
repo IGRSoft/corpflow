@@ -97,15 +97,18 @@ Initialize a new workflow task with proper folder structure, state management, a
 
 4. **Creates Tasks with Dependencies**
    ```typescript
-   // Create all 8 tasks
-   TaskCreate({ subject: "P: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements" });  // id: "1"
-   TaskCreate({ subject: "A: Architecture", description: "Design technical solution", activeForm: "Architecting solution" });  // id: "2"
-   TaskCreate({ subject: "T: Team Lead", description: "Coordinate approach and resources", activeForm: "Coordinating team" });  // id: "3"
-   TaskCreate({ subject: "D: Development", description: "Implement solution", activeForm: "Implementing code" });  // id: "4"
-   TaskCreate({ subject: "Q: QA Testing", description: "Test and validate", activeForm: "Testing solution" });  // id: "5"
-   TaskCreate({ subject: "W: Documentation", description: "Write technical docs", activeForm: "Writing documentation" });  // id: "6"
-   TaskCreate({ subject: "F: Finalization", description: "Prepare release", activeForm: "Finalizing release" });  // id: "7"
-   TaskCreate({ subject: "S: Stakeholder", description: "Final approval", activeForm: "Awaiting approval" });  // id: "8"
+   // Create all 8 tasks with metadata
+   const workflowId = "dark-mode-2025-01-26";
+   const priority = "medium";  // from --priority option
+
+   TaskCreate({ subject: "P: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements", metadata: { stage: "P", workflow_id: workflowId, priority } });  // id: "1"
+   TaskCreate({ subject: "A: Architecture", description: "Design technical solution", activeForm: "Architecting solution", metadata: { stage: "A", workflow_id: workflowId, priority } });  // id: "2"
+   TaskCreate({ subject: "T: Team Lead", description: "Coordinate approach and resources", activeForm: "Coordinating team", metadata: { stage: "T", workflow_id: workflowId, priority } });  // id: "3"
+   TaskCreate({ subject: "D: Development", description: "Implement solution", activeForm: "Implementing code", metadata: { stage: "D", workflow_id: workflowId, priority } });  // id: "4"
+   TaskCreate({ subject: "Q: QA Testing", description: "Test and validate", activeForm: "Testing solution", metadata: { stage: "Q", workflow_id: workflowId, priority } });  // id: "5"
+   TaskCreate({ subject: "W: Documentation", description: "Write technical docs", activeForm: "Writing documentation", metadata: { stage: "W", workflow_id: workflowId, priority } });  // id: "6"
+   TaskCreate({ subject: "F: Finalization", description: "Prepare release", activeForm: "Finalizing release", metadata: { stage: "F", workflow_id: workflowId, priority } });  // id: "7"
+   TaskCreate({ subject: "S: Stakeholder", description: "Final approval", activeForm: "Awaiting approval", metadata: { stage: "S", workflow_id: workflowId, priority } });  // id: "8"
 
    // Set up sequential dependency chain
    TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // A blocked by P
@@ -142,9 +145,13 @@ Initialize a new workflow task with proper folder structure, state management, a
 - Use for: Small fixes, simple features, focused changes
 
 ```typescript
-TaskCreate({ subject: "P: Planning", description: "Quick planning", activeForm: "Planning..." });  // id: "1"
-TaskCreate({ subject: "D: Development", description: "Implementation", activeForm: "Implementing..." });  // id: "2"
-TaskCreate({ subject: "Q: QA Testing", description: "Testing", activeForm: "Testing..." });  // id: "3"
+// Quick workflow creates 3 tasks with metadata
+const workflowId = "quick-fix-2025-01-26";
+const priority = "medium";
+
+TaskCreate({ subject: "P: Planning", description: "Quick planning", activeForm: "Planning...", metadata: { stage: "P", workflow_id: workflowId, priority, workflow_type: "quick" } });  // id: "1"
+TaskCreate({ subject: "D: Development", description: "Implementation", activeForm: "Implementing...", metadata: { stage: "D", workflow_id: workflowId, priority, workflow_type: "quick" } });  // id: "2"
+TaskCreate({ subject: "Q: QA Testing", description: "Testing", activeForm: "Testing...", metadata: { stage: "Q", workflow_id: workflowId, priority, workflow_type: "quick" } });  // id: "3"
 
 TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // D blocked by P
 TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // Q blocked by D

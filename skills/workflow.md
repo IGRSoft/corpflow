@@ -6,10 +6,52 @@ Single source of truth for task workflow management using the Task System for UI
 
 | Tool | Purpose |
 |------|---------|
-| `TaskCreate` | Create new tasks with subject, description, activeForm |
+| `TaskCreate` | Create new tasks with subject, description, activeForm, metadata |
 | `TaskUpdate` | Update status, owner, add/remove blockedBy |
 | `TaskGet` | Retrieve current task state |
 | `TaskList` | View all tasks and their statuses |
+
+### Metadata Field
+
+TaskCreate supports a `metadata` field for storing workflow-specific information:
+
+```typescript
+TaskCreate({
+  subject: "P: Planning",
+  description: "Define requirements and acceptance criteria",
+  activeForm: "Planning task requirements",
+  metadata: {
+    priority: "high",
+    stage: "P",
+    workflow_id: "dark-mode-2025"
+  }
+});
+```
+
+**Standard metadata fields:**
+- `priority` - Task priority (high, medium, low)
+- `stage` - Workflow stage code (P, A, T, D, Q, W, F, S)
+- `workflow_id` - Links task to specific workflow instance
+
+## Cross-Session Persistence
+
+By default, tasks persist within a session. For cross-session persistence, set `CLAUDE_CODE_TASK_LIST_ID`:
+
+```bash
+# Per-session
+CLAUDE_CODE_TASK_LIST_ID="my-project" claude
+
+# Or in .claude/settings.json
+{
+  "env": {
+    "CLAUDE_CODE_TASK_LIST_ID": "project-workflow"
+  }
+}
+```
+
+**Storage location:** `~/.claude/tasks/<list-id>/`
+
+Each task is stored as a JSON file with full state including blockedBy relationships.
 
 ## CRITICAL: Trigger Behavior (MUST EXECUTE)
 
@@ -318,15 +360,18 @@ TaskUpdate({ taskId: "4", status: "completed" });
 ### Initial State (Task Creation)
 
 ```typescript
-// Create all 8 tasks
-TaskCreate({ subject: "P: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements" });  // Returns id: "1"
-TaskCreate({ subject: "A: Architecture", description: "Design technical solution and architecture", activeForm: "Architecting solution" });  // Returns id: "2"
-TaskCreate({ subject: "T: Team Lead", description: "Coordinate approach and allocate resources", activeForm: "Coordinating team" });  // Returns id: "3"
-TaskCreate({ subject: "D: Development", description: "Implement solution following architecture", activeForm: "Implementing code" });  // Returns id: "4"
-TaskCreate({ subject: "Q: QA Testing", description: "Test and validate implementation", activeForm: "Testing solution" });  // Returns id: "5"
-TaskCreate({ subject: "W: Documentation", description: "Write technical documentation", activeForm: "Writing technical documentation" });  // Returns id: "6"
-TaskCreate({ subject: "F: Finalization", description: "Prepare release package", activeForm: "Finalizing release" });  // Returns id: "7"
-TaskCreate({ subject: "S: Stakeholder", description: "Final stakeholder approval", activeForm: "Awaiting approval" });  // Returns id: "8"
+// Create all 8 tasks with metadata
+const workflowId = "dark-mode-2025";
+const priority = "medium";
+
+TaskCreate({ subject: "P: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements", metadata: { stage: "P", workflow_id: workflowId, priority } });  // Returns id: "1"
+TaskCreate({ subject: "A: Architecture", description: "Design technical solution and architecture", activeForm: "Architecting solution", metadata: { stage: "A", workflow_id: workflowId, priority } });  // Returns id: "2"
+TaskCreate({ subject: "T: Team Lead", description: "Coordinate approach and allocate resources", activeForm: "Coordinating team", metadata: { stage: "T", workflow_id: workflowId, priority } });  // Returns id: "3"
+TaskCreate({ subject: "D: Development", description: "Implement solution following architecture", activeForm: "Implementing code", metadata: { stage: "D", workflow_id: workflowId, priority } });  // Returns id: "4"
+TaskCreate({ subject: "Q: QA Testing", description: "Test and validate implementation", activeForm: "Testing solution", metadata: { stage: "Q", workflow_id: workflowId, priority } });  // Returns id: "5"
+TaskCreate({ subject: "W: Documentation", description: "Write technical documentation", activeForm: "Writing technical documentation", metadata: { stage: "W", workflow_id: workflowId, priority } });  // Returns id: "6"
+TaskCreate({ subject: "F: Finalization", description: "Prepare release package", activeForm: "Finalizing release", metadata: { stage: "F", workflow_id: workflowId, priority } });  // Returns id: "7"
+TaskCreate({ subject: "S: Stakeholder", description: "Final stakeholder approval", activeForm: "Awaiting approval", metadata: { stage: "S", workflow_id: workflowId, priority } });  // Returns id: "8"
 
 // Set up sequential dependency chain
 TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // A blocked by P
