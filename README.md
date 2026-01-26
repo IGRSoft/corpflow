@@ -10,7 +10,7 @@ A comprehensive 8-stage workflow system for Claude Code with Task System integra
 - **Cross-Session Persistence**: Tasks persist across sessions
 - **Approval Gates**: P3 approval gate for standard workflows, auto-skip for fast workflows
 - **Error Handling**: Retry logic (max 3 per stage) and escalation chains
-- **Workflow State Management**: `workflow-state.json` v2 schema with task ID mapping
+- **Workflow State Management**: Task System handles all state persistence
 - **Sub-agent Visibility**: All agents can view tasks with `TaskGet`
 - **Agent-Specific Commands**: Specialized commands for each workflow role
 - **Ethics Review**: Optional constitutional compliance checkpoint for high-risk features
@@ -145,7 +145,6 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 
 ```
 .context/
-├── workflow-state.json      # v2 state management with task IDs
 ├── planning.md              # P stage
 ├── analyzing.md             # A stage
 ├── development.md           # D stage
@@ -227,12 +226,6 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 | `/roi-analysis` | ROI calculation |
 | `/executive-summary` | Executive summary |
 
-#### Workflow Engineer
-| Command | Description |
-|---------|-------------|
-| `/workflow-debug` | Diagnose workflow issues |
-| `/workflow-reset` | Reset stuck workflow |
-
 ### Skills
 - `workflow.md` - Complete workflow system documentation
 - `task-folder-organization.md` - Task folder structure
@@ -246,12 +239,11 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ## Error Handling
 
 ### Retry Logic
-Each stage can retry up to 3 times before escalation. Retries tracked in `workflow-state.json`:
+Each stage can retry up to 3 times before escalation. Error context tracked in `.context/error.md`:
 
-```json
-{
-  "retries": { "4": 2 }  // Development task, second retry
-}
+```markdown
+## Development Error - 2025-01-26
+**Retry**: 2/3
 ```
 
 ### Escalation Chain
@@ -304,9 +296,8 @@ S → F → Q → D → T → A → P → USER
 
 ### Troubleshooting
 ```
-/workflow-debug                     # Diagnose issues
-/workflow-reset --to D              # Reset to stage
 /standup                            # Check progress
+/context-status                     # Context analysis
 ```
 
 ## License

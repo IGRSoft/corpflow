@@ -34,13 +34,11 @@ Before transitioning:
 
 ### Task Status Values
 
-| Status | Meaning | Valid statusCodes | Example |
-|--------|---------|-------------------|---------|
-| **pending** | Not yet started | n/a | Task blocked by dependencies |
-| **in_progress** | Actively working | "0", "1", "2" | Agent executing stage |
-| **completed** | Done | "3" | Stage finished successfully |
-
-**Note**: Task System status (`pending`/`in_progress`/`completed`) and workflow-state.json statusCode (`"0"`-`"3"`) must stay synchronized.
+| Status | Meaning |
+|--------|---------|
+| **pending** | Task blocked by dependencies |
+| **in_progress** | Agent executing stage |
+| **completed** | Stage finished successfully |
 
 ## Error Handling & Escalation
 
@@ -72,11 +70,11 @@ Direct Escalation (based on error type):
 
 ### Adaptive Retry Strategy
 
-**Note**: `X` represents any stage (P, A, T, D, Q, W, F, S). Code 2 = error state.
+**Note**: `X` represents any stage (P, A, T, D, Q, W, F, S).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│             ERROR DETECTED (statusCode: "2")                 │
+│                     ERROR DETECTED                           │
 └──────────────────────────┬──────────────────────────────────┘
                            ↓
               ┌────────────────────────┐
@@ -156,32 +154,15 @@ Create/update `.context/error.md`:
 - [ ] Separate task entries with proper dependencies
 
 ### Execution
-1. Initialize both stages (statusCode "0" for each, e.g., W0 and Q0)
-2. Track in workflow-state.json: `"active_stages": ["W", "Q"]`
-3. Execute concurrently (both at statusCode "1")
-4. Wait for both to reach statusCode "3" (done) before proceeding
-
-**Status Code Reference**: 0=preparing, 1=executing, 2=error, 3=done
+1. Initialize both stages via Task System (set `in_progress`)
+2. Execute concurrently
+3. Wait for both tasks to reach `completed` before proceeding
 
 ### Merge Handling
 If both stages modify same artifact:
 - Designate primary owner
 - Secondary appends to designated section
 - Review for conflicts before F stage
-```
-
-### workflow-state.json Parallel Tracking
-
-```json
-{
-  "parallel_execution": {
-    "enabled": true,
-    "active_stages": ["W", "Q"],
-    "safe_combinations": [["W", "Q"]],
-    "started_at": "2025-01-22T10:00:00Z",
-    "primary_for_conflicts": "W"
-  }
-}
 ```
 
 ## Agent Selection

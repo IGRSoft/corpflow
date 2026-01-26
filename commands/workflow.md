@@ -36,59 +36,7 @@ Initialize a new workflow task with proper folder structure, state management, a
    - Location: `.context/`
    - Creates `images/` subdirectory for visual assets
 
-2. **Initializes workflow-state.json**
-   ```json
-   {
-     "$schema": "workflow-state-v2",
-     "workflow_id": "dark-mode-2025-01-26",
-     "title": "Task Title",
-     "created_at": "2025-01-26T10:00:00Z",
-     "updated_at": "2025-01-26T10:00:00Z",
-     "workflow_type": "standard",
-     "options": {
-       "with_design": false,
-       "ethics_review": false,
-       "priority": "medium",
-       "platform": "all"
-     },
-     "task_ids": {
-       "planning": "1",
-       "ethics": null,
-       "architecture": "2",
-       "teamlead": "3",
-       "development": "4",
-       "qa": "5",
-       "documentation": "6",
-       "finalization": "7",
-       "stakeholder": "8"
-     },
-     "state": {
-       "current": "planning:preparing",
-       "previous": null,
-       "statusCode": "0",
-       "agent": "P",
-       "transitions": []
-     },
-     "retries": { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0, "8": 0, "max": 3 },
-     "approvals": {},
-     "escalations": [],
-     "artifacts": {
-       "planning": ".context/planning.md",
-       "architecture": ".context/analyzing.md",
-       "development": ".context/development.md",
-       "testing": ".context/testing.md",
-       "documentation": ".context/documentation.md",
-       "complete": ".context/complete.md"
-     },
-     "rule_checks": {
-       "build": "pending",
-       "code_review": "pending",
-       "testing": "pending"
-     }
-   }
-   ```
-
-3. **Creates planning.md Template**
+2. **Creates planning.md Template**
    - Problem statement section
    - Requirements (functional and non-functional)
    - Acceptance criteria
@@ -162,7 +110,6 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 - Adds designer to P stage for UX/UI planning input
 - Designer provides: user flow analysis, component requirements, accessibility considerations
 - Use for: UI features, user-facing changes, design system updates
-- Sets `options.with_design: true` in workflow-state.json
 
 When `--with-design` is enabled:
 

@@ -34,7 +34,7 @@ In the 8-stage workflow system, the team-lead handles:
 ### T Stage (Team Lead)
 - Review design from Architecture stage
 - Coordinate implementation approach
-- Update workflow-state.json with blockers/dependencies
+- Update Task System with blockers/dependencies
 - Allocate resources and define quality gates
 - **T3**: Approve approach, transition to Development
 
@@ -142,7 +142,7 @@ When stages can run independently, coordinate parallel execution:
 ```
 1. Verify both stages have independent inputs
 2. Create separate tasks with proper dependencies
-3. Update workflow-state.json: "active_stages": ["W", "Q"]
+3. Set up native dependencies via Task System (Q and W blocked by D only)
 4. Monitor both stages concurrently
 5. Wait for both tasks completed before proceeding to F
 ```
@@ -226,5 +226,4 @@ This agent operates within Claude's constitutional framework:
 - `skills/agent-coordination.md` - Coordination and handoff patterns
 - `skills/cost-optimization.md` - Cost management strategies
 - `skills/claude-constitution.md` - Constitutional principles
-- `/workflow-parallel` - Parallel execution command
 - `/cost-report` - Cost analysis command

@@ -2,7 +2,7 @@
 """
 Setup script for new tasks using Task System integration.
 
-This script creates the .context/ folder with FLAT STRUCTURE and initializes workflow-state.json.
+This script creates the .context/ folder with FLAT STRUCTURE for workflow artifacts.
 Workflow state is managed via Task System (TaskCreate, TaskUpdate, TaskGet, TaskList).
 
 Usage:
@@ -11,12 +11,11 @@ Usage:
 Flat Structure in .context/:
 - All .md files are stored in .context/ root (no subfolders except images/)
 - Only images/ subdirectory is created for visual assets
-- Files: workflow-state.json, planning.md, analyzing.md, development.md, testing.md, etc.
+- Files: planning.md, analyzing.md, development.md, testing.md, etc.
 - error.md is created when errors occur and require escalation
 """
 
 import argparse
-import json
 import re
 import subprocess
 import sys
@@ -26,58 +25,6 @@ from typing import Dict, Optional
 
 
 # Embedded templates
-WORKFLOW_STATE_TEMPLATE = """{
-  "$schema": "workflow-state-v2",
-  "workflow_id": "{{WORKFLOW_ID}}",
-  "title": "{{TITLE}}",
-  "created_at": "{{CREATED_AT}}",
-  "updated_at": "{{UPDATED_AT}}",
-  "workflow_type": "standard",
-  "options": {
-    "with_design": false,
-    "ethics_review": false,
-    "priority": "medium",
-    "platform": "all"
-  },
-  "task_ids": {
-    "planning": "1",
-    "ethics": null,
-    "architecture": "2",
-    "teamlead": "3",
-    "development": "4",
-    "qa": "5",
-    "documentation": "6",
-    "finalization": "7",
-    "stakeholder": "8"
-  },
-  "state": {
-    "current": "planning:preparing",
-    "previous": null,
-    "statusCode": "0",
-    "agent": "P",
-    "transitions": []
-  },
-  "retries": {
-    "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0, "8": 0,
-    "max": 3
-  },
-  "approvals": {},
-  "escalations": [],
-  "artifacts": {
-    "planning": ".context/planning.md",
-    "architecture": ".context/analyzing.md",
-    "development": ".context/development.md",
-    "testing": ".context/testing.md",
-    "documentation": ".context/documentation.md",
-    "complete": ".context/complete.md"
-  },
-  "rule_checks": {
-    "build": "pending",
-    "code_review": "pending",
-    "testing": "pending"
-  }
-}"""
-
 PLANNING_TEMPLATE = """# Task Title
 
 ## Problem Statement
@@ -164,15 +111,6 @@ def get_context_dir(project_root: Optional[Path] = None) -> Path:
     return root / ".context"
 
 
-def replace_placeholders(content: str, placeholders: Dict[str, str]) -> str:
-    """Replace all placeholders in content with their values."""
-    result = content
-    for key, value in placeholders.items():
-        placeholder = f"{{{{{key}}}}}"
-        result = result.replace(placeholder, value)
-    return result
-
-
 def title_to_kebab_case(title: str) -> str:
     """Convert title to kebab-case for folder name."""
     title = re.sub(r'[^\w\s-]', '', title)
@@ -218,45 +156,6 @@ def create_task_structure(
         print(f"Created directory: {directory}")
 
     return True
-
-
-def create_workflow_state_json(
-    task_dir: Path,
-    task_info: Dict[str, str],
-    workflow_id: str,
-    dry_run: bool = False
-) -> bool:
-    """Create workflow-state.json file."""
-    now = datetime.now().isoformat() + "Z"
-
-    placeholders = {
-        "WORKFLOW_ID": workflow_id,
-        "TITLE": task_info["title"],
-        "CREATED_AT": now,
-        "UPDATED_AT": now,
-    }
-
-    content = replace_placeholders(WORKFLOW_STATE_TEMPLATE, placeholders)
-
-    state = json.loads(content)
-    state["options"]["priority"] = task_info.get("priority", "medium").lower()
-    state["options"]["platform"] = task_info.get("platform", "all").lower()
-
-    content = json.dumps(state, indent=2)
-
-    filepath = task_dir / "workflow-state.json"
-
-    if dry_run:
-        print(f"[DRY RUN] Would create: {filepath}")
-        return True
-
-    try:
-        filepath.write_text(content, encoding="utf-8")
-        print(f"Created: {filepath}")
-        return True
-    except Exception as e:
-        print(f"Error writing {filepath}: {e}", file=sys.stderr)
-        return False
 
 
 def create_planning_md(
@@ -416,7 +315,6 @@ Examples:
 
     if create_task_structure(task_dir, task_info, workflow_id, dry_run=args.dry_run):
         if not args.dry_run:
-            create_workflow_state_json(task_dir, task_info, workflow_id, dry_run=args.dry_run)
             create_planning_md(task_dir, task_info, workflow_id, dry_run=args.dry_run)
 
     print("\n=== Summary ===")
@@ -426,7 +324,6 @@ Examples:
         print(f"Created task folder structure:")
 
     print(f"  {task_dir}/")
-    print(f"    ├── workflow-state.json")
     print(f"    ├── planning.md")
     print(f"    └── images/")
     print()

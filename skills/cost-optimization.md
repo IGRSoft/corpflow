@@ -148,7 +148,7 @@ Where:
 
 | Threshold | Alert Level | Action |
 |-----------|-------------|--------|
-| **50%** | Warning | Log to workflow-state.json |
+| **50%** | Warning | Log to console |
 | **75%** | Notify | Alert user, suggest optimizations |
 | **90%** | Critical | Force context compression, recommend model downgrades |
 | **100%** | Pause | Stop workflow, require explicit approval to continue |
@@ -157,38 +157,10 @@ Where:
 
 Claude Code billing occurs per calendar month. Optimization strategies:
 
-1. **Track month boundaries** in workflow-state.json
+1. **Track month boundaries** via Task System metadata
 2. **Plan large workflows** to complete within single month
 3. **Defer non-urgent work** if near month end with budget concerns
 4. **Front-load complex stages** early in billing cycle
-
-## Cost Tracking Schema
-
-Add to `workflow-state.json`:
-
-```json
-{
-  "cost_tracking": {
-    "total_estimated_tokens": 45000,
-    "by_stage": {
-      "P": { "tokens": 7500, "model": "sonnet", "cost": 0.023 },
-      "A": { "tokens": 15000, "model": "opus", "cost": 0.225 },
-      "T": { "tokens": 4000, "model": "sonnet", "cost": 0.012 },
-      "D": { "tokens": 0, "model": "sonnet", "cost": 0 },
-      "Q": { "tokens": 0, "model": "haiku", "cost": 0 },
-      "W": { "tokens": 0, "model": "haiku", "cost": 0 },
-      "F": { "tokens": 0, "model": "sonnet", "cost": 0 },
-      "S": { "tokens": 0, "model": "sonnet", "cost": 0 }
-    },
-    "budget_limit": 1.00,
-    "budget_used_percent": 26,
-    "alerts": [
-      { "level": "info", "message": "A stage used opus model", "timestamp": "..." }
-    ],
-    "billing_month": "2025-01"
-  }
-}
-```
 
 ## Optimization Checklist
 

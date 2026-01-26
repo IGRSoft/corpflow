@@ -27,7 +27,6 @@ The `.context/` folder is located at the project root:
 ```
 project-root/
 ├── .context/           # Workflow artifacts
-│   ├── workflow-state.json
 │   ├── planning.md
 │   └── images/
 ├── src/
@@ -43,7 +42,6 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 
 ```
 .context/
-├── workflow-state.json          # State management (single source of truth)
 ├── planning.md              # Requirements, acceptance criteria (P stage)
 ├── analyzing.md             # Technical design, architecture (A stage)
 ├── development.md           # Implementation notes (D stage)
@@ -59,94 +57,7 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 
 ### Required Files
 
-#### 1. `workflow-state.json`
-
-State management and metadata tracking (v2 schema):
-
-```json
-{
-  "$schema": "workflow-state-v2",
-  "workflow_id": "unique-workflow-id",
-  "title": "Human Readable Task Title",
-  "created_at": "2025-01-26T10:00:00Z",
-  "updated_at": "2025-01-26T10:30:00Z",
-  "workflow_type": "standard|fast|quick",
-  "options": {
-    "with_design": false,
-    "ethics_review": false,
-    "priority": "medium",
-    "platform": "all"
-  },
-  "task_ids": {
-    "planning": "1",
-    "ethics": null,
-    "architecture": "2",
-    "teamlead": "3",
-    "development": "4",
-    "qa": "5",
-    "documentation": "6",
-    "finalization": "7",
-    "stakeholder": "8"
-  },
-  "state": {
-    "current": "planning:executing",
-    "previous": null,
-    "statusCode": "1",
-    "agent": "P",
-    "transitions": []
-  },
-  "retries": {
-    "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0, "8": 0,
-    "max": 3
-  },
-  "approvals": {},
-  "escalations": [],
-  "artifacts": {
-    "planning": ".context/planning.md",
-    "architecture": ".context/analyzing.md",
-    "development": ".context/development.md",
-    "testing": ".context/testing.md",
-    "documentation": ".context/documentation.md",
-    "complete": ".context/complete.md"
-  },
-  "rule_checks": {
-    "build": "pending",
-    "code_review": "pending",
-    "testing": "pending"
-  }
-}
-```
-
-#### Schema Field Descriptions
-
-##### Core Fields
-- **$schema**: Schema version identifier (`workflow-state-v2`)
-- **workflow_id**: Unique identifier for the workflow
-- **workflow_type**: Type of workflow (`standard`, `fast`, or `quick`)
-- **options**: Workflow configuration (with_design, ethics_review, priority, platform)
-
-##### task_ids
-Maps workflow stages to Task System task IDs:
-- `planning`, `ethics`, `architecture`, `teamlead`, `development`, `qa`, `documentation`, `finalization`, `stakeholder`
-- Use `null` for skipped stages (e.g., quick workflow skips architecture, teamlead, etc.)
-
-##### state
-- **current**: Current state in format `{stage}:{phase}` (e.g., `development:executing`)
-- **previous**: Previous state for transition tracking
-- **statusCode**: Phase code (`"0"` preparing, `"1"` executing, `"2"` error, `"3"` done)
-- **agent**: Current stage code (P, A, T, D, Q, W, F, S)
-- **transitions**: Array of transition logs (e.g., `"P3 → A1 (user approved)"`)
-
-##### retries
-- Tracks retry count per task ID (e.g., `"4": 2` means task 4 has retried twice)
-- **max**: Maximum retries before escalation (default: 3)
-
-##### rule_checks
-- **build**: Build validation status (`pending`, `passed`, `failed`)
-- **code_review**: Code review status
-- **testing**: Test execution status
-
-#### 2. `planning.md`
+#### 1. `planning.md`
 
 Product Manager's planning document containing:
 - Problem statement
@@ -227,7 +138,6 @@ All markdown files should include:
 
 ```
 .context/
-├── workflow-state.json
 ├── planning.md
 ├── development.md
 └── testing.md
@@ -237,7 +147,6 @@ All markdown files should include:
 
 ```
 .context/
-├── workflow-state.json
 ├── planning.md
 ├── analyzing.md
 ├── development.md
@@ -254,7 +163,6 @@ All markdown files should include:
 
 ```
 .context/
-├── workflow-state.json
 ├── planning.md
 ├── analyzing.md
 ├── development.md
@@ -268,7 +176,7 @@ All markdown files should include:
 ### DON'T
 
 1. **No .context folder**: Documenting in random locations
-2. **Missing workflow-state.json**: No way to track progress
+2. **Skipping Task System initialization**: No way to track progress
 3. **Creating subfolders**: Keep all .md files in .context/ root (except images/)
 4. **Ignoring errors**: Always create error.md when escalation is needed
 5. **Multiple context folders**: Only one .context/ per project
@@ -277,7 +185,7 @@ All markdown files should include:
 
 1. **Always create .context/**: Even for small tasks
 2. **Document decisions**: Explain WHY, not just WHAT
-3. **Update state**: Keep workflow-state.json current
+3. **Update Task System**: Keep task status current
 4. **Flat structure**: All .md files in .context/ (images/ only subdirectory)
 5. **Log errors**: Create error.md when issues require escalation
 6. **Clean up**: Archive or clear .context/ when starting new tasks
