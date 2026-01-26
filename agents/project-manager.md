@@ -50,6 +50,13 @@ In the 8-stage workflow system, the project-manager handles:
 - Create release.md with release notes
 - **F3**: Mark technical complete
 
+### Task System Format
+```typescript
+// F Stage task states (task_id: "7")
+TaskUpdate({ taskId: "7", status: "in_progress", owner: "project-manager" });  // Start finalization
+TaskUpdate({ taskId: "7", status: "completed" });  // Finalization complete, ready for S stage
+```
+
 ## Task Specification Format
 
 ```markdown

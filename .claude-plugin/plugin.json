@@ -1,7 +1,7 @@
 {
   "name": "igrsoft",
-  "description": "Comprehensive 8-stage workflow system for task management with TodoWrite integration, stage transitions, and structured persistence.",
-  "version": "1.0.0",
+  "description": "Comprehensive 8-stage workflow system for task management with Task System integration, stage transitions, and structured persistence.",
+  "version": "2.0.0",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
@@ -9,7 +9,7 @@
   "keywords": [
     "workflow",
     "task-management",
-    "todowrite",
+    "task-system",
     "project-management",
     "agile",
     "stages",

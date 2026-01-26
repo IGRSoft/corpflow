@@ -90,6 +90,16 @@ In the 8-stage workflow system, the qa-engineer handles:
 - **Q2**: Handle test failures (retry or escalate)
 - **Q3**: All tests pass, document results in testing.md
 
+### Task System Format
+```typescript
+// Q Stage task states (task_id: "5")
+TaskUpdate({ taskId: "5", status: "in_progress", owner: "qa-engineer" });  // Start QA
+TaskUpdate({ taskId: "5", status: "completed" });  // QA complete, ready for W stage
+
+// Retries tracked in workflow-state.json
+{ "retries": { "5": 1 } }  // Retry count for test failures
+```
+
 ## Anti-Patterns to Avoid
 
 - Test implementation details → Test behavior and contracts

@@ -1,6 +1,15 @@
 # Workflow System
 
-Single source of truth for task workflow management using TodoWrite for UI visibility and task-state.json for structured persistence.
+Single source of truth for task workflow management using the Task System for UI visibility and workflow-state.json for structured persistence.
+
+## Task System Tools
+
+| Tool | Purpose |
+|------|---------|
+| `TaskCreate` | Create new tasks with subject, description, activeForm |
+| `TaskUpdate` | Update status, owner, add/remove blockedBy |
+| `TaskGet` | Retrieve current task state |
+| `TaskList` | View all tasks and their statuses |
 
 ## CRITICAL: Trigger Behavior (MUST EXECUTE)
 
@@ -26,12 +35,12 @@ Claude MUST:
 1. Detect "workflow:" prefix
 2. Extract task: "/apple-developer:code-legacy-modernize migrate @StateObject to @Environment"
 3. Invoke: SlashCommand("/company-workflow:workflow \"/apple-developer:code-legacy-modernize migrate @StateObject to @Environment\"")
-4. Workflow creates .context/, task-state.json, planning.md
+4. Workflow creates .context/, workflow-state.json, planning.md
 5. Planning stage (product-manager) captures requirements
 6. Architecture stage can then invoke /apple-developer:code-legacy-modernize
 ```
 
-**For `micro: [task]`**: No workflow initialization. Execute the task directly without TodoWrite or stage management.
+**For `micro: [task]`**: No workflow initialization. Execute the task directly without stage management.
 
 ---
 
@@ -65,7 +74,7 @@ Choose the appropriate tier based on task complexity:
 
 ### Micro Workflow
 - **No folder creation** - Work directly in codebase
-- **No TodoWrite** - Single task, immediate execution
+- **No task tracking** - Single task, immediate execution
 - **Use for**: Typos, small refactors, simple config changes
 
 ### Quick Workflow (3 stages)
@@ -82,72 +91,91 @@ P → D → Q
 P → A → T → D → Q → W → F → S
 ```
 
-| Code | Stage | Agent | Purpose | Artifact |
-|------|-------|-------|---------|----------|
-| P | Planning | product-manager | Define requirements | planning.md |
-| A | Architecture | software-architector | Design solution | analyzing.md |
-| T | Team Lead | team-lead | Coordinate approach | task-state.json |
-| D | Development | [language-pro] | Implement solution | development.md |
-| Q | QA | qa-engineer | Test and validate | testing.md |
-| W | Documentation | technical-writer | Write technical docs | documentation.md |
-| F | Finalization | project-manager | Prepare release | complete.md |
-| S | Stakeholder | stakeholder | Final approval | Terminal state |
+| Code | Stage | Agent | Purpose | Artifact | Task ID |
+|------|-------|-------|---------|----------|---------|
+| P | Planning | product-manager | Define requirements | planning.md | 1 |
+| E | Ethics (optional) | ethics-reviewer | Constitutional review | ethics.md | 2* |
+| A | Architecture | software-architector | Design solution | analyzing.md | 2 or 3 |
+| T | Team Lead | team-lead | Coordinate approach | workflow-state.json | 3 or 4 |
+| D | Development | [language-pro] | Implement solution | development.md | 4 or 5 |
+| Q | QA | qa-engineer | Test and validate | testing.md | 5 or 6 |
+| W | Documentation | technical-writer | Write technical docs | documentation.md | 6 or 7 |
+| F | Finalization | project-manager | Prepare release | complete.md | 7 or 8 |
+| S | Stakeholder | stakeholder | Final approval | Terminal state | 8 or 9 |
 
-## Status Codes
+*Task IDs shift when Ethics stage is included
 
-| Code | Name | TodoWrite Status | Description |
-|------|------|------------------|-------------|
-| 0 | preparing | pending | Agent preparing to work |
-| 1 | executing | in_progress | Agent actively working |
-| 2 | error | in_progress | Error occurred (retry or escalate) |
-| 3 | done | completed | Agent completed work |
+## Task Status
 
-## TodoWrite Integration (MANDATORY)
+| Status | Meaning |
+|--------|---------|
+| `pending` | Not started, may be blocked by dependencies |
+| `in_progress` | Actively working |
+| `completed` | Done |
+
+**Retry tracking** stored in workflow-state.json `retries` object
+
+## Task Tracking Integration (MANDATORY)
 
 ### Stage Code Format
 
-**CRITICAL**: The `content` field MUST use this format:
+**CRITICAL**: The subject field MUST use this format:
 
 ```
-[STAGE][STATUS]: [Description]
+[STAGE]: [Description]
 ```
 
 **Examples:**
-- `P1: Planning` - Planning stage, executing
-- `A0: Architecture` - Architecture stage, preparing
-- `D2: Development (retry 1/3)` - Development error with retry
-- `Q3: QA Testing` - QA completed
+- `P: Planning` - Planning stage
+- `A: Architecture` - Architecture stage
+- `D: Development` - Development stage
+- `Q: QA Testing` - QA stage
 
 ### Initial State (Task Creation)
 
 ```typescript
-TodoWrite({
-  todos: [
-    { content: "P1: Planning", status: "in_progress", activeForm: "Planning task requirements" },
-    { content: "A0: Architecture", status: "pending", activeForm: "Architecting solution" },
-    { content: "T0: Team Lead", status: "pending", activeForm: "Coordinating team" },
-    { content: "D0: Development", status: "pending", activeForm: "Implementing code" },
-    { content: "Q0: QA Testing", status: "pending", activeForm: "Testing solution" },
-    { content: "W0: Documentation", status: "pending", activeForm: "Writing technical documentation" },
-    { content: "F0: Finalization", status: "pending", activeForm: "Finalizing release" },
-    { content: "S0: Stakeholder", status: "pending", activeForm: "Awaiting approval" }
-  ]
-});
+// Create all 8 tasks
+TaskCreate({ subject: "P: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements" });  // Returns id: "1"
+TaskCreate({ subject: "A: Architecture", description: "Design technical solution and architecture", activeForm: "Architecting solution" });  // Returns id: "2"
+TaskCreate({ subject: "T: Team Lead", description: "Coordinate approach and allocate resources", activeForm: "Coordinating team" });  // Returns id: "3"
+TaskCreate({ subject: "D: Development", description: "Implement solution following architecture", activeForm: "Implementing code" });  // Returns id: "4"
+TaskCreate({ subject: "Q: QA Testing", description: "Test and validate implementation", activeForm: "Testing solution" });  // Returns id: "5"
+TaskCreate({ subject: "W: Documentation", description: "Write technical documentation", activeForm: "Writing technical documentation" });  // Returns id: "6"
+TaskCreate({ subject: "F: Finalization", description: "Prepare release package", activeForm: "Finalizing release" });  // Returns id: "7"
+TaskCreate({ subject: "S: Stakeholder", description: "Final stakeholder approval", activeForm: "Awaiting approval" });  // Returns id: "8"
+
+// Set up sequential dependency chain
+TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // A blocked by P
+TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // T blocked by A
+TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // D blocked by T
+TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // Q blocked by D
+TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // W blocked by Q
+TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });  // F blocked by W
+TaskUpdate({ taskId: "8", addBlockedBy: ["7"] });  // S blocked by F
+
+// Start first task
+TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ```
 
 ### Stage Transitions
 
-When a stage completes (code 3), auto-transition to next stage (code 1):
+When a stage completes, transition to the next stage:
 
 | From | To | Action |
 |------|-----|--------|
-| P3 | A1 | User approval → Architecture starts |
-| A3 | T1 | Architecture done → Team Lead starts |
-| T3 | D1 | Team Lead done → Development starts |
-| D3 | Q1 | Development done → QA starts |
-| Q3 | W1 | QA done → Documentation starts |
-| W3 | F1 | Documentation done → Finalization starts |
-| F3 | S1 | Finalization done → Stakeholder acceptance |
+| P (completed) | A (in_progress) | User approval → Architecture starts |
+| A (completed) | T (in_progress) | Architecture done → Team Lead starts |
+| T (completed) | D (in_progress) | Team Lead done → Development starts |
+| D (completed) | Q (in_progress) | Development done → QA starts |
+| Q (completed) | W (in_progress) | QA done → Documentation starts |
+| W (completed) | F (in_progress) | Documentation done → Finalization starts |
+| F (completed) | S (in_progress) | Finalization done → Stakeholder acceptance |
+
+```typescript
+// Complete current stage and start next
+TaskUpdate({ taskId: "1", status: "completed" });
+TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" });
+```
 
 ## P3 Approval Gate
 
@@ -155,67 +183,62 @@ When a stage completes (code 3), auto-transition to next stage (code 1):
 
 **CRITICAL**: You MUST stop and wait for user approval.
 
-1. Planning completes → Update TodoWrite: `P3: Planning (awaiting approval)`
+1. Planning completes → `TaskUpdate({ taskId: "1", status: "completed" })`
 2. **STOP AND ASK**: "Planning complete. Please review planning.md. Approve? [Y/n]"
 3. **WAIT FOR USER RESPONSE** - Do NOT proceed automatically
-4. User approves → Update to `P3: Planning Approved`, transition to A1
+4. User approves → `TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" })`
 
 ### Fast Workflow (`fworkflow:`) - SKIP P3
 
 For fast workflow, immediately continue to Architecture:
 
 ```typescript
-TodoWrite({
-  todos: [
-    { content: "P3: Planning Auto-approved", status: "completed", activeForm: "Planning task requirements" },
-    { content: "A1: Architecture", status: "in_progress", activeForm: "Architecting solution" },
-    // ... rest
-  ]
-});
+TaskUpdate({ taskId: "1", status: "completed" });
+TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" });
 ```
 
 ## Agent Responsibilities
 
 ### Planning (P) - product-manager
-- Create task folder and task-state.json
+- Create task folder and workflow-state.json
 - Write planning.md with requirements, acceptance criteria
 - **P3**: Wait for user approval (standard) or auto-continue (fast)
 
 ### Architecture (A) - software-architector
 - Review requirements, design technical solution
 - Create analyzing.md with architecture decisions
-- **Skip path**: A0 → T0 for simple tasks (no architectural impact)
+- **Skip path**: Simple tasks may skip to T
 
 ### Team Lead (T) - team-lead
 - Review design, coordinate approach
-- Update task-state.json with blockers/dependencies
+- Update workflow-state.json with blockers/dependencies
 - Allocate resources, define quality gates
 
 ### Development (D) - [language specialist]
-- **D0**: Analyze task, create development.md with implementation plan
-- **D1**: Implement solution following the plan
-- **D2**: Run code formatter on modified files (pre-D3 check)
-- **D3**: Verify build passes, complete implementation notes
+- Analyze task, create development.md with implementation plan
+- Implement solution following the plan
+- Run code formatter on modified files
+- Verify build passes, complete implementation notes
 
 ### QA (Q) - qa-engineer
-- **Q0**: Analyze requirements, discover existing tests, create test plan
-- **Q1**: Implement/update tests, execute test suite
-- **Q2**: Handle test failures (retry or escalate)
-- **Q3**: All tests pass, document results
+- Analyze requirements, discover existing tests, create test plan
+- Implement/update tests, execute test suite
+- Handle test failures (retry or escalate)
+- All tests pass, document results
 
 ### Documentation (W) - technical-writer
-- **W0**: Analyze artifacts, discover documentation needing updates
-- **W1**: Update code docs, README, ARCHITECTURE files
-- **W3**: All documentation updated
+- Analyze artifacts, discover documentation needing updates
+- Update code docs, README, ARCHITECTURE files
+- All documentation updated
 
 ### Finalization (F) - project-manager
 - Review all artifacts, run final builds/tests
 - Create complete.md, release.md
-- **F3**: Technical complete
+- Technical complete
 
 ### Stakeholder (S) - stakeholder
 - Final acceptance review
-- **S3**: Task complete (terminal state)
+- Task complete (terminal state)
 
 ## Error Handling
 
@@ -251,10 +274,12 @@ When errors occur that require escalation, create/update `error.md` in the task 
 
 ### Retry Logic
 
-Each stage can retry up to 3 times:
+Each stage can retry up to 3 times. Track retries in workflow-state.json:
 
-```typescript
-{ content: "D2: Development (retry 2/3)", status: "in_progress", activeForm: "Retrying after error" }
+```json
+{
+  "retries": { "4": 2, "max": 3 }
+}
 ```
 
 ### Escalation Chain
@@ -265,22 +290,35 @@ After 3 retries, escalate to previous stage:
 S → F → Q → D → T → A → P → USER
 ```
 
-## task-state.json Structure
+## workflow-state.json Structure
 
-Located at `.context/task-state.json`:
+Located at `.context/workflow-state.json`:
 
 ```json
 {
-  "task_id": "current-task",
-  "title": "Example Task",
-  "created_date": "2025-01-02T10:00:00Z",
-  "updated_date": "2025-01-02T10:30:00Z",
-  "execution_mode": "async",
-  "priority": "medium",
-  "platform": "all",
-  "dependencies": [],
-  "blockers": [],
-
+  "$schema": "workflow-state-v2",
+  "workflow_id": "unique-workflow-id",
+  "title": "Task Title",
+  "created_at": "2025-01-26T10:00:00Z",
+  "updated_at": "2025-01-26T10:30:00Z",
+  "workflow_type": "standard|fast|quick",
+  "options": {
+    "with_design": false,
+    "ethics_review": false,
+    "priority": "medium",
+    "platform": "all"
+  },
+  "task_ids": {
+    "planning": "1",
+    "ethics": null,
+    "architecture": "2",
+    "teamlead": "3",
+    "development": "4",
+    "qa": "5",
+    "documentation": "6",
+    "finalization": "7",
+    "stakeholder": "8"
+  },
   "state": {
     "current": "development:executing",
     "previous": "teamlead:done",
@@ -288,15 +326,20 @@ Located at `.context/task-state.json`:
     "agent": "D",
     "transitions": []
   },
-
   "retries": {
-    "P": 0, "A": 0, "T": 0, "D": 0, "Q": 0, "W": 0, "F": 0, "S": 0,
+    "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0, "8": 0,
     "max": 3
   },
-
   "approvals": {},
   "escalations": [],
-
+  "artifacts": {
+    "planning": ".context/planning.md",
+    "architecture": ".context/analyzing.md",
+    "development": ".context/development.md",
+    "testing": ".context/testing.md",
+    "documentation": ".context/documentation.md",
+    "complete": ".context/complete.md"
+  },
   "rule_checks": {
     "build": "pending",
     "code_review": "pending",
@@ -311,10 +354,10 @@ Required validations before certain transitions:
 
 | Rule | Required Before |
 |------|-----------------|
-| Code Format | D3 (before marking complete) |
-| Build | D3 → Q1 |
-| Tests | Q3 → W1 |
-| Code Review | D3 → Q1 |
+| Code Format | D (before marking complete) |
+| Build | D → Q |
+| Tests | Q → W |
+| Code Review | D → Q |
 
 ## Execution Modes
 
@@ -322,7 +365,7 @@ Required validations before certain transitions:
 Tasks run independently, no waiting.
 
 ### Sync
-Tasks wait for dependencies to complete (F3 or S1):
+Tasks wait for dependencies to complete (F or S):
 
 ```json
 {
@@ -330,6 +373,36 @@ Tasks wait for dependencies to complete (F3 or S1):
   "dependencies": ["20250114-database-setup"]
 }
 ```
+
+## Parallel Execution Patterns
+
+### Safe Parallel Combinations
+
+| Combination | Condition | Time Savings |
+|-------------|-----------|--------------|
+| W + Q | W doesn't need test results | ~30-40% |
+| Early W during D | Core API stable | Documentation ready sooner |
+
+### Native Parallel Dependencies
+
+```typescript
+// W and Q can run in parallel after D completes
+TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // Q blocked by D (not W)
+TaskUpdate({ taskId: "6", addBlockedBy: ["4"] });  // W blocked by D (not Q)
+TaskUpdate({ taskId: "7", addBlockedBy: ["5", "6"] });  // F blocked by BOTH Q AND W
+
+// Both Q and W become unblocked when D completes
+// F only starts when both Q and W are completed
+```
+
+### Never Parallelize
+
+| Combination | Reason |
+|-------------|--------|
+| A before P | Architecture needs requirements |
+| D before T | Development needs coordination |
+| Q before D | Can't test unwritten code |
+| S before F | Approval needs release package |
 
 ## Optimization Hooks
 
@@ -350,7 +423,7 @@ After completing any stage:
 | Action | Purpose |
 |--------|---------|
 | Compress context | Prepare handoff summary (50-100 tokens) |
-| Log token usage | Update cost_tracking in task-state.json |
+| Log token usage | Update cost_tracking in workflow-state.json |
 | Validate artifacts | Ensure required files created |
 
 ### Stage-Specific Optimizations
@@ -366,75 +439,13 @@ After completing any stage:
 | F | sonnet | Brief validation checks |
 | S | sonnet | Concise approval review |
 
-## Parallel Execution Patterns
-
-### Safe Parallel Combinations
-
-| Combination | Condition | Time Savings |
-|-------------|-----------|--------------|
-| W + Q | W doesn't need test results | ~30-40% |
-| Early W during D | Core API stable | Documentation ready sooner |
-
-### Execution Protocol
-
-```
-1. Verify both stages have independent inputs
-2. Create separate TodoWrite entries
-3. Update task-state.json: "active_stages": ["W", "Q"]
-4. Execute concurrently
-5. Wait for both X3 before proceeding to F
-```
-
-### Never Parallelize
-
-| Combination | Reason |
-|-------------|--------|
-| A before P | Architecture needs requirements |
-| D before T | Development needs coordination |
-| Q before D | Can't test unwritten code |
-| S before F | Approval needs release package |
-
-## Command Chaining Patterns
-
-### Pre-Workflow Chain
-
-```
-/estimate "Task" → /pm-prioritize → workflow: "Task"
-```
-
-Estimate complexity and priority before starting full workflow.
-
-### Mid-Development Chain
-
-```
-/arch-review → /tech-debt --quick → /code-impl
-```
-
-Review architecture and tech debt before implementation.
-
-### Pre-Release Chain
-
-```
-/test-coverage → /doc-audit → /release-notes → /executive-summary
-```
-
-Validate coverage and docs before generating release notes.
-
-### Troubleshooting Chain
-
-```
-/workflow-debug → /workflow-reset --to D → /standup
-```
-
-Diagnose issues, reset to appropriate stage, generate status.
-
 ## Best Practices
 
 ### DO
 - Create `.context/` folder before any work
-- Initialize TodoWrite at task start
-- Update TodoWrite at every stage transition
-- Keep task-state.json synchronized
+- Initialize tasks with proper dependencies at workflow start
+- Update task status at every stage transition
+- Keep workflow-state.json synchronized
 - Document errors in error.md (for escalation scenarios)
 - Check dependencies before starting
 - Compress context at stage handoffs
@@ -443,7 +454,7 @@ Diagnose issues, reset to appropriate stage, generate status.
 
 ### DON'T
 - Skip state transitions
-- Forget to update TodoWrite
+- Forget to update task status
 - Bypass approval gates (standard workflow)
 - Create circular dependencies
 - Ignore rule check failures
@@ -484,7 +495,7 @@ workflow: Add user tracking feature --ethics-review
 This adds ethics checkpoint after P stage:
 
 ```
-P1 → P3 → [Ethics Review] → A1 → ...
+P → E → A → T → D → Q → W → F → S
 ```
 
 ### Ethics Stage (Optional E Stage)
@@ -492,14 +503,14 @@ P1 → P3 → [Ethics Review] → A1 → ...
 For high-risk features, insert explicit ethics review:
 
 ```typescript
-TodoWrite({
-  todos: [
-    { content: "P3: Planning Complete", status: "completed", activeForm: "Planning complete" },
-    { content: "E1: Ethics Review", status: "in_progress", activeForm: "Reviewing constitutional compliance" },
-    { content: "A0: Architecture", status: "pending", activeForm: "Architecting solution" },
-    // ... rest
-  ]
-});
+TaskCreate({ subject: "P: Planning", description: "Define requirements", activeForm: "Planning..." });  // id: "1"
+TaskCreate({ subject: "E: Ethics Review", description: "Constitutional compliance", activeForm: "Reviewing ethics..." });  // id: "2"
+TaskCreate({ subject: "A: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "3"
+// ... rest of stages
+
+TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // E blocked by P
+TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // A blocked by E
+// ... rest of chain
 ```
 
 ### Constitutional Escalation
@@ -524,6 +535,52 @@ Features requiring mandatory ethics review:
 - AI/ML decision-making
 - Children or vulnerable populations
 - Health or safety implications
+
+## Task System Features
+
+### Persistence
+Tasks persist across sessions, accessible via `Ctrl+T` task view.
+
+### Native Dependencies
+Use `blockedBy` arrays for explicit dependency management:
+
+```typescript
+TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // D blocked by T
+TaskUpdate({ taskId: "4", removeBlockedBy: ["3"] });  // Remove blocker
+```
+
+### Sub-agent Visibility
+Sub-agents can see and update the main task list:
+
+```typescript
+// Main agent creates task
+TaskCreate({ subject: "D: Development", ... });  // id: "4"
+
+// Sub-agent (swift-pro) can see and update
+const task = TaskGet({ taskId: "4" });
+TaskUpdate({ taskId: "4", status: "in_progress", owner: "swift-pro" });
+```
+
+### Multi-Workflow Coordination
+
+Track multiple workflows with cross-workflow dependencies:
+
+```typescript
+// Workflow A
+TaskCreate({ subject: "WF-A: D: Development", ... });  // id: "wfa-dev"
+TaskCreate({ subject: "WF-A: F: Finalization", ... });  // id: "wfa-final"
+
+// Workflow B depends on Workflow A completing
+TaskCreate({ subject: "WF-B: P: Planning", ... });  // id: "wfb-plan"
+TaskUpdate({ taskId: "wfb-plan", addBlockedBy: ["wfa-final"] });
+```
+
+### Task Ownership
+Use the `owner` field to track which agent owns each task:
+
+```typescript
+TaskUpdate({ taskId: "4", status: "in_progress", owner: "swift-pro" });
+```
 
 ## Related Skills
 

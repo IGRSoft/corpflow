@@ -1,16 +1,38 @@
 # Company Workflow Plugin
 
-A comprehensive 8-stage workflow system for Claude Code with TodoWrite integration, stage transitions, approval gates, and structured task management.
+A comprehensive 8-stage workflow system for Claude Code with Task System integration, stage transitions, approval gates, and structured task management.
 
 ## Features
 
 - **8-Stage Workflow**: Planning → Architecture → Team Lead → Development → QA → Documentation → Finalization → Stakeholder
-- **TodoWrite Integration**: Visual progress tracking with mandatory stage code format
+- **Task System Integration**: Native `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` tools
+- **Native Dependencies**: `blockedBy` arrays for explicit dependency management
+- **Cross-Session Persistence**: Tasks persist across sessions
 - **Approval Gates**: P3 approval gate for standard workflows, auto-skip for fast workflows
 - **Error Handling**: Retry logic (max 3 per stage) and escalation chains
-- **Task State Management**: `task-state.json` as single source of truth
-- **Flat Task Structure**: Organized task folders with consistent naming
+- **Workflow State Management**: `workflow-state.json` v2 schema with task ID mapping
+- **Sub-agent Visibility**: All agents can view tasks with `TaskGet`
 - **Agent-Specific Commands**: Specialized commands for each workflow role
+- **Ethics Review**: Optional constitutional compliance checkpoint for high-risk features
+
+## Task System
+
+The workflow uses Claude Code's Task System for persistent task management:
+
+| Tool | Purpose |
+|------|---------|
+| `TaskCreate` | Create tasks with subject, description, activeForm |
+| `TaskUpdate` | Update status, owner, add/remove blockedBy |
+| `TaskGet` | Retrieve current task state |
+| `TaskList` | View all tasks and their statuses |
+
+### Key Benefits
+
+- **Cross-session persistence**: Tasks survive session boundaries
+- **Native dependencies**: `blockedBy` arrays handled by the system
+- **Sub-agent visibility**: Any agent can query task state
+- **Task ownership**: Explicit `owner` field tracks responsible agent
+- **UI integration**: `Ctrl+T` task view in Claude Code
 
 ## Installation
 
@@ -37,7 +59,7 @@ quick: [task description]      # 3-stage workflow: P → D → Q
 micro: [task description]      # Direct execution, no workflow
 ```
 
-When Claude detects these prefixes, it automatically invokes `/workflow` to set up the workflow context, TodoWrite integration, and stage management.
+When Claude detects these prefixes, it automatically invokes `/workflow` to set up the workflow context, Task System integration, and stage management.
 
 ### Examples
 
@@ -81,20 +103,30 @@ fworkflow: /code-review PR #123
 | F | Finalization | project-manager | Prepare release |
 | S | Stakeholder | stakeholder | Final approval |
 
-## Status Codes
+## Task System Initialization
 
-| Code | Name | TodoWrite Status |
-|------|------|------------------|
-| 0 | preparing | pending |
-| 1 | executing | in_progress |
-| 2 | error | in_progress |
-| 3 | done | completed |
+When a workflow starts, tasks are created with dependencies:
+
+```typescript
+// Create all 8 tasks
+TaskCreate({ subject: "P: Planning", description: "Define requirements", activeForm: "Planning..." });  // id: "1"
+TaskCreate({ subject: "A: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "2"
+// ... all 8 stages
+
+// Set up sequential dependency chain
+TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // A blocked by P
+TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // T blocked by A
+// ... rest of chain
+
+// Start Planning
+TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
+```
 
 ## Context Folder Structure
 
 ```
 .context/
-├── task-state.json          # State management
+├── workflow-state.json      # v2 state management with task IDs
 ├── planning.md              # P stage
 ├── analyzing.md             # A stage
 ├── development.md           # D stage
@@ -187,6 +219,7 @@ fworkflow: /code-review PR #123
 - `task-folder-organization.md` - Task folder structure
 - `five-whys.md` - Root cause analysis technique
 - `workflow-triggers.md` - Automatic trigger detection
+- `claude-constitution.md` - Constitutional principles and ethics framework
 
 ### Tools
 - `setup-task.py` - Python script for task initialization
@@ -194,7 +227,13 @@ fworkflow: /code-review PR #123
 ## Error Handling
 
 ### Retry Logic
-Each stage can retry up to 3 times before escalation.
+Each stage can retry up to 3 times before escalation. Retries tracked in `workflow-state.json`:
+
+```json
+{
+  "retries": { "4": 2 }  // Development task, second retry
+}
+```
 
 ### Escalation Chain
 ```

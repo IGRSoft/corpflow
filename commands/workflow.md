@@ -1,6 +1,6 @@
 # Workflow Command
 
-Initialize a new workflow task with proper folder structure, state management, and TodoWrite integration.
+Initialize a new workflow task with proper folder structure, state management, and Task System integration.
 
 ## Usage
 
@@ -36,15 +36,44 @@ Initialize a new workflow task with proper folder structure, state management, a
    - Location: `.context/`
    - Creates `images/` subdirectory for visual assets
 
-2. **Initializes task-state.json**
+2. **Initializes workflow-state.json**
    ```json
    {
-     "task_id": "current-task",
+     "$schema": "workflow-state-v2",
+     "workflow_id": "dark-mode-2025-01-26",
      "title": "Task Title",
+     "created_at": "2025-01-26T10:00:00Z",
+     "updated_at": "2025-01-26T10:00:00Z",
+     "workflow_type": "standard",
+     "options": {
+       "with_design": false,
+       "ethics_review": false,
+       "priority": "medium",
+       "platform": "all"
+     },
+     "task_ids": {
+       "planning": "1",
+       "ethics": null,
+       "architecture": "2",
+       "teamlead": "3",
+       "development": "4",
+       "qa": "5",
+       "documentation": "6",
+       "finalization": "7",
+       "stakeholder": "8"
+     },
      "state": { "current": "planning:preparing", "statusCode": "0", "agent": "P" },
-     "priority": "medium",
-     "platform": "all",
-     "retries": { "P": 0, "A": 0, "T": 0, "D": 0, "Q": 0, "W": 0, "F": 0, "S": 0, "max": 3 }
+     "retries": { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0, "8": 0, "max": 3 },
+     "approvals": {},
+     "escalations": [],
+     "artifacts": {
+       "planning": ".context/planning.md",
+       "architecture": ".context/analyzing.md",
+       "development": ".context/development.md",
+       "testing": ".context/testing.md",
+       "documentation": ".context/documentation.md",
+       "complete": ".context/complete.md"
+     }
    }
    ```
 
@@ -55,20 +84,29 @@ Initialize a new workflow task with proper folder structure, state management, a
    - Success metrics
    - Constraints and dependencies
 
-4. **Initializes TodoWrite**
+4. **Creates Tasks with Dependencies**
    ```typescript
-   TodoWrite({
-     todos: [
-       { content: "P1: Planning", status: "in_progress", activeForm: "Planning task requirements" },
-       { content: "A0: Architecture", status: "pending", activeForm: "Architecting solution" },
-       { content: "T0: Team Lead", status: "pending", activeForm: "Coordinating team" },
-       { content: "D0: Development", status: "pending", activeForm: "Implementing code" },
-       { content: "Q0: QA Testing", status: "pending", activeForm: "Testing solution" },
-       { content: "W0: Documentation", status: "pending", activeForm: "Writing technical documentation" },
-       { content: "F0: Finalization", status: "pending", activeForm: "Finalizing release" },
-       { content: "S0: Stakeholder", status: "pending", activeForm: "Awaiting approval" }
-     ]
-   });
+   // Create all 8 tasks
+   TaskCreate({ subject: "P: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements" });  // id: "1"
+   TaskCreate({ subject: "A: Architecture", description: "Design technical solution", activeForm: "Architecting solution" });  // id: "2"
+   TaskCreate({ subject: "T: Team Lead", description: "Coordinate approach and resources", activeForm: "Coordinating team" });  // id: "3"
+   TaskCreate({ subject: "D: Development", description: "Implement solution", activeForm: "Implementing code" });  // id: "4"
+   TaskCreate({ subject: "Q: QA Testing", description: "Test and validate", activeForm: "Testing solution" });  // id: "5"
+   TaskCreate({ subject: "W: Documentation", description: "Write technical docs", activeForm: "Writing documentation" });  // id: "6"
+   TaskCreate({ subject: "F: Finalization", description: "Prepare release", activeForm: "Finalizing release" });  // id: "7"
+   TaskCreate({ subject: "S: Stakeholder", description: "Final approval", activeForm: "Awaiting approval" });  // id: "8"
+
+   // Set up sequential dependency chain
+   TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // A blocked by P
+   TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // T blocked by A
+   TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // D blocked by T
+   TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // Q blocked by D
+   TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // W blocked by Q
+   TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });  // F blocked by W
+   TaskUpdate({ taskId: "8", addBlockedBy: ["7"] });  // S blocked by F
+
+   // Start Planning
+   TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
    ```
 
 5. **Starts Planning Phase**
@@ -93,20 +131,20 @@ Initialize a new workflow task with proper folder structure, state management, a
 - Use for: Small fixes, simple features, focused changes
 
 ```typescript
-// Quick workflow TodoWrite initialization
-TodoWrite({
-  todos: [
-    { content: "P1: Planning", status: "in_progress", activeForm: "Planning task requirements" },
-    { content: "D0: Development", status: "pending", activeForm: "Implementing code" },
-    { content: "Q0: QA Testing", status: "pending", activeForm: "Testing solution" }
-  ]
-});
+TaskCreate({ subject: "P: Planning", description: "Quick planning", activeForm: "Planning..." });  // id: "1"
+TaskCreate({ subject: "D: Development", description: "Implementation", activeForm: "Implementing..." });  // id: "2"
+TaskCreate({ subject: "Q: QA Testing", description: "Testing", activeForm: "Testing..." });  // id: "3"
+
+TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // D blocked by P
+TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // Q blocked by D
+TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ```
 
 ### Design-Integrated Workflow (`--with-design`)
 - Adds designer to P stage for UX/UI planning input
 - Designer provides: user flow analysis, component requirements, accessibility considerations
 - Use for: UI features, user-facing changes, design system updates
+- Sets `options.with_design: true` in workflow-state.json
 
 When `--with-design` is enabled:
 
@@ -130,20 +168,45 @@ When `--with-design` is enabled:
    - Accessibility compliance checks
    - Cross-platform consistency
 
+### Ethics-Review Workflow (`--ethics-review`)
+
+For features with potential ethical implications, add an ethics checkpoint:
+
+```
+P → E → A → T → D → Q → W → F → S
+```
+
+When `--ethics-review` is enabled:
+
+1. **Ethics Stage (E) Inserted** after P approval:
+   - Ethics-reviewer agent evaluates constitutional compliance
+   - Checks for potential user harm, manipulation, privacy concerns
+   - Reviews against Claude's constitutional principles
+
+2. **Automatic Ethics Triggers** - Even without flag, ethics review is recommended for:
+   - User data collection or tracking
+   - Algorithmic recommendations
+   - Financial transactions
+   - Content moderation
+   - AI/ML decision-making
+   - Children or vulnerable populations
+
+3. **Ethics Review Output**:
+   - Constitutional compliance assessment
+   - Identified concerns and risks
+   - Mitigation recommendations
+   - Go/no-go recommendation
+
 ```typescript
-// Design-integrated workflow TodoWrite initialization
-TodoWrite({
-  todos: [
-    { content: "P1: Planning + Design", status: "in_progress", activeForm: "Planning requirements with design input" },
-    { content: "A0: Architecture", status: "pending", activeForm: "Architecting solution with design alignment" },
-    { content: "T0: Team Lead", status: "pending", activeForm: "Coordinating team" },
-    { content: "D0: Development", status: "pending", activeForm: "Implementing code with design specs" },
-    { content: "Q0: QA + Design QA", status: "pending", activeForm: "Testing solution and design fidelity" },
-    { content: "W0: Documentation", status: "pending", activeForm: "Writing technical documentation" },
-    { content: "F0: Finalization", status: "pending", activeForm: "Finalizing release" },
-    { content: "S0: Stakeholder", status: "pending", activeForm: "Awaiting approval" }
-  ]
-});
+// With ethics review: P → E → A → T → D → Q → W → F → S
+TaskCreate({ subject: "P: Planning", description: "Define requirements", activeForm: "Planning..." });  // id: "1"
+TaskCreate({ subject: "E: Ethics Review", description: "Constitutional compliance", activeForm: "Reviewing ethics..." });  // id: "2"
+TaskCreate({ subject: "A: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "3"
+// ... rest of stages with shifted IDs
+
+TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // E blocked by P
+TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // A blocked by E
+// ... rest of dependency chain
 ```
 
 ## Output
@@ -165,47 +228,6 @@ After initialization:
 2. P3 approval gate (standard workflow) or auto-continue (fast workflow)
 3. Architecture stage begins
 4. Continue through remaining stages
-
-### Ethics-Review Workflow (`--ethics-review`)
-
-For features with potential ethical implications, add an ethics checkpoint:
-
-```
-P1 → P3 → [E1: Ethics Review] → A1 → ...
-```
-
-When `--ethics-review` is enabled:
-
-1. **Ethics Stage (E) Inserted** after P3 approval:
-   - Ethics-reviewer agent evaluates constitutional compliance
-   - Checks for potential user harm, manipulation, privacy concerns
-   - Reviews against Claude's constitutional principles
-
-2. **Automatic Ethics Triggers** - Even without flag, ethics review is recommended for:
-   - User data collection or tracking
-   - Algorithmic recommendations
-   - Financial transactions
-   - Content moderation
-   - AI/ML decision-making
-   - Children or vulnerable populations
-
-3. **Ethics Review Output**:
-   - Constitutional compliance assessment
-   - Identified concerns and risks
-   - Mitigation recommendations
-   - Go/no-go recommendation
-
-```typescript
-// Ethics-integrated workflow TodoWrite initialization
-TodoWrite({
-  todos: [
-    { content: "P1: Planning", status: "in_progress", activeForm: "Planning task requirements" },
-    { content: "E0: Ethics Review", status: "pending", activeForm: "Reviewing constitutional compliance" },
-    { content: "A0: Architecture", status: "pending", activeForm: "Architecting solution" },
-    // ... rest of stages
-  ]
-});
-```
 
 ## Related
 

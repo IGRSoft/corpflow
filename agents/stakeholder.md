@@ -48,6 +48,13 @@ In the 8-stage workflow system, the stakeholder handles:
 - Approve for release or request changes
 - **S3**: Task complete (terminal state)
 
+### Task System Format
+```typescript
+// S Stage task states (task_id: "8")
+TaskUpdate({ taskId: "8", status: "in_progress", owner: "stakeholder" });  // Start stakeholder review
+TaskUpdate({ taskId: "8", status: "completed" });  // Workflow complete (terminal state)
+```
+
 ## Decision Framework
 
 ### Approval Criteria

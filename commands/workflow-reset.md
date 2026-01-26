@@ -68,7 +68,7 @@ Select option [1-5]:
 ## Actions Taken
 1. ✅ Reset stage to D1 (Development - Executing)
 2. ✅ Reset retry counter for D stage
-3. ✅ Updated TodoWrite
+3. ✅ Updated Task System
 4. ✅ Preserved existing artifacts
 5. ✅ Logged reset in transitions
 
@@ -82,17 +82,20 @@ Select option [1-5]:
 }
 ```
 
-## TodoWrite Updated
+## Task System Updated
 ```typescript
-todos: [
-  { content: "P3: Planning", status: "completed" },
-  { content: "A3: Architecture", status: "completed" },
-  { content: "T3: Team Lead", status: "completed" },
-  { content: "D1: Development (reset)", status: "in_progress" },  // Reset
-  { content: "Q0: QA Testing", status: "pending" },
-  { content: "W0: Documentation", status: "pending" },
-  { content: "F0: Finalization", status: "pending" },
-  { content: "S0: Stakeholder", status: "pending" }
+// Tasks after reset
+TaskList()
+// Returns:
+[
+  { taskId: "1", subject: "P: Planning", status: "completed" },
+  { taskId: "2", subject: "A: Architecture", status: "completed" },
+  { taskId: "3", subject: "T: Team Lead", status: "completed" },
+  { taskId: "4", subject: "D: Development", status: "in_progress" },  // Reset
+  { taskId: "5", subject: "Q: QA Testing", status: "pending" },
+  { taskId: "6", subject: "W: Documentation", status: "pending" },
+  { taskId: "7", subject: "F: Finalization", status: "pending" },
+  { taskId: "8", subject: "S: Stakeholder", status: "pending" }
 ]
 ```
 

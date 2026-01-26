@@ -5,15 +5,15 @@
     "url": "https://github.com/igrsoft"
   },
   "metadata": {
-    "description": "Comprehensive 8-stage workflow system for task management with TodoWrite integration, stage transitions, and structured persistence",
-    "version": "1.0.0"
+    "description": "Comprehensive 8-stage workflow system for task management with Task System integration, stage transitions, and structured persistence",
+    "version": "2.0.0"
   },
   "plugins": [
     {
       "name": "igrsoft",
       "source": "./",
-      "description": "8-stage workflow system (P→A→T→D→Q→W→F→S) with TodoWrite integration for task management, stage transitions, approval gates, error handling, and escalation chains",
-      "version": "1.0.0",
+      "description": "8-stage workflow system (P→A→T→D→Q→W→F→S) with Task System integration for task management, stage transitions, approval gates, error handling, and escalation chains",
+      "version": "2.0.0",
       "author": {
         "name": "igrsoft",
         "url": "https://github.com/igrsoft"
@@ -22,7 +22,7 @@
       "keywords": [
         "workflow",
         "task-management",
-        "todowrite",
+        "task-system",
         "project-management",
         "agile",
         "stages",

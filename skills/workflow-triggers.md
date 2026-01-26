@@ -55,7 +55,7 @@ This rule defines automatic behavior when Claude detects workflow trigger prefix
 **Claude MUST:**
 1. Detect `micro:` prefix
 2. Execute the task directly without workflow initialization
-3. No TodoWrite, no stage management, no .context folder
+3. No Task System, no stage management, no .context folder
 
 ## Priority
 
@@ -63,4 +63,4 @@ This rule has **highest priority** for input processing. Before analyzing the us
 
 ## Why This Matters
 
-Without this rule, users who type `workflow: [task]` expect the full 8-stage workflow to be initialized. If Claude doesn't invoke `/company-workflow:workflow`, the workflow system isn't activated, and the task runs without proper stage management, TodoWrite integration, or approval gates.
+Without this rule, users who type `workflow: [task]` expect the full 8-stage workflow to be initialized. If Claude doesn't invoke `/company-workflow:workflow`, the workflow system isn't activated, and the task runs without proper stage management, Task System integration, or approval gates.
