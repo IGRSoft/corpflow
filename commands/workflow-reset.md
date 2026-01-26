@@ -120,7 +120,7 @@ TaskList()
 This will remove all workflow artifacts and start fresh.
 
 ## Files to Remove
-- [ ] .context/task-state.json
+- [ ] .context/workflow-state.json
 - [ ] .context/planning.md
 - [ ] .context/analyzing.md
 - [ ] .context/development.md

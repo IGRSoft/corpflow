@@ -148,7 +148,7 @@ Where:
 
 | Threshold | Alert Level | Action |
 |-----------|-------------|--------|
-| **50%** | Warning | Log to task-state.json |
+| **50%** | Warning | Log to workflow-state.json |
 | **75%** | Notify | Alert user, suggest optimizations |
 | **90%** | Critical | Force context compression, recommend model downgrades |
 | **100%** | Pause | Stop workflow, require explicit approval to continue |
@@ -157,14 +157,14 @@ Where:
 
 Claude Code billing occurs per calendar month. Optimization strategies:
 
-1. **Track month boundaries** in task-state.json
+1. **Track month boundaries** in workflow-state.json
 2. **Plan large workflows** to complete within single month
 3. **Defer non-urgent work** if near month end with budget concerns
 4. **Front-load complex stages** early in billing cycle
 
 ## Cost Tracking Schema
 
-Add to `task-state.json`:
+Add to `workflow-state.json`:
 
 ```json
 {

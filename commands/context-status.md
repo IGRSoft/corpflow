@@ -141,7 +141,7 @@ Estimated new utilization: 38% (down from 65%)
 |-----------|--------|--------------|
 | planning.md | 3,500 | Yes (to 500) |
 | analyzing.md | 6,000 | Yes (to 800) |
-| task-state.json | 500 | No |
+| workflow-state.json | 500 | No |
 | error.md | 0 | N/A |
 
 ### Conversation
