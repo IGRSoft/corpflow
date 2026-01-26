@@ -178,10 +178,17 @@ Organize backlog by stage:
 In the 8-stage workflow system, the product-manager handles:
 
 ### P Stage (Planning)
-- Create task folder and task-state.json
+- Create task folder and workflow-state.json
 - Write planning.md with requirements and acceptance criteria
 - Define scope, priorities, and dependencies
 - **P3**: Wait for user approval (standard workflow)
+
+### Task System Format
+```typescript
+// P Stage task states (task_id: "1")
+TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });  // Start planning
+TaskUpdate({ taskId: "1", status: "completed" });  // Planning complete, ready for A stage
+```
 
 ### P Stage with Design (`--with-design`)
 When design integration is enabled, Product Manager collaborates with Designer:

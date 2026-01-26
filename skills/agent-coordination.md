@@ -14,13 +14,13 @@ Systematic patterns for coordinating multiple agents across the 8-stage workflow
 ```
 1. Current agent completes work
          ↓
-2. Updates TodoWrite status to X3 (e.g., P3, A3, D3)
+2. Updates task status: TaskUpdate({ taskId: "X", status: "completed" })
          ↓
 3. Creates stage artifact (e.g., planning.md, analyzing.md)
          ↓
 4. Writes compressed handoff summary (50-100 tokens)
          ↓
-5. Next agent begins with X1 status
+5. Next agent begins: TaskUpdate({ taskId: "Y", status: "in_progress" })
 ```
 
 ### Handoff Checklist
@@ -28,18 +28,17 @@ Systematic patterns for coordinating multiple agents across the 8-stage workflow
 Before transitioning:
 - [ ] All stage objectives completed
 - [ ] Artifact created in `.context/`
-- [ ] TodoWrite updated to X3
+- [ ] Task status updated to `completed`
 - [ ] Handoff summary prepared (compressed)
 - [ ] Open questions documented for next stage
 
-### TodoWrite Status Codes
+### Task Status Values
 
-| Code | Meaning | Example |
-|------|---------|---------|
-| **X0** | Preparing | `P0: Planning - Preparing requirements analysis` |
-| **X1** | Executing | `D1: Development - Implementing feature` |
-| **X2** | Error | `Q2: QA - Test failures encountered` |
-| **X3** | Complete | `A3: Architecture - Design complete` |
+| Status | Meaning | Example |
+|--------|---------|---------|
+| **pending** | Not yet started | Task blocked by dependencies |
+| **in_progress** | Actively working | Agent executing stage |
+| **completed** | Done | Stage finished successfully |
 
 ## Error Handling & Escalation
 
@@ -150,7 +149,7 @@ Create/update `.context/error.md`:
 ### Prerequisites
 - [ ] Both stages have independent inputs
 - [ ] No shared artifact writes
-- [ ] Separate TodoWrite entries
+- [ ] Separate task entries with proper dependencies
 
 ### Execution
 1. Initialize both stages (X0 for each)

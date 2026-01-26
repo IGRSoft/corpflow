@@ -122,6 +122,13 @@ In the 8-stage workflow system, the software-architector handles:
 - **A2**: Handle design conflicts (iterate or escalate)
 - **A3**: Complete analyzing.md with architecture decisions
 
+### Task System Format
+```typescript
+// A Stage task states (task_id: "2")
+TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" });  // Start architecture
+TaskUpdate({ taskId: "2", status: "completed" });  // Architecture complete, ready for T stage
+```
+
 ### Model Usage
 This agent uses `opus` model for complex architectural reasoning. Reserve full opus usage for:
 - Trade-off analysis between approaches

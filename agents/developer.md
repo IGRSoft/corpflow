@@ -50,12 +50,14 @@ When platform is `apple`, further route based on context:
 - **D2**: Handle errors (retry up to 3 times)
 - **D3**: Implementation complete, ready for QA
 
-### TodoWrite Format
-```
-D0: Development (preparing)
-D1: Development (implementing feature X)
-D2: Development (retry 1/3 - fixing build error)
-D3: Development (complete)
+### Task System Format
+```typescript
+// Development task states
+TaskUpdate({ taskId: "4", status: "in_progress", owner: "developer" });  // Start
+TaskUpdate({ taskId: "4", status: "completed" });  // Complete
+
+// Retries tracked in workflow-state.json
+{ "retries": { "4": 1 } }  // Retry count
 ```
 
 ## Core Capabilities

@@ -20,7 +20,7 @@ Comprehensive strategies for managing AI agent costs, tracking token usage, and 
 | Task Type | Recommended Model | Rationale |
 |-----------|-------------------|-----------|
 | Status checks | haiku | Simple validation |
-| TodoWrite formatting | haiku | Mechanical operation |
+| Task status updates | haiku | Mechanical operation |
 | Code formatting | haiku | Rule-based transformation |
 | Platform routing | haiku | Pattern matching |
 | Code implementation | sonnet | Balanced complexity |

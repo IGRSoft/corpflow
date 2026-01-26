@@ -141,10 +141,10 @@ When stages can run independently, coordinate parallel execution:
 
 ```
 1. Verify both stages have independent inputs
-2. Create separate TodoWrite entries for each
+2. Create separate tasks with proper dependencies
 3. Update task-state.json: "active_stages": ["W", "Q"]
 4. Monitor both stages concurrently
-5. Wait for both X3 before proceeding to F
+5. Wait for both tasks completed before proceeding to F
 ```
 
 ### Never Parallelize

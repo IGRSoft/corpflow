@@ -138,7 +138,7 @@ model: haiku|sonnet|opus
 
 ### Workflow Integration
 - Stage codes (P, A, T, D, Q, W, F, S)
-- TodoWrite format
+- Task System integration
 - Handoff protocols
 
 ## Integration

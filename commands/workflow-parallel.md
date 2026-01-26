@@ -122,7 +122,7 @@ Both stages operating on independent artifacts.
 ### Merged State
 | Metric | Value |
 |--------|-------|
-| TodoWrite | Both stages marked X3 |
+| Task System | Both tasks marked completed |
 | Next Stage | F |
 | Ready | Yes |
 
@@ -172,7 +172,7 @@ Both stages complete, no conflicts.
 1. Verify both stages have independent inputs
 2. Confirm no shared artifact writes
 3. Check both agents available
-4. Create separate TodoWrite entries
+4. Create separate tasks with proper dependencies
 5. Update task-state.json with parallel flag
 ```
 

@@ -6,7 +6,7 @@ Diagnose and troubleshoot workflow issues, state inconsistencies, and stage tran
 
 ```
 /workflow-debug
-/workflow-debug --check [state|todowrite|transitions]
+/workflow-debug --check [state|tasks|transitions]
 /workflow-debug --fix
 ```
 
@@ -34,8 +34,8 @@ Diagnose and troubleshoot workflow issues, state inconsistencies, and stage tran
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| task-state.json | ✅ Valid | Properly formatted |
-| TodoWrite | ⚠️ Desync | Mismatch with state |
+| workflow-state.json | ✅ Valid | Properly formatted |
+| Task System | ⚠️ Desync | Mismatch with state |
 | Transitions | ✅ Valid | No orphan states |
 | Context Folder | ✅ Present | All required files |
 
@@ -45,12 +45,12 @@ Diagnose and troubleshoot workflow issues, state inconsistencies, and stage tran
 
 ### 🔴 Critical Issues
 
-#### TodoWrite State Mismatch
-**Problem**: TodoWrite shows D1 but task-state.json shows D3
+#### Task System State Mismatch
+**Problem**: Task shows `in_progress` but workflow-state.json shows `completed`
 **Impact**: Workflow progress unclear to user
-**Location**: `.context/task-state.json:12`
+**Location**: `.context/workflow-state.json:12`
 
-**task-state.json**:
+**workflow-state.json**:
 ```json
 {
   "state": {
@@ -61,17 +61,18 @@ Diagnose and troubleshoot workflow issues, state inconsistencies, and stage tran
 }
 ```
 
-**TodoWrite**:
+**Task System**:
 ```typescript
-{ content: "D1: Development", status: "in_progress" }
+TaskGet({ taskId: "4" })
+// Returns: { status: "in_progress", subject: "D: Development" }
 ```
 
-**Fix**: Sync TodoWrite to match task-state.json
+**Fix**: Sync Task System to match workflow-state.json
 
 ### ⚠️ Warnings
 
 #### Missing Transition Log
-**Problem**: Transition from A3 to T1 not logged
+**Problem**: Transition from A to T not logged
 **Impact**: Audit trail incomplete
 **Recommendation**: Add missing transition entry
 
@@ -87,26 +88,21 @@ Diagnose and troubleshoot workflow issues, state inconsistencies, and stage tran
 ### Current State
 ```
 Stage: D (Development)
-Status: 3 (Done)
-Next Expected: Q1 (QA - Executing)
+Status: completed
+Next Expected: Q (QA - in_progress)
 ```
 
 ### Transition History
 | From | To | Timestamp | Notes |
 |------|-----|-----------|-------|
-| P1 | P3 | 2025-01-10 09:00 | Planning complete |
-| P3 | A1 | 2025-01-10 09:15 | User approved |
-| A1 | A3 | 2025-01-10 10:00 | Architecture complete |
-| A3 | T1 | 2025-01-10 10:05 | ⚠️ Not logged |
-| T1 | T3 | 2025-01-10 10:30 | Team lead approved |
-| T3 | D1 | 2025-01-10 10:35 | Development started |
-| D1 | D2 | 2025-01-10 14:00 | Build error |
-| D2 | D1 | 2025-01-10 14:15 | Retry 1 |
-| D1 | D3 | 2025-01-10 16:00 | Development complete |
+| P | A | 2025-01-10 09:15 | User approved |
+| A | T | 2025-01-10 10:05 | ⚠️ Not logged |
+| T | D | 2025-01-10 10:35 | Development started |
+| D | Q | 2025-01-10 16:00 | Development complete |
 
 ### Expected Next Actions
-1. Transition to Q1 (QA Testing)
-2. Update TodoWrite to show Q1 in_progress
+1. Transition to Q (QA Testing)
+2. Update task: `TaskUpdate({ taskId: "5", status: "in_progress" })`
 3. qa-engineer begins test execution
 
 ---
@@ -115,7 +111,7 @@ Next Expected: Q1 (QA - Executing)
 
 | File | Status | Notes |
 |------|--------|-------|
-| task-state.json | ✅ | Valid JSON |
+| workflow-state.json | ✅ | Valid JSON |
 | planning.md | ✅ | Complete |
 | analyzing.md | ✅ | Complete |
 | development.md | ✅ | Complete |
@@ -124,36 +120,31 @@ Next Expected: Q1 (QA - Executing)
 
 ---
 
-## TodoWrite Analysis
+## Task System Analysis
 
 ### Current State
 ```typescript
-todos: [
-  { content: "P3: Planning", status: "completed" },      // ✅ Correct
-  { content: "A3: Architecture", status: "completed" },  // ✅ Correct
-  { content: "T3: Team Lead", status: "completed" },     // ✅ Correct
-  { content: "D1: Development", status: "in_progress" }, // ❌ Should be D3, completed
-  { content: "Q0: QA Testing", status: "pending" },      // ⚠️ Should be Q1, in_progress
-  { content: "W0: Documentation", status: "pending" },   // ✅ Correct
-  { content: "F0: Finalization", status: "pending" },    // ✅ Correct
-  { content: "S0: Stakeholder", status: "pending" }      // ✅ Correct
+TaskList()
+// Returns:
+[
+  { taskId: "1", subject: "P: Planning", status: "completed" },      // ✅ Correct
+  { taskId: "2", subject: "A: Architecture", status: "completed" },  // ✅ Correct
+  { taskId: "3", subject: "T: Team Lead", status: "completed" },     // ✅ Correct
+  { taskId: "4", subject: "D: Development", status: "in_progress" }, // ❌ Should be completed
+  { taskId: "5", subject: "Q: QA Testing", status: "pending" },      // ⚠️ Should be in_progress
+  { taskId: "6", subject: "W: Documentation", status: "pending" },   // ✅ Correct
+  { taskId: "7", subject: "F: Finalization", status: "pending" },    // ✅ Correct
+  { taskId: "8", subject: "S: Stakeholder", status: "pending" }      // ✅ Correct
 ]
 ```
 
 ### Recommended Fix
 ```typescript
-TodoWrite({
-  todos: [
-    { content: "P3: Planning", status: "completed", activeForm: "Planning complete" },
-    { content: "A3: Architecture", status: "completed", activeForm: "Architecture complete" },
-    { content: "T3: Team Lead", status: "completed", activeForm: "Team lead approved" },
-    { content: "D3: Development", status: "completed", activeForm: "Development complete" },
-    { content: "Q1: QA Testing", status: "in_progress", activeForm: "Testing solution" },
-    { content: "W0: Documentation", status: "pending", activeForm: "Writing documentation" },
-    { content: "F0: Finalization", status: "pending", activeForm: "Finalizing release" },
-    { content: "S0: Stakeholder", status: "pending", activeForm: "Awaiting approval" }
-  ]
-});
+// Fix Development task status
+TaskUpdate({ taskId: "4", status: "completed" });
+
+// Start QA task
+TaskUpdate({ taskId: "5", status: "in_progress", owner: "qa-engineer" });
 ```
 
 ---
@@ -163,7 +154,7 @@ TodoWrite({
 ### Fixes Applied
 | Issue | Action | Status |
 |-------|--------|--------|
-| TodoWrite mismatch | Synced with state | ✅ Fixed |
+| Task status mismatch | Synced with state | ✅ Fixed |
 | Missing transition | Added to log | ✅ Fixed |
 | Retry counter | Reset to 0 | ✅ Fixed |
 
@@ -176,7 +167,7 @@ TodoWrite({
 
 ## Prevention Recommendations
 
-1. Always update TodoWrite AND task-state.json together
+1. Always update Task System AND workflow-state.json together
 2. Log transitions immediately after state change
 3. Reset retry counters when stage completes successfully
 4. Validate state before starting new stage
