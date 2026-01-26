@@ -15,8 +15,9 @@ Perform platform-aware code review using specialized developer expertise. Review
 - `--platform <apple|android|web|all>` - Platform context (default: auto-detect)
 - `--path <dir>` - Review specific directory
 - `--pr <number>` - Review PR changes
-- `--focus <areas>` - Focus areas: security, performance, patterns, tests
+- `--focus <areas>` - Focus areas: security, performance, patterns, tests, safety, honesty
 - `--severity <level>` - Minimum severity: info, warning, error
+- `--ethics` - Include constitutional compliance checks
 
 ## Examples
 
@@ -146,6 +147,73 @@ struct User { ... }
 - **performance**: Memory, CPU, network, battery impact
 - **patterns**: Platform idioms, design patterns, architecture
 - **tests**: Coverage, quality, edge cases
+- **safety**: Harm potential, user protection, error handling for safety-critical paths
+- **honesty**: Truthful comments, accurate error messages, non-deceptive UI patterns
+
+### Safety Focus (`--focus safety`)
+
+Reviews code for potential user harm:
+
+```markdown
+## Safety Review 🛡️
+
+### S-01: Missing Input Validation on User Data
+**File**: `src/forms/UserProfile.swift:34`
+**Severity**: Warning
+**Issue**: User input passed directly to database query
+
+**Safety Analysis**:
+- Potential harm: SQL injection, data corruption
+- Affected users: All users submitting profile updates
+- Constitutional principle: Harm avoidance
+
+**Recommendation**: Add input sanitization before database operations
+
+### S-02: No Rate Limiting on API Endpoint
+**File**: `src/api/SubmitController.swift:12`
+**Severity**: Warning
+**Issue**: API endpoint vulnerable to abuse
+
+**Safety Analysis**:
+- Potential harm: Service disruption, resource exhaustion
+- Mitigation: Add rate limiting middleware
+```
+
+### Honesty Focus (`--focus honesty`)
+
+Reviews code for truthfulness and transparency:
+
+```markdown
+## Honesty Review 📋
+
+### H-01: Misleading Error Message
+**File**: `src/errors/ErrorHandler.swift:45`
+**Severity**: Info
+**Issue**: Error message doesn't accurately describe the problem
+
+```swift
+// Current (misleading)
+throw UserError("Something went wrong")
+
+// Recommended (honest)
+throw UserError("Failed to save profile: network connection unavailable")
+```
+
+**Honesty Analysis**:
+- Property violated: Truthful, forthright
+- User impact: Users can't understand or fix the issue
+- Recommendation: Provide specific, actionable error messages
+
+### H-02: Hidden Data Collection
+**File**: `src/analytics/Tracker.swift:78`
+**Severity**: Warning
+**Issue**: Analytics collection without user notification
+
+**Honesty Analysis**:
+- Property violated: Transparent, non-deceptive
+- User impact: Users unaware of data being collected
+- Recommendation: Add disclosure in privacy settings, allow opt-out
+```
 
 ## Integration
 
@@ -160,3 +228,6 @@ This command is used:
 - [code-impl](./code-impl.md) - Implementation command
 - [senior-review](./senior-review.md) - Senior developer review
 - [arch-review](./arch-review.md) - Architecture review
+- [ethics-review](./ethics-review.md) - Ethics review command
+- [transparency-check](./transparency-check.md) - Transparency verification
+- [claude-constitution](../skills/claude-constitution.md) - Constitutional principles

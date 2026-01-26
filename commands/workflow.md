@@ -16,6 +16,7 @@ Initialize a new workflow task with proper folder structure, state management, a
 - `--fast` - Use fast workflow (skip P3 approval gate)
 - `--quick` - Use quick 3-stage workflow (P → D → Q only)
 - `--with-design` - Include designer in planning phase (P stage)
+- `--ethics-review` - Add ethics checkpoint after planning (recommended for high-risk features)
 
 ## Examples
 
@@ -25,6 +26,8 @@ Initialize a new workflow task with proper folder structure, state management, a
 /workflow "Refactor database layer" --fast
 /workflow "Add form validation" --quick
 /workflow "Redesign settings screen" --with-design --platform apple
+/workflow "Add user tracking analytics" --ethics-review
+/workflow "Implement recommendation algorithm" --ethics-review --priority High
 ```
 
 ## What This Command Does
@@ -163,13 +166,58 @@ After initialization:
 3. Architecture stage begins
 4. Continue through remaining stages
 
+### Ethics-Review Workflow (`--ethics-review`)
+
+For features with potential ethical implications, add an ethics checkpoint:
+
+```
+P1 → P3 → [E1: Ethics Review] → A1 → ...
+```
+
+When `--ethics-review` is enabled:
+
+1. **Ethics Stage (E) Inserted** after P3 approval:
+   - Ethics-reviewer agent evaluates constitutional compliance
+   - Checks for potential user harm, manipulation, privacy concerns
+   - Reviews against Claude's constitutional principles
+
+2. **Automatic Ethics Triggers** - Even without flag, ethics review is recommended for:
+   - User data collection or tracking
+   - Algorithmic recommendations
+   - Financial transactions
+   - Content moderation
+   - AI/ML decision-making
+   - Children or vulnerable populations
+
+3. **Ethics Review Output**:
+   - Constitutional compliance assessment
+   - Identified concerns and risks
+   - Mitigation recommendations
+   - Go/no-go recommendation
+
+```typescript
+// Ethics-integrated workflow TodoWrite initialization
+TodoWrite({
+  todos: [
+    { content: "P1: Planning", status: "in_progress", activeForm: "Planning task requirements" },
+    { content: "E0: Ethics Review", status: "pending", activeForm: "Reviewing constitutional compliance" },
+    { content: "A0: Architecture", status: "pending", activeForm: "Architecting solution" },
+    // ... rest of stages
+  ]
+});
+```
+
 ## Related
 
 - [Workflow System](../skills/workflow.md) - Complete workflow documentation
 - [Task Folder Organization](../skills/task-folder-organization.md) - Folder structure
 - [workflow-engineer](../agents/workflow-engineer.md) - Troubleshooting
 - [designer](../agents/designer.md) - Designer agent for `--with-design` workflows
+- [ethics-reviewer](../agents/ethics-reviewer.md) - Ethics reviewer for `--ethics-review` workflows
+- [ethics-review](ethics-review.md) - Standalone ethics review command
+- [harm-assessment](harm-assessment.md) - Harm assessment command
 - [design-review](design-review.md) - Design review command
 - [design-specs](design-specs.md) - Generate design specifications
 - [ux-flow](ux-flow.md) - Create user experience flows
 - [a11y-audit](a11y-audit.md) - Accessibility audit command
+- [claude-constitution](../skills/claude-constitution.md) - Constitutional principles

@@ -460,9 +460,75 @@ Diagnose issues, reset to appropriate stage, generate status.
 | Security/permissions involved | One small test |
 | Cross-team coordination needed | Mechanical change |
 
+## Constitutional Integration
+
+### Ethics Checkpoints
+
+Optional ethics review can be integrated at workflow stages:
+
+| Checkpoint | Stage | Trigger | Purpose |
+|------------|-------|---------|---------|
+| **Pre-Planning** | Before P | `--ethics-review` flag | Assess feature for harm potential |
+| **Design Review** | After A | High-risk features | Validate architecture safety |
+| **Implementation Review** | After D | Safety-critical code | Verify no harmful implementations |
+| **Pre-Release** | After F | All major releases | Final constitutional compliance check |
+
+### Adding Ethics Review to Workflow
+
+Use the `--ethics-review` flag with workflow command:
+
+```
+workflow: Add user tracking feature --ethics-review
+```
+
+This adds ethics checkpoint after P stage:
+
+```
+P1 → P3 → [Ethics Review] → A1 → ...
+```
+
+### Ethics Stage (Optional E Stage)
+
+For high-risk features, insert explicit ethics review:
+
+```typescript
+TodoWrite({
+  todos: [
+    { content: "P3: Planning Complete", status: "completed", activeForm: "Planning complete" },
+    { content: "E1: Ethics Review", status: "in_progress", activeForm: "Reviewing constitutional compliance" },
+    { content: "A0: Architecture", status: "pending", activeForm: "Architecting solution" },
+    // ... rest
+  ]
+});
+```
+
+### Constitutional Escalation
+
+Ethics concerns escalate differently from technical issues:
+
+```
+Ethics Escalation Chain:
+Feature Concern → ethics-reviewer → stakeholder → USER
+
+Hard Constraint Violation → IMMEDIATE STOP → USER
+```
+
+### High-Risk Feature Indicators
+
+Features requiring mandatory ethics review:
+
+- User data collection or tracking
+- Algorithmic recommendations or personalization
+- Financial transactions or sensitive data
+- Content moderation or filtering
+- AI/ML decision-making
+- Children or vulnerable populations
+- Health or safety implications
+
 ## Related Skills
 
 - `cost-optimization.md` - Cost tracking and budget management
 - `context-compression.md` - Context compression techniques
 - `agent-coordination.md` - Multi-agent coordination patterns
 - `estimation-methodology.md` - Task estimation framework
+- `claude-constitution.md` - Constitutional principles and ethics framework
