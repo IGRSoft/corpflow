@@ -55,9 +55,6 @@ When platform is `apple`, further route based on context:
 // Development task states
 TaskUpdate({ taskId: "4", status: "in_progress", owner: "developer" });  // Start
 TaskUpdate({ taskId: "4", status: "completed" });  // Complete
-
-// Retries tracked in workflow-state.json
-{ "retries": { "4": 1 } }  // Retry count
 ```
 
 ## Core Capabilities

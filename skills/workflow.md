@@ -1,6 +1,6 @@
 # Workflow System
 
-Single source of truth for task workflow management using the Task System for UI visibility and workflow-state.json for structured persistence.
+Single source of truth for task workflow management using the Task System for state management, UI visibility, and cross-session persistence.
 
 ## Task System Tools
 
@@ -77,7 +77,7 @@ Claude MUST:
 1. Detect "workflow:" prefix
 2. Extract task: "/apple-developer:code-legacy-modernize migrate @StateObject to @Environment"
 3. Invoke: SlashCommand("/company-workflow:workflow \"/apple-developer:code-legacy-modernize migrate @StateObject to @Environment\"")
-4. Workflow creates .context/, workflow-state.json, planning.md
+4. Workflow creates .context/, planning.md, and initializes Task System
 5. Planning stage (product-manager) captures requirements
 6. Architecture stage can then invoke /apple-developer:code-legacy-modernize
 ```
@@ -138,7 +138,7 @@ P → A → T → D → Q → W → F → S
 | P | Planning | product-manager | Define requirements | planning.md | 1 |
 | E | Ethics (optional) | ethics-reviewer | Constitutional review | ethics.md | 2* |
 | A | Architecture | software-architector | Design solution | analyzing.md | 2 or 3 |
-| T | Team Lead | team-lead | Coordinate approach | workflow-state.json | 3 or 4 |
+| T | Team Lead | team-lead | Coordinate approach | Task System | 3 or 4 |
 | D | Development | [language-pro] | Implement solution | development.md | 4 or 5 |
 | Q | QA | qa-engineer | Test and validate | testing.md | 5 or 6 |
 | W | Documentation | technical-writer | Write technical docs | documentation.md | 6 or 7 |
@@ -154,192 +154,6 @@ P → A → T → D → Q → W → F → S
 | `pending` | Not started, may be blocked by dependencies |
 | `in_progress` | Actively working |
 | `completed` | Done |
-
-**Retry tracking** stored in workflow-state.json `retries` object
-
-## Status Code Reference
-
-This section defines the canonical status tracking system used throughout the workflow.
-
-### Dual-Layer Status System
-
-The workflow uses two complementary status tracking mechanisms:
-
-| Layer | Location | Values | Purpose |
-|-------|----------|--------|---------|
-| **Task System** | TaskUpdate/TaskGet | `pending`, `in_progress`, `completed` | UI visibility, user-facing progress |
-| **Workflow State** | workflow-state.json `statusCode` | `"0"`, `"1"`, `"2"`, `"3"` | Internal phase tracking within stages |
-
-**CRITICAL**: Both systems must be updated together at every state transition.
-
-### Workflow State Status Codes (statusCode)
-
-| Code | Name | Description | Task Status |
-|------|------|-------------|-------------|
-| `"0"` | PREPARING | Stage initialized, setup in progress | `in_progress` |
-| `"1"` | EXECUTING | Active work being performed | `in_progress` |
-| `"2"` | ERROR | Stage failed, awaiting retry/escalation | `in_progress` |
-| `"3"` | DONE | Stage completed successfully | `completed` |
-
-**Note**: statusCode is stored as a string in JSON (`"1"` not `1`).
-
-### Task Status to StatusCode Mapping
-
-| Task Status | Valid statusCodes | When to Use |
-|-------------|-------------------|-------------|
-| `pending` | n/a | Task blocked by dependencies |
-| `in_progress` | `"0"`, `"1"`, `"2"` | Stage active (preparing, executing, or error) |
-| `completed` | `"3"` | Stage finished successfully |
-
-### State String Format
-
-**Canonical format**: `{stage}:{phase}`
-
-| Component | Values |
-|-----------|--------|
-| stage | `planning`, `architecture`, `teamlead`, `development`, `qa`, `documentation`, `finalization`, `stakeholder` |
-| phase | `preparing`, `executing`, `error`, `done` |
-
-**Shorthand format**: `{STAGE_CODE}{STATUS_CODE}`
-
-| Component | Values |
-|-----------|--------|
-| STAGE_CODE | P, A, T, D, Q, W, F, S |
-| STATUS_CODE | 0, 1, 2, 3 |
-
-**Format Mapping Examples**:
-
-| Canonical | Shorthand | Description |
-|-----------|-----------|-------------|
-| `"development:executing"` | `D1` | Development stage actively working |
-| `"qa:error"` | `Q2` | QA stage encountered error |
-| `"finalization:done"` | `F3` | Finalization complete |
-| `"planning:preparing"` | `P0` | Planning stage initializing |
-
-### Stage Lifecycle State Machine
-
-```
-                    ┌──────────────────────────────────────────┐
-                    │            Stage Started                 │
-                    │     (TaskUpdate: in_progress)            │
-                    └──────────────────┬───────────────────────┘
-                                       ↓
-                    ┌──────────────────────────────────────────┐
-                    │     PREPARING (statusCode: "0")          │
-                    │     Task: in_progress                    │
-                    │     state.current: "{stage}:preparing"   │
-                    └──────────────────┬───────────────────────┘
-                                       ↓ Begin work
-                    ┌──────────────────────────────────────────┐
-                    │     EXECUTING (statusCode: "1")          │
-                    │     Task: in_progress                    │
-                    │     state.current: "{stage}:executing"   │
-                    └─────────┬───────────────────┬────────────┘
-                              │                   │
-                      Error   ↓           Success ↓
-         ┌──────────────────────────┐    ┌──────────────────────────┐
-         │  ERROR (statusCode: "2") │    │   DONE (statusCode: "3") │
-         │  Task: in_progress       │    │   Task: completed        │
-         │  state: "{stage}:error"  │    │   state: "{stage}:done"  │
-         └────────────┬─────────────┘    └────────────┬─────────────┘
-                      │                               │
-              Retry   ↓   Escalate                    ↓
-         ┌────────────┴────────────┐         Next Stage Starts
-         │ retries < max:          │         (PREPARING)
-         │   → EXECUTING ("1")     │
-         │ retries = max:          │
-         │   → Previous Stage      │
-         └─────────────────────────┘
-```
-
-### Transition Log Format
-
-Transitions are logged in `state.transitions` array using shorthand notation:
-
-```
-"[FROM_SHORTHAND] → [TO_SHORTHAND]"              // Simple transition
-"[FROM_SHORTHAND] → [TO_SHORTHAND] ([note])"     // With note
-```
-
-**Standard transition notes**:
-- `(user approved)` - User approved P3 gate
-- `(error)` - Error occurred
-- `(retry)` - Retry after error
-- `(A,T skipped)` - Stages skipped (quick workflow)
-- `(escalated)` - Escalated to previous stage
-
-**Examples**:
-```json
-"transitions": [
-  "P0 → P1",
-  "P1 → P3",
-  "P3 → A1 (user approved)",
-  "A1 → A3",
-  "A3 → T1",
-  "T1 → T3",
-  "T3 → D1",
-  "D1 → D2 (error)",
-  "D2 → D1 (retry)",
-  "D1 → D3",
-  "D3 → Q1"
-]
-```
-
-### Quick Workflow State Tracking
-
-For quick workflows (P→D→Q), skipped stages have `null` task_ids:
-
-```json
-{
-  "task_ids": {
-    "planning": "1",
-    "ethics": null,
-    "architecture": null,
-    "teamlead": null,
-    "development": "2",
-    "qa": "3",
-    "documentation": null,
-    "finalization": null,
-    "stakeholder": null
-  },
-  "state": {
-    "current": "development:executing",
-    "statusCode": "1",
-    "transitions": [
-      "P0 → P1",
-      "P1 → P3",
-      "P3 → D1 (A,T skipped)"
-    ]
-  }
-}
-```
-
-### Synchronization Rules
-
-**ALWAYS update both systems together**:
-
-```typescript
-// Stage starts
-TaskUpdate({ taskId: "4", status: "in_progress", owner: "developer" });
-// Update workflow-state.json: statusCode = "0", current = "development:preparing"
-
-// Stage executing
-// Update workflow-state.json: statusCode = "1", current = "development:executing"
-
-// Stage completes
-TaskUpdate({ taskId: "4", status: "completed" });
-// Update workflow-state.json: statusCode = "3", current = "development:done"
-```
-
-**Error handling**:
-```typescript
-// Error detected - Task stays in_progress
-// Update workflow-state.json: statusCode = "2", current = "development:error"
-// Increment retries["4"]
-
-// Retry - Task stays in_progress
-// Update workflow-state.json: statusCode = "1", current = "development:executing"
-```
 
 ## Task Tracking Integration (MANDATORY)
 
@@ -429,7 +243,7 @@ TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" }
 ## Agent Responsibilities
 
 ### Planning (P) - product-manager
-- Create task folder and workflow-state.json
+- Create .context folder and initialize Task System
 - Write planning.md with requirements, acceptance criteria
 - **P3**: Wait for user approval (standard) or auto-continue (fast)
 
@@ -440,7 +254,7 @@ TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" }
 
 ### Team Lead (T) - team-lead
 - Review design, coordinate approach
-- Update workflow-state.json with blockers/dependencies
+- Manage task dependencies via Task System
 - Allocate resources, define quality gates
 
 ### Development (D) - [language specialist]
@@ -503,13 +317,7 @@ When errors occur that require escalation, create/update `error.md` in the task 
 
 ### Retry Logic
 
-Each stage can retry up to 3 times. Track retries in workflow-state.json:
-
-```json
-{
-  "retries": { "4": 2, "max": 3 }
-}
-```
+Each stage can retry up to 3 times. Track retries via task metadata or error.md.
 
 ### Escalation Chain
 
@@ -517,64 +325,6 @@ After 3 retries, escalate to previous stage:
 
 ```
 S → F → Q → D → T → A → P → USER
-```
-
-## workflow-state.json Structure
-
-Located at `.context/workflow-state.json`:
-
-```json
-{
-  "$schema": "workflow-state-v2",
-  "workflow_id": "unique-workflow-id",
-  "title": "Task Title",
-  "created_at": "2025-01-26T10:00:00Z",
-  "updated_at": "2025-01-26T10:30:00Z",
-  "workflow_type": "standard|fast|quick",
-  "options": {
-    "with_design": false,
-    "ethics_review": false,
-    "priority": "medium",
-    "platform": "all"
-  },
-  "task_ids": {
-    "planning": "1",
-    "ethics": null,
-    "architecture": "2",
-    "teamlead": "3",
-    "development": "4",
-    "qa": "5",
-    "documentation": "6",
-    "finalization": "7",
-    "stakeholder": "8"
-  },
-  "state": {
-    "current": "development:executing",
-    "previous": "teamlead:done",
-    "statusCode": "1",
-    "agent": "D",
-    "transitions": []
-  },
-  "retries": {
-    "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0, "8": 0,
-    "max": 3
-  },
-  "approvals": {},
-  "escalations": [],
-  "artifacts": {
-    "planning": ".context/planning.md",
-    "architecture": ".context/analyzing.md",
-    "development": ".context/development.md",
-    "testing": ".context/testing.md",
-    "documentation": ".context/documentation.md",
-    "complete": ".context/complete.md"
-  },
-  "rule_checks": {
-    "build": "pending",
-    "code_review": "pending",
-    "testing": "pending"
-  }
-}
 ```
 
 ## Rule Checks
@@ -652,7 +402,7 @@ After completing any stage:
 | Action | Purpose |
 |--------|---------|
 | Compress context | Prepare handoff summary (50-100 tokens) |
-| Log token usage | Update cost_tracking in workflow-state.json |
+| Log token usage | Track cost via task metadata |
 | Validate artifacts | Ensure required files created |
 
 ### Stage-Specific Optimizations
@@ -674,7 +424,6 @@ After completing any stage:
 - Create `.context/` folder before any work
 - Initialize tasks with proper dependencies at workflow start
 - Update task status at every stage transition
-- Keep workflow-state.json synchronized
 - Document errors in error.md (for escalation scenarios)
 - Check dependencies before starting
 - Compress context at stage handoffs

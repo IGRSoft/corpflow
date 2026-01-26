@@ -204,4 +204,3 @@ This command is used:
 - `skills/context-compression.md` - Context compression techniques
 - `/estimate` - Pre-workflow cost estimation
 - `/context-status` - Context window analysis
-- `/workflow-debug` - Workflow diagnostics

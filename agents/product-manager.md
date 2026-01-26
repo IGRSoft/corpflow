@@ -178,7 +178,7 @@ Organize backlog by stage:
 In the 8-stage workflow system, the product-manager handles:
 
 ### P Stage (Planning)
-- Create task folder and workflow-state.json
+- Create task folder and initialize Task System
 - Write planning.md with requirements and acceptance criteria
 - Define scope, priorities, and dependencies
 - **P3**: Wait for user approval (standard workflow)

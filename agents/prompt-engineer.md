@@ -114,7 +114,7 @@ When creating or optimizing agents that participate in the 8-stage workflow:
 
 ### Task System Format
 ```typescript
-// Each stage has a dedicated task_id in workflow-state.json
+// Each stage has a dedicated task_id (P=1, A=2, T=3, D=4, Q=5, W=6, F=7, S=8)
 // Agents update their task status via Task System tools:
 TaskUpdate({ taskId: "N", status: "in_progress", owner: "agent-name" });  // Start
 TaskUpdate({ taskId: "N", status: "completed" });  // Complete
