@@ -228,3 +228,54 @@ After workflow:
 | Separate API calls for each file | Overhead tokens | Batch reads |
 | Retrying without context compression | Compounds cost | Compress first |
 | Full workflow for trivial changes | Unnecessary stages | Use micro/quick |
+
+## Constitutional Considerations
+
+### Safety and Ethics Override Cost
+
+**IMPORTANT**: Constitutional compliance always takes priority over cost optimization.
+
+| Scenario | Cost Impact | Action |
+|----------|-------------|--------|
+| Ethics review needed | Additional stage cost | Accept cost, conduct review |
+| Hard constraint check | May require opus reasoning | Use appropriate model |
+| Safety-critical code | Extended review time | Prioritize thoroughness |
+| User harm potential | May require stakeholder escalation | Escalate regardless of cost |
+
+### Ethics Review Cost Budgeting
+
+When planning workflows with ethics components:
+
+| Ethics Activity | Typical Tokens | Model | Est. Cost |
+|-----------------|----------------|-------|-----------|
+| Quick ethics check | 2,000-5,000 | sonnet | $0.006-0.015 |
+| Standard ethics review | 5,000-10,000 | sonnet | $0.015-0.03 |
+| Comprehensive ethics audit | 15,000-30,000 | opus | $0.225-0.45 |
+| Hard constraint analysis | 5,000-10,000 | opus | $0.075-0.15 |
+
+### When NOT to Optimize
+
+Do not apply cost optimization when:
+
+- Safety-critical code requires thorough review
+- User harm potential needs assessment
+- Hard constraints may be involved
+- Ethics-reviewer recommends comprehensive analysis
+- Stakeholder has flagged for ethics review
+
+### Constitutional Budget Allocation
+
+Recommended budget reserves for ethics:
+
+| Workflow Type | Ethics Reserve | Purpose |
+|---------------|----------------|---------|
+| Standard | 10% | Ad-hoc ethics consultation |
+| High-risk features | 20% | Mandatory ethics review |
+| User data handling | 15% | Privacy and consent review |
+| AI/ML features | 25% | Fairness and bias assessment |
+
+## Related Skills
+
+- `workflow.md` - Workflow system documentation
+- `agent-coordination.md` - Multi-agent coordination patterns
+- `claude-constitution.md` - Constitutional principles and ethics framework

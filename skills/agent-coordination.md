@@ -370,3 +370,76 @@ Can [Stage A] and [Stage B] run in parallel?
 All checked? → Safe to parallelize
 Any unchecked? → Run sequentially
 ```
+
+## Constitutional Coordination
+
+### Ethics-Reviewer Integration
+
+The `ethics-reviewer` agent can be invoked at any stage:
+
+| Invocation Type | Trigger | Action |
+|-----------------|---------|--------|
+| **Optional Review** | `--ethics-review` flag | Add ethics checkpoint |
+| **Mandatory Review** | High-risk feature detected | Block until review complete |
+| **Escalation** | Agent flags ethical concern | Route to ethics-reviewer |
+| **Hard Constraint** | Absolute violation detected | Immediate stop |
+
+### Constitutional Escalation Chain
+
+Ethics concerns follow a separate escalation path:
+
+```
+Standard Escalation (Technical):
+S → F → Q → D → T → A → P → USER
+
+Constitutional Escalation (Ethics):
+Any Stage → ethics-reviewer → stakeholder → USER
+
+Hard Constraint Violation:
+Any Stage → IMMEDIATE STOP → USER
+```
+
+### Honesty Requirements in Handoffs
+
+All handoff messages must adhere to honesty properties:
+
+| Property | Handoff Requirement |
+|----------|---------------------|
+| **Truthful** | Accurate status and completion claims |
+| **Calibrated** | Appropriate uncertainty in estimates |
+| **Transparent** | No hidden issues or concerns |
+| **Forthright** | Proactively share relevant risks |
+| **Non-deceptive** | No misleading summaries |
+
+### Ethics-Aware Agent Selection
+
+When delegating tasks, consider constitutional implications:
+
+| Task Type | Additional Consideration |
+|-----------|-------------------------|
+| User data handling | May need ethics-reviewer consultation |
+| Content generation | Check for manipulation potential |
+| Decision algorithms | Assess fairness and bias |
+| Safety-critical code | Mandatory review before completion |
+
+### Constitutional Handoff Format
+
+When ethics concerns are identified, include in handoff:
+
+```markdown
+## [FROM_STAGE]→[TO_STAGE] Handoff
+
+**Summary**: [Accomplishment]
+
+**Constitutional Notes**:
+- [Ethics concern or consideration]
+- [Mitigation applied or recommended]
+
+**Ethics Status**: [Clear | Concern Noted | Review Required]
+```
+
+## Related Skills
+
+- `workflow.md` - Workflow system documentation
+- `cost-optimization.md` - Cost tracking and optimization
+- `claude-constitution.md` - Constitutional principles and ethics framework

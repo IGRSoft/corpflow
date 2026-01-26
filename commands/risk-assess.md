@@ -15,9 +15,10 @@ Identify, assess, and document project risks with mitigation strategies.
 
 - `--update` - Update existing risk register
 - `--report` - Generate risk report
-- `--category [technical|schedule|resource|external]` - Filter by category
+- `--category [technical|schedule|resource|external|ethical]` - Filter by category
 - `--threshold [low|medium|high]` - Show risks above threshold
 - `--platform <apple|android|web|all>` - Target platform context (default: all)
+- `--include-ethics` - Include ethical risk assessment (recommended for user-facing features)
 
 ## Examples
 
@@ -219,8 +220,77 @@ This command works with:
 - `/release-notes` - Document known issues
 - `/business-case` - Risk section
 
+## Ethical Risk Category
+
+When using `--include-ethics` or `--category ethical`, the assessment includes:
+
+### Ethical Risk Types
+
+| Risk Type | Description | Examples |
+|-----------|-------------|----------|
+| **User Harm** | Potential for direct user harm | Privacy violation, data exposure |
+| **Manipulation** | Potential for user manipulation | Dark patterns, deceptive UX |
+| **Autonomy** | Impact on user autonomy | Dependency creation, choice limitation |
+| **Fairness** | Bias or discrimination potential | Algorithmic bias, unequal treatment |
+| **Transparency** | Honesty and disclosure issues | Hidden data collection, misleading info |
+
+### Ethical Risk Assessment Output
+
+```markdown
+## Ethical Risks 🔵
+
+### E-01: User Privacy Exposure
+| Attribute | Value |
+|-----------|-------|
+| Category | Ethical - Privacy |
+| Probability | Medium (40%) |
+| Impact | High |
+| Risk Score | 7/10 |
+| Constitutional Principle | Harm Avoidance |
+
+**Description**: Feature collects location data without explicit user consent.
+
+**Constitutional Analysis**:
+- Violates: User autonomy, informed consent
+- Principle: "Respect user's right to make informed decisions"
+- Hard Constraint: No (but significant concern)
+
+**Mitigation**:
+1. Add explicit opt-in consent dialog
+2. Provide clear data usage explanation
+3. Allow granular permissions control
+
+**Ethics Review**: Recommended before implementation
+```
+
+### Hard Constraint Risks
+
+These are NEVER acceptable regardless of mitigation:
+
+| Hard Constraint | Risk Classification |
+|-----------------|---------------------|
+| CSAM facilitation | Absolute prohibition |
+| Weapons of mass destruction | Absolute prohibition |
+| Critical infrastructure attacks | Absolute prohibition |
+| Undermining AI oversight | Absolute prohibition |
+
+If hard constraint risk is identified: **IMMEDIATE STOP** - escalate to stakeholder and user.
+
+## Integration
+
+This command works with:
+- `/sprint-plan` - Include risk buffer
+- `/release-notes` - Document known issues
+- `/business-case` - Risk section
+- `/ethics-review` - Deep ethical analysis
+- `/harm-assessment` - Detailed harm evaluation
+
 ## Related
 
 - [project-manager](../agents/project-manager.md) - Project management
 - [sprint-plan](./sprint-plan.md) - Sprint planning
 - [stakeholder](../agents/stakeholder.md) - Risk escalation
+- [ethics-reviewer](../agents/ethics-reviewer.md) - Ethics review agent
+- [ethics-review](./ethics-review.md) - Ethics review command
+- [harm-assessment](./harm-assessment.md) - Harm assessment command
+- [claude-constitution](../skills/claude-constitution.md) - Constitutional principles
