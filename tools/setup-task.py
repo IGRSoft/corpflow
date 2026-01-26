@@ -296,21 +296,24 @@ def create_planning_md(
         return False
 
 
-def print_task_system_command(workflow_id: str):
+def print_task_system_command(workflow_id: str, priority: str = "medium"):
     """Print Task System commands to initialize workflow."""
     print("\n" + "="*70)
     print("IMPORTANT: Initialize workflow with Task System")
     print("="*70)
     print("\nCopy and paste these commands into Claude Code:\n")
-    print("// Create all 8 tasks")
-    print('TaskCreate({ subject: "P: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements" });  // id: "1"')
-    print('TaskCreate({ subject: "A: Architecture", description: "Design technical solution", activeForm: "Architecting solution" });  // id: "2"')
-    print('TaskCreate({ subject: "T: Team Lead", description: "Coordinate approach and resources", activeForm: "Coordinating team" });  // id: "3"')
-    print('TaskCreate({ subject: "D: Development", description: "Implement solution", activeForm: "Implementing code" });  // id: "4"')
-    print('TaskCreate({ subject: "Q: QA Testing", description: "Test and validate", activeForm: "Testing solution" });  // id: "5"')
-    print('TaskCreate({ subject: "W: Documentation", description: "Write technical docs", activeForm: "Writing documentation" });  // id: "6"')
-    print('TaskCreate({ subject: "F: Finalization", description: "Prepare release", activeForm: "Finalizing release" });  // id: "7"')
-    print('TaskCreate({ subject: "S: Stakeholder", description: "Final approval", activeForm: "Awaiting approval" });  // id: "8"')
+    print(f'// Create all 8 tasks with metadata')
+    print(f'const workflowId = "{workflow_id}";')
+    print(f'const priority = "{priority}";')
+    print()
+    print('TaskCreate({ subject: "P: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements", metadata: { stage: "P", workflow_id: workflowId, priority } });  // id: "1"')
+    print('TaskCreate({ subject: "A: Architecture", description: "Design technical solution", activeForm: "Architecting solution", metadata: { stage: "A", workflow_id: workflowId, priority } });  // id: "2"')
+    print('TaskCreate({ subject: "T: Team Lead", description: "Coordinate approach and resources", activeForm: "Coordinating team", metadata: { stage: "T", workflow_id: workflowId, priority } });  // id: "3"')
+    print('TaskCreate({ subject: "D: Development", description: "Implement solution", activeForm: "Implementing code", metadata: { stage: "D", workflow_id: workflowId, priority } });  // id: "4"')
+    print('TaskCreate({ subject: "Q: QA Testing", description: "Test and validate", activeForm: "Testing solution", metadata: { stage: "Q", workflow_id: workflowId, priority } });  // id: "5"')
+    print('TaskCreate({ subject: "W: Documentation", description: "Write technical docs", activeForm: "Writing documentation", metadata: { stage: "W", workflow_id: workflowId, priority } });  // id: "6"')
+    print('TaskCreate({ subject: "F: Finalization", description: "Prepare release", activeForm: "Finalizing release", metadata: { stage: "F", workflow_id: workflowId, priority } });  // id: "7"')
+    print('TaskCreate({ subject: "S: Stakeholder", description: "Final approval", activeForm: "Awaiting approval", metadata: { stage: "S", workflow_id: workflowId, priority } });  // id: "8"')
     print()
     print("// Set up sequential dependency chain")
     print('TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // A blocked by P')
@@ -442,7 +445,7 @@ Examples:
         print("  2. Initialize Task System (see commands below)")
         print("  3. Start planning work")
 
-        print_task_system_command(workflow_id)
+        print_task_system_command(workflow_id, task_info["priority"].lower())
 
 
 if __name__ == "__main__":

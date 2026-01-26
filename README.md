@@ -21,18 +21,37 @@ The workflow uses Claude Code's Task System for persistent task management:
 
 | Tool | Purpose |
 |------|---------|
-| `TaskCreate` | Create tasks with subject, description, activeForm |
+| `TaskCreate` | Create tasks with subject, description, activeForm, metadata |
 | `TaskUpdate` | Update status, owner, add/remove blockedBy |
 | `TaskGet` | Retrieve current task state |
 | `TaskList` | View all tasks and their statuses |
 
 ### Key Benefits
 
-- **Cross-session persistence**: Tasks survive session boundaries
+- **Cross-session persistence**: Tasks survive session boundaries (see below)
 - **Native dependencies**: `blockedBy` arrays handled by the system
 - **Sub-agent visibility**: Any agent can query task state
 - **Task ownership**: Explicit `owner` field tracks responsible agent
+- **Metadata support**: Store priority, stage, workflow_id per task
 - **UI integration**: `Ctrl+T` task view in Claude Code
+
+### Cross-Session Persistence
+
+By default, tasks persist within a session. For cross-session persistence:
+
+```bash
+# Per-session (temporary)
+CLAUDE_CODE_TASK_LIST_ID="my-project" claude
+
+# Permanent (add to .claude/settings.json)
+{
+  "env": {
+    "CLAUDE_CODE_TASK_LIST_ID": "project-workflow"
+  }
+}
+```
+
+Tasks are stored at `~/.claude/tasks/<list-id>/` as individual JSON files.
 
 ## Installation
 
