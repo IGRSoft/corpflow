@@ -44,7 +44,7 @@ The workflow system currently uses `tasks/YYYYMMDD-short-title/` folder structur
 ## Constraints
 
 - Single `.context/` folder per project (no date-based folders)
-- Task metadata (date, ID) moves to task-state.json only
+- Task metadata (date, ID) moves to workflow-state.json only
 
 ## Next Steps
 

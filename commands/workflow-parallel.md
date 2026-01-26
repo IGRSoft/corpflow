@@ -173,7 +173,7 @@ Both stages complete, no conflicts.
 2. Confirm no shared artifact writes
 3. Check both agents available
 4. Create separate tasks with proper dependencies
-5. Update task-state.json with parallel flag
+5. Update workflow-state.json with parallel flag
 ```
 
 ### During Execution
@@ -191,11 +191,11 @@ Both stages complete, no conflicts.
 1. Wait for both X3 status
 2. Run conflict detection
 3. Merge results if clean
-4. Update task-state.json
+4. Update workflow-state.json
 5. Prepare combined handoff
 ```
 
-## task-state.json Schema
+## workflow-state.json Schema
 
 ```json
 {

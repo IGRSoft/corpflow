@@ -2,16 +2,16 @@
 """
 Setup script for new tasks using Task System integration.
 
-This script creates a new task folder with FLAT STRUCTURE and initializes workflow-state.json.
+This script creates the .context/ folder with FLAT STRUCTURE and initializes workflow-state.json.
 Workflow state is managed via Task System (TaskCreate, TaskUpdate, TaskGet, TaskList).
 
 Usage:
     python3 setup-task.py "Task Title" [options]
 
-Flat Structure:
-- All .md files are stored in task folder root (no subfolders)
+Flat Structure in .context/:
+- All .md files are stored in .context/ root (no subfolders except images/)
 - Only images/ subdirectory is created for visual assets
-- Files: planning.md, analyzing.md, development.md, testing.md, etc.
+- Files: workflow-state.json, planning.md, analyzing.md, development.md, testing.md, etc.
 - error.md is created when errors occur and require escalation
 """
 
@@ -52,8 +52,10 @@ WORKFLOW_STATE_TEMPLATE = """{
   },
   "state": {
     "current": "planning:preparing",
+    "previous": null,
     "statusCode": "0",
-    "agent": "P"
+    "agent": "P",
+    "transitions": []
   },
   "retries": {
     "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0, "8": 0,
@@ -68,6 +70,11 @@ WORKFLOW_STATE_TEMPLATE = """{
     "testing": ".context/testing.md",
     "documentation": ".context/documentation.md",
     "complete": ".context/complete.md"
+  },
+  "rule_checks": {
+    "build": "pending",
+    "code_review": "pending",
+    "testing": "pending"
   }
 }"""
 
@@ -151,10 +158,10 @@ def get_project_root(explicit_root: Optional[Path] = None) -> Path:
     return Path.cwd()
 
 
-def get_tasks_dir(project_root: Optional[Path] = None) -> Path:
-    """Get the tasks directory path in PROJECT_ROOT/tasks/."""
+def get_context_dir(project_root: Optional[Path] = None) -> Path:
+    """Get the .context directory path in PROJECT_ROOT/.context/."""
     root = get_project_root(project_root)
-    return root / "tasks"
+    return root / ".context"
 
 
 def replace_placeholders(content: str, placeholders: Dict[str, str]) -> str:
@@ -393,9 +400,8 @@ Examples:
         print("No files will be written. Preview of changes:\n")
 
     project_root = get_project_root(args.project_root)
-    folder_name = generate_folder_name(task_info["title"])
-    workflow_id = folder_name
-    task_dir = get_tasks_dir(project_root) / folder_name
+    workflow_id = generate_folder_name(task_info["title"])
+    task_dir = get_context_dir(project_root)
 
     print(f"\nProject root: {project_root}")
     print(f"Workflow ID: {workflow_id}")

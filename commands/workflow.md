@@ -62,7 +62,13 @@ Initialize a new workflow task with proper folder structure, state management, a
        "finalization": "7",
        "stakeholder": "8"
      },
-     "state": { "current": "planning:preparing", "statusCode": "0", "agent": "P" },
+     "state": {
+       "current": "planning:preparing",
+       "previous": null,
+       "statusCode": "0",
+       "agent": "P",
+       "transitions": []
+     },
      "retries": { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0, "8": 0, "max": 3 },
      "approvals": {},
      "escalations": [],
@@ -73,6 +79,11 @@ Initialize a new workflow task with proper folder structure, state management, a
        "testing": ".context/testing.md",
        "documentation": ".context/documentation.md",
        "complete": ".context/complete.md"
+     },
+     "rule_checks": {
+       "build": "pending",
+       "code_review": "pending",
+       "testing": "pending"
      }
    }
    ```

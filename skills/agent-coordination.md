@@ -170,7 +170,7 @@ If both stages modify same artifact:
 - Review for conflicts before F stage
 ```
 
-### task-state.json Parallel Tracking
+### workflow-state.json Parallel Tracking
 
 ```json
 {
