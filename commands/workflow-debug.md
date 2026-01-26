@@ -50,7 +50,7 @@ Diagnose and troubleshoot workflow issues, state inconsistencies, and stage tran
 **Impact**: Workflow progress unclear to user
 **Location**: `.context/workflow-state.json:12`
 
-**workflow-state.json**:
+**workflow-state.json** (canonical format: `stage:phase`, shorthand: `D3`):
 ```json
 {
   "state": {
@@ -67,7 +67,15 @@ TaskGet({ taskId: "4" })
 // Returns: { status: "in_progress", subject: "D: Development" }
 ```
 
-**Fix**: Sync Task System to match workflow-state.json
+**Status Code Reference**:
+| Code | Name | Task Status |
+|------|------|-------------|
+| `"0"` | PREPARING | `in_progress` |
+| `"1"` | EXECUTING | `in_progress` |
+| `"2"` | ERROR | `in_progress` |
+| `"3"` | DONE | `completed` |
+
+**Fix**: Sync Task System to match workflow-state.json (statusCode `"3"` = task `completed`)
 
 ### ⚠️ Warnings
 
@@ -95,10 +103,12 @@ Next Expected: Q (QA - in_progress)
 ### Transition History
 | From | To | Timestamp | Notes |
 |------|-----|-----------|-------|
-| P | A | 2025-01-10 09:15 | User approved |
-| A | T | 2025-01-10 10:05 | ⚠️ Not logged |
-| T | D | 2025-01-10 10:35 | Development started |
-| D | Q | 2025-01-10 16:00 | Development complete |
+| P3 | A1 | 2025-01-10 09:15 | User approved |
+| A3 | T1 | 2025-01-10 10:05 | ⚠️ Not logged |
+| T3 | D1 | 2025-01-10 10:35 | Development started |
+| D3 | Q1 | 2025-01-10 16:00 | Development complete |
+
+**Shorthand**: `{STAGE}{CODE}` where CODE: 0=preparing, 1=executing, 2=error, 3=done
 
 ### Expected Next Actions
 1. Transition to Q (QA Testing)

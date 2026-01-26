@@ -34,11 +34,13 @@ Before transitioning:
 
 ### Task Status Values
 
-| Status | Meaning | Example |
-|--------|---------|---------|
-| **pending** | Not yet started | Task blocked by dependencies |
-| **in_progress** | Actively working | Agent executing stage |
-| **completed** | Done | Stage finished successfully |
+| Status | Meaning | Valid statusCodes | Example |
+|--------|---------|-------------------|---------|
+| **pending** | Not yet started | n/a | Task blocked by dependencies |
+| **in_progress** | Actively working | "0", "1", "2" | Agent executing stage |
+| **completed** | Done | "3" | Stage finished successfully |
+
+**Note**: Task System status (`pending`/`in_progress`/`completed`) and workflow-state.json statusCode (`"0"`-`"3"`) must stay synchronized.
 
 ## Error Handling & Escalation
 
@@ -70,9 +72,11 @@ Direct Escalation (based on error type):
 
 ### Adaptive Retry Strategy
 
+**Note**: `X` represents any stage (P, A, T, D, Q, W, F, S). Code 2 = error state.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    ERROR DETECTED (X2)                       │
+│             ERROR DETECTED (statusCode: "2")                 │
 └──────────────────────────┬──────────────────────────────────┘
                            ↓
               ┌────────────────────────┐
@@ -152,10 +156,12 @@ Create/update `.context/error.md`:
 - [ ] Separate task entries with proper dependencies
 
 ### Execution
-1. Initialize both stages (X0 for each)
-2. Track in task-state.json: `"active_stages": ["W", "Q"]`
-3. Execute concurrently
-4. Wait for both X3 before proceeding
+1. Initialize both stages (statusCode "0" for each, e.g., W0 and Q0)
+2. Track in workflow-state.json: `"active_stages": ["W", "Q"]`
+3. Execute concurrently (both at statusCode "1")
+4. Wait for both to reach statusCode "3" (done) before proceeding
+
+**Status Code Reference**: 0=preparing, 1=executing, 2=error, 3=done
 
 ### Merge Handling
 If both stages modify same artifact:
@@ -237,6 +243,8 @@ Task Complexity Assessment:
 ```
 P1 → P3 → A1 → A3 → T1 → T3 → D1 → D3 → Q1 → Q3 → W1 → W3 → F1 → F3 → S1 → S3
 ```
+
+**Shorthand notation**: `{STAGE}{CODE}` where CODE: 0=preparing, 1=executing, 2=error, 3=done
 
 Standard 8-stage execution with handoffs.
 
