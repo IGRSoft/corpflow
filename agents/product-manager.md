@@ -127,6 +127,56 @@ Generate or contribute to:
 - complexity_analysis.csv (5-factor scoring)
 - success_metrics.csv (KPIs, acceptance criteria)
 
+## Test Strategy Definition
+
+When planning features, define the test strategy for developers:
+
+### Test Requirements Template
+
+Include in planning.md:
+
+```markdown
+## Test Strategy
+
+### Test Scope
+| Category | Description | Priority |
+|----------|-------------|----------|
+| Unit Tests | [Core logic to test] | Required |
+| Integration Tests | [Component interactions] | Required/Optional |
+| E2E Tests | [Critical user journeys] | If applicable |
+
+### Test Acceptance Criteria
+- [ ] [Specific testable behavior 1]
+- [ ] [Specific testable behavior 2]
+- [ ] [Edge case to cover]
+
+### Existing Tests to Update
+| Test File | Reason for Update |
+|-----------|-------------------|
+| [path/to/test] | [Logic changed in X] |
+
+### Test Effort Estimate
+- New tests: [X hours]
+- Test updates: [Y hours]
+```
+
+### Test Strategy Rules
+
+1. **New Feature**: Define at least 3 unit test scenarios
+2. **Bug Fix**: Define regression test for the fixed behavior
+3. **Refactor**: Identify all existing tests that touch changed code
+4. **Logic Change**: List specific tests requiring updates
+
+### Test Scope Guidelines
+
+| Feature Type | Unit Tests | Integration | E2E |
+|--------------|------------|-------------|-----|
+| New API endpoint | Required | Required | Optional |
+| UI component | Required | Optional | Optional |
+| Business logic | Required | Optional | No |
+| Data migration | Required | Required | Required |
+| Bug fix | Regression test required | As needed | No |
+
 ## Feature Stage Prioritization
 
 ### RICE + Stage Model
@@ -180,6 +230,7 @@ In the 8-stage workflow system, the product-manager handles:
 ### P Stage (Planning)
 - Create task folder and initialize Task System
 - Write planning.md with requirements and acceptance criteria
+- **Define test strategy** (what needs to be tested, existing tests to update)
 - Define scope, priorities, and dependencies
 - **P3**: Wait for user approval (standard workflow)
 
