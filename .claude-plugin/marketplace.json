@@ -66,9 +66,6 @@
         "./commands/test-coverage.md",
         "./commands/test-plan.md",
         "./commands/ux-flow.md",
-        "./commands/workflow-debug.md",
-        "./commands/workflow-parallel.md",
-        "./commands/workflow-reset.md",
         "./commands/workflow.md"
       ],
       "agents": [
@@ -81,8 +78,7 @@
         "./agents/software-architector.md",
         "./agents/stakeholder.md",
         "./agents/team-lead.md",
-        "./agents/technical-writer.md",
-        "./agents/workflow-engineer.md"
+        "./agents/technical-writer.md"
       ],
       "skills": [
         "./skills/agent-coordination.md",

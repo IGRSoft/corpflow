@@ -13,6 +13,15 @@
     "project-management",
     "agile",
     "stages",
-    "approval-gates"
+    "approval-gates",
+    "product-management",
+    "architecture",
+    "qa-testing",
+    "documentation",
+    "ethics-review",
+    "prompt-engineering",
+    "design-systems",
+    "cost-optimization",
+    "estimation"
   ]
 }

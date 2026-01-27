@@ -164,10 +164,14 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 | `product-manager` | Product strategy, requirements | P (Planning) |
 | `software-architector` | Architecture, design patterns | A (Architecture) |
 | `team-lead` | Team coordination, code reviews | T (Team Lead) |
+| `developer` | Dynamic platform developer routing | D (Development) |
 | `qa-engineer` | Testing, quality assurance | Q (QA) |
 | `technical-writer` | Documentation | W (Documentation) |
 | `project-manager` | Sprint management, releases | F (Finalization) |
 | `stakeholder` | Business approval, ROI | S (Stakeholder) |
+| `designer` | UI/UX strategy, design systems | P (Planning) |
+| `ethics-reviewer` | Constitutional compliance, harm assessment | Support |
+| `prompt-engineer` | Agent/command optimization | Support |
 | `workflow-engineer` | Workflow troubleshooting | Support |
 
 ### Commands
@@ -177,6 +181,16 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 |---------|-------------|
 | `/workflow` | Initialize a new workflow task |
 | `/estimate` | Estimate task complexity and effort |
+| `/export-estimate` | Export estimates to CSV |
+| `/context-status` | Check context and workflow state |
+
+#### Designer
+| Command | Description |
+|---------|-------------|
+| `/design-specs` | Generate design specifications |
+| `/design-review` | Review design decisions |
+| `/ux-flow` | Create user flow diagrams |
+| `/a11y-audit` | Accessibility audit (WCAG) |
 
 #### Product Manager
 | Command | Description |
@@ -211,6 +225,9 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 |---------|-------------|
 | `/onboard-task` | Onboarding documentation |
 | `/standup` | Standup summary |
+| `/senior-review` | Senior developer code review |
+| `/code-review-dev` | Development-focused code review |
+| `/code-impl` | Code implementation guidance |
 
 #### Technical Writer
 | Command | Description |
@@ -225,13 +242,36 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 | `/business-case` | Business case generation |
 | `/roi-analysis` | ROI calculation |
 | `/executive-summary` | Executive summary |
+| `/cost-report` | Cost analysis report |
+
+#### Prompt Engineer
+| Command | Description |
+|---------|-------------|
+| `/create-agent` | Create new agent definition |
+| `/optimize-agent` | Optimize existing agent |
+| `/optimize-command` | Optimize command definition |
+| `/prompt-audit` | Audit prompt effectiveness |
+
+#### Ethics Reviewer
+| Command | Description |
+|---------|-------------|
+| `/ethics-review` | Constitutional compliance review |
+| `/harm-assessment` | Harm assessment analysis |
+| `/transparency-check` | Verify output transparency |
 
 ### Skills
 - `workflow.md` - Complete workflow system documentation
 - `task-folder-organization.md` - Task folder structure
 - `five-whys.md` - Root cause analysis technique
-- `workflow-triggers.md` - Automatic trigger detection
 - `claude-constitution.md` - Constitutional principles and ethics framework
+- `agent-coordination.md` - Multi-agent coordination patterns
+- `context-compression.md` - Context optimization techniques
+- `cost-optimization.md` - Token and cost management
+- `csv-export-templates.md` - Export format templates
+- `estimation-methodology.md` - Complexity estimation methods
+- `milestone-workflow.md` - Milestone-based workflow tracking
+- `senior-developer-review.md` - Senior review guidelines
+- `testing-strategy.md` - Testing patterns and strategies
 
 ### Tools
 - `setup-task.py` - Python script for task initialization
