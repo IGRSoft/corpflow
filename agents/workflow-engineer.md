@@ -268,13 +268,21 @@ async function initializeWorkspace(issue: Issue, track: number, milestoneNumber:
   // Create workspace directory
   mkdirSync(`${workspacePath}/.context/images`, { recursive: true });
 
+  // Resolve base branch for this issue (issue body → develop → master)
+  const { baseBranch, source } = await resolveBaseBranchWithSource(issue.body);
+
   // Create workspace.json
   const workspace = {
     version: "1.0",
     type: "ticket-workspace",
     created_at: new Date().toISOString(),
     issue: { number: issue.number, title: issue.title, body: issue.body, labels: issue.labels, milestone_number: milestoneNumber },
-    git: { branch_name: `feature/${issue.number}-${generateSlug(issue.title)}`, branch_created: false, base_branch: "master" },
+    git: {
+      branch_name: `feature/${issue.number}-${generateSlug(issue.title)}`,
+      branch_created: false,
+      base_branch: baseBranch,
+      base_branch_source: source  // Tracks how base branch was resolved
+    },
     workflow: { workflow_id: workflowId, track: track, task_prefix: prefix },
     execution: { current_stage: "P", stage_history: [], retry_count: 0 },
     task_ids: {}
@@ -315,6 +323,61 @@ async function initializeWorkspace(issue: Issue, track: number, milestoneNumber:
 
   // Update orchestrator
   updateOrchestratorTrack(track, issue.number, "active");
+}
+
+/**
+ * Parse base_branch field from issue body
+ * Format: base_branch: <branch-name> (one per line)
+ */
+function parseBaseBranchFromIssueBody(issueBody: string | null): string | null {
+  if (!issueBody) return null;
+  const match = issueBody.match(/^base_branch:\s*(\S+)\s*$/m);
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * Check if a branch exists on the remote
+ * Uses: git ls-remote --heads origin <branchName>
+ */
+async function remoteBranchExists(branchName: string): Promise<boolean> {
+  // Execute: git ls-remote --heads origin <branchName>
+  // Returns true if output is non-empty, false otherwise
+  // On network/permission error, returns false (fall back to default)
+  const result = execSync(`git ls-remote --heads origin ${branchName}`);
+  return result.toString().trim().length > 0;
+}
+
+/**
+ * Resolve base branch with fallback logic and source tracking
+ *
+ * Priority:
+ * 1. Issue body `base_branch:` field (if branch exists)
+ * 2. `develop` branch (if exists on remote)
+ * 3. `master` branch (default)
+ *
+ * @returns { baseBranch, source } where source is one of:
+ *   - "issue_body": From base_branch field in issue
+ *   - "develop_fallback": develop branch exists
+ *   - "master_default": Default fallback
+ */
+async function resolveBaseBranchWithSource(issueBody: string | null): Promise<{baseBranch: string, source: string}> {
+  // Priority 1: Check issue body for explicit base_branch field
+  const specifiedBranch = parseBaseBranchFromIssueBody(issueBody);
+  if (specifiedBranch) {
+    const exists = await remoteBranchExists(specifiedBranch);
+    if (exists) {
+      return { baseBranch: specifiedBranch, source: 'issue_body' };
+    }
+    // Warning: specified branch doesn't exist, falling back
+  }
+
+  // Priority 2: Check if 'develop' branch exists
+  if (await remoteBranchExists('develop')) {
+    return { baseBranch: 'develop', source: 'develop_fallback' };
+  }
+
+  // Priority 3: Default to 'master'
+  return { baseBranch: 'master', source: 'master_default' };
 }
 ```
 

@@ -162,13 +162,20 @@ Each ticket has its own isolated workspace with full context:
   "version": "1.0",
   "type": "ticket-workspace",
   "issue": { "number": 42, "title": "Add login flow", "body": "...", "labels": ["enhancement"] },
-  "git": { "branch_name": "feature/42-add-login-flow", "branch_created": true },
+  "git": {
+    "branch_name": "feature/42-add-login-flow",
+    "branch_created": true,
+    "base_branch": "develop",
+    "base_branch_source": "develop_fallback"
+  },
   "workflow": { "track": 1, "task_prefix": "t1", "complexity_score": 18 },
   "execution": { "current_stage": "D", "retry_count": 0 },
   "task_ids": { "P": "t1-1", "A": "t1-2", "D": "t1-3", "Q": "t1-4" },
   "artifacts": { "planning.md": true, "analyzing.md": true }
 }
 ```
+
+The `base_branch` is resolved per-issue: issue body field → `develop` (if exists) → `master`.
 
 ### Track-Prefixed Task IDs
 
@@ -182,12 +189,15 @@ With parallel execution, task IDs are namespaced by track to prevent collisions:
 
 ### Per-Workspace Git Branches
 
-Each workspace operates on its own feature branch:
+Each workspace operates on its own feature branch with a per-issue resolved base branch:
 
-1. **Initialization**: Branch `feature/{issue#}-{slug}` created and checked out
-2. **Development**: All commits go to the workspace's branch
-3. **Completion**: PR created from workspace branch with "Closes #{issue}"
-4. **Parallel**: Orchestrator coordinates branch switches for concurrent work
+1. **Base Resolution**: Resolve base branch (issue body → develop → master)
+2. **Initialization**: Branch `feature/{issue#}-{slug}` created from resolved base branch
+3. **Development**: All commits go to the workspace's branch
+4. **Completion**: PR created targeting the resolved base branch with "Closes #{issue}"
+5. **Parallel**: Orchestrator coordinates branch switches for concurrent work
+
+See [Milestone Workflow](../skills/milestone-workflow.md#base-branch-resolution) for full resolution logic.
 
 ### Workspace Initialization Flow
 
@@ -201,8 +211,9 @@ Each workspace operates on its own feature branch:
 │ 3. Create orchestrator.json with sorted issues              │
 │ 4. For first N issues (N = parallel_tracks):                │
 │    - Create workspace directory                             │
-│    - Create workspace.json with issue context               │
-│    - Create git branch feature/{issue#}-{slug}              │
+│    - Resolve base branch (issue body → develop → master)    │
+│    - Create workspace.json with issue context + base_branch │
+│    - Create git branch feature/{issue#}-{slug} from base    │
 │    - Create track-prefixed tasks (t1-1, t2-1, etc.)        │
 │    - Start P stage                                          │
 └─────────────────────────────────────────────────────────────┘

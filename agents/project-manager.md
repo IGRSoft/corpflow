@@ -65,14 +65,16 @@ if (workspacePath) {
   // WORKSPACE MODE: Create PR from workspace
   const workspace = JSON.parse(readFile(`${workspacePath}/workspace.json`));
   const branchName = workspace.git.branch_name;
+  const baseBranch = workspace.git.base_branch;  // Resolved base branch
+  const baseBranchSource = workspace.git.base_branch_source;  // Resolution source
   const issueTitle = workspace.issue.title;
 
   // Read artifacts for PR body
   const complete = readFile(`${workspacePath}/.context/complete.md`);
 
-  // Push branch and create PR
+  // Push branch and create PR with resolved base branch
   // git push -u origin {branchName}
-  // gh pr create --title "{issueTitle}" --body "## Summary\n{complete}\n\nCloses #{issueNumber}"
+  // gh pr create --base {baseBranch} --title "{issueTitle}" --body "..."
 
   // Update workspace.json
   workspace.execution.current_stage = "S";  // Next stage
@@ -100,9 +102,10 @@ When creating a PR in workspace mode:
 2. **Stage all changes**: `git add .`
 3. **Commit with issue reference**: `git commit -m "#{issueNumber} feat: {summary}"`
 4. **Push to remote**: `git push -u origin {branchName}`
-5. **Create PR with issue link**:
+5. **Create PR with issue link** (using resolved base branch from workspace.json):
    ```bash
    gh pr create \
+     --base {baseBranch} \
      --title "{issue.title}" \
      --body "$(cat <<'EOF'
    ## Summary
@@ -111,10 +114,15 @@ When creating a PR in workspace mode:
    ## Changes
    - See commits on this branch
 
+   ## Target Branch
+   This PR targets `{baseBranch}` (resolved via {base_branch_source})
+
    Closes #{issueNumber}
    EOF
    )"
    ```
+
+   The `baseBranch` is read from `workspace.json` under `git.base_branch`.
 
 ### Task System Format
 ```typescript
