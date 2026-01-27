@@ -88,6 +88,9 @@ if (workspacePath) {
   // Signal orchestrator (update orchestrator.json)
   updateOrchestratorIssueStatus(issueNumber, "completed");
 
+  // Archive context to keep fresh state for any follow-up
+  archiveWorkspaceContext(workspacePath, workspace);
+
 } else {
   // STANDARD MODE: PR creation at project root
   // (existing behavior)
@@ -123,6 +126,41 @@ When creating a PR in workspace mode:
    ```
 
    The `baseBranch` is read from `workspace.json` under `git.base_branch`.
+
+### Post-PR Context Archival
+
+After successful PR creation, automatically archive the issue context to keep AI agent context manageable:
+
+```typescript
+function archiveWorkspaceContext(workspacePath: string, workspace: object) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const archivePath = `${workspacePath}/.context.archive/${timestamp}`;
+
+  // 1. Create archive directory and move context
+  mkdir(`${workspacePath}/.context.archive`);
+  mv(`${workspacePath}/.context`, archivePath);
+  mkdir(`${workspacePath}/.context`);  // Fresh context for any follow-up
+
+  // 2. Update workspace.json with archive info
+  workspace.context_archived = true;
+  workspace.archive_timestamp = new Date().toISOString();
+  workspace.archive_path = `.context.archive/${timestamp}`;
+  writeFile(`${workspacePath}/workspace.json`, JSON.stringify(workspace, null, 2));
+
+  // 3. Preserve key files at workspace root (not archived):
+  //    - handoff.md - Summary for orchestrator
+  //    - workspace.json - State and metadata
+}
+```
+
+**What Gets Archived**:
+- All `.context/` contents (planning.md, analyzing.md, etc.)
+- Stage artifacts and temporary analysis files
+
+**What Gets Preserved**:
+- `handoff.md` - Compressed summary for orchestrator
+- `workspace.json` - Issue metadata and state
+- Git branch and PR references
 
 ### Task System Format
 ```typescript

@@ -323,7 +323,42 @@ async function initializeWorkspace(issue: Issue, track: number, milestoneNumber:
 
   // Update orchestrator
   updateOrchestratorTrack(track, issue.number, "active");
+
+  // Delegate to fresh subagent for clean context
+  // This ensures each issue starts with ~1000 tokens, not accumulated history
+  delegateToFreshAgent(issue, track, milestoneNumber, workspacePath);
 }
+
+/**
+ * Delegate issue execution to a fresh subagent to keep AI context manageable.
+ * Each issue gets a clean context window, avoiding accumulation from previous issues.
+ */
+function delegateToFreshAgent(issue: Issue, track: number, milestoneNumber: number, workspacePath: string) {
+  Task({
+    subagent_type: "developer",
+    prompt: `Execute workflow for issue #${issue.number} (Track ${track}).
+
+## Workspace
+Path: ${workspacePath}
+Read workspace.json for full issue details including:
+- Issue title, body, and labels
+- Base branch configuration
+- Track assignment and task IDs
+
+## Execution
+Execute all stages sequentially: P → A → T → D → Q → W → F
+- Update task status as you progress
+- Write artifacts to .context/
+- After F stage (PR created), context will be auto-archived
+
+## Context Management
+- This is a FRESH agent session with clean context
+- Read workspace.json for persistent state
+- Previous issue history is NOT available (by design)
+- Focus only on this issue's requirements`,
+    description: `Issue #${issue.number} workflow`,
+    run_in_background: true  // Non-blocking for parallel execution
+  });
 
 /**
  * Parse base_branch field from issue body

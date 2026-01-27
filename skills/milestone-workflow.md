@@ -652,6 +652,47 @@ When in workspace context:
 - Update `workspace.json` with completion status
 - Write compressed handoff to `handoff.md`
 - Signal orchestrator that track is complete
+- Archive `.context/` to `.context.archive/{timestamp}/`
+
+## Context Lifecycle
+
+### Automatic Archival After PR
+
+Context is automatically archived after PR creation to:
+1. Keep AI agent context manageable for subsequent issues
+2. Preserve artifacts for reference if needed
+3. Ensure fresh context for any follow-up work
+
+| Event | Action | Location |
+|-------|--------|----------|
+| PR Created | Archive `.context/` | `.context.archive/{timestamp}/` |
+| Issue Complete | Preserve archive | Workspace retained |
+| Milestone Complete | Archive all | `.workspaces/archive/` |
+
+### What Gets Archived
+- All `.context/` contents (planning.md, analyzing.md, complete.md, etc.)
+- Stage artifacts and temporary analysis files
+- Images and generated diagrams
+
+### What Gets Preserved (Not Archived)
+- `handoff.md` - Orchestrator summary
+- `workspace.json` - Issue metadata and state
+- Git branch and PR references
+
+### Accessing Archived Context
+
+If needed, archived context is available at:
+```
+.workspaces/milestone-{N}/{issue#}/.context.archive/{timestamp}/
+```
+
+### Fresh Agent Context Per Issue
+
+To avoid context window limits when processing multiple issues:
+- Orchestrator delegates each issue to a fresh subagent via Task tool
+- Each subagent starts with clean context (~1000 tokens)
+- `workspace.json` provides persistent state across agents
+- Previous issue's conversation history is NOT carried over
 
 ## Error Handling
 
