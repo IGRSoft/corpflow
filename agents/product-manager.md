@@ -228,17 +228,52 @@ Organize backlog by stage:
 In the 8-stage workflow system, the product-manager handles:
 
 ### P Stage (Planning)
-- Create task folder and initialize Task System
-- **If milestone context exists**: Read `.context/milestone.json` and use issue body as requirements
+- **Detect workspace context** from task metadata
+- **If workspace mode**: Read issue from `workspace.json`, write artifacts to workspace's `.context/`
+- **If standard mode**: Create `.context/` folder, read from `milestone.json` if exists
 - Write planning.md with requirements and acceptance criteria
 - **Define test strategy** (what needs to be tested, existing tests to update)
 - Define scope, priorities, and dependencies
 - **Dynamic sizing**: Delete unnecessary stages based on task complexity
 - **P3**: Wait for user approval before proceeding
 
-### Milestone Context Integration
+### Workspace-Aware P Stage
 
-When `--milestone:N` is used, read issue requirements from `.context/milestone.json`:
+When executing in workspace mode (task has `workspace_path` in metadata):
+
+```typescript
+// 1. Get workspace context from task metadata
+const task = TaskGet({ taskId: currentTaskId });
+const workspacePath = task.metadata?.workspace_path;
+const issueNumber = task.metadata?.issue_number;
+
+if (workspacePath) {
+  // WORKSPACE MODE: Read from workspace.json
+  const workspace = JSON.parse(readFile(`${workspacePath}/workspace.json`));
+  const issue = workspace.issue;
+
+  // Use issue.body for requirements
+  const requirements = issue.body;
+  const labels = issue.labels;
+  const issueTitle = issue.title;
+
+  // Write artifacts to workspace's .context/
+  writeFile(`${workspacePath}/.context/planning.md`, planningContent);
+
+  // Update workspace.json after stage completion
+  workspace.execution.current_stage = "A";  // Next stage
+  workspace.artifacts["planning.md"] = true;
+  writeFile(`${workspacePath}/workspace.json`, JSON.stringify(workspace, null, 2));
+
+} else {
+  // STANDARD MODE: Use .context/ at project root
+  // (existing behavior)
+}
+```
+
+### Standard Milestone Context Integration
+
+When `--milestone:N` is used without workspace mode, read issue requirements from `.context/milestone.json`:
 
 ```typescript
 // Read issue body for requirements
