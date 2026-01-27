@@ -181,7 +181,8 @@ Each workspace maintains its own isolated state:
   "git": {
     "branch_name": "feature/42-implement-login-flow",
     "branch_created": true,
-    "base_branch": "master",
+    "base_branch": "develop",
+    "base_branch_source": "develop_fallback",
     "commits": []
   },
 
@@ -284,6 +285,82 @@ issues.sort((a, b) => {
 | 42 | Implement login flow | `feature/42-implement-login-flow` |
 | 43 | Fix password reset | `feature/43-fix-password-reset` |
 | 44 | [URGENT] Fix critical bug!!! | `feature/44-urgent-fix-critical-bug` |
+
+## Base Branch Resolution
+
+Each issue can specify its own base branch for feature branch creation and PR targets. The resolution follows a per-issue fallback chain.
+
+### Resolution Priority
+
+1. **Issue Body Field**: Parse `base_branch: <branch>` from issue body
+2. **Develop Fallback**: If `develop` branch exists on remote
+3. **Master Default**: Fall back to `master`
+
+### Issue Body Format
+
+Add the following line anywhere in the GitHub issue body to specify the base branch:
+
+```
+base_branch: develop
+```
+
+Or target a specific release branch:
+
+```
+base_branch: release/2.0
+```
+
+### Resolution Implementation
+
+```bash
+# Step 1: Parse issue body for base_branch field
+base_branch=$(echo "$issue_body" | grep -oP '^base_branch:\s*\K\S+' | head -1)
+
+# Step 2: If not found or invalid, check if develop exists
+if [ -z "$base_branch" ] || ! git ls-remote --heads origin "$base_branch" | grep -q "$base_branch"; then
+  if git ls-remote --heads origin develop | grep -q develop; then
+    base_branch="develop"
+    source="develop_fallback"
+  else
+    base_branch="master"
+    source="master_default"
+  fi
+else
+  source="issue_body"
+fi
+```
+
+### Workspace Integration
+
+The resolved base branch is stored in `workspace.json`:
+
+```json
+{
+  "git": {
+    "branch_name": "feature/42-implement-login-flow",
+    "base_branch": "develop",
+    "base_branch_source": "develop_fallback"
+  }
+}
+```
+
+**Source Values:**
+| Source | Meaning |
+|--------|---------|
+| `issue_body` | From `base_branch:` field in issue body |
+| `develop_fallback` | `develop` branch exists on remote |
+| `master_default` | Default fallback to `master` |
+
+### PR Creation
+
+PRs are created targeting the resolved base branch:
+
+```bash
+gh pr create \
+  --base {base_branch} \
+  --title "{issue.title}" \
+  --body "Closes #{issue.number}"
+```
 
 ## Orchestrator Pattern
 
@@ -523,20 +600,24 @@ T+30    Starts #45 (P2)      Starts #46 (P2)      (No more issues)
 
 ### Per-Workspace Branch Checkout
 
-Each workspace operates on its own feature branch:
+Each workspace operates on its own feature branch created from the resolved base branch:
 
 ```bash
-# During workspace initialization
+# During workspace initialization - checkout from resolved base branch
+git checkout {base_branch}
+git pull origin {base_branch}
 git checkout -b feature/{issue#}-{slug}
 
 # All commits within workspace go to this branch
 git add .
 git commit -m "#{issue#} feat: implement login flow"
 
-# PR created from workspace branch
+# PR created from workspace branch targeting the base branch
 git push -u origin feature/{issue#}-{slug}
-gh pr create --title "Issue title" --body "Closes #{issue#}"
+gh pr create --base {base_branch} --title "Issue title" --body "Closes #{issue#}"
 ```
+
+The `{base_branch}` is resolved per-issue (see Base Branch Resolution section above).
 
 ### Branch Management
 
