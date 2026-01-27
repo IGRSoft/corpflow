@@ -87,6 +87,101 @@ Execute GitHub issues by priority using the milestone parameter:
 
 See [Milestone Workflow](milestone-workflow.md) for full documentation.
 
+## Workspace Mode
+
+When using `--milestone:N`, the workflow operates in **workspace mode** where each ticket executes in an isolated workspace directory.
+
+### Workspace Detection
+
+Agents detect workspace context by checking task metadata:
+
+```typescript
+// Check if running in workspace mode
+const task = TaskGet({ taskId: currentTaskId });
+const workspacePath = task.metadata?.workspace_path;
+
+if (workspacePath) {
+  // Running in workspace mode - use workspace paths
+  const artifactPath = `${workspacePath}/.context/planning.md`;
+} else {
+  // Standard mode - use project root .context/
+  const artifactPath = `.context/planning.md`;
+}
+```
+
+### Workspace Metadata Fields
+
+Tasks in workspace mode include additional metadata:
+
+```typescript
+TaskCreate({
+  taskId: `t${track}-1`,  // Track-prefixed ID
+  subject: `P: Planning - Issue #${issueNumber}`,
+  metadata: {
+    stage: "P",
+    workflow_id: `milestone-${milestoneNumber}-issue-${issueNumber}`,
+    issue_number: issueNumber,
+    milestone_number: milestoneNumber,
+    track: track,
+    workspace_path: `.workspaces/milestone-${milestoneNumber}/${issueNumber}`
+  }
+});
+```
+
+### Path Resolution
+
+**Artifact paths** are relative to workspace when in workspace mode:
+
+| Mode | Base Path | Example |
+|------|-----------|---------|
+| Standard | `.context/` | `.context/planning.md` |
+| Workspace | `{workspace_path}/.context/` | `.workspaces/milestone-1/42/.context/planning.md` |
+
+### Task ID Namespacing
+
+Workspace mode uses **track-prefixed task IDs** to enable parallel execution:
+
+| Track | Task IDs |
+|-------|----------|
+| Track 1 | `t1-1`, `t1-2`, `t1-3`, `t1-4`, ... |
+| Track 2 | `t2-1`, `t2-2`, `t2-3`, `t2-4`, ... |
+| Track N | `t{N}-1`, `t{N}-2`, ... |
+
+### Workspace-Aware Agent Pattern
+
+Agents should use this pattern for workspace awareness:
+
+```typescript
+// Get current task and extract workspace context
+const task = TaskGet({ taskId: currentTaskId });
+const workspacePath = task.metadata?.workspace_path;
+const issueNumber = task.metadata?.issue_number;
+
+// Resolve context path
+const contextPath = workspacePath
+  ? `${workspacePath}/.context`
+  : `.context`;
+
+// Read workspace state if in workspace mode
+if (workspacePath) {
+  const workspaceJson = readFile(`${workspacePath}/workspace.json`);
+  const workspace = JSON.parse(workspaceJson);
+  // Use workspace.issue.body for requirements
+  // Use workspace.git.branch_name for branch context
+}
+
+// Write artifacts to correct location
+writeFile(`${contextPath}/planning.md`, planningContent);
+
+// Update workspace state after stage completion
+if (workspacePath) {
+  updateWorkspaceJson(workspacePath, {
+    execution: { current_stage: "A" },
+    artifacts: { "planning.md": true }
+  });
+}
+```
+
 ### Task-Based Workflow
 
 For tasks not linked to GitHub issues:

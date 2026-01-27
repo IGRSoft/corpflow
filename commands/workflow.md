@@ -12,22 +12,27 @@ Initialize a new workflow task with proper folder structure, state management, a
 
 ## Options
 
-- `--milestone:N` - Execute GitHub milestone N issues by priority
-- `--milestone:N:ISSUE` - Execute specific issue from milestone N
+- `--milestone:N` - Execute GitHub milestone N issues by priority (creates workspaces)
+- `--milestone:N:ISSUE` - Execute specific issue from milestone N (creates single workspace)
+- `--parallel:N` - Run N issues in parallel for milestones (default: 2, max: 5, creates N workspaces)
+- `--auto-continue` - Skip per-issue approval gates in milestone execution (trusted workflows only)
 - `--priority [High|Medium|Low]` - Task priority (default: Medium)
 - `--platform <apple|android|web|all>` - Target platform (default: all)
 - `--mode [async|sync]` - Execution mode (default: async)
 - `--with-design` - Include designer in planning phase (P stage)
 - `--ethics-review` - Add ethics checkpoint after planning (recommended for high-risk features)
 - `--sequential` - Force W to wait for Q (default: W+Q run parallel)
-- `--auto-continue` - Skip per-issue approval gates in milestone execution (trusted workflows only)
-- `--parallel:N` - Run N issues in parallel for milestones (default: 2, max: 5)
 
 ## Examples
 
 ```
-/workflow --milestone:1                               # Work through milestone 1 by priority
-/workflow --milestone:2:123                           # Work on issue #123 from milestone 2
+# Milestone mode (creates isolated workspaces)
+/workflow --milestone:1                               # Sequential execution, workspaces in .workspaces/milestone-1/
+/workflow --milestone:1 --parallel:3                  # 3 concurrent tracks with isolated workspaces
+/workflow --milestone:2:123                           # Single workspace for issue #123
+/workflow --milestone:1 --parallel:3 --auto-continue  # Parallel execution without approval gates
+
+# Standard mode (uses .context/ at project root)
 /workflow "Add dark mode support" --with-design
 /workflow "Fix login crash" --priority High --platform apple
 /workflow "Redesign settings screen" --with-design --platform apple
@@ -103,6 +108,140 @@ Execute specific issue from milestone N:
 3. **Execute Issue** - Same workflow as above
 
 See [Milestone Workflow](../skills/milestone-workflow.md) for full documentation.
+
+## Workspace Mode (Milestone Execution)
+
+When using `--milestone:N`, the workflow operates in **workspace mode** with isolated execution per ticket.
+
+### Workspace Architecture
+
+```
+project-root/
+├── .workspaces/                           # Workspace orchestration root
+│   ├── orchestrator.json                  # Root orchestrator state
+│   └── milestone-{N}/                     # Per-milestone container
+│       ├── {issue#}/                      # Issue workspace
+│       │   ├── .context/                  # Isolated artifacts
+│       │   │   ├── planning.md
+│       │   │   ├── analyzing.md
+│       │   │   └── ...
+│       │   ├── workspace.json             # Workspace state
+│       │   └── handoff.md                 # Compressed context
+│       └── {issue#}/                      # Another issue
+└── .context/                              # Non-milestone workflows (unchanged)
+```
+
+### Orchestrator (`orchestrator.json`)
+
+The root orchestrator tracks all workspaces and manages parallel execution:
+
+```json
+{
+  "version": "2.0",
+  "type": "workspace-orchestrator",
+  "milestone": { "number": 1, "title": "Sprint 1", "state": "open" },
+  "configuration": { "parallel_tracks": 3, "auto_continue": false },
+  "issues": [
+    { "number": 42, "workspace_path": ".workspaces/milestone-1/42", "status": "in_progress", "track": 1, "current_stage": "D" },
+    { "number": 43, "workspace_path": ".workspaces/milestone-1/43", "status": "pending", "track": null }
+  ],
+  "tracks": {
+    "1": { "issue_number": 42, "status": "active", "task_prefix": "t1" },
+    "2": { "issue_number": null, "status": "available", "task_prefix": "t2" }
+  },
+  "summary": { "total": 5, "completed": 1, "in_progress": 1, "pending": 3 }
+}
+```
+
+### Workspace State (`workspace.json`)
+
+Each ticket has its own isolated workspace with full context:
+
+```json
+{
+  "version": "1.0",
+  "type": "ticket-workspace",
+  "issue": { "number": 42, "title": "Add login flow", "body": "...", "labels": ["enhancement"] },
+  "git": { "branch_name": "feature/42-add-login-flow", "branch_created": true },
+  "workflow": { "track": 1, "task_prefix": "t1", "complexity_score": 18 },
+  "execution": { "current_stage": "D", "retry_count": 0 },
+  "task_ids": { "P": "t1-1", "A": "t1-2", "D": "t1-3", "Q": "t1-4" },
+  "artifacts": { "planning.md": true, "analyzing.md": true }
+}
+```
+
+### Track-Prefixed Task IDs
+
+With parallel execution, task IDs are namespaced by track to prevent collisions:
+
+| Track | Task Prefix | Example Task IDs |
+|-------|-------------|------------------|
+| 1 | t1 | t1-1, t1-2, t1-3, t1-4 |
+| 2 | t2 | t2-1, t2-2, t2-3, t2-4 |
+| 3 | t3 | t3-1, t3-2, t3-3, t3-4 |
+
+### Per-Workspace Git Branches
+
+Each workspace operates on its own feature branch:
+
+1. **Initialization**: Branch `feature/{issue#}-{slug}` created and checked out
+2. **Development**: All commits go to the workspace's branch
+3. **Completion**: PR created from workspace branch with "Closes #{issue}"
+4. **Parallel**: Orchestrator coordinates branch switches for concurrent work
+
+### Workspace Initialization Flow
+
+```
+/workflow --milestone:1 --parallel:3
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Create .workspaces/milestone-1/ directory                │
+│ 2. Fetch milestone + issues from GitHub                     │
+│ 3. Create orchestrator.json with sorted issues              │
+│ 4. For first N issues (N = parallel_tracks):                │
+│    - Create workspace directory                             │
+│    - Create workspace.json with issue context               │
+│    - Create git branch feature/{issue#}-{slug}              │
+│    - Create track-prefixed tasks (t1-1, t2-1, etc.)        │
+│    - Start P stage                                          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Orchestrator Monitoring
+
+The orchestrator continuously monitors workspace status:
+
+1. **Check Active Tracks**: Poll each workspace's current stage
+2. **Handle Completion**: Free track, assign next pending issue
+3. **Handle Errors**: Retry within workspace or escalate
+4. **Enforce Gates**: Pause at P3 unless `--auto-continue`
+
+### Workspace Cleanup
+
+After milestone completion:
+
+```bash
+# Archive completed workspaces
+mv .workspaces/milestone-1 .workspaces/archive/milestone-1-$(date +%Y%m%d)
+
+# Or remove entirely
+rm -rf .workspaces/milestone-1
+```
+
+### Checking Workspace Status
+
+View orchestrator state:
+```bash
+cat .workspaces/orchestrator.json | jq '.summary'
+# { "total": 5, "completed": 2, "in_progress": 2, "pending": 1 }
+```
+
+View specific workspace:
+```bash
+cat .workspaces/milestone-1/42/workspace.json | jq '.execution'
+# { "current_stage": "D", "retry_count": 0 }
+```
 
 ## Dynamic Workflow Sizing
 

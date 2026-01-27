@@ -48,13 +48,82 @@ In the 8-stage workflow system, the project-manager handles:
 - Run final builds and tests
 - Create complete.md summarizing the work
 - Create release.md with release notes
+- **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
+
+### Workspace-Aware F Stage
+
+When executing in workspace mode (task has `workspace_path` in metadata):
+
+```typescript
+// 1. Get workspace context from task metadata
+const task = TaskGet({ taskId: currentTaskId });
+const workspacePath = task.metadata?.workspace_path;
+const issueNumber = task.metadata?.issue_number;
+
+if (workspacePath) {
+  // WORKSPACE MODE: Create PR from workspace
+  const workspace = JSON.parse(readFile(`${workspacePath}/workspace.json`));
+  const branchName = workspace.git.branch_name;
+  const issueTitle = workspace.issue.title;
+
+  // Read artifacts for PR body
+  const complete = readFile(`${workspacePath}/.context/complete.md`);
+
+  // Push branch and create PR
+  // git push -u origin {branchName}
+  // gh pr create --title "{issueTitle}" --body "## Summary\n{complete}\n\nCloses #{issueNumber}"
+
+  // Update workspace.json
+  workspace.execution.current_stage = "S";  // Next stage
+  workspace.artifacts["complete.md"] = true;
+  workspace.artifacts["release.md"] = true;
+  writeFile(`${workspacePath}/workspace.json`, JSON.stringify(workspace, null, 2));
+
+  // Write compressed handoff for orchestrator
+  writeFile(`${workspacePath}/handoff.md`, compressedSummary);
+
+  // Signal orchestrator (update orchestrator.json)
+  updateOrchestratorIssueStatus(issueNumber, "completed");
+
+} else {
+  // STANDARD MODE: PR creation at project root
+  // (existing behavior)
+}
+```
+
+### PR Creation from Workspace
+
+When creating a PR in workspace mode:
+
+1. **Ensure on workspace branch**: The branch should already be checked out
+2. **Stage all changes**: `git add .`
+3. **Commit with issue reference**: `git commit -m "#{issueNumber} feat: {summary}"`
+4. **Push to remote**: `git push -u origin {branchName}`
+5. **Create PR with issue link**:
+   ```bash
+   gh pr create \
+     --title "{issue.title}" \
+     --body "$(cat <<'EOF'
+   ## Summary
+   {content from complete.md}
+
+   ## Changes
+   - See commits on this branch
+
+   Closes #{issueNumber}
+   EOF
+   )"
+   ```
 
 ### Task System Format
 ```typescript
-// F Stage task states (task_id: "7")
-TaskUpdate({ taskId: "7", status: "in_progress", owner: "project-manager" });  // Start finalization
-TaskUpdate({ taskId: "7", status: "completed" });  // Finalization complete, ready for S stage
+// F Stage task states
+// Standard mode: task_id: "7"
+// Workspace mode: task_id: "t{track}-{N}" (e.g., "t1-4")
+TaskUpdate({ taskId: currentTaskId, status: "in_progress", owner: "project-manager" });  // Start finalization
+// [Create PR if workspace mode]
+TaskUpdate({ taskId: currentTaskId, status: "completed" });  // Finalization complete, ready for S stage
 ```
 
 ## Task Specification Format

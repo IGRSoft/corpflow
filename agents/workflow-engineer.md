@@ -55,6 +55,35 @@ Specialist for workflow system operations including initialization, state manage
 - Validate state before transitions
 - Use native `blockedBy` for dependency management
 
+### Workspace Orchestration (Milestone Mode)
+
+When `--milestone:N` is used, the workflow-engineer acts as the **root orchestrator** managing isolated workspaces:
+
+**Orchestrator Initialization:**
+1. Create `.workspaces/milestone-{N}/` directory structure
+2. Fetch milestone and issues from GitHub
+3. Sort issues by priority (P0 > P1 > P2 > P3)
+4. Create `orchestrator.json` with configuration
+5. Initialize first N workspaces (N = parallel_tracks)
+
+**Workspace Management:**
+- Create workspace directory: `.workspaces/milestone-{N}/{issue#}/`
+- Create `workspace.json` with issue metadata
+- Create `.context/` subdirectory for artifacts
+- Create track-prefixed tasks (t1-1, t2-1, etc.)
+- Create and checkout git branch per workspace
+
+**Monitoring Loop:**
+1. Check each active track's workspace status
+2. Handle completed workspaces (free track, assign next issue)
+3. Handle errors (retry or escalate within workspace)
+4. Enforce approval gates (unless `--auto-continue`)
+
+**Track Assignment:**
+- Assign pending issues to available tracks
+- Maintain track state in `orchestrator.json`
+- Balance workload across parallel tracks
+
 ## Workflow Stages Reference
 
 | Code | Stage | Agent | Purpose |
@@ -171,6 +200,170 @@ TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // Q blocked by D
 TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ```
 
+### Workspace Orchestrator (Milestone Mode)
+
+```typescript
+// Initialize workspace orchestrator for milestone
+async function initializeMilestoneOrchestrator(milestoneNumber: number, parallelTracks: number) {
+  const workspaceRoot = `.workspaces/milestone-${milestoneNumber}`;
+
+  // 1. Create workspace directory structure
+  mkdirSync(workspaceRoot, { recursive: true });
+
+  // 2. Fetch milestone and issues from GitHub (use gh CLI)
+  // gh api /repos/{owner}/{repo}/milestones/{milestoneNumber}
+  // gh api "/repos/{owner}/{repo}/issues?milestone={milestoneNumber}&state=open"
+
+  // 3. Sort issues by priority
+  const sortedIssues = sortByPriority(issues);
+
+  // 4. Create orchestrator.json
+  const orchestrator = {
+    version: "2.0",
+    type: "workspace-orchestrator",
+    created_at: new Date().toISOString(),
+    milestone: milestone,
+    configuration: { parallel_tracks: parallelTracks, auto_continue: false },
+    issues: sortedIssues.map(issue => ({
+      number: issue.number,
+      title: issue.title,
+      priority: getPriority(issue),
+      slug: generateSlug(issue.title),
+      workspace_path: `${workspaceRoot}/${issue.number}`,
+      status: "pending",
+      track: null
+    })),
+    tracks: {},
+    summary: { total_issues: sortedIssues.length, completed: 0, in_progress: 0, pending: sortedIssues.length }
+  };
+
+  // Initialize tracks
+  for (let i = 1; i <= parallelTracks; i++) {
+    orchestrator.tracks[i] = { issue_number: null, status: "available", task_prefix: `t${i}` };
+  }
+
+  writeFile(`${workspaceRoot}/../orchestrator.json`, JSON.stringify(orchestrator, null, 2));
+
+  // 5. Create orchestrator task
+  TaskCreate({
+    taskId: "orch-1",
+    subject: `Milestone ${milestoneNumber} Orchestrator`,
+    description: `Managing ${sortedIssues.length} issues across ${parallelTracks} tracks`,
+    activeForm: "Orchestrating milestone execution",
+    metadata: { type: "orchestrator", milestone_number: milestoneNumber }
+  });
+
+  // 6. Initialize first N workspaces
+  for (let track = 1; track <= Math.min(parallelTracks, sortedIssues.length); track++) {
+    await initializeWorkspace(sortedIssues[track - 1], track, milestoneNumber);
+  }
+}
+
+// Initialize a single workspace for an issue
+async function initializeWorkspace(issue: Issue, track: number, milestoneNumber: number) {
+  const prefix = `t${track}`;
+  const workspacePath = `.workspaces/milestone-${milestoneNumber}/${issue.number}`;
+  const workflowId = `milestone-${milestoneNumber}-issue-${issue.number}`;
+
+  // Create workspace directory
+  mkdirSync(`${workspacePath}/.context/images`, { recursive: true });
+
+  // Create workspace.json
+  const workspace = {
+    version: "1.0",
+    type: "ticket-workspace",
+    created_at: new Date().toISOString(),
+    issue: { number: issue.number, title: issue.title, body: issue.body, labels: issue.labels, milestone_number: milestoneNumber },
+    git: { branch_name: `feature/${issue.number}-${generateSlug(issue.title)}`, branch_created: false, base_branch: "master" },
+    workflow: { workflow_id: workflowId, track: track, task_prefix: prefix },
+    execution: { current_stage: "P", stage_history: [], retry_count: 0 },
+    task_ids: {}
+  };
+  writeFile(`${workspacePath}/workspace.json`, JSON.stringify(workspace, null, 2));
+
+  // Create git branch: git checkout -b feature/{issue.number}-{slug}
+  workspace.git.branch_created = true;
+
+  // Create track-prefixed tasks
+  const stages = ["P", "A", "D", "Q"];  // Can be dynamically sized
+  for (let i = 0; i < stages.length; i++) {
+    const taskId = `${prefix}-${i + 1}`;
+    TaskCreate({
+      taskId: taskId,
+      subject: `${stages[i]}: ${getStageDescription(stages[i])} - Issue #${issue.number}`,
+      description: `${getStageDescription(stages[i])} for issue #${issue.number}`,
+      activeForm: `${getStageActiveForm(stages[i])}`,
+      metadata: {
+        stage: stages[i],
+        workflow_id: workflowId,
+        issue_number: issue.number,
+        milestone_number: milestoneNumber,
+        track: track,
+        workspace_path: workspacePath
+      }
+    });
+    workspace.task_ids[stages[i]] = taskId;
+
+    // Set up dependencies
+    if (i > 0) {
+      TaskUpdate({ taskId: taskId, addBlockedBy: [`${prefix}-${i}`] });
+    }
+  }
+
+  // Start P stage
+  TaskUpdate({ taskId: `${prefix}-1`, status: "in_progress", owner: "product-manager" });
+
+  // Update orchestrator
+  updateOrchestratorTrack(track, issue.number, "active");
+}
+```
+
+### Orchestrator Monitoring Loop
+
+```typescript
+// Monitor and manage workspace execution
+async function orchestratorMonitoringLoop() {
+  const orchestrator = JSON.parse(readFile(`.workspaces/orchestrator.json`));
+
+  // 1. Check each active track
+  for (const [trackNum, track] of Object.entries(orchestrator.tracks)) {
+    if (track.status !== "active") continue;
+
+    const workspace = JSON.parse(readFile(`${track.workspace_path}/workspace.json`));
+    const tasks = TaskList().filter(t => t.metadata?.track === parseInt(trackNum));
+
+    // Check if all tasks completed
+    const allCompleted = tasks.every(t => t.status === "completed");
+    if (allCompleted) {
+      // Track completed - free it for next issue
+      handleTrackCompletion(parseInt(trackNum), workspace.issue.number);
+    }
+
+    // Check for errors
+    const errorTask = tasks.find(t => t.metadata?.error_count >= 3);
+    if (errorTask) {
+      handleWorkspaceError(parseInt(trackNum), errorTask);
+    }
+  }
+
+  // 2. Assign pending issues to available tracks
+  const availableTracks = Object.entries(orchestrator.tracks)
+    .filter(([_, t]) => t.status === "available")
+    .map(([num, _]) => parseInt(num));
+
+  const pendingIssues = orchestrator.issues.filter(i => i.status === "pending");
+
+  for (const trackNum of availableTracks) {
+    if (pendingIssues.length === 0) break;
+    const nextIssue = pendingIssues.shift();
+    await initializeWorkspace(nextIssue, trackNum, orchestrator.milestone.number);
+  }
+
+  // Update orchestrator.json
+  writeFile(`.workspaces/orchestrator.json`, JSON.stringify(orchestrator, null, 2));
+}
+```
+
 ## Troubleshooting Guide
 
 ### Task Status Not Updating
@@ -236,6 +429,46 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 2. Use `TaskList()` to see all tasks in workflow
 3. Ensure task IDs are passed correctly to sub-agents
 4. Use standard task IDs: P=1, A=2, T=3, D=4, Q=5, W=6, F=7, S=8
+
+### Workspace Not Initialized
+
+**Symptoms**: `.workspaces/` directory missing or workspace.json not found.
+
+**Solutions**:
+1. Verify `--milestone:N` flag was used (workspace mode requires milestone)
+2. Check if `.workspaces/orchestrator.json` exists
+3. Ensure GitHub CLI is authenticated (`gh auth status`)
+4. Verify milestone exists and has open issues
+
+### Track Not Assigned
+
+**Symptoms**: Issue remains in `pending` status, no track assigned.
+
+**Solutions**:
+1. Check `orchestrator.json` for available tracks
+2. Verify parallel_tracks configuration (default: 2, max: 5)
+3. Check if all tracks are occupied by active issues
+4. Wait for a track to complete or manually free a track
+
+### Workspace Branch Conflicts
+
+**Symptoms**: Git branch already exists or merge conflicts.
+
+**Solutions**:
+1. Check if branch `feature/{issue#}-{slug}` exists
+2. Delete old branch if issue was previously attempted
+3. For merge conflicts, resolve in workspace branch
+4. Update `workspace.json` with branch status
+
+### Orchestrator Out of Sync
+
+**Symptoms**: `orchestrator.json` doesn't reflect actual task states.
+
+**Solutions**:
+1. Run monitoring loop to sync state
+2. Compare `orchestrator.json` with Task System state
+3. Check each workspace's `workspace.json` for current_stage
+4. Manually update orchestrator if needed
 
 ## Workflow Operations
 

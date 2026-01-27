@@ -6,7 +6,7 @@
 
 ## Purpose
 
-This skill defines how the workflow system integrates with GitHub milestones to execute issues by priority.
+This skill defines how the workflow system integrates with GitHub milestones to execute issues by priority using **isolated workspaces** for each ticket.
 
 ## Parameter Format
 
@@ -15,6 +15,216 @@ This skill defines how the workflow system integrates with GitHub milestones to 
 --milestone:N:ISSUE        # Execute specific issue ISSUE from milestone N only
 --parallel:N               # Run N issues in parallel (default: 2, max: 5)
 --auto-continue            # Skip per-issue approval gates (trusted workflows)
+```
+
+## Workspace Architecture
+
+### Overview
+
+Each ticket executes in its own isolated workspace directory. A root orchestrator monitors and manages execution across all workspaces, enabling true parallel execution without artifact collisions.
+
+### Directory Structure
+
+```
+project-root/
+├── .workspaces/                           # Workspace orchestration root
+│   ├── orchestrator.json                  # Root orchestrator state
+│   └── milestone-{N}/                     # Per-milestone container
+│       ├── {issue#}/                      # Issue workspace
+│       │   ├── .context/                  # Standard workflow artifacts
+│       │   │   ├── planning.md
+│       │   │   ├── analyzing.md
+│       │   │   ├── development.md
+│       │   │   ├── testing.md
+│       │   │   ├── documentation.md
+│       │   │   ├── complete.md
+│       │   │   ├── error.md
+│       │   │   └── images/
+│       │   ├── workspace.json             # Workspace metadata and state
+│       │   └── handoff.md                 # Compressed context for orchestrator
+│       └── {issue#}/                      # Another issue workspace
+│
+└── .context/                              # Non-milestone workflows (unchanged)
+```
+
+### Orchestrator State (`orchestrator.json`)
+
+**Location:** `.workspaces/orchestrator.json`
+
+The root orchestrator maintains global state across all workspaces:
+
+```json
+{
+  "version": "2.0",
+  "type": "workspace-orchestrator",
+  "created_at": "2025-01-27T12:00:00Z",
+  "updated_at": "2025-01-27T12:30:00Z",
+
+  "milestone": {
+    "number": 1,
+    "title": "Sprint 1",
+    "description": "...",
+    "state": "open",
+    "due_on": "2025-02-01T00:00:00Z",
+    "html_url": "https://github.com/owner/repo/milestone/1"
+  },
+
+  "configuration": {
+    "parallel_tracks": 3,
+    "auto_continue": false,
+    "workspace_root": ".workspaces/milestone-1"
+  },
+
+  "issues": [
+    {
+      "number": 42,
+      "title": "Implement login flow",
+      "priority": 0,
+      "priority_label": "P0",
+      "slug": "implement-login-flow",
+      "branch_name": "feature/42-implement-login-flow",
+      "workspace_path": ".workspaces/milestone-1/42",
+      "status": "in_progress",
+      "track": 1,
+      "current_stage": "D",
+      "started_at": "2025-01-27T12:00:00Z",
+      "completed_at": null
+    },
+    {
+      "number": 43,
+      "title": "Fix password reset",
+      "priority": 1,
+      "priority_label": "P1",
+      "slug": "fix-password-reset",
+      "branch_name": "feature/43-fix-password-reset",
+      "workspace_path": ".workspaces/milestone-1/43",
+      "status": "in_progress",
+      "track": 2,
+      "current_stage": "A",
+      "started_at": "2025-01-27T12:05:00Z",
+      "completed_at": null
+    },
+    {
+      "number": 44,
+      "title": "Add logout button",
+      "priority": 1,
+      "priority_label": "P1",
+      "slug": "add-logout-button",
+      "branch_name": "feature/44-add-logout-button",
+      "workspace_path": ".workspaces/milestone-1/44",
+      "status": "pending",
+      "track": null,
+      "current_stage": null,
+      "started_at": null,
+      "completed_at": null
+    }
+  ],
+
+  "tracks": {
+    "1": {
+      "issue_number": 42,
+      "status": "active",
+      "task_prefix": "t1",
+      "last_heartbeat": "2025-01-27T12:30:00Z"
+    },
+    "2": {
+      "issue_number": 43,
+      "status": "active",
+      "task_prefix": "t2",
+      "last_heartbeat": "2025-01-27T12:28:00Z"
+    },
+    "3": {
+      "issue_number": null,
+      "status": "available",
+      "task_prefix": "t3",
+      "last_heartbeat": null
+    }
+  },
+
+  "summary": {
+    "total_issues": 3,
+    "completed": 0,
+    "in_progress": 2,
+    "pending": 1,
+    "failed": 0
+  },
+
+  "execution": {
+    "started_at": "2025-01-27T12:00:00Z",
+    "estimated_completion": null,
+    "last_orchestrator_check": "2025-01-27T12:30:00Z"
+  }
+}
+```
+
+### Workspace State (`workspace.json`)
+
+**Location:** `.workspaces/milestone-{N}/{issue#}/workspace.json`
+
+Each workspace maintains its own isolated state:
+
+```json
+{
+  "version": "1.0",
+  "type": "ticket-workspace",
+  "created_at": "2025-01-27T12:00:00Z",
+  "updated_at": "2025-01-27T12:25:00Z",
+
+  "issue": {
+    "number": 42,
+    "title": "Implement login flow",
+    "body": "As a user, I want to login securely...",
+    "labels": ["feature", "P0"],
+    "milestone_number": 1
+  },
+
+  "git": {
+    "branch_name": "feature/42-implement-login-flow",
+    "branch_created": true,
+    "base_branch": "master",
+    "commits": []
+  },
+
+  "workflow": {
+    "workflow_id": "milestone-1-issue-42",
+    "track": 1,
+    "task_prefix": "t1",
+    "stages_enabled": ["P", "A", "D", "Q"],
+    "stages_deleted": ["T", "W", "F", "S"],
+    "complexity_score": 18,
+    "model_hint": "sonnet"
+  },
+
+  "execution": {
+    "current_stage": "D",
+    "stage_history": [
+      {"stage": "P", "status": "completed", "started": "...", "completed": "...", "task_id": "t1-1"},
+      {"stage": "A", "status": "completed", "started": "...", "completed": "...", "task_id": "t1-2"},
+      {"stage": "D", "status": "in_progress", "started": "...", "completed": null, "task_id": "t1-3"}
+    ],
+    "retry_count": 0,
+    "last_error": null
+  },
+
+  "task_ids": {
+    "P": "t1-1",
+    "A": "t1-2",
+    "D": "t1-3",
+    "Q": "t1-4"
+  },
+
+  "artifacts": {
+    "planning.md": true,
+    "analyzing.md": true,
+    "development.md": false,
+    "testing.md": false
+  },
+
+  "orchestrator_sync": {
+    "last_reported_stage": "D",
+    "last_sync_at": "2025-01-27T12:25:00Z"
+  }
+}
 ```
 
 ## GitHub CLI Commands
@@ -29,60 +239,6 @@ gh api "/repos/{owner}/{repo}/issues?milestone={N}&state=open&per_page=100"
 # Fetch specific issue
 gh api /repos/{owner}/{repo}/issues/{ISSUE}
 ```
-
-## Milestone Context File
-
-**Location:** `.context/milestone.json`
-
-```json
-{
-  "version": "1.0",
-  "fetched_at": "2025-01-27T12:00:00Z",
-  "milestone": {
-    "number": 1,
-    "title": "Sprint 1",
-    "description": "...",
-    "state": "open",
-    "due_on": "2025-02-01T00:00:00Z",
-    "html_url": "https://github.com/owner/repo/milestone/1"
-  },
-  "issues": [
-    {
-      "number": 42,
-      "title": "Implement login flow",
-      "state": "open",
-      "priority": 1,
-      "priority_label": "P1",
-      "slug": "implement-login-flow",
-      "branch_name": "feature/42-implement-login-flow",
-      "labels": ["feature", "P1"],
-      "body_preview": "As a user, I want to login...",
-      "status": "pending"
-    }
-  ],
-  "execution": {
-    "parallel_tracks": 2,
-    "active_issues": [],
-    "current_issue": null,
-    "completed_issues": [],
-    "pending_issues": [42],
-    "started_at": null,
-    "auto_continue": false
-  },
-  "summary": {
-    "total_issues": 1,
-    "completed": 0,
-    "pending": 1
-  }
-}
-```
-
-### Issue Status Values
-
-- `pending` - Not yet started
-- `in_progress` - Currently being worked on
-- `completed` - PR created, issue done
-- `skipped` - Manually skipped by user
 
 ## Priority Sorting
 
@@ -129,6 +285,131 @@ issues.sort((a, b) => {
 | 43 | Fix password reset | `feature/43-fix-password-reset` |
 | 44 | [URGENT] Fix critical bug!!! | `feature/44-urgent-fix-critical-bug` |
 
+## Orchestrator Pattern
+
+### Initialization Sequence
+
+```
+1. USER INVOKES: /workflow --milestone:N --parallel:3
+
+2. ORCHESTRATOR SETUP:
+   a. Create .workspaces/milestone-{N}/ directory
+   b. Fetch milestone and issues from GitHub
+   c. Sort issues by priority
+   d. Create orchestrator.json with configuration
+   e. Create orchestrator task: TaskCreate({ taskId: "orch-1", ... })
+
+3. WORKSPACE INITIALIZATION (for first N issues where N = parallel_tracks):
+   For each issue in first N:
+   a. Create workspace directory: .workspaces/milestone-{N}/{issue#}/
+   b. Create workspace.json with issue metadata
+   c. Create .context/ subdirectory
+   d. Create track-prefixed tasks (t1-1, t1-2, ... for track 1)
+   e. Set up task dependencies
+   f. Create and checkout git branch: feature/{issue#}-{slug}
+   g. Start P stage: TaskUpdate({ taskId: "t{track}-1", status: "in_progress" })
+
+4. PARALLEL EXECUTION BEGINS:
+   - Track 1: Issue #42 → P stage starts
+   - Track 2: Issue #43 → P stage starts
+   - Track 3: Issue #44 → P stage starts
+```
+
+### Monitoring Loop
+
+The orchestrator periodically monitors workspace status:
+
+```
+ORCHESTRATOR MONITORING CYCLE:
+
+1. CHECK TRACK STATUS:
+   For each active track:
+   a. Read workspace.json for current state
+   b. Check Task System for task status
+   c. Update orchestrator.json with latest state
+
+2. HANDLE COMPLETED TRACKS:
+   If a track has completed its workflow:
+   a. Mark issue as completed in orchestrator.json
+   b. PR should already be created by F stage
+   c. Free up track for next pending issue
+
+3. ASSIGN PENDING ISSUES:
+   If available tracks and pending issues:
+   a. Get next highest-priority pending issue
+   b. Initialize workspace for issue
+   c. Assign to available track
+   d. Start P stage for new workspace
+
+4. HANDLE ERRORS:
+   If a workspace reports error:
+   a. Check retry count vs max (3)
+   b. If retries available: Allow workspace to retry
+   c. If max retries: Escalate within workspace or pause track
+   d. Update orchestrator.json with error state
+
+5. APPROVAL GATES (unless --auto-continue):
+   When track completes P3 (planning):
+   a. STOP AND ASK: "Track 1 (Issue #42) planning complete. Continue? [Y/n/skip]"
+   b. Wait for user response
+   c. Resume approved tracks, skip/pause others
+```
+
+### Task System Integration
+
+Track-prefixed task IDs enable parallel execution without collisions:
+
+```
+Root Tasks (Orchestrator Level):
+├── "orch-1": Milestone 1 Orchestrator (in_progress)
+
+Track 1 Tasks (Issue #42):
+├── "t1-1": P: Planning - Issue #42 (completed)
+├── "t1-2": A: Architecture - Issue #42 (completed)
+├── "t1-3": D: Development - Issue #42 (in_progress)
+└── "t1-4": Q: QA Testing - Issue #42 (pending, blocked by t1-3)
+
+Track 2 Tasks (Issue #43):
+├── "t2-1": P: Planning - Issue #43 (completed)
+├── "t2-2": A: Architecture - Issue #43 (in_progress)
+├── "t2-3": D: Development - Issue #43 (pending, blocked by t2-2)
+└── "t2-4": Q: QA Testing - Issue #43 (pending, blocked by t2-3)
+```
+
+**Task Creation Pattern:**
+
+```typescript
+function initializeWorkspaceTasks(issueNumber: number, track: number, milestoneNumber: number) {
+  const prefix = `t${track}`;
+  const workflowId = `milestone-${milestoneNumber}-issue-${issueNumber}`;
+  const workspacePath = `.workspaces/milestone-${milestoneNumber}/${issueNumber}`;
+
+  // Create tasks with track-prefixed IDs
+  TaskCreate({
+    taskId: `${prefix}-1`,
+    subject: `P: Planning - Issue #${issueNumber}`,
+    description: `Define requirements for issue #${issueNumber}`,
+    activeForm: "Planning requirements",
+    metadata: {
+      stage: "P",
+      workflow_id: workflowId,
+      issue_number: issueNumber,
+      milestone_number: milestoneNumber,
+      track: track,
+      workspace_path: workspacePath
+    }
+  });
+
+  // Create A, D, Q tasks similarly with appropriate task_ids
+  // t{track}-2 for A, t{track}-3 for D, t{track}-4 for Q, etc.
+
+  // Set up dependencies within this track
+  TaskUpdate({ taskId: `${prefix}-2`, addBlockedBy: [`${prefix}-1`] });
+  TaskUpdate({ taskId: `${prefix}-3`, addBlockedBy: [`${prefix}-2`] });
+  TaskUpdate({ taskId: `${prefix}-4`, addBlockedBy: [`${prefix}-3`] });
+}
+```
+
 ## Execution Flow
 
 ### All Issues Mode: `/workflow --milestone:N`
@@ -138,98 +419,39 @@ issues.sort((a, b) => {
    gh api /repos/{owner}/{repo}/milestones/N
    gh api "/repos/{owner}/{repo}/issues?milestone=N&state=open"
 
-2. CREATE MILESTONE.JSON
+2. CREATE ORCHESTRATOR
+   - Create .workspaces/milestone-{N}/ directory
    - Sort issues by priority
-   - Generate branch names and slugs
-   - Set pending_issues array
+   - Create orchestrator.json
    - Set parallel_tracks from --parallel:N (default: 2)
    - Set auto_continue from --auto-continue flag
 
-3. FOR EACH ISSUE (by priority):
-   a. Create branch: feature/{issue#}-{slug}
-   b. Update current_issue in milestone.json
-   c. Run workflow stages (P → ... → Q)
-   d. Create PR linking to issue (Closes #N)
-   e. Move issue to completed_issues
-   f. [APPROVAL GATE] Unless --auto-continue:
-      - STOP AND ASK: "Issue #N complete. Continue to next? [Y/n/skip]"
-      - Wait for user confirmation
-   g. Proceed to next pending issue
+3. INITIALIZE FIRST N WORKSPACES (N = parallel_tracks):
+   For each issue:
+   a. Create workspace directory
+   b. Create workspace.json with issue context
+   c. Create .context/ with images/ subdirectory
+   d. Create and checkout branch: feature/{issue#}-{slug}
+   e. Create track-prefixed tasks
+   f. Start P stage
 
-4. COMPLETION
-   - All open issues processed
-   - PRs created for each
+4. PARALLEL EXECUTION:
+   Each workspace executes independently:
+   - Agents read workspace.json for context
+   - Write artifacts to workspace's .context/
+   - Update track-prefixed task status
+
+5. TRACK COMPLETION:
+   When a workspace completes:
+   a. PR created from workspace branch
+   b. Track freed in orchestrator
+   c. Next pending issue assigned to track
+   d. New workspace initialized
+
+6. MILESTONE COMPLETION:
+   - All issues processed
+   - All PRs created
 ```
-
-### Per-Issue Approval Gate
-
-**DEFAULT BEHAVIOR**: Stop between issues for user approval.
-
-```typescript
-// After completing issue, before starting next:
-TaskCreate({
-  subject: "Issue Gate: #42 → #43",
-  metadata: {
-    completed_issue: 42,
-    next_issue: 43,
-    requires_approval: true
-  }
-});
-
-// STOP AND ASK: "Issue #42 complete. Continue to #43? [Y/n/skip]"
-// Wait for user response:
-// - Y/yes → Continue to next issue
-// - n/no → Stop milestone execution
-// - skip → Skip next issue, continue to following
-```
-
-**`--auto-continue` flag**: Skip approval gates for trusted workflows.
-
-### Multi-Issue Parallelism: `--parallel:N`
-
-Default is 2 parallel tracks (max 5). Run multiple issues concurrently:
-
-```
-Milestone Setup: P(prep) for all issues
-├─ Track 1: Issue #42 (P0) → P → A → D → Q
-├─ Track 2: Issue #43 (P1) → P → A → D → Q
-├─ Track 3: Issue #44 (P1) → P → A → D → Q  (with --parallel:3+)
-├─ Track 4: Issue #45 (P2) → P → A → D → Q  (with --parallel:4+)
-└─ Track 5: Issue #46 (P2) → P → A → D → Q  (with --parallel:5)
-Final: Merge PRs in priority order
-```
-
-**Extended milestone.json for parallel execution:**
-
-```json
-{
-  "execution": {
-    "parallel_tracks": 5,
-    "active_issues": [42, 43, 44, 45, 46],
-    "tracks": {
-      "track_1": { "issue": 42, "stage": "D", "task_prefix": "t1" },
-      "track_2": { "issue": 43, "stage": "A", "task_prefix": "t2" },
-      "track_3": { "issue": 44, "stage": "P", "task_prefix": "t3" },
-      "track_4": { "issue": 45, "stage": "P", "task_prefix": "t4" },
-      "track_5": { "issue": 46, "stage": "P", "task_prefix": "t5" }
-    },
-    "completed_issues": [],
-    "pending_issues": [47, 48]
-  }
-}
-```
-
-**Task ID prefixing for parallel tracks:**
-- Track 1: task IDs `t1-1`, `t1-2`, etc.
-- Track 2: task IDs `t2-1`, `t2-2`, etc.
-- Track 3-5: task IDs `t3-1`, `t4-1`, `t5-1`, etc.
-
-**Time savings:**
-| Tracks | 5 issues | Time | Savings |
-|--------|----------|------|---------|
-| 1 (sequential) | 5 × 1h = 5h | 5 hours | — |
-| 2 (default) | 3 × 1h = 3h | 3 hours | 40% |
-| 5 (max) | 1 × 1h = 1h | 1 hour | 80% |
 
 ### Single Issue Mode: `/workflow --milestone:N:ISSUE`
 
@@ -242,12 +464,13 @@ Final: Merge PRs in priority order
    - Confirm issue.milestone.number === N
    - Error if issue not in milestone
 
-3. CREATE MILESTONE.JSON
-   - Single issue in issues array
-   - Set current_issue to ISSUE
+3. CREATE SINGLE WORKSPACE
+   - Create .workspaces/milestone-{N}/{ISSUE}/
+   - Create workspace.json with issue context
+   - Set parallel_tracks to 1
 
 4. EXECUTE SINGLE ISSUE
-   a. Create branch: feature/{ISSUE}-{slug}
+   a. Create and checkout branch: feature/{ISSUE}-{slug}
    b. Run workflow stages (P → ... → Q)
    c. Create PR linking to issue (Closes #ISSUE)
 
@@ -256,7 +479,132 @@ Final: Merge PRs in priority order
    - PR created
 ```
 
+### Per-Issue Approval Gate
+
+**DEFAULT BEHAVIOR**: Stop after P stage for user approval.
+
+```typescript
+// After P stage completes in a workspace:
+// STOP AND ASK: "Track 1 (Issue #42) planning complete. Continue? [Y/n/skip]"
+// Wait for user response:
+// - Y/yes → Continue to A stage
+// - n/no → Pause track
+// - skip → Skip issue, free track for next
+```
+
+**`--auto-continue` flag**: Skip approval gates for trusted workflows.
+
+### Multi-Issue Parallelism
+
+```
+Timeline with --parallel:3 on 5 issues:
+
+Time    Track 1 (#42, P0)    Track 2 (#43, P1)    Track 3 (#44, P1)
+─────   ─────────────────    ─────────────────    ─────────────────
+T+0     P: Planning          P: Planning          P: Planning
+T+5     [P3 Gate]            [P3 Gate]            [P3 Gate]
+T+6     A: Architecture      A: Architecture      A: Architecture
+T+10    D: Development       D: Development       D: Development
+T+20    Q: QA Testing        D: (continues)       D: (continues)
+T+25    F: Finalization      Q: QA Testing        Q: QA Testing
+T+28    COMPLETE             COMPLETE             COMPLETE
+        ↓ Track 1 freed      ↓ Track 2 freed      ↓ Track 3 freed
+T+30    Starts #45 (P2)      Starts #46 (P2)      (No more issues)
+```
+
+**Time savings:**
+| Tracks | 5 issues | Time | Savings |
+|--------|----------|------|---------|
+| 1 (sequential) | 5 × 1h = 5h | 5 hours | — |
+| 2 (default) | 3 × 1h = 3h | 3 hours | 40% |
+| 5 (max) | 1 × 1h = 1h | 1 hour | 80% |
+
+## Git Integration
+
+### Per-Workspace Branch Checkout
+
+Each workspace operates on its own feature branch:
+
+```bash
+# During workspace initialization
+git checkout -b feature/{issue#}-{slug}
+
+# All commits within workspace go to this branch
+git add .
+git commit -m "#{issue#} feat: implement login flow"
+
+# PR created from workspace branch
+git push -u origin feature/{issue#}-{slug}
+gh pr create --title "Issue title" --body "Closes #{issue#}"
+```
+
+### Branch Management
+
+- Branch created during workspace initialization
+- All work committed to workspace branch
+- PR created from workspace branch during F stage
+- Parallel workspaces work on separate branches simultaneously
+
+## Stage Integration
+
+### P Stage (Planning)
+
+When in workspace context:
+- Read issue body from `workspace.json`
+- Use issue labels for type/priority classification
+- Write `planning.md` to workspace's `.context/`
+- Update `workspace.json` with stage completion
+
+### D Stage (Development)
+
+When in workspace context:
+- Workspace branch already checked out
+- Write artifacts to workspace's `.context/`
+- Commit changes to workspace branch
+- Reference issue in commit messages (`#{issue#}`)
+
+### F Stage (Finalization)
+
+When in workspace context:
+- Push workspace branch to remote
+- Create PR with "Closes #{issue#}" in body
+- Update `workspace.json` with completion status
+- Write compressed handoff to `handoff.md`
+- Signal orchestrator that track is complete
+
 ## Error Handling
+
+### Per-Workspace Error Isolation
+
+Each workspace has its own error context:
+
+| Error Type | Workspace Action | Orchestrator Action |
+|------------|------------------|---------------------|
+| Transient | Retry (3x) | Monitor, no intervention |
+| Logic | Fix and retry (2x) | Monitor, no intervention |
+| Dependency | Escalate to previous stage | Pause track, alert user |
+| Requirements | Escalate to P stage | Pause track, return to planning |
+| Fatal | Mark workspace failed | Free track, alert user |
+
+### Error State in workspace.json
+
+```json
+{
+  "execution": {
+    "current_stage": "D",
+    "retry_count": 2,
+    "last_error": {
+      "type": "logic",
+      "message": "Build failed: missing dependency",
+      "stage": "D",
+      "timestamp": "2025-01-27T12:25:00Z",
+      "resolution_attempted": "Added missing import"
+    }
+  }
+}
+```
+
+### Global Error Handling
 
 | Error | Handling |
 |-------|----------|
@@ -267,31 +615,17 @@ Final: Merge PRs in priority order
 | No repo detected | Error: "Not in git repo. --milestone requires GitHub" |
 | Invalid format | Error: "Invalid format. Use --milestone:N or --milestone:N:ISSUE" |
 
-## Stage Integration
+## Issue Status Values
 
-### P Stage (Planning)
-
-When milestone context exists:
-- Read issue body as requirements input
-- Use issue labels for type/priority classification
-- Reference issue number in planning.md
-
-### D Stage (Development)
-
-When milestone context exists:
-- Create feature branch from milestone.json
-- Update `execution.current_issue`
-- Reference issue in commit messages (`#N`)
-
-### F Stage (Finalization)
-
-When milestone context exists:
-- Create PR with "Closes #N" in body
-- Update issue status to `completed`
-- Move to next pending issue (if any)
+- `pending` - Not yet started, no workspace created
+- `in_progress` - Workspace active, being worked on
+- `completed` - PR created, workspace done
+- `skipped` - Manually skipped by user
+- `failed` - Failed after max retries
 
 ## Related
 
 - [Workflow Command](../commands/workflow.md) - Main workflow command
 - [Workflow System](workflow.md) - Core workflow documentation
 - [Task Folder Organization](task-folder-organization.md) - Folder structure
+- [workflow-engineer](../agents/workflow-engineer.md) - Orchestrator troubleshooting
