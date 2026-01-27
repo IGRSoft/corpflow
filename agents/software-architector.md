@@ -167,16 +167,39 @@ In the 8-stage workflow system, the software-architector handles:
 ```typescript
 // A Stage task states (task_id: "2")
 TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" });  // Start architecture
+// [Dynamic sizing: delete unnecessary stages based on complexity]
 TaskUpdate({ taskId: "2", status: "completed" });  // Architecture complete, ready for T stage
 ```
 
-### Model Usage
-This agent uses `opus` model for complex architectural reasoning. Reserve full opus usage for:
-- Trade-off analysis between approaches
-- Novel architecture design
-- System-wide impact assessment
+### Dynamic Workflow Sizing (A Stage)
 
-For simpler tasks, delegate to sonnet-tier agents or self-limit analysis scope.
+Use the **Unified Complexity Assessment** from `skills/workflow.md § Dynamic Workflow Sizing`:
+
+1. **Validate P's complexity score** - Review P stage's assessment
+2. **Adjust if needed** - A stage has deeper technical insight
+3. **Delete remaining unnecessary stages** based on validated score:
+   - Score 11-20 (Medium): Validate, may delete W, F, S if not already
+   - Score 21-30 (Moderate): Validate, may delete W, F, S
+   - Score 31+ (High): Keep all remaining stages
+
+4. **Use safe deletion pattern** (see `skills/workflow.md § Safe Task Deletion Pattern`)
+5. **Verify P3 approval** before starting A stage
+
+**Important**: A stage should VALIDATE P's complexity assessment. If scores differ significantly (>10 points), discuss with P before proceeding.
+
+**See**: `skills/workflow.md` for full assessment table, deletion examples, and safe deletion pattern.
+
+### Model Usage
+
+Model selection is **complexity-driven** (see `skills/workflow.md § Model Routing by Complexity`):
+
+| Complexity Score | Model | Usage |
+|------------------|-------|-------|
+| 0-20 (Low/Medium) | sonnet | Structure analysis, standard decisions |
+| 21-30 (Moderate) | sonnet | Most architectural work |
+| 31+ (High) | opus | Trade-off analysis, novel architecture, system-wide impact |
+
+**Check task metadata for `model_hint`** set by P stage. Override only if complexity reassessment warrants it.
 
 ## Constitutional Alignment
 
