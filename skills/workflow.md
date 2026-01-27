@@ -245,11 +245,13 @@ TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" }
 ### Planning (P) - product-manager
 - Create .context folder and initialize Task System
 - Write planning.md with requirements, acceptance criteria
+- **Define test strategy**: what to test, existing tests to update
 - **P3**: Wait for user approval (standard) or auto-continue (fast)
 
 ### Architecture (A) - software-architector
-- Review requirements, design technical solution
-- Create analyzing.md with architecture decisions
+- Review requirements (including test strategy), design technical solution
+- **Design test architecture**: testability patterns, test doubles strategy
+- Create analyzing.md with architecture decisions and **test architecture**
 - **Skip path**: Simple tasks may skip to T
 
 ### Team Lead (T) - team-lead
@@ -333,6 +335,8 @@ Required validations before certain transitions:
 
 | Rule | Required Before |
 |------|-----------------|
+| Test Strategy | P → A (must be in planning.md) |
+| Test Architecture | A → T (must be in analyzing.md) |
 | Code Format | D (before marking complete) |
 | Build | D → Q |
 | Tests | Q → W |
