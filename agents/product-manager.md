@@ -229,16 +229,47 @@ In the 8-stage workflow system, the product-manager handles:
 
 ### P Stage (Planning)
 - Create task folder and initialize Task System
+- **If milestone context exists**: Read `.context/milestone.json` and use issue body as requirements
 - Write planning.md with requirements and acceptance criteria
 - **Define test strategy** (what needs to be tested, existing tests to update)
 - Define scope, priorities, and dependencies
-- **P3**: Wait for user approval (standard workflow)
+- **Dynamic sizing**: Delete unnecessary stages based on task complexity
+- **P3**: Wait for user approval before proceeding
+
+### Milestone Context Integration
+
+When `--milestone:N` is used, read issue requirements from `.context/milestone.json`:
+
+```typescript
+// Read issue body for requirements
+const milestone = JSON.parse(readFile('.context/milestone.json'));
+const issue = milestone.issues.find(i => i.number === milestone.execution.current_issue);
+// Use issue.body_preview and labels for planning input
+```
+
+### Dynamic Workflow Sizing (P Stage)
+
+Use the **Unified Complexity Assessment** from `skills/workflow.md § Dynamic Workflow Sizing`:
+
+1. **Assess complexity** using the 5-factor table (patterns, integration, concerns, risk, docs)
+2. **Sum scores** (0-50 total)
+3. **Delete stages** based on score:
+   - Score 0-10 (Low): Delete A, T, W, F, S → Keep P → D → Q
+   - Score 11-20 (Medium): Delete T, W, F, S → Keep P → A → D → Q
+   - Score 21-30 (Moderate): Delete W, F, S → Keep P → A → T → D → Q
+   - Score 31+ (High): Keep all 8 stages
+
+4. **Use safe deletion pattern** (see `skills/workflow.md § Safe Task Deletion Pattern`)
+5. **Set model hint** in task metadata based on complexity score
+
+**See**: `skills/workflow.md` for full assessment table and deletion examples.
 
 ### Task System Format
 ```typescript
 // P Stage task states (task_id: "1")
 TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });  // Start planning
-TaskUpdate({ taskId: "1", status: "completed" });  // Planning complete, ready for A stage
+// [Dynamic sizing: delete unnecessary stages]
+TaskUpdate({ taskId: "1", status: "completed" });  // Planning complete, wait for P3 approval
 ```
 
 ### P Stage with Design (`--with-design`)

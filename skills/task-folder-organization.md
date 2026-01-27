@@ -49,6 +49,7 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 ├── documentation.md         # Documentation plan (W stage)
 ├── complete.md              # Final validation (F stage)
 ├── release.md               # Release notes (F stage)
+├── milestone.json           # GitHub milestone context (when --milestone used)
 ├── security-review.md       # Security audit (if applicable)
 ├── deployment.md            # Deployment plan (if applicable)
 ├── error.md                 # Error log for escalations (created on errors)
@@ -74,9 +75,21 @@ Product Manager's planning document containing:
 - **documentation.md**: Documentation plan (W stage)
 - **complete.md**: Final validation (F stage)
 - **release.md**: Release notes (F stage)
+- **milestone.json**: GitHub milestone context (when `--milestone` used)
 - **security-review.md**: Security audit (if applicable)
 - **deployment.md**: Deployment plan (if applicable)
 - **error.md**: Error log for escalation scenarios
+
+### Milestone Context File (`milestone.json`)
+
+Created when `/workflow --milestone:N` is used. Contains:
+
+- **milestone**: GitHub milestone metadata (number, title, due date)
+- **issues**: Array of issues sorted by priority with branch names
+- **execution**: Current issue, completed/pending arrays
+- **summary**: Issue counts and progress
+
+See [Milestone Workflow](milestone-workflow.md) for full schema.
 
 ### images/ Directory
 
@@ -167,6 +180,18 @@ All markdown files should include:
 ├── analyzing.md
 ├── development.md
 ├── error.md              # Created when errors occurred
+├── testing.md
+└── images/
+```
+
+### Example 4: Milestone-Based Workflow
+
+```
+.context/
+├── milestone.json        # GitHub milestone context
+├── planning.md
+├── analyzing.md
+├── development.md
 ├── testing.md
 └── images/
 ```

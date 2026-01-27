@@ -5,29 +5,33 @@ Initialize a new workflow task with proper folder structure, state management, a
 ## Usage
 
 ```
-/workflow "Task Title" [options]
+/workflow --milestone:N              # Execute all open issues in milestone N by priority
+/workflow --milestone:N:ISSUE        # Execute specific issue from milestone N
+/workflow "Task Title" [options]     # Execute a custom task
 ```
 
 ## Options
 
+- `--milestone:N` - Execute GitHub milestone N issues by priority
+- `--milestone:N:ISSUE` - Execute specific issue from milestone N
 - `--priority [High|Medium|Low]` - Task priority (default: Medium)
 - `--platform <apple|android|web|all>` - Target platform (default: all)
 - `--mode [async|sync]` - Execution mode (default: async)
-- `--fast` - Use fast workflow (skip P3 approval gate)
-- `--quick` - Use quick 3-stage workflow (P → D → Q only)
 - `--with-design` - Include designer in planning phase (P stage)
 - `--ethics-review` - Add ethics checkpoint after planning (recommended for high-risk features)
+- `--sequential` - Force W to wait for Q (default: W+Q run parallel)
+- `--auto-continue` - Skip per-issue approval gates in milestone execution (trusted workflows only)
+- `--parallel:N` - Run N issues in parallel for milestones (default: 2, max: 5)
 
 ## Examples
 
 ```
+/workflow --milestone:1                               # Work through milestone 1 by priority
+/workflow --milestone:2:123                           # Work on issue #123 from milestone 2
 /workflow "Add dark mode support" --with-design
 /workflow "Fix login crash" --priority High --platform apple
-/workflow "Refactor database layer" --fast
-/workflow "Add form validation" --quick
 /workflow "Redesign settings screen" --with-design --platform apple
 /workflow "Add user tracking analytics" --ethics-review
-/workflow "Implement recommendation algorithm" --ethics-review --priority High
 ```
 
 ## What This Command Does
@@ -75,36 +79,57 @@ Initialize a new workflow task with proper folder structure, state management, a
    - Prompts for requirements gathering
    - Guides through planning.md completion
 
+## Milestone Execution Mode (`--milestone`)
+
+### All Issues: `/workflow --milestone:N`
+
+Execute all open issues in milestone N, sorted by priority:
+
+1. **Fetch Milestone** - `gh api /repos/{owner}/{repo}/milestones/N`
+2. **Fetch Issues** - `gh api "/repos/{owner}/{repo}/issues?milestone=N&state=open"`
+3. **Create milestone.json** - Sort issues by priority (P0 > P1 > P2 > P3)
+4. **Execute Each Issue**:
+   - Create branch: `feature/{issue#}-{slug}`
+   - Run workflow stages (dynamically sized)
+   - Create PR with "Closes #N"
+   - Move to next issue
+
+### Single Issue: `/workflow --milestone:N:ISSUE`
+
+Execute specific issue from milestone N:
+
+1. **Fetch & Validate** - Confirm issue belongs to milestone
+2. **Create milestone.json** - Single issue context
+3. **Execute Issue** - Same workflow as above
+
+See [Milestone Workflow](../skills/milestone-workflow.md) for full documentation.
+
+## Dynamic Workflow Sizing
+
+Workflows are dynamically sized during P and A stages using the **Unified Complexity Assessment**.
+
+**See**: `skills/workflow.md § Dynamic Workflow Sizing` for:
+- Full complexity assessment table (5 factors, 0-50 scoring)
+- Decision rules by score range
+- Safe task deletion pattern
+- Model routing by complexity
+
+### Quick Reference
+
+| Complexity Score | Stages Kept | P Stage Deletes |
+|------------------|-------------|-----------------|
+| 0-10 (Low) | P → D → Q | A, T, W, F, S |
+| 11-20 (Medium) | P → A → D → Q | T, W, F, S |
+| 21-30 (Moderate) | P → A → T → D → Q | W, F, S |
+| 31+ (High) | All 8 stages | None |
+
 ## Workflow Modes
 
 ### Standard Workflow
 - Full 8-stage process: P → A → T → D → Q → W → F → S
 - Stops at P3 for user approval before continuing
+- P and A stages dynamically delete unnecessary stages
 - Use for: Major features, architectural changes, security-sensitive work
-
-### Fast Workflow (`--fast`)
-- Same 8 stages but skips P3 approval gate
-- Planning auto-approves and continues to Architecture
-- Use for: Trusted tasks, bug fixes, well-defined features
-
-### Quick Workflow (`--quick`)
-- 3-stage process: P → D → Q only
-- Skips Architecture (A), Team Lead (T), Documentation (W), Finalization (F), Stakeholder (S)
-- Use for: Small fixes, simple features, focused changes
-
-```typescript
-// Quick workflow creates 3 tasks with metadata
-const workflowId = "quick-fix-2025-01-26";
-const priority = "medium";
-
-TaskCreate({ subject: "P: Planning", description: "Quick planning", activeForm: "Planning...", metadata: { stage: "P", workflow_id: workflowId, priority, workflow_type: "quick" } });  // id: "1"
-TaskCreate({ subject: "D: Development", description: "Implementation", activeForm: "Implementing...", metadata: { stage: "D", workflow_id: workflowId, priority, workflow_type: "quick" } });  // id: "2"
-TaskCreate({ subject: "Q: QA Testing", description: "Testing", activeForm: "Testing...", metadata: { stage: "Q", workflow_id: workflowId, priority, workflow_type: "quick" } });  // id: "3"
-
-TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // D blocked by P
-TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // Q blocked by D
-TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
-```
 
 ### Design-Integrated Workflow (`--with-design`)
 - Adds designer to P stage for UX/UI planning input
@@ -190,13 +215,14 @@ I've initiated the workflow. Starting planning...
 
 After initialization:
 1. Complete planning.md with requirements and acceptance criteria
-2. P3 approval gate (standard workflow) or auto-continue (fast workflow)
-3. Architecture stage begins
-4. Continue through remaining stages
+2. P stage may delete unnecessary stages (dynamic sizing)
+3. P3 approval gate - wait for user approval
+4. Continue through remaining stages (A stage may further prune)
 
 ## Related
 
 - [Workflow System](../skills/workflow.md) - Complete workflow documentation
+- [Milestone Workflow](../skills/milestone-workflow.md) - GitHub milestone integration
 - [Task Folder Organization](../skills/task-folder-organization.md) - Folder structure
 - [workflow-engineer](../agents/workflow-engineer.md) - Troubleshooting
 - [designer](../agents/designer.md) - Designer agent for `--with-design` workflows

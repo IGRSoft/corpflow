@@ -7,9 +7,19 @@ Single source of truth for task workflow management using the Task System for st
 | Tool | Purpose |
 |------|---------|
 | `TaskCreate` | Create new tasks with subject, description, activeForm, metadata |
-| `TaskUpdate` | Update status, owner, add/remove blockedBy |
+| `TaskUpdate` | Update status, owner, add/remove blockedBy, **delete tasks** |
 | `TaskGet` | Retrieve current task state |
 | `TaskList` | View all tasks and their statuses |
+
+### Task Deletion (Claude Code v2.1.20+)
+
+TaskUpdate supports `delete: true` to remove tasks dynamically:
+
+```typescript
+TaskUpdate({ taskId: "6", delete: true });  // Delete task 6
+```
+
+This enables dynamic workflow sizing during P and A stages.
 
 ### Metadata Field
 
@@ -23,7 +33,9 @@ TaskCreate({
   metadata: {
     priority: "high",
     stage: "P",
-    workflow_id: "dark-mode-2025"
+    workflow_id: "dark-mode-2025",
+    milestone_number: 1,
+    issue_number: 42
   }
 });
 ```
@@ -32,6 +44,8 @@ TaskCreate({
 - `priority` - Task priority (high, medium, low)
 - `stage` - Workflow stage code (P, A, T, D, Q, W, F, S)
 - `workflow_id` - Links task to specific workflow instance
+- `milestone_number` - GitHub milestone number (when using `--milestone`)
+- `issue_number` - GitHub issue number being worked on
 
 ## Cross-Session Persistence
 
@@ -53,79 +67,186 @@ CLAUDE_CODE_TASK_LIST_ID="my-project" claude
 
 Each task is stored as a JSON file with full state including blockedBy relationships.
 
-## CRITICAL: Trigger Behavior (MUST EXECUTE)
+## Workflow Invocation
 
-**When you see user input starting with these prefixes, you MUST immediately invoke the corresponding slash command using the SlashCommand tool:**
+### Milestone-Based Workflow (Recommended)
 
-| User Input Prefix | SlashCommand to Invoke |
-|-------------------|------------------------|
-| `workflow: [task]` | `/company-workflow:workflow "[task]"` |
-| `fworkflow: [task]` | `/company-workflow:workflow "[task]" --fast` |
-| `quick: [task]` | `/company-workflow:workflow "[task]" --quick` |
+Execute GitHub issues by priority using the milestone parameter:
 
-**Execution Order:**
-1. **Detect prefix** - Check if user message starts with `workflow:`, `fworkflow:`, or `quick:`
-2. **Extract task** - Everything after the prefix (including any embedded slash commands like `/apple-developer:...`)
-3. **Invoke workflow FIRST** - Use SlashCommand tool to run `/company-workflow:workflow "[extracted task]"`
-4. **Workflow handles the rest** - The workflow command sets up the context, then orchestrates the stages including any embedded commands
-
-**Example Flow:**
-```
-User: workflow: /apple-developer:code-legacy-modernize migrate @StateObject to @Environment
-
-Claude MUST:
-1. Detect "workflow:" prefix
-2. Extract task: "/apple-developer:code-legacy-modernize migrate @StateObject to @Environment"
-3. Invoke: SlashCommand("/company-workflow:workflow \"/apple-developer:code-legacy-modernize migrate @StateObject to @Environment\"")
-4. Workflow creates .context/, planning.md, and initializes Task System
-5. Planning stage (product-manager) captures requirements
-6. Architecture stage can then invoke /apple-developer:code-legacy-modernize
+```bash
+/workflow --milestone:1       # Work through milestone 1 issues by priority
+/workflow --milestone:2:123   # Work on issue #123 from milestone 2 only
 ```
 
-**For `micro: [task]`**: No workflow initialization. Execute the task directly without stage management.
+**Execution Flow:**
+1. Fetch milestone and issues from GitHub
+2. Create `.context/milestone.json` with issues sorted by priority
+3. Start working on highest priority issue (or specified issue)
+4. Create branch `feature/{issue#}-{slug}` for each issue
+5. Continue through issues until milestone complete
 
----
+See [Milestone Workflow](milestone-workflow.md) for full documentation.
 
-## Quick Start: Triggers
+### Task-Based Workflow
 
-Start workflows with these prefixes:
+For tasks not linked to GitHub issues:
 
 ```
-workflow: [task description]   # Standard - stops at P3 for user approval
-fworkflow: [task description]  # Fast - skips P3 approval, auto-continues
+workflow: [task description]   # Standard workflow
 ```
 
-**Examples:**
-- `workflow: Add dark mode to settings` - Stops at P3 for approval
-- `fworkflow: Fix login button typo` - Runs through all stages automatically
+**Example:**
+- `workflow: Add dark mode to settings` - Creates full 8-stage workflow
 
 **Auto-detection from keywords:**
 - Priority: `critical`, `urgent`, `blocker` → High; `minor`, `optional` → Low
 - Platform: `ios`, `macos`, `tvos`, `watchos`, `visionos` → Specific platform
 
-## Workflow Tiers (Context Optimization)
+### Micro Tasks
 
-Choose the appropriate tier based on task complexity:
+For simple changes that don't need workflow tracking:
 
-| Trigger | Stages | Use For |
-|---------|--------|---------|
-| `micro: [task]` | Direct edit | Single-file fixes, typos, simple changes |
-| `quick: [task]` | P → D → Q | Small features, bug fixes, focused changes |
-| `workflow: [task]` | Full 8 stages | Multi-file features, architectural changes |
-| `fworkflow: [task]` | Full 8 stages (no P3 gate) | Trusted full workflows |
+```
+micro: [task description]
+```
 
-### Micro Workflow
 - **No folder creation** - Work directly in codebase
 - **No task tracking** - Single task, immediate execution
 - **Use for**: Typos, small refactors, simple config changes
 
-### Quick Workflow (3 stages)
+---
+
+## Dynamic Workflow Sizing
+
+Instead of predefined workflow tiers (quick, fast), workflows are dynamically sized during P and A stages using task deletion.
+
+### Unified Complexity Assessment
+
+**Single Source of Truth** - Both P and A stages use this assessment framework:
+
+| Factor | Low (0-2) | Medium (3-5) | High (6-10) |
+|--------|-----------|--------------|-------------|
+| **New patterns** | None | 1-2 new | 3+ new |
+| **Integration points** | 1-2 | 3-5 | 6+ |
+| **Cross-cutting concerns** | None | 1 area (security OR perf) | Multiple areas |
+| **Risk level** | Minimal, reversible | Moderate, testable | High, hard to rollback |
+| **Documentation needs** | Inline only | README update | ADR + API docs |
+
+**Scoring**: Sum factor scores (0-50 total)
+
+**Decision Rules**:
+
+| Score | Complexity | P Stage Deletes | A Stage Deletes | Resulting Stages |
+|-------|------------|-----------------|-----------------|------------------|
+| 0-10 | Low | A, T, W, F, S | — | P → D → Q |
+| 11-20 | Medium | T, W, F, S | (validate P decision) | P → A → D → Q |
+| 21-30 | Moderate | W, F, S | (validate P decision) | P → A → T → D → Q |
+| 31+ | High | None | None | All 8 stages |
+
+### Model Routing by Complexity
+
+Based on complexity score, suggest model for each stage:
+
+| Complexity | P Stage | A Stage | D Stage | Q Stage | W Stage |
+|------------|---------|---------|---------|---------|---------|
+| Low (0-10) | haiku | — | sonnet | haiku | — |
+| Medium (11-20) | sonnet | sonnet | sonnet | haiku | — |
+| Moderate (21-30) | sonnet | sonnet | sonnet | sonnet | haiku |
+| High (31+) | sonnet | opus | opus | sonnet | sonnet |
+
+**Add to task metadata:**
+```typescript
+TaskCreate({
+  subject: "A: Architecture",
+  metadata: {
+    stage: "A",
+    complexity_score: 18,  // From unified assessment
+    model_hint: "sonnet",  // Suggested model
+    token_budget: 15000    // Soft limit
+  }
+});
 ```
-P → D → Q
+
+### Safe Task Deletion Pattern
+
+**ALWAYS** use this pattern to prevent dangling blockedBy references:
+
+```typescript
+// Safe deletion with dependency cleanup
+function deleteTaskSafely(taskId: string) {
+  // 1. Get all tasks to find dependents
+  const allTasks = TaskList();
+
+  // 2. Find tasks that reference this task in blockedBy
+  const dependents = allTasks.filter(t =>
+    t.blockedBy?.includes(taskId)
+  );
+
+  // 3. Update dependents to remove reference
+  for (const dep of dependents) {
+    TaskUpdate({
+      taskId: dep.id,
+      removeBlockedBy: [taskId]
+    });
+  }
+
+  // 4. Delete the task
+  TaskUpdate({ taskId, delete: true });
+}
 ```
-- Creates task folder with minimal artifacts
-- Skips Architecture (A), Team Lead (T), Documentation (W), Finalization (F)
-- **Use for**: Bug fixes, small features, focused improvements
+
+**Example: Delete T (id: 3) safely:**
+```typescript
+// D (id: 4) is blocked by T (id: 3)
+// Step 1: Remove T from D's blockedBy
+TaskUpdate({ taskId: "4", removeBlockedBy: ["3"] });
+// Step 2: D should now be blocked by A
+TaskUpdate({ taskId: "4", addBlockedBy: ["2"] });
+// Step 3: Delete T
+TaskUpdate({ taskId: "3", delete: true });
+```
+
+### P Stage Task Deletion
+
+Product Manager deletes stages based on LOW complexity (score 0-10):
+
+```typescript
+// Complexity score: 8 (Low) - keep only P → D → Q
+deleteTaskSafely("2");  // Delete Architecture
+deleteTaskSafely("3");  // Delete Team Lead
+deleteTaskSafely("6");  // Delete Documentation
+deleteTaskSafely("7");  // Delete Finalization
+deleteTaskSafely("8");  // Delete Stakeholder
+
+// Update D to be blocked by P (since A is deleted)
+TaskUpdate({ taskId: "4", addBlockedBy: ["1"] });
+// Update Q to be blocked by D
+TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });
+```
+
+### A Stage Task Deletion
+
+Architect validates P's assessment and can further prune (for MODERATE complexity):
+
+```typescript
+// Complexity score: 25 (Moderate) - skip W, F, S
+deleteTaskSafely("6");  // Delete Documentation
+deleteTaskSafely("7");  // Delete Finalization
+deleteTaskSafely("8");  // Delete Stakeholder
+
+// Q now leads to completion (no changes to blockedBy needed)
+```
+
+**Important**: A stage should VALIDATE P's complexity assessment. If A disagrees, discuss with P before proceeding.
+
+### Workflow Sizing Guidelines
+
+| Task Complexity | Score | Stages Kept | Deleted |
+|-----------------|-------|-------------|---------|
+| Typo/micro | 0-10 | P → D → Q | A, T, W, F, S |
+| Bug fix | 11-20 | P → A → D → Q | T, W, F, S |
+| Small feature | 21-30 | P → A → T → D → Q | W, F, S |
+| Full feature | 31+ | All 8 stages | None |
 
 ## 8-Stage Workflow (Full)
 
@@ -222,37 +343,51 @@ TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" }
 
 ## P3 Approval Gate
 
-### Standard Workflow (`workflow:`) - STOP at P3
+### Standard Workflow - STOP at P3
 
-**CRITICAL**: You MUST stop and wait for user approval.
+**CRITICAL**: After Planning completes, you MUST stop and wait for user approval.
 
-1. Planning completes → `TaskUpdate({ taskId: "1", status: "completed" })`
-2. **STOP AND ASK**: "Planning complete. Please review planning.md. Approve? [Y/n]"
-3. **WAIT FOR USER RESPONSE** - Do NOT proceed automatically
-4. User approves → `TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" })`
+1. Planning completes
+2. P stage deletes unnecessary tasks (if applicable)
+3. **Mark P approved in metadata:**
+   ```typescript
+   TaskUpdate({
+     taskId: "1",
+     status: "completed",
+     metadata: { p3_approved: true, approved_at: new Date().toISOString() }
+   });
+   ```
+4. **STOP AND ASK**: "Planning complete. Please review planning.md. Approve? [Y/n]"
+5. **WAIT FOR USER RESPONSE** - Do NOT proceed automatically
+6. User approves → Continue to next stage (A or D depending on deletions)
 
-### Fast Workflow (`fworkflow:`) - SKIP P3
+### P3 Enforcement (A Stage Check)
 
-For fast workflow, immediately continue to Architecture:
+A stage MUST verify P3 approval before proceeding:
 
 ```typescript
-TaskUpdate({ taskId: "1", status: "completed" });
-TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" });
+// A stage startup check
+const pTask = TaskGet({ taskId: "1" });
+if (!pTask.metadata?.p3_approved) {
+  throw new Error("P3 approval required before starting A stage");
+}
 ```
 
 ## Agent Responsibilities
 
 ### Planning (P) - product-manager
 - Create .context folder and initialize Task System
+- **If milestone context exists**: Read issue body as requirements input
 - Write planning.md with requirements, acceptance criteria
 - **Define test strategy**: what to test, existing tests to update
-- **P3**: Wait for user approval (standard) or auto-continue (fast)
+- **Dynamic sizing**: Delete unnecessary stages for simple tasks
+- **P3**: Wait for user approval before proceeding
 
 ### Architecture (A) - software-architector
 - Review requirements (including test strategy), design technical solution
 - **Design test architecture**: testability patterns, test doubles strategy
 - Create analyzing.md with architecture decisions and **test architecture**
-- **Skip path**: Simple tasks may skip to T
+- **Dynamic sizing**: Can delete W, F, S stages based on complexity assessment
 
 ### Team Lead (T) - team-lead
 - Review design, coordinate approach
@@ -359,17 +494,19 @@ Tasks wait for dependencies to complete (F or S):
 
 ## Parallel Execution Patterns
 
-### Safe Parallel Combinations
+### W + Q Parallel (DEFAULT)
 
-| Combination | Condition | Time Savings |
-|-------------|-----------|--------------|
-| W + Q | W doesn't need test results | ~30-40% |
-| Early W during D | Core API stable | Documentation ready sooner |
+**W and Q run in parallel by default** - This saves 30-40% wall-clock time.
 
-### Native Parallel Dependencies
+| Condition | Dependencies | Time Savings |
+|-----------|--------------|--------------|
+| Default (parallel) | Q blocked by D, W blocked by D, F blocked by Q AND W | ~30-40% |
+| Sequential (use `--sequential`) | Q blocked by D, W blocked by Q, F blocked by W | — |
+
+### Default Parallel Dependencies (Use This)
 
 ```typescript
-// W and Q can run in parallel after D completes
+// DEFAULT: W and Q run in parallel after D completes
 TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // Q blocked by D (not W)
 TaskUpdate({ taskId: "6", addBlockedBy: ["4"] });  // W blocked by D (not Q)
 TaskUpdate({ taskId: "7", addBlockedBy: ["5", "6"] });  // F blocked by BOTH Q AND W
@@ -377,6 +514,24 @@ TaskUpdate({ taskId: "7", addBlockedBy: ["5", "6"] });  // F blocked by BOTH Q A
 // Both Q and W become unblocked when D completes
 // F only starts when both Q and W are completed
 ```
+
+### Sequential Dependencies (Only When Needed)
+
+Use `--sequential` flag when W requires test results:
+
+```typescript
+// SEQUENTIAL: W waits for Q (only use when W needs test output)
+TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // Q blocked by D
+TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // W blocked by Q
+TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });  // F blocked by W
+```
+
+### Other Parallel Opportunities
+
+| Combination | Condition | Time Savings |
+|-------------|-----------|--------------|
+| Early W during D | Core API stable | Documentation ready sooner |
+| Multi-issue milestone | See milestone-workflow.md | 40-50% for 3+ issues |
 
 ### Never Parallelize
 
@@ -566,6 +721,7 @@ TaskUpdate({ taskId: "4", status: "in_progress", owner: "swift-pro" });
 
 ## Related Skills
 
+- `milestone-workflow.md` - GitHub milestone integration and priority-based execution
 - `cost-optimization.md` - Cost tracking and budget management
 - `context-compression.md` - Context compression techniques
 - `agent-coordination.md` - Multi-agent coordination patterns
