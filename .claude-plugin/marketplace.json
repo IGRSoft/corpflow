@@ -45,8 +45,10 @@
         "./commands/design-specs.md",
         "./commands/doc-audit.md",
         "./commands/estimate.md",
+        "./commands/ethics-review.md",
         "./commands/executive-summary.md",
         "./commands/export-estimate.md",
+        "./commands/harm-assessment.md",
         "./commands/onboard-task.md",
         "./commands/optimize-agent.md",
         "./commands/optimize-command.md",
@@ -65,12 +67,14 @@
         "./commands/tech-debt.md",
         "./commands/test-coverage.md",
         "./commands/test-plan.md",
+        "./commands/transparency-check.md",
         "./commands/ux-flow.md",
         "./commands/workflow.md"
       ],
       "agents": [
         "./agents/designer.md",
         "./agents/developer.md",
+        "./agents/ethics-reviewer.md",
         "./agents/product-manager.md",
         "./agents/project-manager.md",
         "./agents/prompt-engineer.md",
@@ -78,18 +82,21 @@
         "./agents/software-architector.md",
         "./agents/stakeholder.md",
         "./agents/team-lead.md",
-        "./agents/technical-writer.md"
+        "./agents/technical-writer.md",
+        "./agents/workflow-engineer.md"
       ],
       "skills": [
         "./skills/agent-coordination.md",
+        "./skills/claude-constitution.md",
         "./skills/context-compression.md",
         "./skills/cost-optimization.md",
         "./skills/csv-export-templates.md",
         "./skills/estimation-methodology.md",
         "./skills/five-whys.md",
+        "./skills/milestone-workflow.md",
         "./skills/senior-developer-review.md",
         "./skills/task-folder-organization.md",
-        "./skills/workflow-triggers.md",
+        "./skills/testing-strategy.md",
         "./skills/workflow.md"
       ]
     }
