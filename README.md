@@ -271,7 +271,7 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 - `estimation-methodology.md` - Complexity estimation methods
 - `milestone-workflow.md` - Milestone-based workflow tracking
 - `senior-developer-review.md` - Senior review guidelines
-- `testing-strategy.md` - Testing patterns and strategies
+- `workflow-testing-strategy.md` - Workflow-integrated testing planning for P/A stages
 
 ### Tools
 - `setup-task.py` - Python script for task initialization

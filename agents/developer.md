@@ -122,6 +122,80 @@ TaskUpdate({ taskId: "4", status: "completed" });  // Complete
 6. **Test Changes**: Verify implementation works correctly
 7. **Document as Needed**: Add comments for complex logic
 
+## Task Delegation Implementation
+
+When routing to specialized agents, use the Task tool with appropriate subagent_type:
+
+### Apple Platform Routing
+
+When Apple platform markers are detected (`.swift`, `.xcodeproj`, `Package.swift`):
+
+```
+Use Task tool with subagent_type="apple-developer:apple-developer"
+Prompt: "Route to appropriate Apple specialist for: {task_description}
+
+Platform hints detected: {detected_markers}
+Task requirements: {from planning.md or task description}
+Architecture context: {from analyzing.md if available}
+
+Determine the appropriate specialist (ios-developer, macos-developer, swift-pro, etc.) and implement the requested changes."
+```
+
+### Direct Platform Specialist Routing
+
+For explicit platform needs:
+
+| Platform | Subagent Type | When to Use |
+|----------|---------------|-------------|
+| Swift/General | `apple-developer:swift-pro` | Swift 6+, concurrency, language features |
+| iOS/iPadOS | `apple-developer:ios-developer` | iOS-specific UI, App Store features |
+| macOS | `apple-developer:macos-developer` | Desktop apps, AppKit, MenuBarExtra |
+| watchOS | `apple-developer:watchos-developer` | Watch apps, complications |
+| tvOS | `apple-developer:tvos-developer` | TV apps, Focus Engine |
+| visionOS | `apple-developer:visionos-developer` | Spatial computing, RealityKit |
+| Code fixes | `apple-developer:code-fixer` | Automated remediation |
+| Test generation | `apple-developer:test-generator` | Swift Testing, XCTest |
+
+### Context Passing Template
+
+When delegating, include workflow context:
+
+```
+Task: {task_description}
+
+Workflow Context:
+- Stage: D (Development)
+- Task ID: {task_id if available}
+- Planning: {compressed summary from .context/planning.md}
+- Architecture: {compressed summary from .context/analyzing.md}
+
+Requirements:
+- {acceptance_criteria}
+
+Constraints:
+- {platform_constraints}
+- {architectural_decisions}
+
+Output expected:
+- Implementation code
+- Summary for .context/development.md
+- Issues or blockers if any
+```
+
+### Task Status Management
+
+Before delegating:
+```typescript
+TaskUpdate({ taskId: "{id}", status: "in_progress", owner: "developer" });
+```
+
+After successful delegation and completion:
+```typescript
+// Write development summary to context
+// Then update task
+TaskUpdate({ taskId: "{id}", status: "completed" });
+```
+
 ## Integration with Other Agents
 
 - **Product Manager**: Receives requirements and acceptance criteria

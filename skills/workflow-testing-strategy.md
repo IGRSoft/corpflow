@@ -1,6 +1,8 @@
-# Testing Strategy Skill
+# Workflow Testing Strategy Skill
 
-Guidance for planning tests during P and A stages, before implementation begins.
+Guidance for planning tests during P and A stages of the igrsoft workflow, before implementation begins.
+
+Note: This skill focuses on workflow-integrated testing planning. For platform-specific testing patterns (Swift Testing, XCTest), see `apple-developer:testing-strategy`.
 
 ## Purpose
 
