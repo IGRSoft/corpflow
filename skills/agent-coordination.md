@@ -5,7 +5,15 @@ description: Patterns for efficient multi-agent coordination, handoffs, parallel
 
 # Agent Coordination
 
-Systematic patterns for coordinating multiple agents across the 8-stage workflow system, managing handoffs, and handling errors efficiently.
+Systematic patterns for coordinating multiple agents across the workflow system (8-stage, 10-stage, and emergency flows), managing handoffs, and handling errors efficiently.
+
+## Workflow Variants
+
+| Variant | Stages | Use Case |
+|---------|--------|----------|
+| 8-stage | PL→AR→TL→DV→QA→DC→FN→ST | Standard (backward compatible) |
+| 10-stage | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST | Full workflow with security & release |
+| Emergency | IR→DV→QA→RE→FN | Hotfix/incident response |
 
 ## Handoff Protocol
 
@@ -56,19 +64,28 @@ Before transitioning:
 ### Escalation Chain
 
 ```
-Primary Path (stage-specific escalation):
-S → F → Q → D → T → A → P → USER
+10-Stage Flow (primary path):
+ST → FN → RE → DC → QA → SR → DV → TL → AR → PL → USER
+
+8-Stage Flow (backward compatible):
+ST → FN → DC → QA → DV → TL → AR → PL → USER
+
+Emergency Flow:
+FN → RE → QA → DV → IR → USER
 
 Direct Escalation (based on error type):
-- Requirements unclear → P (product-manager)
-- Architecture issue → A (software-architector)
+- Requirements unclear → PL (product-manager)
+- Architecture issue → AR (software-architector)
 - Technical decision → technical-lead (implementation choices)
 - Code quality concern → technical-lead (standards, deep review)
 - Tech debt decision → technical-lead (prioritization)
-- Resource allocation → T (team-lead)
-- Implementation bug → D (developer, retry)
-- Test environment → T (team-lead)
-- Documentation gap → W (technical-writer, retry)
+- Security vulnerability → SR (security-reviewer)
+- Resource allocation → TL (team-lead)
+- Implementation bug → DV (developer, retry)
+- Test environment → TL (team-lead)
+- Documentation gap → DC (technical-writer, retry)
+- Release blocker → RE (release-engineer)
+- Incident response → IR (incident-responder)
 ```
 
 ### Adaptive Retry Strategy
@@ -345,30 +362,36 @@ Documentation and QA run in parallel after development.
 
 | Stage | Primary Agent | Model | Key Responsibility |
 |-------|---------------|-------|-------------------|
-| P | product-manager | sonnet | Requirements |
-| A | software-architector | opus | Design |
-| T | team-lead | sonnet | Coordination |
-| D | developer | opus | Implementation |
-| Q | qa-engineer | haiku | Testing |
-| W | technical-writer | haiku | Documentation |
-| F | project-manager | sonnet | Release |
-| S | stakeholder | sonnet | Approval |
+| PL | product-manager | sonnet | Requirements |
+| AR | software-architector | opus | Design |
+| TL | team-lead | sonnet | Coordination |
+| DV | developer | opus | Implementation |
+| **SR** | **security-reviewer** | **opus** | **Security audit** |
+| QA | qa-engineer | haiku | Testing |
+| DC | technical-writer | haiku | Documentation |
+| **RE** | **release-engineer** | **haiku** | **Versioning, changelog** |
+| FN | project-manager | sonnet | Release |
+| ST | stakeholder | sonnet | Approval |
+| **IR** | **incident-responder** | **sonnet** | **Incident triage** |
 
 ### Escalation Quick Guide
 
 | Stuck On | Escalate To | Expected Help |
 |----------|-------------|---------------|
-| Unclear requirements | P | Clarification |
-| Design flaw | A | Architecture fix |
-| Resource conflict | T | Reallocation |
+| Unclear requirements | PL | Clarification |
+| Design flaw | AR | Architecture fix |
+| Resource conflict | TL | Reallocation |
 | Technical decision | technical-lead | Implementation guidance |
 | Code quality issue | technical-lead | Standards, deep review |
 | Tech debt decision | technical-lead | Prioritization |
-| Implementation block | D retry | Different approach |
-| Test environment | T | Environment fix |
-| Doc conflict | W retry | Resolve internally |
-| Release blocker | F | Unblock or defer |
-| Business conflict | S | Decision |
+| **Security vulnerability** | **SR** | **OWASP review, fix guidance** |
+| Implementation block | DV retry | Different approach |
+| Test environment | TL | Environment fix |
+| Doc conflict | DC retry | Resolve internally |
+| **Version/changelog issue** | **RE** | **SemVer guidance** |
+| Release blocker | FN | Unblock or defer |
+| Business conflict | ST | Decision |
+| **Production incident** | **IR** | **Triage, coordination** |
 
 ### Parallel Safety Check
 
@@ -402,11 +425,20 @@ The `ethics-reviewer` agent can be invoked at any stage:
 Ethics concerns follow a separate escalation path:
 
 ```
-Standard Escalation (Technical):
-S → F → Q → D → T → A → P → USER
+Standard Escalation (Technical - 10-stage):
+ST → FN → RE → DC → QA → SR → DV → TL → AR → PL → USER
+
+Standard Escalation (Technical - 8-stage):
+ST → FN → DC → QA → DV → TL → AR → PL → USER
+
+Emergency Escalation:
+FN → RE → QA → DV → IR → USER
 
 Constitutional Escalation (Ethics):
 Any Stage → ethics-reviewer → stakeholder → USER
+
+Security Escalation:
+Any Stage → security-reviewer → stakeholder → USER
 
 Hard Constraint Violation:
 Any Stage → IMMEDIATE STOP → USER
@@ -451,8 +483,117 @@ When ethics concerns are identified, include in handoff:
 **Ethics Status**: [Clear | Concern Noted | Review Required]
 ```
 
+## New Stage Handoff Patterns
+
+### DV → SR Handoff (Security Review)
+
+```markdown
+## DV→SR Handoff
+
+**Summary**: Implementation complete, ready for security review
+
+**Key Deliverables**:
+- `development.md`: Implementation summary
+- Source files: [list of modified files]
+
+**Security-Sensitive Areas**:
+- [Area 1]: [why security-relevant]
+- [Area 2]: [why security-relevant]
+
+**Recommended Focus**:
+- Authentication/authorization changes
+- Data handling patterns
+- External API integrations
+```
+
+### SR → QA Handoff (Security to Testing)
+
+```markdown
+## SR→QA Handoff
+
+**Summary**: Security review complete, [N] findings documented
+
+**Key Deliverables**:
+- `security-review.md`: Full security assessment
+
+**Security Status**: [Approved | Blocked | Conditional]
+
+**Critical Findings**: [count]
+**High Findings**: [count]
+
+**Security Tests Recommended**:
+- [Test 1]: [purpose]
+- [Test 2]: [purpose]
+```
+
+### DC → RE Handoff (Documentation to Release Engineering)
+
+```markdown
+## DC→RE Handoff
+
+**Summary**: Documentation complete, ready for release preparation
+
+**Key Deliverables**:
+- `documentation.md`: Documentation summary
+- Updated README, API docs, etc.
+
+**Commit Summary**:
+- [feat: feature 1]
+- [fix: bug 1]
+
+**Recommended Version Bump**: [MAJOR | MINOR | PATCH]
+**Breaking Changes**: [yes/no, details]
+```
+
+### RE → FN Handoff (Release to Finalization)
+
+```markdown
+## RE→FN Handoff
+
+**Summary**: Release artifacts prepared
+
+**Key Deliverables**:
+- `release-prep.md`: Release summary
+- CHANGELOG updated
+- Version: [x.y.z]
+
+**Deployment Checklist**: [complete | items remaining]
+**Rollback Plan**: [documented | needed]
+
+**Platform-Specific**:
+- iOS: [status]
+- Android: [status]
+- Web: [status]
+```
+
+### IR → DV Handoff (Incident to Hotfix Development)
+
+```markdown
+## IR→DV Handoff (Emergency)
+
+**Incident ID**: INC-[number]
+**Severity**: P[0-3]
+
+**Summary**: Incident triaged, hotfix required
+
+**Root Cause Hypothesis**: [description]
+
+**Required Fix**:
+- [Specific change needed]
+
+**Constraints**:
+- [ ] Minimal change only
+- [ ] No refactoring
+- [ ] Must be backward compatible
+
+**Rollback Available**: [yes/no]
+```
+
 ## Related Skills
 
 - `workflow.md` - Workflow system documentation
 - `cost-optimization.md` - Cost tracking and optimization
 - `claude-constitution.md` - Constitutional principles and ethics framework
+- `security-review-process.md` - OWASP checklists for SR stage
+- `release-engineering.md` - Versioning and changelog for RE stage
+- `incident-response.md` - Incident triage for IR stage

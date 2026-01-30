@@ -126,22 +126,82 @@ TaskCreate({
 
 | igrsoft Stage | apple-developer Agent | Handoff Data |
 |---------------|----------------------|--------------|
-| D (Development) | swift-pro, ios-developer, etc. | planning + architecture context |
-| Q (Quality) | test-generator | development context + test requirements |
+| DV (Development) | swift-pro, ios-developer, etc. | planning + architecture context |
+| QA (Quality) | test-generator | development context + test requirements |
+| RE (Release) | ios-developer | App Store submission data |
 
 ### security-scanning Plugin
 
 | igrsoft Stage | security-scanning Agent | Handoff Data |
 |---------------|------------------------|--------------|
-| D (Development) | security-auditor | code for security review |
-| Q (Quality) | security-auditor | implementation for validation |
+| SR (Security) | security-auditor | code + OWASP checklist |
+| SR (Security) | threat-modeling-expert | architecture + threat analysis |
 
 ### debugging-toolkit Plugin
 
 | igrsoft Stage | debugging-toolkit Agent | Handoff Data |
 |---------------|------------------------|--------------|
-| D (Development) | debugger | error logs, stack traces |
-| D (Development) | dx-optimizer | workflow friction points |
+| DV (Development) | debugger | error logs, stack traces |
+| DV (Development) | dx-optimizer | workflow friction points |
+| IR (Incident) | debugger | production logs, RCA context |
+
+### code-documentation Plugin (Marketplace)
+
+| igrsoft Stage | code-documentation Agent | Handoff Data |
+|---------------|-------------------------|--------------|
+| DV (Development) | code-reviewer | PR diff, code changes |
+
+**Invocation:**
+```typescript
+Task({
+  prompt: "Review PR for code quality: {changes}",
+  subagent_type: "code-documentation:code-reviewer"
+});
+```
+
+### application-performance Plugin (Marketplace)
+
+| igrsoft Stage | application-performance Agent | Handoff Data |
+|---------------|------------------------------|--------------|
+| DV (Development) | performance-engineer | implementation for perf review |
+| QA (Quality) | performance-engineer | benchmark requirements |
+
+**Invocation:**
+```typescript
+Task({
+  prompt: "Analyze performance impact: {changes}",
+  subagent_type: "application-performance:performance-engineer"
+});
+```
+
+### cicd-automation Plugin (Marketplace)
+
+| igrsoft Stage | cicd-automation Agent | Handoff Data |
+|---------------|----------------------|--------------|
+| RE (Release) | deployment-engineer | release artifacts |
+| FN (Finalization) | deployment-engineer | deployment plan |
+
+**Invocation:**
+```typescript
+Task({
+  prompt: "Prepare CI/CD for release v{version}",
+  subagent_type: "cicd-automation:deployment-engineer"
+});
+```
+
+### accessibility-compliance Plugin (Marketplace)
+
+| igrsoft Stage | accessibility-compliance Agent | Handoff Data |
+|---------------|-------------------------------|--------------|
+| QA (Quality) | ui-visual-validator | UI components for WCAG audit |
+
+**Invocation:**
+```typescript
+Task({
+  prompt: "Audit accessibility for WCAG 2.2 compliance",
+  subagent_type: "accessibility-compliance:ui-visual-validator"
+});
+```
 
 ## Context Compression Guidelines
 

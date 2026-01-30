@@ -5,15 +5,15 @@
     "url": "https://github.com/igrsoft"
   },
   "metadata": {
-    "description": "Comprehensive 8-stage workflow system for task management with Task System integration, stage transitions, and structured persistence",
-    "version": "2.0.0"
+    "description": "Comprehensive 10-stage workflow system (PL→AR→TL→DV→SR→QA→DC→RE→FN→ST) for task management with security review, release engineering, and incident response",
+    "version": "3.0.0"
   },
   "plugins": [
     {
       "name": "igrsoft",
       "source": "./",
-      "description": "8-stage workflow system (P→A→T→D→Q→W→F→S) with Task System integration for task management, stage transitions, approval gates, error handling, and escalation chains",
-      "version": "2.0.0",
+      "description": "10-stage workflow system (PL→AR→TL→DV→SR→QA→DC→RE→FN→ST) with Task System integration, security review, release engineering, incident response, and cross-plugin handoffs",
+      "version": "3.0.0",
       "author": {
         "name": "igrsoft",
         "url": "https://github.com/igrsoft"
@@ -26,7 +26,20 @@
         "project-management",
         "agile",
         "stages",
-        "approval-gates"
+        "approval-gates",
+        "product-management",
+        "architecture",
+        "qa-testing",
+        "documentation",
+        "ethics-review",
+        "prompt-engineering",
+        "design-systems",
+        "cost-optimization",
+        "estimation",
+        "security-review",
+        "release-engineering",
+        "incident-response",
+        "cross-plugin-handoff"
       ],
       "category": "workflows",
       "strict": true,
@@ -77,10 +90,13 @@
         "./agents/designer.md",
         "./agents/developer.md",
         "./agents/ethics-reviewer.md",
+        "./agents/incident-responder.md",
         "./agents/product-manager.md",
         "./agents/project-manager.md",
         "./agents/prompt-engineer.md",
         "./agents/qa-engineer.md",
+        "./agents/release-engineer.md",
+        "./agents/security-reviewer.md",
         "./agents/software-architector.md",
         "./agents/stakeholder.md",
         "./agents/team-lead.md",
@@ -93,10 +109,14 @@
         "./skills/claude-constitution.md",
         "./skills/context-compression.md",
         "./skills/cost-optimization.md",
+        "./skills/cross-plugin-handoff.md",
         "./skills/csv-export-templates.md",
         "./skills/estimation-methodology.md",
         "./skills/five-whys.md",
+        "./skills/incident-response.md",
         "./skills/milestone-workflow.md",
+        "./skills/release-engineering.md",
+        "./skills/security-review-process.md",
         "./skills/senior-developer-review.md",
         "./skills/task-folder-organization.md",
         "./skills/workflow-testing-strategy.md",

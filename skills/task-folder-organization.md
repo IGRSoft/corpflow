@@ -42,15 +42,18 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 
 ```
 .context/
-├── planning.md              # Requirements, acceptance criteria (P stage)
-├── analyzing.md             # Technical design, architecture (A stage)
-├── development.md           # Implementation notes (D stage)
-├── testing.md               # Test plan, results (Q stage)
-├── documentation.md         # Documentation plan (W stage)
-├── complete.md              # Final validation (F stage)
-├── release.md               # Release notes (F stage)
+├── planning.md              # Requirements, acceptance criteria (PL stage)
+├── analyzing.md             # Technical design, architecture (AR stage)
+├── coordination.md          # Team coordination (TL stage)
+├── development.md           # Implementation notes (DV stage)
+├── security-review.md       # OWASP audit, findings (SR stage) [NEW]
+├── testing.md               # Test plan, results (QA stage)
+├── documentation.md         # Documentation plan (DC stage)
+├── release-prep.md          # Version, changelog, readiness (RE stage) [NEW]
+├── complete.md              # Final validation (FN stage)
+├── approval.md              # Stakeholder sign-off (ST stage)
+├── incident-report.md       # Incident triage, RCA (IR stage - emergency) [NEW]
 ├── milestone.json           # GitHub milestone context (when --milestone used)
-├── security-review.md       # Security audit (if applicable)
 ├── deployment.md            # Deployment plan (if applicable)
 ├── error.md                 # Error log for escalations (created on errors)
 └── images/                  # Design references, screenshots, user-attached images
@@ -67,16 +70,31 @@ Product Manager's planning document containing:
 - Success metrics
 - Constraints and dependencies
 
-### Optional Files
+### Optional Files (by Workflow Variant)
 
-- **analyzing.md**: Architecture decisions (A stage)
-- **development.md**: Implementation notes (D stage)
-- **testing.md**: Test plan and results (Q stage)
-- **documentation.md**: Documentation plan (W stage)
-- **complete.md**: Final validation (F stage)
-- **release.md**: Release notes (F stage)
+**8-Stage Workflow (standard):**
+- **analyzing.md**: Architecture decisions (AR stage)
+- **coordination.md**: Team coordination (TL stage)
+- **development.md**: Implementation notes (DV stage)
+- **testing.md**: Test plan and results (QA stage)
+- **documentation.md**: Documentation plan (DC stage)
+- **complete.md**: Final validation (FN stage)
+- **approval.md**: Stakeholder sign-off (ST stage)
+
+**10-Stage Workflow (secure/full):**
+- All of the above, plus:
+- **security-review.md**: OWASP audit, security findings (SR stage)
+- **release-prep.md**: Version, changelog, deployment readiness (RE stage)
+
+**Emergency Workflow:**
+- **incident-report.md**: Incident triage, RCA (IR stage)
+- **development.md**: Hotfix implementation (DV stage)
+- **testing.md**: Regression tests (QA stage)
+- **release-prep.md**: Hotfix release (RE stage)
+- **complete.md**: Emergency deployment (FN stage)
+
+**Always Optional:**
 - **milestone.json**: GitHub milestone context (when `--milestone` used)
-- **security-review.md**: Security audit (if applicable)
 - **deployment.md**: Deployment plan (if applicable)
 - **error.md**: Error log for escalation scenarios
 
@@ -124,14 +142,17 @@ Files are named by **workflow stage** and stored in `.context/`:
 
 | File | Stage | Owner |
 |------|-------|-------|
-| planning.md | P (Planning) | project-manager |
-| analyzing.md | A (Architecture) | architect-review |
-| development.md | D (Development) | [language-pro] |
-| testing.md | Q (QA) | test-automator |
-| documentation.md | W (Documentation) | docs-architect |
-| complete.md | F (Finalization) | project-manager |
-| release.md | F (Finalization) | project-manager |
-| security-review.md | Optional | security-auditor |
+| planning.md | PL (Planning) | product-manager |
+| analyzing.md | AR (Architecture) | software-architector |
+| coordination.md | TL (Team Lead) | team-lead |
+| development.md | DV (Development) | developer |
+| **security-review.md** | **SR (Security Review)** | **security-reviewer** |
+| testing.md | QA (QA Testing) | qa-engineer |
+| documentation.md | DC (Documentation) | technical-writer |
+| **release-prep.md** | **RE (Release Engineering)** | **release-engineer** |
+| complete.md | FN (Finalization) | project-manager |
+| approval.md | ST (Stakeholder) | stakeholder |
+| **incident-report.md** | **IR (Incident Response)** | **incident-responder** |
 | deployment.md | Optional | deployment-engineer |
 | error.md | On error | Any agent |
 
@@ -147,7 +168,7 @@ All markdown files should include:
 
 ## Examples
 
-### Example 1: Simple Bug Fix
+### Example 1: Simple Bug Fix (8-stage, low complexity)
 
 ```
 .context/
@@ -156,23 +177,53 @@ All markdown files should include:
 └── testing.md
 ```
 
-### Example 2: Feature Development
+### Example 2: Feature Development (8-stage, full)
 
 ```
 .context/
 ├── planning.md
 ├── analyzing.md
+├── coordination.md
 ├── development.md
 ├── testing.md
 ├── documentation.md
 ├── complete.md
-├── security-review.md
+├── approval.md
 └── images/
-    ├── login-flow.png
+    └── feature-mockup.png
+```
+
+### Example 3: Security-Critical Feature (10-stage)
+
+```
+.context/
+├── planning.md
+├── analyzing.md
+├── coordination.md
+├── development.md
+├── security-review.md     # SR stage output [NEW]
+├── testing.md
+├── documentation.md
+├── release-prep.md        # RE stage output [NEW]
+├── complete.md
+├── approval.md
+└── images/
+    ├── auth-flow.png
     └── security-diagram.png
 ```
 
-### Example 3: Task with Errors
+### Example 4: Emergency Hotfix (emergency workflow)
+
+```
+.context/
+├── incident-report.md     # IR stage output [NEW]
+├── development.md
+├── testing.md
+├── release-prep.md        # RE stage output
+└── complete.md
+```
+
+### Example 5: Task with Errors
 
 ```
 .context/
@@ -184,7 +235,7 @@ All markdown files should include:
 └── images/
 ```
 
-### Example 4: Milestone-Based Workflow
+### Example 6: Milestone-Based Workflow
 
 ```
 .context/
