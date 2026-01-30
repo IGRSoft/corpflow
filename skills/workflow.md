@@ -2,6 +2,55 @@
 
 Single source of truth for task workflow management using the Task System for state management, UI visibility, and cross-session persistence.
 
+## Workflow Evolution (v2.0)
+
+The workflow system supports 8-stage (backward compatible) and 10-stage (full) pipelines:
+
+```
+8-stage:  PL → AR → TL → DV → QA → DC → FN → ST
+10-stage: PL → AR → TL → DV → SR → QA → DC → RE → FN → ST
+                             ↑              ↑
+                       Security Review    Release Engineering
+```
+
+### Stage Code Legend (2-character codes)
+
+| Code | Stage | Agent | Model |
+|------|-------|-------|-------|
+| PL | Planning | product-manager | sonnet |
+| AR | Architecture | software-architector | opus |
+| TL | Team Lead | team-lead | sonnet |
+| DV | Development | developer | opus |
+| **SR** | **Security Review** | **security-reviewer** | **opus** |
+| QA | QA Testing | qa-engineer | haiku |
+| DC | Documentation | technical-writer | haiku |
+| **RE** | **Release Engineering** | **release-engineer** | **haiku** |
+| FN | Finalization | project-manager | sonnet |
+| ST | Stakeholder | stakeholder | sonnet |
+| **IR** | **Incident Response** | **incident-responder** | **sonnet** |
+
+### Workflow Triggers
+
+| Trigger | Stages | Use Case |
+|---------|--------|----------|
+| `workflow:` | PL→AR→TL→DV→QA→DC→FN→ST | Standard (8 stages, backward compatible) |
+| `secure-workflow:` | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST | Security-critical features (10 stages) |
+| `full-workflow:` | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST | Complete 10-stage pipeline |
+| `emergency:` | IR→DV→QA→RE→FN | Hotfix/incident response (5 stages) |
+| `micro:` | Direct | Single-file changes |
+
+### Emergency Workflow
+
+For production incidents, use `emergency:` trigger:
+
+```
+emergency: [incident description]
+```
+
+Flow: `IR → DV → QA → RE → FN`
+
+The `incident-responder` agent owns the IR stage and coordinates the hotfix workflow.
+
 ## Task System Tools
 
 | Tool | Purpose |
@@ -231,12 +280,21 @@ Instead of predefined workflow tiers (quick, fast), workflows are dynamically si
 
 **Decision Rules**:
 
-| Score | Complexity | P Stage Deletes | A Stage Deletes | Resulting Stages |
-|-------|------------|-----------------|-----------------|------------------|
-| 0-10 | Low | A, T, W, F, S | — | P → D → Q |
-| 11-20 | Medium | T, W, F, S | (validate P decision) | P → A → D → Q |
-| 21-30 | Moderate | W, F, S | (validate P decision) | P → A → T → D → Q |
-| 31+ | High | None | None | All 8 stages |
+| Score | Complexity | PL Stage Deletes | AR Stage Deletes | Resulting Stages |
+|-------|------------|------------------|------------------|------------------|
+| 0-10 | Low | AR, TL, DC, FN, ST | — | PL → DV → QA |
+| 11-20 | Medium | TL, DC, FN, ST | (validate PL decision) | PL → AR → DV → QA |
+| 21-30 | Moderate | DC, FN, ST | (validate PL decision) | PL → AR → TL → DV → QA |
+| 31-40 | High | None | None | All 8 stages |
+| 41-50 | Critical | None | None | All 10 stages (with SR, RE) |
+
+**Security-Sensitive Features** (auto-include SR stage regardless of score):
+- Authentication or authorization changes
+- Payment processing
+- PII (Personally Identifiable Information) handling
+- Cryptographic operations
+- External API integrations with secrets
+- File uploads or user-generated content
 
 ### Model Routing by Complexity
 
@@ -343,25 +401,55 @@ deleteTaskSafely("8");  // Delete Stakeholder
 | Small feature | 21-30 | P → A → T → D → Q | W, F, S |
 | Full feature | 31+ | All 8 stages | None |
 
-## 8-Stage Workflow (Full)
+## 10-Stage Workflow (Full)
 
 ```
-P → A → T → D → Q → W → F → S
+PL → AR → TL → DV → SR → QA → DC → RE → FN → ST
 ```
 
 | Code | Stage | Agent | Purpose | Artifact | Task ID |
 |------|-------|-------|---------|----------|---------|
-| P | Planning | product-manager | Define requirements | planning.md | 1 |
-| E | Ethics (optional) | ethics-reviewer | Constitutional review | ethics.md | 2* |
-| A | Architecture | software-architector | Design solution | analyzing.md | 2 or 3 |
-| T | Team Lead | team-lead | Coordinate approach | Task System | 3 or 4 |
-| D | Development | [language-pro] | Implement solution | development.md | 4 or 5 |
-| Q | QA | qa-engineer | Test and validate | testing.md | 5 or 6 |
-| W | Documentation | technical-writer | Write technical docs | documentation.md | 6 or 7 |
-| F | Finalization | project-manager | Prepare release | complete.md | 7 or 8 |
-| S | Stakeholder | stakeholder | Final approval | Terminal state | 8 or 9 |
+| PL | Planning | product-manager | Define requirements | planning.md | 1 |
+| AR | Architecture | software-architector | Design solution | analyzing.md | 2 |
+| TL | Team Lead | team-lead | Coordinate approach | coordination.md | 3 |
+| DV | Development | developer | Implement solution | development.md | 4 |
+| **SR** | **Security Review** | **security-reviewer** | **OWASP audit** | **security-review.md** | **5** |
+| QA | QA Testing | qa-engineer | Test and validate | testing.md | 6 |
+| DC | Documentation | technical-writer | Write technical docs | documentation.md | 7 |
+| **RE** | **Release Engineering** | **release-engineer** | **Version, changelog** | **release-prep.md** | **8** |
+| FN | Finalization | project-manager | Prepare release | complete.md | 9 |
+| ST | Stakeholder | stakeholder | Final approval | approval.md | 10 |
 
-*Task IDs shift when Ethics stage is included
+## 8-Stage Workflow (Backward Compatible)
+
+```
+PL → AR → TL → DV → QA → DC → FN → ST
+```
+
+| Code | Stage | Agent | Purpose | Artifact | Task ID |
+|------|-------|-------|---------|----------|---------|
+| PL | Planning | product-manager | Define requirements | planning.md | 1 |
+| AR | Architecture | software-architector | Design solution | analyzing.md | 2 |
+| TL | Team Lead | team-lead | Coordinate approach | coordination.md | 3 |
+| DV | Development | developer | Implement solution | development.md | 4 |
+| QA | QA Testing | qa-engineer | Test and validate | testing.md | 5 |
+| DC | Documentation | technical-writer | Write technical docs | documentation.md | 6 |
+| FN | Finalization | project-manager | Prepare release | complete.md | 7 |
+| ST | Stakeholder | stakeholder | Final approval | approval.md | 8 |
+
+## Emergency Workflow (Incident Response)
+
+```
+IR → DV → QA → RE → FN
+```
+
+| Code | Stage | Agent | Purpose | Artifact | Task ID |
+|------|-------|-------|---------|----------|---------|
+| **IR** | **Incident Triage** | **incident-responder** | **Classify, coordinate** | **incident-report.md** | **1** |
+| DV | Hotfix Development | developer | Implement fix | development.md | 2 |
+| QA | Regression Testing | qa-engineer | Verify fix | testing.md | 3 |
+| RE | Hotfix Release | release-engineer | Prepare release | release-prep.md | 4 |
+| FN | Emergency Deploy | project-manager | Deploy fix | complete.md | 5 |
 
 ## Task Status
 
@@ -420,15 +508,31 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 
 When a stage completes, transition to the next stage:
 
+**10-Stage Flow (full-workflow / secure-workflow):**
+
 | From | To | Action |
 |------|-----|--------|
-| P (completed) | A (in_progress) | User approval → Architecture starts |
-| A (completed) | T (in_progress) | Architecture done → Team Lead starts |
-| T (completed) | D (in_progress) | Team Lead done → Development starts |
-| D (completed) | Q (in_progress) | Development done → QA starts |
-| Q (completed) | W (in_progress) | QA done → Documentation starts |
-| W (completed) | F (in_progress) | Documentation done → Finalization starts |
-| F (completed) | S (in_progress) | Finalization done → Stakeholder acceptance |
+| PL (completed) | AR (in_progress) | User approval → Architecture starts |
+| AR (completed) | TL (in_progress) | Architecture done → Team Lead starts |
+| TL (completed) | DV (in_progress) | Team Lead done → Development starts |
+| DV (completed) | SR (in_progress) | Development done → Security Review starts |
+| SR (completed) | QA (in_progress) | Security Review done → QA starts |
+| QA (completed) | DC (in_progress) | QA done → Documentation starts |
+| DC (completed) | RE (in_progress) | Documentation done → Release Engineering starts |
+| RE (completed) | FN (in_progress) | Release Engineering done → Finalization starts |
+| FN (completed) | ST (in_progress) | Finalization done → Stakeholder acceptance |
+
+**8-Stage Flow (workflow - backward compatible):**
+
+| From | To | Action |
+|------|-----|--------|
+| PL (completed) | AR (in_progress) | User approval → Architecture starts |
+| AR (completed) | TL (in_progress) | Architecture done → Team Lead starts |
+| TL (completed) | DV (in_progress) | Team Lead done → Development starts |
+| DV (completed) | QA (in_progress) | Development done → QA starts |
+| QA (completed) | DC (in_progress) | QA done → Documentation starts |
+| DC (completed) | FN (in_progress) | Documentation done → Finalization starts |
+| FN (completed) | ST (in_progress) | Finalization done → Stakeholder acceptance |
 
 ```typescript
 // Complete current stage and start next
@@ -470,7 +574,7 @@ if (!pTask.metadata?.p3_approved) {
 
 ## Agent Responsibilities
 
-### Planning (P) - product-manager
+### Planning (PL) - product-manager
 - Create .context folder and initialize Task System
 - **If milestone context exists**: Read issue body as requirements input
 - Write planning.md with requirements, acceptance criteria
@@ -478,44 +582,66 @@ if (!pTask.metadata?.p3_approved) {
 - **Dynamic sizing**: Delete unnecessary stages for simple tasks
 - **P3**: Wait for user approval before proceeding
 
-### Architecture (A) - software-architector
+### Architecture (AR) - software-architector
 - Review requirements (including test strategy), design technical solution
 - **Design test architecture**: testability patterns, test doubles strategy
 - Create analyzing.md with architecture decisions and **test architecture**
-- **Dynamic sizing**: Can delete W, F, S stages based on complexity assessment
+- **Dynamic sizing**: Can delete DC, FN, ST stages based on complexity assessment
 
-### Team Lead (T) - team-lead
+### Team Lead (TL) - team-lead
 - Review design, coordinate approach
 - Manage task dependencies via Task System
 - Allocate resources, define quality gates
 
-### Development (D) - [language specialist]
+### Development (DV) - developer
 - Analyze task, create development.md with implementation plan
 - Implement solution following the plan
 - **Testing Framework**: Use Swift Testing (`@Suite`, `@Test`, `#expect`) for unit tests; XCTest for UI tests only
 - Run code formatter on modified files
 - Verify build passes, complete implementation notes
 
-### QA (Q) - qa-engineer
+### Security Review (SR) - security-reviewer [NEW]
+- Review development.md, identify security-sensitive areas
+- Execute OWASP Top 10 checklist
+- Scan for vulnerabilities, secrets, CVEs
+- Document findings in security-review.md
+- Sign off or block for critical issues
+
+### QA Testing (QA) - qa-engineer
 - Analyze requirements, discover existing tests, create test plan
 - Implement/update tests, execute test suite
 - **Framework Enforcement**: All new unit tests MUST use Swift Testing framework
 - Handle test failures (retry or escalate)
 - All tests pass, document results
 
-### Documentation (W) - technical-writer
+### Documentation (DC) - technical-writer
 - Analyze artifacts, discover documentation needing updates
 - Update code docs, README, ARCHITECTURE files
 - All documentation updated
 
-### Finalization (F) - project-manager
+### Release Engineering (RE) - release-engineer [NEW]
+- Determine version bump (SemVer)
+- Generate changelog from conventional commits
+- Validate deployment readiness
+- Create release-prep.md with rollback plan
+- Platform-specific release preparation
+
+### Finalization (FN) - project-manager
 - Review all artifacts, run final builds/tests
-- Create complete.md, release.md
+- Create complete.md
+- Execute deployment
 - Technical complete
 
-### Stakeholder (S) - stakeholder
+### Stakeholder (ST) - stakeholder
 - Final acceptance review
 - Task complete (terminal state)
+
+### Incident Response (IR) - incident-responder [NEW - Emergency Workflow]
+- Classify incident severity (P0-P3)
+- Assess impact and blast radius
+- Decide: hotfix, rollback, or mitigation
+- Coordinate emergency response
+- Document in incident-report.md
 
 ## Error Handling
 
@@ -557,8 +683,19 @@ Each stage can retry up to 3 times. Track retries via task metadata or error.md.
 
 After 3 retries, escalate to previous stage:
 
+**10-Stage Flow:**
 ```
-S → F → Q → D → T → A → P → USER
+ST → FN → RE → DC → QA → SR → DV → TL → AR → PL → USER
+```
+
+**8-Stage Flow (backward compatible):**
+```
+ST → FN → DC → QA → DV → TL → AR → PL → USER
+```
+
+**Emergency Flow:**
+```
+FN → RE → QA → DV → IR → USER
 ```
 
 ## Rule Checks
@@ -824,3 +961,6 @@ TaskUpdate({ taskId: "4", status: "in_progress", owner: "swift-pro" });
 - `agent-coordination.md` - Multi-agent coordination patterns
 - `estimation-methodology.md` - Task estimation framework
 - `claude-constitution.md` - Constitutional principles and ethics framework
+- `security-review-process.md` - OWASP checklists for SR stage
+- `release-engineering.md` - Versioning and changelog for RE stage
+- `incident-response.md` - Incident triage for IR stage

@@ -1,7 +1,7 @@
 {
   "name": "igrsoft",
-  "description": "Comprehensive 8-stage workflow system for task management with Task System integration, stage transitions, and structured persistence.",
-  "version": "2.0.0",
+  "description": "Comprehensive 10-stage workflow system (PL→AR→TL→DV→SR→QA→DC→RE→FN→ST) for task management with Task System integration, security review, release engineering, and incident response.",
+  "version": "3.0.0",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
@@ -22,6 +22,10 @@
     "prompt-engineering",
     "design-systems",
     "cost-optimization",
-    "estimation"
+    "estimation",
+    "security-review",
+    "release-engineering",
+    "incident-response",
+    "cross-plugin-handoff"
   ]
 }
