@@ -65,6 +65,8 @@
         "./commands/sprint-plan.md",
         "./commands/standup.md",
         "./commands/tech-debt.md",
+        "./commands/tech-decision.md",
+        "./commands/tech-review.md",
         "./commands/test-coverage.md",
         "./commands/test-plan.md",
         "./commands/transparency-check.md",
@@ -82,6 +84,7 @@
         "./agents/software-architector.md",
         "./agents/stakeholder.md",
         "./agents/team-lead.md",
+        "./agents/technical-lead.md",
         "./agents/technical-writer.md",
         "./agents/workflow-engineer.md"
       ],

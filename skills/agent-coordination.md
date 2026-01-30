@@ -62,6 +62,9 @@ S → F → Q → D → T → A → P → USER
 Direct Escalation (based on error type):
 - Requirements unclear → P (product-manager)
 - Architecture issue → A (software-architector)
+- Technical decision → technical-lead (implementation choices)
+- Code quality concern → technical-lead (standards, deep review)
+- Tech debt decision → technical-lead (prioritization)
 - Resource allocation → T (team-lead)
 - Implementation bug → D (developer, retry)
 - Test environment → T (team-lead)
@@ -177,6 +180,9 @@ When a stage needs sub-task delegation:
 | Formatting | Self (inline) | haiku | Mechanical operation |
 | Code implementation | developer | sonnet | Balanced complexity |
 | Architecture question | software-architector | opus | Complex tradeoffs |
+| Technical decision | technical-lead | opus | Implementation choices |
+| Code quality deep dive | technical-lead | opus | Beyond checklist review |
+| Tech debt assessment | technical-lead | opus | Prioritization analysis |
 | Test design | qa-engineer | haiku/sonnet | Depends on complexity |
 | Documentation snippet | technical-writer | haiku | Template-based |
 
@@ -188,11 +194,27 @@ Sometimes an agent needs input from another domain without a full stage transiti
 |------|---------|--------|------|
 | Requirement clarification | product-manager | Read `planning.md` | Free |
 | Architecture question | software-architector | Read `analyzing.md` | Free |
+| Technology evaluation | technical-lead | Agent invocation | Medium |
+| Code quality guidance | technical-lead | Agent invocation | Medium |
+| Tech debt prioritization | technical-lead | Agent invocation | Medium |
 | Implementation detail | developer | Read source files | Free |
 | Test coverage info | qa-engineer | Brief inline query | Low |
 | Doc standard check | technical-writer | Read existing docs | Free |
 
 **Rule**: Prefer reading artifacts over agent invocation when possible.
+
+### Technical Lead vs Team Lead
+
+| Need | Consult | Rationale |
+|------|---------|-----------|
+| Deep technical decisions | technical-lead | Implementation expertise |
+| Code quality standards | technical-lead | Quality enforcement |
+| Technology evaluation | technical-lead | Evaluation framework |
+| Tech debt management | technical-lead | Prioritization, remediation |
+| Resource allocation | team-lead | People management |
+| Sprint coordination | team-lead | Process expertise |
+| Team blockers | team-lead | Coordination role |
+| Agile ceremonies | team-lead | Process facilitation |
 
 ### Model Selection by Complexity
 
@@ -339,6 +361,9 @@ Documentation and QA run in parallel after development.
 | Unclear requirements | P | Clarification |
 | Design flaw | A | Architecture fix |
 | Resource conflict | T | Reallocation |
+| Technical decision | technical-lead | Implementation guidance |
+| Code quality issue | technical-lead | Standards, deep review |
+| Tech debt decision | technical-lead | Prioritization |
 | Implementation block | D retry | Different approach |
 | Test environment | T | Environment fix |
 | Doc conflict | W retry | Resolve internally |
