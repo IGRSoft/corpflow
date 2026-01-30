@@ -8,6 +8,83 @@ Note: This skill focuses on workflow-integrated testing planning. For platform-s
 
 Ensure developers know WHAT tests to write before coding begins, so tests are developed alongside features, not as an afterthought.
 
+## Testing Framework
+
+### Swift Testing (Required - Unit Tests)
+
+All unit tests MUST use Swift Testing framework:
+
+```swift
+import Testing
+
+@Suite("Feature Tests")
+struct FeatureTests {
+    @Test("happy path returns expected result")
+    func happyPath() {
+        let result = feature.execute()
+        #expect(result == .success)
+    }
+
+    @Test("error cases throw appropriate error")
+    func errorCase() {
+        #expect(throws: FeatureError.self) {
+            try feature.executeWithInvalidInput()
+        }
+    }
+
+    @Test("parameterized test", arguments: [
+        ("input1", "expected1"),
+        ("input2", "expected2"),
+    ])
+    func parameterized(input: String, expected: String) {
+        #expect(feature.transform(input) == expected)
+    }
+}
+```
+
+### XCTest (UI Tests Only)
+
+XCUITest requires XCTest framework:
+
+```swift
+import XCTest
+
+final class FlowUITests: XCTestCase {
+    let app = XCUIApplication()
+
+    override func setUp() {
+        continueAfterFailure = false
+        app.launch()
+    }
+
+    func testLoginFlow() {
+        // XCUITest code
+    }
+}
+```
+
+### @MainActor for MainActor-Isolated Tests
+
+When testing code that requires MainActor:
+
+```swift
+@Suite("ViewModel Tests")
+@MainActor
+struct ViewModelTests {
+    let sut: ViewModel
+
+    init() {
+        sut = ViewModel()
+    }
+
+    @Test("state updates on action")
+    func stateUpdates() {
+        sut.performAction()
+        #expect(sut.state == .updated)
+    }
+}
+```
+
 ## P Stage: Test Strategy Definition
 
 ### What to Include in planning.md
@@ -21,6 +98,10 @@ Ensure developers know WHAT tests to write before coding begins, so tests are de
 | Unit Tests | [Core logic, pure functions, isolated components] | Required |
 | Integration Tests | [API calls, database ops, service interactions] | Required/Optional |
 | E2E Tests | [Critical user journeys only] | If applicable |
+
+### Testing Framework
+- **Unit Tests**: Swift Testing (`@Suite`, `@Test`, `#expect`)
+- **UI Tests**: XCTest (XCUITest requirement)
 
 ### Test Acceptance Criteria
 Derived from acceptance criteria - each should be testable:
