@@ -492,12 +492,14 @@ if (!pTask.metadata?.p3_approved) {
 ### Development (D) - [language specialist]
 - Analyze task, create development.md with implementation plan
 - Implement solution following the plan
+- **Testing Framework**: Use Swift Testing (`@Suite`, `@Test`, `#expect`) for unit tests; XCTest for UI tests only
 - Run code formatter on modified files
 - Verify build passes, complete implementation notes
 
 ### QA (Q) - qa-engineer
 - Analyze requirements, discover existing tests, create test plan
 - Implement/update tests, execute test suite
+- **Framework Enforcement**: All new unit tests MUST use Swift Testing framework
 - Handle test failures (retry or escalate)
 - All tests pass, document results
 

@@ -52,20 +52,71 @@ You are an expert QA engineer specializing in test strategy, test automation, qu
 - Run before release
 - Minimize for stability
 
+## Testing Frameworks
+
+### Swift Testing (Primary - Unit Tests)
+
+```swift
+import Testing
+
+@Suite("Service Tests")
+struct ServiceTests {
+    @Test("returns expected result")
+    func returnsExpected() {
+        let result = service.call()
+        #expect(result == expected)
+    }
+
+    @Test("handles error case", arguments: [
+        (ErrorCase.network, "Network error"),
+        (ErrorCase.auth, "Auth error"),
+    ])
+    func handlesError(error: ErrorCase, message: String) {
+        #expect(throws: error) {
+            try service.failing(error)
+        }
+    }
+}
+```
+
+### XCTest (UI Tests Only)
+
+```swift
+import XCTest
+
+final class FlowUITests: XCTestCase {
+    // XCUITest requires XCTest
+}
+```
+
 ## Test Best Practices
 
-### AAA Pattern
-```
-Arrange: Set up test data and conditions
-Act: Execute the code under test
-Assert: Verify expected outcomes
+### AAA Pattern (Swift Testing)
+
+```swift
+@Test("login with valid credentials succeeds")
+func loginValid() {
+    // Arrange
+    let credentials = Credentials.valid
+
+    // Act
+    let result = authService.login(credentials)
+
+    // Assert
+    #expect(result == .success)
+}
 ```
 
 ### Naming Convention
-```
-test_[unit]_[scenario]_[expected_result]
-test_login_validCredentials_returnsToken
-test_payment_insufficientFunds_throwsError
+
+Test method names should be descriptive (not prefixed with `test_`):
+
+```swift
+@Test("login with valid credentials returns session")
+func loginValidCredentialsReturnsSession() { }
+
+@Test("payment with insufficient funds throws error")
+func paymentInsufficientFundsThrowsError() { }
 ```
 
 ### Test Isolation

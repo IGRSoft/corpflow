@@ -102,6 +102,14 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 | Test Isolation | 95% | ✅ Good |
 | Flaky Tests | 3 | ⚠️ Needs attention |
 | Avg Test Duration | 45ms | ✅ Good |
+
+## Testing Framework Compliance
+
+| Framework | Usage | Status |
+|-----------|-------|--------|
+| Swift Testing | Unit tests | ✅ Required |
+| XCTest | UI tests only | ✅ Allowed |
+| XCTest | Unit tests | ⚠️ Migrate to Swift Testing |
 ```
 
 ## Integration

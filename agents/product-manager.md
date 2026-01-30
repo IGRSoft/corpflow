@@ -145,6 +145,10 @@ Include in planning.md:
 | Integration Tests | [Component interactions] | Required/Optional |
 | E2E Tests | [Critical user journeys] | If applicable |
 
+### Testing Framework
+- **Unit Tests**: Swift Testing (`@Suite`, `@Test`, `#expect`)
+- **UI Tests**: XCTest (XCUITest requirement)
+
 ### Test Acceptance Criteria
 - [ ] [Specific testable behavior 1]
 - [ ] [Specific testable behavior 2]

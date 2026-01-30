@@ -46,6 +46,15 @@ Generate a comprehensive test plan from requirements or code changes. Creates st
 | Integration Tests | 70% | - |
 | E2E Critical Paths | 100% | - |
 
+## Testing Framework
+
+| Test Type | Framework | Example |
+|-----------|-----------|---------|
+| Unit Tests | Swift Testing | `@Suite`, `@Test`, `#expect` |
+| UI Tests | XCTest | `XCUIApplication`, `XCTestCase` |
+
+**Note**: XCUITest requires XCTest framework; all other tests should use Swift Testing.
+
 ## Test Cases
 
 ### Unit Tests
