@@ -65,7 +65,7 @@ Before executing any milestone workflow, validate:
 | Failure | Cause | Fix |
 |---------|-------|-----|
 | Single branch for all issues | Missing branch-per-issue logic | Each issue MUST get own branch |
-| Branch from wrong base | Not switching to base first | Always `git checkout develop` first |
+| Branch from wrong base | Not using remote ref | Use `git fetch origin develop && git checkout -b ... origin/develop` |
 | Missing orchestrator.json | Init skipped | Run milestone init before issues |
 | No PR created | FN stage incomplete | Ensure `gh pr create` runs per issue |
 | Duplicate PR for issue | PR check skipped | Check issue timeline for existing PRs first |

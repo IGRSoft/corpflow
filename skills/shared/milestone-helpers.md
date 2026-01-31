@@ -203,8 +203,8 @@ function completeIssue(
 
 | Operation | Command |
 |-----------|---------|
-| Checkout base | `git checkout develop` |
-| Create branch | `git checkout -b feature/{issue#}-{slug}` |
+| Fetch base | `git fetch origin develop` |
+| Create branch | `git checkout -b feature/{issue#}-{slug} origin/develop` |
 | Stage changes | `git add -A` |
 | Commit | `git commit -m "#{issue} feat: {title}"` |
 | Push branch | `git push -u origin feature/{issue#}-{slug}` |
