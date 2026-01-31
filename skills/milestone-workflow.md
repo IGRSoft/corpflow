@@ -25,24 +25,68 @@ Each ticket executes in its own isolated workspace:
         └── handoff.md             # Compressed context for orchestrator
 ```
 
-### Orchestrator State
+### Orchestrator State (Required Schema)
 
 ```json
 {
   "version": "2.0",
   "milestone": { "number": 1, "title": "Sprint 1" },
   "configuration": { "parallel_tracks": 3, "auto_continue": false },
+  "base_branch": "develop",
+  "created_at": "2026-01-31T10:00:00Z",
   "issues": [
-    { "number": 42, "status": "in_progress", "track": 1, "current_stage": "DV" },
-    { "number": 43, "status": "pending", "track": null }
+    {
+      "number": 42,
+      "title": "feat: Add login flow",
+      "priority": "P0",
+      "status": "in_progress",
+      "track": 1,
+      "current_stage": "DV",
+      "branch": "feature/42-add-login-flow",
+      "workspace": ".workspaces/milestone-1/42"
+    },
+    {
+      "number": 43,
+      "title": "feat: Add logout button",
+      "priority": "P1",
+      "status": "pending",
+      "track": null,
+      "branch": "feature/43-add-logout-button",
+      "workspace": ".workspaces/milestone-1/43"
+    }
   ],
   "tracks": {
     "1": { "issue_number": 42, "task_prefix": "t1" },
     "2": { "issue_number": null, "status": "available" }
   },
-  "summary": { "total": 5, "completed": 1, "in_progress": 1, "pending": 3 }
+  "progress": {
+    "total": 2,
+    "completed": 0,
+    "in_progress": 1,
+    "pending": 1
+  }
 }
 ```
+
+### Status Transitions
+
+```
+pending → in_progress → completed
+                     → failed
+                     → skipped
+```
+
+**Starting an issue**:
+1. Set `status: "in_progress"`
+2. Assign `track: N`
+3. Checkout dedicated branch
+4. Begin staged workflow (PL → AR → ... → ST)
+
+**Completing an issue**:
+1. Push branch to origin
+2. Create PR with "Closes #issue"
+3. Set `status: "completed"`
+4. Free track for next issue
 
 ### Workspace State
 
@@ -187,6 +231,7 @@ Fresh agent context per issue - orchestrator delegates via Task tool, each subag
 - `in_progress` - Workspace active
 - `completed` - PR created
 - `skipped` - Manually skipped
+- `skipped_has_pr` - Already has linked PR (auto-detected)
 - `failed` - Max retries exceeded
 
 ## GitHub CLI

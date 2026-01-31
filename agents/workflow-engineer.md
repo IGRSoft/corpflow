@@ -34,6 +34,42 @@ Acts as root orchestrator when `--milestone:N` is used:
 
 See `skills/milestone-workflow.md` for architecture details.
 
+## Milestone Workflow Validation
+
+Before executing any milestone workflow, validate:
+
+### Pre-Execution Checks
+
+- [ ] orchestrator.json exists or will be created
+- [ ] Each issue checked for existing PRs (skip if found)
+- [ ] Each issue has unique branch name
+- [ ] Base branch is clean (no uncommitted changes)
+- [ ] No branch naming conflicts
+
+### Per-Issue Checks (CRITICAL)
+
+- [ ] Branch created from correct base (develop/master)
+- [ ] Branch name follows pattern: `feature/{issue#}-{slug}`
+- [ ] Workspace directory created
+- [ ] orchestrator.json updated with status
+
+### Completion Checks
+
+- [ ] All changes committed to issue branch
+- [ ] Branch pushed to origin
+- [ ] PR created with "Closes #{issue}" in body
+- [ ] orchestrator.json status set to "completed"
+
+### Common Validation Failures
+
+| Failure | Cause | Fix |
+|---------|-------|-----|
+| Single branch for all issues | Missing branch-per-issue logic | Each issue MUST get own branch |
+| Branch from wrong base | Not switching to base first | Always `git checkout develop` first |
+| Missing orchestrator.json | Init skipped | Run milestone init before issues |
+| No PR created | FN stage incomplete | Ensure `gh pr create` runs per issue |
+| Duplicate PR for issue | PR check skipped | Check issue timeline for existing PRs first |
+
 ## Troubleshooting Guide
 
 ### Task Status Not Updating

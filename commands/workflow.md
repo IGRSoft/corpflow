@@ -75,15 +75,84 @@ When using `--milestone:N`, operates in **workspace mode**:
         └── handoff.md             # Compressed context
 ```
 
-### Orchestrator State
+### Command Flow for --milestone:N
 
-```json
-{
-  "milestone": { "number": 1, "title": "Sprint 1" },
-  "configuration": { "parallel_tracks": 3 },
-  "issues": [{ "number": 42, "status": "in_progress", "track": 1 }],
-  "summary": { "total": 5, "completed": 1, "in_progress": 1, "pending": 3 }
-}
+#### Step 1: Initialize Milestone
+
+```bash
+# Fetch milestone info
+gh api repos/:owner/:repo/milestones/{N} --jq '.title'
+
+# Get issues and check for existing PRs
+gh issue list --milestone "{title}" --json number,title,labels,body
+
+# For each issue, check if PR already exists
+gh api /repos/:owner/:repo/issues/{issue#}/timeline \
+  --jq '[.[] | select(.event == "cross-referenced" and .source.issue.pull_request)] | length'
+# If count > 0, mark as "skipped_has_pr"
+
+# Create orchestrator
+mkdir -p .workspaces/milestone-{N}
+# Write orchestrator.json with sorted issues (excluding those with PRs)
+```
+
+#### Step 2: Per-Issue Setup (CRITICAL)
+
+For each issue in priority order:
+
+```bash
+# 1. Create workspace
+mkdir -p .workspaces/milestone-{N}/{issue#}/.context
+
+# 2. Create branch FROM BASE (not from current)
+git checkout develop
+git checkout -b feature/{issue#}-{slug}
+
+# 3. Update orchestrator.json
+# Set issue status to "in_progress"
+
+# 4. Execute staged workflow
+# PL → AR → TL → DV → QA → DC → FN → ST
+```
+
+#### Step 3: Issue Completion
+
+```bash
+# 1. Commit all changes
+git add -A
+git commit -m "#{issue} feat: {title}"
+
+# 2. Push branch
+git push -u origin feature/{issue#}-{slug}
+
+# 3. Create PR
+gh pr create --base develop --title "#{issue} {title}" --body "Closes #{issue}"
+
+# 4. Update orchestrator.json
+# Set issue status to "completed"
+
+# 5. Move to next issue
+```
+
+### Correct Flow Diagram
+
+```
+/workflow --milestone:1
+    │
+    ├─→ Create orchestrator.json
+    │
+    ├─→ Issue #27 (P0)
+    │   ├─→ git checkout -b feature/27-watermark
+    │   ├─→ PL → AR → TL → DV → QA → DC → FN → ST
+    │   ├─→ git push && gh pr create
+    │   └─→ Update orchestrator: completed
+    │
+    └─→ Issue #26 (P1)
+        ├─→ git checkout develop
+        ├─→ git checkout -b feature/26-font-family
+        ├─→ PL → AR → TL → DV → QA → DC → FN → ST
+        ├─→ git push && gh pr create
+        └─→ Update orchestrator: completed
 ```
 
 ### Track-Prefixed Task IDs
