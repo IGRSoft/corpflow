@@ -215,7 +215,7 @@ And the setting is consistent across all my devices
 This command feeds into:
 - `/arch-decision` - Technical decisions from requirements
 - `/test-plan` - Test cases from acceptance criteria
-- `/workflow` - Requirements for P stage
+- `/workflow` - Requirements for PL stage
 
 ## Related
 

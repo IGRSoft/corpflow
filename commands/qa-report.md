@@ -141,9 +141,9 @@ Generate a comprehensive QA summary report for completed work, including test re
 ## Integration
 
 This command is typically used:
-- At end of Q stage - Document test results
-- Before F stage - Quality gate check
-- For stakeholder review - S stage input
+- At end of QA stage - Document test results
+- Before FN stage - Quality gate check
+- For stakeholder review - ST stage input
 
 ## Related
 

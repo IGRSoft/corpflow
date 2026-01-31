@@ -104,9 +104,9 @@ Conduct a comprehensive design review for screens, components, or features using
 ## Workflow Integration
 
 This command can be used:
-- During P stage for existing UI assessment
-- During D stage for implementation review
-- During Q stage for visual QA
+- During PL stage for existing UI assessment
+- During DV stage for implementation review
+- During QA stage for visual QA
 - Standalone for periodic design audits
 
 ## Related

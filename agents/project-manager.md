@@ -77,7 +77,7 @@ if (workspacePath) {
   // gh pr create --base {baseBranch} --title "{issueTitle}" --body "..."
 
   // Update workspace.json
-  workspace.execution.current_stage = "S";  // Next stage
+  workspace.execution.current_stage = "ST";  // Next stage
   workspace.artifacts["complete.md"] = true;
   workspace.artifacts["release.md"] = true;
   writeFile(`${workspacePath}/workspace.json`, JSON.stringify(workspace, null, 2));
@@ -169,7 +169,7 @@ function archiveWorkspaceContext(workspacePath: string, workspace: object) {
 // Workspace mode: task_id: "t{track}-{N}" (e.g., "t1-4")
 TaskUpdate({ taskId: currentTaskId, status: "in_progress", owner: "project-manager" });  // Start finalization
 // [Create PR if workspace mode]
-TaskUpdate({ taskId: currentTaskId, status: "completed" });  // Finalization complete, ready for S stage
+TaskUpdate({ taskId: currentTaskId, status: "completed" });  // Finalization complete, ready for ST stage
 ```
 
 ## Task Specification Format

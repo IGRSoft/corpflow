@@ -29,6 +29,18 @@ The workflow system supports 8-stage (backward compatible) and 10-stage (full) p
 | ST | Stakeholder | stakeholder | sonnet |
 | **IR** | **Incident Response** | **incident-responder** | **sonnet** |
 
+### Support Agent Codes (On-Demand)
+
+| Code | Stage | Agent | Model | Invoked By |
+|------|-------|-------|-------|------------|
+| **DS** | **Design** | **designer** | **sonnet** | PL, AR, DV, QA stages |
+| **TC** | **Technical Review** | **technical-lead** | **opus** | AR, TL, DV, QA stages |
+| **ET** | **Ethics Review** | **ethics-reviewer** | **sonnet** | Any stage |
+| **PE** | **Prompt Engineering** | **prompt-engineer** | **opus** | Agent optimization |
+| **WE** | **Workflow Engineering** | **workflow-engineer** | **sonnet** | Workflow troubleshooting |
+
+Support agents don't own workflow stages but can be invoked on-demand via Task tool delegation.
+
 ### Workflow Triggers
 
 | Trigger | Stages | Use Case |
@@ -68,7 +80,7 @@ TaskUpdate supports `delete: true` to remove tasks dynamically:
 TaskUpdate({ taskId: "6", delete: true });  // Delete task 6
 ```
 
-This enables dynamic workflow sizing during P and A stages.
+This enables dynamic workflow sizing during PL and AR stages.
 
 ### Metadata Field
 
@@ -76,12 +88,12 @@ TaskCreate supports a `metadata` field for storing workflow-specific information
 
 ```typescript
 TaskCreate({
-  subject: "P: Planning",
+  subject: "PL: Planning",
   description: "Define requirements and acceptance criteria",
   activeForm: "Planning task requirements",
   metadata: {
     priority: "high",
-    stage: "P",
+    stage: "PL",
     workflow_id: "dark-mode-2025",
     milestone_number: 1,
     issue_number: 42
@@ -91,7 +103,7 @@ TaskCreate({
 
 **Standard metadata fields:**
 - `priority` - Task priority (high, medium, low)
-- `stage` - Workflow stage code (P, A, T, D, Q, W, F, S)
+- `stage` - Workflow stage code (PL, AR, TL, DV, SR, QA, DC, RE, FN, ST)
 - `workflow_id` - Links task to specific workflow instance
 - `milestone_number` - GitHub milestone number (when using `--milestone`)
 - `issue_number` - GitHub issue number being worked on
@@ -165,9 +177,9 @@ Tasks in workspace mode include additional metadata:
 ```typescript
 TaskCreate({
   taskId: `t${track}-1`,  // Track-prefixed ID
-  subject: `P: Planning - Issue #${issueNumber}`,
+  subject: `PL: Planning - Issue #${issueNumber}`,
   metadata: {
-    stage: "P",
+    stage: "PL",
     workflow_id: `milestone-${milestoneNumber}-issue-${issueNumber}`,
     issue_number: issueNumber,
     milestone_number: milestoneNumber,
@@ -225,7 +237,7 @@ writeFile(`${contextPath}/planning.md`, planningContent);
 // Update workspace state after stage completion
 if (workspacePath) {
   updateWorkspaceJson(workspacePath, {
-    execution: { current_stage: "A" },
+    execution: { current_stage: "AR" },
     artifacts: { "planning.md": true }
   });
 }
@@ -262,11 +274,11 @@ micro: [task description]
 
 ## Dynamic Workflow Sizing
 
-Instead of predefined workflow tiers (quick, fast), workflows are dynamically sized during P and A stages using task deletion.
+Instead of predefined workflow tiers (quick, fast), workflows are dynamically sized during PL and AR stages using task deletion.
 
 ### Unified Complexity Assessment
 
-**Single Source of Truth** - Both P and A stages use this assessment framework:
+**Single Source of Truth** - Both PL and AR stages use this assessment framework:
 
 | Factor | Low (0-2) | Medium (3-5) | High (6-10) |
 |--------|-----------|--------------|-------------|
@@ -310,9 +322,9 @@ Based on complexity score, suggest model for each stage:
 **Add to task metadata:**
 ```typescript
 TaskCreate({
-  subject: "A: Architecture",
+  subject: "AR: Architecture",
   metadata: {
-    stage: "A",
+    stage: "AR",
     complexity_score: 18,  // From unified assessment
     model_hint: "sonnet",  // Suggested model
     token_budget: 15000    // Soft limit
@@ -364,7 +376,7 @@ TaskUpdate({ taskId: "3", delete: true });
 Product Manager deletes stages based on LOW complexity (score 0-10):
 
 ```typescript
-// Complexity score: 8 (Low) - keep only P → D → Q
+// Complexity score: 8 (Low) - keep only PL → DV → QA
 deleteTaskSafely("2");  // Delete Architecture
 deleteTaskSafely("3");  // Delete Team Lead
 deleteTaskSafely("6");  // Delete Documentation
@@ -390,15 +402,15 @@ deleteTaskSafely("8");  // Delete Stakeholder
 // Q now leads to completion (no changes to blockedBy needed)
 ```
 
-**Important**: A stage should VALIDATE P's complexity assessment. If A disagrees, discuss with P before proceeding.
+**Important**: AR stage should VALIDATE PL's complexity assessment. If AR disagrees, discuss with PL before proceeding.
 
 ### Workflow Sizing Guidelines
 
 | Task Complexity | Score | Stages Kept | Deleted |
 |-----------------|-------|-------------|---------|
-| Typo/micro | 0-10 | P → D → Q | A, T, W, F, S |
-| Bug fix | 11-20 | P → A → D → Q | T, W, F, S |
-| Small feature | 21-30 | P → A → T → D → Q | W, F, S |
+| Typo/micro | 0-10 | PL → DV → QA | AR, TL, DC, FN, ST |
+| Bug fix | 11-20 | PL → AR → DV → QA | TL, DC, FN, ST |
+| Small feature | 21-30 | PL → AR → TL → DV → QA | DC, FN, ST |
 | Full feature | 31+ | All 8 stages | None |
 
 ## 10-Stage Workflow (Full)
@@ -470,10 +482,10 @@ IR → DV → QA → RE → FN
 ```
 
 **Examples:**
-- `P: Planning` - Planning stage
-- `A: Architecture` - Architecture stage
-- `D: Development` - Development stage
-- `Q: QA Testing` - QA stage
+- `PL: Planning` - Planning stage
+- `AR: Architecture` - Architecture stage
+- `DV: Development` - Development stage
+- `QA: QA Testing` - QA stage
 
 ### Initial State (Task Creation)
 
@@ -482,23 +494,23 @@ IR → DV → QA → RE → FN
 const workflowId = "dark-mode-2025";
 const priority = "medium";
 
-TaskCreate({ subject: "P: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements", metadata: { stage: "P", workflow_id: workflowId, priority } });  // Returns id: "1"
-TaskCreate({ subject: "A: Architecture", description: "Design technical solution and architecture", activeForm: "Architecting solution", metadata: { stage: "A", workflow_id: workflowId, priority } });  // Returns id: "2"
-TaskCreate({ subject: "T: Team Lead", description: "Coordinate approach and allocate resources", activeForm: "Coordinating team", metadata: { stage: "T", workflow_id: workflowId, priority } });  // Returns id: "3"
-TaskCreate({ subject: "D: Development", description: "Implement solution following architecture", activeForm: "Implementing code", metadata: { stage: "D", workflow_id: workflowId, priority } });  // Returns id: "4"
-TaskCreate({ subject: "Q: QA Testing", description: "Test and validate implementation", activeForm: "Testing solution", metadata: { stage: "Q", workflow_id: workflowId, priority } });  // Returns id: "5"
-TaskCreate({ subject: "W: Documentation", description: "Write technical documentation", activeForm: "Writing technical documentation", metadata: { stage: "W", workflow_id: workflowId, priority } });  // Returns id: "6"
-TaskCreate({ subject: "F: Finalization", description: "Prepare release package", activeForm: "Finalizing release", metadata: { stage: "F", workflow_id: workflowId, priority } });  // Returns id: "7"
-TaskCreate({ subject: "S: Stakeholder", description: "Final stakeholder approval", activeForm: "Awaiting approval", metadata: { stage: "S", workflow_id: workflowId, priority } });  // Returns id: "8"
+TaskCreate({ subject: "PL: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements", metadata: { stage: "PL", workflow_id: workflowId, priority } });  // Returns id: "1"
+TaskCreate({ subject: "AR: Architecture", description: "Design technical solution and architecture", activeForm: "Architecting solution", metadata: { stage: "AR", workflow_id: workflowId, priority } });  // Returns id: "2"
+TaskCreate({ subject: "TL: Team Lead", description: "Coordinate approach and allocate resources", activeForm: "Coordinating team", metadata: { stage: "TL", workflow_id: workflowId, priority } });  // Returns id: "3"
+TaskCreate({ subject: "DV: Development", description: "Implement solution following architecture", activeForm: "Implementing code", metadata: { stage: "DV", workflow_id: workflowId, priority } });  // Returns id: "4"
+TaskCreate({ subject: "QA: QA Testing", description: "Test and validate implementation", activeForm: "Testing solution", metadata: { stage: "QA", workflow_id: workflowId, priority } });  // Returns id: "5"
+TaskCreate({ subject: "DC: Documentation", description: "Write technical documentation", activeForm: "Writing technical documentation", metadata: { stage: "DC", workflow_id: workflowId, priority } });  // Returns id: "6"
+TaskCreate({ subject: "FN: Finalization", description: "Prepare release package", activeForm: "Finalizing release", metadata: { stage: "FN", workflow_id: workflowId, priority } });  // Returns id: "7"
+TaskCreate({ subject: "ST: Stakeholder", description: "Final stakeholder approval", activeForm: "Awaiting approval", metadata: { stage: "ST", workflow_id: workflowId, priority } });  // Returns id: "8"
 
 // Set up sequential dependency chain
-TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // A blocked by P
-TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // T blocked by A
-TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // D blocked by T
-TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // Q blocked by D
-TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // W blocked by Q
-TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });  // F blocked by W
-TaskUpdate({ taskId: "8", addBlockedBy: ["7"] });  // S blocked by F
+TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // AR blocked by PL
+TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // TL blocked by AR
+TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // DV blocked by TL
+TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // QA blocked by DV
+TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // DC blocked by QA
+TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });  // FN blocked by DC
+TaskUpdate({ taskId: "8", addBlockedBy: ["7"] });  // ST blocked by FN
 
 // Start first task
 TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
@@ -540,14 +552,14 @@ TaskUpdate({ taskId: "1", status: "completed" });
 TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" });
 ```
 
-## P3 Approval Gate
+## PL3 Approval Gate
 
-### Standard Workflow - STOP at P3
+### Standard Workflow - STOP at PL3
 
 **CRITICAL**: After Planning completes, you MUST stop and wait for user approval.
 
 1. Planning completes
-2. P stage deletes unnecessary tasks (if applicable)
+2. PL stage deletes unnecessary tasks (if applicable)
 3. **Mark P approved in metadata:**
    ```typescript
    TaskUpdate({
@@ -560,15 +572,15 @@ TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" }
 5. **WAIT FOR USER RESPONSE** - Do NOT proceed automatically
 6. User approves → Continue to next stage (A or D depending on deletions)
 
-### P3 Enforcement (A Stage Check)
+### PL3 Enforcement (AR Stage Check)
 
-A stage MUST verify P3 approval before proceeding:
+AR stage MUST verify PL3 approval before proceeding:
 
 ```typescript
-// A stage startup check
+// AR stage startup check
 const pTask = TaskGet({ taskId: "1" });
 if (!pTask.metadata?.p3_approved) {
-  throw new Error("P3 approval required before starting A stage");
+  throw new Error("PL3 approval required before starting AR stage");
 }
 ```
 
@@ -580,13 +592,13 @@ if (!pTask.metadata?.p3_approved) {
 - Write planning.md with requirements, acceptance criteria
 - **Define test strategy**: what to test, existing tests to update
 - **Dynamic sizing**: Delete unnecessary stages for simple tasks
-- **P3**: Wait for user approval before proceeding
+- **PL3**: Wait for user approval before proceeding
 
 ### Architecture (AR) - software-architector
 - Review requirements (including test strategy), design technical solution
 - **Design test architecture**: testability patterns, test doubles strategy
 - Create analyzing.md with architecture decisions and **test architecture**
-- **Dynamic sizing**: Can delete DC, FN, ST stages based on complexity assessment
+- **Dynamic sizing**: Can delete DC, FN, ST stages based on AR complexity assessment
 
 ### Team Lead (TL) - team-lead
 - Review design, coordinate approach
@@ -704,12 +716,12 @@ Required validations before certain transitions:
 
 | Rule | Required Before |
 |------|-----------------|
-| Test Strategy | P → A (must be in planning.md) |
-| Test Architecture | A → T (must be in analyzing.md) |
-| Code Format | D (before marking complete) |
-| Build | D → Q |
-| Tests | Q → W |
-| Code Review | D → Q |
+| Test Strategy | PL → AR (must be in planning.md) |
+| Test Architecture | AR → TL (must be in analyzing.md) |
+| Code Format | DV (before marking complete) |
+| Build | DV → QA |
+| Tests | QA → DC |
+| Code Review | DV → QA |
 
 ## Execution Modes
 
@@ -741,9 +753,9 @@ Tasks wait for dependencies to complete (F or S):
 
 ```typescript
 // DEFAULT: W and Q run in parallel after D completes
-TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // Q blocked by D (not W)
-TaskUpdate({ taskId: "6", addBlockedBy: ["4"] });  // W blocked by D (not Q)
-TaskUpdate({ taskId: "7", addBlockedBy: ["5", "6"] });  // F blocked by BOTH Q AND W
+TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // QA blocked by DV (not DC)
+TaskUpdate({ taskId: "6", addBlockedBy: ["4"] });  // DC blocked by DV (not QA)
+TaskUpdate({ taskId: "7", addBlockedBy: ["5", "6"] });  // FN blocked by BOTH QA AND DC
 
 // Both Q and W become unblocked when D completes
 // F only starts when both Q and W are completed
@@ -755,9 +767,9 @@ Use `--sequential` flag when W requires test results:
 
 ```typescript
 // SEQUENTIAL: W waits for Q (only use when W needs test output)
-TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // Q blocked by D
-TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // W blocked by Q
-TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });  // F blocked by W
+TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // QA blocked by DV
+TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // DC blocked by QA
+TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });  // FN blocked by DC
 ```
 
 ### Other Parallel Opportunities
@@ -863,10 +875,10 @@ Use the `--ethics-review` flag with workflow command:
 workflow: Add user tracking feature --ethics-review
 ```
 
-This adds ethics checkpoint after P stage:
+This adds ethics checkpoint after PL stage:
 
 ```
-P → E → A → T → D → Q → W → F → S
+PL → ET → AR → TL → DV → QA → DC → FN → ST
 ```
 
 ### Ethics Stage (Optional E Stage)
@@ -874,13 +886,13 @@ P → E → A → T → D → Q → W → F → S
 For high-risk features, insert explicit ethics review:
 
 ```typescript
-TaskCreate({ subject: "P: Planning", description: "Define requirements", activeForm: "Planning..." });  // id: "1"
-TaskCreate({ subject: "E: Ethics Review", description: "Constitutional compliance", activeForm: "Reviewing ethics..." });  // id: "2"
-TaskCreate({ subject: "A: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "3"
+TaskCreate({ subject: "PL: Planning", description: "Define requirements", activeForm: "Planning..." });  // id: "1"
+TaskCreate({ subject: "ET: Ethics Review", description: "Constitutional compliance", activeForm: "Reviewing ethics..." });  // id: "2"
+TaskCreate({ subject: "AR: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "3"
 // ... rest of stages
 
-TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // E blocked by P
-TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // A blocked by E
+TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // ET blocked by PL
+TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // AR blocked by ET
 // ... rest of chain
 ```
 
@@ -916,7 +928,7 @@ Tasks persist across sessions, accessible via `Ctrl+T` task view.
 Use `blockedBy` arrays for explicit dependency management:
 
 ```typescript
-TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // D blocked by T
+TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // DV blocked by TL
 TaskUpdate({ taskId: "4", removeBlockedBy: ["3"] });  // Remove blocker
 ```
 
@@ -925,7 +937,7 @@ Sub-agents can see and update the main task list:
 
 ```typescript
 // Main agent creates task
-TaskCreate({ subject: "D: Development", ... });  // id: "4"
+TaskCreate({ subject: "DV: Development", ... });  // id: "4"
 
 // Sub-agent (swift-pro) can see and update
 const task = TaskGet({ taskId: "4" });
@@ -938,11 +950,11 @@ Track multiple workflows with cross-workflow dependencies:
 
 ```typescript
 // Workflow A
-TaskCreate({ subject: "WF-A: D: Development", ... });  // id: "wfa-dev"
-TaskCreate({ subject: "WF-A: F: Finalization", ... });  // id: "wfa-final"
+TaskCreate({ subject: "WF-A: DV: Development", ... });  // id: "wfa-dev"
+TaskCreate({ subject: "WF-A: FN: Finalization", ... });  // id: "wfa-final"
 
 // Workflow B depends on Workflow A completing
-TaskCreate({ subject: "WF-B: P: Planning", ... });  // id: "wfb-plan"
+TaskCreate({ subject: "WF-B: PL: Planning", ... });  // id: "wfb-plan"
 TaskUpdate({ taskId: "wfb-plan", addBlockedBy: ["wfa-final"] });
 ```
 

@@ -93,7 +93,7 @@ When `--platform` is not specified, detection uses:
 ## Integration
 
 This command is used:
-- In D stage (Development) of workflows
+- In DV stage (Development) of workflows
 - For standalone implementation tasks
 - With `/code-review-dev` for review after implementation
 

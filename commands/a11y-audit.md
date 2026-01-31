@@ -182,9 +182,9 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 ## Workflow Integration
 
 Use this command:
-- During P stage for accessibility requirements
-- During D stage for implementation checks
-- During Q stage for compliance verification
+- During PL stage for accessibility requirements
+- During DV stage for implementation checks
+- During QA stage for compliance verification
 - Standalone for periodic audits
 
 ## Related

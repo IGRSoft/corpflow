@@ -283,7 +283,7 @@ Authenticate user with email and password.
 This command works with:
 - `/doc-audit` - Find missing API docs
 - `/readme-update` - Link API docs from README
-- `/workflow` W stage - Documentation phase
+- `/workflow` DC stage - Documentation phase
 
 ## Related
 

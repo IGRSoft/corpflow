@@ -58,8 +58,8 @@ Before transitioning:
 | **Logic** | Incorrect approach, bug | Yes (2x) | Same agent (fix first) |
 | **Dependency** | Missing input, blocked | No | Previous stage |
 | **Resource** | Context overflow, budget | Yes (1x) | Compress first |
-| **Requirements** | Unclear requirements | No | P stage |
-| **Architecture** | Design flaw discovered | No | A stage |
+| **Requirements** | Unclear requirements | No | PL stage |
+| **Architecture** | Design flaw discovered | No | AR stage |
 
 ### Escalation Chain
 
@@ -182,7 +182,7 @@ Create/update `.context/error.md`:
 If both stages modify same artifact:
 - Designate primary owner
 - Secondary appends to designated section
-- Review for conflicts before F stage
+- Review for conflicts before FN stage
 ```
 
 ## Agent Selection
@@ -261,7 +261,7 @@ Task Complexity Assessment:
 ### Pattern 1: Sequential Pipeline (Default)
 
 ```
-P1 → P3 → A1 → A3 → T1 → T3 → D1 → D3 → Q1 → Q3 → W1 → W3 → F1 → F3 → S1 → S3
+PL1 → PL3 → AR1 → AR3 → TL1 → TL3 → DV1 → DV3 → QA1 → QA3 → DC1 → DC3 → FN1 → FN3 → ST1 → ST3
 ```
 
 **Shorthand notation**: `{STAGE}{CODE}` where CODE: 0=preparing, 1=executing, 2=error, 3=done
@@ -271,9 +271,9 @@ Standard 8-stage execution with handoffs.
 ### Pattern 2: Fast Track (Skip Approval)
 
 ```
-P1 → P3 → A1 → A3 → T1 → T3 → D1 → D3 → Q1 → Q3 → W1 → W3 → F1 → F3 → S1 → S3
-         ↑
-         (auto-continue, no P3 approval gate)
+PL1 → PL3 → AR1 → AR3 → TL1 → TL3 → DV1 → DV3 → QA1 → QA3 → DC1 → DC3 → FN1 → FN3 → ST1 → ST3
+           ↑
+           (auto-continue, no PL3 approval gate)
 ```
 
 Use with `fworkflow:` trigger for trusted workflows.
@@ -281,7 +281,7 @@ Use with `fworkflow:` trigger for trusted workflows.
 ### Pattern 3: Quick Workflow
 
 ```
-P1 → P3 → D1 → D3 → Q1 → Q3
+PL1 → PL3 → DV1 → DV3 → QA1 → QA3
 ```
 
 Use with `quick:` for simple changes (bug fixes, small features).
@@ -289,7 +289,7 @@ Use with `quick:` for simple changes (bug fixes, small features).
 ### Pattern 4: Micro Execution
 
 ```
-D1 → D3
+DV1 → DV3
 ```
 
 Use with `micro:` for trivial changes (typos, formatting).
@@ -297,9 +297,9 @@ Use with `micro:` for trivial changes (typos, formatting).
 ### Pattern 5: Parallel Documentation
 
 ```
-          ┌→ W1 → W3 ─┐
-D3 → T1 ──┤           ├→ F1
-          └→ Q1 → Q3 ─┘
+            ┌→ DC1 → DC3 ─┐
+DV3 → TL1 ──┤             ├→ FN1
+            └→ QA1 → QA3 ─┘
 ```
 
 Documentation and QA run in parallel after development.

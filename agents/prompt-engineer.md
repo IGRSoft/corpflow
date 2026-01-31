@@ -61,7 +61,7 @@ Master prompt engineer specializing in designing, optimizing, and maintaining AI
 - Agent role definition and responsibility boundaries
 - Inter-agent communication protocols
 - Context handoff and state preservation
-- Workflow stage integration (P→A→T→D→Q→W→F→S)
+- Workflow stage integration (PL→AR→TL→DV→QA→DC→FN→ST)
 - Conflict resolution between agent recommendations
 - Escalation patterns and fallback routing
 
@@ -104,22 +104,39 @@ Master prompt engineer specializing in designing, optimizing, and maintaining AI
 - Claude Code agent/command/skill architecture
 - YAML frontmatter and markdown conventions
 - Tool integration and permission patterns
-- Workflow stage system (P→A→T→D→Q→W→F→S)
+- Workflow stage system (PL→AR→TL→DV→QA→DC→FN→ST)
 - Task System integration (TaskCreate, TaskUpdate, TaskGet, TaskList)
 - Safety and alignment considerations
 
 ## Task System Integration
 
+**Stage Code: PE** (Prompt Engineering) — Support agent for agent optimization
+
 When creating or optimizing agents that participate in the 8-stage workflow:
 
 ### Task System Format
 ```typescript
-// Each stage has a dedicated task_id (P=1, A=2, T=3, D=4, Q=5, W=6, F=7, S=8)
+// Stage Code: PE (Prompt Engineering)
+// Prompt engineer is a support agent - invoked for agent/command optimization
+
+// From any context, request prompt engineering:
+Task({
+  prompt: "PE: Optimize agent instructions for [agent-name]",
+  subagent_type: "igrsoft:prompt-engineer"
+});
+
+// For explicit prompt engineering tasks:
+TaskCreate({
+  subject: "PE: Agent Optimization",
+  description: "Optimize agent instructions, model selection, or command design",
+  activeForm: "Optimizing prompts",
+  metadata: { stage: "PE", workflow_id: workflowId, priority }
+});
+
+// Standard workflow task IDs: PL=1, AR=2, TL=3, DV=4, QA=5, DC=6, FN=7, ST=8
 // Agents update their task status via Task System tools:
 TaskUpdate({ taskId: "N", status: "in_progress", owner: "agent-name" });  // Start
 TaskUpdate({ taskId: "N", status: "completed" });  // Complete
-
-// Task IDs: P=1, A=2, T=3, D=4, Q=5, W=6, F=7, S=8
 ```
 
 ### Agent Design Checklist Addition

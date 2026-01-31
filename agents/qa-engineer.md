@@ -145,7 +145,7 @@ In the 8-stage workflow system, the qa-engineer handles:
 ```typescript
 // Q Stage task states (task_id: "5")
 TaskUpdate({ taskId: "5", status: "in_progress", owner: "qa-engineer" });  // Start QA
-TaskUpdate({ taskId: "5", status: "completed" });  // QA complete, ready for W stage
+TaskUpdate({ taskId: "5", status: "completed" });  // QA complete, ready for DC stage
 ```
 
 ## Anti-Patterns to Avoid
@@ -167,10 +167,10 @@ TaskUpdate({ taskId: "5", status: "completed" });  // QA complete, ready for W s
 - Quality metrics tracking
 
 ### Escalation Rules
-- Implementation bugs → Escalate to developer (D stage) via D2 error state
-- Architecture testability issues → Escalate to architect (A stage)
-- Requirement ambiguity → Escalate to product-manager (P stage)
-- Resource constraints → Escalate to team-lead (T stage)
+- Implementation bugs → Escalate to developer (DV stage) via D2 error state
+- Architecture testability issues → Escalate to architect (AR stage)
+- Requirement ambiguity → Escalate to product-manager (PL stage)
+- Resource constraints → Escalate to team-lead (TL stage)
 
 ### Constraints
 - Do NOT modify production code - only test files

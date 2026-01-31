@@ -42,7 +42,7 @@ TaskUpdate({
 ### 3. Delegation Prompt Template
 
 ```
-Implement the following for the igrsoft workflow D stage:
+Implement the following for the igrsoft workflow DV stage:
 
 ## Task
 {task_description}
@@ -63,7 +63,7 @@ Implement the following for the igrsoft workflow D stage:
 ## Expected Output
 1. Implementation code
 2. Write summary to .context/development.md
-3. Return compressed handoff for Q stage (max 500 tokens)
+3. Return compressed handoff for QA stage (max 500 tokens)
 ```
 
 ### 4. Return Protocol
@@ -112,7 +112,7 @@ KNOWN_ISSUES:
 ```typescript
 // qa-engineer receives handoff
 // Reads development.md
-// Creates Q stage tasks
+// Creates QA stage tasks
 TaskCreate({
   subject: "Test {feature}",
   description: "Verify implementation per development handoff...",

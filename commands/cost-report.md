@@ -134,8 +134,8 @@ Model Rates (per 1M tokens):
     "budget_limit": 0.50,
     "budget_used_percent": 56,
     "by_stage": {
-      "P": { "tokens": 7500, "model": "sonnet", "cost": 0.023 },
-      "A": { "tokens": 15000, "model": "opus", "cost": 0.225 }
+      "PL": { "tokens": 7500, "model": "sonnet", "cost": 0.023 },
+      "AR": { "tokens": 15000, "model": "opus", "cost": 0.225 }
     },
     "alerts": []
   }
@@ -196,7 +196,7 @@ This command is used:
 - Throughout workflow for cost monitoring
 - At stage transitions for optimization checks
 - At workflow completion for final analysis
-- By project-manager (F stage) for budget reporting
+- By project-manager (FN stage) for budget reporting
 
 ## Related
 

@@ -239,7 +239,7 @@ In the 8-stage workflow system, the product-manager handles:
 - **Define test strategy** (what needs to be tested, existing tests to update)
 - Define scope, priorities, and dependencies
 - **Dynamic sizing**: Delete unnecessary stages based on task complexity
-- **P3**: Wait for user approval before proceeding
+- **PL3**: Wait for user approval before proceeding
 
 ### Workspace-Aware P Stage
 
@@ -265,7 +265,7 @@ if (workspacePath) {
   writeFile(`${workspacePath}/.context/planning.md`, planningContent);
 
   // Update workspace.json after stage completion
-  workspace.execution.current_stage = "A";  // Next stage
+  workspace.execution.current_stage = "AR";  // Next stage
   workspace.artifacts["planning.md"] = true;
   writeFile(`${workspacePath}/workspace.json`, JSON.stringify(workspace, null, 2));
 
@@ -293,9 +293,9 @@ Use the **Unified Complexity Assessment** from `skills/workflow.md § Dynamic Wo
 1. **Assess complexity** using the 5-factor table (patterns, integration, concerns, risk, docs)
 2. **Sum scores** (0-50 total)
 3. **Delete stages** based on score:
-   - Score 0-10 (Low): Delete A, T, W, F, S → Keep P → D → Q
-   - Score 11-20 (Medium): Delete T, W, F, S → Keep P → A → D → Q
-   - Score 21-30 (Moderate): Delete W, F, S → Keep P → A → T → D → Q
+   - Score 0-10 (Low): Delete AR, TL, DC, FN, ST → Keep PL → DV → QA
+   - Score 11-20 (Medium): Delete TL, DC, FN, ST → Keep PL → AR → DV → QA
+   - Score 21-30 (Moderate): Delete DC, FN, ST → Keep PL → AR → TL → DV → QA
    - Score 31+ (High): Keep all 8 stages
 
 4. **Use safe deletion pattern** (see `skills/workflow.md § Safe Task Deletion Pattern`)
@@ -308,7 +308,7 @@ Use the **Unified Complexity Assessment** from `skills/workflow.md § Dynamic Wo
 // P Stage task states (task_id: "1")
 TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });  // Start planning
 // [Dynamic sizing: delete unnecessary stages]
-TaskUpdate({ taskId: "1", status: "completed" });  // Planning complete, wait for P3 approval
+TaskUpdate({ taskId: "1", status: "completed" });  // Planning complete, wait for PL3 approval
 ```
 
 ### P Stage with Design (`--with-design`)

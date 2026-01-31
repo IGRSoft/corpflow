@@ -111,7 +111,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 
 #### Workflow Integration
 **Current**: Not documented
-**Recommended**: Add P stage usage note
+**Recommended**: Add PL stage usage note
 
 ### Recommendations
 

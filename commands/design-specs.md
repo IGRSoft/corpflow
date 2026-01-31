@@ -147,8 +147,8 @@ Generate developer-ready design specifications for components, screens, or featu
 ## Workflow Integration
 
 Use this command:
-- After design approval in P stage
-- Before D stage implementation
+- After design approval in PL stage
+- Before DV stage implementation
 - For design-to-code handoff
 - When updating existing components
 

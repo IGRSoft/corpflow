@@ -83,7 +83,7 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 ### Risk Assessment
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
-| Token security issues | Medium | High | Security review in A stage |
+| Token security issues | Medium | High | Security review in AR stage |
 | OAuth provider changes | Low | Medium | Abstract provider interface |
 
 ### Budget Calculation
@@ -202,7 +202,7 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 IF size = XS AND no security concerns:
   → micro: (direct edit)
 ELSE IF size <= S AND single component:
-  → quick: (P → D → Q)
+  → quick: (PL → DV → QA)
 ELSE IF size <= L:
   → workflow: (full 8-stage)
 ELSE:

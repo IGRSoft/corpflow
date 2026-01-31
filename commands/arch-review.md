@@ -152,7 +152,7 @@ The command evaluates against:
 ## Integration
 
 This command is used:
-- In A stage - Formal architecture review
+- In AR stage - Formal architecture review
 - Before merging large PRs
 - When introducing new patterns
 

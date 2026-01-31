@@ -111,7 +111,7 @@ Include in analyzing.md:
 
 ### Architecture Testability Checklist
 
-Before completing A stage:
+Before completing AR stage:
 - [ ] Dependency injection points defined
 - [ ] Protocol/interface boundaries identified for test doubles
 - [ ] Test data strategy documented
@@ -158,34 +158,34 @@ When receiving large codebases, optimize context usage:
 In the 8-stage workflow system, the software-architector handles:
 
 ### A Stage (Architecture)
-- **A0**: Review planning.md, analyze requirements (including test strategy)
-- **A1**: Design technical solution, create ADRs, **design test architecture**
-- **A2**: Handle design conflicts (iterate or escalate)
-- **A3**: Complete analyzing.md with architecture decisions and **test architecture**
+- **AR0**: Review planning.md, analyze requirements (including test strategy)
+- **AR1**: Design technical solution, create ADRs, **design test architecture**
+- **AR2**: Handle design conflicts (iterate or escalate)
+- **AR3**: Complete analyzing.md with architecture decisions and **test architecture**
 
 ### Task System Format
 ```typescript
 // A Stage task states (task_id: "2")
 TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" });  // Start architecture
 // [Dynamic sizing: delete unnecessary stages based on complexity]
-TaskUpdate({ taskId: "2", status: "completed" });  // Architecture complete, ready for T stage
+TaskUpdate({ taskId: "2", status: "completed" });  // Architecture complete, ready for TL stage
 ```
 
 ### Dynamic Workflow Sizing (A Stage)
 
 Use the **Unified Complexity Assessment** from `skills/workflow.md § Dynamic Workflow Sizing`:
 
-1. **Validate P's complexity score** - Review P stage's assessment
-2. **Adjust if needed** - A stage has deeper technical insight
+1. **Validate PL's complexity score** - Review PL stage's assessment
+2. **Adjust if needed** - AR stage has deeper technical insight
 3. **Delete remaining unnecessary stages** based on validated score:
    - Score 11-20 (Medium): Validate, may delete W, F, S if not already
    - Score 21-30 (Moderate): Validate, may delete W, F, S
    - Score 31+ (High): Keep all remaining stages
 
 4. **Use safe deletion pattern** (see `skills/workflow.md § Safe Task Deletion Pattern`)
-5. **Verify P3 approval** before starting A stage
+5. **Verify PL3 approval** before starting AR stage
 
-**Important**: A stage should VALIDATE P's complexity assessment. If scores differ significantly (>10 points), discuss with P before proceeding.
+**Important**: AR stage should VALIDATE PL's complexity assessment. If scores differ significantly (>10 points), discuss with PL before proceeding.
 
 **See**: `skills/workflow.md` for full assessment table, deletion examples, and safe deletion pattern.
 
@@ -199,7 +199,7 @@ Model selection is **complexity-driven** (see `skills/workflow.md § Model Routi
 | 21-30 (Moderate) | sonnet | Most architectural work |
 | 31+ (High) | opus | Trade-off analysis, novel architecture, system-wide impact |
 
-**Check task metadata for `model_hint`** set by P stage. Override only if complexity reassessment warrants it.
+**Check task metadata for `model_hint`** set by PL stage. Override only if complexity reassessment warrants it.
 
 ## Constitutional Alignment
 
