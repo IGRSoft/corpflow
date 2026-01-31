@@ -87,6 +87,90 @@ const contextPath = workspacePath ? `${workspacePath}/.context` : `.context`;
 
 See `milestone-workflow.md` for full workspace documentation.
 
+## Milestone Initialization
+
+When `--milestone:N` is specified:
+
+### 1. Fetch Milestone Issues
+
+```bash
+# Get milestone info
+gh api repos/:owner/:repo/milestones/{N} --jq '.title'
+
+# Get all open issues
+gh issue list --milestone "{title}" --json number,title,labels,body
+```
+
+### 2. Filter Issues with Existing PRs
+
+Skip issues that already have linked PRs:
+
+```bash
+# Check for linked PRs on each issue
+gh api /repos/:owner/:repo/issues/{issue#}/timeline --jq '[.[] | select(.event == "cross-referenced" and .source.issue.pull_request)] | length'
+```
+
+If count > 0, mark issue as `skipped_has_pr` and exclude from workflow.
+
+### 3. Sort by Priority
+
+| Priority | Label | Order |
+|----------|-------|-------|
+| Critical | P0, priority:critical | 1 |
+| High | P1, priority:high | 2 |
+| Medium | P2, priority:medium | 3 |
+| Low | P3, priority:low | 4 |
+| None | (unlabeled) | 5 |
+
+### 4. Per-Issue Workspace Setup
+
+For each issue in priority order:
+
+```bash
+# Create isolated workspace
+mkdir -p .workspaces/milestone-{N}/{issue#}/.context
+
+# CRITICAL: Create branch from base (not current branch)
+git checkout develop  # or base branch from issue body
+git checkout -b feature/{issue#}-{slug}
+```
+
+### 5. Initialize Orchestrator
+
+Create `.workspaces/orchestrator.json` to track all issues:
+
+```json
+{
+  "milestone_number": 1,
+  "milestone_title": "Sprint 2025-W05",
+  "parallel_tracks": 2,
+  "base_branch": "develop",
+  "created_at": "2026-01-31T10:00:00Z",
+  "issues": [
+    {
+      "number": 27,
+      "title": "feat: Add watermark support",
+      "priority": "P0",
+      "status": "pending",
+      "track": null,
+      "branch": "feature/27-watermark-support",
+      "workspace": ".workspaces/milestone-1/27"
+    }
+  ]
+}
+```
+
+### 6. Execute Per-Issue Workflow
+
+Each issue runs the full staged workflow independently:
+
+```
+Issue #27 → feature/27-watermark → PL→AR→TL→DV→QA→DC→FN→ST → PR → complete
+Issue #26 → feature/26-font-family → PL→AR→TL→DV→QA→DC→FN→ST → PR → complete
+```
+
+See `shared/milestone-helpers.md` for helper functions.
+
 ## Workflow Initialization
 
 ```typescript
