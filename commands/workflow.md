@@ -10,6 +10,15 @@ Initialize a new workflow task with proper folder structure, state management, a
 /workflow "Task Title" [options]     # Execute a custom task
 ```
 
+## Workflow Types
+
+| Type | Stages | Trigger | Use Case |
+|------|--------|---------|----------|
+| **Standard** | PL→AR→TL→DV→QA→DC→FN→ST (8) | `/workflow` | Default, backward compatible |
+| **Secure** | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST (10) | `/workflow --secure` | Security-critical features |
+| **Full** | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST (10) | `/workflow --full` | Complete pipeline |
+| **Emergency** | IR→DV→QA→RE→FN (5) | `/emergency` | Production incidents, hotfixes |
+
 ## Options
 
 - `--milestone:N` - Execute GitHub milestone N issues by priority (creates workspaces)
@@ -19,9 +28,11 @@ Initialize a new workflow task with proper folder structure, state management, a
 - `--priority [High|Medium|Low]` - Task priority (default: Medium)
 - `--platform <apple|android|web|all>` - Target platform (default: all)
 - `--mode [async|sync]` - Execution mode (default: async)
-- `--with-design` - Include designer in planning phase (P stage)
+- `--with-design` - Include designer in planning phase (PL stage)
 - `--ethics-review` - Add ethics checkpoint after planning (recommended for high-risk features)
 - `--sequential` - Force W to wait for Q (default: W+Q run parallel)
+- `--secure` - Use 10-stage secure workflow with SR and RE stages
+- `--full` - Use 10-stage full workflow (alias for --secure)
 
 ## Examples
 
@@ -37,6 +48,15 @@ Initialize a new workflow task with proper folder structure, state management, a
 /workflow "Fix login crash" --priority High --platform apple
 /workflow "Redesign settings screen" --with-design --platform apple
 /workflow "Add user tracking analytics" --ethics-review
+
+# Secure/Full workflow (10-stage with SR and RE)
+/workflow "Implement OAuth authentication" --secure
+/workflow "Add payment processing" --secure --ethics-review
+/workflow "Critical infrastructure change" --full
+
+# Emergency workflow (5-stage for incidents)
+/emergency "Production login failing for 50% of users"
+/emergency "Database connection timeouts" --priority High
 ```
 
 ## What This Command Does
@@ -58,23 +78,23 @@ Initialize a new workflow task with proper folder structure, state management, a
    const workflowId = "dark-mode-2025-01-26";
    const priority = "medium";  // from --priority option
 
-   TaskCreate({ subject: "P: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements", metadata: { stage: "P", workflow_id: workflowId, priority } });  // id: "1"
-   TaskCreate({ subject: "A: Architecture", description: "Design technical solution", activeForm: "Architecting solution", metadata: { stage: "A", workflow_id: workflowId, priority } });  // id: "2"
-   TaskCreate({ subject: "T: Team Lead", description: "Coordinate approach and resources", activeForm: "Coordinating team", metadata: { stage: "T", workflow_id: workflowId, priority } });  // id: "3"
-   TaskCreate({ subject: "D: Development", description: "Implement solution", activeForm: "Implementing code", metadata: { stage: "D", workflow_id: workflowId, priority } });  // id: "4"
-   TaskCreate({ subject: "Q: QA Testing", description: "Test and validate", activeForm: "Testing solution", metadata: { stage: "Q", workflow_id: workflowId, priority } });  // id: "5"
-   TaskCreate({ subject: "W: Documentation", description: "Write technical docs", activeForm: "Writing documentation", metadata: { stage: "W", workflow_id: workflowId, priority } });  // id: "6"
-   TaskCreate({ subject: "F: Finalization", description: "Prepare release", activeForm: "Finalizing release", metadata: { stage: "F", workflow_id: workflowId, priority } });  // id: "7"
-   TaskCreate({ subject: "S: Stakeholder", description: "Final approval", activeForm: "Awaiting approval", metadata: { stage: "S", workflow_id: workflowId, priority } });  // id: "8"
+   TaskCreate({ subject: "PL: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements", metadata: { stage: "PL", workflow_id: workflowId, priority } });  // id: "1"
+   TaskCreate({ subject: "AR: Architecture", description: "Design technical solution", activeForm: "Architecting solution", metadata: { stage: "AR", workflow_id: workflowId, priority } });  // id: "2"
+   TaskCreate({ subject: "TL: Team Lead", description: "Coordinate approach and resources", activeForm: "Coordinating team", metadata: { stage: "TL", workflow_id: workflowId, priority } });  // id: "3"
+   TaskCreate({ subject: "DV: Development", description: "Implement solution", activeForm: "Implementing code", metadata: { stage: "DV", workflow_id: workflowId, priority } });  // id: "4"
+   TaskCreate({ subject: "QA: QA Testing", description: "Test and validate", activeForm: "Testing solution", metadata: { stage: "QA", workflow_id: workflowId, priority } });  // id: "5"
+   TaskCreate({ subject: "DC: Documentation", description: "Write technical docs", activeForm: "Writing documentation", metadata: { stage: "DC", workflow_id: workflowId, priority } });  // id: "6"
+   TaskCreate({ subject: "FN: Finalization", description: "Prepare release", activeForm: "Finalizing release", metadata: { stage: "FN", workflow_id: workflowId, priority } });  // id: "7"
+   TaskCreate({ subject: "ST: Stakeholder", description: "Final approval", activeForm: "Awaiting approval", metadata: { stage: "ST", workflow_id: workflowId, priority } });  // id: "8"
 
    // Set up sequential dependency chain
-   TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // A blocked by P
-   TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // T blocked by A
-   TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // D blocked by T
-   TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // Q blocked by D
-   TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // W blocked by Q
-   TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });  // F blocked by W
-   TaskUpdate({ taskId: "8", addBlockedBy: ["7"] });  // S blocked by F
+   TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // AR blocked by PL
+   TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // TL blocked by AR
+   TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // DV blocked by TL
+   TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // QA blocked by DV
+   TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // DC blocked by QA
+   TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });  // FN blocked by DC
+   TaskUpdate({ taskId: "8", addBlockedBy: ["7"] });  // ST blocked by FN
 
    // Start Planning
    TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
@@ -142,7 +162,7 @@ The root orchestrator tracks all workspaces and manages parallel execution:
   "milestone": { "number": 1, "title": "Sprint 1", "state": "open" },
   "configuration": { "parallel_tracks": 3, "auto_continue": false },
   "issues": [
-    { "number": 42, "workspace_path": ".workspaces/milestone-1/42", "status": "in_progress", "track": 1, "current_stage": "D" },
+    { "number": 42, "workspace_path": ".workspaces/milestone-1/42", "status": "in_progress", "track": 1, "current_stage": "DV" },
     { "number": 43, "workspace_path": ".workspaces/milestone-1/43", "status": "pending", "track": null }
   ],
   "tracks": {
@@ -169,8 +189,8 @@ Each ticket has its own isolated workspace with full context:
     "base_branch_source": "develop_fallback"
   },
   "workflow": { "track": 1, "task_prefix": "t1", "complexity_score": 18 },
-  "execution": { "current_stage": "D", "retry_count": 0 },
-  "task_ids": { "P": "t1-1", "A": "t1-2", "D": "t1-3", "Q": "t1-4" },
+  "execution": { "current_stage": "DV", "retry_count": 0 },
+  "task_ids": { "PL": "t1-1", "AR": "t1-2", "DV": "t1-3", "QA": "t1-4" },
   "artifacts": { "planning.md": true, "analyzing.md": true }
 }
 ```
@@ -215,7 +235,7 @@ See [Milestone Workflow](../skills/milestone-workflow.md#base-branch-resolution)
 │    - Create workspace.json with issue context + base_branch │
 │    - Create git branch feature/{issue#}-{slug} from base    │
 │    - Create track-prefixed tasks (t1-1, t2-1, etc.)        │
-│    - Start P stage                                          │
+│    - Start PL stage                                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -226,7 +246,7 @@ The orchestrator continuously monitors workspace status:
 1. **Check Active Tracks**: Poll each workspace's current stage
 2. **Handle Completion**: Free track, assign next pending issue
 3. **Handle Errors**: Retry within workspace or escalate
-4. **Enforce Gates**: Pause at P3 unless `--auto-continue`
+4. **Enforce Gates**: Pause at PL3 unless `--auto-continue`
 
 ### Workspace Cleanup
 
@@ -251,12 +271,12 @@ cat .workspaces/orchestrator.json | jq '.summary'
 View specific workspace:
 ```bash
 cat .workspaces/milestone-1/42/workspace.json | jq '.execution'
-# { "current_stage": "D", "retry_count": 0 }
+# { "current_stage": "DV", "retry_count": 0 }
 ```
 
 ## Dynamic Workflow Sizing
 
-Workflows are dynamically sized during P and A stages using the **Unified Complexity Assessment**.
+Workflows are dynamically sized during PL and AR stages using the **Unified Complexity Assessment**.
 
 **See**: `skills/workflow.md § Dynamic Workflow Sizing` for:
 - Full complexity assessment table (5 factors, 0-50 scoring)
@@ -268,21 +288,21 @@ Workflows are dynamically sized during P and A stages using the **Unified Comple
 
 | Complexity Score | Stages Kept | P Stage Deletes |
 |------------------|-------------|-----------------|
-| 0-10 (Low) | P → D → Q | A, T, W, F, S |
-| 11-20 (Medium) | P → A → D → Q | T, W, F, S |
-| 21-30 (Moderate) | P → A → T → D → Q | W, F, S |
+| 0-10 (Low) | PL → DV → QA | AR, TL, DC, FN, ST |
+| 11-20 (Medium) | PL → AR → DV → QA | TL, DC, FN, ST |
+| 21-30 (Moderate) | PL → AR → TL → DV → QA | DC, FN, ST |
 | 31+ (High) | All 8 stages | None |
 
 ## Workflow Modes
 
 ### Standard Workflow
-- Full 8-stage process: P → A → T → D → Q → W → F → S
-- Stops at P3 for user approval before continuing
-- P and A stages dynamically delete unnecessary stages
+- Full 8-stage process: PL → AR → TL → DV → QA → DC → FN → ST
+- Stops at PL3 for user approval before continuing
+- PL and AR stages dynamically delete unnecessary stages
 - Use for: Major features, architectural changes, security-sensitive work
 
 ### Design-Integrated Workflow (`--with-design`)
-- Adds designer to P stage for UX/UI planning input
+- Adds designer to PL stage for UX/UI planning input
 - Designer provides: user flow analysis, component requirements, accessibility considerations
 - Use for: UI features, user-facing changes, design system updates
 
@@ -313,7 +333,7 @@ When `--with-design` is enabled:
 For features with potential ethical implications, add an ethics checkpoint:
 
 ```
-P → E → A → T → D → Q → W → F → S
+PL → ET → AR → TL → DV → QA → DC → FN → ST
 ```
 
 When `--ethics-review` is enabled:
@@ -338,15 +358,114 @@ When `--ethics-review` is enabled:
    - Go/no-go recommendation
 
 ```typescript
-// With ethics review: P → E → A → T → D → Q → W → F → S
-TaskCreate({ subject: "P: Planning", description: "Define requirements", activeForm: "Planning..." });  // id: "1"
-TaskCreate({ subject: "E: Ethics Review", description: "Constitutional compliance", activeForm: "Reviewing ethics..." });  // id: "2"
-TaskCreate({ subject: "A: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "3"
+// With ethics review: PL → ET → AR → TL → DV → QA → DC → FN → ST
+TaskCreate({ subject: "PL: Planning", description: "Define requirements", activeForm: "Planning..." });  // id: "1"
+TaskCreate({ subject: "ET: Ethics Review", description: "Constitutional compliance", activeForm: "Reviewing ethics..." });  // id: "2"
+TaskCreate({ subject: "AR: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "3"
 // ... rest of stages with shifted IDs
 
-TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // E blocked by P
-TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // A blocked by E
+TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // ET blocked by PL
+TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // AR blocked by ET
 // ... rest of dependency chain
+```
+
+### Secure/Full Workflow (`--secure`, `--full`)
+
+For security-critical features requiring comprehensive security review and release engineering:
+
+```
+PL → AR → TL → DV → SR → QA → DC → RE → FN → ST
+```
+
+When `--secure` or `--full` is enabled:
+
+1. **SR Stage Inserted** after Development:
+   - Security-reviewer performs OWASP compliance validation
+   - Vulnerability scanning and secure coding review
+   - Must pass before QA can begin
+
+2. **RE Stage Inserted** after Documentation:
+   - Release-engineer handles semantic versioning
+   - Changelog generation and deployment readiness
+   - Platform-specific release preparation
+
+3. **Automatic Security Triggers** - Use `--secure` when feature involves:
+   - Authentication or authorization
+   - Payment processing or financial data
+   - PII handling or sensitive data
+   - Cryptographic operations
+   - External API integrations with secrets
+   - File uploads or user-generated content
+
+```typescript
+// 10-stage secure workflow: PL → AR → TL → DV → SR → QA → DC → RE → FN → ST
+TaskCreate({ subject: "PL: Planning", description: "Define requirements", activeForm: "Planning..." });      // id: "1"
+TaskCreate({ subject: "AR: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "2"
+TaskCreate({ subject: "TL: Team Lead", description: "Coordinate approach", activeForm: "Coordinating..." }); // id: "3"
+TaskCreate({ subject: "DV: Development", description: "Implement solution", activeForm: "Implementing..." }); // id: "4"
+TaskCreate({ subject: "SR: Security Review", description: "OWASP compliance", activeForm: "Reviewing security..." }); // id: "5"
+TaskCreate({ subject: "QA: QA Testing", description: "Test and validate", activeForm: "Testing..." });       // id: "6"
+TaskCreate({ subject: "DC: Documentation", description: "Write technical docs", activeForm: "Writing docs..." }); // id: "7"
+TaskCreate({ subject: "RE: Release Engineering", description: "Version and changelog", activeForm: "Preparing release..." }); // id: "8"
+TaskCreate({ subject: "FN: Finalization", description: "Deploy release", activeForm: "Finalizing..." });     // id: "9"
+TaskCreate({ subject: "ST: Stakeholder", description: "Final approval", activeForm: "Awaiting approval..." }); // id: "10"
+
+// Dependency chain with SR after DV, RE after DC
+TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });   // AR blocked by PL
+TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });   // TL blocked by AR
+TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });   // DV blocked by TL
+TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });   // SR blocked by DV
+TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });   // QA blocked by SR
+TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });   // DC blocked by QA
+TaskUpdate({ taskId: "8", addBlockedBy: ["7"] });   // RE blocked by DC
+TaskUpdate({ taskId: "9", addBlockedBy: ["8"] });   // FN blocked by RE
+TaskUpdate({ taskId: "10", addBlockedBy: ["9"] });  // ST blocked by FN
+```
+
+### Emergency Workflow (`/emergency`)
+
+For production incidents and hotfixes requiring rapid response:
+
+```
+IR → DV → QA → RE → FN
+```
+
+**Usage:**
+```
+/emergency "Production login failing for 50% of users"
+/emergency "Database connection timeouts" --priority High
+```
+
+When emergency workflow is triggered:
+
+1. **IR Stage First** - Incident-responder triages:
+   - Severity classification (P0-P3)
+   - Impact assessment and blast radius
+   - Decide: hotfix, rollback, or mitigation
+   - Coordinate response
+
+2. **Abbreviated Pipeline** - Skip planning and architecture:
+   - DV: Implement fix directly
+   - QA: Validate fix (minimal regression)
+   - RE: Prepare emergency release
+   - FN: Deploy hotfix
+
+```typescript
+// 5-stage emergency workflow: IR → DV → QA → RE → FN
+TaskCreate({ subject: "IR: Incident Response", description: "Triage and coordinate", activeForm: "Responding to incident...", metadata: { priority: "high" } }); // id: "1"
+TaskCreate({ subject: "DV: Development", description: "Implement hotfix", activeForm: "Fixing..." });  // id: "2"
+TaskCreate({ subject: "QA: QA Testing", description: "Validate fix", activeForm: "Testing..." });      // id: "3"
+TaskCreate({ subject: "RE: Release Engineering", description: "Emergency release", activeForm: "Releasing..." }); // id: "4"
+TaskCreate({ subject: "FN: Finalization", description: "Deploy hotfix", activeForm: "Deploying..." }); // id: "5"
+
+// Dependency chain
+TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // DV blocked by IR
+TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // QA blocked by DV
+TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // RE blocked by QA
+TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // FN blocked by RE
+
+// Start immediately
+TaskUpdate({ taskId: "1", status: "in_progress", owner: "incident-responder" });
 ```
 
 ## Output
@@ -356,7 +475,7 @@ Workflow Initiated (Standard)
 
 Task: Add dark mode support
 Location: .context/
-Mode: Standard (will pause at P3 for approval)
+Mode: Standard (will pause at PL3 for approval)
 
 I've initiated the workflow. Starting planning...
 ```
@@ -365,9 +484,9 @@ I've initiated the workflow. Starting planning...
 
 After initialization:
 1. Complete planning.md with requirements and acceptance criteria
-2. P stage may delete unnecessary stages (dynamic sizing)
-3. P3 approval gate - wait for user approval
-4. Continue through remaining stages (A stage may further prune)
+2. PL stage may delete unnecessary stages (dynamic sizing)
+3. PL3 approval gate - wait for user approval
+4. Continue through remaining stages (AR stage may further prune)
 
 ## Related
 

@@ -1,6 +1,6 @@
 # Workflow Testing Strategy Skill
 
-Guidance for planning tests during P and A stages of the igrsoft workflow, before implementation begins.
+Guidance for planning tests during P and AR stages of the igrsoft workflow, before implementation begins.
 
 Note: This skill focuses on workflow-integrated testing planning. For platform-specific testing patterns (Swift Testing, XCTest), see `apple-developer:testing-strategy`.
 
@@ -178,12 +178,12 @@ Tests/
 
 ## Handoff to Q Stage
 
-Q stage receives:
+QA stage receives:
 1. **Test scope** from planning.md - WHAT to test
 2. **Test architecture** from analyzing.md - HOW to structure tests
 3. **Existing tests to update** list - WHERE changes needed
 
-Q stage then:
+QA stage then:
 - Creates detailed test plan (test-plan.md format)
 - Implements tests following architecture
 - Validates all acceptance criteria are tested
@@ -229,8 +229,8 @@ Test effort is embedded in subtask estimates:
 
 ## Related
 
-- `agents/product-manager.md` - P stage owner
-- `agents/software-architector.md` - A stage owner
-- `agents/qa-engineer.md` - Q stage owner
+- `agents/product-manager.md` - PL stage owner
+- `agents/software-architector.md` - AR stage owner
+- `agents/qa-engineer.md` - QA stage owner
 - `commands/test-plan.md` - Detailed test plan generation
 - `skills/estimation-methodology.md` - Test effort estimation

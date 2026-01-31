@@ -54,12 +54,23 @@ PL → AR → TL → DV → SR → QA → DC → [RE] → FN → ST
 ### Task System Format
 
 ```typescript
-// RE Stage task states (task_id: "8" in 10-stage flow)
-TaskUpdate({ taskId: "8", status: "in_progress", owner: "release-engineer" });
+// Stage Code: RE (Release Engineering)
+// Release engineer owns RE stage in 10-stage workflow: PL→AR→TL→DV→SR→QA→DC→[RE]→FN→ST
+
+// 10-stage workflow task IDs: PL=1, AR=2, TL=3, DV=4, SR=5, QA=6, DC=7, RE=8, FN=9, ST=10
+TaskUpdate({ taskId: "8", status: "in_progress", owner: "release-engineer" });  // Start RE
 
 // On completion
-TaskUpdate({ taskId: "8", status: "completed" });
+TaskUpdate({ taskId: "8", status: "completed" });  // Complete RE
 // Write release-prep.md artifact
+
+// Standard creation for RE stage:
+TaskCreate({
+  subject: "RE: Release Engineering",
+  description: "Version bump, changelog generation, and deployment readiness",
+  activeForm: "Preparing release",
+  metadata: { stage: "RE", workflow_id: workflowId, priority }
+});
 ```
 
 ### Output Artifact

@@ -142,7 +142,7 @@ Proposed → Accepted → [Deprecated | Superseded]
 ## Integration
 
 This command is used:
-- During A stage - Document architecture decisions
+- During AR stage - Document architecture decisions
 - When introducing new patterns or technologies
 - For significant technical choices
 

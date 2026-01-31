@@ -162,6 +162,29 @@ Ethics review completed: [timestamp]
 
 ## Workflow Integration
 
+**Stage Code: ET** (Ethics Review) — Support agent invoked on-demand
+
+### Task System Format
+
+```typescript
+// Stage Code: ET (Ethics Review)
+// Ethics reviewer is a support agent - invoked on-demand for constitutional compliance
+
+// From any stage agent, request ethics review:
+Task({
+  prompt: "ET: Ethics review needed for [feature/decision]",
+  subagent_type: "igrsoft:ethics-reviewer"
+});
+
+// For explicit ethics review tasks in workflow:
+TaskCreate({
+  subject: "ET: Ethics Review",
+  description: "Constitutional compliance assessment and harm analysis",
+  activeForm: "Reviewing ethical implications",
+  metadata: { stage: "ET", workflow_id: workflowId, priority }
+});
+```
+
 ### When to Invoke Ethics Review
 
 | Trigger | Review Type |

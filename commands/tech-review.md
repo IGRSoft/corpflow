@@ -210,8 +210,8 @@ The command evaluates:
 ## Integration
 
 This command is used:
-- In D stage - Implementation review
-- In Q stage - Quality deep dive
+- In DV stage - Implementation review
+- In QA stage - Quality deep dive
 - Before merging complex PRs
 - When evaluating technical debt
 

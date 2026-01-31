@@ -61,12 +61,23 @@ emergency: Production login failing for 50% of users
 ### Task System Format
 
 ```typescript
-// IR Stage task states (task_id: "1" in emergency flow)
-TaskUpdate({ taskId: "1", status: "in_progress", owner: "incident-responder" });
+// Stage Code: IR (Incident Response)
+// Incident responder owns IR stage in emergency workflow: [IR]→DV→QA→RE→FN
+
+// Emergency workflow task IDs: IR=1, DV=2, QA=3, RE=4, FN=5
+TaskUpdate({ taskId: "1", status: "in_progress", owner: "incident-responder" });  // Start IR
 
 // On triage complete
-TaskUpdate({ taskId: "1", status: "completed" });
+TaskUpdate({ taskId: "1", status: "completed" });  // Complete IR
 // Write incident-report.md artifact
+
+// Standard creation for IR stage:
+TaskCreate({
+  subject: "IR: Incident Response",
+  description: "Production triage, severity assessment, and response coordination",
+  activeForm: "Responding to incident",
+  metadata: { stage: "IR", workflow_id: workflowId, priority: "high" }
+});
 ```
 
 ### Output Artifact

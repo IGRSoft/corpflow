@@ -8,7 +8,7 @@ A comprehensive 8-stage workflow system for Claude Code with Task System integra
 - **Task System Integration**: Native `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` tools
 - **Native Dependencies**: `blockedBy` arrays for explicit dependency management
 - **Cross-Session Persistence**: Tasks persist across sessions
-- **Approval Gates**: P3 approval gate for standard workflows, auto-skip for fast workflows
+- **Approval Gates**: PL3 approval gate for standard workflows, auto-skip for fast workflows
 - **Error Handling**: Retry logic (max 3 per stage) and escalation chains
 - **Workflow State Management**: Task System handles all state persistence
 - **Sub-agent Visibility**: All agents can view tasks with `TaskGet`
@@ -72,9 +72,9 @@ claude plugins add /path/to/company-workflow
 Simply prefix your task with one of these triggers:
 
 ```
-workflow: [task description]   # Standard - stops at P3 for user approval
-fworkflow: [task description]  # Fast - skips P3 approval, auto-continues
-quick: [task description]      # 3-stage workflow: P → D → Q
+workflow: [task description]   # Standard - stops at PL3 for user approval
+fworkflow: [task description]  # Fast - skips PL3 approval, auto-continues
+quick: [task description]      # 3-stage workflow: PL → DV → QA
 micro: [task description]      # Direct execution, no workflow
 ```
 
@@ -105,9 +105,9 @@ fworkflow: /code-review PR #123
 | Trigger | Stages | Use For |
 |---------|--------|---------|
 | `micro: [task]` | Direct edit | Single-file fixes, typos |
-| `quick: [task]` | P → D → Q | Small features, bug fixes |
+| `quick: [task]` | PL → DV → QA | Small features, bug fixes |
 | `workflow: [task]` | Full 8 stages | Multi-file features, architectural changes |
-| `fworkflow: [task]` | Full 8 stages (no P3) | Trusted full workflows |
+| `fworkflow: [task]` | Full 8 stages (no PL3) | Trusted full workflows |
 
 ## 8-Stage Workflow
 
@@ -128,13 +128,13 @@ When a workflow starts, tasks are created with dependencies:
 
 ```typescript
 // Create all 8 tasks
-TaskCreate({ subject: "P: Planning", description: "Define requirements", activeForm: "Planning..." });  // id: "1"
-TaskCreate({ subject: "A: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "2"
+TaskCreate({ subject: "PL: Planning", description: "Define requirements", activeForm: "Planning..." });  // id: "1"
+TaskCreate({ subject: "AR: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "2"
 // ... all 8 stages
 
 // Set up sequential dependency chain
-TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // A blocked by P
-TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // T blocked by A
+TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // AR blocked by PL
+TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // TL blocked by AR
 // ... rest of chain
 
 // Start Planning
@@ -145,12 +145,12 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 
 ```
 .context/
-├── planning.md              # P stage
-├── analyzing.md             # A stage
-├── development.md           # D stage
-├── testing.md               # Q stage
-├── documentation.md         # W stage
-├── complete.md              # F stage
+├── planning.md              # PL stage
+├── analyzing.md             # AR stage
+├── development.md           # DV stage
+├── testing.md               # QA stage
+├── documentation.md         # DC stage
+├── complete.md              # FN stage
 ├── error.md                 # Error log (if needed)
 └── images/                  # Visual assets
 ```
@@ -271,7 +271,7 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 - `estimation-methodology.md` - Complexity estimation methods
 - `milestone-workflow.md` - Milestone-based workflow tracking
 - `senior-developer-review.md` - Senior review guidelines
-- `workflow-testing-strategy.md` - Workflow-integrated testing planning for P/A stages
+- `workflow-testing-strategy.md` - Workflow-integrated testing planning for PL/AR stages
 
 ### Tools
 - `setup-task.py` - Python script for task initialization
@@ -288,7 +288,7 @@ Each stage can retry up to 3 times before escalation. Error context tracked in `
 
 ### Escalation Chain
 ```
-S → F → Q → D → T → A → P → USER
+ST → FN → QA → DV → TL → AR → PL → USER
 ```
 
 ## Command Quick Reference

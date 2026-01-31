@@ -86,7 +86,7 @@ The root orchestrator maintains global state across all workspaces:
       "workspace_path": ".workspaces/milestone-1/42",
       "status": "in_progress",
       "track": 1,
-      "current_stage": "D",
+      "current_stage": "DV",
       "started_at": "2025-01-27T12:00:00Z",
       "completed_at": null
     },
@@ -100,7 +100,7 @@ The root orchestrator maintains global state across all workspaces:
       "workspace_path": ".workspaces/milestone-1/43",
       "status": "in_progress",
       "track": 2,
-      "current_stage": "A",
+      "current_stage": "AR",
       "started_at": "2025-01-27T12:05:00Z",
       "completed_at": null
     },
@@ -190,28 +190,28 @@ Each workspace maintains its own isolated state:
     "workflow_id": "milestone-1-issue-42",
     "track": 1,
     "task_prefix": "t1",
-    "stages_enabled": ["P", "A", "D", "Q"],
-    "stages_deleted": ["T", "W", "F", "S"],
+    "stages_enabled": ["PL", "AR", "DV", "QA"],
+    "stages_deleted": ["TL", "DC", "FN", "ST"],
     "complexity_score": 18,
     "model_hint": "sonnet"
   },
 
   "execution": {
-    "current_stage": "D",
+    "current_stage": "DV",
     "stage_history": [
-      {"stage": "P", "status": "completed", "started": "...", "completed": "...", "task_id": "t1-1"},
-      {"stage": "A", "status": "completed", "started": "...", "completed": "...", "task_id": "t1-2"},
-      {"stage": "D", "status": "in_progress", "started": "...", "completed": null, "task_id": "t1-3"}
+      {"stage": "PL", "status": "completed", "started": "...", "completed": "...", "task_id": "t1-1"},
+      {"stage": "AR", "status": "completed", "started": "...", "completed": "...", "task_id": "t1-2"},
+      {"stage": "DV", "status": "in_progress", "started": "...", "completed": null, "task_id": "t1-3"}
     ],
     "retry_count": 0,
     "last_error": null
   },
 
   "task_ids": {
-    "P": "t1-1",
-    "A": "t1-2",
-    "D": "t1-3",
-    "Q": "t1-4"
+    "PL": "t1-1",
+    "AR": "t1-2",
+    "DV": "t1-3",
+    "QA": "t1-4"
   },
 
   "artifacts": {
@@ -222,7 +222,7 @@ Each workspace maintains its own isolated state:
   },
 
   "orchestrator_sync": {
-    "last_reported_stage": "D",
+    "last_reported_stage": "DV",
     "last_sync_at": "2025-01-27T12:25:00Z"
   }
 }
@@ -384,12 +384,12 @@ gh pr create \
    d. Create track-prefixed tasks (t1-1, t1-2, ... for track 1)
    e. Set up task dependencies
    f. Create and checkout git branch: feature/{issue#}-{slug}
-   g. Start P stage: TaskUpdate({ taskId: "t{track}-1", status: "in_progress" })
+   g. Start PL stage: TaskUpdate({ taskId: "t{track}-1", status: "in_progress" })
 
 4. PARALLEL EXECUTION BEGINS:
-   - Track 1: Issue #42 → P stage starts
-   - Track 2: Issue #43 → P stage starts
-   - Track 3: Issue #44 → P stage starts
+   - Track 1: Issue #42 → PL stage starts
+   - Track 2: Issue #43 → PL stage starts
+   - Track 3: Issue #44 → PL stage starts
 ```
 
 ### Monitoring Loop
@@ -408,7 +408,7 @@ ORCHESTRATOR MONITORING CYCLE:
 2. HANDLE COMPLETED TRACKS:
    If a track has completed its workflow:
    a. Mark issue as completed in orchestrator.json
-   b. PR should already be created by F stage
+   b. PR should already be created by FN stage
    c. Free up track for next pending issue
 
 3. ASSIGN PENDING ISSUES:
@@ -416,7 +416,7 @@ ORCHESTRATOR MONITORING CYCLE:
    a. Get next highest-priority pending issue
    b. Initialize workspace for issue
    c. Assign to available track
-   d. Start P stage for new workspace
+   d. Start PL stage for new workspace
 
 4. HANDLE ERRORS:
    If a workspace reports error:
@@ -426,7 +426,7 @@ ORCHESTRATOR MONITORING CYCLE:
    d. Update orchestrator.json with error state
 
 5. APPROVAL GATES (unless --auto-continue):
-   When track completes P3 (planning):
+   When track completes PL3 (planning):
    a. STOP AND ASK: "Track 1 (Issue #42) planning complete. Continue? [Y/n/skip]"
    b. Wait for user response
    c. Resume approved tracks, skip/pause others
@@ -464,11 +464,11 @@ function initializeWorkspaceTasks(issueNumber: number, track: number, milestoneN
   // Create tasks with track-prefixed IDs
   TaskCreate({
     taskId: `${prefix}-1`,
-    subject: `P: Planning - Issue #${issueNumber}`,
+    subject: `PL: Planning - Issue #${issueNumber}`,
     description: `Define requirements for issue #${issueNumber}`,
     activeForm: "Planning requirements",
     metadata: {
-      stage: "P",
+      stage: "PL",
       workflow_id: workflowId,
       issue_number: issueNumber,
       milestone_number: milestoneNumber,
@@ -477,8 +477,8 @@ function initializeWorkspaceTasks(issueNumber: number, track: number, milestoneN
     }
   });
 
-  // Create A, D, Q tasks similarly with appropriate task_ids
-  // t{track}-2 for A, t{track}-3 for D, t{track}-4 for Q, etc.
+  // Create AR, DV, QA tasks similarly with appropriate task_ids
+  // t{track}-2 for AR, t{track}-3 for DV, t{track}-4 for QA, etc.
 
   // Set up dependencies within this track
   TaskUpdate({ taskId: `${prefix}-2`, addBlockedBy: [`${prefix}-1`] });
@@ -510,7 +510,7 @@ function initializeWorkspaceTasks(issueNumber: number, track: number, milestoneN
    c. Create .context/ with images/ subdirectory
    d. Create and checkout branch: feature/{issue#}-{slug}
    e. Create track-prefixed tasks
-   f. Start P stage
+   f. Start PL stage
 
 4. PARALLEL EXECUTION:
    Each workspace executes independently:
@@ -548,7 +548,7 @@ function initializeWorkspaceTasks(issueNumber: number, track: number, milestoneN
 
 4. EXECUTE SINGLE ISSUE
    a. Create and checkout branch: feature/{ISSUE}-{slug}
-   b. Run workflow stages (P → ... → Q)
+   b. Run workflow stages (PL → ... → QA)
    c. Create PR linking to issue (Closes #ISSUE)
 
 5. COMPLETION
@@ -558,13 +558,13 @@ function initializeWorkspaceTasks(issueNumber: number, track: number, milestoneN
 
 ### Per-Issue Approval Gate
 
-**DEFAULT BEHAVIOR**: Stop after P stage for user approval.
+**DEFAULT BEHAVIOR**: Stop after PL stage for user approval.
 
 ```typescript
-// After P stage completes in a workspace:
+// After PL stage completes in a workspace:
 // STOP AND ASK: "Track 1 (Issue #42) planning complete. Continue? [Y/n/skip]"
 // Wait for user response:
-// - Y/yes → Continue to A stage
+// - Y/yes → Continue to AR stage
 // - n/no → Pause track
 // - skip → Skip issue, free track for next
 ```
@@ -579,7 +579,7 @@ Timeline with --parallel:3 on 5 issues:
 Time    Track 1 (#42, P0)    Track 2 (#43, P1)    Track 3 (#44, P1)
 ─────   ─────────────────    ─────────────────    ─────────────────
 T+0     P: Planning          P: Planning          P: Planning
-T+5     [P3 Gate]            [P3 Gate]            [P3 Gate]
+T+5     [PL3 Gate]            [PL3 Gate]            [PL3 Gate]
 T+6     A: Architecture      A: Architecture      A: Architecture
 T+10    D: Development       D: Development       D: Development
 T+20    Q: QA Testing        D: (continues)       D: (continues)
@@ -623,7 +623,7 @@ The `{base_branch}` is resolved per-issue (see Base Branch Resolution section ab
 
 - Branch created during workspace initialization
 - All work committed to workspace branch
-- PR created from workspace branch during F stage
+- PR created from workspace branch during FN stage
 - Parallel workspaces work on separate branches simultaneously
 
 ## Stage Integration
@@ -705,7 +705,7 @@ Each workspace has its own error context:
 | Transient | Retry (3x) | Monitor, no intervention |
 | Logic | Fix and retry (2x) | Monitor, no intervention |
 | Dependency | Escalate to previous stage | Pause track, alert user |
-| Requirements | Escalate to P stage | Pause track, return to planning |
+| Requirements | Escalate to PL stage | Pause track, return to planning |
 | Fatal | Mark workspace failed | Free track, alert user |
 
 ### Error State in workspace.json
@@ -713,12 +713,12 @@ Each workspace has its own error context:
 ```json
 {
   "execution": {
-    "current_stage": "D",
+    "current_stage": "DV",
     "retry_count": 2,
     "last_error": {
       "type": "logic",
       "message": "Build failed: missing dependency",
-      "stage": "D",
+      "stage": "DV",
       "timestamp": "2025-01-27T12:25:00Z",
       "resolution_attempted": "Added missing import"
     }

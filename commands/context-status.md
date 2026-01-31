@@ -70,13 +70,13 @@ Check context window utilization, analyze token distribution, and trigger compre
 | Conversation | 18,000 | 8,000 | 56% |
 
 ### Compression Actions
-1. ✓ Summarized P stage artifact (3,500 → 500 tokens)
-2. ✓ Summarized A stage artifact (6,000 → 800 tokens)
+1. ✓ Summarized PL stage artifact (3,500 → 500 tokens)
+2. ✓ Summarized AR stage artifact (6,000 → 800 tokens)
 3. ✓ Compressed conversation history (18,000 → 8,000 tokens)
 4. ✓ Referenced code paths instead of inline content
 
 ### Preserved Context
-- Current stage requirements (D stage)
+- Current stage requirements (DV stage)
 - Open questions and decisions
 - Error context (if any)
 - User preferences
@@ -97,8 +97,8 @@ Check context window utilization, analyze token distribution, and trigger compre
 ### High Priority (> 1,000 token savings)
 
 1. **Stage Artifacts: Summarize completed stages**
-   - P stage: 3,500 → ~500 tokens (85% reduction)
-   - A stage: 6,000 → ~800 tokens (87% reduction)
+   - PL stage: 3,500 → ~500 tokens (85% reduction)
+   - AR stage: 6,000 → ~800 tokens (87% reduction)
    - Method: Replace with handoff summary format
 
 2. **Conversation History: Compress older turns**

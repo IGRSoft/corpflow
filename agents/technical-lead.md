@@ -63,6 +63,8 @@ You are a technical lead specializing in implementation excellence, code quality
 
 ## Workflow Integration
 
+**Stage Code: TC** (Technical Review) — Support agent invoked on-demand
+
 ### Support Agent Pattern
 
 This agent is a **support agent**, not a workflow stage owner. Invoke on-demand:
@@ -75,13 +77,24 @@ This agent is a **support agent**, not a workflow stage owner. Invoke on-demand:
 | Q Stage | Quality concern | Code quality deep dive |
 | Any Stage | Tech debt decision | Prioritization, remediation plan |
 
-### Consultation Protocol
+### Task System Format
 
 ```typescript
-// From any stage agent, request technical lead consultation
+// Stage Code: TC (Technical Review)
+// Technical lead is a support agent - invoked on-demand for deep technical decisions
+
+// From any stage agent, request technical lead consultation:
 Task({
-  prompt: "Technical consultation needed: [specific question]",
+  prompt: "TC: Technical consultation needed: [specific question]",
   subagent_type: "igrsoft:technical-lead"
+});
+
+// For explicit technical review tasks in workflow:
+TaskCreate({
+  subject: "TC: Technical Review",
+  description: "Technology evaluation, code quality assessment, or tech debt analysis",
+  activeForm: "Conducting technical review",
+  metadata: { stage: "TC", workflow_id: workflowId, priority }
 });
 ```
 

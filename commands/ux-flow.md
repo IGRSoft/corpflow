@@ -134,10 +134,10 @@ Create or analyze user experience flows for features, tasks, or user journeys.
 ## Workflow Integration
 
 Use this command:
-- During P stage for feature planning
-- During A stage for architecture validation
-- During D stage for implementation reference
-- During Q stage for test case generation
+- During PL stage for feature planning
+- During AR stage for architecture validation
+- During DV stage for implementation reference
+- During QA stage for test case generation
 
 ## Related
 

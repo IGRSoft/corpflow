@@ -88,7 +88,7 @@ because it provides stateless verification, works well with
 microservices, and has excellent library support..."
 
 After (80 tokens):
-## A3 Decision: JWT Auth
+## AR3 Decision: JWT Auth
 - Stateless verification
 - Microservice compatible
 - Good library support
@@ -116,9 +116,9 @@ Savings: ~80% on overhead tokens
 
 | Scenario | Action |
 |----------|--------|
-| Simple bug fix | Skip A stage, minimal T stage |
-| Documentation-only | Skip D stage, minimal Q stage |
-| Hotfix | Use `quick:` workflow (P→D→Q only) |
+| Simple bug fix | Skip AR stage, minimal TL stage |
+| Documentation-only | Skip DV stage, minimal QA stage |
+| Hotfix | Use `quick:` workflow (PL→DV→QA only) |
 | Trivial change | Use `micro:` (direct execution) |
 
 **Workflow Selection Guide**:

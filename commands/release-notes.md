@@ -242,7 +242,7 @@ cc @engineering @product
 ## Integration
 
 This command is used:
-- At end of F stage - Document release
+- At end of FN stage - Document release
 - For stakeholder communication
 - For customer announcements
 

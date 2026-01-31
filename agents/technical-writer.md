@@ -113,7 +113,7 @@ In the 8-stage workflow system, the technical-writer handles:
 ```typescript
 // W Stage task states (task_id: "6")
 TaskUpdate({ taskId: "6", status: "in_progress", owner: "technical-writer" });  // Start documentation
-TaskUpdate({ taskId: "6", status: "completed" });  // Documentation complete, ready for F stage
+TaskUpdate({ taskId: "6", status: "completed" });  // Documentation complete, ready for FN stage
 ```
 
 ## Best Practices

@@ -64,12 +64,23 @@ PL → AR → TL → DV → [SR] → QA → DC → RE → FN → ST
 ### Task System Format
 
 ```typescript
-// SR Stage task states (task_id: "5" in 10-stage flow)
-TaskUpdate({ taskId: "5", status: "in_progress", owner: "security-reviewer" });
+// Stage Code: SR (Security Review)
+// Security reviewer owns SR stage in 10-stage workflow: PL→AR→TL→DV→[SR]→QA→DC→RE→FN→ST
+
+// 10-stage workflow task IDs: PL=1, AR=2, TL=3, DV=4, SR=5, QA=6, DC=7, RE=8, FN=9, ST=10
+TaskUpdate({ taskId: "5", status: "in_progress", owner: "security-reviewer" });  // Start SR
 
 // On completion
-TaskUpdate({ taskId: "5", status: "completed" });
+TaskUpdate({ taskId: "5", status: "completed" });  // Complete SR
 // Write security-review.md artifact
+
+// Standard creation for SR stage:
+TaskCreate({
+  subject: "SR: Security Review",
+  description: "OWASP compliance, vulnerability scanning, and secure coding validation",
+  activeForm: "Reviewing security",
+  metadata: { stage: "SR", workflow_id: workflowId, priority }
+});
 ```
 
 ### Output Artifact
@@ -200,7 +211,7 @@ Auto-include SR stage when feature involves:
 | Architecture security flaw | software-architector (AR stage) |
 | Requires code changes | developer (DV stage) |
 | Compliance uncertainty | ethics-reviewer |
-| External security audit needed | stakeholder (ST stage) |
+| External security audit needed | stakeholder (ST) |
 
 ## Model Usage Note
 

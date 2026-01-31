@@ -78,10 +78,10 @@ Standard format for stage transitions (target: 50-100 tokens):
 [One sentence: what the next stage should prioritize]
 ```
 
-### Example Handoff: P→A
+### Example Handoff: PL→AR
 
 ```markdown
-## Stage P Complete
+## Stage PL Complete
 
 ### Decisions Made
 - Feature scope: Dark mode for settings screen only (MVP)
@@ -167,13 +167,13 @@ Maximum tokens to pass between stages:
 
 | Handoff | Max Tokens | Focus Areas |
 |---------|------------|-------------|
-| **P→A** | 500 | Requirements, constraints, user needs |
-| **A→T** | 300 | Architecture decisions, patterns, risks |
-| **T→D** | 400 | Implementation approach, file assignments, deadlines |
-| **D→Q** | 300 | What changed, test focus areas, edge cases |
-| **Q→W** | 200 | Test results summary, documentation needs |
-| **W→F** | 200 | Doc changes, release items, changelog |
-| **F→S** | 150 | Executive summary, approval checklist |
+| **PL→AR** | 500 | Requirements, constraints, user needs |
+| **AR→TL** | 300 | Architecture decisions, patterns, risks |
+| **TL→DV** | 400 | Implementation approach, file assignments, deadlines |
+| **DV→QA** | 300 | What changed, test focus areas, edge cases |
+| **QA→DC** | 200 | Test results summary, documentation needs |
+| **DC→FN** | 200 | Doc changes, release items, changelog |
+| **FN→ST** | 150 | Executive summary, approval checklist |
 
 ### Budget Enforcement
 
@@ -238,7 +238,7 @@ when using the app at night...
 
 **After (180 tokens)**:
 ```markdown
-## P3: Planning Complete
+## PL3: Planning Complete
 
 ### Requirements
 - REQ-1: Dark mode toggle in Settings
@@ -288,7 +288,7 @@ After careful consideration, we have decided to go with Option 3...
 
 **After (200 tokens)**:
 ```markdown
-## A3: Architecture Complete
+## AR3: Architecture Complete
 
 ### Decision: ColorPalette Abstraction
 Selected: ColorPalette class with theme variants

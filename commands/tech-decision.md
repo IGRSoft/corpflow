@@ -182,7 +182,7 @@ if (!result.success) {
 | Level | Implementation | Architectural |
 | Examples | Zod, React Query, Vitest | Database choice, API design |
 | Owner | Technical Lead | Software Architect |
-| Review | D/Q stages | A stage |
+| Review | DV/QA stages | AR stage |
 
 ## TDR Categories
 
@@ -224,7 +224,7 @@ Proposed → Accepted → [Deprecated | Superseded]
 ## Integration
 
 This command is used:
-- During D stage - Document implementation choices
+- During DV stage - Document implementation choices
 - During tech debt discussions - Evaluate alternatives
 - When introducing new libraries or tools
 - For standardizing patterns across the codebase
