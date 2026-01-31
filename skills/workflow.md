@@ -1,10 +1,8 @@
 # Workflow System
 
-Single source of truth for task workflow management using the Task System for state management, UI visibility, and cross-session persistence.
+Single source of truth for task workflow management using the Task System.
 
 ## Workflow Evolution (v2.0)
-
-The workflow system supports 8-stage (backward compatible) and 10-stage (full) pipelines:
 
 ```
 8-stage:  PL → AR → TL → DV → QA → DC → FN → ST
@@ -13,966 +11,209 @@ The workflow system supports 8-stage (backward compatible) and 10-stage (full) p
                        Security Review    Release Engineering
 ```
 
-### Stage Code Legend (2-character codes)
+**Stage codes and triggers**: See `shared/stage-codes.md` and `shared/workflow-triggers.md`
 
-| Code | Stage | Agent | Model |
-|------|-------|-------|-------|
-| PL | Planning | product-manager | sonnet |
-| AR | Architecture | software-architector | opus |
-| TL | Team Lead | team-lead | sonnet |
-| DV | Development | developer | opus |
-| **SR** | **Security Review** | **security-reviewer** | **opus** |
-| QA | QA Testing | qa-engineer | haiku |
-| DC | Documentation | technical-writer | haiku |
-| **RE** | **Release Engineering** | **release-engineer** | **haiku** |
-| FN | Finalization | project-manager | sonnet |
-| ST | Stakeholder | stakeholder | sonnet |
-| **IR** | **Incident Response** | **incident-responder** | **sonnet** |
-
-### Support Agent Codes (On-Demand)
-
-| Code | Stage | Agent | Model | Invoked By |
-|------|-------|-------|-------|------------|
-| **DS** | **Design** | **designer** | **sonnet** | PL, AR, DV, QA stages |
-| **TC** | **Technical Review** | **technical-lead** | **opus** | AR, TL, DV, QA stages |
-| **ET** | **Ethics Review** | **ethics-reviewer** | **sonnet** | Any stage |
-| **PE** | **Prompt Engineering** | **prompt-engineer** | **opus** | Agent optimization |
-| **WE** | **Workflow Engineering** | **workflow-engineer** | **sonnet** | Workflow troubleshooting |
-
-Support agents don't own workflow stages but can be invoked on-demand via Task tool delegation.
-
-### Workflow Triggers
-
-| Trigger | Stages | Use Case |
-|---------|--------|----------|
-| `workflow:` | PL→AR→TL→DV→QA→DC→FN→ST | Standard (8 stages, backward compatible) |
-| `secure-workflow:` | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST | Security-critical features (10 stages) |
-| `full-workflow:` | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST | Complete 10-stage pipeline |
-| `emergency:` | IR→DV→QA→RE→FN | Hotfix/incident response (5 stages) |
-| `micro:` | Direct | Single-file changes |
-
-### Emergency Workflow
-
-For production incidents, use `emergency:` trigger:
-
-```
-emergency: [incident description]
-```
-
-Flow: `IR → DV → QA → RE → FN`
-
-The `incident-responder` agent owns the IR stage and coordinates the hotfix workflow.
-
-## Task System Tools
-
-| Tool | Purpose |
-|------|---------|
-| `TaskCreate` | Create new tasks with subject, description, activeForm, metadata |
-| `TaskUpdate` | Update status, owner, add/remove blockedBy, **delete tasks** |
-| `TaskGet` | Retrieve current task state |
-| `TaskList` | View all tasks and their statuses |
-
-### Task Deletion (Claude Code v2.1.20+)
-
-TaskUpdate supports `delete: true` to remove tasks dynamically:
-
-```typescript
-TaskUpdate({ taskId: "6", delete: true });  // Delete task 6
-```
-
-This enables dynamic workflow sizing during PL and AR stages.
-
-### Metadata Field
-
-TaskCreate supports a `metadata` field for storing workflow-specific information:
-
-```typescript
-TaskCreate({
-  subject: "PL: Planning",
-  description: "Define requirements and acceptance criteria",
-  activeForm: "Planning task requirements",
-  metadata: {
-    priority: "high",
-    stage: "PL",
-    workflow_id: "dark-mode-2025",
-    milestone_number: 1,
-    issue_number: 42
-  }
-});
-```
-
-**Standard metadata fields:**
-- `priority` - Task priority (high, medium, low)
-- `stage` - Workflow stage code (PL, AR, TL, DV, SR, QA, DC, RE, FN, ST)
-- `workflow_id` - Links task to specific workflow instance
-- `milestone_number` - GitHub milestone number (when using `--milestone`)
-- `issue_number` - GitHub issue number being worked on
-
-## Cross-Session Persistence
-
-By default, tasks persist within a session. For cross-session persistence, set `CLAUDE_CODE_TASK_LIST_ID`:
-
-```bash
-# Per-session
-CLAUDE_CODE_TASK_LIST_ID="my-project" claude
-
-# Or in .claude/settings.json
-{
-  "env": {
-    "CLAUDE_CODE_TASK_LIST_ID": "project-workflow"
-  }
-}
-```
-
-**Storage location:** `~/.claude/tasks/<list-id>/`
-
-Each task is stored as a JSON file with full state including blockedBy relationships.
-
-## Workflow Invocation
-
-### Milestone-Based Workflow (Recommended)
-
-Execute GitHub issues by priority using the milestone parameter:
-
-```bash
-/workflow --milestone:1       # Work through milestone 1 issues by priority
-/workflow --milestone:2:123   # Work on issue #123 from milestone 2 only
-```
-
-**Execution Flow:**
-1. Fetch milestone and issues from GitHub
-2. Create `.context/milestone.json` with issues sorted by priority
-3. Start working on highest priority issue (or specified issue)
-4. Create branch `feature/{issue#}-{slug}` for each issue
-5. Continue through issues until milestone complete
-
-See [Milestone Workflow](milestone-workflow.md) for full documentation.
-
-## Workspace Mode
-
-When using `--milestone:N`, the workflow operates in **workspace mode** where each ticket executes in an isolated workspace directory.
-
-### Workspace Detection
-
-Agents detect workspace context by checking task metadata:
-
-```typescript
-// Check if running in workspace mode
-const task = TaskGet({ taskId: currentTaskId });
-const workspacePath = task.metadata?.workspace_path;
-
-if (workspacePath) {
-  // Running in workspace mode - use workspace paths
-  const artifactPath = `${workspacePath}/.context/planning.md`;
-} else {
-  // Standard mode - use project root .context/
-  const artifactPath = `.context/planning.md`;
-}
-```
-
-### Workspace Metadata Fields
-
-Tasks in workspace mode include additional metadata:
-
-```typescript
-TaskCreate({
-  taskId: `t${track}-1`,  // Track-prefixed ID
-  subject: `PL: Planning - Issue #${issueNumber}`,
-  metadata: {
-    stage: "PL",
-    workflow_id: `milestone-${milestoneNumber}-issue-${issueNumber}`,
-    issue_number: issueNumber,
-    milestone_number: milestoneNumber,
-    track: track,
-    workspace_path: `.workspaces/milestone-${milestoneNumber}/${issueNumber}`
-  }
-});
-```
-
-### Path Resolution
-
-**Artifact paths** are relative to workspace when in workspace mode:
-
-| Mode | Base Path | Example |
-|------|-----------|---------|
-| Standard | `.context/` | `.context/planning.md` |
-| Workspace | `{workspace_path}/.context/` | `.workspaces/milestone-1/42/.context/planning.md` |
-
-### Task ID Namespacing
-
-Workspace mode uses **track-prefixed task IDs** to enable parallel execution:
-
-| Track | Task IDs |
-|-------|----------|
-| Track 1 | `t1-1`, `t1-2`, `t1-3`, `t1-4`, ... |
-| Track 2 | `t2-1`, `t2-2`, `t2-3`, `t2-4`, ... |
-| Track N | `t{N}-1`, `t{N}-2`, ... |
-
-### Workspace-Aware Agent Pattern
-
-Agents should use this pattern for workspace awareness:
-
-```typescript
-// Get current task and extract workspace context
-const task = TaskGet({ taskId: currentTaskId });
-const workspacePath = task.metadata?.workspace_path;
-const issueNumber = task.metadata?.issue_number;
-
-// Resolve context path
-const contextPath = workspacePath
-  ? `${workspacePath}/.context`
-  : `.context`;
-
-// Read workspace state if in workspace mode
-if (workspacePath) {
-  const workspaceJson = readFile(`${workspacePath}/workspace.json`);
-  const workspace = JSON.parse(workspaceJson);
-  // Use workspace.issue.body for requirements
-  // Use workspace.git.branch_name for branch context
-}
-
-// Write artifacts to correct location
-writeFile(`${contextPath}/planning.md`, planningContent);
-
-// Update workspace state after stage completion
-if (workspacePath) {
-  updateWorkspaceJson(workspacePath, {
-    execution: { current_stage: "AR" },
-    artifacts: { "planning.md": true }
-  });
-}
-```
-
-### Task-Based Workflow
-
-For tasks not linked to GitHub issues:
-
-```
-workflow: [task description]   # Standard workflow
-```
-
-**Example:**
-- `workflow: Add dark mode to settings` - Creates full 8-stage workflow
-
-**Auto-detection from keywords:**
-- Priority: `critical`, `urgent`, `blocker` → High; `minor`, `optional` → Low
-- Platform: `ios`, `macos`, `tvos`, `watchos`, `visionos` → Specific platform
-
-### Micro Tasks
-
-For simple changes that don't need workflow tracking:
-
-```
-micro: [task description]
-```
-
-- **No folder creation** - Work directly in codebase
-- **No task tracking** - Single task, immediate execution
-- **Use for**: Typos, small refactors, simple config changes
-
----
+**Task System integration**: See `shared/task-system.md`
 
 ## Dynamic Workflow Sizing
 
-Instead of predefined workflow tiers (quick, fast), workflows are dynamically sized during PL and AR stages using task deletion.
+Workflows are dynamically sized during PL and AR stages using task deletion.
 
-### Unified Complexity Assessment
-
-**Single Source of Truth** - Both PL and AR stages use this assessment framework:
+### Complexity Assessment
 
 | Factor | Low (0-2) | Medium (3-5) | High (6-10) |
 |--------|-----------|--------------|-------------|
 | **New patterns** | None | 1-2 new | 3+ new |
 | **Integration points** | 1-2 | 3-5 | 6+ |
-| **Cross-cutting concerns** | None | 1 area (security OR perf) | Multiple areas |
-| **Risk level** | Minimal, reversible | Moderate, testable | High, hard to rollback |
-| **Documentation needs** | Inline only | README update | ADR + API docs |
+| **Cross-cutting concerns** | None | 1 area | Multiple |
+| **Risk level** | Minimal | Moderate | High |
+| **Documentation needs** | Inline | README | ADR + API docs |
 
 **Scoring**: Sum factor scores (0-50 total)
 
-**Decision Rules**:
+### Decision Rules
 
-| Score | Complexity | PL Stage Deletes | AR Stage Deletes | Resulting Stages |
-|-------|------------|------------------|------------------|------------------|
-| 0-10 | Low | AR, TL, DC, FN, ST | — | PL → DV → QA |
-| 11-20 | Medium | TL, DC, FN, ST | (validate PL decision) | PL → AR → DV → QA |
-| 21-30 | Moderate | DC, FN, ST | (validate PL decision) | PL → AR → TL → DV → QA |
-| 31-40 | High | None | None | All 8 stages |
-| 41-50 | Critical | None | None | All 10 stages (with SR, RE) |
+| Score | Complexity | Resulting Stages |
+|-------|------------|------------------|
+| 0-10 | Low | PL → DV → QA |
+| 11-20 | Medium | PL → AR → DV → QA |
+| 21-30 | Moderate | PL → AR → TL → DV → QA |
+| 31-40 | High | All 8 stages |
+| 41-50 | Critical | All 10 stages (with SR, RE) |
 
-**Security-Sensitive Features** (auto-include SR stage regardless of score):
-- Authentication or authorization changes
-- Payment processing
-- PII (Personally Identifiable Information) handling
-- Cryptographic operations
-- External API integrations with secrets
-- File uploads or user-generated content
+**Security-sensitive features** auto-include SR stage:
+- Authentication/authorization, payment processing, PII handling
+- Cryptographic operations, external API secrets, file uploads
 
-### Model Routing by Complexity
-
-Based on complexity score, suggest model for each stage:
-
-| Complexity | P Stage | A Stage | D Stage | Q Stage | W Stage |
-|------------|---------|---------|---------|---------|---------|
-| Low (0-10) | haiku | — | sonnet | haiku | — |
-| Medium (11-20) | sonnet | sonnet | sonnet | haiku | — |
-| Moderate (21-30) | sonnet | sonnet | sonnet | sonnet | haiku |
-| High (31+) | sonnet | opus | opus | sonnet | sonnet |
-
-**Add to task metadata:**
-```typescript
-TaskCreate({
-  subject: "AR: Architecture",
-  metadata: {
-    stage: "AR",
-    complexity_score: 18,  // From unified assessment
-    model_hint: "sonnet",  // Suggested model
-    token_budget: 15000    // Soft limit
-  }
-});
-```
-
-### Safe Task Deletion Pattern
-
-**ALWAYS** use this pattern to prevent dangling blockedBy references:
+### Safe Task Deletion
 
 ```typescript
-// Safe deletion with dependency cleanup
+// Remove task and update dependents
 function deleteTaskSafely(taskId: string) {
-  // 1. Get all tasks to find dependents
   const allTasks = TaskList();
-
-  // 2. Find tasks that reference this task in blockedBy
-  const dependents = allTasks.filter(t =>
-    t.blockedBy?.includes(taskId)
-  );
-
-  // 3. Update dependents to remove reference
+  const dependents = allTasks.filter(t => t.blockedBy?.includes(taskId));
   for (const dep of dependents) {
-    TaskUpdate({
-      taskId: dep.id,
-      removeBlockedBy: [taskId]
-    });
+    TaskUpdate({ taskId: dep.id, removeBlockedBy: [taskId] });
   }
-
-  // 4. Delete the task
   TaskUpdate({ taskId, delete: true });
 }
 ```
 
-**Example: Delete T (id: 3) safely:**
-```typescript
-// D (id: 4) is blocked by T (id: 3)
-// Step 1: Remove T from D's blockedBy
-TaskUpdate({ taskId: "4", removeBlockedBy: ["3"] });
-// Step 2: D should now be blocked by A
-TaskUpdate({ taskId: "4", addBlockedBy: ["2"] });
-// Step 3: Delete T
-TaskUpdate({ taskId: "3", delete: true });
-```
+## Workspace Mode
 
-### P Stage Task Deletion
+When using `--milestone:N`, each ticket executes in an isolated workspace.
 
-Product Manager deletes stages based on LOW complexity (score 0-10):
+### Workspace Detection
 
 ```typescript
-// Complexity score: 8 (Low) - keep only PL → DV → QA
-deleteTaskSafely("2");  // Delete Architecture
-deleteTaskSafely("3");  // Delete Team Lead
-deleteTaskSafely("6");  // Delete Documentation
-deleteTaskSafely("7");  // Delete Finalization
-deleteTaskSafely("8");  // Delete Stakeholder
-
-// Update D to be blocked by P (since A is deleted)
-TaskUpdate({ taskId: "4", addBlockedBy: ["1"] });
-// Update Q to be blocked by D
-TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });
+const task = TaskGet({ taskId: currentTaskId });
+const workspacePath = task.metadata?.workspace_path;
+const contextPath = workspacePath ? `${workspacePath}/.context` : `.context`;
 ```
 
-### A Stage Task Deletion
+### Path Resolution
 
-Architect validates P's assessment and can further prune (for MODERATE complexity):
+| Mode | Base Path |
+|------|-----------|
+| Standard | `.context/` |
+| Workspace | `.workspaces/milestone-{N}/{issue#}/.context/` |
+
+### Task ID Namespacing
+
+| Track | Task IDs |
+|-------|----------|
+| Track 1 | `t1-1`, `t1-2`, ... |
+| Track N | `t{N}-1`, `t{N}-2`, ... |
+
+See `milestone-workflow.md` for full workspace documentation.
+
+## Workflow Initialization
 
 ```typescript
-// Complexity score: 25 (Moderate) - skip W, F, S
-deleteTaskSafely("6");  // Delete Documentation
-deleteTaskSafely("7");  // Delete Finalization
-deleteTaskSafely("8");  // Delete Stakeholder
-
-// Q now leads to completion (no changes to blockedBy needed)
-```
-
-**Important**: AR stage should VALIDATE PL's complexity assessment. If AR disagrees, discuss with PL before proceeding.
-
-### Workflow Sizing Guidelines
-
-| Task Complexity | Score | Stages Kept | Deleted |
-|-----------------|-------|-------------|---------|
-| Typo/micro | 0-10 | PL → DV → QA | AR, TL, DC, FN, ST |
-| Bug fix | 11-20 | PL → AR → DV → QA | TL, DC, FN, ST |
-| Small feature | 21-30 | PL → AR → TL → DV → QA | DC, FN, ST |
-| Full feature | 31+ | All 8 stages | None |
-
-## 10-Stage Workflow (Full)
-
-```
-PL → AR → TL → DV → SR → QA → DC → RE → FN → ST
-```
-
-| Code | Stage | Agent | Purpose | Artifact | Task ID |
-|------|-------|-------|---------|----------|---------|
-| PL | Planning | product-manager | Define requirements | planning.md | 1 |
-| AR | Architecture | software-architector | Design solution | analyzing.md | 2 |
-| TL | Team Lead | team-lead | Coordinate approach | coordination.md | 3 |
-| DV | Development | developer | Implement solution | development.md | 4 |
-| **SR** | **Security Review** | **security-reviewer** | **OWASP audit** | **security-review.md** | **5** |
-| QA | QA Testing | qa-engineer | Test and validate | testing.md | 6 |
-| DC | Documentation | technical-writer | Write technical docs | documentation.md | 7 |
-| **RE** | **Release Engineering** | **release-engineer** | **Version, changelog** | **release-prep.md** | **8** |
-| FN | Finalization | project-manager | Prepare release | complete.md | 9 |
-| ST | Stakeholder | stakeholder | Final approval | approval.md | 10 |
-
-## 8-Stage Workflow (Backward Compatible)
-
-```
-PL → AR → TL → DV → QA → DC → FN → ST
-```
-
-| Code | Stage | Agent | Purpose | Artifact | Task ID |
-|------|-------|-------|---------|----------|---------|
-| PL | Planning | product-manager | Define requirements | planning.md | 1 |
-| AR | Architecture | software-architector | Design solution | analyzing.md | 2 |
-| TL | Team Lead | team-lead | Coordinate approach | coordination.md | 3 |
-| DV | Development | developer | Implement solution | development.md | 4 |
-| QA | QA Testing | qa-engineer | Test and validate | testing.md | 5 |
-| DC | Documentation | technical-writer | Write technical docs | documentation.md | 6 |
-| FN | Finalization | project-manager | Prepare release | complete.md | 7 |
-| ST | Stakeholder | stakeholder | Final approval | approval.md | 8 |
-
-## Emergency Workflow (Incident Response)
-
-```
-IR → DV → QA → RE → FN
-```
-
-| Code | Stage | Agent | Purpose | Artifact | Task ID |
-|------|-------|-------|---------|----------|---------|
-| **IR** | **Incident Triage** | **incident-responder** | **Classify, coordinate** | **incident-report.md** | **1** |
-| DV | Hotfix Development | developer | Implement fix | development.md | 2 |
-| QA | Regression Testing | qa-engineer | Verify fix | testing.md | 3 |
-| RE | Hotfix Release | release-engineer | Prepare release | release-prep.md | 4 |
-| FN | Emergency Deploy | project-manager | Deploy fix | complete.md | 5 |
-
-## Task Status
-
-| Status | Meaning |
-|--------|---------|
-| `pending` | Not started, may be blocked by dependencies |
-| `in_progress` | Actively working |
-| `completed` | Done |
-
-## Task Tracking Integration (MANDATORY)
-
-### Stage Code Format
-
-**CRITICAL**: The subject field MUST use this format:
-
-```
-[STAGE]: [Description]
-```
-
-**Examples:**
-- `PL: Planning` - Planning stage
-- `AR: Architecture` - Architecture stage
-- `DV: Development` - Development stage
-- `QA: QA Testing` - QA stage
-
-### Initial State (Task Creation)
-
-```typescript
-// Create all 8 tasks with metadata
 const workflowId = "dark-mode-2025";
-const priority = "medium";
+const stages = ["PL", "AR", "TL", "DV", "QA", "DC", "FN", "ST"];
+const stageNames = { PL: "Planning", AR: "Architecture", TL: "Team Lead", DV: "Development", QA: "QA Testing", DC: "Documentation", FN: "Finalization", ST: "Stakeholder" };
 
-TaskCreate({ subject: "PL: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements", metadata: { stage: "PL", workflow_id: workflowId, priority } });  // Returns id: "1"
-TaskCreate({ subject: "AR: Architecture", description: "Design technical solution and architecture", activeForm: "Architecting solution", metadata: { stage: "AR", workflow_id: workflowId, priority } });  // Returns id: "2"
-TaskCreate({ subject: "TL: Team Lead", description: "Coordinate approach and allocate resources", activeForm: "Coordinating team", metadata: { stage: "TL", workflow_id: workflowId, priority } });  // Returns id: "3"
-TaskCreate({ subject: "DV: Development", description: "Implement solution following architecture", activeForm: "Implementing code", metadata: { stage: "DV", workflow_id: workflowId, priority } });  // Returns id: "4"
-TaskCreate({ subject: "QA: QA Testing", description: "Test and validate implementation", activeForm: "Testing solution", metadata: { stage: "QA", workflow_id: workflowId, priority } });  // Returns id: "5"
-TaskCreate({ subject: "DC: Documentation", description: "Write technical documentation", activeForm: "Writing technical documentation", metadata: { stage: "DC", workflow_id: workflowId, priority } });  // Returns id: "6"
-TaskCreate({ subject: "FN: Finalization", description: "Prepare release package", activeForm: "Finalizing release", metadata: { stage: "FN", workflow_id: workflowId, priority } });  // Returns id: "7"
-TaskCreate({ subject: "ST: Stakeholder", description: "Final stakeholder approval", activeForm: "Awaiting approval", metadata: { stage: "ST", workflow_id: workflowId, priority } });  // Returns id: "8"
+// Create tasks
+stages.forEach((code, i) => {
+  TaskCreate({
+    subject: `${code}: ${stageNames[code]}`,
+    description: `Stage ${i + 1}`,
+    activeForm: `Working on ${stageNames[code]}`,
+    metadata: { stage: code, workflow_id: workflowId, priority: "medium" }
+  });
+});
 
-// Set up sequential dependency chain
-TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // AR blocked by PL
-TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // TL blocked by AR
-TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // DV blocked by TL
-TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // QA blocked by DV
-TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // DC blocked by QA
-TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });  // FN blocked by DC
-TaskUpdate({ taskId: "8", addBlockedBy: ["7"] });  // ST blocked by FN
+// Chain dependencies: 2←1, 3←2, ..., 8←7
+for (let i = 2; i <= 8; i++) {
+  TaskUpdate({ taskId: String(i), addBlockedBy: [String(i - 1)] });
+}
 
 // Start first task
 TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ```
 
-### Stage Transitions
-
-When a stage completes, transition to the next stage:
-
-**10-Stage Flow (full-workflow / secure-workflow):**
-
-| From | To | Action |
-|------|-----|--------|
-| PL (completed) | AR (in_progress) | User approval → Architecture starts |
-| AR (completed) | TL (in_progress) | Architecture done → Team Lead starts |
-| TL (completed) | DV (in_progress) | Team Lead done → Development starts |
-| DV (completed) | SR (in_progress) | Development done → Security Review starts |
-| SR (completed) | QA (in_progress) | Security Review done → QA starts |
-| QA (completed) | DC (in_progress) | QA done → Documentation starts |
-| DC (completed) | RE (in_progress) | Documentation done → Release Engineering starts |
-| RE (completed) | FN (in_progress) | Release Engineering done → Finalization starts |
-| FN (completed) | ST (in_progress) | Finalization done → Stakeholder acceptance |
-
-**8-Stage Flow (workflow - backward compatible):**
-
-| From | To | Action |
-|------|-----|--------|
-| PL (completed) | AR (in_progress) | User approval → Architecture starts |
-| AR (completed) | TL (in_progress) | Architecture done → Team Lead starts |
-| TL (completed) | DV (in_progress) | Team Lead done → Development starts |
-| DV (completed) | QA (in_progress) | Development done → QA starts |
-| QA (completed) | DC (in_progress) | QA done → Documentation starts |
-| DC (completed) | FN (in_progress) | Documentation done → Finalization starts |
-| FN (completed) | ST (in_progress) | Finalization done → Stakeholder acceptance |
-
-```typescript
-// Complete current stage and start next
-TaskUpdate({ taskId: "1", status: "completed" });
-TaskUpdate({ taskId: "2", status: "in_progress", owner: "software-architector" });
-```
-
 ## PL3 Approval Gate
 
-### Standard Workflow - STOP at PL3
+**CRITICAL**: Standard workflow MUST stop after Planning for user approval.
 
-**CRITICAL**: After Planning completes, you MUST stop and wait for user approval.
+1. Planning completes, PL stage deletes unnecessary tasks
+2. Mark approved: `TaskUpdate({ taskId: "1", status: "completed", metadata: { p3_approved: true } })`
+3. **STOP AND ASK**: "Planning complete. Please review planning.md. Approve? [Y/n]"
+4. User approves → Continue to next stage
 
-1. Planning completes
-2. PL stage deletes unnecessary tasks (if applicable)
-3. **Mark P approved in metadata:**
-   ```typescript
-   TaskUpdate({
-     taskId: "1",
-     status: "completed",
-     metadata: { p3_approved: true, approved_at: new Date().toISOString() }
-   });
-   ```
-4. **STOP AND ASK**: "Planning complete. Please review planning.md. Approve? [Y/n]"
-5. **WAIT FOR USER RESPONSE** - Do NOT proceed automatically
-6. User approves → Continue to next stage (A or D depending on deletions)
-
-### PL3 Enforcement (AR Stage Check)
-
-AR stage MUST verify PL3 approval before proceeding:
-
-```typescript
-// AR stage startup check
-const pTask = TaskGet({ taskId: "1" });
-if (!pTask.metadata?.p3_approved) {
-  throw new Error("PL3 approval required before starting AR stage");
-}
-```
+AR stage verifies: `if (!pTask.metadata?.p3_approved) throw new Error("PL3 approval required");`
 
 ## Agent Responsibilities
 
-### Planning (PL) - product-manager
-- Create .context folder and initialize Task System
-- **If milestone context exists**: Read issue body as requirements input
-- Write planning.md with requirements, acceptance criteria
-- **Define test strategy**: what to test, existing tests to update
-- **Dynamic sizing**: Delete unnecessary stages for simple tasks
-- **PL3**: Wait for user approval before proceeding
+| Stage | Agent | Key Tasks |
+|-------|-------|-----------|
+| PL | product-manager | Requirements, acceptance criteria, test strategy, dynamic sizing |
+| AR | software-architector | Technical design, test architecture, validate PL sizing |
+| TL | team-lead | Coordinate approach, allocate resources |
+| DV | developer | Implement solution, run formatter, verify build |
+| SR | security-reviewer | OWASP audit, vulnerability scan |
+| QA | qa-engineer | Test plan, execute tests, all tests pass |
+| DC | technical-writer | Update docs, README, ARCHITECTURE |
+| RE | release-engineer | Version bump, changelog, deployment readiness |
+| FN | project-manager | Final builds, deployment |
+| ST | stakeholder | Final acceptance |
+| IR | incident-responder | Triage, classify severity, coordinate response |
 
-### Architecture (AR) - software-architector
-- Review requirements (including test strategy), design technical solution
-- **Design test architecture**: testability patterns, test doubles strategy
-- Create analyzing.md with architecture decisions and **test architecture**
-- **Dynamic sizing**: Can delete DC, FN, ST stages based on AR complexity assessment
+## Parallel Execution
 
-### Team Lead (TL) - team-lead
-- Review design, coordinate approach
-- Manage task dependencies via Task System
-- Allocate resources, define quality gates
-
-### Development (DV) - developer
-- Analyze task, create development.md with implementation plan
-- Implement solution following the plan
-- **Testing Framework**: Use Swift Testing (`@Suite`, `@Test`, `#expect`) for unit tests; XCTest for UI tests only
-- Run code formatter on modified files
-- Verify build passes, complete implementation notes
-
-### Security Review (SR) - security-reviewer [NEW]
-- Review development.md, identify security-sensitive areas
-- Execute OWASP Top 10 checklist
-- Scan for vulnerabilities, secrets, CVEs
-- Document findings in security-review.md
-- Sign off or block for critical issues
-
-### QA Testing (QA) - qa-engineer
-- Analyze requirements, discover existing tests, create test plan
-- Implement/update tests, execute test suite
-- **Framework Enforcement**: All new unit tests MUST use Swift Testing framework
-- Handle test failures (retry or escalate)
-- All tests pass, document results
-
-### Documentation (DC) - technical-writer
-- Analyze artifacts, discover documentation needing updates
-- Update code docs, README, ARCHITECTURE files
-- All documentation updated
-
-### Release Engineering (RE) - release-engineer [NEW]
-- Determine version bump (SemVer)
-- Generate changelog from conventional commits
-- Validate deployment readiness
-- Create release-prep.md with rollback plan
-- Platform-specific release preparation
-
-### Finalization (FN) - project-manager
-- Review all artifacts, run final builds/tests
-- Create complete.md
-- Execute deployment
-- Technical complete
-
-### Stakeholder (ST) - stakeholder
-- Final acceptance review
-- Task complete (terminal state)
-
-### Incident Response (IR) - incident-responder [NEW - Emergency Workflow]
-- Classify incident severity (P0-P3)
-- Assess impact and blast radius
-- Decide: hotfix, rollback, or mitigation
-- Coordinate emergency response
-- Document in incident-report.md
-
-## Error Handling
-
-### error.md File
-
-When errors occur that require escalation, create/update `error.md` in the task folder root.
-
-```markdown
-# Error Log
-
-## [STAGE] Error - [TIMESTAMP]
-
-**Stage**: [P/A/T/D/Q/W/F/S]
-**Retry Count**: [X/3]
-**Status**: [active|resolved|escalated]
-
-### Problem Description
-[Clear description of what went wrong]
-
-### Root Cause Analysis
-[Why did this happen?]
-
-### Attempted Solutions
-1. [First attempt and result]
-2. [Second attempt and result]
-3. [Third attempt and result]
-
-### Escalation Details (if escalated)
-- **Escalated To**: [Previous stage agent]
-- **Escalation Reason**: [Why escalation was needed]
-- **Required Action**: [What the escalated agent needs to do]
-```
-
-### Retry Logic
-
-Each stage can retry up to 3 times. Track retries via task metadata or error.md.
-
-### Escalation Chain
-
-After 3 retries, escalate to previous stage:
-
-**10-Stage Flow:**
-```
-ST → FN → RE → DC → QA → SR → DV → TL → AR → PL → USER
-```
-
-**8-Stage Flow (backward compatible):**
-```
-ST → FN → DC → QA → DV → TL → AR → PL → USER
-```
-
-**Emergency Flow:**
-```
-FN → RE → QA → DV → IR → USER
-```
-
-## Rule Checks
-
-Required validations before certain transitions:
-
-| Rule | Required Before |
-|------|-----------------|
-| Test Strategy | PL → AR (must be in planning.md) |
-| Test Architecture | AR → TL (must be in analyzing.md) |
-| Code Format | DV (before marking complete) |
-| Build | DV → QA |
-| Tests | QA → DC |
-| Code Review | DV → QA |
-
-## Execution Modes
-
-### Async (Default)
-Tasks run independently, no waiting.
-
-### Sync
-Tasks wait for dependencies to complete (F or S):
-
-```json
-{
-  "execution_mode": "sync",
-  "dependencies": ["20250114-database-setup"]
-}
-```
-
-## Parallel Execution Patterns
-
-### W + Q Parallel (DEFAULT)
-
-**W and Q run in parallel by default** - This saves 30-40% wall-clock time.
-
-| Condition | Dependencies | Time Savings |
-|-----------|--------------|--------------|
-| Default (parallel) | Q blocked by D, W blocked by D, F blocked by Q AND W | ~30-40% |
-| Sequential (use `--sequential`) | Q blocked by D, W blocked by Q, F blocked by W | — |
-
-### Default Parallel Dependencies (Use This)
+### W + Q Parallel (Default)
 
 ```typescript
-// DEFAULT: W and Q run in parallel after D completes
-TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // QA blocked by DV (not DC)
-TaskUpdate({ taskId: "6", addBlockedBy: ["4"] });  // DC blocked by DV (not QA)
-TaskUpdate({ taskId: "7", addBlockedBy: ["5", "6"] });  // FN blocked by BOTH QA AND DC
-
-// Both Q and W become unblocked when D completes
-// F only starts when both Q and W are completed
+TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // QA ← DV
+TaskUpdate({ taskId: "6", addBlockedBy: ["4"] });  // DC ← DV
+TaskUpdate({ taskId: "7", addBlockedBy: ["5", "6"] });  // FN ← QA AND DC
 ```
 
-### Sequential Dependencies (Only When Needed)
-
-Use `--sequential` flag when W requires test results:
-
-```typescript
-// SEQUENTIAL: W waits for Q (only use when W needs test output)
-TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // QA blocked by DV
-TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // DC blocked by QA
-TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });  // FN blocked by DC
-```
-
-### Other Parallel Opportunities
-
-| Combination | Condition | Time Savings |
-|-------------|-----------|--------------|
-| Early W during D | Core API stable | Documentation ready sooner |
-| Multi-issue milestone | See milestone-workflow.md | 40-50% for 3+ issues |
+Use `--sequential` when DC requires test results.
 
 ### Never Parallelize
 
-| Combination | Reason |
-|-------------|--------|
-| A before P | Architecture needs requirements |
-| D before T | Development needs coordination |
-| Q before D | Can't test unwritten code |
-| S before F | Approval needs release package |
+- AR before PL (needs requirements)
+- DV before TL (needs coordination)
+- QA before DV (can't test unwritten code)
+
+## Error Handling
+
+### Retry Logic
+
+Each stage: max 3 retries. Track via task metadata or error.md.
+
+### Escalation Chains
+
+```
+10-stage: ST → FN → RE → DC → QA → SR → DV → TL → AR → PL → USER
+8-stage:  ST → FN → DC → QA → DV → TL → AR → PL → USER
+Emergency: FN → RE → QA → DV → IR → USER
+```
+
+Document errors in `.context/error.md` with problem, root cause, attempted solutions.
+
+## Rule Checks
+
+| Rule | Required Before |
+|------|-----------------|
+| Test Strategy | PL → AR |
+| Test Architecture | AR → TL |
+| Code Format | DV complete |
+| Build Pass | DV → QA |
+| Tests Pass | QA → DC |
 
 ## Optimization Hooks
 
-### Pre-Stage Hooks
-
-Before starting any stage, perform these checks:
+### Pre-Stage
 
 | Check | Threshold | Action |
 |-------|-----------|--------|
 | Context size | > 50% window | Compress previous stages |
-| Budget usage | > 75% | Alert user, suggest optimizations |
-| Required artifacts | Missing | Block until available |
+| Budget usage | > 75% | Alert user |
 
-### Post-Stage Hooks
+### Post-Stage
 
-After completing any stage:
-
-| Action | Purpose |
-|--------|---------|
-| Compress context | Prepare handoff summary (50-100 tokens) |
-| Log token usage | Track cost via task metadata |
-| Validate artifacts | Ensure required files created |
-
-### Stage-Specific Optimizations
-
-| Stage | Model | Optimization |
-|-------|-------|--------------|
-| P | sonnet | Use haiku for simple formatting |
-| A | opus | Full opus for decisions, haiku for diagrams |
-| T | sonnet | Brief coordination, reference artifacts |
-| D | opus | Sonnet for implementation, opus for complex logic |
-| Q | haiku | Haiku for test execution, sonnet for test design |
-| W | haiku | Template-based documentation |
-| F | sonnet | Brief validation checks |
-| S | sonnet | Concise approval review |
-
-## Best Practices
-
-### DO
-- Create `.context/` folder before any work
-- Initialize tasks with proper dependencies at workflow start
-- Update task status at every stage transition
-- Document errors in error.md (for escalation scenarios)
-- Check dependencies before starting
-- Compress context at stage handoffs
-- Use appropriate model tier for each task
-- Reference artifacts instead of duplicating content
-
-### DON'T
-- Skip state transitions
-- Forget to update task status
-- Bypass approval gates (standard workflow)
-- Create circular dependencies
-- Ignore rule check failures
-- Include full file content in handoffs (reference paths instead)
-- Use opus for simple formatting tasks
-- Duplicate context across stages
-
-## When to Use Workflow
-
-| Use Full Workflow | Skip Workflow |
-|-------------------|---------------|
-| Multiple files/modules affected | Single-file edit |
-| New feature or multi-step fix | Typo, rename, docs tweak |
-| Security/permissions involved | One small test |
-| Cross-team coordination needed | Mechanical change |
+- Compress context for handoff (50-100 tokens)
+- Log token usage in task metadata
+- Validate artifacts created
 
 ## Constitutional Integration
 
-### Ethics Checkpoints
-
-Optional ethics review can be integrated at workflow stages:
-
-| Checkpoint | Stage | Trigger | Purpose |
-|------------|-------|---------|---------|
-| **Pre-Planning** | Before P | `--ethics-review` flag | Assess feature for harm potential |
-| **Design Review** | After A | High-risk features | Validate architecture safety |
-| **Implementation Review** | After D | Safety-critical code | Verify no harmful implementations |
-| **Pre-Release** | After F | All major releases | Final constitutional compliance check |
-
-### Adding Ethics Review to Workflow
-
-Use the `--ethics-review` flag with workflow command:
-
-```
-workflow: Add user tracking feature --ethics-review
-```
-
-This adds ethics checkpoint after PL stage:
+Use `--ethics-review` for high-risk features:
 
 ```
 PL → ET → AR → TL → DV → QA → DC → FN → ST
 ```
 
-### Ethics Stage (Optional E Stage)
+**High-risk indicators**: User tracking, algorithmic recommendations, financial transactions, content moderation, AI/ML decisions, children/vulnerable populations.
 
-For high-risk features, insert explicit ethics review:
+See `claude-constitution.md` for full principles.
 
-```typescript
-TaskCreate({ subject: "PL: Planning", description: "Define requirements", activeForm: "Planning..." });  // id: "1"
-TaskCreate({ subject: "ET: Ethics Review", description: "Constitutional compliance", activeForm: "Reviewing ethics..." });  // id: "2"
-TaskCreate({ subject: "AR: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "3"
-// ... rest of stages
+## Related
 
-TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // ET blocked by PL
-TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // AR blocked by ET
-// ... rest of chain
-```
-
-### Constitutional Escalation
-
-Ethics concerns escalate differently from technical issues:
-
-```
-Ethics Escalation Chain:
-Feature Concern → ethics-reviewer → stakeholder → USER
-
-Hard Constraint Violation → IMMEDIATE STOP → USER
-```
-
-### High-Risk Feature Indicators
-
-Features requiring mandatory ethics review:
-
-- User data collection or tracking
-- Algorithmic recommendations or personalization
-- Financial transactions or sensitive data
-- Content moderation or filtering
-- AI/ML decision-making
-- Children or vulnerable populations
-- Health or safety implications
-
-## Task System Features
-
-### Persistence
-Tasks persist across sessions, accessible via `Ctrl+T` task view.
-
-### Native Dependencies
-Use `blockedBy` arrays for explicit dependency management:
-
-```typescript
-TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // DV blocked by TL
-TaskUpdate({ taskId: "4", removeBlockedBy: ["3"] });  // Remove blocker
-```
-
-### Sub-agent Visibility
-Sub-agents can see and update the main task list:
-
-```typescript
-// Main agent creates task
-TaskCreate({ subject: "DV: Development", ... });  // id: "4"
-
-// Sub-agent (swift-pro) can see and update
-const task = TaskGet({ taskId: "4" });
-TaskUpdate({ taskId: "4", status: "in_progress", owner: "swift-pro" });
-```
-
-### Multi-Workflow Coordination
-
-Track multiple workflows with cross-workflow dependencies:
-
-```typescript
-// Workflow A
-TaskCreate({ subject: "WF-A: DV: Development", ... });  // id: "wfa-dev"
-TaskCreate({ subject: "WF-A: FN: Finalization", ... });  // id: "wfa-final"
-
-// Workflow B depends on Workflow A completing
-TaskCreate({ subject: "WF-B: PL: Planning", ... });  // id: "wfb-plan"
-TaskUpdate({ taskId: "wfb-plan", addBlockedBy: ["wfa-final"] });
-```
-
-### Task Ownership
-Use the `owner` field to track which agent owns each task:
-
-```typescript
-TaskUpdate({ taskId: "4", status: "in_progress", owner: "swift-pro" });
-```
-
-## Related Skills
-
-- `milestone-workflow.md` - GitHub milestone integration and priority-based execution
-- `cost-optimization.md` - Cost tracking and budget management
-- `context-compression.md` - Context compression techniques
-- `agent-coordination.md` - Multi-agent coordination patterns
-- `estimation-methodology.md` - Task estimation framework
-- `claude-constitution.md` - Constitutional principles and ethics framework
-- `security-review-process.md` - OWASP checklists for SR stage
-- `release-engineering.md` - Versioning and changelog for RE stage
-- `incident-response.md` - Incident triage for IR stage
+- `milestone-workflow.md` - GitHub milestone integration
+- `agent-coordination.md` - Multi-agent coordination
+- `cost-optimization.md` - Budget management
+- `context-compression.md` - Context compression

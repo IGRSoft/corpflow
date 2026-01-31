@@ -282,8 +282,5 @@ For novel ethical dilemmas or hard edge cases, escalate to human review.
 
 ## Related
 
-- `skills/claude-constitution.md` - Constitutional principles reference
-- `commands/ethics-review.md` - Ethics review command
-- `commands/harm-assessment.md` - Detailed harm analysis
-- `commands/transparency-check.md` - Honesty verification
+- `skills/shared/constitutional-base.md` - Core principles
 - `skills/agent-coordination.md` - Escalation patterns

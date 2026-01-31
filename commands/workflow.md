@@ -1,471 +1,144 @@
 # Workflow Command
 
-Initialize a new workflow task with proper folder structure, state management, and Task System integration.
+Initialize a new workflow task with proper folder structure and Task System integration.
 
 ## Usage
 
 ```
-/workflow --milestone:N              # Execute all open issues in milestone N by priority
+/workflow --milestone:N              # Execute milestone N issues by priority
 /workflow --milestone:N:ISSUE        # Execute specific issue from milestone N
 /workflow "Task Title" [options]     # Execute a custom task
 ```
 
 ## Workflow Types
 
-| Type | Stages | Trigger | Use Case |
-|------|--------|---------|----------|
-| **Standard** | PL→AR→TL→DV→QA→DC→FN→ST (8) | `/workflow` | Default, backward compatible |
-| **Secure** | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST (10) | `/workflow --secure` | Security-critical features |
-| **Full** | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST (10) | `/workflow --full` | Complete pipeline |
-| **Emergency** | IR→DV→QA→RE→FN (5) | `/emergency` | Production incidents, hotfixes |
+| Type | Stages | Trigger |
+|------|--------|---------|
+| Standard | PL→AR→TL→DV→QA→DC→FN→ST | `/workflow` |
+| Secure | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST | `--secure` |
+| Emergency | IR→DV→QA→RE→FN | `/emergency` |
+
+See `skills/shared/stage-codes.md` for stage details.
 
 ## Options
 
-- `--milestone:N` - Execute GitHub milestone N issues by priority (creates workspaces)
-- `--milestone:N:ISSUE` - Execute specific issue from milestone N (creates single workspace)
-- `--parallel:N` - Run N issues in parallel for milestones (default: 2, max: 5, creates N workspaces)
-- `--auto-continue` - Skip per-issue approval gates in milestone execution (trusted workflows only)
-- `--priority [High|Medium|Low]` - Task priority (default: Medium)
-- `--platform <apple|android|web|all>` - Target platform (default: all)
-- `--mode [async|sync]` - Execution mode (default: async)
-- `--with-design` - Include designer in planning phase (PL stage)
-- `--ethics-review` - Add ethics checkpoint after planning (recommended for high-risk features)
-- `--sequential` - Force W to wait for Q (default: W+Q run parallel)
-- `--secure` - Use 10-stage secure workflow with SR and RE stages
-- `--full` - Use 10-stage full workflow (alias for --secure)
+| Option | Effect |
+|--------|--------|
+| `--milestone:N` | Execute GitHub milestone N issues |
+| `--milestone:N:ISSUE` | Execute specific issue |
+| `--parallel:N` | N concurrent tracks (max 5) |
+| `--auto-continue` | Skip approval gates |
+| `--priority [High\|Medium\|Low]` | Task priority |
+| `--platform <apple\|android\|web\|all>` | Target platform |
+| `--with-design` | Include designer in PL |
+| `--ethics-review` | Add ET checkpoint after PL |
+| `--sequential` | DC waits for QA |
+| `--secure` / `--full` | Use 10-stage workflow |
 
 ## Examples
 
-```
-# Milestone mode (creates isolated workspaces)
-/workflow --milestone:1                               # Sequential execution, workspaces in .workspaces/milestone-1/
-/workflow --milestone:1 --parallel:3                  # 3 concurrent tracks with isolated workspaces
-/workflow --milestone:2:123                           # Single workspace for issue #123
-/workflow --milestone:1 --parallel:3 --auto-continue  # Parallel execution without approval gates
+```bash
+# Milestone mode
+/workflow --milestone:1
+/workflow --milestone:1 --parallel:3
+/workflow --milestone:2:123
 
-# Standard mode (uses .context/ at project root)
+# Standard mode
 /workflow "Add dark mode support" --with-design
-/workflow "Fix login crash" --priority High --platform apple
-/workflow "Redesign settings screen" --with-design --platform apple
-/workflow "Add user tracking analytics" --ethics-review
+/workflow "Fix login crash" --priority High
 
-# Secure/Full workflow (10-stage with SR and RE)
-/workflow "Implement OAuth authentication" --secure
-/workflow "Add payment processing" --secure --ethics-review
-/workflow "Critical infrastructure change" --full
+# Secure workflow
+/workflow "Implement OAuth" --secure
 
-# Emergency workflow (5-stage for incidents)
-/emergency "Production login failing for 50% of users"
-/emergency "Database connection timeouts" --priority High
+# Emergency
+/emergency "Production login failing"
 ```
 
 ## What This Command Does
 
-1. **Creates Context Folder**
-   - Location: `.context/`
-   - Creates `images/` subdirectory for visual assets
+1. **Creates Context Folder**: `.context/` with `images/` subdirectory
+2. **Creates planning.md Template**: Requirements, acceptance criteria, success metrics
+3. **Creates Tasks with Dependencies**: See `skills/workflow.md` for task creation pattern
+4. **Starts Planning Phase**: Prompts for requirements gathering
 
-2. **Creates planning.md Template**
-   - Problem statement section
-   - Requirements (functional and non-functional)
-   - Acceptance criteria
-   - Success metrics
-   - Constraints and dependencies
+## Milestone Mode
 
-4. **Creates Tasks with Dependencies**
-   ```typescript
-   // Create all 8 tasks with metadata
-   const workflowId = "dark-mode-2025-01-26";
-   const priority = "medium";  // from --priority option
-
-   TaskCreate({ subject: "PL: Planning", description: "Define requirements and acceptance criteria", activeForm: "Planning task requirements", metadata: { stage: "PL", workflow_id: workflowId, priority } });  // id: "1"
-   TaskCreate({ subject: "AR: Architecture", description: "Design technical solution", activeForm: "Architecting solution", metadata: { stage: "AR", workflow_id: workflowId, priority } });  // id: "2"
-   TaskCreate({ subject: "TL: Team Lead", description: "Coordinate approach and resources", activeForm: "Coordinating team", metadata: { stage: "TL", workflow_id: workflowId, priority } });  // id: "3"
-   TaskCreate({ subject: "DV: Development", description: "Implement solution", activeForm: "Implementing code", metadata: { stage: "DV", workflow_id: workflowId, priority } });  // id: "4"
-   TaskCreate({ subject: "QA: QA Testing", description: "Test and validate", activeForm: "Testing solution", metadata: { stage: "QA", workflow_id: workflowId, priority } });  // id: "5"
-   TaskCreate({ subject: "DC: Documentation", description: "Write technical docs", activeForm: "Writing documentation", metadata: { stage: "DC", workflow_id: workflowId, priority } });  // id: "6"
-   TaskCreate({ subject: "FN: Finalization", description: "Prepare release", activeForm: "Finalizing release", metadata: { stage: "FN", workflow_id: workflowId, priority } });  // id: "7"
-   TaskCreate({ subject: "ST: Stakeholder", description: "Final approval", activeForm: "Awaiting approval", metadata: { stage: "ST", workflow_id: workflowId, priority } });  // id: "8"
-
-   // Set up sequential dependency chain
-   TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // AR blocked by PL
-   TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // TL blocked by AR
-   TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // DV blocked by TL
-   TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // QA blocked by DV
-   TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // DC blocked by QA
-   TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });  // FN blocked by DC
-   TaskUpdate({ taskId: "8", addBlockedBy: ["7"] });  // ST blocked by FN
-
-   // Start Planning
-   TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
-   ```
-
-5. **Starts Planning Phase**
-   - Prompts for requirements gathering
-   - Guides through planning.md completion
-
-## Milestone Execution Mode (`--milestone`)
-
-### All Issues: `/workflow --milestone:N`
-
-Execute all open issues in milestone N, sorted by priority:
-
-1. **Fetch Milestone** - `gh api /repos/{owner}/{repo}/milestones/N`
-2. **Fetch Issues** - `gh api "/repos/{owner}/{repo}/issues?milestone=N&state=open"`
-3. **Create milestone.json** - Sort issues by priority (P0 > P1 > P2 > P3)
-4. **Execute Each Issue**:
-   - Create branch: `feature/{issue#}-{slug}`
-   - Run workflow stages (dynamically sized)
-   - Create PR with "Closes #N"
-   - Move to next issue
-
-### Single Issue: `/workflow --milestone:N:ISSUE`
-
-Execute specific issue from milestone N:
-
-1. **Fetch & Validate** - Confirm issue belongs to milestone
-2. **Create milestone.json** - Single issue context
-3. **Execute Issue** - Same workflow as above
-
-See [Milestone Workflow](../skills/milestone-workflow.md) for full documentation.
-
-## Workspace Mode (Milestone Execution)
-
-When using `--milestone:N`, the workflow operates in **workspace mode** with isolated execution per ticket.
-
-### Workspace Architecture
+When using `--milestone:N`, operates in **workspace mode**:
 
 ```
-project-root/
-├── .workspaces/                           # Workspace orchestration root
-│   ├── orchestrator.json                  # Root orchestrator state
-│   └── milestone-{N}/                     # Per-milestone container
-│       ├── {issue#}/                      # Issue workspace
-│       │   ├── .context/                  # Isolated artifacts
-│       │   │   ├── planning.md
-│       │   │   ├── analyzing.md
-│       │   │   └── ...
-│       │   ├── workspace.json             # Workspace state
-│       │   └── handoff.md                 # Compressed context
-│       └── {issue#}/                      # Another issue
-└── .context/                              # Non-milestone workflows (unchanged)
+.workspaces/
+├── orchestrator.json              # Root orchestrator state
+└── milestone-{N}/
+    └── {issue#}/
+        ├── .context/              # Isolated artifacts
+        ├── workspace.json         # Workspace state
+        └── handoff.md             # Compressed context
 ```
 
-### Orchestrator (`orchestrator.json`)
-
-The root orchestrator tracks all workspaces and manages parallel execution:
+### Orchestrator State
 
 ```json
 {
-  "version": "2.0",
-  "type": "workspace-orchestrator",
-  "milestone": { "number": 1, "title": "Sprint 1", "state": "open" },
-  "configuration": { "parallel_tracks": 3, "auto_continue": false },
-  "issues": [
-    { "number": 42, "workspace_path": ".workspaces/milestone-1/42", "status": "in_progress", "track": 1, "current_stage": "DV" },
-    { "number": 43, "workspace_path": ".workspaces/milestone-1/43", "status": "pending", "track": null }
-  ],
-  "tracks": {
-    "1": { "issue_number": 42, "status": "active", "task_prefix": "t1" },
-    "2": { "issue_number": null, "status": "available", "task_prefix": "t2" }
-  },
+  "milestone": { "number": 1, "title": "Sprint 1" },
+  "configuration": { "parallel_tracks": 3 },
+  "issues": [{ "number": 42, "status": "in_progress", "track": 1 }],
   "summary": { "total": 5, "completed": 1, "in_progress": 1, "pending": 3 }
 }
 ```
 
-### Workspace State (`workspace.json`)
-
-Each ticket has its own isolated workspace with full context:
-
-```json
-{
-  "version": "1.0",
-  "type": "ticket-workspace",
-  "issue": { "number": 42, "title": "Add login flow", "body": "...", "labels": ["enhancement"] },
-  "git": {
-    "branch_name": "feature/42-add-login-flow",
-    "branch_created": true,
-    "base_branch": "develop",
-    "base_branch_source": "develop_fallback"
-  },
-  "workflow": { "track": 1, "task_prefix": "t1", "complexity_score": 18 },
-  "execution": { "current_stage": "DV", "retry_count": 0 },
-  "task_ids": { "PL": "t1-1", "AR": "t1-2", "DV": "t1-3", "QA": "t1-4" },
-  "artifacts": { "planning.md": true, "analyzing.md": true }
-}
-```
-
-The `base_branch` is resolved per-issue: issue body field → `develop` (if exists) → `master`.
-
 ### Track-Prefixed Task IDs
 
-With parallel execution, task IDs are namespaced by track to prevent collisions:
+| Track | Task IDs |
+|-------|----------|
+| 1 | t1-1, t1-2, t1-3 |
+| 2 | t2-1, t2-2, t2-3 |
 
-| Track | Task Prefix | Example Task IDs |
-|-------|-------------|------------------|
-| 1 | t1 | t1-1, t1-2, t1-3, t1-4 |
-| 2 | t2 | t2-1, t2-2, t2-3, t2-4 |
-| 3 | t3 | t3-1, t3-2, t3-3, t3-4 |
+See `skills/milestone-workflow.md` for full workspace documentation.
 
-### Per-Workspace Git Branches
+## Dynamic Sizing
 
-Each workspace operates on its own feature branch with a per-issue resolved base branch:
+Workflows are sized during PL/AR based on complexity (0-50 score):
 
-1. **Base Resolution**: Resolve base branch (issue body → develop → master)
-2. **Initialization**: Branch `feature/{issue#}-{slug}` created from resolved base branch
-3. **Development**: All commits go to the workspace's branch
-4. **Completion**: PR created targeting the resolved base branch with "Closes #{issue}"
-5. **Parallel**: Orchestrator coordinates branch switches for concurrent work
+| Score | Stages |
+|-------|--------|
+| 0-10 | PL → DV → QA |
+| 11-20 | PL → AR → DV → QA |
+| 21-30 | PL → AR → TL → DV → QA |
+| 31+ | All stages |
 
-See [Milestone Workflow](../skills/milestone-workflow.md#base-branch-resolution) for full resolution logic.
-
-### Workspace Initialization Flow
-
-```
-/workflow --milestone:1 --parallel:3
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 1. Create .workspaces/milestone-1/ directory                │
-│ 2. Fetch milestone + issues from GitHub                     │
-│ 3. Create orchestrator.json with sorted issues              │
-│ 4. For first N issues (N = parallel_tracks):                │
-│    - Create workspace directory                             │
-│    - Resolve base branch (issue body → develop → master)    │
-│    - Create workspace.json with issue context + base_branch │
-│    - Create git branch feature/{issue#}-{slug} from base    │
-│    - Create track-prefixed tasks (t1-1, t2-1, etc.)        │
-│    - Start PL stage                                         │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Orchestrator Monitoring
-
-The orchestrator continuously monitors workspace status:
-
-1. **Check Active Tracks**: Poll each workspace's current stage
-2. **Handle Completion**: Free track, assign next pending issue
-3. **Handle Errors**: Retry within workspace or escalate
-4. **Enforce Gates**: Pause at PL3 unless `--auto-continue`
-
-### Workspace Cleanup
-
-After milestone completion:
-
-```bash
-# Archive completed workspaces
-mv .workspaces/milestone-1 .workspaces/archive/milestone-1-$(date +%Y%m%d)
-
-# Or remove entirely
-rm -rf .workspaces/milestone-1
-```
-
-### Checking Workspace Status
-
-View orchestrator state:
-```bash
-cat .workspaces/orchestrator.json | jq '.summary'
-# { "total": 5, "completed": 2, "in_progress": 2, "pending": 1 }
-```
-
-View specific workspace:
-```bash
-cat .workspaces/milestone-1/42/workspace.json | jq '.execution'
-# { "current_stage": "DV", "retry_count": 0 }
-```
-
-## Dynamic Workflow Sizing
-
-Workflows are dynamically sized during PL and AR stages using the **Unified Complexity Assessment**.
-
-**See**: `skills/workflow.md § Dynamic Workflow Sizing` for:
-- Full complexity assessment table (5 factors, 0-50 scoring)
-- Decision rules by score range
-- Safe task deletion pattern
-- Model routing by complexity
-
-### Quick Reference
-
-| Complexity Score | Stages Kept | P Stage Deletes |
-|------------------|-------------|-----------------|
-| 0-10 (Low) | PL → DV → QA | AR, TL, DC, FN, ST |
-| 11-20 (Medium) | PL → AR → DV → QA | TL, DC, FN, ST |
-| 21-30 (Moderate) | PL → AR → TL → DV → QA | DC, FN, ST |
-| 31+ (High) | All 8 stages | None |
+See `skills/workflow.md` for complexity assessment.
 
 ## Workflow Modes
 
-### Standard Workflow
-- Full 8-stage process: PL → AR → TL → DV → QA → DC → FN → ST
-- Stops at PL3 for user approval before continuing
-- PL and AR stages dynamically delete unnecessary stages
-- Use for: Major features, architectural changes, security-sensitive work
+### Standard (`/workflow`)
+- Full 8-stage process
+- Stops at PL3 for user approval
+- Dynamic stage deletion based on complexity
 
-### Design-Integrated Workflow (`--with-design`)
-- Adds designer to PL stage for UX/UI planning input
-- Designer provides: user flow analysis, component requirements, accessibility considerations
-- Use for: UI features, user-facing changes, design system updates
+### With Design (`--with-design`)
+- Designer joins PL stage for UX/UI input
+- Adds design specifications to artifacts
 
-When `--with-design` is enabled:
-
-1. **P Stage Enhanced** - Product Manager + Designer collaborate:
-   - Product Manager defines requirements and acceptance criteria
-   - Designer adds UX requirements, wireframes, component needs
-   - Combined output in planning.md with design section
-
-2. **A Stage Design Alignment** - Architecture includes:
-   - UI component architecture review
-   - Design system compatibility check
-   - Animation/interaction feasibility
-
-3. **D Stage Design Support** - Developer gets:
-   - Design specifications
-   - Asset requirements
-   - Interaction behavior definitions
-
-4. **Q Stage Design QA** - Testing includes:
-   - Visual regression criteria
-   - Accessibility compliance checks
-   - Cross-platform consistency
-
-### Ethics-Review Workflow (`--ethics-review`)
-
-For features with potential ethical implications, add an ethics checkpoint:
-
+### Ethics Review (`--ethics-review`)
+Inserts ET stage after PL:
 ```
 PL → ET → AR → TL → DV → QA → DC → FN → ST
 ```
 
-When `--ethics-review` is enabled:
+Recommended for: user tracking, algorithmic recommendations, financial transactions, content moderation.
 
-1. **Ethics Stage (E) Inserted** after P approval:
-   - Ethics-reviewer agent evaluates constitutional compliance
-   - Checks for potential user harm, manipulation, privacy concerns
-   - Reviews against Claude's constitutional principles
-
-2. **Automatic Ethics Triggers** - Even without flag, ethics review is recommended for:
-   - User data collection or tracking
-   - Algorithmic recommendations
-   - Financial transactions
-   - Content moderation
-   - AI/ML decision-making
-   - Children or vulnerable populations
-
-3. **Ethics Review Output**:
-   - Constitutional compliance assessment
-   - Identified concerns and risks
-   - Mitigation recommendations
-   - Go/no-go recommendation
-
-```typescript
-// With ethics review: PL → ET → AR → TL → DV → QA → DC → FN → ST
-TaskCreate({ subject: "PL: Planning", description: "Define requirements", activeForm: "Planning..." });  // id: "1"
-TaskCreate({ subject: "ET: Ethics Review", description: "Constitutional compliance", activeForm: "Reviewing ethics..." });  // id: "2"
-TaskCreate({ subject: "AR: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "3"
-// ... rest of stages with shifted IDs
-
-TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // ET blocked by PL
-TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // AR blocked by ET
-// ... rest of dependency chain
-```
-
-### Secure/Full Workflow (`--secure`, `--full`)
-
-For security-critical features requiring comprehensive security review and release engineering:
-
+### Secure (`--secure`, `--full`)
+10-stage with SR (Security Review) and RE (Release Engineering):
 ```
 PL → AR → TL → DV → SR → QA → DC → RE → FN → ST
 ```
 
-When `--secure` or `--full` is enabled:
+Use for: authentication, payments, PII, cryptography, external API secrets.
 
-1. **SR Stage Inserted** after Development:
-   - Security-reviewer performs OWASP compliance validation
-   - Vulnerability scanning and secure coding review
-   - Must pass before QA can begin
-
-2. **RE Stage Inserted** after Documentation:
-   - Release-engineer handles semantic versioning
-   - Changelog generation and deployment readiness
-   - Platform-specific release preparation
-
-3. **Automatic Security Triggers** - Use `--secure` when feature involves:
-   - Authentication or authorization
-   - Payment processing or financial data
-   - PII handling or sensitive data
-   - Cryptographic operations
-   - External API integrations with secrets
-   - File uploads or user-generated content
-
-```typescript
-// 10-stage secure workflow: PL → AR → TL → DV → SR → QA → DC → RE → FN → ST
-TaskCreate({ subject: "PL: Planning", description: "Define requirements", activeForm: "Planning..." });      // id: "1"
-TaskCreate({ subject: "AR: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "2"
-TaskCreate({ subject: "TL: Team Lead", description: "Coordinate approach", activeForm: "Coordinating..." }); // id: "3"
-TaskCreate({ subject: "DV: Development", description: "Implement solution", activeForm: "Implementing..." }); // id: "4"
-TaskCreate({ subject: "SR: Security Review", description: "OWASP compliance", activeForm: "Reviewing security..." }); // id: "5"
-TaskCreate({ subject: "QA: QA Testing", description: "Test and validate", activeForm: "Testing..." });       // id: "6"
-TaskCreate({ subject: "DC: Documentation", description: "Write technical docs", activeForm: "Writing docs..." }); // id: "7"
-TaskCreate({ subject: "RE: Release Engineering", description: "Version and changelog", activeForm: "Preparing release..." }); // id: "8"
-TaskCreate({ subject: "FN: Finalization", description: "Deploy release", activeForm: "Finalizing..." });     // id: "9"
-TaskCreate({ subject: "ST: Stakeholder", description: "Final approval", activeForm: "Awaiting approval..." }); // id: "10"
-
-// Dependency chain with SR after DV, RE after DC
-TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });   // AR blocked by PL
-TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });   // TL blocked by AR
-TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });   // DV blocked by TL
-TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });   // SR blocked by DV
-TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });   // QA blocked by SR
-TaskUpdate({ taskId: "7", addBlockedBy: ["6"] });   // DC blocked by QA
-TaskUpdate({ taskId: "8", addBlockedBy: ["7"] });   // RE blocked by DC
-TaskUpdate({ taskId: "9", addBlockedBy: ["8"] });   // FN blocked by RE
-TaskUpdate({ taskId: "10", addBlockedBy: ["9"] });  // ST blocked by FN
-```
-
-### Emergency Workflow (`/emergency`)
-
-For production incidents and hotfixes requiring rapid response:
-
+### Emergency (`/emergency`)
+5-stage rapid response:
 ```
 IR → DV → QA → RE → FN
-```
-
-**Usage:**
-```
-/emergency "Production login failing for 50% of users"
-/emergency "Database connection timeouts" --priority High
-```
-
-When emergency workflow is triggered:
-
-1. **IR Stage First** - Incident-responder triages:
-   - Severity classification (P0-P3)
-   - Impact assessment and blast radius
-   - Decide: hotfix, rollback, or mitigation
-   - Coordinate response
-
-2. **Abbreviated Pipeline** - Skip planning and architecture:
-   - DV: Implement fix directly
-   - QA: Validate fix (minimal regression)
-   - RE: Prepare emergency release
-   - FN: Deploy hotfix
-
-```typescript
-// 5-stage emergency workflow: IR → DV → QA → RE → FN
-TaskCreate({ subject: "IR: Incident Response", description: "Triage and coordinate", activeForm: "Responding to incident...", metadata: { priority: "high" } }); // id: "1"
-TaskCreate({ subject: "DV: Development", description: "Implement hotfix", activeForm: "Fixing..." });  // id: "2"
-TaskCreate({ subject: "QA: QA Testing", description: "Validate fix", activeForm: "Testing..." });      // id: "3"
-TaskCreate({ subject: "RE: Release Engineering", description: "Emergency release", activeForm: "Releasing..." }); // id: "4"
-TaskCreate({ subject: "FN: Finalization", description: "Deploy hotfix", activeForm: "Deploying..." }); // id: "5"
-
-// Dependency chain
-TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // DV blocked by IR
-TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // QA blocked by DV
-TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // RE blocked by QA
-TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // FN blocked by RE
-
-// Start immediately
-TaskUpdate({ taskId: "1", status: "in_progress", owner: "incident-responder" });
 ```
 
 ## Output
@@ -482,24 +155,14 @@ I've initiated the workflow. Starting planning...
 
 ## Next Steps
 
-After initialization:
-1. Complete planning.md with requirements and acceptance criteria
-2. PL stage may delete unnecessary stages (dynamic sizing)
+1. Complete planning.md with requirements
+2. PL stage may delete unnecessary stages
 3. PL3 approval gate - wait for user approval
-4. Continue through remaining stages (AR stage may further prune)
+4. Continue through remaining stages
 
 ## Related
 
-- [Workflow System](../skills/workflow.md) - Complete workflow documentation
-- [Milestone Workflow](../skills/milestone-workflow.md) - GitHub milestone integration
-- [Task Folder Organization](../skills/task-folder-organization.md) - Folder structure
-- [workflow-engineer](../agents/workflow-engineer.md) - Troubleshooting
-- [designer](../agents/designer.md) - Designer agent for `--with-design` workflows
-- [ethics-reviewer](../agents/ethics-reviewer.md) - Ethics reviewer for `--ethics-review` workflows
-- [ethics-review](ethics-review.md) - Standalone ethics review command
-- [harm-assessment](harm-assessment.md) - Harm assessment command
-- [design-review](design-review.md) - Design review command
-- [design-specs](design-specs.md) - Generate design specifications
-- [ux-flow](ux-flow.md) - Create user experience flows
-- [a11y-audit](a11y-audit.md) - Accessibility audit command
-- [claude-constitution](../skills/claude-constitution.md) - Constitutional principles
+- `skills/workflow.md` - Complete workflow documentation
+- `skills/milestone-workflow.md` - GitHub milestone integration
+- `skills/task-folder-organization.md` - Folder structure
+- `agents/workflow-engineer.md` - Troubleshooting
