@@ -104,9 +104,9 @@ For each issue in priority order:
 # 1. Create workspace
 mkdir -p .workspaces/milestone-{N}/{issue#}/.context
 
-# 2. Create branch FROM BASE (not from current)
-git checkout develop
-git checkout -b feature/{issue#}-{slug}
+# 2. Create branch FROM BASE (using remote to avoid worktree conflicts)
+git fetch origin develop
+git checkout -b feature/{issue#}-{slug} origin/develop
 
 # 3. Update orchestrator.json
 # Set issue status to "in_progress"
@@ -148,8 +148,8 @@ gh pr create --base develop --title "#{issue} {title}" --body "Closes #{issue}"
     │   └─→ Update orchestrator: completed
     │
     └─→ Issue #26 (P1)
-        ├─→ git checkout develop
-        ├─→ git checkout -b feature/26-font-family
+        ├─→ git fetch origin develop
+        ├─→ git checkout -b feature/26-font-family origin/develop
         ├─→ PL → AR → TL → DV → QA → DC → FN → ST
         ├─→ git push && gh pr create
         └─→ Update orchestrator: completed

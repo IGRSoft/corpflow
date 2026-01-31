@@ -130,9 +130,9 @@ For each issue in priority order:
 # Create isolated workspace
 mkdir -p .workspaces/milestone-{N}/{issue#}/.context
 
-# CRITICAL: Create branch from base (not current branch)
-git checkout develop  # or base branch from issue body
-git checkout -b feature/{issue#}-{slug}
+# CRITICAL: Create branch from base (using remote to avoid worktree conflicts)
+git fetch origin develop  # or base branch from issue body
+git checkout -b feature/{issue#}-{slug} origin/develop
 ```
 
 ### 5. Initialize Orchestrator
