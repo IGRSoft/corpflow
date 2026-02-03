@@ -25,6 +25,7 @@ Conduct a comprehensive design review for screens, components, or features using
 ## What This Command Does
 
 1. **Gathers Design Context**
+   - Reviews generated SVG mockups in `.context/images/mockup-*.svg`
    - Identifies target screens, components, or features
    - Reviews existing design patterns and system usage
    - Checks platform-specific considerations

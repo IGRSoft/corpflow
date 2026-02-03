@@ -345,19 +345,34 @@ When design detection threshold is met:
      1. UX Assessment - User impact and flow analysis
      2. Design Scope - Component needs, pattern reuse
      3. Technical Design - Platform patterns, accessibility
-     4. Effort Estimate - Design sprints needed`
+     4. SVG Mockups - Generate wireframe-style visual mockups:
+        - Create 1-2 mockups for key screens and states
+        - Save to .context/images/ using mockup-[feature]-[screen]-[variant].svg naming
+        - Include critical states: default, error, empty, loading
+        - Use design tokens and component patterns from designer.md § SVG Mockup Generation
+     5. Effort Estimate - Design sprints needed`
    });
    ```
 
-2. **Combined Output**: planning.md includes Design Requirements section:
+2. **Combined Output**: planning.md includes Design Requirements section with mockup references:
    ```markdown
    ## Design Requirements
+
+   ### Visual Mockups
+   Generated SVG mockups (see `.context/images/`):
+   - **`mockup-[feature]-[screen].svg`** - [Description]
+   - **`mockup-[feature]-[screen]-error.svg`** - [Error state]
+
    ### User Experience
-   - [UX considerations]
+   - [UX considerations referencing mockups]
+
    ### UI Components
-   - [Component needs]
+   Components identified from mockups:
+   - [Component from design system]
+   - [New component needed]
+
    ### Accessibility
-   - [A11y requirements]
+   - [A11y requirements for mockup elements]
    ```
 
 ## Constitutional Alignment

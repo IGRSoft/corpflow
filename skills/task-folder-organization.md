@@ -113,6 +113,39 @@ See [Milestone Workflow](milestone-workflow.md) for full schema.
 
 The only subdirectory - contains visual references, mockups, screenshots, and user-attached images.
 
+### Agent-Generated SVG Mockups
+
+The Designer agent generates wireframe-style SVG mockups for UI-related tasks and saves them to `.context/images/`.
+
+**Workflow:**
+1. Product Manager detects UI work (design score >= 5)
+2. Product Manager invokes Designer with SVG mockup request
+3. Designer generates 1-2 wireframe-style SVG mockups
+4. Designer saves to `.context/images/mockup-*.svg`
+5. Designer references mockups in design documentation
+6. Downstream stages use mockups: AR reviews, DV implements, QA validates
+
+**SVG vs User-Attached Images:**
+
+| Type | Source | Pattern | Format |
+|------|--------|---------|--------|
+| SVG Mockups | Designer agent | `mockup-*.svg` | SVG |
+| Screenshots | User | `screenshot-*.png` | PNG/JPG |
+| Diagrams | User | `diagram-*.png` | PNG/SVG |
+
+**Naming**: `mockup-[feature]-[screen]-[variant].svg`
+
+```
+.context/images/
+├── mockup-login-screen.svg               # Designer: default state
+├── mockup-login-screen-error.svg         # Designer: error state
+├── mockup-profile-edit-form.svg          # Designer: main screen
+├── screenshot-bug-report.png             # User-attached
+└── diagram-architecture.png              # User-attached
+```
+
+**Workspace isolation**: Each workspace has its own `.context/images/` with isolated mockups.
+
 ## User-Attached Images
 
 When a user attaches images during a workflow task, copy them to `.context/images/`.
@@ -191,6 +224,25 @@ All markdown files should include:
 ├── approval.md
 └── images/
     └── feature-mockup.png
+```
+
+### Example 2b: Feature with Designer-Generated SVG Mockups
+
+```
+.context/
+├── planning.md                               # References mockups in Design Requirements
+├── analyzing.md                              # Reviews mockup feasibility
+├── coordination.md
+├── development.md                            # Uses mockups as implementation guide
+├── testing.md                                # Validates against mockups
+├── documentation.md
+├── complete.md
+├── approval.md
+└── images/
+    ├── mockup-user-profile-main.svg          # Designer: main profile screen
+    ├── mockup-user-profile-edit.svg          # Designer: edit mode
+    ├── mockup-user-profile-edit-error.svg    # Designer: validation errors
+    └── mockup-user-profile-success.svg       # Designer: save confirmation
 ```
 
 ### Example 3: Security-Critical Feature (10-stage)
