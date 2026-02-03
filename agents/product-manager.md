@@ -311,23 +311,45 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });  /
 TaskUpdate({ taskId: "1", status: "completed" });  // Planning complete, wait for PL3 approval
 ```
 
-### P Stage with Design (`--with-design`)
-When design integration is enabled, Product Manager collaborates with Designer:
+### P Stage: Automatic Design Detection
 
-1. **Requirements Definition** (Product Manager)
-   - Problem statement and user needs
-   - Functional and non-functional requirements
-   - Acceptance criteria and success metrics
+Product Manager detects design-related tasks and invokes Designer when appropriate.
 
-2. **Design Input** (Designer - via Task tool)
-   - UX requirements and user flow analysis
-   - Component and design system requirements
-   - Accessibility considerations
-   - Wireframe concepts (if needed)
+#### Design Detection Criteria
 
-3. **Combined Output**
-   - planning.md includes both product and design requirements
-   - Design section added to planning.md template:
+Analyze task description for design indicators with weighted scoring:
+
+| Category | Weight | Keywords |
+|----------|--------|----------|
+| UI Components | 2 | button, form, screen, layout, modal, dialog, menu, navigation, tab, card, list, table, grid |
+| User Experience | 3 | user flow, accessibility, a11y, usability, interaction, gesture, wireframe, prototype |
+| Visual Design | 2 | color, theme, dark mode, typography, font, icon, animation, responsive |
+| Platform UI | 2 | swiftui, uikit, view, component, widget, navigationstack, tabview |
+| High-Confidence | 5 | "redesign", "new ui", "ui/ux", "design system", "user interface", "visual refresh" |
+
+**Negative Indicators** (-3 each): backend, api only, database, migration, infrastructure, no ui
+
+**Threshold**: Score >= 5 triggers Designer invocation
+
+#### Designer Invocation
+
+When design detection threshold is met:
+
+1. **Invoke Designer** via Task tool:
+   ```typescript
+   Task({
+     subagent_type: "igrsoft:designer",
+     prompt: `DS: Analyze design requirements for: "${taskDescription}"
+
+     Provide:
+     1. UX Assessment - User impact and flow analysis
+     2. Design Scope - Component needs, pattern reuse
+     3. Technical Design - Platform patterns, accessibility
+     4. Effort Estimate - Design sprints needed`
+   });
+   ```
+
+2. **Combined Output**: planning.md includes Design Requirements section:
    ```markdown
    ## Design Requirements
    ### User Experience

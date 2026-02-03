@@ -30,7 +30,6 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--auto-continue` | Skip approval gates |
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|all>` | Target platform |
-| `--with-design` | Include designer in PL |
 | `--ethics-review` | Add ET checkpoint after PL |
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 10-stage workflow |
@@ -44,7 +43,7 @@ See `skills/shared/stage-codes.md` for stage details.
 /workflow --milestone:2:123
 
 # Standard mode
-/workflow "Add dark mode support" --with-design
+/workflow "Add dark mode support"
 /workflow "Fix login crash" --priority High
 
 # Secure workflow
@@ -184,9 +183,15 @@ See `skills/workflow.md` for complexity assessment.
 - Stops at PL3 for user approval
 - Dynamic stage deletion based on complexity
 
-### With Design (`--with-design`)
-- Designer joins PL stage for UX/UI input
-- Adds design specifications to artifacts
+### Design Auto-Detection
+
+Designer automatically joins PL stage when task description contains UI/UX indicators:
+- **UI keywords**: button, form, screen, modal, navigation, menu, layout
+- **UX terms**: user flow, accessibility, usability, gesture
+- **Visual design**: color, theme, dark mode, typography, animation
+- **High-confidence**: "redesign", "new UI", "UI/UX", "design system"
+
+No flag required - design collaboration is context-driven.
 
 ### Ethics Review (`--ethics-review`)
 Inserts ET stage after PL:

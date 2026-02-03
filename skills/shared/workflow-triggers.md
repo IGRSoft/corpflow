@@ -19,7 +19,6 @@
 | `--parallel:N` | N concurrent tracks (max 5) |
 | `--secure` | Use 10-stage with SR, RE |
 | `--ethics-review` | Add ET checkpoint after PL |
-| `--with-design` | Include designer in PL |
 | `--sequential` | DC waits for QA (default: parallel) |
 
 ## Auto-Detection
@@ -27,3 +26,4 @@
 From task keywords:
 - **Priority**: `critical`, `urgent`, `blocker` → High; `minor`, `optional` → Low
 - **Platform**: `ios`, `macos`, `tvos`, `watchos`, `visionos` → Specific platform
+- **Design**: UI/UX keywords → Designer joins PL stage automatically
