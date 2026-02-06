@@ -1,3 +1,9 @@
+---
+name: api-docs
+description: Generate or update API documentation from code, including endpoints, schemas, and examples
+model: sonnet
+---
+
 # API Documentation Command
 
 Generate or update API documentation from code, including endpoints, schemas, and examples.
@@ -261,7 +267,7 @@ Authenticate user with email and password.
     "name": "John Doe"
   },
   "token": "eyJhbG...",
-  "expiresAt": "2025-01-11T10:00:00Z"
+  "expiresAt": "[ISO-8601-datetime]"
 }
 ```
 

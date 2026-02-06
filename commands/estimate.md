@@ -1,3 +1,9 @@
+---
+name: estimate
+description: Estimate task complexity, effort, and resources to determine appropriate workflow tier
+model: sonnet
+---
+
 # Estimate Command
 
 Estimate task complexity, effort, and resources before starting a workflow. Helps determine the appropriate workflow tier and provides sizing guidance.
@@ -17,10 +23,10 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 - `--stages` - 3-stage breakdown (Required, Nice-to-have, v1.1)
 - `--sequential` - Force sequential stage planning (no parallel)
 - `--compare` - Compare multiple approaches
-- `--export` - Generate 8 CSV files for Google Sheets
+- `--export` - Generate CSV files for Google Sheets (see `/export-estimate` for full 13-file export)
 - `--platform <apple|android|web|all>` - Platform-specific templates (default: all)
 - `--multiplier <hours>` - Override SP multiplier (default: 6)
-- `--ai-rate <amount>` - AI agent monthly rate (default: $200)
+- `--ai-rate <amount>` - AI agent monthly rate (default: current billing rate)
 - `--dev-rate <amount>` - Developer hourly rate (default: $1)
 
 ## Examples

@@ -1,3 +1,9 @@
+---
+name: senior-review
+description: Technical review of estimates by platform specialist
+model: sonnet
+---
+
 # Senior Review Command
 
 Technical review of estimates by platform specialist.

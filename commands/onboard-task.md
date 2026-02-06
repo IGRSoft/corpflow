@@ -1,3 +1,9 @@
+---
+name: onboard-task
+description: Create onboarding documentation for a task or feature area to help new team members ramp up
+model: sonnet
+---
+
 # Onboard Task Command
 
 Create onboarding documentation for a task or feature area to help new team members ramp up quickly.

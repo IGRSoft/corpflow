@@ -1,3 +1,9 @@
+---
+name: standup
+description: Generate standup summary from recent work, git activity, and workflow progress
+model: haiku
+---
+
 # Standup Command
 
 Generate standup summary from recent work, git activity, and workflow progress.
@@ -30,7 +36,7 @@ Generate standup summary from recent work, git activity, and workflow progress.
 
 ### Individual Standup
 ```markdown
-# Daily Standup - January 10, 2025
+# Daily Standup - [Date]
 
 ## Yesterday
 - ✅ Completed SSO Okta integration (PR #456 merged)
@@ -51,7 +57,7 @@ Generate standup summary from recent work, git activity, and workflow progress.
 
 ### Team Standup
 ```markdown
-# Team Standup - January 10, 2025
+# Team Standup - [Date]
 
 ## Summary
 | Member | Progress | Blockers |
@@ -91,7 +97,7 @@ Generate standup summary from recent work, git activity, and workflow progress.
 | Azure credentials | DevOps | Provision test tenant | Today |
 
 ## Sprint Progress
-- **Sprint 2025-01**: Day 3 of 10
+- **Sprint [Current Sprint]**: Day 3 of 10
 - **Committed**: 38 points
 - **Completed**: 15 points (39%)
 - **On Track**: ✅ Yes

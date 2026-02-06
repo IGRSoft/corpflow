@@ -1,11 +1,14 @@
 ---
 name: harm-assessment
 description: Evaluate potential harms of features, decisions, or code using constitutional harm avoidance framework
+model: sonnet
 ---
 
 # /harm-assessment
 
 Comprehensive evaluation of potential harms using Claude's constitutional harm avoidance framework, including cost-benefit analysis, stakeholder impact, and mitigation recommendations.
+
+> **Broad screening first**: For general ethics screening, use `/ethics-review` first. This command provides a specialized deep-dive into harm analysis.
 
 ## Usage
 

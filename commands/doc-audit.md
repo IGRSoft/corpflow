@@ -1,3 +1,9 @@
+---
+name: doc-audit
+description: Audit documentation for gaps, outdated content, and quality issues
+model: haiku
+---
+
 # Documentation Audit Command
 
 Audit documentation for gaps, outdated content, and quality issues.
@@ -166,17 +172,17 @@ The following can be auto-fixed with `--fix`:
 
 | Month | Score | Change |
 |-------|-------|--------|
-| Jan 2025 | 65% | - |
-| Dec 2024 | 62% | +3% |
-| Nov 2024 | 58% | +4% |
-| Oct 2024 | 55% | +3% |
+| [Month] | 65% | - |
+| [Month-1] | 62% | +3% |
+| [Month-2] | 58% | +4% |
+| [Month-3] | 55% | +3% |
 
 ---
 
 ## Next Review
 
 Schedule: Monthly
-Next: February 10, 2025
+Next: [Next Review Date]
 Owner: Technical Writer
 ```
 

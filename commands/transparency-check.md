@@ -1,6 +1,7 @@
 ---
 name: transparency-check
 description: Verify honesty and transparency properties in outputs, documentation, and code
+model: sonnet
 ---
 
 # /transparency-check

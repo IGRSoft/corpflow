@@ -1,3 +1,9 @@
+---
+name: tech-debt
+description: Analyze, document, and prioritize technical debt in the codebase
+model: sonnet
+---
+
 # Technical Debt Command
 
 Analyze, document, and prioritize technical debt in the codebase.

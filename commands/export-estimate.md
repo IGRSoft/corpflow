@@ -1,3 +1,9 @@
+---
+name: export-estimate
+description: Generate CSV files from estimation data for Google Sheets import
+model: haiku
+---
+
 # Export Estimate Command
 
 Generate 13 CSV files from estimation for Google Sheets import.

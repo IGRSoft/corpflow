@@ -1,3 +1,9 @@
+---
+name: release-notes
+description: Generate release notes from completed work, git history, or workflow artifacts
+model: haiku
+---
+
 # Release Notes Command
 
 Generate release notes from completed work, git history, or workflow artifacts.
@@ -34,7 +40,7 @@ Generate release notes from completed work, git history, or workflow artifacts.
 ```markdown
 # Release Notes v2.1.0
 
-**Release Date**: January 24, 2025
+**Release Date**: [Release Date]
 
 ---
 
@@ -111,8 +117,8 @@ We'd love to hear your thoughts! Send feedback to feedback@example.com or use th
 ```markdown
 # Release Notes v2.1.0 (Internal)
 
-**Release Date**: January 24, 2025
-**Sprint**: 2025-01
+**Release Date**: [Release Date]
+**Sprint**: [Sprint ID]
 **Release Manager**: Project Manager
 
 ---

@@ -1,3 +1,9 @@
+---
+name: test-coverage
+description: Analyze test coverage gaps and generate recommendations for improving test quality
+model: haiku
+---
+
 # Test Coverage Command
 
 Analyze test coverage gaps and generate recommendations for improving test quality.

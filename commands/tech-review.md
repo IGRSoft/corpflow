@@ -1,6 +1,14 @@
+---
+name: tech-review
+description: Perform deep technical review evaluating code quality, performance, and security practices
+model: sonnet
+---
+
 # Technical Review Command
 
 Perform deep technical review of implementation code. Evaluates code quality, performance, security practices, and implementation patterns beyond standard code review checklists.
+
+> **See also**: For standard platform-specific code review (pre-merge), use `/code-review-dev`. For estimation accuracy reviews, use `/senior-review`.
 
 ## Usage
 

@@ -1,3 +1,9 @@
+---
+name: arch-decision
+description: Create or update Architecture Decision Records (ADRs) to document significant technical decisions
+model: sonnet
+---
+
 # Architecture Decision Record Command
 
 Create or update Architecture Decision Records (ADRs) to document significant technical decisions.
@@ -37,7 +43,7 @@ Creates file: `docs/adr/ADR-XXX-title.md`
 Accepted
 
 ## Date
-2025-01-10
+[Date]
 
 ## Context
 

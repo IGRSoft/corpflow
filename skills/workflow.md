@@ -55,7 +55,7 @@ function deleteTaskSafely(taskId: string) {
   for (const dep of dependents) {
     TaskUpdate({ taskId: dep.id, removeBlockedBy: [taskId] });
   }
-  TaskUpdate({ taskId, delete: true });
+  TaskUpdate({ taskId, status: "deleted" });
 }
 ```
 

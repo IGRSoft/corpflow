@@ -1,3 +1,9 @@
+---
+name: sprint-plan
+description: Plan sprint with capacity analysis, task breakdown, and resource allocation
+model: sonnet
+---
+
 # Sprint Plan Command
 
 Plan sprint with capacity analysis, task breakdown, and resource allocation.
@@ -30,13 +36,13 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 ## Output Format
 
 ```markdown
-# Sprint Plan: Sprint 2025-01
+# Sprint Plan: Sprint [ID]
 
 ## Sprint Overview
 
 | Attribute | Value |
 |-----------|-------|
-| Sprint | 2025-01 |
+| Sprint | [Sprint ID] |
 | Duration | Jan 13 - Jan 24 (2 weeks) |
 | Team Capacity | 40 story points |
 | Committed | 38 story points |

@@ -1,3 +1,9 @@
+---
+name: pm-prioritize
+description: Apply RICE, WSJF, or other prioritization frameworks to rank features and tasks
+model: sonnet
+---
+
 # PM Prioritize Command
 
 Apply RICE, WSJF, or other prioritization frameworks to rank features and tasks.
@@ -59,7 +65,7 @@ RICE = 4,000
 
 ## Recommendation
 
-Prioritize for **Q1 2025** based on:
+Prioritize for **Q1 [Year]** based on:
 - High user demand (50% of feedback mentions this)
 - Reasonable effort with clear scope
 - Improves retention metrics

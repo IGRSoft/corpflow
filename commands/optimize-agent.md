@@ -1,3 +1,9 @@
+---
+name: optimize-agent
+description: Analyze and optimize existing agent definitions for clarity, efficiency, and consistency
+model: sonnet
+---
+
 # Optimize Agent Command
 
 Analyze and optimize existing agent definitions for clarity, efficiency, and consistency. Uses prompt engineering best practices.

@@ -1,3 +1,9 @@
+---
+name: design-review
+description: Conduct a comprehensive design review for screens, components, or features
+model: sonnet
+---
+
 # Design Review Command
 
 Conduct a comprehensive design review for screens, components, or features using the designer agent.

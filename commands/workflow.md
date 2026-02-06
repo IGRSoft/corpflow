@@ -1,3 +1,9 @@
+---
+name: workflow
+description: Initialize a new workflow task with proper folder structure and Task System integration
+model: opus
+---
+
 # Workflow Command
 
 Initialize a new workflow task with proper folder structure and Task System integration.
