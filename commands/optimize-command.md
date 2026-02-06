@@ -1,3 +1,9 @@
+---
+name: optimize-command
+description: Analyze and optimize existing command definitions for usability, consistency, and completeness
+model: sonnet
+---
+
 # Optimize Command
 
 Analyze and optimize existing command definitions for usability, consistency, and completeness. Improves command quality using prompt engineering best practices.

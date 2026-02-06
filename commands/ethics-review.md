@@ -1,11 +1,14 @@
 ---
 name: ethics-review
 description: Review tasks, features, or architecture for constitutional compliance with Claude's ethical principles
+model: sonnet
 ---
 
 # /ethics-review
 
 Review tasks, features, or code for alignment with Claude's constitutional principles including safety, honesty, harm avoidance, and ethical guidelines.
+
+> **For deeper analysis**: Use `/harm-assessment` for comprehensive harm evaluation, or `/transparency-check` for detailed honesty property verification.
 
 ## Usage
 

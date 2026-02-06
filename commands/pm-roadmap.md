@@ -1,3 +1,9 @@
+---
+name: pm-roadmap
+description: Create or update product roadmap with timeline, milestones, and dependencies
+model: sonnet
+---
+
 # PM Roadmap Command
 
 Create or update product roadmap with timeline, milestones, and dependencies.
@@ -32,14 +38,14 @@ Create or update product roadmap with timeline, milestones, and dependencies.
 
 ### Timeline View (Default)
 ```markdown
-# Product Roadmap 2025
+# Product Roadmap [Year]
 
 ## Vision
 Become the leading platform for team collaboration with enterprise-grade security and delightful user experience.
 
 ---
 
-## Q1 2025: Foundation & Security
+## Q1 [Year]: Foundation & Security
 
 ### Themes
 - Enterprise readiness
@@ -73,7 +79,7 @@ Jan ──────────────── Feb ───────�
 
 ---
 
-## Q2 2025: Growth & Collaboration
+## Q2 [Year]: Growth & Collaboration
 
 ### Themes
 - Team collaboration
@@ -95,7 +101,7 @@ Jan ──────────────── Feb ───────�
 
 ---
 
-## Q3 2025: Intelligence & Scale
+## Q3 [Year]: Intelligence & Scale
 
 ### Themes
 - AI-powered features
@@ -111,7 +117,7 @@ Jan ──────────────── Feb ───────�
 
 ---
 
-## Q4 2025: Polish & Expansion
+## Q4 [Year]: Polish & Expansion
 
 ### Themes
 - Platform maturity

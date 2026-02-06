@@ -1,3 +1,9 @@
+---
+name: executive-summary
+description: Generate executive-level summary of projects or initiatives for stakeholder communication
+model: sonnet
+---
+
 # Executive Summary Command
 
 Generate executive-level summary of projects, initiatives, or completed work for stakeholder communication.
@@ -29,7 +35,7 @@ Generate executive-level summary of projects, initiatives, or completed work for
 
 ### Brief Format (Default)
 ```markdown
-# Executive Summary: Q1 Product Release
+# Executive Summary: Q1 [Year] Product Release
 
 ## TL;DR
 Successfully delivered SSO and Dark Mode features on time and under budget, unlocking $2.4M enterprise pipeline.
@@ -73,9 +79,9 @@ Successfully delivered SSO and Dark Mode features on time and under budget, unlo
 
 ### Detailed Format
 ```markdown
-# Executive Summary: Q1 2025 Product Release
+# Executive Summary: Q1 [Year] Product Release
 
-**Date**: January 24, 2025
+**Date**: [Date]
 **Prepared By**: Product Team
 **For**: Executive Leadership
 

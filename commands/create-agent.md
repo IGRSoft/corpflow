@@ -1,3 +1,9 @@
+---
+name: create-agent
+description: Create new agent definitions with proper structure, model selection, and best practices
+model: sonnet
+---
+
 # Create Agent Command
 
 Create new agent definitions with proper structure, model selection, and best practices. Generates production-ready agent files.

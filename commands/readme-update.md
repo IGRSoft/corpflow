@@ -1,3 +1,9 @@
+---
+name: readme-update
+description: Update README files based on code changes, keeping documentation in sync with implementation
+model: haiku
+---
+
 # README Update Command
 
 Update README files based on code changes, keeping documentation in sync with implementation.

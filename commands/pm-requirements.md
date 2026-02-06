@@ -1,3 +1,9 @@
+---
+name: pm-requirements
+description: Generate a Product Requirements Document (PRD) from task description or user stories
+model: sonnet
+---
+
 # PM Requirements Command
 
 Generate a Product Requirements Document (PRD) from task description or user stories.
@@ -38,7 +44,7 @@ Generate a Product Requirements Document (PRD) from task description or user sto
 | Author | Product Manager |
 | Status | Draft |
 | Version | 1.0 |
-| Last Updated | 2025-01-10 |
+| Last Updated | [Date] |
 
 ---
 

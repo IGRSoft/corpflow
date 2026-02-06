@@ -42,7 +42,7 @@ Examples: `PL: Planning`, `AR: Architecture`, `DV: Development`
 ## Task Deletion
 
 ```typescript
-TaskUpdate({ taskId: "6", delete: true });
+TaskUpdate({ taskId: "6", status: "deleted" });
 ```
 
 Use for dynamic workflow sizing during PL/AR stages.

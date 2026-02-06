@@ -1,6 +1,14 @@
+---
+name: code-review-dev
+description: Perform platform-aware code review using specialized developer expertise
+model: sonnet
+---
+
 # Developer Code Review Command
 
 Perform platform-aware code review using specialized developer expertise. Reviews code quality, patterns, and platform-specific best practices.
+
+> **See also**: For deep technical analysis including complexity metrics, tech debt assessment, and performance profiling, use `/tech-review`. For estimation accuracy reviews, use `/senior-review`.
 
 ## Usage
 

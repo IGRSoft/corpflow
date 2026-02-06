@@ -1,3 +1,9 @@
+---
+name: tech-decision
+description: Create or update Technology Decision Records (TDRs) for implementation-level technology choices
+model: sonnet
+---
+
 # Technology Decision Record Command
 
 Create or update Technology Decision Records (TDRs) to document implementation-level technology choices such as libraries, frameworks, tools, and patterns.
@@ -41,7 +47,7 @@ Creates file: `docs/tdr/TDR-XXX-title.md`
 Accepted
 
 ## Date
-2025-01-15
+[Date]
 
 ## Category
 Library - Validation
@@ -160,7 +166,7 @@ if (!result.success) {
 
 ## Review Date
 
-2025-07-15 - Review adoption and consider v4 migration if available
+[Review Date] - Review adoption and consider v4 migration if available
 
 ## Related Decisions
 

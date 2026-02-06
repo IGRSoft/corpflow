@@ -1,3 +1,9 @@
+---
+name: design-specs
+description: Generate developer-ready design specifications for components, screens, or features
+model: sonnet
+---
+
 # Design Specifications Command
 
 Generate developer-ready design specifications for components, screens, or features.

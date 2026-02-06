@@ -1,3 +1,9 @@
+---
+name: a11y-audit
+description: Conduct an accessibility audit for screens, components, or the entire application
+model: sonnet
+---
+
 # Accessibility Audit Command
 
 Conduct an accessibility audit for screens, components, or the entire application.

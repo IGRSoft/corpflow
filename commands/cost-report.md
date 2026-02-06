@@ -1,3 +1,9 @@
+---
+name: cost-report
+description: Generate cost analysis for workflows with token usage breakdown and optimization recommendations
+model: sonnet
+---
+
 # Cost Report
 
 Generate cost analysis for completed or in-progress workflows with token usage breakdown and optimization recommendations.

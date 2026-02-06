@@ -1,3 +1,9 @@
+---
+name: context-status
+description: Check context window utilization, analyze token distribution, and trigger compression
+model: haiku
+---
+
 # Context Status
 
 Check context window utilization, analyze token distribution, and trigger compression when needed.

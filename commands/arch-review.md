@@ -1,3 +1,9 @@
+---
+name: arch-review
+description: Perform architecture review evaluating architectural integrity, scalability, and maintainability
+model: sonnet
+---
+
 # Architecture Review Command
 
 Perform architecture review for PRs, features, or system changes. Evaluates architectural integrity, scalability, and maintainability.

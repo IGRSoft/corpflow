@@ -1,3 +1,9 @@
+---
+name: qa-report
+description: Generate a comprehensive QA summary report with test results, coverage, and quality metrics
+model: sonnet
+---
+
 # QA Report Command
 
 Generate a comprehensive QA summary report for completed work, including test results, coverage, and quality metrics.

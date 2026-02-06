@@ -1,3 +1,9 @@
+---
+name: risk-assess
+description: Identify, assess, and document project risks with mitigation strategies
+model: sonnet
+---
+
 # Risk Assessment Command
 
 Identify, assess, and document project risks with mitigation strategies.

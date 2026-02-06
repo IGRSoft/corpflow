@@ -1,3 +1,9 @@
+---
+name: business-case
+description: Generate business case documentation with financial analysis and strategic justification
+model: sonnet
+---
+
 # Business Case Command
 
 Generate business case documentation for features or initiatives with financial analysis and strategic justification.

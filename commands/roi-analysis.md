@@ -1,3 +1,9 @@
+---
+name: roi-analysis
+description: Calculate Return on Investment for initiatives with NPV, IRR, and payback period
+model: sonnet
+---
+
 # ROI Analysis Command
 
 Calculate Return on Investment for initiatives with NPV, IRR, and payback period.

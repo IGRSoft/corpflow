@@ -1,3 +1,9 @@
+---
+name: prompt-audit
+description: Comprehensive audit of agents, commands, and prompts for quality, consistency, and best practices
+model: sonnet
+---
+
 # Prompt Audit Command
 
 Comprehensive audit of agents, commands, and prompts for quality, consistency, and best practices. Identifies issues and generates improvement recommendations.

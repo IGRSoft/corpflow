@@ -1,3 +1,9 @@
+---
+name: test-plan
+description: Generate a comprehensive test plan from requirements or code changes with coverage analysis
+model: sonnet
+---
+
 # Test Plan Command
 
 Generate a comprehensive test plan from requirements or code changes. Creates structured test cases with coverage analysis.
