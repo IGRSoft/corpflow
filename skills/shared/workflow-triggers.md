@@ -27,3 +27,14 @@ From task keywords:
 - **Priority**: `critical`, `urgent`, `blocker` → High; `minor`, `optional` → Low
 - **Platform**: `ios`, `macos`, `tvos`, `watchos`, `visionos` → Specific platform
 - **Design**: UI/UX keywords → Designer joins PL stage automatically
+
+## Agent Teams (Experimental)
+
+When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set, milestone workflows can use agent teams for parallel issue execution. Agent teams enable independent teammate sessions instead of Task-based orchestration tracks.
+
+| Option | Effect |
+|--------|--------|
+| `--milestone:N` + agent teams | Each issue spawned as independent teammate |
+| `--parallel:N` | Still respected as max concurrent teammates |
+
+See `milestone-workflow.md § Agent Teams Mode` for patterns.
