@@ -197,6 +197,85 @@ Ethics-reviewer can be invoked at any stage:
 | Calibrated | Appropriate uncertainty |
 | Transparent | No hidden issues |
 
+## Hook-Based Stage Monitoring
+
+Claude Code hook events enable automated monitoring of agent lifecycle within workflows.
+
+### Subagent Lifecycle Hooks
+
+| Hook Event | Fires When | Matcher |
+|------------|------------|---------|
+| `SubagentStart` | Stage agent spawned | Agent type name (e.g., `igrsoft:developer`) |
+| `SubagentStop` | Stage agent completes | Agent type name |
+
+#### Project-Level Configuration
+
+Add to project `settings.json` for workflow-wide monitoring:
+
+```json
+{
+  "hooks": {
+    "SubagentStart": [
+      {
+        "matcher": "igrsoft:.*",
+        "hooks": [
+          { "type": "command", "command": "./tools/log-stage-start.sh" }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "./tools/log-stage-complete.sh" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Agent Teams Lifecycle Hooks
+
+When agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), additional hook events are available:
+
+| Hook Event | Fires When | Use Case |
+|------------|------------|----------|
+| `TeammateIdle` | Teammate finishes work and becomes idle | Assign next task, reassign work |
+| `TaskCompleted` | A task in the shared task list is completed | Trigger dependent stages, update orchestrator |
+
+These hooks enable event-driven orchestration in milestone mode, where the lead session can react to teammate progress automatically.
+
+## Agent Teams vs Subagents
+
+### Comparison for igrsoft Workflows
+
+| Aspect | Subagents (Task tool) | Agent Teams (Teammate) |
+|--------|----------------------|------------------------|
+| Context | Own window, results return to caller | Fully independent sessions |
+| Communication | Report back to parent only | Direct inter-teammate messaging |
+| Coordination | Task dependencies (blockedBy) | Shared task list + messaging |
+| Tool restrictions | `tools` frontmatter per agent | Inherits lead's permissions |
+| Token cost | Lower (results summarized) | Higher (N context windows) |
+| Nesting | Cannot spawn sub-subagents | Cannot spawn sub-teams |
+
+### When to Use Each
+
+| Workflow Pattern | Subagents | Agent Teams |
+|-----------------|-----------|-------------|
+| Standard 8/10-stage | Default | Not recommended |
+| Cross-plugin handoff (DV→apple-developer) | Default | Not applicable |
+| Milestone sequential issues | Default (orchestrator) | Not recommended |
+| Milestone parallel independent issues | Task-based tracks | Optional (experimental) |
+| Cross-cutting research / competing hypotheses | Possible | Preferred |
+| Code review from multiple perspectives | Possible | Preferred |
+
+### Limitations
+
+- Teammates cannot spawn their own teams or sub-agents
+- One team per session; clean up before starting another
+- No session resumption for in-process teammates
+- Higher token cost (~Nx for N teammates)
+
 ## Related
 
 - `workflow.md` - Workflow system

@@ -26,6 +26,10 @@
     "security-review",
     "release-engineering",
     "incident-response",
-    "cross-plugin-handoff"
+    "cross-plugin-handoff",
+    "tool-restrictions",
+    "agent-teams",
+    "hooks",
+    "subagent-lifecycle"
   ]
 }

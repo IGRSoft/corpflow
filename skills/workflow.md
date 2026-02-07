@@ -295,6 +295,43 @@ PL → ET → AR → TL → DV → QA → DC → FN → ST
 
 See `claude-constitution.md` for full principles.
 
+## Agent Teams Integration (Experimental)
+
+When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, the workflow system can leverage agent teams for milestone mode parallel execution.
+
+### Enabling
+
+Add to project `settings.json`:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}
+```
+
+### Hook Events for Workflow Monitoring
+
+| Hook Event | Use Case |
+|------------|----------|
+| `SubagentStart` | Log stage agent activation |
+| `SubagentStop` | Detect stage agent completion |
+| `TeammateIdle` | Assign next task to idle teammate (agent teams only) |
+| `TaskCompleted` | Trigger dependent stages, update orchestrator (agent teams only) |
+
+See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration patterns.
+
+### Limitations
+
+- Teammates cannot spawn sub-agents or teams
+- No session resumption for in-process teammates
+- Higher token cost than Task-based orchestration
+- Maximum one team per session
+
+See `milestone-workflow.md § Agent Teams Mode` for parallel execution patterns.
+See `agent-coordination.md § Agent Teams vs Subagents` for comparison.
+
 ## Related
 
 - `milestone-workflow.md` - GitHub milestone integration
