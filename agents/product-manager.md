@@ -168,9 +168,20 @@ Include in planning.md:
 |-----------|-------------------|
 | [path/to/test] | [Logic changed in X] |
 
-### Test Effort Estimate
-- New tests: [X hours]
-- Test updates: [Y hours]
+### New Test Files
+
+| Test File Path | Tests For | Priority | Stage |
+|----------------|-----------|----------|-------|
+| [Tests/UnitTests/.../FooTests.swift] | [FooService] | Required | DV |
+| [Tests/IntegrationTests/.../BarTests.swift] | [Bar API] | Optional | QA |
+
+### Test Effort Estimate (Required)
+| Type | Hours | Stage |
+|------|-------|-------|
+| New unit tests | X | DV |
+| Update existing tests | Y | DV |
+| Integration tests | Z | QA |
+| **Total** | **X+Y+Z** | |
 ```
 
 ### Test Strategy Rules
@@ -386,7 +397,8 @@ This agent uses `sonnet` because:
 
 Before marking PL stage complete, verify:
 - [ ] planning.md contains all acceptance criteria
-- [ ] Test strategy section is present with test scenarios
+- [ ] Test strategy section present with specific test scenarios and file paths
+- [ ] Test effort estimate included (required, not optional)
 - [ ] Complexity score calculated (0-50)
 - [ ] Unnecessary stages deleted per complexity score
 - [ ] No open questions blocking AR stage

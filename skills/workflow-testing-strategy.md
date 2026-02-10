@@ -176,17 +176,67 @@ Tests/
 ```
 ```
 
+## D Stage: Test Implementation
+
+The developer MUST implement unit tests alongside production code during the DV stage.
+
+### Developer Responsibilities
+
+1. **Read test specs** from `.context/planning.md § Test Strategy`
+2. **Read test architecture** from `.context/analyzing.md § Test Architecture` (if available)
+3. **Create test files** using the specified testing framework
+4. **Follow test patterns** defined in the architecture (DI, mocking strategy, etc.)
+5. **Run all tests** and verify they pass before completing DV stage
+6. **Document test files** in `.context/development.md`
+
+### Handoff Requirements (DV → QA)
+
+- [ ] All unit tests from planning.md § Test Strategy implemented
+- [ ] All unit tests pass locally (zero failures)
+- [ ] Test file paths listed in development.md
+- [ ] Mock/stub implementations created as needed
+
+### What DV Writes vs What QA Adds
+
+| DV Stage (Developer) | QA Stage (QA Engineer) |
+|----------------------|------------------------|
+| Unit tests per planning.md specs | Additional edge case tests |
+| Mock implementations | Coverage gap analysis |
+| Happy path + known error cases | Boundary and stress tests |
+| Test data builders/fixtures | Integration and E2E tests |
+| Tests for acceptance criteria | Test quality review and metrics |
+
+### Development.md Test Documentation Template
+
+```markdown
+## Tests Implemented
+
+### Unit Tests
+| Test File | Tests For | Status |
+|-----------|-----------|--------|
+| Tests/UnitTests/Services/FooTests.swift | FooService | Pass |
+
+### Test Summary
+- Acceptance Criteria Covered: N/N
+- Edge Cases Tested: [list]
+- Mocks Created: [list]
+```
+
 ## Handoff to Q Stage
 
-QA stage receives:
-1. **Test scope** from planning.md - WHAT to test
-2. **Test architecture** from analyzing.md - HOW to structure tests
-3. **Existing tests to update** list - WHERE changes needed
+QA stage receives from DV:
+1. **Test scope** from planning.md - WHAT was planned to test
+2. **Test architecture** from analyzing.md - HOW tests are structured
+3. **Implemented unit tests** from development.md - WHAT tests DV already wrote
+4. **Existing tests to update** list - WHERE changes were made
 
 QA stage then:
-- Creates detailed test plan (test-plan.md format)
-- Implements tests following architecture
-- Validates all acceptance criteria are tested
+- **Reviews** developer's unit tests for quality and completeness
+- **Identifies gaps** in test coverage (edge cases, boundaries)
+- **Adds missing tests** for scenarios not covered by DV
+- **Runs integration and E2E tests** as defined in planning.md
+- **Validates** all acceptance criteria are tested
+- **Reports** test metrics in testing.md
 
 ## Logic Change Handling
 
