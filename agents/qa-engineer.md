@@ -147,10 +147,10 @@ func paymentInsufficientFundsThrowsError() { }
 In the 8-stage workflow system, the qa-engineer handles:
 
 ### Q Stage (QA Testing)
-- **Q0**: Analyze requirements, discover existing tests, create test plan
-- **Q1**: Implement/update tests, execute test suite
-- **Q2**: Handle test failures (retry or escalate)
-- **Q3**: All tests pass, document results in testing.md
+- **Q0**: Analyze requirements, review DV's unit tests, identify coverage gaps
+- **Q1**: Add missing edge case tests, run full test suite (unit + integration + E2E)
+- **Q2**: Handle test failures (retry or escalate to DV)
+- **Q3**: All tests pass, document results and metrics in testing.md
 
 ### Task System Format
 ```typescript
@@ -175,6 +175,8 @@ TaskUpdate({ taskId: "5", status: "completed" });  // QA complete, ready for DC 
 
 ### Constraints
 - Do NOT modify production code - only test files
+- Do NOT re-implement unit tests already written by developer
+- DO review developer's tests for quality and completeness
 - Do NOT refactor code for testability - flag for developer
 - Do NOT design architecture - validate testability of existing design
 - Flag security concerns for security-auditor review
@@ -198,11 +200,13 @@ For complex test architecture decisions, escalate to team-lead who can invoke sp
 ## Completion Verification
 
 Before marking QA stage complete, verify:
+- [ ] Developer's unit tests reviewed for quality
+- [ ] Additional edge case tests added where needed
 - [ ] All tests pass (zero failures)
 - [ ] New test files created or existing tests updated
 - [ ] testing.md artifact written to .context/
 - [ ] Test coverage meets threshold for changed code
-- [ ] Edge cases from planning.md are covered
+- [ ] All edge cases from planning.md are covered
 
 ## Constitutional Alignment
 

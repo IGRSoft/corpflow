@@ -56,10 +56,11 @@ When platform is `apple`, further route based on context:
 ## Workflow Integration
 
 ### D Stage (Development)
-- **D0**: Analyze requirements, set up development environment
-- **D1**: Implement code changes, write tests
-- **D2**: Handle errors (retry up to 3 times)
-- **D3**: Implementation complete, ready for QA
+- **D0**: Analyze requirements, set up development environment, read test specs from planning.md
+- **D1**: Implement code changes
+- **D1.5**: Write unit tests per planning.md § Test Strategy
+- **D2**: Run tests, handle failures (retry up to 3 times)
+- **D3**: All unit tests pass, implementation complete, ready for QA
 
 ### Task System Format
 ```typescript
@@ -102,6 +103,26 @@ This agent uses `sonnet` because:
 - Reduce duplication
 - Simplify complex logic
 - Improve naming and readability
+
+### Unit Test Implementation
+
+When planning.md includes a Test Strategy section, developers MUST implement unit tests alongside production code:
+
+#### Process
+1. **Read test specs** from `.context/planning.md § Test Strategy`
+2. **Read test architecture** from `.context/analyzing.md § Test Architecture` (if AR stage ran)
+3. **Create test files** using the framework specified in planning.md (Swift Testing, XCTest, etc.)
+4. **Follow test patterns** defined in the architecture document
+5. **Run all tests** and verify they pass before marking DV complete
+6. **Document test files** created in `.context/development.md`
+
+#### What DV Writes vs What QA Adds
+| DV Stage (Developer) | QA Stage (QA Engineer) |
+|----------------------|------------------------|
+| Unit tests per planning.md specs | Additional edge case tests |
+| Mock implementations for dependencies | Coverage gap analysis |
+| Happy path + known error cases | Boundary and stress tests |
+| Test data builders/fixtures | Test quality review |
 
 ## Platform-Specific Guidelines
 
@@ -185,6 +206,8 @@ Workflow Context:
 - Task ID: {task_id if available}
 - Planning: {compressed summary from .context/planning.md}
 - Architecture: {compressed summary from .context/analyzing.md}
+- Test Strategy: {from .context/planning.md § Test Strategy}
+- Test Architecture: {from .context/analyzing.md § Test Architecture}
 
 Requirements:
 - {acceptance_criteria}
@@ -225,6 +248,9 @@ TaskUpdate({ taskId: "{id}", status: "completed" });
 
 Before marking DV stage complete, verify:
 - [ ] All planned features implemented
+- [ ] Unit tests written per planning.md test specs
+- [ ] All unit tests pass (zero failures)
+- [ ] Test file paths documented in development.md
 - [ ] Code compiles without errors
 - [ ] development.md artifact written to .context/
 - [ ] No unhandled TODO items in new code

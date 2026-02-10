@@ -215,7 +215,7 @@ AR stage verifies: `if (!pTask.metadata?.p3_approved) throw new Error("PL3 appro
 | PL | product-manager | Requirements, acceptance criteria, test strategy, dynamic sizing |
 | AR | software-architector | Technical design, test architecture, validate PL sizing |
 | TL | team-lead | Coordinate approach, allocate resources |
-| DV | developer | Implement solution, run formatter, verify build |
+| DV | developer | Implement solution + unit tests, run formatter, verify build + tests pass |
 | SR | security-reviewer | OWASP audit, vulnerability scan |
 | QA | qa-engineer | Test plan, execute tests, all tests pass |
 | DC | technical-writer | Update docs, README, ARCHITECTURE |
@@ -266,7 +266,8 @@ Document errors in `.context/error.md` with problem, root cause, attempted solut
 | Test Architecture | AR → TL |
 | Code Format | DV complete |
 | Build Pass | DV → QA |
-| Tests Pass | QA → DC |
+| Unit Tests Written + Pass | DV → QA |
+| All Tests Pass (Unit + Integration + E2E) | QA → DC |
 
 ## Optimization Hooks
 
