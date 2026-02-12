@@ -357,11 +357,13 @@ When design detection threshold is met:
      1. UX Assessment - User impact and flow analysis
      2. Design Scope - Component needs, pattern reuse
      3. Technical Design - Platform patterns, accessibility
-     4. SVG Mockups - Generate wireframe-style visual mockups:
+     4. Pencil Mockups - Generate .pen design mockups using Pencil MCP:
+        - Load Pencil tools via ToolSearch({ query: "+pencil" })
         - Create 1-2 mockups for key screens and states
-        - Save to .context/images/ using mockup-[feature]-[screen]-[variant].svg naming
+        - Save to .context/designs/ using mockup-[feature]-[screen]-[variant].pen naming
         - Include critical states: default, error, empty, loading
-        - Use design tokens and component patterns from designer.md § SVG Mockup Generation
+        - Validate visually with get_screenshot()
+        - Follow workflow in designer.md § Pencil Mockup Generation
      5. Effort Estimate - Design sprints needed`
    });
    ```
@@ -371,9 +373,9 @@ When design detection threshold is met:
    ## Design Requirements
 
    ### Visual Mockups
-   Generated SVG mockups (see `.context/images/`):
-   - **`mockup-[feature]-[screen].svg`** - [Description]
-   - **`mockup-[feature]-[screen]-error.svg`** - [Error state]
+   Generated Pencil mockups (see `.context/designs/`):
+   - **`mockup-[feature]-[screen].pen`** - [Description]
+   - **`mockup-[feature]-[screen]-error.pen`** - [Error state]
 
    ### User Experience
    - [UX considerations referencing mockups]
