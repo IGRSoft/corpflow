@@ -31,7 +31,8 @@ Conduct a comprehensive design review for screens, components, or features using
 ## What This Command Does
 
 1. **Gathers Design Context**
-   - Reviews generated SVG mockups in `.context/images/mockup-*.svg`
+   - Reviews generated Pencil mockups in `.context/designs/mockup-*.pen`
+   - Uses Pencil MCP tools (`get_screenshot`, `batch_get`, `snapshot_layout`) for visual and structural review
    - Identifies target screens, components, or features
    - Reviews existing design patterns and system usage
    - Checks platform-specific considerations

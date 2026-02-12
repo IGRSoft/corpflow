@@ -28,7 +28,8 @@ The `.context/` folder is located at the project root:
 project-root/
 ├── .context/           # Workflow artifacts
 │   ├── planning.md
-│   └── images/
+│   ├── designs/        # Designer-generated .pen mockups
+│   └── images/         # User-attached screenshots, diagrams
 ├── src/
 ├── tests/
 └── ...
@@ -38,7 +39,7 @@ project-root/
 
 ### Flat Layout
 
-All markdown files are stored directly in `.context/` (no subfolders except for images):
+All markdown files are stored directly in `.context/` (no subfolders except for `designs/` and `images/`):
 
 ```
 .context/
@@ -56,7 +57,8 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 ├── milestone.json           # GitHub milestone context (when --milestone used)
 ├── deployment.md            # Deployment plan (if applicable)
 ├── error.md                 # Error log for escalations (created on errors)
-└── images/                  # Design references, screenshots, user-attached images
+├── designs/                 # Designer-generated .pen mockups
+└── images/                  # User-attached screenshots, diagrams
 ```
 
 ### Required Files
@@ -109,42 +111,50 @@ Created when `/workflow --milestone:N` is used. Contains:
 
 See [Milestone Workflow](milestone-workflow.md) for full schema.
 
+### designs/ Directory
+
+Contains Designer-generated .pen mockups created via Pencil MCP tools.
+
 ### images/ Directory
 
-The only subdirectory - contains visual references, mockups, screenshots, and user-attached images.
+Contains user-attached screenshots, diagrams, and other visual references.
 
-### Agent-Generated SVG Mockups
+### Agent-Generated Pencil Mockups
 
-The Designer agent generates wireframe-style SVG mockups for UI-related tasks and saves them to `.context/images/`.
+The Designer agent generates .pen design mockups for UI-related tasks using the Pencil MCP server and saves them to `.context/designs/`.
 
 **Workflow:**
 1. Product Manager detects UI work (design score >= 5)
-2. Product Manager invokes Designer with SVG mockup request
-3. Designer generates 1-2 wireframe-style SVG mockups
-4. Designer saves to `.context/images/mockup-*.svg`
-5. Designer references mockups in design documentation
-6. Downstream stages use mockups: AR reviews, DV implements, QA validates
+2. Product Manager invokes Designer with mockup request
+3. Designer loads Pencil tools via `ToolSearch({ query: "+pencil" })`
+4. Designer generates 1-2 .pen mockups for key screens and states
+5. Designer validates visually with `get_screenshot()`
+6. Designer saves to `.context/designs/mockup-*.pen`
+7. Designer references mockups in design documentation
+8. Downstream stages use mockups: AR reviews, DV implements, QA validates
 
-**SVG vs User-Attached Images:**
+**Pencil Mockups vs User-Attached Images:**
 
-| Type | Source | Pattern | Format |
-|------|--------|---------|--------|
-| SVG Mockups | Designer agent | `mockup-*.svg` | SVG |
-| Screenshots | User | `screenshot-*.png` | PNG/JPG |
-| Diagrams | User | `diagram-*.png` | PNG/SVG |
+| Type | Source | Location | Format |
+|------|--------|----------|--------|
+| Pencil Mockups | Designer agent | `.context/designs/mockup-*.pen` | .pen (JSON) |
+| Screenshots | User | `.context/images/screenshot-*.png` | PNG/JPG |
+| Diagrams | User | `.context/images/diagram-*.png` | PNG/SVG |
 
-**Naming**: `mockup-[feature]-[screen]-[variant].svg`
+**Naming**: `mockup-[feature]-[screen]-[variant].pen`
 
 ```
-.context/images/
-├── mockup-login-screen.svg               # Designer: default state
-├── mockup-login-screen-error.svg         # Designer: error state
-├── mockup-profile-edit-form.svg          # Designer: main screen
-├── screenshot-bug-report.png             # User-attached
-└── diagram-architecture.png              # User-attached
+.context/
+├── designs/
+│   ├── mockup-login-screen.pen              # Designer: default state
+│   ├── mockup-login-screen-error.pen        # Designer: error state
+│   └── mockup-profile-edit-form.pen         # Designer: main screen
+└── images/
+    ├── screenshot-bug-report.png            # User-attached
+    └── diagram-architecture.png             # User-attached
 ```
 
-**Workspace isolation**: Each workspace has its own `.context/images/` with isolated mockups.
+**Workspace isolation**: Each workspace has its own `.context/designs/` with isolated mockups.
 
 ## User-Attached Images
 
@@ -226,7 +236,7 @@ All markdown files should include:
     └── feature-mockup.png
 ```
 
-### Example 2b: Feature with Designer-Generated SVG Mockups
+### Example 2b: Feature with Designer-Generated Pencil Mockups
 
 ```
 .context/
@@ -238,11 +248,12 @@ All markdown files should include:
 ├── documentation.md
 ├── complete.md
 ├── approval.md
+├── designs/
+│   ├── mockup-user-profile-main.pen          # Designer: main profile screen
+│   ├── mockup-user-profile-edit.pen          # Designer: edit mode
+│   └── mockup-user-profile-edit-error.pen    # Designer: validation errors
 └── images/
-    ├── mockup-user-profile-main.svg          # Designer: main profile screen
-    ├── mockup-user-profile-edit.svg          # Designer: edit mode
-    ├── mockup-user-profile-edit-error.svg    # Designer: validation errors
-    └── mockup-user-profile-success.svg       # Designer: save confirmation
+    └── feature-mockup.png
 ```
 
 ### Example 3: Security-Critical Feature (10-stage)
@@ -305,7 +316,7 @@ All markdown files should include:
 
 1. **No .context folder**: Documenting in random locations
 2. **Skipping Task System initialization**: No way to track progress
-3. **Creating subfolders**: Keep all .md files in .context/ root (except images/)
+3. **Creating subfolders**: Keep all .md files in .context/ root (except designs/ and images/)
 4. **Ignoring errors**: Always create error.md when escalation is needed
 5. **Multiple context folders**: Only one .context/ per project
 
@@ -314,6 +325,6 @@ All markdown files should include:
 1. **Always create .context/**: Even for small tasks
 2. **Document decisions**: Explain WHY, not just WHAT
 3. **Update Task System**: Keep task status current
-4. **Flat structure**: All .md files in .context/ (images/ only subdirectory)
+4. **Flat structure**: All .md files in .context/ (designs/ and images/ are the only subdirectories)
 5. **Log errors**: Create error.md when issues require escalation
 6. **Clean up**: Archive or clear .context/ when starting new tasks

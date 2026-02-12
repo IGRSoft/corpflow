@@ -152,7 +152,8 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ├── documentation.md         # DC stage
 ├── complete.md              # FN stage
 ├── error.md                 # Error log (if needed)
-└── images/                  # Visual assets
+├── designs/                 # Designer-generated .pen mockups
+└── images/                  # User-attached visual assets
 ```
 
 ## Components
