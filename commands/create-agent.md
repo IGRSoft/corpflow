@@ -21,8 +21,8 @@ Create new agent definitions with proper structure, model selection, and best pr
 - `--purpose <description>` - Agent purpose (required)
 - `--model <haiku|sonnet|opus>` - Model selection (default: auto-select)
 - `--template <minimal|standard|comprehensive>` - Template style (default: standard)
-- `--tools <list>` - Tool access: read, write, edit, bash, all
-- `--stage <code>` - Workflow stage integration: P, A, T, D, Q, W, F, S
+- `--tools <preset|list>` - Tool access preset or comma-separated list (see Tool Presets)
+- `--stage <code>` - Workflow stage integration: PL, AR, TL, DV, SR, QA, DC, RE, FN, ST, IR
 - `--output <path>` - Output path (default: agents/<name>.md)
 
 ## Examples
@@ -31,7 +31,7 @@ Create new agent definitions with proper structure, model selection, and best pr
 /create-agent "database-admin" --purpose "Database schema design, query optimization, and migration management"
 /create-agent "api-designer" --purpose "REST/GraphQL API design" --model haiku --template minimal
 /create-agent "security-reviewer" --purpose "Security code review and vulnerability assessment" --model opus --tools read
-/create-agent "test-automator" --purpose "Automated test generation" --stage Q --template comprehensive
+/create-agent "test-automator" --purpose "Automated test generation" --stage QA --template comprehensive
 ```
 
 ## Templates
@@ -39,26 +39,35 @@ Create new agent definitions with proper structure, model selection, and best pr
 ### Minimal
 Basic structure for simple, focused agents:
 - Frontmatter (name, description, model)
+- Constraints (DO NOT) section (3 items)
 - Purpose section
 - Core capabilities (3-5 items)
 - Basic response approach
 
 ### Standard (Default)
 Balanced structure for most agents:
-- Frontmatter
+- Frontmatter (name, description, model, tools)
+- Constraints (DO NOT) section (3-5 items)
 - Purpose section
 - Capabilities (organized by category)
 - Workflow integration
+- Task System integration
+- Model Usage Note
+- Constitutional Alignment (reference `skills/shared/constitutional-base.md`)
 - Response approach
 - Related agents/commands
 
 ### Comprehensive
 Full structure for complex agents:
-- Frontmatter
+- Frontmatter (name, description, model, tools)
+- Constraints (DO NOT) section (5-7 items)
 - Expert purpose
 - Detailed capabilities (multiple subsections)
 - Behavioral traits
 - Knowledge base
+- Workflow integration with Task System format
+- Model Usage Note with rationale
+- Constitutional Alignment with agent-specific focus
 - Response approach (numbered steps)
 - Example interactions
 - Anti-patterns
@@ -80,7 +89,7 @@ Full structure for complex agents:
 | Model | sonnet |
 | Template | standard |
 | Tools | read, bash |
-| Stage | D |
+| Stage | DV |
 
 ## Preview
 
@@ -121,16 +130,41 @@ When `--model` is not specified, selection based on purpose analysis:
 | implement, review, analyze, design | sonnet | Balanced reasoning |
 | architect, strategize, optimize, research | opus | Complex reasoning |
 
+## Tool Presets
+
+When using `--tools`, specify a preset name or a comma-separated tool list:
+
+| Preset | Expands To |
+|--------|-----------|
+| read-only | Read, Glob, Grep |
+| standard | Read, Glob, Grep, Write, Edit, Bash |
+| full | Read, Glob, Grep, Write, Edit, Bash, TaskUpdate, TaskGet, TaskList |
+| orchestrator | Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList |
+| design | Read, Glob, Grep, Write, ToolSearch, TaskGet, TaskList |
+
+### Cross-Plugin Delegation
+Add Task delegation syntax to any preset: `--tools full,Task(apple-developer:swift-pro)`
+
 ## Agent Structure Guidelines
 
 ### Frontmatter (Required)
 ```yaml
 ---
 name: agent-name
-description: Brief description for routing (1-2 sentences)
+description: Brief description for routing (1-2 sentences). Use PROACTIVELY for...
 model: haiku|sonnet|opus
+tools: Read, Glob, Grep, Write, Edit, TaskUpdate, TaskGet, TaskList
 ---
 ```
+
+### Description Best Practices
+- Include "Use PROACTIVELY for..." to improve agent routing
+- Example: "Database specialist for schema design. Use PROACTIVELY for query optimization, migration planning, or database architecture decisions."
+
+### Constraints (DO NOT) Section
+- First section after frontmatter identity sentence
+- 3-7 specific prohibitions defining agent boundaries
+- Example: "DO NOT modify production code directly" for QA agents
 
 ### Purpose Section
 - Clear statement of agent's role
@@ -143,9 +177,17 @@ model: haiku|sonnet|opus
 - No overlap with other agents
 
 ### Workflow Integration
-- Stage codes (P, A, T, D, Q, W, F, S)
+- Stage codes (PL, AR, TL, DV, SR, QA, DC, RE, FN, ST, IR)
 - Task System integration
 - Handoff protocols
+
+### Model Usage Note
+- Explain why the selected model is appropriate
+- Reference task complexity and reasoning requirements
+
+### Constitutional Alignment
+- Reference `skills/shared/constitutional-base.md`
+- Add agent-specific ethical focus areas
 
 ## Integration
 
@@ -158,4 +200,6 @@ This command is used by:
 
 - [prompt-engineer](../agents/prompt-engineer.md) - Prompt engineering agent
 - [optimize-agent](./optimize-agent.md) - Optimize existing agents
+- [create-command](./create-command.md) - Create new commands
+- [create-skill](./create-skill.md) - Create new skills
 - [prompt-audit](./prompt-audit.md) - Audit agent quality
