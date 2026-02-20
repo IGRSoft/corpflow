@@ -54,6 +54,8 @@
         "./commands/context-status.md",
         "./commands/cost-report.md",
         "./commands/create-agent.md",
+        "./commands/create-command.md",
+        "./commands/create-skill.md",
         "./commands/design-review.md",
         "./commands/design-specs.md",
         "./commands/doc-audit.md",

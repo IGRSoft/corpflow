@@ -183,4 +183,6 @@ This command is used by:
 
 - [prompt-engineer](../agents/prompt-engineer.md) - Prompt engineering agent
 - [create-agent](./create-agent.md) - Create new agents
+- [create-command](./create-command.md) - Create new commands
+- [create-skill](./create-skill.md) - Create new skills
 - [prompt-audit](./prompt-audit.md) - Audit all prompts

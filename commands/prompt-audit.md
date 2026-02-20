@@ -221,3 +221,5 @@ This command is used:
 - [optimize-agent](./optimize-agent.md) - Optimize agents
 - [optimize-command](./optimize-command.md) - Optimize commands
 - [create-agent](./create-agent.md) - Create new agents
+- [create-command](./create-command.md) - Create new commands
+- [create-skill](./create-skill.md) - Create new skills
