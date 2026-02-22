@@ -46,6 +46,7 @@
       "commands": [
         "./commands/a11y-audit.md",
         "./commands/api-docs.md",
+        "./commands/appstore-iap.md",
         "./commands/appstore-info.md",
         "./commands/arch-decision.md",
         "./commands/arch-review.md",
