@@ -35,9 +35,20 @@ Transfer task to external plugin agent:
 TaskUpdate({
   taskId: "{id}",
   status: "in_progress",
-  owner: "apple-developer:swift-pro"  // or specific agent
+  owner: "apple-developer:swift-pro",  // or specific agent
+  metadata: {
+    // Include worktree context when applicable
+    workspace_path: ".worktrees/milestone-1/42",  // if worktree mode
+    isolation: "worktree"                          // signals worktree mode to external agent
+  }
 });
 ```
+
+External agents receiving worktree-isolated tasks should:
+1. Read `workspace_path` from task metadata
+2. Operate on files inside the worktree path
+3. Use `git -C {workspace_path}` for any git commands
+4. Write artifacts to `{workspace_path}/.context/`
 
 ### 3. Delegation Prompt Template
 

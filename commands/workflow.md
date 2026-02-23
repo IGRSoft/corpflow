@@ -39,6 +39,7 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--ethics-review` | Add ET checkpoint after PL |
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 10-stage workflow |
+| `--worktree` | Use git worktrees for issue isolation (requires --milestone) |
 
 ## Examples
 
@@ -47,6 +48,10 @@ See `skills/shared/stage-codes.md` for stage details.
 /workflow --milestone:1
 /workflow --milestone:1 --parallel:3
 /workflow --milestone:2:123
+
+# Worktree mode (true parallel isolation)
+/workflow --milestone:1 --worktree
+/workflow --milestone:1 --worktree --parallel:3
 
 # Standard mode
 /workflow "Add dark mode support"
@@ -97,7 +102,9 @@ gh api /repos/:owner/:repo/issues/{issue#}/timeline \
 # If count > 0, mark as "skipped_has_pr"
 
 # Create orchestrator
-mkdir -p .workspaces/milestone-{N}
+mkdir -p .workspaces/milestone-{N}      # Legacy mode
+# OR
+mkdir -p .worktrees/milestone-{N}        # Worktree mode
 # Write orchestrator.json with sorted issues (excluding those with PRs)
 ```
 
@@ -105,22 +112,38 @@ mkdir -p .workspaces/milestone-{N}
 
 For each issue in priority order:
 
+##### Legacy Mode (default)
+
 ```bash
 # 1. Create workspace
 mkdir -p .workspaces/milestone-{N}/{issue#}/.context
 
-# 2. Create branch FROM BASE (using remote to avoid worktree conflicts)
+# 2. Create branch FROM BASE (using remote to avoid conflicts)
 git fetch origin develop
 git checkout -b feature/{issue#}-{slug} origin/develop
 
-# 3. Update orchestrator.json
-# Set issue status to "in_progress"
+# 3. Update orchestrator.json → status: "in_progress"
+# 4. Execute staged workflow: PL → AR → TL → DV → QA → DC → FN → ST
+```
 
-# 4. Execute staged workflow
-# PL → AR → TL → DV → QA → DC → FN → ST
+##### Worktree Mode (`--worktree`)
+
+```bash
+# 1. Create worktree with dedicated branch (no checkout needed)
+git fetch origin develop
+git worktree add -b feature/{issue#}-{slug} \
+  .worktrees/milestone-{N}/{issue#} origin/develop
+
+# 2. Create .context/ inside worktree
+mkdir -p .worktrees/milestone-{N}/{issue#}/.context
+
+# 3. Update orchestrator.json → status: "in_progress", isolation: "worktree"
+# 4. Execute staged workflow (all operations inside worktree)
 ```
 
 #### Step 3: Issue Completion
+
+##### Legacy Mode
 
 ```bash
 # 1. Commit all changes
@@ -133,13 +156,30 @@ git push -u origin feature/{issue#}-{slug}
 # 3. Create PR
 gh pr create --base develop --title "#{issue} {title}" --body "Closes #{issue}"
 
-# 4. Update orchestrator.json
-# Set issue status to "completed"
-
+# 4. Update orchestrator.json → status: "completed"
 # 5. Move to next issue
 ```
 
-### Correct Flow Diagram
+##### Worktree Mode
+
+```bash
+# 1. Commit inside worktree
+git -C .worktrees/milestone-{N}/{issue#} add -A
+git -C .worktrees/milestone-{N}/{issue#} commit -m "#{issue} feat: {title}"
+
+# 2. Push from worktree
+git -C .worktrees/milestone-{N}/{issue#} push -u origin feature/{issue#}-{slug}
+
+# 3. Create PR
+gh pr create --base develop --title "#{issue} {title}" --body "Closes #{issue}"
+
+# 4. Update orchestrator.json → status: "completed"
+# 5. Remove worktree (branch persists on remote)
+git worktree remove .worktrees/milestone-{N}/{issue#}
+git worktree prune
+```
+
+### Flow Diagram (Legacy — Sequential)
 
 ```
 /workflow --milestone:1
@@ -152,13 +192,39 @@ gh pr create --base develop --title "#{issue} {title}" --body "Closes #{issue}"
     │   ├─→ git push && gh pr create
     │   └─→ Update orchestrator: completed
     │
-    └─→ Issue #26 (P1)
+    └─→ Issue #26 (P1)  ← must wait for #27 (shared worktree)
         ├─→ git fetch origin develop
         ├─→ git checkout -b feature/26-font-family origin/develop
         ├─→ PL → AR → TL → DV → QA → DC → FN → ST
         ├─→ git push && gh pr create
         └─→ Update orchestrator: completed
 ```
+
+### Flow Diagram (Worktree — Parallel)
+
+```
+/workflow --milestone:1 --worktree --parallel:2
+    │
+    ├─→ Create orchestrator.json (isolation: "worktree")
+    │
+    ├─→ Issue #27 (P0) ─── PARALLEL ───────────────────────
+    │   ├─→ git worktree add -b feature/27-watermark
+    │   │     .worktrees/milestone-1/27 origin/develop
+    │   ├─→ PL → AR → TL → DV → QA → DC → FN → ST
+    │   ├─→ git -C .worktrees/.../27 push && gh pr create
+    │   ├─→ git worktree remove .worktrees/.../27
+    │   └─→ Update orchestrator: completed
+    │
+    └─→ Issue #26 (P1) ─── PARALLEL (no branch conflicts!) ─
+        ├─→ git worktree add -b feature/26-font-family
+        │     .worktrees/milestone-1/26 origin/develop
+        ├─→ PL → AR → TL → DV → QA → DC → FN → ST
+        ├─→ git -C .worktrees/.../26 push && gh pr create
+        ├─→ git worktree remove .worktrees/.../26
+        └─→ Update orchestrator: completed
+```
+
+**Key improvement**: Both issues execute simultaneously because each has its own worktree with an independent branch. No `git checkout` switching needed.
 
 ### Track-Prefixed Task IDs
 

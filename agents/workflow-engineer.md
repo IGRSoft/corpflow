@@ -55,6 +55,17 @@ Before executing any milestone workflow, validate:
 - [ ] Base branch is clean (no uncommitted changes)
 - [ ] No branch naming conflicts
 
+### Pre-Execution Checks (Worktree Mode)
+
+When `--worktree` flag is present, add these checks:
+
+- [ ] Git version >= 2.15 (worktree support)
+- [ ] `.worktrees/` directory is writable
+- [ ] No existing worktree for the same branch (`git worktree list`)
+- [ ] Sufficient disk space for worktree copies
+- [ ] No stale worktrees (`git worktree prune` if needed)
+- [ ] orchestrator.json version is 3.0 with `isolation: "worktree"`
+
 ### Per-Issue Checks (CRITICAL)
 
 - [ ] Branch created from correct base (develop/master)
@@ -144,6 +155,61 @@ Before executing any milestone workflow, validate:
 2. Compare orchestrator.json with Task System
 3. Check each workspace.json for current_stage
 4. Manually update if needed
+
+## Worktree Troubleshooting
+
+### Worktree Not Created
+
+**Symptoms**: `git worktree add` fails or `.worktrees/` directory missing.
+
+**Solutions**:
+1. Check git version: `git --version` (requires >= 2.15)
+2. Check for bare repo: worktrees not supported in bare repositories
+3. Verify disk space: each worktree duplicates the working tree
+4. Check permissions on project directory
+5. Ensure `.worktrees/` parent directory exists
+
+### Branch Already Checked Out
+
+**Symptoms**: `fatal: '{branch}' is already checked out at '{path}'`
+
+**Solutions**:
+1. Check existing worktrees: `git worktree list`
+2. Remove stale worktree: `git worktree remove {path}` then `git worktree prune`
+3. If branch is checked out in main tree, switch main to a different branch first
+4. Use a different branch name for the issue
+
+### Worktree Cleanup Failed
+
+**Symptoms**: `git worktree remove` fails with uncommitted changes.
+
+**Solutions**:
+1. Check for uncommitted work: `git -C {worktree_path} status`
+2. Commit or stash changes: `git -C {worktree_path} stash`
+3. Force remove if truly unneeded: `git worktree remove --force {path}`
+4. Run `git worktree prune` to clean stale references
+
+### Orchestrator / Worktree Mismatch
+
+**Symptoms**: orchestrator.json shows worktree mode but paths don't match filesystem.
+
+**Solutions**:
+1. Compare `git worktree list` output with orchestrator.json issue entries
+2. Check each issue's `worktree_path` field against actual filesystem
+3. Re-create missing worktrees: `git worktree add -b {branch} {path} origin/{base}`
+4. Update orchestrator.json to reflect actual state
+
+### Legacy vs Worktree Mode Detection
+
+**How to Detect**:
+
+| Check | Legacy Mode | Worktree Mode |
+|-------|-------------|---------------|
+| orchestrator.json version | `"2.0"` | `"3.0"` |
+| `configuration.isolation` | absent or `null` | `"worktree"` |
+| workspace.json `isolation` | absent | `"worktree"` |
+| Issue directory location | `.workspaces/milestone-{N}/{issue#}/` | `.worktrees/milestone-{N}/{issue#}/` |
+| Source files in issue dir | No (only `.context/`) | Yes (full worktree copy) |
 
 ## Workflow Operations
 

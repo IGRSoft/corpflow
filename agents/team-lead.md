@@ -134,6 +134,17 @@ When stages can run independently, coordinate parallel execution:
 | Docs + QA Parallel | W + Q | Documentation doesn't depend on test results | ~30-40% |
 | Early Documentation | W starts during D | Core API is stable | Docs ready sooner |
 
+### Worktree-Enabled Parallelism
+
+With `--worktree` mode in milestone workflows, true parallel DV stages across issues become safe:
+
+| Pattern | Without Worktree | With Worktree |
+|---------|------------------|---------------|
+| Multiple DV stages (different issues) | **Blocked** — shared working directory | **Safe** — separate worktrees |
+| Parallel issue execution | Sequential `git checkout` | Concurrent worktrees |
+
+**Capacity consideration**: Each worktree duplicates the working tree. For large repos, factor disk space into parallel track allocation (`--parallel:N`).
+
 ### Parallel Execution Protocol
 
 ```
