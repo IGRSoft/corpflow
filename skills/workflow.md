@@ -68,15 +68,29 @@ When using `--milestone:N`, each ticket executes in an isolated workspace.
 ```typescript
 const task = TaskGet({ taskId: currentTaskId });
 const workspacePath = task.metadata?.workspace_path;
-const contextPath = workspacePath ? `${workspacePath}/.context` : `.context`;
+const isolation = task.metadata?.isolation;  // 'worktree' or undefined
+
+if (isolation === 'worktree') {
+  // WORKTREE MODE: workspace_path IS the worktree directory
+  // All git operations happen inside the worktree
+  // .context/ lives inside the worktree alongside source files
+  const contextPath = `${workspacePath}/.context`;
+} else if (workspacePath) {
+  // LEGACY WORKSPACE MODE: directory-based artifact isolation only
+  const contextPath = `${workspacePath}/.context`;
+} else {
+  // STANDARD MODE: project root
+  const contextPath = '.context';
+}
 ```
 
 ### Path Resolution
 
-| Mode | Base Path |
-|------|-----------|
-| Standard | `.context/` |
-| Workspace | `.workspaces/milestone-{N}/{issue#}/.context/` |
+| Mode | Base Path | Git Operations | Source Isolation |
+|------|-----------|----------------|------------------|
+| Standard | `.context/` | Main working directory | None |
+| Workspace (legacy) | `.workspaces/milestone-{N}/{issue#}/.context/` | Shared working directory | Artifacts only |
+| Worktree | `.worktrees/milestone-{N}/{issue#}/.context/` | Dedicated worktree | Full (git + artifacts) |
 
 ### Task ID Namespacing
 
@@ -126,21 +140,42 @@ If count > 0, mark issue as `skipped_has_pr` and exclude from workflow.
 
 For each issue in priority order:
 
+#### Legacy Mode (default)
+
 ```bash
 # Create isolated workspace
 mkdir -p .workspaces/milestone-{N}/{issue#}/.context
 
-# CRITICAL: Create branch from base (using remote to avoid worktree conflicts)
+# CRITICAL: Create branch from base (using remote to avoid conflicts)
 git fetch origin develop  # or base branch from issue body
 git checkout -b feature/{issue#}-{slug} origin/develop
 ```
 
+#### Worktree Mode (`--worktree`)
+
+```bash
+# Create worktree with dedicated branch (no checkout switching needed)
+git fetch origin develop
+git worktree add -b feature/{issue#}-{slug} \
+  .worktrees/milestone-{N}/{issue#} origin/develop
+
+# Create .context/ inside worktree
+mkdir -p .worktrees/milestone-{N}/{issue#}/.context
+```
+
+**Key difference**: No `git checkout` needed. Each worktree has its own branch checked out independently. Multiple issues can run truly in parallel without branch conflicts.
+
 ### 5. Initialize Orchestrator
 
-Create `.workspaces/orchestrator.json` to track all issues:
+Create orchestrator.json to track all issues.
+
+#### Legacy Mode
+
+Location: `.workspaces/orchestrator.json`
 
 ```json
 {
+  "version": "2.0",
   "milestone_number": 1,
   "milestone_title": "Sprint 2025-W05",
   "parallel_tracks": 2,
@@ -155,6 +190,34 @@ Create `.workspaces/orchestrator.json` to track all issues:
       "track": null,
       "branch": "feature/27-watermark-support",
       "workspace": ".workspaces/milestone-1/27"
+    }
+  ]
+}
+```
+
+#### Worktree Mode
+
+Location: `.worktrees/orchestrator.json`
+
+```json
+{
+  "version": "3.0",
+  "milestone_number": 1,
+  "milestone_title": "Sprint 2025-W05",
+  "parallel_tracks": 3,
+  "isolation": "worktree",
+  "base_branch": "develop",
+  "created_at": "2026-02-23T10:00:00Z",
+  "issues": [
+    {
+      "number": 27,
+      "title": "feat: Add watermark support",
+      "priority": "P0",
+      "status": "pending",
+      "track": null,
+      "branch": "feature/27-watermark-support",
+      "workspace": ".worktrees/milestone-1/27",
+      "isolation": "worktree"
     }
   ]
 }
@@ -329,6 +392,10 @@ See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration pat
 - No session resumption for in-process teammates
 - Higher token cost than Task-based orchestration
 - Maximum one team per session
+
+### Worktree + Agent Teams
+
+When both `--worktree` and agent teams are enabled, each teammate operates in its own worktree. This provides the strongest isolation — each teammate has its own branch, working directory, and `.context/`. This is the recommended configuration for milestone parallel execution when token budget allows.
 
 See `milestone-workflow.md § Agent Teams Mode` for parallel execution patterns.
 See `agent-coordination.md § Agent Teams vs Subagents` for comparison.

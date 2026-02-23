@@ -71,19 +71,32 @@ const workspacePath = task.metadata?.workspace_path;
 const issueNumber = task.metadata?.issue_number;
 
 if (workspacePath) {
-  // WORKSPACE MODE: Create PR from workspace
+  // Check isolation mode
   const workspace = JSON.parse(readFile(`${workspacePath}/workspace.json`));
+  const isWorktree = workspace.isolation === 'worktree';
   const branchName = workspace.git.branch_name;
   const baseBranch = workspace.git.base_branch;  // Resolved base branch
   const baseBranchSource = workspace.git.base_branch_source;  // Resolution source
   const issueTitle = workspace.issue.title;
 
   // Read artifacts for PR body
-  const complete = readFile(`${workspacePath}/.context/complete.md`);
+  const contextPath = `${workspacePath}/.context`;
+  const complete = readFile(`${contextPath}/complete.md`);
 
-  // Push branch and create PR with resolved base branch
-  // git push -u origin {branchName}
-  // gh pr create --base {baseBranch} --title "{issueTitle}" --body "..."
+  if (isWorktree) {
+    // WORKTREE MODE: Branch already checked out, use git -C
+    // git -C {workspacePath} add .
+    // git -C {workspacePath} commit -m "#{issueNumber} feat: {summary}"
+    // git -C {workspacePath} push -u origin {branchName}
+    // gh pr create --base {baseBranch} --title "{issueTitle}" --body "..."
+    //
+    // After PR: git worktree remove {workspacePath}
+    //           git worktree prune
+  } else {
+    // LEGACY WORKSPACE MODE: Checkout branch first
+    // git push -u origin {branchName}
+    // gh pr create --base {baseBranch} --title "{issueTitle}" --body "..."
+  }
 
   // Update workspace.json
   workspace.execution.current_stage = "ST";  // Next stage
@@ -106,9 +119,30 @@ if (workspacePath) {
 }
 ```
 
-### PR Creation from Workspace
+### PR Creation from Worktree
 
-When creating a PR in workspace mode:
+When creating a PR in worktree mode (`workspace.isolation === 'worktree'`):
+
+1. **Branch is already active**: The worktree was created with the correct branch — no checkout needed
+2. **Stage changes**: `git -C {workspacePath} add .`
+3. **Commit with issue reference**: `git -C {workspacePath} commit -m "#{issueNumber} feat: {summary}"`
+4. **Push to remote**: `git -C {workspacePath} push -u origin {branchName}`
+5. **Create PR** (same as legacy, using resolved base branch from workspace.json):
+   ```bash
+   gh pr create \
+     --base {baseBranch} \
+     --title "{issue.title}" \
+     --body "..."
+   ```
+6. **Remove worktree after PR**:
+   ```bash
+   git worktree remove {workspacePath}
+   git worktree prune
+   ```
+
+### PR Creation from Workspace (Legacy)
+
+When creating a PR in legacy workspace mode:
 
 1. **Ensure on workspace branch**: The branch should already be checked out
 2. **Stage all changes**: `git add .`

@@ -23,6 +23,7 @@ Implement code changes using the appropriate platform developer. Automatically r
 - `--task <description>` - Task description (alternative to positional arg)
 - `--tests` - Generate tests alongside implementation
 - `--dry-run` - Show plan without implementing
+- `--worktree` - Run implementation in isolated git worktree (auto-creates and removes)
 
 ## Examples
 

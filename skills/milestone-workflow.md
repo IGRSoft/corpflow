@@ -13,7 +13,9 @@ GitHub milestone integration with isolated workspaces for each ticket.
 
 ## Workspace Architecture
 
-Each ticket executes in its own isolated workspace:
+Each ticket executes in its own isolated workspace.
+
+### Legacy Mode (default)
 
 ```
 .workspaces/
@@ -25,7 +27,30 @@ Each ticket executes in its own isolated workspace:
         └── handoff.md             # Compressed context for orchestrator
 ```
 
+### Worktree Mode (`--worktree`)
+
+Each issue gets a dedicated git worktree with full source isolation:
+
+```
+.worktrees/
+├── orchestrator.json              # Root orchestrator state
+└── milestone-{N}/
+    └── {issue#}/                  # Git worktree root (full source copy)
+        ├── .git                   # Worktree git link file
+        ├── .context/              # Workflow artifacts (inside worktree)
+        ├── workspace.json         # Workspace metadata (isolation: "worktree")
+        ├── handoff.md             # Compressed context
+        ├── src/                   # Full source tree
+        └── ...                    # All project files
+```
+
+**Key difference**: In worktree mode, the entire source tree exists inside each issue directory. Each worktree has its own branch checked out independently — no `git checkout` switching needed. Multiple issues can execute truly in parallel.
+
+> Add `.worktrees/` to `.gitignore` to prevent worktree contents from appearing as untracked files.
+
 ### Orchestrator State (Required Schema)
+
+#### Legacy Mode (version 2.0)
 
 ```json
 {
@@ -68,6 +93,45 @@ Each ticket executes in its own isolated workspace:
 }
 ```
 
+#### Worktree Mode (version 3.0)
+
+```json
+{
+  "version": "3.0",
+  "milestone": { "number": 1, "title": "Sprint 1" },
+  "configuration": {
+    "parallel_tracks": 3,
+    "auto_continue": false,
+    "isolation": "worktree"
+  },
+  "base_branch": "develop",
+  "created_at": "2026-02-23T10:00:00Z",
+  "issues": [
+    {
+      "number": 42,
+      "title": "feat: Add login flow",
+      "priority": "P0",
+      "status": "in_progress",
+      "track": 1,
+      "current_stage": "DV",
+      "branch": "feature/42-add-login-flow",
+      "workspace": ".worktrees/milestone-1/42",
+      "isolation": "worktree"
+    }
+  ],
+  "tracks": {
+    "1": { "issue_number": 42, "task_prefix": "t1" },
+    "2": { "issue_number": null, "status": "available" }
+  },
+  "progress": {
+    "total": 1,
+    "completed": 0,
+    "in_progress": 1,
+    "pending": 0
+  }
+}
+```
+
 ### Status Transitions
 
 ```
@@ -90,11 +154,31 @@ pending → in_progress → completed
 
 ### Workspace State
 
+#### Legacy (version 1.0)
+
 ```json
 {
   "version": "1.0",
   "issue": { "number": 42, "title": "Add login flow", "labels": ["feature"] },
   "git": { "branch_name": "feature/42-add-login-flow", "base_branch": "develop" },
+  "workflow": { "track": 1, "task_prefix": "t1", "complexity_score": 18 },
+  "execution": { "current_stage": "DV", "retry_count": 0 },
+  "task_ids": { "PL": "t1-1", "AR": "t1-2", "DV": "t1-3", "QA": "t1-4" }
+}
+```
+
+#### Worktree (version 2.0)
+
+```json
+{
+  "version": "2.0",
+  "isolation": "worktree",
+  "issue": { "number": 42, "title": "Add login flow", "labels": ["feature"] },
+  "git": {
+    "branch_name": "feature/42-add-login-flow",
+    "base_branch": "develop",
+    "worktree_path": ".worktrees/milestone-1/42"
+  },
   "workflow": { "track": 1, "task_prefix": "t1", "complexity_score": 18 },
   "execution": { "current_stage": "DV", "retry_count": 0 },
   "task_ids": { "PL": "t1-1", "AR": "t1-2", "DV": "t1-3", "QA": "t1-4" }
@@ -188,14 +272,36 @@ TaskCreate({
 
 ## Git Integration
 
+### Legacy Mode
+
 ```bash
-# Workspace initialization
+# Workspace initialization (sequential — one branch at a time)
 git checkout {base_branch}
 git checkout -b feature/{issue#}-{slug}
 
 # PR creation (FN stage)
 git push -u origin feature/{issue#}-{slug}
 gh pr create --base {base_branch} --body "Closes #{issue#}"
+```
+
+### Worktree Mode
+
+```bash
+# Workspace initialization (parallel — each issue gets own worktree)
+git fetch origin {base_branch}
+git worktree add -b feature/{issue#}-{slug} \
+  .worktrees/milestone-{N}/{issue#} origin/{base_branch}
+mkdir -p .worktrees/milestone-{N}/{issue#}/.context
+
+# All git operations use -C flag for worktree path
+git -C .worktrees/milestone-{N}/{issue#} add -A
+git -C .worktrees/milestone-{N}/{issue#} commit -m "#{issue} feat: {title}"
+git -C .worktrees/milestone-{N}/{issue#} push -u origin feature/{issue#}-{slug}
+gh pr create --base {base_branch} --body "Closes #{issue#}"
+
+# Cleanup after PR
+git worktree remove .worktrees/milestone-{N}/{issue#}
+git worktree prune
 ```
 
 ## Stage Integration
@@ -215,6 +321,44 @@ gh pr create --base {base_branch} --body "Closes #{issue#}"
 | Milestone Complete | Archive to `.workspaces/archive/` |
 
 Fresh agent context per issue - orchestrator delegates via Task tool, each subagent starts clean.
+
+## Worktree Lifecycle
+
+Applies when `--worktree` flag is used with `--milestone:N`.
+
+### Creation
+
+| Event | Action |
+|-------|--------|
+| Issue starts (PL) | `git worktree add -b {branch} {path} origin/{base}` |
+| Context setup | `mkdir -p {worktree_path}/.context` |
+| Metadata | Write `workspace.json` with `isolation: "worktree"`, `version: "2.0"` |
+
+### During Execution
+
+| Event | Action |
+|-------|--------|
+| Stage work | All file operations happen inside worktree path |
+| Git operations | Use `git -C {worktree_path}` prefix |
+| Context path | `{worktree_path}/.context/` |
+| Builds/tests | Run from worktree directory |
+| Commits | Committed to the worktree's branch automatically |
+
+### Cleanup
+
+| Event | Action |
+|-------|--------|
+| PR created | `git worktree remove {path}` (branch persists on remote) |
+| Uncommitted changes | Warn user, preserve worktree |
+| Failed issue | Preserve worktree for debugging |
+| Milestone complete | `git worktree prune` to remove all stale entries |
+
+### Edge Cases
+
+1. **Uncommitted changes**: `removeIssueWorktree()` checks `git status --porcelain` and refuses removal by default. Pass `force=true` to override.
+2. **Failed issues**: Worktree preserved with `status: "failed"` in orchestrator. User can inspect and retry.
+3. **Stale worktrees**: If a session crashes, run `git worktree prune` to clean up orphaned entries.
+4. **Disk space**: Each worktree duplicates the working tree. For large repos, monitor with `du -sh .worktrees/`.
 
 ## Error Handling
 
@@ -284,6 +428,8 @@ Lead Session (workflow-engineer):
 
 ### Teammate Spawn Prompt Template
 
+#### Legacy Mode
+
 ```
 You are working on Issue #{issue_number}: {issue_title}
 
@@ -303,6 +449,42 @@ Write all artifacts to your workspace .context/ directory.
 Issue body:
 {issue_body}
 ```
+
+#### Worktree Mode
+
+```
+You are working on Issue #{issue_number}: {issue_title}
+
+Worktree: .worktrees/milestone-{N}/{issue_number}
+Branch: feature/{issue_number}-{slug} (already checked out in worktree)
+Base: {base_branch}
+
+IMPORTANT: All file operations must happen inside the worktree directory.
+The worktree has its own copy of the source tree with the correct branch.
+Use `git -C .worktrees/milestone-{N}/{issue_number}` for all git commands.
+
+Execute the workflow for this issue:
+1. All artifacts go to .worktrees/milestone-{N}/{issue_number}/.context/
+2. PL: Plan requirements from the issue body
+3. DV: Implement the solution (source files are in the worktree)
+4. QA: Test the implementation (run tests from worktree directory)
+5. FN: Commit, push, and create PR with "Closes #{issue_number}"
+6. Cleanup: git worktree remove .worktrees/milestone-{N}/{issue_number}
+
+Issue body:
+{issue_body}
+```
+
+### Worktree + Agent Teams
+
+When both `--worktree` and agent teams are enabled, each teammate operates in its own worktree. This provides the strongest isolation:
+
+- Each teammate has its own git branch checked out in a separate directory
+- No branch-switching conflicts between teammates
+- Each teammate's `.context/` lives inside its worktree
+- Worktrees are cleaned up when each teammate completes its issue
+
+This is the **recommended configuration** for milestone parallel execution when token budget allows it.
 
 ### Hook Events for Team Monitoring
 

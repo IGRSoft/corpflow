@@ -28,8 +28,10 @@ Examples: `PL: Planning`, `AR: Architecture`, `DV: Development`
 | `priority` | high, medium, low |
 | `milestone_number` | GitHub milestone (--milestone mode) |
 | `issue_number` | GitHub issue being worked |
-| `workspace_path` | Workspace directory (milestone mode) |
+| `workspace_path` | Workspace directory (milestone mode) or worktree path |
 | `track` | Parallel track number |
+| `isolation` | `"worktree"` when using git worktree isolation (--worktree flag) |
+| `worktree_branch` | Branch name in worktree (convenience field, worktree mode only) |
 
 ## Status Values
 

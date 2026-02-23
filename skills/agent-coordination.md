@@ -71,6 +71,19 @@ Create `.context/error.md`:
 | Docs + QA | DC + QA | 30-40% time savings |
 | Early Docs | DC during DV | Docs ready sooner |
 
+### Worktree-Enabled Parallelism
+
+With `--worktree` mode, additional parallelism becomes safe because each issue has its own working directory:
+
+| Pattern | Without Worktree | With Worktree |
+|---------|------------------|---------------|
+| Parallel issues in milestone | Artifact-only isolation (branch conflicts) | Full source isolation per issue |
+| QA + DC parallel | Safe (mostly read-only) | Safe (each has own copy) |
+| Multiple DV stages across issues | **NOT SAFE** (shared source tree) | **SAFE** (separate worktrees) |
+| Agent teams + milestone issues | Risky (branch switching conflicts) | **Recommended** |
+
+> When two agents need to modify source files simultaneously (e.g., parallel DV stages for different milestone issues), worktree mode prevents conflicts by giving each a separate working directory and branch.
+
 ### Never Parallelize
 
 - AR before PL (needs requirements)
@@ -257,6 +270,7 @@ These hooks enable event-driven orchestration in milestone mode, where the lead 
 | Tool restrictions | `tools` frontmatter per agent | Inherits lead's permissions |
 | Token cost | Lower (results summarized) | Higher (N context windows) |
 | Nesting | Cannot spawn sub-subagents | Cannot spawn sub-teams |
+| Source isolation | None by default; `isolation: worktree` in frontmatter | None by default; worktree mode recommended for milestone |
 
 ### When to Use Each
 

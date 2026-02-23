@@ -310,6 +310,27 @@ All markdown files should include:
 └── images/
 ```
 
+### Example 7: Worktree-Based Milestone Workflow
+
+When using `--worktree` with milestones, `.context/` lives inside each worktree:
+
+```
+.worktrees/milestone-1/42/              # Git worktree root (full source copy)
+├── .context/                            # Workflow artifacts
+│   ├── planning.md
+│   ├── analyzing.md
+│   ├── development.md
+│   ├── testing.md
+│   └── designs/
+├── workspace.json                       # Workspace metadata (isolation: "worktree")
+├── handoff.md                           # Compressed context
+├── src/                                 # Source code (worktree copy)
+├── tests/                               # Tests (worktree copy)
+└── Package.swift                        # Build config (worktree copy)
+```
+
+**Key difference**: In worktree mode, the project source files are duplicated inside each issue directory. This provides complete source-level isolation but uses more disk space.
+
 ## Common Pitfalls
 
 ### DON'T
@@ -319,6 +340,7 @@ All markdown files should include:
 3. **Creating subfolders**: Keep all .md files in .context/ root (except designs/ and images/)
 4. **Ignoring errors**: Always create error.md when escalation is needed
 5. **Multiple context folders**: Only one .context/ per project
+6. **Wrong .context/ location in worktree mode**: In worktree mode, `.context/` must be inside the worktree directory, not in the main repo's `.workspaces/`
 
 ### DO
 

@@ -2,6 +2,7 @@
 name: developer
 description: Dynamic platform developer that routes to specialized agents (swift-pro, apple-developer, android-developer) based on platform context and arguments. Use for DV stage development tasks, code implementation, debugging, and refactoring.
 model: opus
+isolation: worktree
 tools: Read, Glob, Grep, Write, Edit, Bash, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:swift-pro), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator)
 ---
 
@@ -68,6 +69,37 @@ When platform is `apple`, further route based on context:
 TaskUpdate({ taskId: "4", status: "in_progress", owner: "developer" });  // Start
 TaskUpdate({ taskId: "4", status: "completed" });  // Complete
 ```
+
+### Worktree-Aware Development
+
+When spawned in milestone mode with `--worktree`, this agent automatically receives its own git worktree via the `isolation: worktree` frontmatter field.
+
+**Mode Detection:**
+
+```typescript
+const task = TaskGet({ taskId: currentTaskId });
+const isWorktree = task.metadata?.isolation === 'worktree';
+const workdir = task.metadata?.workspace_path;  // .worktrees/milestone-{N}/{issue#}
+```
+
+**Key Differences in Worktree Mode:**
+
+| Operation | Standard Mode | Worktree Mode |
+|-----------|--------------|---------------|
+| Working directory | Project root (`.`) | `{workdir}` (worktree path) |
+| Branch | `git checkout -b feature/...` | Already checked out in worktree |
+| Build | `swift build` | `swift build --package-path {workdir}` or `cd {workdir} && swift build` |
+| Test | `swift test` | `swift test --package-path {workdir}` or `cd {workdir} && swift test` |
+| Git operations | `git add/commit/push` | `git -C {workdir} add/commit/push` |
+| Context files | `.context/` | `{workdir}/.context/` |
+
+**Worktree Development Protocol:**
+
+1. **D0**: Read task metadata, detect worktree mode, confirm working directory
+2. **D1**: All file reads/writes use `{workdir}/` prefix; all git operations use `git -C {workdir}`
+3. **D1.5**: Run tests from worktree: `swift test --package-path {workdir}`
+4. **D2**: Verify build and tests pass within worktree
+5. **D3**: Commit and push from worktree; do NOT switch branches
 
 ## Model Usage Note
 
