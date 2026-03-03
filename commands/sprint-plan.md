@@ -40,13 +40,13 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 
 ## Sprint Overview
 
-| Attribute | Value |
-|-----------|-------|
-| Sprint | [Sprint ID] |
-| Duration | Jan 13 - Jan 24 (2 weeks) |
-| Team Capacity | 40 story points |
-| Committed | 38 story points |
-| Buffer | 2 points (5%) |
+| Attribute | Min | Max |
+|-----------|-----|-----|
+| Sprint | [Sprint ID] | |
+| Duration | Jan 13 - Jan 24 (2 weeks) | |
+| Team Capacity | 36 SP | 40 SP |
+| Committed | 30 SP | 38 SP |
+| Buffer | 2 points (5%) | 2 points (5%) |
 
 ---
 
@@ -68,52 +68,52 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 
 ### Team Capacity
 
-| Team Member | Available Days | Capacity (pts) | Notes |
-|-------------|----------------|----------------|-------|
-| Alice | 10 | 10 | Full capacity |
-| Bob | 8 | 8 | PTO Jan 20-21 |
-| Carol | 10 | 10 | Full capacity |
-| Dave | 6 | 6 | Conference Jan 15-16 |
-| Eve | 6 | 6 | Part-time this sprint |
-| **Total** | **40** | **40** | |
+| Team Member | Available Days | Capacity Min | Capacity Max | Notes |
+|-------------|----------------|-------------|-------------|-------|
+| Alice | 10 | 8 | 10 | Full capacity |
+| Bob | 8 | 6 | 8 | PTO Jan 20-21 |
+| Carol | 10 | 8 | 10 | Full capacity |
+| Dave | 6 | 5 | 6 | Conference Jan 15-16 |
+| Eve | 6 | 5 | 6 | Part-time this sprint |
+| **Total** | **40** | **32** | **40** | |
 
 ### Allocation
 
-| Category | Points | % | Notes |
-|----------|--------|---|-------|
-| Features | 28 | 70% | Sprint goals |
-| Tech Debt | 6 | 15% | Prioritized items |
-| Bugs | 4 | 10% | Critical only |
-| Buffer | 2 | 5% | Unexpected work |
+| Category | Pts Min | Pts Max | % | Notes |
+|----------|---------|---------|---|-------|
+| Features | 22 | 28 | 70% | Sprint goals |
+| Tech Debt | 5 | 6 | 15% | Prioritized items |
+| Bugs | 3 | 4 | 10% | Critical only |
+| Buffer | 2 | 2 | 5% | Unexpected work |
 
 ---
 
 ## Sprint Backlog
 
-### Features (28 pts)
+### Features (22-28 pts)
 
-| ID | Story | Points | Assignee | Priority |
-|----|-------|--------|----------|----------|
-| FEAT-101 | SSO: Okta integration | 8 | Alice | P0 |
-| FEAT-102 | SSO: Azure AD integration | 5 | Alice | P0 |
-| FEAT-103 | Dark mode: Core implementation | 8 | Carol | P1 |
-| FEAT-104 | Dark mode: Settings toggle | 3 | Carol | P1 |
-| FEAT-105 | Dashboard performance: Query optimization | 4 | Dave | P1 |
+| ID | Story | SP Min | SP Max | Assignee | Priority |
+|----|-------|--------|--------|----------|----------|
+| FEAT-101 | SSO: Okta integration | 5 | 8 | Alice | P0 |
+| FEAT-102 | SSO: Azure AD integration | 3 | 5 | Alice | P0 |
+| FEAT-103 | Dark mode: Core implementation | 5 | 8 | Carol | P1 |
+| FEAT-104 | Dark mode: Settings toggle | 2 | 3 | Carol | P1 |
+| FEAT-105 | Dashboard performance: Query optimization | 3 | 4 | Dave | P1 |
 
-### Tech Debt (6 pts)
+### Tech Debt (5-6 pts)
 
-| ID | Item | Points | Assignee | Priority |
-|----|------|--------|----------|----------|
-| TD-015 | Refactor auth module | 3 | Bob | P2 |
-| TD-018 | Add missing indexes | 2 | Dave | P1 |
-| TD-021 | Update deprecated deps | 1 | Eve | P2 |
+| ID | Item | SP Min | SP Max | Assignee | Priority |
+|----|------|--------|--------|----------|----------|
+| TD-015 | Refactor auth module | 2 | 3 | Bob | P2 |
+| TD-018 | Add missing indexes | 1 | 2 | Dave | P1 |
+| TD-021 | Update deprecated deps | 1 | 1 | Eve | P2 |
 
-### Bugs (4 pts)
+### Bugs (3-4 pts)
 
-| ID | Bug | Points | Assignee | Priority |
-|----|-----|--------|----------|----------|
-| BUG-234 | Login timeout on slow networks | 2 | Bob | P1 |
-| BUG-238 | Chart rendering issue in Safari | 2 | Eve | P2 |
+| ID | Bug | SP Min | SP Max | Assignee | Priority |
+|----|-----|--------|--------|----------|----------|
+| BUG-234 | Login timeout on slow networks | 1 | 2 | Bob | P1 |
+| BUG-238 | Chart rendering issue in Safari | 1 | 2 | Eve | P2 |
 
 ---
 
@@ -199,11 +199,11 @@ FEAT-103 (Dark mode core)
 
 ## Capacity Guidelines
 
-| Team Size | 2-week Capacity | Buffer |
-|-----------|-----------------|--------|
-| 3 devs | 24-30 pts | 3 pts |
-| 5 devs | 40-50 pts | 5 pts |
-| 7 devs | 56-70 pts | 7 pts |
+| Team Size | 2-week Capacity Min | 2-week Capacity Max | Buffer |
+|-----------|---------------------|---------------------|--------|
+| 3 devs | 18 pts | 30 pts | 3 pts |
+| 5 devs | 30 pts | 50 pts | 5 pts |
+| 7 devs | 42 pts | 70 pts | 7 pts |
 
 ## Integration
 

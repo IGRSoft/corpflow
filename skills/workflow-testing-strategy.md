@@ -266,16 +266,16 @@ When logic changes, follow this process:
 Test effort is embedded in subtask estimates:
 
 **Correct:**
-| Subtask | Estimate |
-|---------|----------|
-| Implement login + tests | 8 SP (48h) |
-| Add OAuth support + tests | 5 SP (30h) |
+| Subtask | SP Min | SP Max | Hours Min | Hours Max |
+|---------|--------|--------|-----------|-----------|
+| Implement login + tests | 5 | 8 | 30 | 48 |
+| Add OAuth support + tests | 3 | 5 | 18 | 30 |
 
 **Incorrect:**
-| Subtask | Estimate |
-|---------|----------|
-| Implement login | 6 SP |
-| Write login tests | 2 SP |
+| Subtask | SP Min | SP Max |
+|---------|--------|--------|
+| Implement login | 4 | 6 |
+| Write login tests | 1 | 2 |
 
 ## Related
 

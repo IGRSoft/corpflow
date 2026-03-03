@@ -56,8 +56,10 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 | Metric | Value | Notes |
 |--------|-------|-------|
 | T-Shirt Size | L | Multiple components affected |
-| Story Points | 8 | Based on complexity and unknowns |
-| Effort | 5-8 days | Including testing and docs |
+| SP Min | 5 | Optimistic estimate |
+| SP Max | 10 | Pessimistic estimate |
+| Hours Min | 30 | SP Min × 6h |
+| Hours Max | 60 | SP Max × 6h |
 
 ### Complexity Analysis
 | Factor | Score (1-5) | Notes |
@@ -77,14 +79,14 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 - **Blockers**: None identified
 
 ### Breakdown
-| Component | Size | Notes |
-|-----------|------|-------|
-| OAuth Provider Setup | S | Configuration only |
-| Token Management | M | Storage, refresh logic |
-| Login UI | S | Form and error handling |
-| Session Management | M | State persistence |
-| Tests | M | Security tests critical |
-| Documentation | S | API docs, user guide |
+| Component | Size | SP Min | SP Max | Notes |
+|-----------|------|--------|--------|-------|
+| OAuth Provider Setup | S | 2 | 3 | Configuration only |
+| Token Management | M | 3 | 5 | Storage, refresh logic |
+| Login UI | S | 2 | 3 | Form and error handling |
+| Session Management | M | 3 | 5 | State persistence |
+| Tests | M | 3 | 5 | Security tests critical |
+| Documentation | S | 2 | 3 | API docs, user guide |
 
 ### Risk Assessment
 | Risk | Probability | Impact | Mitigation |
@@ -93,24 +95,24 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 | OAuth provider changes | Low | Medium | Abstract provider interface |
 
 ### Budget Calculation
-| Metric | Value |
-|--------|-------|
-| Base Hours | [SP × 6h] |
-| Buffer (15%) | [Base × 0.15] |
-| Total Hours | [Base + Buffer] |
-| Budget | $[Total × Rate] |
+| Metric | Min | Max |
+|--------|-----|-----|
+| Base Hours | [SP Min × 6h] | [SP Max × 6h] |
+| Buffer (15%) | [Base Min × 0.15] | [Base Max × 0.15] |
+| Total Hours | [Base Min + Buffer Min] | [Base Max + Buffer Max] |
+| Budget | $[Total Min × Rate] | $[Total Max × Rate] |
 ```
 
 ## Sizing Guide
 
 ### T-Shirt Sizes
-| Size | Story Points | Hours (SP × 6h) | Workflow |
-|------|--------------|-----------------|----------|
-| XS | 1 | 6 | `micro:` |
-| S | 2-3 | 12-18 | `quick:` |
-| M | 5 | 30 | `workflow:` |
-| L | 8-10 | 48-60 | `workflow:` |
-| XL | 13+ | 78+ | `workflow:` (consider splitting) |
+| Size | SP Min | SP Max | Hours Min | Hours Max | Workflow |
+|------|--------|--------|-----------|-----------|----------|
+| XS | 1 | 1 | 6 | 6 | `micro:` |
+| S | 2 | 3 | 12 | 18 | `quick:` |
+| M | 3 | 5 | 18 | 30 | `workflow:` |
+| L | 5 | 10 | 30 | 60 | `workflow:` |
+| XL | 13 | 21 | 78 | 126 | `workflow:` (consider splitting) |
 
 ### Complexity Factors
 - **Technical Complexity**: Algorithm difficulty, new technologies
@@ -121,14 +123,14 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 
 ### Story Points to Hours
 
-**Formula**: Hours = Story Points × 6h (senior developer)
+**Formula**: `Hours Min = SP Min × 6h`, `Hours Max = SP Max × 6h` (senior developer)
 
 | Level | Multiplier |
 |-------|------------|
-| Junior | SP × 10h |
-| Mid-level | SP × 8h |
-| Senior | SP × 6h (default) |
-| Expert | SP × 4h |
+| Junior | SP Min/Max × 10h |
+| Mid-level | SP Min/Max × 8h |
+| Senior | SP Min/Max × 6h (default) |
+| Expert | SP Min/Max × 4h |
 
 ### Phase Constraints
 
@@ -144,9 +146,9 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 
 ### Buffer Calculation
 
-- Add 15% buffer to base hours
-- Total = Base × 1.15
-- Budget = Total Hours × Hourly Rate
+- Add 15% buffer to both Min and Max base hours
+- Total Min = Base Min × 1.15, Total Max = Base Max × 1.15
+- Budget Min = Total Min × Rate, Budget Max = Total Max × Rate
 
 ## 3-Stage Sequential Model
 
@@ -174,12 +176,12 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 
 ### Stage Budget Template
 
-| Stage | SP | Hours | Weeks | New Months | AI Cost | Dev Cost | Buffer | Total |
-|-------|-----|-------|-------|------------|---------|----------|--------|-------|
-| Required | - | - | 1-N | N | $200×N | h×rate | 10% | - |
-| Nice-to-have | - | - | N+1 to M | +X | $200×X | h×rate | 10% | - |
-| v1.1 | - | - | M+1 to K | +Y | $200×Y | h×rate | 10% | - |
-| **TOTAL** | - | - | K | N+X+Y | - | - | - | - |
+| Stage | SP Min | SP Max | Hours Min | Hours Max | Weeks | New Months | AI Cost | Dev Cost Min | Dev Cost Max | Buffer | Total Min | Total Max |
+|-------|--------|--------|-----------|-----------|-------|------------|---------|-------------|-------------|--------|-----------|-----------|
+| Required | - | - | - | - | 1-N | N | $200×N | hMin×rate | hMax×rate | 10% | - | - |
+| Nice-to-have | - | - | - | - | N+1 to M | +X | $200×X | hMin×rate | hMax×rate | 10% | - | - |
+| v1.1 | - | - | - | - | M+1 to K | +Y | $200×Y | hMin×rate | hMax×rate | 10% | - | - |
+| **TOTAL** | - | - | - | - | K | N+X+Y | - | - | - | - | - | - |
 
 ### Gate Template
 
