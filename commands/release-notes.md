@@ -130,27 +130,27 @@ We'd love to hear your thoughts! Send feedback to feedback@example.com or use th
 | Features | 3 |
 | Improvements | 5 |
 | Bug Fixes | 8 |
-| Story Points | 38 |
+| Story Points | 30-38 |
 | Contributors | 5 |
 
 ---
 
 ## Features
 
-### FEAT-101: SSO - Okta Integration (8 pts)
+### FEAT-101: SSO - Okta Integration (5-8 pts)
 - **Author**: Alice
 - **PR**: #456
 - **Tests**: 15 new integration tests
 - **Docs**: SSO setup guide added
 - **Config**: New env vars `OKTA_CLIENT_ID`, `OKTA_SECRET`
 
-### FEAT-102: SSO - Azure AD Integration (5 pts)
+### FEAT-102: SSO - Azure AD Integration (3-5 pts)
 - **Author**: Alice
 - **PR**: #462
 - **Tests**: 12 new integration tests
 - **Config**: New env vars `AZURE_CLIENT_ID`, `AZURE_TENANT`
 
-### FEAT-103: Dark Mode Core (8 pts)
+### FEAT-103: Dark Mode Core (5-8 pts)
 - **Author**: Carol
 - **PR**: #470
 - **Tests**: 20 unit tests, 5 E2E tests

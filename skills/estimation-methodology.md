@@ -2,27 +2,27 @@
 
 Standardized project estimation for Claude Code workflows.
 
-## T-Shirt Sizing → Story Points
+## T-Shirt Sizing → Story Points (Range)
 
-| Size | Story Points | Hours (SP × 6h) | Workflow |
-|------|--------------|-----------------|----------|
-| XS | 1 | 6 | `micro:` |
-| S | 2-3 | 12-18 | `quick:` |
-| M | 5 | 30 | `workflow:` |
-| L | 8-10 | 48-60 | `workflow:` |
-| XL | 13+ | 78+ | Split first |
+| Size | SP Min | SP Max | Hours Min | Hours Max | Workflow |
+|------|--------|--------|-----------|-----------|----------|
+| XS | 1 | 1 | 6 | 6 | `micro:` |
+| S | 2 | 3 | 12 | 18 | `quick:` |
+| M | 3 | 5 | 18 | 30 | `workflow:` |
+| L | 5 | 10 | 30 | 60 | `workflow:` |
+| XL | 13 | 21 | 78 | 126 | Split first |
 
 ## Story Points to Hours
 
-**Formula**: `Hours = Story Points × 6h (senior developer)`
+**Formula**: `Hours Min = SP Min × 6h`, `Hours Max = SP Max × 6h` (senior developer)
 
 **Multiplier Variants**:
 | Level | Multiplier | Use When |
 |-------|------------|----------|
-| Junior | SP × 10h | New to platform/domain |
-| Mid-level | SP × 8h | Familiar with stack |
-| Senior | SP × 6h | **Default** |
-| Expert | SP × 4h | Deep specialization |
+| Junior | SP Min/Max × 10h | New to platform/domain |
+| Mid-level | SP Min/Max × 8h | Familiar with stack |
+| Senior | SP Min/Max × 6h | **Default** |
+| Expert | SP Min/Max × 4h | Deep specialization |
 
 ## 5-Factor Complexity Analysis
 
@@ -67,13 +67,13 @@ If a phase exceeds 160h:
 
 ## Buffer Calculation
 
-**Rule**: Add 15% buffer to total base hours.
+**Rule**: Add 15% buffer to both Min and Max base hours.
 
 ```
-Base Hours = Total SP × 6h
-Buffer = Base Hours × 0.15
-Total Hours = Base Hours + Buffer
-Budget = Total Hours × Hourly Rate
+Base Hours Min = Total SP Min × 6h    |  Base Hours Max = Total SP Max × 6h
+Buffer Min = Base Hours Min × 0.15    |  Buffer Max = Base Hours Max × 0.15
+Total Hours Min = Base Hours Min + Buffer Min  |  Total Hours Max = Base Hours Max + Buffer Max
+Budget Min = Total Hours Min × Rate   |  Budget Max = Total Hours Max × Rate
 ```
 
 **Buffer Uses**:
@@ -85,9 +85,9 @@ Budget = Total Hours × Hourly Rate
 ## Phase Distribution Formula
 
 ```
-Phase Duration (weeks) = Phase Hours / 40h per week
-Phase Cost = Phase Hours × Hourly Rate
-Phase Percentage = Phase Hours / Total Hours × 100
+Phase Duration Min (weeks) = Phase Hours Min / 40h  |  Phase Duration Max (weeks) = Phase Hours Max / 40h
+Phase Cost Min = Phase Hours Min × Rate  |  Phase Cost Max = Phase Hours Max × Rate
+Phase % Min = Phase Hours Min / Total Hours Min × 100  |  Phase % Max = Phase Hours Max / Total Hours Max × 100
 ```
 
 ## Estimation Workflow
@@ -139,11 +139,11 @@ Where:
 
 ### Combined Estimate Example
 
-For a medium feature (`workflow:`):
+For a medium feature (`workflow:`, SP 3-5):
 ```
-Human Development: 30 hours × $150/hr = $4,500
+Human Development: 18-30 hours × $150/hr = $2,700-$4,500
 AI Agent Cost: ~100K tokens × mixed = $0.35
-Total: $4,500.35
+Total: $2,700.35-$4,500.35
 
 AI adds: <0.01% to total project cost
 ```
@@ -160,10 +160,11 @@ AI adds: <0.01% to total project cost
 
 | Metric | Formula |
 |--------|---------|
-| Hours | SP × 6 |
-| Buffer | Base × 0.15 |
-| Budget | Total Hours × Rate |
-| Phase Max | 160 hours (4 weeks) |
+| Hours Min | SP Min × 6 |
+| Hours Max | SP Max × 6 |
+| Buffer | Base Min/Max × 0.15 |
+| Budget | Total Hours Min/Max × Rate |
+| Phase Max | 160 hours (4 weeks) per Max |
 | Complexity | Sum of 5 factors (25 max) |
 | AI Cost | Base Tokens × Model Rate × Factors |
 

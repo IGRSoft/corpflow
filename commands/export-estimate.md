@@ -71,10 +71,12 @@ Requires completed estimation artifacts. Run after:
 ## Validation
 
 With `--validate`, checks:
-- Story Points sum matches across 04 and 13
-- Hours sum matches across 07 and 13
-- Overview totals match phase summary
-- No phase exceeds 160 hours
+- SP Min sum matches across 04 and 13
+- SP Max sum matches across 04 and 13
+- Hours Min/Max sum matches across 07 and 13
+- Overview Min/Max totals match phase summary Min/Max
+- SP Min ≤ SP Max for every row
+- No phase Hours Max exceeds 160 hours
 - Week ranges are continuous
 
 ## Google Sheets Import

@@ -96,12 +96,12 @@ Allocate team by stage (no parallel stages):
 
 For AI agent teams:
 
-| Agent | Required | Nice-to-have | v1.1 | Total |
-|-------|----------|--------------|------|-------|
-| ALPHA | X SP | Y SP | Z SP | Sum |
-| BETA | X SP | Y SP | Z SP | Sum |
-| GAMMA | X SP | Y SP | Z SP | Sum |
-| DEVELOPER | X SP | 0 SP | Z SP | Sum |
+| Agent | Required (Min-Max) | Nice-to-have (Min-Max) | v1.1 (Min-Max) | Total (Min-Max) |
+|-------|---------------------|------------------------|----------------|-----------------|
+| ALPHA | X1-X2 SP | Y1-Y2 SP | Z1-Z2 SP | Sum Min-Max |
+| BETA | X1-X2 SP | Y1-Y2 SP | Z1-Z2 SP | Sum Min-Max |
+| GAMMA | X1-X2 SP | Y1-Y2 SP | Z1-Z2 SP | Sum Min-Max |
+| DEVELOPER | X1-X2 SP | 0 SP | Z1-Z2 SP | Sum Min-Max |
 
 ### Gate Coordination
 

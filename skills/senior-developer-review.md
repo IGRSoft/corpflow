@@ -13,45 +13,45 @@ Technical review of estimates by platform specialists.
 
 ## Adjustment Matrix
 
-| Category | Trigger | Typical Increase |
-|----------|---------|------------------|
-| AR/Camera SDKs | Metal, AVFoundation, face tracking | L → XL (+5 SP) |
-| API Integration | Image processing, async handling | +2 SP |
-| BLE/Hardware | State machines, background modes | M → L (+3 SP) |
-| Vision Framework | Face detection, landmarks | M → L (+3 SP) |
-| Offline Sync | Conflict resolution, Core Data | M → L (+3 SP) |
-| Third-party SDKs | Unknown documentation quality | +20% buffer |
+| Category | Trigger | Min Increase | Max Increase |
+|----------|---------|-------------|-------------|
+| AR/Camera SDKs | Metal, AVFoundation, face tracking | +3 SP | +5 SP |
+| API Integration | Image processing, async handling | +1 SP | +2 SP |
+| BLE/Hardware | State machines, background modes | +2 SP | +3 SP |
+| Vision Framework | Face detection, landmarks | +2 SP | +3 SP |
+| Offline Sync | Conflict resolution, Core Data | +2 SP | +3 SP |
+| Third-party SDKs | Unknown documentation quality | +15% buffer | +20% buffer |
 
 ## Platform-Specific Adjustments
 
 ### iOS/SwiftUI
-| Feature | Adjustment |
-|---------|------------|
-| Metal rendering | +5 SP |
-| ARKit integration | +8 SP |
-| CoreBluetooth state machine | +5 SP |
-| Vision face detection | +3 SP |
-| App Store review prep | +3 SP |
-| Background app refresh | +2 SP |
-| Push notifications | +2 SP |
-| Deep linking | +2 SP |
+| Feature | Min Adjustment | Max Adjustment |
+|---------|---------------|---------------|
+| Metal rendering | +3 SP | +5 SP |
+| ARKit integration | +5 SP | +8 SP |
+| CoreBluetooth state machine | +3 SP | +5 SP |
+| Vision face detection | +2 SP | +3 SP |
+| App Store review prep | +2 SP | +3 SP |
+| Background app refresh | +1 SP | +2 SP |
+| Push notifications | +1 SP | +2 SP |
+| Deep linking | +1 SP | +2 SP |
 
 ### Android/Kotlin
-| Feature | Adjustment |
-|---------|------------|
-| NDK/JNI integration | +5 SP |
-| BLE background services | +5 SP |
-| Camera2 API | +3 SP |
-| Play Store compliance | +2 SP |
-| WorkManager setup | +2 SP |
+| Feature | Min Adjustment | Max Adjustment |
+|---------|---------------|---------------|
+| NDK/JNI integration | +3 SP | +5 SP |
+| BLE background services | +3 SP | +5 SP |
+| Camera2 API | +2 SP | +3 SP |
+| Play Store compliance | +1 SP | +2 SP |
+| WorkManager setup | +1 SP | +2 SP |
 
 ### Web/React
-| Feature | Adjustment |
-|---------|------------|
-| WebGL rendering | +5 SP |
-| WebRTC integration | +5 SP |
-| Service workers | +3 SP |
-| IndexedDB sync | +3 SP |
+| Feature | Min Adjustment | Max Adjustment |
+|---------|---------------|---------------|
+| WebGL rendering | +3 SP | +5 SP |
+| WebRTC integration | +3 SP | +5 SP |
+| Service workers | +2 SP | +3 SP |
+| IndexedDB sync | +2 SP | +3 SP |
 
 ## Review Process
 
@@ -65,19 +65,19 @@ Technical review of estimates by platform specialists.
    - Note platform-specific concerns
 
 3. **Apply adjustments**
-   - Update SP for affected features
-   - Recalculate hours (SP × 6h)
-   - Add buffer for unknowns
+   - Update SP Min and SP Max for affected features
+   - Recalculate hours (Hours Min = SP Min × 6h, Hours Max = SP Max × 6h)
+   - Add buffer for unknowns (applied to both Min and Max)
 
 4. **Document changes**
-   - Original vs adjusted values
+   - Original vs adjusted Min/Max values
    - Rationale for each adjustment
    - Risk flags identified
 
 5. **Update totals**
-   - Recalculate phase summary
-   - Update budget
-   - Adjust timeline if needed
+   - Recalculate phase summary (Min and Max independently)
+   - Update budget range
+   - Adjust timeline range if needed
 
 ## Review Checklist
 
@@ -113,15 +113,15 @@ Watch for these during review:
 ## Senior Developer Review: [Project]
 
 ### Adjustment Summary
-| Category | Original | Adjusted | Delta | Reason |
-|----------|----------|----------|-------|--------|
-| [Feature] | [Size] | [New Size] | +X SP | [Reason] |
+| Category | Original (Min-Max) | Adjusted (Min-Max) | Delta | Reason |
+|----------|--------------------|--------------------|-------|--------|
+| [Feature] | [Size] (Min-Max) | [New Size] (Min-Max) | +X-Y SP | [Reason] |
 
 ### Total Impact
-- Original SP: X
-- Adjusted SP: Y
-- Delta: +Z SP (+N%)
-- Hours Impact: +Nh
+- Original SP: X Min - Y Max
+- Adjusted SP: X' Min - Y' Max
+- Delta: +Z-W SP (+N-M%)
+- Hours Impact: +Nh Min - +Mh Max
 
 ### Risk Flags
 1. [Risk 1]

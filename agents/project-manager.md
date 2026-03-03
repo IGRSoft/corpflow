@@ -237,7 +237,7 @@ This agent uses `sonnet` because:
 - Blocked by: [TASK-X]
 
 ## Estimation
-Story Points: X | Complexity: [Low/Medium/High]
+Story Points: X-Y (Min-Max) | Complexity: [Low/Medium/High]
 
 ## Priority
 [P0-Critical / P1-High / P2-Medium / P3-Low]
@@ -254,51 +254,53 @@ Story Points: X | Complexity: [Low/Medium/High]
 
 When working with estimation workflows:
 
-### Story Points to Hours
-**Formula**: Hours = Story Points × 6h (senior developer)
+### Story Points to Hours (Range)
+**Formula**: `Hours Min = SP Min × 6h`, `Hours Max = SP Max × 6h` (senior developer)
 
 | Level | Multiplier | Use When |
 |-------|------------|----------|
-| Junior | SP × 10h | New to platform/domain |
-| Mid-level | SP × 8h | Familiar with stack |
-| Senior | SP × 6h | Default |
-| Expert | SP × 4h | Deep specialization |
+| Junior | SP Min/Max × 10h | New to platform/domain |
+| Mid-level | SP Min/Max × 8h | Familiar with stack |
+| Senior | SP Min/Max × 6h | Default |
+| Expert | SP Min/Max × 4h | Deep specialization |
 
-### Budget Calculation
+### Budget Calculation (Range)
 ```
-Base Hours = Total SP × 6h
-Buffer = Base Hours × 0.15
-Total Hours = Base Hours + Buffer
-Budget = Total Hours × Hourly Rate
+Base Hours Min = Total SP Min × 6h    |  Base Hours Max = Total SP Max × 6h
+Buffer Min = Base Hours Min × 0.15    |  Buffer Max = Base Hours Max × 0.15
+Total Hours Min = Base Hours Min + Buffer Min  |  Total Hours Max = Base Hours Max + Buffer Max
+Budget Min = Total Hours Min × Rate   |  Budget Max = Total Hours Max × Rate
 ```
 
 ### Phase Distribution
-- Maximum 4 weeks (~160h) per phase
-- If phase exceeds 160h, split into sub-phases
+- Maximum 4 weeks (~160h) per phase (based on Hours Max)
+- If phase Hours Max exceeds 160h, split into sub-phases
 - Week ranges: [start]-[end] format (e.g., "1-4", "5-8")
 
 ### Phase Cost Breakdown
-| Phase | SP | Hours | Rate | Cost | % |
-|-------|-----|-------|------|------|---|
-| [N] | X | Y | $Z | $W | N% |
+| Phase | SP Min | SP Max | Hours Min | Hours Max | Rate | Cost Min | Cost Max | % |
+|-------|--------|--------|-----------|-----------|------|----------|----------|---|
+| [N] | X1 | X2 | Y1 | Y2 | $Z | $W1 | $W2 | N% |
 
 Calculate:
-- Phase Hours = Phase SP × 6h
-- Phase Cost = Phase Hours × Rate
-- Phase % = Phase Hours / Total Hours × 100
+- Phase Hours Min = Phase SP Min × 6h, Phase Hours Max = Phase SP Max × 6h
+- Phase Cost Min = Phase Hours Min × Rate, Phase Cost Max = Phase Hours Max × Rate
+- Phase % = Phase Hours / Total Hours × 100 (use midpoint for percentage)
 
 ### Timeline Calculation
 ```
-Phase Duration (weeks) = Phase Hours / 40h per week
-Total Timeline = Sum of Phase Durations + Buffer Weeks
-Buffer Weeks = Total Buffer Hours / 40h
+Phase Duration Min (weeks) = Phase Hours Min / 40h
+Phase Duration Max (weeks) = Phase Hours Max / 40h
+Total Timeline = Sum of Phase Duration Min/Max + Buffer Weeks
+Buffer Weeks Min = Total Buffer Hours Min / 40h
+Buffer Weeks Max = Total Buffer Hours Max / 40h
 ```
 
 ### Estimation Artifacts
 Generate or contribute to:
-- roadmap_milestones.csv (week-by-week plan)
-- budget_estimate.csv (cost breakdown by phase)
-- phase_summary.csv (phase rollup with totals)
+- roadmap_milestones.csv (week-by-week plan with SP Min/Max)
+- budget_estimate.csv (cost breakdown by phase with Min/Max)
+- phase_summary.csv (phase rollup with Min/Max totals)
 - risk_assessment.csv (risk register)
 
 ## 3-Stage Project Planning

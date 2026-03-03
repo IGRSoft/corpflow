@@ -98,10 +98,11 @@ Then [expected outcome]
 
 When working with `/estimate` command or estimation workflows:
 
-### T-Shirt Sizing Rules
-- Use SP × 6h for hours calculation (senior developer default)
+### T-Shirt Sizing Rules (Range-Based)
+- Use SP Min × 6h and SP Max × 6h for hours range (senior developer default)
+- Each T-shirt size maps to SP Min-Max: XS(1-1), S(2-3), M(3-5), L(5-10), XL(13-21)
 - Include tests in each subtask with "+ tests" suffix
-- Maximum 4 weeks (~160h) per phase
+- Maximum 4 weeks (~160h) per phase (based on Hours Max)
 
 ### Complexity Assessment
 Apply 5-factor analysis (1-5 each, 25 max):
@@ -122,17 +123,17 @@ Overall Score Interpretation:
 - Dependencies mapped between phases
 - Buffer: 15% added to total base hours
 
-### Budget Calculation
+### Budget Calculation (Range)
 ```
-Base Hours = Total SP × 6h
-Buffer = Base Hours × 0.15
-Total Hours = Base Hours + Buffer
-Budget = Total Hours × Hourly Rate
+Base Hours Min = Total SP Min × 6h    |  Base Hours Max = Total SP Max × 6h
+Buffer Min = Base Hours Min × 0.15    |  Buffer Max = Base Hours Max × 0.15
+Total Hours Min = Base Hours Min + Buffer Min  |  Total Hours Max = Base Hours Max + Buffer Max
+Budget Min = Total Hours Min × Rate   |  Budget Max = Total Hours Max × Rate
 ```
 
 ### Estimation Artifacts
 Generate or contribute to:
-- features_breakdown.csv (subtasks with SP/hours)
+- features_breakdown.csv (subtasks with SP Min/Max, Hours Min/Max)
 - complexity_analysis.csv (5-factor scoring)
 - success_metrics.csv (KPIs, acceptance criteria)
 
