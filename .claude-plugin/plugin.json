@@ -2,7 +2,6 @@
   "name": "igrsoft",
   "description": "Comprehensive 10-stage workflow system (PL→AR→TL→DV→SR→QA→DC→RE→FN→ST) for task management with Task System integration, security review, release engineering, and incident response.",
   "version": "3.1.0",
-  "claude_code_min_version": "2.1.51",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"

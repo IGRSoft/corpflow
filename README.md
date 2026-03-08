@@ -2,6 +2,8 @@
 
 A comprehensive 8-stage workflow system for Claude Code with Task System integration, stage transitions, approval gates, and structured task management.
 
+claude-code min version: "2.1.71"
+
 ## Features
 
 - **8-Stage Workflow**: Planning → Architecture → Team Lead → Development → QA → Documentation → Finalization → Stakeholder
