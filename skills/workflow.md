@@ -377,18 +377,20 @@ Add to project `settings.json`:
 
 ### Hook Events for Workflow Monitoring
 
-| Hook Event | Use Case |
-|------------|----------|
-| `SubagentStart` | Log stage agent activation |
-| `SubagentStop` | Detect stage agent completion |
-| `TeammateIdle` | Assign next task to idle teammate (agent teams only) |
-| `TaskCompleted` | Trigger dependent stages, update orchestrator (agent teams only) |
+| Hook Event | Use Case | Payload (2.1.69+) |
+|------------|----------|--------------------|
+| `SubagentStart` | Log stage agent activation | `agent_id`, `agent_type` |
+| `SubagentStop` | Detect stage agent completion | `agent_id`, `agent_type` |
+| `TeammateIdle` | Assign next task to idle teammate (agent teams only) | `agent_id`, `agent_type` |
+| `TaskCompleted` | Trigger dependent stages, update orchestrator (agent teams only) | `agent_id`, `agent_type` |
+
+`TeammateIdle`/`TaskCompleted` handlers can return `{"continue": false, "stopReason": "..."}` to stop a teammate (v2.1.69+). Hooks also support `"type": "http"` for external monitoring (v2.1.63+).
 
 See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration patterns.
 
 ### Limitations
 
-- Teammates cannot spawn sub-agents or teams
+- Teammates cannot spawn sub-agents or teams (runtime-enforced since v2.1.69)
 - No session resumption for in-process teammates
 - Higher token cost than Task-based orchestration
 - Maximum one team per session
@@ -396,6 +398,8 @@ See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration pat
 ### Worktree + Agent Teams
 
 When both `--worktree` and agent teams are enabled, each teammate operates in its own worktree. This provides the strongest isolation — each teammate has its own branch, working directory, and `.context/`. This is the recommended configuration for milestone parallel execution when token budget allows.
+
+> **Shared configuration (2.1.63+)**: Project configs and auto-memory are automatically shared across all git worktrees of the same repo. No per-worktree configuration duplication needed.
 
 See `milestone-workflow.md § Agent Teams Mode` for parallel execution patterns.
 See `agent-coordination.md § Agent Teams vs Subagents` for comparison.

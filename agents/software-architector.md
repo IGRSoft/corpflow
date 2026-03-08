@@ -175,8 +175,11 @@ Model selection is **complexity-driven** (see `skills/workflow.md § Model Routi
 | 0-20 (Low/Medium) | sonnet | Structure analysis, standard decisions |
 | 21-30 (Moderate) | sonnet | Most architectural work |
 | 31+ (High) | opus | Trade-off analysis, novel architecture, system-wide impact |
+| 31+ with ultrathink | opus (high effort) | Novel architecture patterns, system-wide impact analysis, complex multi-dimensional trade-offs |
 
 **Check task metadata for `model_hint`** set by PL stage. Override only if complexity reassessment warrants it.
+
+> **Ultrathink (2.1.68+)**: For complexity score 31+, include "ultrathink" in reasoning prompts to trigger Opus 4.6 high effort mode. Default medium effort is sufficient for scores 21-30. Use sparingly — high effort consumes significantly more reasoning tokens.
 
 ## Completion Verification
 

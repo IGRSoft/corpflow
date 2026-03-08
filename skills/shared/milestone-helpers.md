@@ -214,9 +214,11 @@ function completeIssue(
 
 ## Worktree Operations
 
-Git worktree isolation for milestone workflows. Requires Claude Code 2.1.49+ and `--worktree` flag.
+Git worktree isolation for milestone workflows. Requires Claude Code 2.1.51+ and `--worktree` flag.
 
 > **When to use**: `--worktree` enables true parallel issue execution by giving each issue its own working directory and branch. Without it, issues share a single worktree and must be processed sequentially via `git checkout`.
+
+> **Shared configuration (2.1.63+)**: Project configs and auto-memory are automatically shared across all git worktrees of the same repo. No per-worktree configuration duplication needed.
 
 ### isWorktreeEnabled
 

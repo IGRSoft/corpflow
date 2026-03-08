@@ -488,10 +488,12 @@ This is the **recommended configuration** for milestone parallel execution when 
 
 ### Hook Events for Team Monitoring
 
-| Hook Event | Lead Action |
-|------------|-------------|
-| `TeammateIdle` | Assign next pending issue or clean up team |
-| `TaskCompleted` | Update orchestrator.json, check milestone progress |
+| Hook Event | Lead Action | Payload (2.1.69+) |
+|------------|-------------|--------------------|
+| `TeammateIdle` | Assign next pending issue or clean up team | `agent_id`, `agent_type` |
+| `TaskCompleted` | Update orchestrator.json, check milestone progress | `agent_id`, `agent_type` |
+
+Handlers can return `{"continue": false, "stopReason": "..."}` to stop a teammate when its issue is complete or when milestone budget is exhausted.
 
 ## Related
 
