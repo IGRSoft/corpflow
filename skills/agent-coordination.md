@@ -216,10 +216,12 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 ### Subagent Lifecycle Hooks
 
-| Hook Event | Fires When | Matcher |
-|------------|------------|---------|
-| `SubagentStart` | Stage agent spawned | Agent type name (e.g., `igrsoft:developer`) |
-| `SubagentStop` | Stage agent completes | Agent type name |
+| Hook Event | Fires When | Matcher | Payload Fields (2.1.69+) |
+|------------|------------|---------|--------------------------|
+| `SubagentStart` | Stage agent spawned | Agent type name (e.g., `igrsoft:developer`) | `agent_id`, `agent_type` |
+| `SubagentStop` | Stage agent completes | Agent type name | `agent_id`, `agent_type` |
+
+> **Reliability (2.1.71+)**: Parent agents can now reliably recover subagent results after context compaction. Long-running workflows with multiple subagent handoffs no longer risk losing intermediate results.
 
 #### Project-Level Configuration
 
@@ -247,16 +249,42 @@ Add to project `settings.json` for workflow-wide monitoring:
 }
 ```
 
+Hooks also support HTTP endpoints (v2.1.63+) for external monitoring:
+
+```json
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "http", "url": "https://dashboard.example.com/webhook/stage-complete" }
+        ]
+      }
+    ]
+  }
+}
+```
+
 ### Agent Teams Lifecycle Hooks
 
 When agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), additional hook events are available:
 
-| Hook Event | Fires When | Use Case |
-|------------|------------|----------|
-| `TeammateIdle` | Teammate finishes work and becomes idle | Assign next task, reassign work |
-| `TaskCompleted` | A task in the shared task list is completed | Trigger dependent stages, update orchestrator |
+| Hook Event | Fires When | Payload Fields (2.1.69+) | Use Case |
+|------------|------------|--------------------------|----------|
+| `TeammateIdle` | Teammate finishes work and becomes idle | `agent_id`, `agent_type` | Assign next task, reassign work |
+| `TaskCompleted` | A task in the shared task list is completed | `agent_id`, `agent_type` | Trigger dependent stages, update orchestrator |
 
 These hooks enable event-driven orchestration in milestone mode, where the lead session can react to teammate progress automatically.
+
+#### Stopping Teammates Programmatically (2.1.69+)
+
+`TeammateIdle` and `TaskCompleted` hook handlers can return a stop signal to terminate a teammate:
+
+```json
+{ "continue": false, "stopReason": "Issue completed — PR created" }
+```
+
+Use cases: stop teammate when its issue is complete, when milestone budget is exhausted, or when a blocking error requires lead intervention.
 
 ## Agent Teams vs Subagents
 
@@ -285,7 +313,7 @@ These hooks enable event-driven orchestration in milestone mode, where the lead 
 
 ### Limitations
 
-- Teammates cannot spawn their own teams or sub-agents
+- Teammates cannot spawn their own teams or sub-agents (runtime-enforced since v2.1.69)
 - One team per session; clean up before starting another
 - No session resumption for in-process teammates
 - Higher token cost (~Nx for N teammates)

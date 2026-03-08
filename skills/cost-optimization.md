@@ -15,6 +15,8 @@ Comprehensive strategies for managing AI agent costs, tracking token usage, and 
 | **sonnet** | ~10x haiku | ~$3.00 | Implementation, analysis, code review, coordination |
 | **opus** | ~50x haiku | ~$15.00 | Architecture decisions, complex reasoning, meta-optimization |
 
+> **Opus 4.6 Effort Levels (2.1.68+)**: Opus defaults to medium effort on Max/Team plans. The keyword "ultrathink" in prompts triggers high effort mode (more reasoning tokens, higher cost). Reserve for complexity score 31+ tasks only — default medium effort is sufficient for most work.
+
 ### Model Selection Matrix
 
 | Task Type | Recommended Model | Rationale |
@@ -95,7 +97,20 @@ After (80 tokens):
 See: .context/analyzing.md#auth-decision
 ```
 
-### 3. Batch Operations
+### 3. Context Window Efficiency (2.1.51+)
+
+**Strategy**: Leverage automatic Claude Code improvements that reduce context usage without agent changes.
+
+| Improvement | Version | Impact |
+|-------------|---------|--------|
+| Tool results >50K chars persisted to disk (was 100K) | 2.1.51 | Large tool outputs no longer consume context |
+| Completed subagent task state released | 2.1.59 | Frees context after subagent handoffs |
+| Heavy progress payloads stripped during compaction | 2.1.63 | Better memory in long multi-agent sessions |
+| Skill listing not re-injected on `--resume` | 2.1.70 | ~600 tokens saved per session resume |
+
+These are automatic — no agent or workflow changes needed. They compound across multi-stage workflows.
+
+### 4. Batch Operations
 
 **Strategy**: Combine related queries into single invocations.
 
@@ -110,7 +125,7 @@ Savings: ~80% on overhead tokens
 - Combine related search queries
 - Cache repeated lookups within session
 
-### 4. Early Termination
+### 5. Early Termination
 
 **Strategy**: Exit stages early when completion criteria met.
 
