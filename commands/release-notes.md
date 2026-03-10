@@ -1,6 +1,8 @@
 ---
 name: release-notes
 description: Generate release notes from completed work, git history, or workflow artifacts
+argument-hint: '[--from tag] [--to tag|HEAD]'
+allowed-tools: Read, Glob, Grep, Bash(git log:*)
 model: haiku
 ---
 

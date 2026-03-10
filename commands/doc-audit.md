@@ -1,6 +1,8 @@
 ---
 name: doc-audit
 description: Audit documentation for gaps, outdated content, and quality issues
+argument-hint: '[--path dir] [--scope full|section]'
+allowed-tools: Read, Glob, Grep
 model: haiku
 ---
 

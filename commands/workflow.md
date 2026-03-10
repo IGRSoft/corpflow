@@ -1,6 +1,7 @@
 ---
 name: workflow
 description: Initialize a new workflow task with proper folder structure and Task System integration
+argument-hint: '<task description> [--milestone:N] [--secure] [--worktree] [--parallel:N]'
 model: opus
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: onboard-task
 description: Create onboarding documentation for a task or feature area to help new team members ramp up
+argument-hint: <task or feature area>
 model: sonnet
 ---
 

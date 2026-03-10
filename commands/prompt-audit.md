@@ -1,6 +1,8 @@
 ---
 name: prompt-audit
 description: Comprehensive audit of agents, commands, and prompts for quality, consistency, and best practices
+argument-hint: '[--scope agents|commands|all]'
+allowed-tools: Read, Glob, Grep
 model: sonnet
 ---
 

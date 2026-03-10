@@ -1,6 +1,8 @@
 ---
 name: context-status
 description: Check context window utilization, analyze token distribution, and trigger compression
+argument-hint: ''
+allowed-tools: Read, Glob, TaskList
 model: haiku
 ---
 

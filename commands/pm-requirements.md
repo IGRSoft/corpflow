@@ -1,6 +1,7 @@
 ---
 name: pm-requirements
 description: Generate a Product Requirements Document (PRD) from task description or user stories
+argument-hint: <feature or task description>
 model: sonnet
 ---
 

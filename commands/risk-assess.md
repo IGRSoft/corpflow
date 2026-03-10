@@ -1,6 +1,8 @@
 ---
 name: risk-assess
 description: Identify, assess, and document project risks with mitigation strategies
+argument-hint: <project or feature description>
+allowed-tools: Read, Glob, Grep
 model: sonnet
 ---
 

@@ -2,6 +2,7 @@
 name: developer
 description: Dynamic platform developer that routes to specialized agents (swift-pro, apple-developer, android-developer) based on platform context and arguments. Use for DV stage development tasks, code implementation, debugging, and refactoring.
 model: opus
+color: magenta
 isolation: worktree
 tools: Read, Glob, Grep, Write, Edit, Bash, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:swift-pro), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator)
 ---
@@ -65,72 +66,18 @@ When platform is `apple`, further route based on context:
 - **D2**: Run tests, handle failures (retry up to 3 times)
 - **D3**: All unit tests pass, implementation complete, ready for QA
 
-### Task System Format
-```typescript
-// Development task states
-TaskUpdate({ taskId: "4", status: "in_progress", owner: "developer" });  // Start
-TaskUpdate({ taskId: "4", status: "completed" });  // Complete
-```
+**Task System**: Stage DV, Task ID: 4, Owner: developer. See `skills/shared/task-system.md`.
 
-### Worktree-Aware Development
-
-When spawned in milestone mode with `--worktree`, this agent automatically receives its own git worktree via the `isolation: worktree` frontmatter field.
-
-**Mode Detection:**
-
-```typescript
-const task = TaskGet({ taskId: currentTaskId });
-const isWorktree = task.metadata?.isolation === 'worktree';
-const workdir = task.metadata?.workspace_path;  // .worktrees/milestone-{N}/{issue#}
-```
-
-**Key Differences in Worktree Mode:**
-
-| Operation | Standard Mode | Worktree Mode |
-|-----------|--------------|---------------|
-| Working directory | Project root (`.`) | `{workdir}` (worktree path) |
-| Branch | `git checkout -b feature/...` | Already checked out in worktree |
-| Build | `swift build` | `swift build --package-path {workdir}` or `cd {workdir} && swift build` |
-| Test | `swift test` | `swift test --package-path {workdir}` or `cd {workdir} && swift test` |
-| Git operations | `git add/commit/push` | `git -C {workdir} add/commit/push` |
-| Context files | `.context/` | `{workdir}/.context/` |
-
-**Worktree Development Protocol:**
-
-1. **D0**: Read task metadata, detect worktree mode, confirm working directory
-2. **D1**: All file reads/writes use `{workdir}/` prefix; all git operations use `git -C {workdir}`
-3. **D1.5**: Run tests from worktree: `swift test --package-path {workdir}`
-4. **D2**: Verify build and tests pass within worktree
-5. **D3**: Commit and push from worktree; do NOT switch branches
+**Worktree Mode**: When `task.metadata.isolation === 'worktree'`, all operations use worktree path prefix. Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. See `skills/milestone-workflow.md § Worktree Development`.
 
 ## Capabilities
 
-### Code Implementation
-- Feature development following platform patterns
-- API integration and data layer implementation
-- UI components and view logic
-- Business logic and domain models
-- Error handling and edge cases
-
-### Code Quality
-- Follow platform-specific best practices
-- Apply SOLID principles appropriately
-- Write testable, maintainable code
-- Handle memory management correctly
-- Implement proper error handling
-
-### Debugging
-- Analyze stack traces and error logs
-- Identify root causes systematically
-- Fix bugs with minimal side effects
-- Add regression tests for fixes
-
-### Refactoring
-- Improve code structure without changing behavior
-- Extract reusable components
-- Reduce duplication
-- Simplify complex logic
-- Improve naming and readability
+| Domain | Expertise |
+|--------|-----------|
+| Implementation | Feature development, API integration, data layer, UI components, view logic, business logic, domain models, error handling, edge cases |
+| Code Quality | Platform best practices, SOLID principles, testable/maintainable code, memory management, proper error handling |
+| Debugging | Stack trace analysis, systematic root cause identification, minimal-side-effect fixes, regression tests |
+| Refactoring | Structure improvement, component extraction, duplication reduction, logic simplification, naming/readability |
 
 ### Unit Test Implementation
 

@@ -1,6 +1,7 @@
 ---
 name: ux-flow
 description: Create or analyze user experience flows for features, tasks, or user journeys
+argument-hint: <feature or user journey>
 model: sonnet
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: tech-review
 description: Perform deep technical review evaluating code quality, performance, and security practices
+argument-hint: '[--pr N | --path dir] [--depth surface|deep]'
 model: sonnet
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: ethics-review
 description: Review tasks, features, or architecture for constitutional compliance with Claude's ethical principles
+argument-hint: <feature or decision to review>
 model: sonnet
 ---
 

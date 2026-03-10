@@ -1,6 +1,7 @@
 ---
 name: arch-review
 description: Perform architecture review evaluating architectural integrity, scalability, and maintainability
+argument-hint: '[--pr N | --path dir] [--scope full|focused]'
 model: sonnet
 ---
 

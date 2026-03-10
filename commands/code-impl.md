@@ -1,6 +1,7 @@
 ---
 name: code-impl
 description: Implement code changes using the appropriate platform developer with automatic agent routing
+argument-hint: '<feature description> [--platform apple|android|web]'
 model: sonnet
 ---
 

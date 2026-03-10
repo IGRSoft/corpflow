@@ -1,6 +1,8 @@
 ---
 name: standup
 description: Generate standup summary from recent work, git activity, and workflow progress
+argument-hint: '[--days N] [--format brief|detailed]'
+allowed-tools: Read, Glob, Grep, Bash(git log:*), Bash(git diff:*)
 model: haiku
 ---
 

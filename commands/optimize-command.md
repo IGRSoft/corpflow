@@ -1,6 +1,7 @@
 ---
 name: optimize-command
 description: Analyze and optimize existing command definitions for usability, consistency, and completeness
+argument-hint: <command name or path>
 model: sonnet
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: create-command
 description: Create new command definitions with proper structure, model selection, and best practices
+argument-hint: <command name and purpose>
 model: sonnet
 ---
 

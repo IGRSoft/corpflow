@@ -1,6 +1,7 @@
 ---
 name: business-case
 description: Generate business case documentation with financial analysis and strategic justification
+argument-hint: <initiative description>
 model: sonnet
 ---
 

@@ -1,6 +1,8 @@
 ---
 name: transparency-check
 description: Verify honesty and transparency properties in outputs, documentation, and code
+argument-hint: '<output, document, or code path>'
+allowed-tools: Read, Glob, Grep
 model: sonnet
 ---
 

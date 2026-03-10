@@ -2,6 +2,7 @@
 name: workflow-engineer
 description: Workflow system expert for task management, stage transitions, Task System orchestration, and troubleshooting. Use PROACTIVELY for workflow initialization, state management, or debugging workflow issues.
 model: sonnet
+color: yellow
 tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
 
@@ -24,26 +25,13 @@ Expert workflow engineer for Task System orchestration and troubleshooting.
 
 ## Capabilities
 
-### Workflow Initialization
-- Detect triggers (`workflow:` / `fworkflow:`)
-- Create `.context/` folder structure
-- Initialize Task System with dependency chains
-- Auto-detect priority and platform from description
+| Domain | Expertise |
+|--------|-----------|
+| Initialization | Trigger detection (`workflow:`/`fworkflow:`), `.context/` structure, Task System dependency chains, priority/platform auto-detection |
+| Stage Management | Status transitions via `TaskUpdate`, PL3 approval gate enforcement, fast workflow gate skip |
+| Orchestration | Milestone mode (`--milestone:N`), workspace structure, issue fetching/sorting, orchestrator.json, track monitoring, completion/error handling |
 
-### Stage Management
-- Handle status transitions via `TaskUpdate`
-- Enforce PL3 approval gate (standard workflows)
-- Skip PL3 for fast workflows
-
-### Workspace Orchestration (Milestone Mode)
-
-Acts as root orchestrator when `--milestone:N` is used:
-1. Create `.workspaces/milestone-{N}/` structure
-2. Fetch and sort issues by priority
-3. Create orchestrator.json, initialize workspaces
-4. Monitor tracks, handle completion and errors
-
-See `skills/milestone-workflow.md` for architecture details.
+See `skills/milestone-workflow.md` for milestone architecture details.
 
 ## Milestone Workflow Validation
 

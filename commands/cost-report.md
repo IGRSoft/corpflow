@@ -1,6 +1,8 @@
 ---
 name: cost-report
 description: Generate cost analysis for workflows with token usage breakdown and optimization recommendations
+argument-hint: '[--workflow-id ID] [--format table|csv]'
+allowed-tools: Read, TaskList
 model: sonnet
 ---
 

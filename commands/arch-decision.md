@@ -1,6 +1,7 @@
 ---
 name: arch-decision
 description: Create or update Architecture Decision Records (ADRs) to document significant technical decisions
+argument-hint: <decision topic or context>
 model: sonnet
 ---
 
