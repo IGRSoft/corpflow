@@ -1,6 +1,8 @@
 ---
 name: export-estimate
 description: Generate CSV files from estimation data for Google Sheets import
+argument-hint: <task or milestone reference>
+allowed-tools: Read, Write
 model: haiku
 ---
 

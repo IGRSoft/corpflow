@@ -1,6 +1,7 @@
 ---
 name: pm-prioritize
 description: Apply RICE, WSJF, or other prioritization frameworks to rank features and tasks
+argument-hint: <feature list or backlog items>
 model: sonnet
 ---
 

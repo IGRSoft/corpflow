@@ -1,6 +1,8 @@
 ---
 name: test-coverage
 description: Analyze test coverage gaps and generate recommendations for improving test quality
+argument-hint: '[--path dir] [--threshold N]'
+allowed-tools: Read, Glob, Grep, Bash(swift test:*)
 model: haiku
 ---
 

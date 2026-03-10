@@ -1,6 +1,7 @@
 ---
 name: create-skill
 description: Create new skill definitions with proper structure, knowledge patterns, and best practices
+argument-hint: <skill name and purpose>
 model: sonnet
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: estimate
 description: Estimate task complexity, effort, and resources to determine appropriate workflow tier
+argument-hint: '<task description> [--quick|--detailed]'
 model: sonnet
 ---
 

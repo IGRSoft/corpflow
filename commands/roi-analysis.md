@@ -1,6 +1,7 @@
 ---
 name: roi-analysis
 description: Calculate Return on Investment for initiatives with NPV, IRR, and payback period
+argument-hint: <initiative or investment>
 model: sonnet
 ---
 

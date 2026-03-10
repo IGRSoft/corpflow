@@ -1,6 +1,7 @@
 ---
 name: harm-assessment
 description: Evaluate potential harms of features, decisions, or code using constitutional harm avoidance framework
+argument-hint: '<feature, decision, or scenario>'
 model: sonnet
 ---
 
