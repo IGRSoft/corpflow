@@ -3,6 +3,7 @@ name: code-review-dev
 description: Perform platform-aware code review using specialized developer expertise
 argument-hint: '[--pr N | --path dir]'
 model: sonnet
+allowed-tools: Read, Glob, Grep
 ---
 
 # Developer Code Review Command

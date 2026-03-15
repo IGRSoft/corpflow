@@ -3,6 +3,7 @@ name: appstore-iap
 description: Set up App Store Connect in-app purchases and subscriptions for a new app from its bundle ID
 argument-hint: <bundle ID>
 model: sonnet
+allowed-tools: Read, Glob, Grep, Write
 ---
 
 # App Store IAP Setup Command

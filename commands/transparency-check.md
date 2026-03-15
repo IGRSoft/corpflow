@@ -6,6 +6,8 @@ allowed-tools: Read, Glob, Grep
 model: sonnet
 ---
 
+> **When to use**: `/transparency-check` for honesty properties. `/ethics-review` for constitutional compliance. `/harm-assessment` for stakeholder impact analysis.
+
 # /transparency-check
 
 Verify that outputs, documentation, and code adhere to Claude's seven honesty properties: truthful, calibrated, transparent, forthright, non-deceptive, non-manipulative, and autonomy-preserving.

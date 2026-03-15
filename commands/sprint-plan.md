@@ -3,6 +3,7 @@ name: sprint-plan
 description: Plan sprint with capacity analysis, task breakdown, and resource allocation
 argument-hint: <sprint name or number>
 model: sonnet
+allowed-tools: Read, Glob, Grep, Write
 ---
 
 # Sprint Plan Command

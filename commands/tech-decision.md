@@ -3,6 +3,7 @@ name: tech-decision
 description: Create or update Technology Decision Records (TDRs) for implementation-level technology choices
 argument-hint: <technology choice or question>
 model: sonnet
+allowed-tools: Read, Glob, Grep, Write
 ---
 
 # Technology Decision Record Command

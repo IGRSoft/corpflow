@@ -3,6 +3,7 @@ name: api-docs
 description: Generate or update API documentation from code, including endpoints, schemas, and examples
 argument-hint: '[--path dir] [--format markdown|openapi]'
 model: sonnet
+allowed-tools: Read, Glob, Grep
 ---
 
 # API Documentation Command

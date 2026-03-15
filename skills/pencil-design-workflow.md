@@ -276,5 +276,5 @@ If Pencil MCP tools fail to load or calls error (e.g., Pencil.app not running):
 
 ## Related
 
-- `agents/designer.md` - Designer agent
-- `skills/task-folder-organization.md` - Context folder structure
+- `agents/designer.md` - Designer agent definition
+- `skills/task-folder-organization.md` - `.context/designs/` directory structure and context folder organization

@@ -3,6 +3,7 @@ name: tech-debt
 description: Analyze, document, and prioritize technical debt in the codebase
 argument-hint: '[--path dir] [--severity critical|high|medium|low]'
 model: sonnet
+allowed-tools: Read, Glob, Grep
 ---
 
 # Technical Debt Command

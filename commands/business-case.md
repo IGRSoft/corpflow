@@ -3,7 +3,10 @@ name: business-case
 description: Generate business case documentation with financial analysis and strategic justification
 argument-hint: <initiative description>
 model: sonnet
+allowed-tools: Read, Glob, Grep, Write
 ---
+
+> **When to use**: `/business-case` for strategic justification and financial analysis. `/roi-analysis` for focused ROI metrics (NPV, IRR, payback period).
 
 # Business Case Command
 

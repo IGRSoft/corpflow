@@ -176,7 +176,7 @@ Tests/
 ```
 ```
 
-## D Stage: Test Implementation
+## DV Stage: Test Implementation
 
 The developer MUST implement unit tests alongside production code during the DV stage.
 
@@ -256,7 +256,7 @@ When logic changes, follow this process:
 - If new patterns introduced: document testability approach
 - If boundaries changed: update test organization
 
-### 3. Implementation (D Stage)
+### 3. Implementation (DV Stage)
 - Update tests BEFORE or WITH code changes
 - Run tests frequently during development
 - Ensure no regressions introduced

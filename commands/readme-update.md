@@ -3,6 +3,7 @@ name: readme-update
 description: Update README files based on code changes, keeping documentation in sync with implementation
 argument-hint: '[--path README.md]'
 model: haiku
+allowed-tools: Read, Glob, Grep, Write, Edit, Bash(git log:*)
 ---
 
 # README Update Command
