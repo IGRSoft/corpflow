@@ -230,6 +230,10 @@ If handoff exceeds token budget:
 2. Reference full output via file path
 3. Include only critical items inline
 
+## Model Configuration
+
+> Agent frontmatter accepts full model IDs (e.g., `claude-opus-4-5`) in addition to aliases (`opus`). Cross-plugin handoffs can specify exact model versions when precision matters for provider-specific behavior.
+
 ## Best Practices
 
 1. **Always compress context**: Don't pass full documents between plugins

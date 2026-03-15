@@ -3,7 +3,7 @@ name: workflow-engineer
 description: Workflow system expert for task management, stage transitions, Task System orchestration, and troubleshooting. Use PROACTIVELY for workflow initialization, state management, or debugging workflow issues.
 model: sonnet
 color: yellow
-tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList
+tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
 
 Expert workflow engineer for Task System orchestration and troubleshooting.
@@ -53,7 +53,8 @@ When `--worktree` flag is present, add these checks:
 - [ ] `.worktrees/` directory is writable
 - [ ] No existing worktree for the same branch (`git worktree list`)
 - [ ] Sufficient disk space for worktree copies
-- [ ] No stale worktrees (`git worktree prune` if needed)
+- [ ] No stale worktrees (auto-cleaned on startup; `git worktree prune` as fallback)
+- [ ] If `worktree.sparsePaths` configured, validate paths exist in repo
 - [ ] orchestrator.json version is 3.0 with `isolation: "worktree"`
 
 ### Per-Issue Checks (CRITICAL)
@@ -177,7 +178,7 @@ When `--worktree` flag is present, add these checks:
 1. Check for uncommitted work: `git -C {worktree_path} status`
 2. Commit or stash changes: `git -C {worktree_path} stash`
 3. Force remove if truly unneeded: `git worktree remove --force {path}`
-4. Run `git worktree prune` to clean stale references
+4. Run `git worktree prune` to clean stale references (auto-cleaned on startup)
 
 ### Orchestrator / Worktree Mismatch
 

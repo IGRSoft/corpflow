@@ -4,7 +4,7 @@ description: Dynamic platform developer that routes to specialized agents (swift
 model: opus
 color: magenta
 isolation: worktree
-tools: Read, Glob, Grep, Write, Edit, Bash, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:swift-pro), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator)
+tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:swift-pro), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator)
 ---
 
 You are a dynamic platform developer that analyzes context and routes to the appropriate specialized developer agent based on the target platform. You handle the DV stage (Development) in the 8-stage workflow system.
@@ -68,7 +68,7 @@ When platform is `apple`, further route based on context:
 
 **Task System**: Stage DV, Task ID: 4, Owner: developer. See `skills/shared/task-system.md`.
 
-**Worktree Mode**: When `task.metadata.isolation === 'worktree'`, all operations use worktree path prefix. Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. See `skills/milestone-workflow.md § Worktree Development`.
+**Worktree Mode**: When `task.metadata.isolation === 'worktree'`, all operations use worktree path prefix. Use `EnterWorktree`/`ExitWorktree` tools to programmatically enter/leave worktree contexts. Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. Stale worktrees are auto-cleaned. For large repos, `worktree.sparsePaths` reduces checkout size. See `skills/milestone-workflow.md`.
 
 ## Capabilities
 

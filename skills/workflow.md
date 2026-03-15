@@ -338,7 +338,7 @@ Document errors in `.context/error.md` with problem, root cause, attempted solut
 
 | Check | Threshold | Action |
 |-------|-----------|--------|
-| Context size | > 50% window | Compress previous stages |
+| Context size | > 50% window (standard) or > 30% (1M window) | Compress previous stages |
 | Budget usage | > 75% | Alert user |
 
 ### Post-Stage
@@ -346,6 +346,9 @@ Document errors in `.context/error.md` with problem, root cause, attempted solut
 - Compress context for handoff (50-100 tokens)
 - Log token usage in task metadata
 - Validate artifacts created
+- `PostCompact` hook fires after auto-compaction — use to re-inject critical workflow state
+
+> On Opus 4.6 with Max/Team/Enterprise, context window is 1M tokens. Compression still recommended at stage boundaries for cost efficiency even with larger windows.
 
 ## Constitutional Integration
 
@@ -377,20 +380,22 @@ Add to project `settings.json`:
 
 ### Hook Events for Workflow Monitoring
 
-| Hook Event | Use Case | Payload (2.1.69+) |
-|------------|----------|--------------------|
+| Hook Event | Use Case | Payload |
+|------------|----------|---------|
 | `SubagentStart` | Log stage agent activation | `agent_id`, `agent_type` |
 | `SubagentStop` | Detect stage agent completion | `agent_id`, `agent_type` |
 | `TeammateIdle` | Assign next task to idle teammate (agent teams only) | `agent_id`, `agent_type` |
 | `TaskCompleted` | Trigger dependent stages, update orchestrator (agent teams only) | `agent_id`, `agent_type` |
 
-`TeammateIdle`/`TaskCompleted` handlers can return `{"continue": false, "stopReason": "..."}` to stop a teammate (v2.1.69+). Hooks also support `"type": "http"` for external monitoring (v2.1.63+).
+`TeammateIdle`/`TaskCompleted` handlers can return `{"continue": false, "stopReason": "..."}` to stop a teammate. Hooks also support `"type": "http"` for external monitoring.
+
+> `SessionEnd` hook timeout is configurable via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS`. Useful for workflows requiring cleanup time (e.g., worktree pruning).
 
 See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration patterns.
 
 ### Limitations
 
-- Teammates cannot spawn sub-agents or teams (runtime-enforced since v2.1.69)
+- Teammates cannot spawn sub-agents or teams (runtime-enforced)
 - No session resumption for in-process teammates
 - Higher token cost than Task-based orchestration
 - Maximum one team per session
@@ -399,7 +404,7 @@ See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration pat
 
 When both `--worktree` and agent teams are enabled, each teammate operates in its own worktree. This provides the strongest isolation — each teammate has its own branch, working directory, and `.context/`. This is the recommended configuration for milestone parallel execution when token budget allows.
 
-> **Shared configuration (2.1.63+)**: Project configs and auto-memory are automatically shared across all git worktrees of the same repo. No per-worktree configuration duplication needed.
+> Project configs and auto-memory are automatically shared across all git worktrees of the same repo. No per-worktree configuration duplication needed.
 
 See `milestone-workflow.md § Agent Teams Mode` for parallel execution patterns.
 See `agent-coordination.md § Agent Teams vs Subagents` for comparison.

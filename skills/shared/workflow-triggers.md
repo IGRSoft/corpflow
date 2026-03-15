@@ -20,7 +20,7 @@
 | `--secure` | Use 10-stage with SR, RE |
 | `--ethics-review` | Add ET checkpoint after PL |
 | `--sequential` | DC waits for QA (default: parallel) |
-| `--worktree` | Use git worktrees for issue isolation (requires --milestone) |
+| `--worktree` | Use git worktrees for issue isolation (supports sparse checkout via `worktree.sparsePaths`, auto-cleanup, fast startup). Requires --milestone |
 
 ## Auto-Detection
 

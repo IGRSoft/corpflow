@@ -119,7 +119,11 @@ With `--worktree` mode in milestone workflows, true parallel DV stages across is
 | Multiple DV stages (different issues) | **Blocked** — shared working directory | **Safe** — separate worktrees |
 | Parallel issue execution | Sequential `git checkout` | Concurrent worktrees |
 
-**Capacity consideration**: Each worktree duplicates the working tree. For large repos, factor disk space into parallel track allocation (`--parallel:N`).
+**Capacity consideration**: Each worktree duplicates the working tree. For large repos, use `worktree.sparsePaths` or factor disk space into parallel track allocation (`--parallel:N`).
+
+> Failed `Read`/`Glob`/`WebFetch` calls don't cancel sibling parallel calls — only `Bash` errors cascade. This makes parallel file inspection across issues safer.
+
+> Use the `model` parameter on Task() calls to override model per delegation. Team agents inherit leader's model by default.
 
 ### Parallel Execution Protocol
 

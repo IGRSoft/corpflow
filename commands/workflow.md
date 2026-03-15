@@ -40,7 +40,7 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--ethics-review` | Add ET checkpoint after PL |
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 10-stage workflow |
-| `--worktree` | Use git worktrees for issue isolation (requires --milestone) |
+| `--worktree` | Use git worktrees for issue isolation (requires --milestone). Configure `worktree.sparsePaths` in settings.json for large repos |
 
 ## Examples
 
@@ -175,9 +175,11 @@ git -C .worktrees/milestone-{N}/{issue#} push -u origin feature/{issue#}-{slug}
 gh pr create --base develop --title "#{issue} {title}" --body "Closes #{issue}"
 
 # 4. Update orchestrator.json → status: "completed"
-# 5. Remove worktree (branch persists on remote)
+# 5. Exit worktree context if EnterWorktree was used
+# ExitWorktree tool call
+# 6. Remove worktree (branch persists on remote)
 git worktree remove .worktrees/milestone-{N}/{issue#}
-git worktree prune
+# Stale worktrees auto-cleaned on startup
 ```
 
 ### Flow Diagram (Legacy — Sequential)

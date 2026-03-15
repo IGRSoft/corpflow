@@ -15,7 +15,7 @@ Comprehensive strategies for managing AI agent costs, tracking token usage, and 
 | **sonnet** | ~10x haiku | ~$3.00 | Implementation, analysis, code review, coordination |
 | **opus** | ~50x haiku | ~$15.00 | Architecture decisions, complex reasoning, meta-optimization |
 
-> **Opus 4.6 Effort Levels (2.1.68+)**: Opus defaults to medium effort on Max/Team plans. The keyword "ultrathink" in prompts triggers high effort mode (more reasoning tokens, higher cost). Reserve for complexity score 31+ tasks only — default medium effort is sufficient for most work.
+> **Opus 4.6 Effort Levels**: `low` ○, `medium` ◐, `high` ● only. Opus defaults to medium effort. The keyword "ultrathink" triggers high effort mode. Use `/effort auto` to reset to default. Reserve high effort for complexity score 31+ tasks only.
 
 ### Model Selection Matrix
 
@@ -97,7 +97,7 @@ After (80 tokens):
 See: .context/analyzing.md#auth-decision
 ```
 
-### 3. Context Window Efficiency (2.1.51+)
+### 3. Context Window Efficiency
 
 **Strategy**: Leverage automatic Claude Code improvements that reduce context usage without agent changes.
 
@@ -107,6 +107,11 @@ See: .context/analyzing.md#auth-decision
 | Completed subagent task state released | 2.1.59 | Frees context after subagent handoffs |
 | Heavy progress payloads stripped during compaction | 2.1.63 | Better memory in long multi-agent sessions |
 | Skill listing not re-injected on `--resume` | 2.1.70 | ~600 tokens saved per session resume |
+| Prompt cache fix (up to 12x input cost reduction) | 2.1.72 | SDK query() calls benefit automatically |
+| Failed Read/Glob/WebFetch no longer cancel parallel siblings | 2.1.72 | Safer parallel tool use in agents |
+| 1M context window for Opus 4.6 (Max/Team/Enterprise) | 2.1.75 | 10x larger context window |
+| Auto-compaction circuit breaker (stops after 3 failures) | 2.1.76 | Prevents infinite compaction loops |
+| Deferred tool schemas preserved after compaction | 2.1.76 | Array/number params work post-compaction |
 
 These are automatic — no agent or workflow changes needed. They compound across multi-stage workflows.
 
