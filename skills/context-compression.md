@@ -175,6 +175,22 @@ Maximum tokens to pass between stages:
 | **DC→FN** | 200 | Doc changes, release items, changelog |
 | **FN→ST** | 150 | Executive summary, approval checklist |
 
+### Extended Context Budget (1M Window)
+
+When running on Opus 4.6 with Max/Team/Enterprise plans, the context window is 1M tokens. Handoff budgets scale proportionally:
+
+| Handoff | Standard Budget | Extended Budget (1M) |
+|---------|----------------|---------------------|
+| **PL→AR** | 500 | 2,000 |
+| **AR→TL** | 300 | 1,200 |
+| **TL→DV** | 400 | 1,600 |
+| **DV→QA** | 300 | 1,200 |
+| **QA→DC** | 200 | 800 |
+| **DC→FN** | 200 | 800 |
+| **FN→ST** | 150 | 600 |
+
+> Use extended budgets only when complexity warrants it — standard budgets are still preferred for cost efficiency. Compression remains a best practice regardless of window size.
+
 ### Budget Enforcement
 
 When context exceeds budget:
@@ -205,6 +221,27 @@ When context exceeds budget:
 | Context > 50% window | Summarize completed stages |
 | Error retry | Trim non-essential context |
 | User request | Manual compression |
+| Post-compaction | Deferred tool schemas preserved — no need to re-fetch after compaction |
+
+### PostCompact Hook
+
+The `PostCompact` hook fires after automatic context compaction completes. Use it for workflow context recovery:
+
+```json
+{
+  "hooks": {
+    "PostCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "./tools/post-compact-recovery.sh" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Use cases: re-inject critical task state, log compression metrics, recover workflow context in long multi-stage sessions.
 
 ### Context Size Estimation
 

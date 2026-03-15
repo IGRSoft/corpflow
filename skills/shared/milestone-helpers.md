@@ -300,10 +300,52 @@ function removeIssueWorktree(
   execFileNoThrow('git', args);
 
   // 3. Prune stale worktree entries
+  // Note: Stale worktrees from interrupted runs are auto-cleaned on startup (2.1.76+)
+  // Manual prune as fallback:
   // git worktree prune
   execFileNoThrow('git', ['worktree', 'prune']);
 
   return { removed: true };
+}
+```
+
+### createSparseWorktree (2.1.76+)
+
+For large monorepos, use sparse checkout to reduce worktree size:
+
+```typescript
+function createSparseWorktree(
+  milestoneNumber: number,
+  issue: Issue,
+  baseBranch: string,
+  sparsePaths: string[]  // e.g., ["src/", "tests/", "Package.swift"]
+): WorkspaceState {
+  const branchName = generateBranchName(issue);
+  const worktreePath = `.worktrees/milestone-${milestoneNumber}/${issue.number}`;
+
+  // 1. Create worktree
+  // git worktree add -b ${branchName} ${worktreePath} origin/${baseBranch}
+
+  // 2. Enable sparse checkout (2.1.76+)
+  // git -C ${worktreePath} sparse-checkout init --cone
+  // git -C ${worktreePath} sparse-checkout set ${sparsePaths.join(' ')}
+
+  // 3. Create .context/ inside worktree
+  // mkdir -p ${worktreePath}/.context
+
+  // 4. Write workspace.json (same as createIssueWorktree)
+  const workspace = {
+    version: '2.0',
+    isolation: 'worktree',
+    sparse_paths: sparsePaths,
+    issue: { number: issue.number, title: issue.title, labels: issue.labels },
+    git: { branch_name: branchName, base_branch: baseBranch, worktree_path: worktreePath },
+    workflow: { track: null, task_prefix: null },
+    execution: { current_stage: null, retry_count: 0 }
+  };
+
+  writeFile(`${worktreePath}/workspace.json`, JSON.stringify(workspace, null, 2));
+  return workspace;
 }
 ```
 
@@ -374,7 +416,11 @@ function completeIssueWorktree(
     track: null
   });
 
-  // 5. Remove worktree (branch persists on remote)
+  // 5. Exit worktree context (2.1.72+)
+  // If EnterWorktree was used, call ExitWorktree tool before removal
+
+  // 6. Remove worktree (branch persists on remote)
+  // Note: Stale worktrees from interrupted runs are auto-cleaned on startup (2.1.76+)
   removeIssueWorktree(milestoneNumber, issueNumber);
 }
 ```

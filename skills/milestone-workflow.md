@@ -48,6 +48,22 @@ Each issue gets a dedicated git worktree with full source isolation:
 
 > Add `.worktrees/` to `.gitignore` to prevent worktree contents from appearing as untracked files.
 
+#### Sparse Checkout
+
+For large monorepos, configure `worktree.sparsePaths` in project `settings.json` to check out only relevant directories:
+
+```json
+{
+  "worktree": {
+    "sparsePaths": ["src/", "tests/", "Package.swift"]
+  }
+}
+```
+
+This reduces disk usage per worktree and speeds up initialization.
+
+> `--worktree` startup reads git refs directly and skips redundant fetch, significantly faster for repos with many branches.
+
 ### Orchestrator State (Required Schema)
 
 #### Legacy Mode (version 2.0)
@@ -343,12 +359,13 @@ Applies when `--worktree` flag is used with `--milestone:N`.
 | Context path | `{worktree_path}/.context/` |
 | Builds/tests | Run from worktree directory |
 | Commits | Committed to the worktree's branch automatically |
+| Resume from background | Task tool resume restores cwd to correct worktree |
 
 ### Cleanup
 
 | Event | Action |
 |-------|--------|
-| PR created | `git worktree remove {path}` (branch persists on remote) |
+| PR created | `ExitWorktree` then `git worktree remove {path}` (branch persists on remote) |
 | Uncommitted changes | Warn user, preserve worktree |
 | Failed issue | Preserve worktree for debugging |
 | Milestone complete | `git worktree prune` to remove all stale entries |
@@ -357,7 +374,7 @@ Applies when `--worktree` flag is used with `--milestone:N`.
 
 1. **Uncommitted changes**: `removeIssueWorktree()` checks `git status --porcelain` and refuses removal by default. Pass `force=true` to override.
 2. **Failed issues**: Worktree preserved with `status: "failed"` in orchestrator. User can inspect and retry.
-3. **Stale worktrees**: If a session crashes, run `git worktree prune` to clean up orphaned entries.
+3. **Stale worktrees**: Worktrees from interrupted parallel runs are auto-cleaned on startup. Manual fallback: `git worktree prune`.
 4. **Disk space**: Each worktree duplicates the working tree. For large repos, monitor with `du -sh .worktrees/`.
 
 ## Error Handling
@@ -488,12 +505,14 @@ This is the **recommended configuration** for milestone parallel execution when 
 
 ### Hook Events for Team Monitoring
 
-| Hook Event | Lead Action | Payload (2.1.69+) |
-|------------|-------------|--------------------|
+| Hook Event | Lead Action | Payload |
+|------------|-------------|---------|
 | `TeammateIdle` | Assign next pending issue or clean up team | `agent_id`, `agent_type` |
 | `TaskCompleted` | Update orchestrator.json, check milestone progress | `agent_id`, `agent_type` |
 
 Handlers can return `{"continue": false, "stopReason": "..."}` to stop a teammate when its issue is complete or when milestone budget is exhausted.
+
+Background completion notifications include `worktreePath` and `worktreeBranch` fields, enabling the orchestrator to locate the correct worktree for each teammate.
 
 ## Related
 

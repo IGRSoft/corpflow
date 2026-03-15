@@ -30,6 +30,8 @@ Single source of truth for workflow stage codes.
 
 Support agents don't own workflow stages but can be invoked on-demand via Task tool.
 
+> Model column uses aliases (`opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-5`) are also supported in agent frontmatter. Use aliases for portability across providers. Opus 4.6 is the default across all providers (Anthropic, Bedrock, Vertex, Foundry).
+
 ## Workflow Pipelines
 
 ```

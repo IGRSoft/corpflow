@@ -40,7 +40,7 @@ Check context window utilization, analyze token distribution, and trigger compre
 | Metric | Value |
 |--------|-------|
 | Current Usage | 45,000 tokens |
-| Window Size | 100,000 tokens |
+| Window Size | 200,000 tokens (or 1,000,000 on Opus 4.6 Max/Team/Enterprise) |
 | Utilization | 45% |
 | Status | Normal |
 
@@ -238,3 +238,4 @@ This command is used:
 - `skills/context-compression.md` - Compression techniques
 - `skills/cost-optimization.md` - Cost management
 - `/cost-report` - Token cost analysis
+- `/context` (built-in) - Enhanced with actionable suggestions for context optimization

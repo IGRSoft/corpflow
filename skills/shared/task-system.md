@@ -69,8 +69,13 @@ Configure in project `settings.json` or agent frontmatter `hooks` field:
 | `SubagentStop` | Stage agent completes | settings.json or agent frontmatter |
 | `TeammateIdle` | Teammate finishes and idles | settings.json (agent teams only) |
 | `TaskCompleted` | Task marked completed | settings.json (agent teams only) |
+| `PostCompact` | After context compaction completes | settings.json (all modes) |
+| `Elicitation` | MCP server requests user input | settings.json |
+| `ElicitationResult` | User responds to MCP elicitation | settings.json |
 
 `TeammateIdle` and `TaskCompleted` require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
+
+> `SessionEnd` hook timeout is configurable via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` for workflows requiring cleanup time (e.g., worktree pruning, orchestrator state finalization).
 
 See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration examples.
 
@@ -87,5 +92,17 @@ When agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), additio
 
 Team storage: `~/.claude/teams/{team-name}/config.json`
 Task storage: `~/.claude/tasks/{team-name}/`
+
+### Custom Auto-Memory Directory
+
+Configure a custom directory for workflow-specific auto-memory:
+
+```json
+{
+  "autoMemoryDirectory": ".workflow-memory/"
+}
+```
+
+Allows workflow-specific memory separate from the default `~/.claude/` location.
 
 Teammates share a task list and can self-claim available work. See `milestone-workflow.md § Agent Teams Mode` for milestone patterns.
