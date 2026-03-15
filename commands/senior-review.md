@@ -3,6 +3,7 @@ name: senior-review
 description: Technical review of estimates by platform specialist
 argument-hint: <estimate or task to review>
 model: sonnet
+allowed-tools: Read, Glob, Grep
 ---
 
 # Senior Review Command

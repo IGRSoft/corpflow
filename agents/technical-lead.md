@@ -2,7 +2,7 @@
 name: technical-lead
 description: Technical excellence champion for code quality, technical decisions, debt management, and implementation guidance. Use PROACTIVELY for deep technical reviews, technology evaluation, or code quality enforcement.
 model: opus
-color: green
+color: magenta
 tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
 

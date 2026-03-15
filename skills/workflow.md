@@ -271,6 +271,23 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 
 AR stage verifies: `if (!pTask.metadata?.p3_approved) throw new Error("PL3 approval required");`
 
+### Default Model Assignments
+
+| Stage | Model | Rationale |
+|-------|-------|-----------|
+| PL | sonnet | Planning and generation |
+| AR | opus | Complex architecture decisions |
+| TL | sonnet | Coordination and delegation |
+| DV | opus | Implementation depth |
+| SR | opus | Security analysis complexity |
+| QA | haiku | Test execution and validation |
+| DC | haiku | Documentation generation |
+| RE | haiku | Release operations |
+| FN | sonnet | Final coordination |
+| ST | sonnet | Business review |
+
+Override via Task `model` parameter when stage complexity warrants it. See `cost-optimization.md` for cost tiers.
+
 ## Agent Responsibilities
 
 | Stage | Agent | Key Tasks |

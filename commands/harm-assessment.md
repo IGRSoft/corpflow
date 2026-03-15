@@ -3,7 +3,10 @@ name: harm-assessment
 description: Evaluate potential harms of features, decisions, or code using constitutional harm avoidance framework
 argument-hint: '<feature, decision, or scenario>'
 model: sonnet
+allowed-tools: Read, Glob, Grep
 ---
+
+> **When to use**: `/harm-assessment` for stakeholder impact analysis. `/ethics-review` for constitutional compliance. `/transparency-check` for honesty properties.
 
 # /harm-assessment
 

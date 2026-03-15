@@ -3,6 +3,7 @@ name: optimize-agent
 description: Analyze and optimize existing agent definitions for clarity, efficiency, and consistency
 argument-hint: <agent name or path>
 model: sonnet
+allowed-tools: Read, Glob, Grep, Write
 ---
 
 # Optimize Agent Command

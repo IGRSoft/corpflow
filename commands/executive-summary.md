@@ -3,6 +3,7 @@ name: executive-summary
 description: Generate executive-level summary of projects or initiatives for stakeholder communication
 argument-hint: <project or initiative>
 model: sonnet
+allowed-tools: Read, Glob, Grep, Write
 ---
 
 # Executive Summary Command

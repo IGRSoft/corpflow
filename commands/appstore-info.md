@@ -3,6 +3,7 @@ name: appstore-info
 description: Scaffold App Store publishing folder and generate bilingual EN/UA listing content from README
 argument-hint: <app name or bundle ID>
 model: sonnet
+allowed-tools: Read, Glob, Grep, Write
 ---
 
 # App Store Info Command

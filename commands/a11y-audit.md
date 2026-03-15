@@ -3,6 +3,7 @@ name: a11y-audit
 description: Conduct an accessibility audit for screens, components, or the entire application
 argument-hint: '<screen, component, or app path>'
 model: sonnet
+allowed-tools: Read, Glob, Grep
 ---
 
 # Accessibility Audit Command

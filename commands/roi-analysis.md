@@ -3,7 +3,10 @@ name: roi-analysis
 description: Calculate Return on Investment for initiatives with NPV, IRR, and payback period
 argument-hint: <initiative or investment>
 model: sonnet
+allowed-tools: Read, Glob, Grep, Write
 ---
+
+> **When to use**: `/roi-analysis` for focused ROI metrics (NPV, IRR, payback period). `/business-case` for strategic justification and financial analysis.
 
 # ROI Analysis Command
 

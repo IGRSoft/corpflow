@@ -3,6 +3,7 @@ name: pm-prioritize
 description: Apply RICE, WSJF, or other prioritization frameworks to rank features and tasks
 argument-hint: <feature list or backlog items>
 model: sonnet
+allowed-tools: Read, Glob, Grep, Write
 ---
 
 # PM Prioritize Command

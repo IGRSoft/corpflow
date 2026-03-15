@@ -3,6 +3,7 @@ name: design-review
 description: Conduct a comprehensive design review for screens, components, or features
 argument-hint: '<screen, component, or feature>'
 model: sonnet
+allowed-tools: Read, Glob, Grep
 ---
 
 # Design Review Command

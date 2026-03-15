@@ -3,7 +3,10 @@ name: ethics-review
 description: Review tasks, features, or architecture for constitutional compliance with Claude's ethical principles
 argument-hint: <feature or decision to review>
 model: sonnet
+allowed-tools: Read, Glob, Grep
 ---
+
+> **When to use**: `/ethics-review` for constitutional compliance. `/harm-assessment` for stakeholder impact analysis. `/transparency-check` for honesty properties.
 
 # /ethics-review
 

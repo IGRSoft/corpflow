@@ -3,6 +3,7 @@ name: create-agent
 description: Create new agent definitions with proper structure, model selection, and best practices
 argument-hint: <agent name and purpose>
 model: sonnet
+allowed-tools: Read, Glob, Grep, Write
 ---
 
 # Create Agent Command
