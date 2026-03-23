@@ -1,5 +1,5 @@
 ---
-name: release-notes
+name: create-release-notes
 description: Generate release notes from completed work, git history, or workflow artifacts
 argument-hint: '[--from tag] [--to tag|HEAD]'
 allowed-tools: Read, Glob, Grep, Bash(git log:*)
@@ -13,10 +13,10 @@ Generate release notes from completed work, git history, or workflow artifacts.
 ## Usage
 
 ```
-/release-notes
-/release-notes --version <version>
-/release-notes --from-commits
-/release-notes --format [markdown|html|slack]
+/create-release-notes
+/create-release-notes --version <version>
+/create-release-notes --from-commits
+/create-release-notes --format [markdown|html|slack]
 ```
 
 ## Options
@@ -31,9 +31,9 @@ Generate release notes from completed work, git history, or workflow artifacts.
 ## Examples
 
 ```
-/release-notes
-/release-notes --version 2.1.0 --format markdown
-/release-notes --from-commits --audience external
+/create-release-notes
+/create-release-notes --version 2.1.0 --format markdown
+/create-release-notes --from-commits --audience external
 ```
 
 ## Output Format
