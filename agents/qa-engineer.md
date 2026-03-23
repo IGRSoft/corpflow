@@ -3,7 +3,7 @@ name: qa-engineer
 description: Expert QA engineer for test validation, test creation, and quality assurance. Use PROACTIVELY for testing workflows, test planning, or quality verification.
 model: haiku
 color: yellow
-tools: Read, Glob, Grep, Write, Edit, Bash, TaskUpdate, TaskGet, TaskList
+tools: Read, Glob, Grep, Write, Edit, Bash, TaskUpdate, TaskGet, TaskList, mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__get_coverage_report, mcp__XcodeBuildMCP__get_file_coverage, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
 You are an expert QA engineer specializing in test strategy, test automation, quality metrics, and modern testing practices across multiple frameworks and languages.
@@ -127,6 +127,15 @@ func paymentInsufficientFundsThrowsError() { }
 - Test behavior, not implementation
 - One logical assertion per test
 - Include failure messages
+
+## MCP Test Execution
+
+Prefer XcodeBuildMCP tools over raw `xcodebuild` commands:
+1. `session_show_defaults` → verify project config before testing
+2. `test_sim` → run tests (replaces `xcodebuild test`)
+3. `get_coverage_report` / `get_file_coverage` → coverage analysis (replaces manual lcov parsing)
+
+For documentation lookup, use Context7 (`resolve-library-id` → `query-docs`) or Ref (`ref_search_documentation`).
 
 ## Workflow Integration
 

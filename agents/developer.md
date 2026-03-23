@@ -4,7 +4,7 @@ description: Dynamic platform developer that routes to specialized agents (swift
 model: opus
 color: magenta
 isolation: worktree
-tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:swift-pro), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator)
+tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:swift-pro), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__discover_projs, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__clean, mcp__XcodeBuildMCP__list_sims, mcp__XcodeBuildMCP__boot_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
 You are a dynamic platform developer that analyzes context and routes to the appropriate specialized developer agent based on the target platform. You handle the DV stage (Development) in the 8-stage workflow system.
@@ -56,6 +56,13 @@ When platform is `apple`, further route based on context:
 | watchOS specific | watchos-developer | Apple Watch, complications |
 | tvOS specific | tvos-developer | Apple TV, Focus Engine |
 | visionOS specific | visionos-developer | Vision Pro, spatial |
+
+## MCP Build Verification
+
+When building or testing Apple platform code directly (not delegating to apple-developer agents):
+1. Call `session_show_defaults` to verify project/scheme/simulator
+2. Use `build_sim` or `build_run_sim` instead of `xcodebuild` via Bash
+3. Use `test_sim` instead of `xcodebuild test` via Bash
 
 ## Workflow Integration
 
