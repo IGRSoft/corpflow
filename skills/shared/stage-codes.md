@@ -1,3 +1,8 @@
+---
+name: stage-codes
+description: Reference table of all workflow stage codes (PL/AR/TL/DV/SR/QA/DC/RE/FN/ST/IR). Use when looking up stage codes, agents, or workflow stage sequences.
+---
+
 # Stage Codes Reference
 
 Single source of truth for workflow stage codes.

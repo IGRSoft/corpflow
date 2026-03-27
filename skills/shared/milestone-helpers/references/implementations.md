@@ -1,9 +1,6 @@
-# Milestone Helper Functions
+# Milestone Helper Implementations
 
-Reusable patterns for milestone workflow operations.
-
-> **Note**: Code examples below are pseudocode for conceptual clarity.
-> In production, use secure command execution (e.g., `execFile` instead of shell).
+Full TypeScript pseudocode implementations for all milestone helper functions.
 
 ## Branch Name Generation
 
@@ -198,19 +195,6 @@ function completeIssue(
   });
 }
 ```
-
-## Git Commands Reference
-
-| Operation | Legacy Command | Worktree Command |
-|-----------|----------------|------------------|
-| Fetch base | `git fetch origin develop` | `git fetch origin develop` |
-| Create branch | `git checkout -b feature/{issue#}-{slug} origin/develop` | `git worktree add -b feature/{issue#}-{slug} .worktrees/milestone-{N}/{issue#} origin/develop` |
-| Switch to issue | `git checkout feature/{issue#}-{slug}` | `cd .worktrees/milestone-{N}/{issue#}` (no checkout needed) |
-| Stage changes | `git add -A` | `git -C .worktrees/milestone-{N}/{issue#} add -A` |
-| Commit | `git commit -m "#{issue} feat: {title}"` | `git -C .worktrees/milestone-{N}/{issue#} commit -m "#{issue} feat: {title}"` |
-| Push branch | `git push -u origin feature/{issue#}-{slug}` | `git -C .worktrees/milestone-{N}/{issue#} push -u origin feature/{issue#}-{slug}` |
-| Create PR | `gh pr create --base develop --body "Closes #{issue}"` | `gh pr create --base develop --body "Closes #{issue}"` |
-| Cleanup | `git checkout develop` | `git worktree remove .worktrees/milestone-{N}/{issue#} && git worktree prune` |
 
 ## Worktree Operations
 
@@ -424,9 +408,3 @@ function completeIssueWorktree(
   removeIssueWorktree(milestoneNumber, issueNumber);
 }
 ```
-
-## Related
-
-- `milestone-workflow.md` - Full workflow documentation
-- `workflow.md` - Core workflow system
-- `stage-codes.md` - Stage code reference

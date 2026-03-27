@@ -1,3 +1,8 @@
+---
+name: workflow-testing-strategy
+description: Test strategy planning guidance for PL and AR workflow stages. Use when planning test strategy during Planning or Architecture stages before implementation.
+---
+
 # Workflow Testing Strategy Skill
 
 Guidance for planning tests during P and AR stages of the igrsoft workflow, before implementation begins.
