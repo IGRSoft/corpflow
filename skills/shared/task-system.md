@@ -1,3 +1,8 @@
+---
+name: task-system
+description: Task System tools reference (Create/Update/Get/List) with metadata fields and status values. Use when working with TaskCreate, TaskUpdate, or managing task state.
+---
+
 # Task System Reference
 
 Single source of truth for Task System integration.

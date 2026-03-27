@@ -1,3 +1,8 @@
+---
+name: senior-developer-review
+description: Technical review framework for estimates by platform specialists. Use when conducting senior-level code or estimate reviews.
+---
+
 # Senior Developer Review Guidelines
 
 Technical review of estimates by platform specialists.

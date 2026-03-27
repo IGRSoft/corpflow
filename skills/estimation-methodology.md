@@ -1,3 +1,8 @@
+---
+name: estimation-methodology
+description: Standardized complexity scoring (0-50 scale) and T-shirt sizing for project estimation. Use when estimating task complexity, effort, or determining workflow tier.
+---
+
 # Estimation Methodology
 
 Standardized project estimation for Claude Code workflows.

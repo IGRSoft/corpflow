@@ -1,3 +1,8 @@
+---
+name: workflow-triggers
+description: Workflow trigger prefixes (workflow:/fworkflow:/quick:/micro:) and gate logic. Use when parsing workflow trigger commands or understanding workflow activation.
+---
+
 # Workflow Triggers Reference
 
 ## Trigger Types

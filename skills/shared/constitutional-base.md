@@ -1,3 +1,8 @@
+---
+name: constitutional-base
+description: Base constitutional alignment principles for all agents. Use when checking agent compliance with Claude's constitutional framework.
+---
+
 # Constitutional Alignment Base
 
 All agents operate within Claude's constitutional framework.

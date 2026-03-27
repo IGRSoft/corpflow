@@ -1,6 +1,6 @@
 ---
 name: cross-plugin-handoff
-description: Protocol for handoffs between igrsoft workflow and external plugins (apple-developer, security-scanning, etc.)
+description: Protocol for handoffs between igrsoft workflow and external plugins (apple-developer, security-scanning, etc.). Use when delegating work to apple-developer, security-scanning, or other external plugins.
 ---
 
 # Cross-Plugin Handoff Protocol

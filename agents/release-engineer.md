@@ -1,6 +1,6 @@
 ---
 name: release-engineer
-description: Release engineering specialist for versioning, changelog generation, and deployment readiness. Owns the RE (Release Engineering) stage in secure/full workflows.
+description: Release engineering specialist for versioning, changelog generation, and deployment readiness. Owns the RE (Release Engineering) stage in secure/full workflows. Use PROACTIVELY for release preparation, versioning decisions, or deployment readiness.
 model: haiku
 color: yellow
 tools: Read, Glob, Grep, Bash, Write, Edit, TaskUpdate, TaskGet, TaskList
