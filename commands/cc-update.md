@@ -1,14 +1,14 @@
 ---
 name: cc-update
-description: Analyze Claude Code release notes and update agents, commands, and skills to integrate new capabilities, then sync MEMORY.md and README.md version tracking
-argument-hint: '<version> [--notes <url|text>]'
+description: Update plugin agents, commands, and skills with new Claude Code features, then sync MEMORY.md and README.md version tracking
+argument-hint: '<version> [--notes <url|text>] [--dry-run]'
 allowed-tools: Read, Glob, Grep, Write, Edit, WebFetch
 model: sonnet
 ---
 
-# Claude Code Update Command
+# Claude Code Plugin Update Command
 
-Analyze Claude Code release notes and intelligently update agents, commands, and skills to integrate new capabilities, then sync MEMORY.md version tracking and update the `claude-code min version` in `README.md`. Performs impact mapping from changelog features to affected plugin files.
+Update plugin agents, commands, and skills to leverage new Claude Code features, deep analyze new features to see full picture of changes. Reads release notes (auto-fetched or provided), maps new capabilities to affected plugin files, applies updates, and syncs MEMORY.md version tracking and README.md min version.
 
 ## Version Source
 
@@ -30,7 +30,7 @@ At the end of the update, bump this value in `README.md` to the new version when
 
 ## Options
 
-- `<version>` - Claude Code version number (e.g., 2.1.77) [required, positional]
+- `<version>` - Claude Code version in X.Y.Z format (e.g., 2.1.77) [required, positional]
 - `--notes <url|text>` - Release notes URL or raw text (optional; auto-fetches from GitHub releases if omitted)
 - `--scope <agents|commands|skills|all>` - Scope of files to update (default: all)
 - `--dry-run` - Preview all proposed changes without writing files
@@ -38,6 +38,7 @@ At the end of the update, bump this value in `README.md` to the new version when
 - `--bump-min` - Force bump `README.md` min version even without breaking changes
 - `--agent <name>` - Restrict update to a specific agent file (e.g., developer)
 - `--command <name>` - Restrict update to a specific command file (e.g., workflow)
+- `--force` - Proceed even if version is older than current min version
 
 ## Examples
 
@@ -60,6 +61,14 @@ At the end of the update, bump this value in `README.md` to the new version when
 # Force bump min version even if no breaking changes detected
 /cc-update 2.1.77 --bump-min
 ```
+
+## Batch Workflow
+
+For multi-version updates (e.g., 2.1.77 through 2.1.86):
+1. Run `/cc-update <version> --dry-run` per version to preview cumulative impact
+2. Apply updates version-by-version in chronological order
+3. Consolidate MEMORY.md entries into a range header (e.g., "Claude Code 2.1.77→2.1.86")
+4. Commit once after the full batch
 
 ## Output Format
 
@@ -85,7 +94,6 @@ At the end of the update, bump this value in `README.md` to the new version when
 | ExitWorktree now GA | Tools | Medium |
 | Opus 4.7 model alias registered | Model | Medium |
 | Sparse worktree path filtering | Context | Low |
-| Background agent partial result recovery improved | Subagents | Low |
 
 ## Impact Mapping
 
@@ -99,28 +107,7 @@ At the end of the update, bump this value in `README.md` to the new version when
 - `agents/developer.md` — Add PostToolUse to hook documentation block
 - `skills/agent-coordination.md` — Add PostToolUse row to Hook-Based Stage Monitoring table
 
-### Medium Impact
-
-#### ExitWorktree GA — agents/developer.md, agents/workflow-engineer.md, agents/project-manager.md
-
-**Why affected**: These agents have `EnterWorktree`/`ExitWorktree` in `tools:` frontmatter; GA status may enable worktree for additional agents.
-
-**Proposed changes**:
-- `agents/developer.md` — Remove "experimental" qualifier from worktree note
-- `agents/workflow-engineer.md` — Same
-- `agents/project-manager.md` — Same
-
-#### Opus 4.7 model alias — skills/shared/stage-codes.md
-
-**Proposed changes**:
-- `skills/shared/stage-codes.md` — Update model alias note in footer to include 4.7
-
-### Low Impact
-
-#### Sparse worktree paths — skills/agent-coordination.md
-
-**Proposed changes**:
-- `skills/agent-coordination.md` — Add `worktree.sparsePaths` config note under Worktree-Enabled Parallelism
+<!-- Medium and Low impact entries follow the same structure with proportionally less detail -->
 
 ## Files Modified
 
@@ -128,73 +115,43 @@ At the end of the update, bump this value in `README.md` to the new version when
 |------|--------|---------|
 | agents/developer.md | ✅ Updated | PostToolUse hook + GA worktree note |
 | agents/workflow-engineer.md | ✅ Updated | GA worktree note |
-| agents/project-manager.md | ✅ Updated | GA worktree note |
 | skills/agent-coordination.md | ✅ Updated | PostToolUse row, sparsePaths note |
 | skills/shared/stage-codes.md | ✅ Updated | Model alias footnote |
 
-## Files Scanned — No Change Needed
-
-| File | Reason |
-|------|--------|
-| agents/qa-engineer.md | No hook, worktree, or model dependency |
-| skills/context-compression.md | Sparse paths don't affect compression budgets |
-| commands/workflow.md | No CC-version-specific references |
-| ... (73 more) | No impact detected |
-
 ## MEMORY.md Update
 
-### Version Section Added
-
-```
-## Claude Code 2.1.77 Key Features Integrated
-
-### Hooks
-- v2.1.77: PostToolUse hook — fires after any tool call; payload includes tool name and result
-
-### Tools
-- v2.1.77: ExitWorktree GA — available to all agents; removes experimental qualifier
-
-### Model
-- v2.1.77: Opus 4.7 model alias registered; resolves on all providers
-```
-
-### Version Fields Updated
+Add version section under `## Claude Code {VERSION} Key Features Integrated` with categorized entries (`### Hooks`, `### Tools`, etc.). Update version fields:
 
 | Field | Before | After |
 |-------|--------|-------|
 | Claude Code latest known | 2.1.76 | 2.1.77 |
 | Claude Code min required | 2.1.72 | 2.1.72 (unchanged) |
 
-### Optimization History Entry Added
-
-```
-- 2026-03-22: v3.3.0 — Claude Code 2.1.77 integration (5 files updated, PostToolUse hook + ExitWorktree GA)
-```
+Add optimization history entry: `- YYYY-MM-DD: vX.Y.Z — Claude Code {VERSION} update ({N} files, key changes)`
 
 ## README.md Min Version Update
 
 | Field | Before | After | Reason |
 |-------|--------|-------|--------|
-| claude-code min version | "2.1.76" | "2.1.77" | PostToolUse hook required by updated agent-coordination patterns |
+| claude-code min version | "2.1.76" | "2.1.77" | PostToolUse hook required by updated patterns |
 
-**Decision**: Bumped — new features are required by updated agent/skill patterns. Use `--bump-min` to force, or omit to auto-detect based on whether updated files depend on new CC capabilities.
+Bump when updated files depend on new CC capabilities. Use `--bump-min` to force.
 
 ## Summary
 
 | Metric | Value |
 |--------|-------|
-| Features extracted | 5 |
-| Files updated | 5 |
-| Files unchanged | 73 |
+| Features extracted | 4 |
+| Files updated | 4 |
+| Files unchanged | 74 |
 | MEMORY.md updated | Yes |
 | README.md min version | 2.1.76 → 2.1.77 |
-| Plugin version bump suggested | 3.2.0 → 3.3.0 |
 
 ## Next Steps
 
 1. Review changes: `git diff agents/ skills/ README.md`
 2. Run `/prompt-audit --agents` to verify consistency
-3. Commit: `#N chore: integrate Claude Code v2.1.77 capabilities`
+3. Commit: `#N chore: update plugin for Claude Code v2.1.77 features`
 ```
 
 ## Feature Category Mapping
@@ -216,11 +173,22 @@ How changelog entries are categorized and routed to affected files:
 ## Integration
 
 This command is used by:
-- `prompt-engineer` agent for plugin maintenance after CC releases
-- Manually, when a new Claude Code version is announced
-- As a maintenance step before running `/prompt-audit`
+- `prompt-engineer` agent for plugin updates after CC releases
+- Manually, when a new Claude Code version adds features the plugin should leverage
+- As a prerequisite before running `/prompt-audit`
 
 Not part of the 8/10-stage workflow — standalone maintenance command with stage code **PE**. Recommended cadence: run within one week of each Claude Code release. Use `--dry-run` first to review impact scope, then apply.
+
+## Edge Cases
+
+| Scenario | Behavior |
+|----------|----------|
+| WebFetch fails | Fall back to `--notes` inline text; prompt user if neither available |
+| No release notes for version | Report "No notes found" and exit without changes |
+| Version older than current min | Warn and skip unless `--force` is used |
+| `--scope` yields zero changes | Report clean scan; skip MEMORY.md update |
+| MEMORY.md missing or malformed | Create version tracking section from scratch |
+| Plugin version bump suggested | 3.2.0 → 3.3.0 |
 
 ## Related
 
@@ -229,3 +197,5 @@ Not part of the 8/10-stage workflow — standalone maintenance command with stag
 - [optimize-command](./optimize-command.md) - Optimize individual commands post-update
 - [prompt-audit](./prompt-audit.md) - Audit ecosystem after updates are applied
 - [agent-coordination](../skills/agent-coordination.md) - Hook and subagent patterns updated by this command
+- [stage-codes](../skills/shared/stage-codes.md) - Frontmatter fields and model references updated by this command
+- [hook-monitoring](../skills/agent-coordination/references/hook-monitoring.md) - Hook lifecycle patterns updated by this command
