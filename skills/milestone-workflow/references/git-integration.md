@@ -71,7 +71,7 @@ Applies when `--worktree` flag is used with `--milestone:N`.
 | Context path | `{worktree_path}/.context/` |
 | Builds/tests | Run from worktree directory |
 | Commits | Committed to the worktree's branch automatically |
-| Resume from background | Task tool resume restores cwd to correct worktree |
+| Resume from background | SendMessage restores cwd to correct worktree |
 
 ### Cleanup
 

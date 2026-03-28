@@ -112,6 +112,14 @@ See: .context/analyzing.md#auth-decision
 | 1M context window for Opus 4.6 (Max/Team/Enterprise) | 2.1.75 | 10x larger context window |
 | Auto-compaction circuit breaker (stops after 3 failures) | 2.1.76 | Prevents infinite compaction loops |
 | Deferred tool schemas preserved after compaction | 2.1.76 | Array/number params work post-compaction |
+| Opus 4.6 max output 64k default (128k upper bound) | 2.1.77 | Larger agent outputs possible |
+| `${CLAUDE_PLUGIN_DATA}` for persistent plugin state | 2.1.78 | Plugin-level state without disk management |
+| `effort` frontmatter for skills/commands | 2.1.80 | Fine-grained cost control per invocation |
+| ~80MB memory reduction on large repos | 2.1.80 | More agents per machine |
+| Non-streaming fallback increased to 64k tokens | 2.1.83 | Better fallback handling |
+| MCP tool descriptions/server instructions capped at 2KB | 2.1.84 | Reduced context from MCP tools |
+| Improved prompt cache hit rate | 2.1.86 | Further input cost reduction |
+| Skill descriptions capped at 250 characters | 2.1.86 | Reduced skill listing overhead |
 
 These are automatic — no agent or workflow changes needed. They compound across multi-stage workflows.
 

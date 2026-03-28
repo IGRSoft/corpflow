@@ -224,7 +224,7 @@ Ethics-reviewer can be invoked at any stage:
 | Calibrated | Appropriate uncertainty |
 | Transparent | No hidden issues |
 
-See references/ for hook-based monitoring, agent teams comparison, and MCP elicitation patterns.
+See references/ for hook-based monitoring (including StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, and conditional `if` field for hook filtering), agent teams comparison, and MCP elicitation patterns.
 
 ## Related
 

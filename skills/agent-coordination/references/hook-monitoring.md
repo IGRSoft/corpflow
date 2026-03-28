@@ -8,6 +8,13 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 |------------|------------|---------|----------------|
 | `SubagentStart` | Stage agent spawned | Agent type name (e.g., `igrsoft:developer`) | `agent_id`, `agent_type` |
 | `SubagentStop` | Stage agent completes | Agent type name | `agent_id`, `agent_type` |
+| `StopFailure` | API error causes turn end | — | Error details |
+| `CwdChanged` | Working directory changes | — | New cwd path |
+| `FileChanged` | Monitored file modified | — | File path |
+| `TaskCreated` | TaskCreate tool called | — | Task ID, subject |
+| `WorktreeCreate` | Worktree created | — | Worktree path |
+
+> As of CC 2.1.77, the Agent tool `resume` parameter is removed. Use `SendMessage` to communicate with running agents instead.
 
 > Parent agents reliably recover subagent results after context compaction. Background agents that are killed or interrupted preserve partial results in context, preventing total loss of intermediate work. The `PostCompact` hook can re-inject critical state after auto-compaction.
 
@@ -52,6 +59,29 @@ Hooks also support HTTP endpoints for external monitoring:
   }
 }
 ```
+
+## Conditional Hook Execution (v2.1.85+)
+
+Hooks support an `if` field using permission rule syntax to avoid unnecessary process spawning:
+
+```json
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "if": "agent_type matches 'igrsoft:.*'",
+        "hooks": [
+          { "type": "command", "command": "./tools/log-stage-complete.sh" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### PreToolUse Hook Automation
+
+PreToolUse hooks can satisfy `AskUserQuestion` by returning `{ "updatedInput": "answer" }`, enabling automated responses in workflow pipelines without user interaction.
 
 ## Agent Teams Lifecycle Hooks
 
