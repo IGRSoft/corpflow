@@ -203,13 +203,14 @@ How changelog entries are categorized and routed to affected files:
 
 | Category | Keywords | Affected File Types |
 |----------|----------|---------------------|
-| **Hooks** | hook, PostToolUse, SubagentStart, PreToolUse, PostCompact, Elicitation | agents with hook docs, agent-coordination skill |
-| **Tools** | new tool, ExitWorktree, EnterWorktree, TaskCreate, worktree | agents with tool in `tools:` frontmatter |
+| **Hooks** | hook, PostToolUse, SubagentStart, PreToolUse, PostCompact, Elicitation, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate, conditional if | agents with hook docs, agent-coordination skill |
+| **Tools** | new tool, ExitWorktree, EnterWorktree, TaskCreate, worktree, SendMessage | agents with tool in `tools:` frontmatter |
 | **Model** | model alias, Opus/Sonnet/Haiku version, effort level | stage-codes skill, agents with full model IDs |
 | **Context** | compaction, context window, sparsePaths, worktree, circuit breaker | context-compression skill, agent-coordination skill |
-| **Subagents** | subagent, background agent, teammate, partial result | agent-coordination skill, developer/project-manager agents |
-| **MCP** | MCP, elicitation, server deduplication, deferred tools | agent-coordination skill, cross-plugin-handoff skill |
+| **Subagents** | subagent, background agent, teammate, partial result, resume removed | agent-coordination skill, developer/project-manager agents |
+| **MCP** | MCP, elicitation, server deduplication, deferred tools, description cap | agent-coordination skill, cross-plugin-handoff skill |
 | **Cost** | token, cache, prompt cache, cost reduction | cost-optimization skill |
+| **Frontmatter** | effort, maxTurns, disallowedTools, initialPrompt, paths YAML, description cap | stage-codes skill, prompt-engineer agent |
 | **Commands** | slash command, /clear, /reload-plugins | workflow command, relevant command files |
 
 ## Integration

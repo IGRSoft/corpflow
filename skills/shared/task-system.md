@@ -77,8 +77,15 @@ Configure in project `settings.json` or agent frontmatter `hooks` field:
 | `PostCompact` | After context compaction completes | settings.json (all modes) |
 | `Elicitation` | MCP server requests user input | settings.json |
 | `ElicitationResult` | User responds to MCP elicitation | settings.json |
+| `StopFailure` | API error causes turn end | settings.json |
+| `CwdChanged` | Working directory changes | settings.json |
+| `FileChanged` | Monitored file modified | settings.json |
+| `TaskCreated` | TaskCreate tool called | settings.json |
+| `WorktreeCreate` | Worktree created | settings.json |
 
 `TeammateIdle` and `TaskCompleted` require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
+
+> Hooks support a conditional `if` field (v2.1.85+) using permission rule syntax to reduce process spawning overhead.
 
 > `SessionEnd` hook timeout is configurable via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` for workflows requiring cleanup time (e.g., worktree pruning, orchestrator state finalization).
 

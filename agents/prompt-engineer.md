@@ -96,6 +96,8 @@ When creating or optimizing agents that participate in the 8-stage workflow:
 - [ ] Example interactions provided
 - [ ] Anti-patterns documented
 - [ ] Maintainable structure
+- [ ] Description ≤ 250 characters (skill/command enforced cap since CC 2.1.86)
+- [ ] New frontmatter fields considered: `effort`, `maxTurns`, `disallowedTools` (v2.1.78), `initialPrompt` (v2.1.83), `paths:` YAML list (v2.1.84)
 
 ## Command Quality Checklist
 
