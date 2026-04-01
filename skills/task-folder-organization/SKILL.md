@@ -1,6 +1,7 @@
 ---
 name: task-folder-organization
 description: Context folder structure (.context/) with artifact naming and path resolution. Use when setting up task folders, organizing workflow artifacts, or resolving artifact paths.
+effort: medium
 ---
 
 # Task Folder Organization

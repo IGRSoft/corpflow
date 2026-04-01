@@ -1,6 +1,7 @@
 ---
 name: context-compression
 description: Techniques for compressing context between agent handoffs while preserving critical information. Apply for efficient stage transitions and context window management.
+effort: medium
 ---
 
 # Context Compression

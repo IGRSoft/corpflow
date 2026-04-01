@@ -1,6 +1,7 @@
 ---
 name: incident-response
-description: Incident classification, hotfix workflow, rollback procedures, and post-mortem templates for IR stage. (user)
+description: Incident classification, hotfix workflow, rollback procedures, and post-mortem templates for IR stage. Use when handling production incidents or emergency hotfixes.
+effort: high
 ---
 
 # Incident Response

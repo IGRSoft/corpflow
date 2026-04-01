@@ -1,6 +1,7 @@
 ---
 name: five-whys
-description: Five Whys root cause analysis technique. Use for problem investigation and debugging. (user)
+description: Five Whys root cause analysis technique. Use for problem investigation and debugging.
+effort: low
 ---
 
 # Five Whys Analysis
