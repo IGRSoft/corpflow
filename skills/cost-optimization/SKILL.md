@@ -1,11 +1,14 @@
 ---
 name: cost-optimization
 description: Cost tracking and optimization strategies for AI agent workflows. Apply for budget management, model selection, and efficiency analysis.
+effort: medium
 ---
 
 # Cost Optimization
 
 Comprehensive strategies for managing AI agent costs, tracking token usage, and optimizing workflow efficiency.
+
+For per-stage token baselines, context window improvements, and ethics cost budgeting, see `${CLAUDE_SKILL_DIR}/cost-optimization/references/token-baselines.md`
 
 ## Model Cost Tiers
 
@@ -32,23 +35,6 @@ Comprehensive strategies for managing AI agent costs, tracking token usage, and 
 | Architecture design | opus | Complex tradeoffs |
 | System analysis | opus | Deep reasoning |
 | Prompt optimization | opus | Meta-level thinking |
-
-## Per-Stage Token Baselines
-
-Typical token usage by workflow stage (sonnet model):
-
-| Stage | Code | Typical Range | Estimated Cost | Notes |
-|-------|------|---------------|----------------|-------|
-| **P** (Planning) | P | 5,000-10,000 | $0.015-0.03 | Requirements, prioritization |
-| **A** (Architecture) | A | 10,000-20,000 | $0.03-0.06 | Design decisions, ADRs |
-| **T** (Team Lead) | T | 3,000-5,000 | $0.01-0.015 | Coordination, assignment |
-| **D** (Development) | D | 20,000-50,000 | $0.06-0.15 | Code implementation |
-| **Q** (QA) | Q | 10,000-20,000 | $0.03-0.06 | Test design, validation |
-| **W** (Writing) | W | 5,000-10,000 | $0.015-0.03 | Documentation |
-| **F** (Finalization) | F | 3,000-5,000 | $0.01-0.015 | Release prep |
-| **S** (Stakeholder) | S | 2,000-3,000 | $0.006-0.01 | Approval review |
-
-**Total Workflow Range**: 58,000-123,000 tokens (~$0.17-0.37 for sonnet)
 
 ## Cost Reduction Strategies
 
@@ -101,27 +87,7 @@ See: .context/analyzing.md#auth-decision
 
 **Strategy**: Leverage automatic Claude Code improvements that reduce context usage without agent changes.
 
-| Improvement | Version | Impact |
-|-------------|---------|--------|
-| Tool results >50K chars persisted to disk (was 100K) | 2.1.51 | Large tool outputs no longer consume context |
-| Completed subagent task state released | 2.1.59 | Frees context after subagent handoffs |
-| Heavy progress payloads stripped during compaction | 2.1.63 | Better memory in long multi-agent sessions |
-| Skill listing not re-injected on `--resume` | 2.1.70 | ~600 tokens saved per session resume |
-| Prompt cache fix (up to 12x input cost reduction) | 2.1.72 | SDK query() calls benefit automatically |
-| Failed Read/Glob/WebFetch no longer cancel parallel siblings | 2.1.72 | Safer parallel tool use in agents |
-| 1M context window for Opus 4.6 (Max/Team/Enterprise) | 2.1.75 | 10x larger context window |
-| Auto-compaction circuit breaker (stops after 3 failures) | 2.1.76 | Prevents infinite compaction loops |
-| Deferred tool schemas preserved after compaction | 2.1.76 | Array/number params work post-compaction |
-| Opus 4.6 max output 64k default (128k upper bound) | 2.1.77 | Larger agent outputs possible |
-| `${CLAUDE_PLUGIN_DATA}` for persistent plugin state | 2.1.78 | Plugin-level state without disk management |
-| `effort` frontmatter for skills/commands | 2.1.80 | Fine-grained cost control per invocation |
-| ~80MB memory reduction on large repos | 2.1.80 | More agents per machine |
-| Non-streaming fallback increased to 64k tokens | 2.1.83 | Better fallback handling |
-| MCP tool descriptions/server instructions capped at 2KB | 2.1.84 | Reduced context from MCP tools |
-| Improved prompt cache hit rate | 2.1.86 | Further input cost reduction |
-| Skill descriptions capped at 250 characters | 2.1.86 | Reduced skill listing overhead |
-
-These are automatic — no agent or workflow changes needed. They compound across multi-stage workflows.
+See `${CLAUDE_SKILL_DIR}/cost-optimization/references/token-baselines.md` for the full list of CC version improvements.
 
 ### 4. Batch Operations
 
@@ -181,15 +147,6 @@ Where:
 | **90%** | Critical | Force context compression, recommend model downgrades |
 | **100%** | Pause | Stop workflow, require explicit approval to continue |
 
-### Calendar Month Billing
-
-Claude Code billing occurs per calendar month. Optimization strategies:
-
-1. **Track month boundaries** via Task System metadata
-2. **Plan large workflows** to complete within single month
-3. **Defer non-urgent work** if near month end with budget concerns
-4. **Front-load complex stages** early in billing cycle
-
 ## Optimization Checklist
 
 Before starting workflow:
@@ -229,53 +186,8 @@ After workflow:
 | Retrying without context compression | Compounds cost | Compress first |
 | Full workflow for trivial changes | Unnecessary stages | Use micro/quick |
 
-## Constitutional Considerations
-
-### Safety and Ethics Override Cost
-
-**IMPORTANT**: Constitutional compliance always takes priority over cost optimization.
-
-| Scenario | Cost Impact | Action |
-|----------|-------------|--------|
-| Ethics review needed | Additional stage cost | Accept cost, conduct review |
-| Hard constraint check | May require opus reasoning | Use appropriate model |
-| Safety-critical code | Extended review time | Prioritize thoroughness |
-| User harm potential | May require stakeholder escalation | Escalate regardless of cost |
-
-### Ethics Review Cost Budgeting
-
-When planning workflows with ethics components:
-
-| Ethics Activity | Typical Tokens | Model | Est. Cost |
-|-----------------|----------------|-------|-----------|
-| Quick ethics check | 2,000-5,000 | sonnet | $0.006-0.015 |
-| Standard ethics review | 5,000-10,000 | sonnet | $0.015-0.03 |
-| Comprehensive ethics audit | 15,000-30,000 | opus | $0.225-0.45 |
-| Hard constraint analysis | 5,000-10,000 | opus | $0.075-0.15 |
-
-### When NOT to Optimize
-
-Do not apply cost optimization when:
-
-- Safety-critical code requires thorough review
-- User harm potential needs assessment
-- Hard constraints may be involved
-- Ethics-reviewer recommends comprehensive analysis
-- Stakeholder has flagged for ethics review
-
-### Constitutional Budget Allocation
-
-Recommended budget reserves for ethics:
-
-| Workflow Type | Ethics Reserve | Purpose |
-|---------------|----------------|---------|
-| Standard | 10% | Ad-hoc ethics consultation |
-| High-risk features | 20% | Mandatory ethics review |
-| User data handling | 15% | Privacy and consent review |
-| AI/ML features | 25% | Fairness and bias assessment |
-
 ## Related Skills
 
-- `workflow.md` - Workflow system documentation
-- `agent-coordination.md` - Multi-agent coordination patterns
-- `claude-constitution.md` - Constitutional principles and ethics framework
+- `${CLAUDE_SKILL_DIR}/workflow/SKILL.md` - Workflow system documentation
+- `${CLAUDE_SKILL_DIR}/agent-coordination/SKILL.md` - Multi-agent coordination patterns
+- `${CLAUDE_SKILL_DIR}/claude-constitution/SKILL.md` - Constitutional principles and ethics framework

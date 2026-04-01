@@ -1,0 +1,127 @@
+# Per-Stage Test Templates
+
+## P Stage: Test Strategy Definition
+
+### What to Include in planning.md
+
+```markdown
+## Test Strategy
+
+### Test Scope
+| Category | Description | Priority |
+|----------|-------------|----------|
+| Unit Tests | [Core logic, pure functions, isolated components] | Required |
+| Integration Tests | [API calls, database ops, service interactions] | Required/Optional |
+| E2E Tests | [Critical user journeys only] | If applicable |
+
+### Testing Framework
+- **Unit Tests**: Swift Testing (`@Suite`, `@Test`, `#expect`)
+- **UI Tests**: XCTest (XCUITest requirement)
+
+### Test Acceptance Criteria
+Derived from acceptance criteria - each should be testable:
+- [ ] Given [precondition], when [action], then [expected result]
+- [ ] [Edge case]: [Expected behavior]
+- [ ] [Error case]: [Expected error handling]
+
+### Existing Tests to Update
+When changing existing logic, identify affected tests:
+| Test File | Reason for Update | Impact |
+|-----------|-------------------|--------|
+| tests/UserServiceTests.swift | Login logic changed | Update mocks |
+| tests/AuthFlowTests.swift | New OAuth parameter | Add test case |
+
+### Test Effort Estimate
+| Type | Hours |
+|------|-------|
+| New unit tests | X |
+| New integration tests | Y |
+| Update existing tests | Z |
+| **Total** | **X+Y+Z** |
+```
+
+## A Stage: Test Architecture
+
+### What to Include in analyzing.md
+
+```markdown
+## Test Architecture
+
+### Testability Patterns
+| Pattern | Applied To | Benefit |
+|---------|------------|---------|
+| Dependency Injection | Services, ViewModels | Mockable dependencies |
+| Protocol Abstractions | Network, Storage | Swappable implementations |
+| Pure Functions | Business logic | Deterministic testing |
+
+### Test Doubles Strategy
+| Component | Strategy | Implementation |
+|-----------|----------|----------------|
+| API Client | Mock | Protocol with mock implementation |
+| Database | In-memory | SQLite in-memory or mock store |
+| File System | Temporary directory | Create in setUp, clean in tearDown |
+| Date/Time | Injectable | Clock protocol |
+
+### Test Data Management
+- Fixtures location: `Tests/Fixtures/`
+- Factory pattern for test objects
+- Shared test data builders
+
+### Test Organization
+```
+Tests/
+├── UnitTests/
+│   ├── Domain/
+│   └── Services/
+├── IntegrationTests/
+│   ├── API/
+│   └── Storage/
+└── Fixtures/
+```
+```
+
+## DV Stage: Test Implementation
+
+The developer MUST implement unit tests alongside production code during the DV stage.
+
+### Developer Responsibilities
+
+1. **Read test specs** from `.context/planning.md § Test Strategy`
+2. **Read test architecture** from `.context/analyzing.md § Test Architecture` (if available)
+3. **Create test files** using the specified testing framework
+4. **Follow test patterns** defined in the architecture (DI, mocking strategy, etc.)
+5. **Run all tests** and verify they pass before completing DV stage
+6. **Document test files** in `.context/development.md`
+
+### Handoff Requirements (DV → QA)
+
+- [ ] All unit tests from planning.md § Test Strategy implemented
+- [ ] All unit tests pass locally (zero failures)
+- [ ] Test file paths listed in development.md
+- [ ] Mock/stub implementations created as needed
+
+### What DV Writes vs What QA Adds
+
+| DV Stage (Developer) | QA Stage (QA Engineer) |
+|----------------------|------------------------|
+| Unit tests per planning.md specs | Additional edge case tests |
+| Mock implementations | Coverage gap analysis |
+| Happy path + known error cases | Boundary and stress tests |
+| Test data builders/fixtures | Integration and E2E tests |
+| Tests for acceptance criteria | Test quality review and metrics |
+
+### Development.md Test Documentation Template
+
+```markdown
+## Tests Implemented
+
+### Unit Tests
+| Test File | Tests For | Status |
+|-----------|-----------|--------|
+| Tests/UnitTests/Services/FooTests.swift | FooService | Pass |
+
+### Test Summary
+- Acceptance Criteria Covered: N/N
+- Edge Cases Tested: [list]
+- Mocks Created: [list]
+```

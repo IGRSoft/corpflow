@@ -1,6 +1,7 @@
 ---
 name: milestone-workflow
 description: GitHub milestone integration with isolated workspaces for multi-issue tracking. Use when running milestone-based workflows with --milestone flag or managing parallel issue tracks.
+effort: high
 ---
 
 # Milestone Workflow
@@ -204,5 +205,5 @@ See references/ for detailed schemas, git integration commands, and agent teams 
 ## Related
 
 - `workflow.md` - Core workflow documentation
-- `shared/stage-codes.md` - Stage code reference
-- `shared/task-system.md` - Task System integration
+- `${CLAUDE_SKILL_DIR}/shared/stage-codes.md` - Stage code reference
+- `${CLAUDE_SKILL_DIR}/shared/task-system.md` - Task System integration
