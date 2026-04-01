@@ -99,4 +99,4 @@ This command works with:
 ## Related
 
 - [csv-export-templates](../skills/csv-export-templates.md) - Template definitions
-- [estimation-methodology](../skills/estimation-methodology.md) - Methodology rules
+- [estimation-methodology](../skills/estimation/SKILL.md) - Methodology rules

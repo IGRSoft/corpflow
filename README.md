@@ -265,15 +265,15 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ### Skills
 - `workflow.md` - Complete workflow system documentation
 - `task-folder-organization.md` - Task folder structure
-- `five-whys.md` - Root cause analysis technique
+- `shared/five-whys.md` - Root cause analysis technique
 - `claude-constitution.md` - Constitutional principles and ethics framework
 - `agent-coordination.md` - Multi-agent coordination patterns
 - `context-compression.md` - Context optimization techniques
 - `cost-optimization.md` - Token and cost management
 - `csv-export-templates.md` - Export format templates
-- `estimation-methodology.md` - Complexity estimation methods
+- `estimation/SKILL.md` - Complexity estimation methods
 - `milestone-workflow.md` - Milestone-based workflow tracking
-- `senior-developer-review.md` - Senior review guidelines
+- `review/SKILL.md` - Senior review guidelines
 - `workflow-testing-strategy.md` - Workflow-integrated testing planning for PL/AR stages
 
 ### Tools

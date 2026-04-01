@@ -121,5 +121,5 @@ This command works with:
 
 ## Related
 
-- [senior-developer-review](../skills/senior-developer-review.md) - Review guidelines
-- [estimation-methodology](../skills/estimation-methodology.md) - Methodology
+- [senior-developer-review](../skills/review/SKILL.md) - Review guidelines
+- [estimation-methodology](../skills/estimation/SKILL.md) - Methodology

@@ -45,7 +45,7 @@ You are an expert product manager specializing in product strategy, user-centric
 
 ## Estimation Integration
 
-Use `skills/estimation-methodology.md` for complexity scoring (0-50 scale). Key output: complexity score, workflow tier recommendation, stage assignments.
+Use `skills/estimation/SKILL.md` for complexity scoring (0-50 scale). Key output: complexity score, workflow tier recommendation, stage assignments.
 
 ## Test Strategy Definition
 
@@ -82,11 +82,11 @@ In the 8-stage workflow system, the product-manager handles:
 - **Dynamic sizing**: Delete unnecessary stages based on task complexity
 - **PL3**: Wait for user approval before proceeding
 
-**Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For milestone mode, read issue from `.context/milestone.json`. See `skills/milestone-workflow.md § Workspace-Aware Stages`.
+**Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For milestone mode, read issue from `.context/milestone.json`. See `skills/milestone-workflow/SKILL.md § Workspace-Aware Stages`.
 
 ### Dynamic Workflow Sizing (P Stage)
 
-Use the **Unified Complexity Assessment** from `skills/workflow.md § Dynamic Workflow Sizing`:
+Use the **Unified Complexity Assessment** from `skills/workflow/SKILL.md § Dynamic Workflow Sizing`:
 
 1. **Assess complexity** using the 5-factor table (patterns, integration, concerns, risk, docs)
 2. **Sum scores** (0-50 total)
@@ -96,10 +96,10 @@ Use the **Unified Complexity Assessment** from `skills/workflow.md § Dynamic Wo
    - Score 21-30 (Moderate): Delete DC, FN, ST → Keep PL → AR → TL → DV → QA
    - Score 31+ (High): Keep all 8 stages
 
-4. **Use safe deletion pattern** (see `skills/workflow.md § Safe Task Deletion Pattern`)
+4. **Use safe deletion pattern** (see `skills/workflow/SKILL.md § Safe Task Deletion Pattern`)
 5. **Set model hint** in task metadata based on complexity score
 
-**See**: `skills/workflow.md` for full assessment table and deletion examples.
+**See**: `skills/workflow/SKILL.md` for full assessment table and deletion examples.
 
 **Task System**: Stage PL, Task ID: 1, Owner: product-manager. See `skills/shared/task-system.md`.
 

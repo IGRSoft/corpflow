@@ -83,7 +83,7 @@ Before completing AR stage:
 - [ ] Existing test structure analyzed
 - [ ] Test framework compatibility verified
 
-**Context**: Use progressive loading and compression per `skills/context-compression.md`.
+**Context**: Use progressive loading and compression per `skills/context-compression/SKILL.md`.
 
 ## Workflow Integration
 
@@ -99,7 +99,7 @@ In the 8-stage workflow system, the software-architector handles:
 
 ### Dynamic Workflow Sizing (A Stage)
 
-Use the **Unified Complexity Assessment** from `skills/workflow.md § Dynamic Workflow Sizing`:
+Use the **Unified Complexity Assessment** from `skills/workflow/SKILL.md § Dynamic Workflow Sizing`:
 
 1. **Validate PL's complexity score** - Review PL stage's assessment
 2. **Adjust if needed** - AR stage has deeper technical insight
@@ -108,16 +108,16 @@ Use the **Unified Complexity Assessment** from `skills/workflow.md § Dynamic Wo
    - Score 21-30 (Moderate): Validate, may delete DC, FN, ST
    - Score 31+ (High): Keep all remaining stages
 
-4. **Use safe deletion pattern** (see `skills/workflow.md § Safe Task Deletion Pattern`)
+4. **Use safe deletion pattern** (see `skills/workflow/SKILL.md § Safe Task Deletion Pattern`)
 5. **Verify PL3 approval** before starting AR stage
 
 **Important**: AR stage should VALIDATE PL's complexity assessment. If scores differ significantly (>10 points), discuss with PL before proceeding.
 
-**See**: `skills/workflow.md` for full assessment table, deletion examples, and safe deletion pattern.
+**See**: `skills/workflow/SKILL.md` for full assessment table, deletion examples, and safe deletion pattern.
 
 ### Model Usage
 
-Model selection is **complexity-driven** (see `skills/workflow.md § Model Routing by Complexity`):
+Model selection is **complexity-driven** (see `skills/workflow/SKILL.md § Model Routing by Complexity`):
 
 | Complexity Score | Model | Usage |
 |------------------|-------|-------|

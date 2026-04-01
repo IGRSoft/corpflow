@@ -165,4 +165,4 @@ Test effort is embedded in subtask estimates:
 - `agents/software-architector.md` - AR stage owner
 - `agents/qa-engineer.md` - QA stage owner
 - `commands/test-plan.md` - Detailed test plan generation
-- `${CLAUDE_SKILL_DIR}/../estimation-methodology.md` - Test effort estimation
+- `${CLAUDE_SKILL_DIR}/../estimation/SKILL.md` - Test effort estimation
