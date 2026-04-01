@@ -40,7 +40,7 @@ In the 8-stage workflow system, the project-manager handles:
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
 
-**Workspace Mode**: Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. See `skills/milestone-workflow.md § Workspace-Aware F Stage`.
+**Workspace Mode**: Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. See `skills/milestone-workflow/SKILL.md § Workspace-Aware F Stage`.
 
 **PR Creation**: Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode. Stale worktrees are auto-cleaned.
 
@@ -70,7 +70,7 @@ Story Points: X-Y (Min-Max) | Complexity: [Low/Medium/High]
 
 ## Estimation & Budget Integration
 
-Use `skills/estimation-methodology.md` for complexity scoring. Track costs via `/cost-report` command.
+Use `skills/estimation/SKILL.md` for complexity scoring. Track costs via `/cost-report` command.
 
 Key artifacts: roadmap_milestones.csv, budget_estimate.csv, phase_summary.csv, risk_assessment.csv
 

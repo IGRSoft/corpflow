@@ -8,9 +8,9 @@ effort: medium
 
 Comprehensive security review checklist for the SR (Security Review) stage.
 
-For the full OWASP Top 10 checklist, see `${CLAUDE_SKILL_DIR}/security-review-process/references/owasp-checklist.md`
+For the full OWASP Top 10 checklist, see `${CLAUDE_SKILL_DIR}/references/owasp-checklist.md`
 
-For the security review output template, see `${CLAUDE_SKILL_DIR}/security-review-process/references/review-template.md`
+For the security review output template, see `${CLAUDE_SKILL_DIR}/references/review-template.md`
 
 ## Secrets Detection Patterns
 

@@ -8,7 +8,7 @@ effort: medium
 
 Defines the handoff protocol between igrsoft workflow stages and external plugin agents.
 
-For plugin-specific protocol tables and error handling, see `${CLAUDE_SKILL_DIR}/cross-plugin-handoff/references/plugin-protocols.md`
+For plugin-specific protocol tables and error handling, see `${CLAUDE_SKILL_DIR}/references/plugin-protocols.md`
 
 ## When D Stage Delegates to apple-developer
 
@@ -138,7 +138,7 @@ TaskCreate({
 
 ### Token Budgets
 
-See `${CLAUDE_SKILL_DIR}/context-compression/SKILL.md` for authoritative inter-stage budgets.
+See `${CLAUDE_SKILL_DIR}/../context-compression/SKILL.md` for authoritative inter-stage budgets.
 
 For cross-plugin compressed summaries specifically:
 

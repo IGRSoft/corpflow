@@ -184,7 +184,7 @@ Task({
 
 ## Post-Mortem Framework
 
-Use Five Whys method per `skills/five-whys.md`. Document in post-mortem report with timeline, root cause, action items.
+Use Five Whys method per `skills/shared/five-whys.md`. Document in post-mortem report with timeline, root cause, action items.
 
 **Blameless principles**: Focus on systems not individuals, assume best intentions, identify process improvements, share learnings broadly, follow up on action items.
 

@@ -17,9 +17,9 @@ Single source of truth for task workflow management using the Task System.
                        Security Review    Release Engineering
 ```
 
-**Stage codes and triggers**: See `${CLAUDE_SKILL_DIR}/shared/stage-codes.md` and `${CLAUDE_SKILL_DIR}/shared/workflow-triggers.md`
+**Stage codes and triggers**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md` and `${CLAUDE_SKILL_DIR}/../shared/workflow-triggers.md`
 
-**Task System integration**: See `${CLAUDE_SKILL_DIR}/shared/task-system.md`
+**Task System integration**: See `${CLAUDE_SKILL_DIR}/../shared/task-system.md`
 
 ## Dynamic Workflow Sizing
 

@@ -10,7 +10,7 @@ paths:
 
 Design mockup generation workflow using Pencil MCP tools for the Designer agent.
 
-For design token setup, naming conventions, and storage patterns, see `${CLAUDE_SKILL_DIR}/pencil-design-workflow/references/design-tokens.md`
+For design token setup, naming conventions, and storage patterns, see `${CLAUDE_SKILL_DIR}/references/design-tokens.md`
 
 ## When to Generate
 
@@ -199,4 +199,4 @@ If Pencil MCP tools fail to load or calls error (e.g., Pencil.app not running):
 ## Related
 
 - `agents/designer.md` - Designer agent definition
-- `${CLAUDE_SKILL_DIR}/task-folder-organization/SKILL.md` - `.context/designs/` directory structure and context folder organization
+- `${CLAUDE_SKILL_DIR}/../task-folder-organization/SKILL.md` - `.context/designs/` directory structure and context folder organization

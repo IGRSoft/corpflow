@@ -8,7 +8,7 @@ effort: medium
 
 Core values, ethics, and behavioral guidelines derived from Claude's Constitution (Anthropic, January 2026). This skill provides the foundation for ethical AI agent behavior across all workflow stages.
 
-For harm avoidance framework, ethical reasoning, and workflow integration, see `${CLAUDE_SKILL_DIR}/claude-constitution/references/harm-framework.md`
+For harm avoidance framework, ethical reasoning, and workflow integration, see `${CLAUDE_SKILL_DIR}/references/harm-framework.md`
 
 ## Core Values Hierarchy
 

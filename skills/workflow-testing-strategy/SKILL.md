@@ -10,7 +10,7 @@ Guidance for planning tests during P and AR stages of the igrsoft workflow, befo
 
 Note: This skill focuses on workflow-integrated testing planning. For platform-specific testing patterns (Swift Testing, XCTest), see `apple-developer:testing-strategy`.
 
-For per-stage test templates (PL, AR, DV), see `${CLAUDE_SKILL_DIR}/workflow-testing-strategy/references/stage-templates.md`
+For per-stage test templates (PL, AR, DV), see `${CLAUDE_SKILL_DIR}/references/stage-templates.md`
 
 ## Purpose
 
@@ -165,4 +165,4 @@ Test effort is embedded in subtask estimates:
 - `agents/software-architector.md` - AR stage owner
 - `agents/qa-engineer.md` - QA stage owner
 - `commands/test-plan.md` - Detailed test plan generation
-- `${CLAUDE_SKILL_DIR}/estimation-methodology.md` - Test effort estimation
+- `${CLAUDE_SKILL_DIR}/../estimation/SKILL.md` - Test effort estimation

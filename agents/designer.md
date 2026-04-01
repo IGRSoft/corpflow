@@ -169,7 +169,7 @@ Use Pencil's variable system instead of hardcoded values:
 - Always capture `snapshot_layout()` for developer handoff
 - Always reference mockups in design documentation with descriptions
 
-For complete workflow details, tool reference, and code examples, see `skills/pencil-design-workflow.md`.
+For complete workflow details, tool reference, and code examples, see `skills/pencil-design-workflow/SKILL.md`.
 
 ### Fallback: Pencil Unavailable
 
