@@ -8,8 +8,8 @@ effort: medium
 
 Patterns for coordinating agents across workflow stages, managing handoffs, and handling errors.
 
-**Stage codes and agents**: See `${CLAUDE_SKILL_DIR}/shared/stage-codes.md`
-**Task System tools**: See `${CLAUDE_SKILL_DIR}/shared/task-system.md`
+**Stage codes and agents**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md`
+**Task System tools**: See `${CLAUDE_SKILL_DIR}/../shared/task-system.md`
 
 ## Handoff Protocol
 

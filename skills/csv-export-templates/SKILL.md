@@ -8,7 +8,7 @@ effort: low
 
 13-category export structure for Google Sheets import.
 
-For all 13 CSV template definitions, see `${CLAUDE_SKILL_DIR}/csv-export-templates/references/templates.md`
+For all 13 CSV template definitions, see `${CLAUDE_SKILL_DIR}/references/templates.md`
 
 ## Format Specification
 

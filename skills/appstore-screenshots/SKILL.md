@@ -11,9 +11,9 @@ paths:
 
 Device specifications, layout patterns, typography tables, and Pencil MCP workflow for generating professional App Store screenshots as `.pen` files.
 
-For device dimensions and font sizes, see `${CLAUDE_SKILL_DIR}/appstore-screenshots/references/device-specs.md`
+For device dimensions and font sizes, see `${CLAUDE_SKILL_DIR}/references/device-specs.md`
 
-For layout formulas and composition rules, see `${CLAUDE_SKILL_DIR}/appstore-screenshots/references/layout-patterns.md`
+For layout formulas and composition rules, see `${CLAUDE_SKILL_DIR}/references/layout-patterns.md`
 
 ## Philosophy: Screenshots Are Ads
 

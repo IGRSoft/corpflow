@@ -8,7 +8,7 @@ effort: medium
 
 Comprehensive strategies for managing AI agent costs, tracking token usage, and optimizing workflow efficiency.
 
-For per-stage token baselines, context window improvements, and ethics cost budgeting, see `${CLAUDE_SKILL_DIR}/cost-optimization/references/token-baselines.md`
+For per-stage token baselines, context window improvements, and ethics cost budgeting, see `${CLAUDE_SKILL_DIR}/references/token-baselines.md`
 
 ## Model Cost Tiers
 
@@ -87,7 +87,7 @@ See: .context/analyzing.md#auth-decision
 
 **Strategy**: Leverage automatic Claude Code improvements that reduce context usage without agent changes.
 
-See `${CLAUDE_SKILL_DIR}/cost-optimization/references/token-baselines.md` for the full list of CC version improvements.
+See `${CLAUDE_SKILL_DIR}/references/token-baselines.md` for the full list of CC version improvements.
 
 ### 4. Batch Operations
 
@@ -188,6 +188,6 @@ After workflow:
 
 ## Related Skills
 
-- `${CLAUDE_SKILL_DIR}/workflow/SKILL.md` - Workflow system documentation
-- `${CLAUDE_SKILL_DIR}/agent-coordination/SKILL.md` - Multi-agent coordination patterns
-- `${CLAUDE_SKILL_DIR}/claude-constitution/SKILL.md` - Constitutional principles and ethics framework
+- `${CLAUDE_SKILL_DIR}/../workflow/SKILL.md` - Workflow system documentation
+- `${CLAUDE_SKILL_DIR}/../agent-coordination/SKILL.md` - Multi-agent coordination patterns
+- `${CLAUDE_SKILL_DIR}/../claude-constitution/SKILL.md` - Constitutional principles and ethics framework

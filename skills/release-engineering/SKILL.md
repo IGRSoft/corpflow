@@ -8,9 +8,9 @@ effort: high
 
 Guidelines for version management, changelog generation, and deployment readiness.
 
-For deployment and platform-specific checklists, see `${CLAUDE_SKILL_DIR}/release-engineering/references/checklists.md`
+For deployment and platform-specific checklists, see `${CLAUDE_SKILL_DIR}/references/checklists.md`
 
-For rollback plan template, see `${CLAUDE_SKILL_DIR}/release-engineering/references/rollback-template.md`
+For rollback plan template, see `${CLAUDE_SKILL_DIR}/references/rollback-template.md`
 
 ## Semantic Versioning (SemVer)
 
