@@ -48,6 +48,7 @@
         "./commands/api-docs.md",
         "./commands/appstore-iap.md",
         "./commands/appstore-info.md",
+        "./commands/appstore-screenshots.md",
         "./commands/arch-decision.md",
         "./commands/arch-review.md",
         "./commands/business-case.md",
@@ -69,6 +70,7 @@
         "./commands/onboard-task.md",
         "./commands/optimize-agent.md",
         "./commands/optimize-command.md",
+        "./commands/pm-milestone.md",
         "./commands/pm-prioritize.md",
         "./commands/pm-requirements.md",
         "./commands/pm-roadmap.md",
@@ -107,23 +109,24 @@
         "./agents/workflow-engineer.md"
       ],
       "skills": [
-        "./skills/agent-coordination.md",
+        "./skills/agent-coordination/SKILL.md",
+        "./skills/appstore-screenshots.md",
         "./skills/claude-constitution.md",
-        "./skills/context-compression.md",
+        "./skills/context-compression/SKILL.md",
         "./skills/cost-optimization.md",
         "./skills/cross-plugin-handoff.md",
         "./skills/csv-export-templates.md",
         "./skills/estimation-methodology.md",
         "./skills/five-whys.md",
-        "./skills/incident-response.md",
-        "./skills/milestone-workflow.md",
+        "./skills/incident-response/SKILL.md",
+        "./skills/milestone-workflow/SKILL.md",
+        "./skills/pencil-design-workflow.md",
         "./skills/release-engineering.md",
         "./skills/security-review-process.md",
         "./skills/senior-developer-review.md",
-        "./skills/task-folder-organization.md",
-        "./skills/workflow-testing-strategy.md",
-        "./skills/workflow.md",
-        "./skills/pencil-design-workflow.md"
+        "./skills/task-folder-organization/SKILL.md",
+        "./skills/workflow/SKILL.md",
+        "./skills/workflow-testing-strategy.md"
       ]
     }
   ]
