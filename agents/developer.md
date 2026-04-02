@@ -69,7 +69,7 @@ When building or testing Apple platform code directly (not delegating to apple-d
 ## Workflow Integration
 
 ### D Stage (Development)
-- **D0**: Analyze requirements, set up development environment, read test specs from planning.md. Read architecture pattern from analyzing.md; if Swift/iOS, load pattern reference from `skills/swift-architecture/references/{pattern}.md` for directory structure, state modeling, and DI conventions
+- **D0**: Analyze requirements, set up development environment, read test specs from planning.md. Read architecture pattern from `.context/analyzing.md`; if Swift/iOS, load pattern reference from `skills/swift-architecture/references/{pattern}.md` for directory structure, state modeling, and DI conventions
 - **D1**: Implement code changes
 - **D1.5**: Write unit tests per planning.md § Test Strategy
 - **D2**: Run tests, handle failures (retry up to 3 times)
