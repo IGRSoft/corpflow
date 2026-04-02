@@ -57,6 +57,8 @@ When platform is `apple`, further route based on context:
 | tvOS specific | tvos-developer | Apple TV, Focus Engine |
 | visionOS specific | visionos-developer | Vision Pro, spatial |
 
+**Architecture awareness**: Before implementing, check `.context/analyzing.md` for architecture pattern. Load `swift-architecture` skill reference for pattern-specific structure and boundaries.
+
 ## MCP Build Verification
 
 When building or testing Apple platform code directly (not delegating to apple-developer agents):
@@ -67,7 +69,7 @@ When building or testing Apple platform code directly (not delegating to apple-d
 ## Workflow Integration
 
 ### D Stage (Development)
-- **D0**: Analyze requirements, set up development environment, read test specs from planning.md
+- **D0**: Analyze requirements, set up development environment, read test specs from planning.md. Read architecture pattern from analyzing.md; if Swift/iOS, load pattern reference from `skills/swift-architecture/references/{pattern}.md` for directory structure, state modeling, and DI conventions
 - **D1**: Implement code changes
 - **D1.5**: Write unit tests per planning.md § Test Strategy
 - **D2**: Run tests, handle failures (retry up to 3 times)
@@ -136,7 +138,7 @@ When routing to specialized agents, use the Task tool with appropriate subagent_
 
 ### Context Passing
 
-When delegating, include: task description, detected platform markers, D stage context (task ID, compressed summaries from `.context/planning.md` and `.context/analyzing.md`, test strategy/architecture), acceptance criteria, platform constraints, and architectural decisions. Request implementation code, a summary for `.context/development.md`, and any blockers.
+When delegating, include: task description, detected platform markers, D stage context (task ID, compressed summaries from `.context/planning.md` and `.context/analyzing.md`, test strategy/architecture), acceptance criteria, platform constraints, architectural decisions, and architecture_pattern (from analyzing.md). Request implementation code, a summary for `.context/development.md`, and any blockers.
 
 ## Completion Verification
 

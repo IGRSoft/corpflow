@@ -20,6 +20,8 @@ All available skills for the igrsoft workflow plugin.
 | [release-engineering](release-engineering/SKILL.md) | Semantic versioning, changelog generation, and deployment readiness patterns | high |
 | [review](review/SKILL.md) | Technical review framework for estimates by platform specialists | low |
 | [security-review-process](security-review-process/SKILL.md) | OWASP Top 10 security review checklist and secure coding patterns | medium |
+| [swift-arch-review](swift-arch-review/SKILL.md) | Swift architecture review with per-pattern checklists and anti-pattern detection | medium |
+| [swift-architecture](swift-architecture/SKILL.md) | Swift iOS architecture patterns (MVVM, MVI, TCA, Clean, Reactive, MVP, Coordinator) | high |
 | [task-folder-organization](task-folder-organization/SKILL.md) | Context folder structure (.context/) with artifact naming and path resolution | medium |
 | [workflow](workflow/SKILL.md) | Complete staged workflow system with dynamic sizing and stage management | high |
 | [workflow-testing-strategy](workflow-testing-strategy/SKILL.md) | Test strategy planning guidance for PL and AR workflow stages | medium |
