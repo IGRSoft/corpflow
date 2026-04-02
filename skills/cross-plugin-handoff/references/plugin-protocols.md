@@ -4,6 +4,7 @@
 
 | igrsoft Stage | apple-developer Agent | Handoff Data |
 |---------------|----------------------|--------------|
+| AR (Architecture) | apple-architector | planning context + system constraints |
 | DV (Development) | swift-pro, ios-developer, etc. | planning + architecture context |
 | QA (Quality) | test-generator | development context + test requirements |
 | RE (Release) | ios-developer | App Store submission data |

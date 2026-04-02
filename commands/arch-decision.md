@@ -147,15 +147,28 @@ Proposed → Accepted → [Deprecated | Superseded]
 | Implementation | How to implement |
 | Related | Connected decisions |
 
+## Apple Architecture Consultation
+
+When an ADR involves Swift/Apple platform architecture decisions (app architecture pattern, navigation strategy, state management, Swift concurrency approach), consult `apple-developer:apple-architector` for options evaluation. The apple-architector provides:
+
+- Swift-specific pros/cons for each architecture option
+- Pattern compatibility assessment (e.g., TCA vs MVVM trade-offs for the specific use case)
+- Implementation complexity estimates for the team's Swift expertise level
+
+Include the apple-architector's analysis in the ADR's "Options Considered" section alongside system-level evaluation from software-architector.
+
 ## Integration
 
 This command is used:
 - During AR stage - Document architecture decisions
 - When introducing new patterns or technologies
 - For significant technical choices
+- For Apple platform architecture pattern selection (with apple-architector consultation)
 
 ## Related
 
 - [software-architector](../agents/software-architector.md) - Architecture expertise
+- [apple-architector](apple-developer:apple-architector) - Swift app architecture (consulted for Apple ADRs)
 - [arch-review](./arch-review.md) - Architecture review
+- [arch-apple-select](apple-developer:arch-apple-select) - Standalone Swift pattern selection
 - [tech-debt](./tech-debt.md) - Technical debt tracking
