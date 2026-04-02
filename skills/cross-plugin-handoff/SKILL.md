@@ -10,7 +10,74 @@ Defines the handoff protocol between igrsoft workflow stages and external plugin
 
 For plugin-specific protocol tables and error handling, see `${CLAUDE_SKILL_DIR}/references/plugin-protocols.md`
 
-## When D Stage Delegates to apple-developer
+## When AR Stage Collaborates with apple-architector
+
+Unlike DV stage delegation where task ownership transfers, the AR stage uses a **consultation model** — `software-architector` retains task ownership and merges results.
+
+### Collaboration Protocol
+
+1. `software-architector` detects Apple platform context during AR0
+2. Completes system-level architecture first (API, backend, infra, data)
+3. Delegates Swift app architecture to `apple-developer:apple-architector`
+4. Receives compressed summary + reads `.context/swift-architecture.md`
+5. Merges into unified `analyzing.md`
+
+### Delegation Prompt Template
+
+```
+Provide Swift app architecture for the igrsoft workflow AR stage:
+
+## Task
+{task_description}
+
+## Planning Context (compressed)
+{planning_summary from .context/planning.md}
+
+## System Architecture Constraints
+- API patterns: {REST/GraphQL/gRPC decisions}
+- Data layer: {persistence decisions}
+- Concurrency constraints: {system-level async requirements}
+
+## Expected Output
+1. Select architecture pattern (MVVM/TCA/MVI/Clean/etc.) with rationale
+2. Define module structure and dependency boundaries
+3. Define state management and DI strategy
+4. Define concurrency strategy (actors, async/await patterns)
+5. Define navigation pattern
+6. Define Swift test architecture (unit, integration, UI)
+7. Write full output to .context/swift-architecture.md
+8. Return compressed summary (max 500 tokens)
+```
+
+### Return Protocol
+
+`apple-architector` writes `.context/swift-architecture.md` with full detail and returns a compressed summary (max 500 tokens). `software-architector` reads the full file when merging into `analyzing.md`.
+
+### analyzing.md Merge Template
+
+When Apple platform is detected, `analyzing.md` gains these sections:
+
+```markdown
+## Swift App Architecture
+### Pattern: [MVVM/TCA/MVI/etc.]
+**Rationale**: [from apple-architector]
+### Module Structure
+[file/target structure from apple-architector]
+### State & Dependency Boundaries
+[DI strategy, state management]
+### Concurrency Strategy
+[async/await, actors, Sendable patterns]
+### Navigation Pattern
+[coordinator/NavigationStack approach]
+```
+
+The `## Test Architecture` section splits into system tests (from `software-architector`) and Swift app tests (from `apple-architector`).
+
+### Conflict Resolution
+
+System constraints override app-level preferences. If apple-architector's pattern choice conflicts with system architecture (e.g., TCA's unidirectional flow vs. required bidirectional API streaming), `software-architector` documents the trade-off in an ADR and chooses the compatible option.
+
+## When DV Stage Delegates to apple-developer
 
 ### 1. Context Preparation
 
@@ -87,7 +154,7 @@ External agent should:
 2. Write to `.context/development.md`
 3. Return compressed summary for next stage
 
-## Handoff to Q Stage (QA)
+## Handoff to QA Stage (QA)
 
 ### From apple-developer to qa-engineer
 

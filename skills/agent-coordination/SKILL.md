@@ -104,8 +104,11 @@ Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool ca
 | Status check | Self | haiku |
 | Code implementation | developer | sonnet |
 | Architecture question | software-architector | opus |
+| Apple/Swift architecture | apple-developer:apple-architector | sonnet |
 | Technical decision | technical-lead | opus |
 | Test design | qa-engineer | haiku/sonnet |
+
+> **Cross-plugin AR collaboration**: For Apple platform projects, `software-architector` consults `apple-developer:apple-architector` during AR stage for Swift app architecture (pattern selection, DI, navigation, concurrency). See `cross-plugin-handoff` skill for the full protocol.
 
 ### Model Selection
 

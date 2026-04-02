@@ -145,6 +145,17 @@ class UserService {
 | Blockers | Input validation must be added |
 ```
 
+## Apple Platform Detection
+
+When reviewing Apple platform projects (`.xcodeproj`, `.xcworkspace`, or `Package.swift` with `import SwiftUI`/`import UIKit`), run a dual-pass review:
+
+1. **General review** — SOLID, scalability, security, error handling (this command)
+2. **Swift architecture review** — delegate to `apple-developer:apple-architector` for pattern compliance, boundary violations, Swift concurrency review
+
+Combine both passes into the output. The Swift-specific findings appear under a `### Swift Architecture` subsection within Pattern Analysis, with severity ratings (P0-P3) from apple-architector mapped to Must Fix/Should Fix/Consider.
+
+For server-side Swift (`Package.swift` without UI imports), skip the apple-architector delegation.
+
 ## Review Checklist
 
 The command evaluates against:
@@ -156,6 +167,7 @@ The command evaluates against:
 - [ ] Scalability considerations
 - [ ] Testability
 - [ ] Documentation
+- [ ] Swift architecture pattern compliance (Apple projects only)
 
 ## Integration
 
@@ -167,5 +179,7 @@ This command is used:
 ## Related
 
 - [software-architector](../agents/software-architector.md) - Architecture expertise
+- [apple-architector](apple-developer:apple-architector) - Swift app architecture (consulted for Apple projects)
 - [arch-decision](./arch-decision.md) - Create ADRs
+- [arch-apple-review](apple-developer:arch-apple-review) - Standalone Swift architecture review
 - [tech-debt](./tech-debt.md) - Technical debt analysis
