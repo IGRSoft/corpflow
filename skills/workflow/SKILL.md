@@ -23,7 +23,7 @@ Single source of truth for task workflow management using the Task System.
 
 ## Dynamic Workflow Sizing
 
-Workflows are dynamically sized during PL and AR stages using task deletion.
+PL0 assesses complexity and creates only the stages needed. No pre-creation or deletion — PL builds the task list from scratch.
 
 ### Complexity Assessment
 
@@ -39,31 +39,19 @@ Workflows are dynamically sized during PL and AR stages using task deletion.
 
 ### Decision Rules
 
-| Score | Complexity | Resulting Stages |
-|-------|------------|------------------|
-| 0-10 | Low | PL → DV → QA |
-| 11-20 | Medium | PL → AR → DV → QA |
-| 21-30 | Moderate | PL → AR → TL → DV → QA |
-| 31-40 | High | All 8 stages |
-| 41-50 | Critical | All 10 stages (with SR, RE) |
+| Score | Complexity | PL0 Creates |
+|-------|------------|-------------|
+| 0-10 | Low | DV0, QA0 |
+| 11-20 | Medium | AR0, DV0, QA0 |
+| 21-30 | Moderate | AR0, TL0, DV0, QA0 |
+| 31-40 | High | AR0, TL0, DV0, QA0, DC0, FN0, ST0 |
+| 41-50 | Critical | AR0, TL0, DV0, SR0, QA0, DC0, RE0, FN0, ST0 |
 
-**Security-sensitive features** auto-include SR stage:
+**Security-sensitive features** auto-include SR0:
 - Authentication/authorization, payment processing, PII handling
 - Cryptographic operations, external API secrets, file uploads
 
-### Safe Task Deletion
-
-```typescript
-// Remove task and update dependents
-function deleteTaskSafely(taskId: string) {
-  const allTasks = TaskList();
-  const dependents = allTasks.filter(t => t.blockedBy?.includes(taskId));
-  for (const dep of dependents) {
-    TaskUpdate({ taskId: dep.id, removeBlockedBy: [taskId] });
-  }
-  TaskUpdate({ taskId, status: "deleted" });
-}
-```
+Each task includes `metadata.agent` for executor resolution. See `initialization-patterns.md § PL Creates Subsequent Tasks`.
 
 ## Workspace Mode
 

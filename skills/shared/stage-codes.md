@@ -68,6 +68,21 @@ paths:
 Emergency: IR → DV → QA → RE → FN
 ```
 
+## Subject Numbering
+
+Task subjects use `[CODE][N]:` format with 0-based index per stage code:
+
+```
+PL0: Planning          ← PL is always 0 only (singleton)
+AR0: Architecture
+DV0: Development       ← agents can split: DV0, DV1, DV2
+QA0: QA Testing        ← agents can split: QA0, QA1
+```
+
+- N increments sequentially per `TaskCreate` call for the same stage code
+- The `stage` metadata field stays unnumbered (`"DV"`, not `"DV0"`)
+- `metadata.agent` specifies which agent executes the task; model from agent frontmatter
+
 ## Stage Artifacts
 
 | Code | Artifact |

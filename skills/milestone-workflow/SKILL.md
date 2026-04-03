@@ -117,17 +117,20 @@ Slug: lowercase title, spaces→hyphens, no special chars, max 50 chars.
 ## Track-Prefixed Task IDs
 
 ```
-Track 1: t1-1 (PL), t1-2 (AR), t1-3 (DV), t1-4 (QA)
-Track 2: t2-1 (PL), t2-2 (AR), t2-3 (DV), t2-4 (QA)
+Track 1: t1-1 (PL0), t1-2 (AR0), t1-3 (DV0), t1-4 (QA0)
+Track 2: t2-1 (PL1), t2-2 (AR1), t2-3 (DV1), t2-4 (QA1)
 ```
 
 Task creation pattern:
 ```typescript
+// stageIndex = track - 1: Track 1→PL0, Track 2→PL1, Track 3→PL2, etc.
+const stageIndex = track - 1;
 TaskCreate({
   taskId: `t${track}-1`,
-  subject: `PL: Planning - Issue #${issueNumber}`,
+  subject: `PL${stageIndex}: Planning - Issue #${issueNumber}`,
   metadata: {
-    stage: "PL", issue_number: issueNumber, track: track,
+    stage: "PL", agent: "product-manager",
+    issue_number: issueNumber, track: track,
     workspace_path: `.workspaces/milestone-${milestone}/${issueNumber}`
   }
 });
@@ -148,7 +151,7 @@ TaskCreate({
 1. **Check tracks**: Read workspace.json for current state
 2. **Handle completion**: Free track, assign next pending issue
 3. **Handle errors**: Retry within workspace or escalate
-4. **Approval gates**: Pause at PL3 unless `--auto-continue`
+4. **Stage creation**: Verify PL0 created subsequent stages
 
 ## Execution Flow
 

@@ -1,16 +1,5 @@
 # Stage Details & Agent Teams Integration
 
-## PL3 Approval Gate
-
-**CRITICAL**: Standard workflow MUST stop after Planning for user approval.
-
-1. Planning completes, PL stage deletes unnecessary tasks
-2. Mark approved: `TaskUpdate({ taskId: "1", status: "completed", metadata: { p3_approved: true } })`
-3. **STOP AND ASK**: "Planning complete. Please review planning.md. Approve? [Y/n]"
-4. User approves → Continue to next stage
-
-AR stage verifies: `if (!pTask.metadata?.p3_approved) throw new Error("PL3 approval required");`
-
 ## Default Model Assignments
 
 | Stage | Model | Rationale |
@@ -32,7 +21,7 @@ Override via Task `model` parameter when stage complexity warrants it. See `cost
 
 | Stage | Agent | Key Tasks |
 |-------|-------|-----------|
-| PL | product-manager | Requirements, acceptance criteria, test strategy, dynamic sizing |
+| PL | product-manager | Requirements, acceptance criteria, test strategy, assess complexity, create subsequent stage tasks with `metadata.agent` |
 | AR | software-architector | Technical design, test architecture, validate PL sizing |
 | TL | team-lead | Coordinate approach, allocate resources |
 | DV | developer | Implement solution + unit tests, run formatter, verify build + tests pass |

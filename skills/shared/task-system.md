@@ -19,16 +19,21 @@ Single source of truth for Task System integration.
 ## Subject Format
 
 ```
-[STAGE]: [Description]
+[STAGE][N]: [Description]
 ```
 
-Examples: `PL: Planning`, `AR: Architecture`, `DV: Development`
+N is 0-based, sequential per stage code. First `DV` created → `DV0`, second → `DV1`.
+
+Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implement auth module`
+
+**PL is always `PL0` only** (singleton — no splitting). Other stages can split into sub-tasks.
 
 ## Metadata Fields
 
 | Field | Purpose |
 |-------|---------|
-| `stage` | Stage code (PL, AR, TL, DV, etc.) |
+| `stage` | Stage code unnumbered (PL, AR, TL, DV, etc.) |
+| `agent` | Agent to execute this task (e.g., `software-architector`). Model resolved from agent frontmatter |
 | `workflow_id` | Links task to workflow instance |
 | `priority` | high, medium, low |
 | `milestone_number` | GitHub milestone (--milestone mode) |
