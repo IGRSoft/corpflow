@@ -21,6 +21,28 @@ Patterns for coordinating agents across workflow stages, managing handoffs, and 
 5. Next agent starts: TaskUpdate({ taskId: "Y", status: "in_progress" })
 ```
 
+### Orchestrator → PL0 Handoff
+
+Before PL0, the orchestrator creates `.context/exploration.md` with pre-explored
+codebase facts. This eliminates PL0's need to re-explore the codebase.
+
+The orchestrator's prompt to PL0 MUST include:
+```
+Read .context/exploration.md for codebase context.
+Do NOT re-read files listed there unless you need additional detail.
+```
+
+### Stage Agent File Read Rules
+
+| Stage | Read exploration.md | Read source files | Reason |
+|-------|:------------------:|:-----------------:|--------|
+| PL | Yes | No | Requirements only, no code changes |
+| AR | Yes | Selective | Only files needing architectural analysis |
+| TL | Yes | No | Coordination only |
+| DV | Yes | Yes (modify targets) | Must read files it will modify |
+| QA | Yes | Yes (changed files) | Must review actual changes |
+| DC | Yes | No | Documentation from artifacts |
+
 ### Handoff Checklist
 
 - [ ] Stage objectives completed

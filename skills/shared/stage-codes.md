@@ -98,6 +98,7 @@ QA0: QA Testing        ← agents can split: QA0, QA1
 
 | Code | Artifact |
 |------|----------|
+| EX | exploration.md |
 | PL | planning.md |
 | AR | analyzing.md |
 | TL | coordination.md |

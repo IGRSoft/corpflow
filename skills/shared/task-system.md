@@ -35,6 +35,7 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 | `stage` | Stage code unnumbered (PL, AR, TL, DV, etc.) |
 | `agent` | Agent to execute this task (e.g., `software-architector`). Model resolved from agent frontmatter |
 | `model` | Model alias for this stage (opus, sonnet, haiku). Used by orchestrator when spawning agent |
+| `context_files` | Comma-separated list of `.context/` artifacts this stage should read |
 | `workflow_id` | Links task to workflow instance |
 | `priority` | high, medium, low |
 | `milestone_number` | GitHub milestone (--milestone mode) |
