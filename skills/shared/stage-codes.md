@@ -23,6 +23,16 @@ Single source of truth for workflow stage codes.
 | ST | Stakeholder | stakeholder | sonnet |
 | IR | Incident Response | incident-responder | sonnet |
 
+## Model Lookup
+
+Orchestrator MUST pass `model` parameter when spawning stage agents:
+
+| Model | Stages |
+|-------|--------|
+| opus | AR, DV, SR, TC, PE |
+| sonnet | PL, TL, FN, ST, IR, DS, ET, WE |
+| haiku | QA, DC, RE |
+
 ## Support Agents (On-Demand)
 
 | Code | Agent | Model | Invoked By |
@@ -81,7 +91,8 @@ QA0: QA Testing        ← agents can split: QA0, QA1
 
 - N increments sequentially per `TaskCreate` call for the same stage code
 - The `stage` metadata field stays unnumbered (`"DV"`, not `"DV0"`)
-- `metadata.agent` specifies which agent executes the task; model from agent frontmatter
+- `metadata.agent` specifies which agent executes the task
+- `metadata.model` specifies the model alias; orchestrator MUST pass this to the Agent tool
 
 ## Stage Artifacts
 
