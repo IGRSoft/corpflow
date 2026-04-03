@@ -154,37 +154,38 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 
 ## PL Creates Subsequent Tasks
 
-After planning completes, PL0 creates stage tasks based on complexity score. Each task is self-describing with `metadata.agent` specifying the executor. Model is resolved from the agent's frontmatter.
+After planning completes, PL0 creates stage tasks based on complexity score. Each task is self-describing with `metadata.agent` specifying the executor. Model is resolved from the agent's frontmatter. **Capture returned task IDs** to correctly set up dependency chains.
 
 ```typescript
 // Example: PL0 creates stages for a medium-complexity task
 const workflowId = "dark-mode-2025";
 
-TaskCreate({
+// Capture task IDs returned by TaskCreate
+const ar0 = TaskCreate({
   subject: "AR0: Architecture",
   description: "Design dark mode architecture with theme switching",
   activeForm: "Architecting solution",
   metadata: { stage: "AR", agent: "software-architector", workflow_id: workflowId, priority: "medium" }
 });
 
-TaskCreate({
+const dv0 = TaskCreate({
   subject: "DV0: Development",
   description: "Implement dark mode theme system and color tokens",
   activeForm: "Implementing code",
   metadata: { stage: "DV", agent: "developer", workflow_id: workflowId, priority: "medium" }
 });
 
-TaskCreate({
+const qa0 = TaskCreate({
   subject: "QA0: QA Testing",
   description: "Test theme switching, contrast ratios, persistence",
   activeForm: "Testing solution",
   metadata: { stage: "QA", agent: "qa-engineer", workflow_id: workflowId, priority: "medium" }
 });
 
-// Chain dependencies
-TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // AR0 ← PL0
-TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // DV0 ← AR0
-TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // QA0 ← DV0
+// Chain dependencies using captured IDs (PL0 is taskId "1" from initial creation)
+TaskUpdate({ taskId: ar0, addBlockedBy: ["1"] });  // AR0 ← PL0
+TaskUpdate({ taskId: dv0, addBlockedBy: [ar0] });  // DV0 ← AR0
+TaskUpdate({ taskId: qa0, addBlockedBy: [dv0] });  // QA0 ← DV0
 
 // Mark PL0 completed
 TaskUpdate({ taskId: "1", status: "completed" });

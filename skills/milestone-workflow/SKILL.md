@@ -123,7 +123,8 @@ Track 2: t2-1 (PL1), t2-2 (AR1), t2-3 (DV1), t2-4 (QA1)
 
 Task creation pattern:
 ```typescript
-// stageIndex tracks sequential order per stage code across tracks
+// stageIndex = track - 1: Track 1→PL0, Track 2→PL1, Track 3→PL2, etc.
+const stageIndex = track - 1;
 TaskCreate({
   taskId: `t${track}-1`,
   subject: `PL${stageIndex}: Planning - Issue #${issueNumber}`,
