@@ -242,6 +242,7 @@ When context exceeds budget:
 | Error retry | Trim non-essential context |
 | User request | Manual compression |
 | Post-compaction | Deferred tool schemas preserved — no need to re-fetch after compaction |
+| Auto-compact thrash | v2.1.89 detects when context refills immediately after compaction 3 times and stops with actionable error instead of burning API calls |
 
 ### PostCompact Hook
 

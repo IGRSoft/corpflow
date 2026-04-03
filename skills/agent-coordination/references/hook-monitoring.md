@@ -8,6 +8,7 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 |------------|------------|---------|----------------|
 | `SubagentStart` | Stage agent spawned | Agent type name (e.g., `igrsoft:developer`) | `agent_id`, `agent_type` |
 | `SubagentStop` | Stage agent completes | Agent type name | `agent_id`, `agent_type` |
+| `PermissionDenied` | Auto-mode classifier denies a tool call | — | Tool name, denial reason |
 | `StopFailure` | API error causes turn end | — | Error details |
 | `CwdChanged` | Working directory changes | — | New cwd path |
 | `FileChanged` | Monitored file modified | — | File path |
@@ -17,6 +18,10 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 > As of CC 2.1.77, the Agent tool `resume` parameter is removed. Use `SendMessage` to communicate with running agents instead.
 
 > Parent agents reliably recover subagent results after context compaction. Background agents that are killed or interrupted preserve partial results in context, preventing total loss of intermediate work. The `PostCompact` hook can re-inject critical state after auto-compaction.
+
+> Hook output exceeding 50K characters is saved to disk with a file path + preview injected into context instead of the full output (v2.1.89). This prevents large hook results from consuming context window budget.
+
+> PreToolUse/PostToolUse hooks receive `file_path` as an absolute path for Write/Edit/Read tools, matching documented behavior (confirmed v2.1.89).
 
 ### Project-Level Configuration
 
@@ -62,7 +67,7 @@ Hooks also support HTTP endpoints for external monitoring:
 
 ## Conditional Hook Execution (v2.1.85+)
 
-Hooks support an `if` field using permission rule syntax to avoid unnecessary process spawning:
+Hooks support an `if` field using permission rule syntax to avoid unnecessary process spawning. The `if` matcher correctly handles compound commands (`ls && git push`) and commands with env-var prefixes (`FOO=bar git push`) as of v2.1.89.
 
 ```json
 {
@@ -82,6 +87,22 @@ Hooks support an `if` field using permission rule syntax to avoid unnecessary pr
 ### PreToolUse Hook Automation
 
 PreToolUse hooks can satisfy `AskUserQuestion` by returning `{ "updatedInput": "answer" }`, enabling automated responses in workflow pipelines without user interaction.
+
+### PreToolUse Defer Decision (v2.1.89+)
+
+PreToolUse hooks can return `"defer"` as the permission decision. This pauses headless (`-p`) sessions at the tool call, allowing later resumption with `-p --resume` to re-evaluate. Useful for CI/CD pipelines that need human approval at specific workflow gates.
+
+### PreToolUse Blocking via Exit Code (v2.1.90+)
+
+PreToolUse hooks emitting JSON to stdout with exit code 2 now correctly block tool calls. Previously this combination could be ignored.
+
+### PermissionDenied Hook (v2.1.89+)
+
+The `PermissionDenied` hook fires after auto-mode classifier denials. Return `{retry: true}` to tell the model it can retry the tool call. This enables workflow agents to recover from permission denials automatically.
+
+### PostToolUse Format-on-Save (v2.1.90+)
+
+PostToolUse format-on-save hooks no longer cause "File content has changed" errors between consecutive Edit/Write calls. Safe to use PostToolUse hooks that rewrite files (linters, formatters) without breaking subsequent edits.
 
 ## Agent Teams Lifecycle Hooks
 

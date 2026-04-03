@@ -70,6 +70,8 @@ This reduces disk usage per worktree and speeds up initialization.
 
 > `--worktree` startup reads git refs directly and skips redundant fetch, significantly faster for repos with many branches.
 
+> For headless `-p` mode runs, set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait entirely. Combined with `--mcp-config`, server connections are bounded at 5s instead of blocking on the slowest server (v2.1.89+).
+
 ### Status Transitions
 
 ```

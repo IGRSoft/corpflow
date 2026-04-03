@@ -27,6 +27,14 @@ description: Workflow trigger prefixes (workflow:/fworkflow:/quick:/micro:) and 
 | `--sequential` | DC waits for QA (default: parallel) |
 | `--worktree` | Use git worktrees for issue isolation (supports sparse checkout via `worktree.sparsePaths`, auto-cleanup, fast startup). Requires --milestone |
 
+## Security & Restrictions
+
+| Setting | Version | Effect |
+|---------|---------|--------|
+| `disableSkillShellExecution` | 2.1.91 | Disables inline shell execution in skills, custom slash commands, and plugin commands |
+
+> Auto mode respects explicit user boundaries ("don't push", "wait for X before Y") even when the action would otherwise be allowed (v2.1.90+).
+
 ## Auto-Detection
 
 From task keywords:
