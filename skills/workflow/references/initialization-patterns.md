@@ -145,7 +145,7 @@ TaskCreate({
   subject: "PL0: Planning",
   description: "Define requirements, assess complexity, create stage tasks",
   activeForm: "Planning task requirements",
-  metadata: { stage: "PL", agent: "product-manager", workflow_id: workflowId, priority: "medium" }
+  metadata: { stage: "PL", agent: "product-manager", model: "sonnet", workflow_id: workflowId, priority: "medium" }
 });
 
 // Start immediately
@@ -154,7 +154,7 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 
 ## PL Creates Subsequent Tasks
 
-After planning completes, PL0 creates stage tasks based on complexity score. Each task is self-describing with `metadata.agent` specifying the executor. Model is resolved from the agent's frontmatter. **Capture returned task IDs** to correctly set up dependency chains.
+After planning completes, PL0 creates stage tasks based on complexity score. Each task is self-describing with `metadata.agent` specifying the executor and `metadata.model` specifying the model alias. **Capture returned task IDs** to correctly set up dependency chains.
 
 ```typescript
 // Example: PL0 creates stages for a medium-complexity task
@@ -165,21 +165,21 @@ const ar0 = TaskCreate({
   subject: "AR0: Architecture",
   description: "Design dark mode architecture with theme switching",
   activeForm: "Architecting solution",
-  metadata: { stage: "AR", agent: "software-architector", workflow_id: workflowId, priority: "medium" }
+  metadata: { stage: "AR", agent: "software-architector", model: "opus", workflow_id: workflowId, priority: "medium" }
 });
 
 const dv0 = TaskCreate({
   subject: "DV0: Development",
   description: "Implement dark mode theme system and color tokens",
   activeForm: "Implementing code",
-  metadata: { stage: "DV", agent: "developer", workflow_id: workflowId, priority: "medium" }
+  metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium" }
 });
 
 const qa0 = TaskCreate({
   subject: "QA0: QA Testing",
   description: "Test theme switching, contrast ratios, persistence",
   activeForm: "Testing solution",
-  metadata: { stage: "QA", agent: "qa-engineer", workflow_id: workflowId, priority: "medium" }
+  metadata: { stage: "QA", agent: "qa-engineer", model: "haiku", workflow_id: workflowId, priority: "medium" }
 });
 
 // Chain dependencies using captured IDs (PL0 is taskId "1" from initial creation)
@@ -198,9 +198,11 @@ When a task starts, the executor reads `metadata.agent` and spawns the agent:
 ```typescript
 const task = TaskGet({ taskId: currentTaskId });
 const agentType = task.metadata.agent;  // e.g., "developer"
+const model = task.metadata.model;      // e.g., "haiku"
 
 Task({
-  subagent_type: `igrsoft:${agentType}`,  // loads agent rules + model from frontmatter
+  subagent_type: `igrsoft:${agentType}`,  // loads agent rules from frontmatter
+  model: model,                           // explicit model — do NOT rely on frontmatter inheritance
   prompt: task.description                 // task-specific instructions
 });
 ```
@@ -214,13 +216,13 @@ Any stage agent (except PL) can split its work into sub-tasks:
 TaskCreate({
   subject: "DV1: Implement theme color tokens",
   description: "Create semantic color tokens for light/dark themes",
-  metadata: { stage: "DV", agent: "developer", workflow_id: workflowId, priority: "medium" }
+  metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium" }
 });
 
 TaskCreate({
   subject: "DV2: Implement theme switcher",
   description: "Add toggle and persistence for theme preference",
-  metadata: { stage: "DV", agent: "developer", workflow_id: workflowId, priority: "medium" }
+  metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium" }
 });
 
 // DV1 and DV2 can run in parallel or sequentially
