@@ -159,6 +159,14 @@ Do NOT rollback when:
 - Data migration already applied
 - Rollback would cause worse issues
 
+### Apple Platform Rollback Limitations
+
+- **iOS/tvOS/watchOS/visionOS**: Published App Store builds cannot be rolled back — only forward-fix via new submission
+- **macOS (direct distribution)**: Can replace download immediately
+- **TestFlight**: Distribute hotfix build immediately for beta validation (no review required)
+- **Expedited App Store review**: Request via App Store Connect for P0/P1 — typical 24-48 hours
+- **Server-side mitigation**: Use feature flags or API changes to disable broken client functionality while fix is in review
+
 ## Communication Templates
 
 ### Initial Incident Notification

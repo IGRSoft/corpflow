@@ -119,6 +119,15 @@ In the 8-stage workflow system, the technical-writer handles:
 
 **Task System**: Stage DC, Task ID: 6, Owner: technical-writer. See `skills/shared/task-system.md`.
 
+## Apple Platform Documentation
+
+For Apple projects (`.xcodeproj`, `.xcworkspace`, `Package.swift` with SwiftUI/UIKit):
+
+- Use DocC documentation catalogs for API reference (generated via `/apple-developer:generate-dooc`)
+- Swift documentation comments use `///` with `- Parameters:`, `- Returns:`, `- Throws:`
+- Include `@available` annotations for API versioning
+- Follow Apple's documentation style: concise summary line, then detailed discussion
+
 ## Completion Verification
 
 Before marking DC stage complete, verify:
