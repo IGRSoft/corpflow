@@ -10,7 +10,7 @@ Expert workflow engineer for Task System orchestration and troubleshooting.
 
 ## Constraints (DO NOT)
 
-- DO NOT bypass PL3 approval gate in standard workflows
+- DO NOT create stage tasks outside of PL0 (except sub-task splitting by stage agents)
 - DO NOT hide or obscure workflow failures
 - DO NOT skip per-issue branch creation in milestone mode
 - DO NOT modify task state without using TaskUpdate
@@ -28,7 +28,7 @@ Expert workflow engineer for Task System orchestration and troubleshooting.
 | Domain | Expertise |
 |--------|-----------|
 | Initialization | Trigger detection (`workflow:`/`fworkflow:`), `.context/` structure, Task System dependency chains, priority/platform auto-detection |
-| Stage Management | Status transitions via `TaskUpdate`, PL3 approval gate enforcement, fast workflow gate skip |
+| Stage Management | Status transitions via `TaskUpdate`, PL0 creates subsequent stages, sub-task splitting |
 | Orchestration | Milestone mode (`--milestone:N`), workspace structure, issue fetching/sorting, orchestrator.json, track monitoring, completion/error handling |
 
 See `skills/milestone-workflow/SKILL.md` for milestone architecture details.
@@ -87,17 +87,17 @@ When `--worktree` flag is present, add these checks:
 
 **Solutions**:
 1. Verify state: `TaskGet({ taskId: "X" })`
-2. Check task ID (PL=1, AR=2, TL=3, DV=4, QA=5, DC=6, FN=7, ST=8)
+2. Check task subject prefix (PL0, AR0, DV0, QA0, etc.) — IDs are dynamic
 3. Check `blockedBy` - task blocked if dependencies incomplete
 4. Use `TaskList()` to see all tasks
 
-### Stuck at PL3 Approval
+### PL0 Didn't Create Stages
 
 **Solutions**:
-1. PL task should be `completed`
-2. AR remains `pending` with `blockedBy: ["1"]` - this is intentional
-3. After user approval: `TaskUpdate({ taskId: "2", status: "in_progress" })`
-4. Fast workflows (`fworkflow:`) skip this gate
+1. Verify PL0 task is `completed`
+2. Check if complexity score was assessed
+3. Manually create missing stage tasks with `TaskCreate` and `metadata.agent`
+4. Set dependency chain between tasks
 
 ### Task in Error State
 

@@ -70,8 +70,8 @@ See `skills/shared/stage-codes.md` for stage details.
 
 1. **Creates Context Folder**: `.context/` with `images/` subdirectory
 2. **Creates planning.md Template**: Requirements, acceptance criteria, success metrics
-3. **Creates Tasks with Dependencies**: See `skills/workflow.md` for task creation pattern
-4. **Starts Planning Phase**: Prompts for requirements gathering
+3. **Creates PL0 Task**: Only `PL0: Planning` — PL agent creates subsequent stages after planning
+4. **Starts Planning Phase**: PL0 assesses complexity, creates stage tasks with `metadata.agent`
 
 ## Milestone Mode
 
@@ -241,23 +241,22 @@ See `skills/milestone-workflow.md` for full workspace documentation.
 
 ## Dynamic Sizing
 
-Workflows are sized during PL/AR based on complexity (0-50 score):
+PL0 assesses complexity (0-50 score) and creates only the needed stages:
 
-| Score | Stages |
-|-------|--------|
-| 0-10 | PL → DV → QA |
-| 11-20 | PL → AR → DV → QA |
-| 21-30 | PL → AR → TL → DV → QA |
-| 31+ | All stages |
+| Score | PL0 Creates |
+|-------|-------------|
+| 0-10 | DV0, QA0 |
+| 11-20 | AR0, DV0, QA0 |
+| 21-30 | AR0, TL0, DV0, QA0 |
+| 31+ | All stages (AR0, TL0, DV0, QA0, DC0, FN0, ST0) |
 
-See `skills/workflow.md` for complexity assessment.
+Stage agents can split into sub-tasks (DV0→DV1, DV2). See `skills/workflow.md`.
 
 ## Workflow Modes
 
 ### Standard (`/workflow`)
-- Full 8-stage process
-- Stops at PL3 for user approval
-- Dynamic stage deletion based on complexity
+- PL0 created at startup, subsequent stages created by PL after planning
+- Dynamic stage creation based on complexity assessment
 
 ### Design Auto-Detection
 
@@ -298,17 +297,17 @@ Workflow Initiated (Standard)
 
 Task: Add dark mode support
 Location: .context/
-Mode: Standard (will pause at PL3 for approval)
+Mode: Standard (PL0 creates stages after planning)
 
-I've initiated the workflow. Starting planning...
+I've initiated the workflow. Starting PL0...
 ```
 
 ## Next Steps
 
-1. Complete planning.md with requirements
-2. PL stage may delete unnecessary stages
-3. PL3 approval gate - wait for user approval
-4. Continue through remaining stages
+1. PL0 completes planning.md with requirements
+2. PL0 assesses complexity and creates subsequent stage tasks
+3. Each stage agent loads its rules and executes the task
+4. Agents may split their stage into sub-tasks (DV1, DV2, etc.)
 
 ## Related
 

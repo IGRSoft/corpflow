@@ -10,7 +10,7 @@ claude-code min version: "2.1.77"
 - **Task System Integration**: Native `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` tools
 - **Native Dependencies**: `blockedBy` arrays for explicit dependency management
 - **Cross-Session Persistence**: Tasks persist across sessions
-- **Approval Gates**: PL3 approval gate for standard workflows, auto-skip for fast workflows
+- **Dynamic Task Creation**: PL0 creates subsequent stage tasks based on complexity assessment
 - **Error Handling**: Retry logic (max 3 per stage) and escalation chains
 - **Workflow State Management**: Task System handles all state persistence
 - **Sub-agent Visibility**: All agents can view tasks with `TaskGet`
@@ -74,8 +74,8 @@ claude plugins add /path/to/company-workflow
 Simply prefix your task with one of these triggers:
 
 ```
-workflow: [task description]   # Standard - stops at PL3 for user approval
-fworkflow: [task description]  # Fast - skips PL3 approval, auto-continues
+workflow: [task description]   # Standard - PL0 creates stages after planning
+fworkflow: [task description]  # Fast - auto-continues through all stages
 quick: [task description]      # 3-stage workflow: PL → DV → QA
 micro: [task description]      # Direct execution, no workflow
 ```
@@ -109,7 +109,7 @@ fworkflow: /code-review PR #123
 | `micro: [task]` | Direct edit | Single-file fixes, typos |
 | `quick: [task]` | PL → DV → QA | Small features, bug fixes |
 | `workflow: [task]` | Full 8 stages | Multi-file features, architectural changes |
-| `fworkflow: [task]` | Full 8 stages (no PL3) | Trusted full workflows |
+| `fworkflow: [task]` | Full 8 stages (auto-continue) | Trusted full workflows |
 
 ## 8-Stage Workflow
 
@@ -126,21 +126,23 @@ fworkflow: /code-review PR #123
 
 ## Task System Initialization
 
-When a workflow starts, tasks are created with dependencies:
+Only `PL0` is created at startup. PL0 creates subsequent stage tasks after planning:
 
 ```typescript
-// Create all 8 tasks
-TaskCreate({ subject: "PL: Planning", description: "Define requirements", activeForm: "Planning..." });  // id: "1"
-TaskCreate({ subject: "AR: Architecture", description: "Design solution", activeForm: "Architecting..." });  // id: "2"
-// ... all 8 stages
+// Create PL0 only — PL agent creates remaining stages after planning
+TaskCreate({
+  subject: "PL0: Planning",
+  description: "Define requirements, assess complexity, create stage tasks",
+  activeForm: "Planning...",
+  metadata: { stage: "PL", agent: "product-manager", workflow_id: "dark-mode", priority: "medium" }
+});
 
-// Set up sequential dependency chain
-TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // AR blocked by PL
-TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // TL blocked by AR
-// ... rest of chain
-
-// Start Planning
+// Start PL0
 TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
+
+// After planning, PL0 creates stages based on complexity:
+// AR0, DV0, QA0, etc. — each with metadata.agent for executor resolution
+// Stage agents can split into sub-tasks: DV0 → DV1, DV2
 ```
 
 ## Context Folder Structure
@@ -277,7 +279,6 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 - `workflow-testing-strategy.md` - Workflow-integrated testing planning for PL/AR stages
 
 ### Tools
-- `setup-task.py` - Python script for task initialization
 
 ## Error Handling
 

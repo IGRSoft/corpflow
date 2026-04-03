@@ -22,7 +22,7 @@ when using the app at night...
 
 **After (180 tokens)**:
 ```markdown
-## PL3: Planning Complete
+## PL0: Planning Complete
 
 ### Requirements
 - REQ-1: Dark mode toggle in Settings

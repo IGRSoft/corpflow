@@ -135,26 +135,94 @@ See `shared/milestone-helpers.md` for helper functions.
 
 ## Workflow Initialization
 
+Only PL0 is created at startup. PL0 creates all subsequent stage tasks after planning.
+
 ```typescript
 const workflowId = "dark-mode-2025";
-const stages = ["PL", "AR", "TL", "DV", "QA", "DC", "FN", "ST"];
-const stageNames = { PL: "Planning", AR: "Architecture", TL: "Team Lead", DV: "Development", QA: "QA Testing", DC: "Documentation", FN: "Finalization", ST: "Stakeholder" };
 
-// Create tasks
-stages.forEach((code, i) => {
-  TaskCreate({
-    subject: `${code}: ${stageNames[code]}`,
-    description: `Stage ${i + 1}`,
-    activeForm: `Working on ${stageNames[code]}`,
-    metadata: { stage: code, workflow_id: workflowId, priority: "medium" }
-  });
+// Create only PL0 — PL agent creates subsequent stages after planning
+TaskCreate({
+  subject: "PL0: Planning",
+  description: "Define requirements, assess complexity, create stage tasks",
+  activeForm: "Planning task requirements",
+  metadata: { stage: "PL", agent: "product-manager", workflow_id: workflowId, priority: "medium" }
 });
 
-// Chain dependencies: 2←1, 3←2, ..., 8←7
-for (let i = 2; i <= 8; i++) {
-  TaskUpdate({ taskId: String(i), addBlockedBy: [String(i - 1)] });
-}
-
-// Start first task
+// Start immediately
 TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
+```
+
+## PL Creates Subsequent Tasks
+
+After planning completes, PL0 creates stage tasks based on complexity score. Each task is self-describing with `metadata.agent` specifying the executor. Model is resolved from the agent's frontmatter.
+
+```typescript
+// Example: PL0 creates stages for a medium-complexity task
+const workflowId = "dark-mode-2025";
+
+TaskCreate({
+  subject: "AR0: Architecture",
+  description: "Design dark mode architecture with theme switching",
+  activeForm: "Architecting solution",
+  metadata: { stage: "AR", agent: "software-architector", workflow_id: workflowId, priority: "medium" }
+});
+
+TaskCreate({
+  subject: "DV0: Development",
+  description: "Implement dark mode theme system and color tokens",
+  activeForm: "Implementing code",
+  metadata: { stage: "DV", agent: "developer", workflow_id: workflowId, priority: "medium" }
+});
+
+TaskCreate({
+  subject: "QA0: QA Testing",
+  description: "Test theme switching, contrast ratios, persistence",
+  activeForm: "Testing solution",
+  metadata: { stage: "QA", agent: "qa-engineer", workflow_id: workflowId, priority: "medium" }
+});
+
+// Chain dependencies
+TaskUpdate({ taskId: "2", addBlockedBy: ["1"] });  // AR0 ← PL0
+TaskUpdate({ taskId: "3", addBlockedBy: ["2"] });  // DV0 ← AR0
+TaskUpdate({ taskId: "4", addBlockedBy: ["3"] });  // QA0 ← DV0
+
+// Mark PL0 completed
+TaskUpdate({ taskId: "1", status: "completed" });
+```
+
+## Task Execution Pattern
+
+When a task starts, the executor reads `metadata.agent` and spawns the agent:
+
+```typescript
+const task = TaskGet({ taskId: currentTaskId });
+const agentType = task.metadata.agent;  // e.g., "developer"
+
+Task({
+  subagent_type: `igrsoft:${agentType}`,  // loads agent rules + model from frontmatter
+  prompt: task.description                 // task-specific instructions
+});
+```
+
+## Stage Sub-Task Splitting
+
+Any stage agent (except PL) can split its work into sub-tasks:
+
+```typescript
+// Developer splits DV0 into focused sub-tasks
+TaskCreate({
+  subject: "DV1: Implement theme color tokens",
+  description: "Create semantic color tokens for light/dark themes",
+  metadata: { stage: "DV", agent: "developer", workflow_id: workflowId, priority: "medium" }
+});
+
+TaskCreate({
+  subject: "DV2: Implement theme switcher",
+  description: "Add toggle and persistence for theme preference",
+  metadata: { stage: "DV", agent: "developer", workflow_id: workflowId, priority: "medium" }
+});
+
+// DV1 and DV2 can run in parallel or sequentially
+TaskUpdate({ taskId: "5", addBlockedBy: ["3"] });  // DV1 ← DV0
+TaskUpdate({ taskId: "6", addBlockedBy: ["3"] });  // DV2 ← DV0
 ```
