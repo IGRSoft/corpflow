@@ -192,6 +192,25 @@ When running on Opus 4.6 with Max/Team/Enterprise plans, the context window is 1
 
 > Use extended budgets only when complexity warrants it — standard budgets are still preferred for cost efficiency. Compression remains a best practice regardless of window size.
 
+## Exploration Cache Budget
+
+| Content Type | Token Budget | Technique |
+|-------------|-------------|-----------|
+| File inventory | 100-200 | Path + one-line description table |
+| Key interfaces | 200-500 | Code snippets for enums/protocols only |
+| Patterns | 100-200 | One-liner per pattern with file:line ref |
+| External context | 100-300 | Summarized design/Figma/user decisions |
+| **Total** | **500-1200** | |
+
+### Anti-Patterns for exploration.md
+
+| Anti-Pattern | Problem | Fix |
+|-------------|---------|-----|
+| Full file contents | 500-2000 tokens/file | Include only interfaces/enums (< 30 lines) |
+| Implementation details | Low reuse across stages | Use file:line references |
+| Build commands | Already in CLAUDE.md | Don't duplicate |
+| Architecture decisions | Belongs in analyzing.md | Only include patterns/facts |
+
 ### Budget Enforcement
 
 When context exceeds budget:
