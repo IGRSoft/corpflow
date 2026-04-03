@@ -3,12 +3,17 @@ name: workflow
 description: Initialize a new workflow task with proper folder structure and Task System integration
 argument-hint: '<task description> [--milestone:N] [--secure] [--worktree] [--parallel:N]'
 model: opus
-allowed-tools: Read, Glob, Grep, Write, Edit, Bash
+allowed-tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager)
 ---
 
 # Workflow Command
 
 Initialize a new workflow task with proper folder structure and Task System integration.
+
+> **CRITICAL CONSTRAINTS**
+> - MUST use TaskCreate/TaskUpdate/TaskGet/TaskList for workflow state. Do NOT use Claude Code's built-in plan mode.
+> - Every stage MUST be a Task System task. Do NOT skip TaskCreate.
+> - If Task tools are unavailable, STOP and report. Do NOT fall back to alternative planning.
 
 ## Usage
 
@@ -66,12 +71,16 @@ See `skills/shared/stage-codes.md` for stage details.
 /emergency "Production login failing"
 ```
 
-## What This Command Does
+## Execution Steps (MANDATORY)
 
-1. **Creates Context Folder**: `.context/` with `images/` subdirectory
-2. **Creates planning.md Template**: Requirements, acceptance criteria, success metrics
-3. **Creates PL0 Task**: Only `PL0: Planning` — PL agent creates subsequent stages after planning
-4. **Starts Planning Phase**: PL0 assesses complexity, creates stage tasks with `metadata.agent`
+1. **Create context folder**: `mkdir -p .context/images`
+2. **Create planning.md** template in `.context/` with requirements, acceptance criteria, success metrics
+3. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "product-manager", workflow_id: "<slug>", priority: "<priority>" } })`
+4. **TaskUpdate PL0 to in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
+5. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PL0 assesses complexity, creates stage tasks with `metadata.agent`
+6. **TaskUpdate PL0 to completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
+7. **Present plan and STOP**: Show the user a summary of PL0 results — complexity score, stages created, and key decisions. Then **STOP and wait for user approval** before proceeding.
+8. **Execute remaining stages** (only after user approves): Run the orchestrator execution loop (see `skills/workflow/SKILL.md § Orchestrator Execution Loop`)
 
 ## Milestone Mode
 

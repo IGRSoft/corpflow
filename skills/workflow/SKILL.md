@@ -160,6 +160,68 @@ Document errors in `.context/error.md` with problem, root cause, attempted solut
 
 See references/ for initialization code, stage details, and agent teams integration.
 
+## Pre-Stage Validation
+
+Before executing any workflow stage, the orchestrator MUST validate:
+
+1. **TaskList check**: Call `TaskList()` and verify at least one task exists with `metadata.workflow_id` matching the current workflow
+2. **PL0 exists**: Verify a task with subject starting with `PL0:` exists
+3. **Stage tasks exist**: After PL0 completes, verify PL0 created subsequent stage tasks (at minimum DV0 and QA0 for any complexity level)
+
+If validation fails:
+- No tasks exist → Workflow not initialized. Re-run initialization (TaskCreate PL0)
+- PL0 exists but no subsequent tasks → PL0 did not complete properly. Re-run PL0
+- Tasks exist but are orphaned (no workflow_id) → Log warning and attempt to match by subject pattern
+
+## Orchestrator Execution Loop
+
+After PL0 completes and creates stage tasks, the orchestrator MUST:
+
+1. **Present PL0 results** to the user: complexity score, stages created (with agents), dependency chain, and key planning decisions
+2. **STOP and wait for explicit user approval** before executing any stage beyond PL0
+3. The user may adjust stages, re-prioritize, or skip stages before approving
+4. Only after the user confirms, execute the stage loop below:
+
+Unless `--auto-continue` flag was provided — in that case, skip the approval gate and proceed directly.
+
+```typescript
+// 1. Get all tasks for this workflow
+let tasks = TaskList();
+
+// 2. Loop until all tasks are completed
+while (tasks.some(t => t.status !== "completed")) {
+  // 3. Find unblocked pending tasks
+  const ready = tasks.filter(t =>
+    t.status === "pending" &&
+    (t.blockedBy ?? []).every(dep => tasks.find(d => d.id === dep)?.status === "completed")
+  );
+
+  for (const task of ready) {
+    // 4. Get full task details
+    const full = TaskGet({ taskId: task.id });
+    const agentType = full.metadata.agent;
+
+    // 5. Mark in_progress
+    TaskUpdate({ taskId: task.id, status: "in_progress" });
+
+    // 6. Delegate to stage agent
+    Task({ subagent_type: `igrsoft:${agentType}`, prompt: full.description });
+
+    // 7. Mark completed
+    TaskUpdate({ taskId: task.id, status: "completed" });
+  }
+
+  // Refresh task list
+  tasks = TaskList();
+}
+```
+
+**Key rules**:
+- NEVER skip TaskUpdate calls (both in_progress and completed)
+- NEVER execute a stage without checking blockedBy dependencies are completed
+- If a stage agent fails after 3 retries, escalate per the error handling chain
+- The orchestrator owns the loop; stage agents own their stage's work
+
 ## Related
 
 - `milestone-workflow.md` - GitHub milestone integration
