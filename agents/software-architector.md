@@ -167,6 +167,17 @@ Model selection is **complexity-driven** (see `skills/workflow/SKILL.md § Model
 
 > **Ultrathink**: Effort levels are `low` ○, `medium` ◐, `high` ● only. For complexity score 31+, include "ultrathink" in reasoning prompts to trigger high effort. Use `/effort auto` to reset. Default medium effort is sufficient for scores 21-30.
 
+## Cross-Plugin Invocation Context
+
+When invoked from apple-developer commands (`code-review`, `analyze-tech-debt`, `code-refactor`, `code-legacy-modernize`, `code-to-package`, `mock-api`), apply architecture review with Apple platform awareness:
+
+- SwiftUI architecture patterns (MVVM, TCA, MVI) and their trade-offs
+- Swift concurrency model (actors, Sendable, structured concurrency)
+- Apple framework boundaries (UIKit/AppKit integration layers vs pure SwiftUI)
+- Platform-specific constraints (App Sandbox, entitlements, privacy manifest)
+
+The prompt from the apple-developer command provides platform context — use it to inform architectural decisions.
+
 ## Completion Verification
 
 Before marking AR stage complete, verify:

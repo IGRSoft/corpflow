@@ -184,7 +184,11 @@ Create `.context/release-prep.md`:
 - [ ] Export compliance answered
 - [ ] Content rights confirmed
 - [ ] Age rating accurate
+- [ ] Privacy manifest (PrivacyInfo.xcprivacy) current
+- [ ] TestFlight build uploaded for beta validation
 ```
+
+For Apple platform releases (secure-workflow or full-workflow), consult `.context/security-review.md` for Apple security review findings from the SR stage. For expedited review (P0/P1 hotfixes), request via App Store Connect — typical turnaround 24-48 hours.
 
 ### Android Play Store
 

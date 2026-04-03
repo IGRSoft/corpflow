@@ -6,8 +6,11 @@
 |---------------|----------------------|--------------|
 | AR (Architecture) | apple-architector | planning context + system constraints |
 | DV (Development) | swift-pro, ios-developer, etc. | planning + architecture context |
+| SR (Security) | security-auditor | development context + Apple security checklist (Keychain, ATS, entitlements, TCC, privacy manifest) |
 | QA (Quality) | test-generator | development context + test requirements |
-| RE (Release) | ios-developer | App Store submission data |
+| DC (Documentation) | generate-dooc (command) | development context + API surface |
+| RE (Release) | ios-developer, macos-developer | App Store/TestFlight submission data, notarization |
+| IR (Incident) | All platform agents | incident context + hotfix constraints (no App Store rollback) |
 
 ## security-scanning Plugin
 
