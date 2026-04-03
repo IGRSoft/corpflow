@@ -38,6 +38,16 @@ Typical token usage by workflow stage (sonnet model):
 | MCP tool descriptions/server instructions capped at 2KB | 2.1.84 | Reduced context from MCP tools |
 | Improved prompt cache hit rate | 2.1.86 | Further input cost reduction |
 | Skill descriptions capped at 250 characters | 2.1.86 | Reduced skill listing overhead |
+| Nested CLAUDE.md re-injection fix | 2.1.89 | No longer re-injected dozens of times in long sessions |
+| Auto-compact thrash loop fix (actionable error after 3 refills) | 2.1.89 | Stops burning API calls on immediate context refill |
+| Prompt cache misses in long sessions fixed | 2.1.89 | Tool schema stability preserves cache |
+| Thinking summaries disabled by default | 2.1.89 | Fewer tokens; set `showThinkingSummaries: true` to restore |
+| `/stats` includes subagent usage | 2.1.89 | Accurate cross-agent cost visibility |
+| Hook output >50K chars saved to disk (path + preview) | 2.1.89 | Large hook results no longer consume context |
+| Per-turn MCP schema JSON.stringify eliminated | 2.1.90 | Faster cache-key lookup |
+| SSE transport + SDK transcript writes: linear time (was quadratic) | 2.1.90 | Long sessions no longer slow down |
+| `--resume` prompt-cache miss fix (regression since 2.1.69) | 2.1.90 | Full cache hit on first resumed request |
+| Edit tool uses shorter `old_string` anchors | 2.1.91 | Fewer output tokens per edit |
 
 These are automatic — no agent or workflow changes needed. They compound across multi-stage workflows.
 

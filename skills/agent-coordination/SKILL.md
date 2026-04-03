@@ -153,6 +153,12 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 
 > Agent teams inherit the leader's model. Teammates use the parent session's model unless explicitly overridden. Model aliases (`opus`/`sonnet`/`haiku`) work correctly across all providers (Anthropic, Bedrock, Vertex, Foundry).
 
+> Named subagents appear in `@`-mention typeahead suggestions (v2.1.89+), making it easier to reference and communicate with running agents via `SendMessage`.
+
+### MCP Large Result Handling
+
+MCP servers can annotate tool results with `_meta["anthropic/maxResultSizeChars"]` to allow results up to 500K characters without truncation (v2.1.91+). Useful for large outputs like database schemas or build logs from XcodeBuildMCP.
+
 ## Coordination Patterns
 
 ### Sequential Pipeline (Default)
@@ -250,7 +256,7 @@ Ethics-reviewer can be invoked at any stage:
 | Calibrated | Appropriate uncertainty |
 | Transparent | No hidden issues |
 
-See references/ for hook-based monitoring (including StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, and conditional `if` field for hook filtering), agent teams comparison, and MCP elicitation patterns.
+See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, and PostToolUse format-on-save safety), agent teams comparison, and MCP elicitation patterns.
 
 ## Related
 

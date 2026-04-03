@@ -88,6 +88,7 @@ Configure in project `settings.json` or agent frontmatter `hooks` field:
 | `CwdChanged` | Working directory changes | settings.json |
 | `FileChanged` | Monitored file modified | settings.json |
 | `TaskCreated` | TaskCreate tool called | settings.json |
+| `PermissionDenied` | Auto-mode classifier denies tool call | settings.json (all modes) |
 | `WorktreeCreate` | Worktree created | settings.json |
 
 `TeammateIdle` and `TaskCompleted` require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
