@@ -200,12 +200,13 @@ while (tasks.some(t => t.status !== "completed")) {
     // 4. Get full task details
     const full = TaskGet({ taskId: task.id });
     const agentType = full.metadata.agent;
+    const model = full.metadata.model;
 
     // 5. Mark in_progress
     TaskUpdate({ taskId: task.id, status: "in_progress" });
 
     // 6. Delegate to stage agent
-    Task({ subagent_type: `igrsoft:${agentType}`, prompt: full.description });
+    Task({ subagent_type: `igrsoft:${agentType}`, model: model, prompt: full.description });
 
     // 7. Mark completed
     TaskUpdate({ taskId: task.id, status: "completed" });
@@ -219,6 +220,7 @@ while (tasks.some(t => t.status !== "completed")) {
 **Key rules**:
 - NEVER skip TaskUpdate calls (both in_progress and completed)
 - NEVER execute a stage without checking blockedBy dependencies are completed
+- ALWAYS pass `model` from task metadata to the Agent tool — do NOT rely on agent frontmatter inheritance
 - If a stage agent fails after 3 retries, escalate per the error handling chain
 - The orchestrator owns the loop; stage agents own their stage's work
 

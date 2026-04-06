@@ -63,7 +63,7 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 ├── milestone.json           # GitHub milestone context (when --milestone used)
 ├── deployment.md            # Deployment plan (if applicable)
 ├── error.md                 # Error log for escalations (created on errors)
-├── designs/                 # Designer-generated .pen mockups
+├── designs/                 # Design assets: Figma screenshots (.png) and Pencil mockups (.pen)
 └── images/                  # User-attached screenshots, diagrams
 ```
 
