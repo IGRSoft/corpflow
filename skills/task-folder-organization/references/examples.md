@@ -2,7 +2,7 @@
 
 ## designs/ Directory
 
-Contains Designer-generated .pen mockups created via Pencil MCP tools.
+Contains design assets: Figma screenshots (.png) captured during PL stage and Pencil mockups (.pen) created via Pencil MCP tools.
 
 ## images/ Directory
 
@@ -27,10 +27,13 @@ The Designer agent generates .pen design mockups for UI-related tasks using the 
 | Type | Source | Location | Format |
 |------|--------|----------|--------|
 | Pencil Mockups | Designer agent | `.context/designs/mockup-*.pen` | .pen (JSON) |
+| Figma Screenshots | Product Manager (PL) | `.context/designs/figma-*.png` | PNG |
 | Screenshots | User | `.context/images/screenshot-*.png` | PNG/JPG |
 | Diagrams | User | `.context/images/diagram-*.png` | PNG/SVG |
 
-**Naming**: `mockup-[feature]-[screen]-[variant].pen`
+**Naming**:
+- Pencil: `mockup-[feature]-[screen]-[variant].pen`
+- Figma: `figma-[screen]-[node-id].png`
 
 ```
 .context/
@@ -111,6 +114,22 @@ When a user attaches images during a workflow task, copy them to `.context/image
 │   └── mockup-user-profile-edit-error.pen    # Designer: validation errors
 └── images/
     └── feature-mockup.png
+```
+
+### Example 2c: Feature with Figma Design References
+
+```
+.context/
+├── planning.md                               # References Figma screenshots in Design Requirements
+├── exploration.md                            # Contains Figma design context summary
+├── analyzing.md
+├── development.md                            # Uses Figma screenshots as implementation guide
+├── testing.md                                # Design comparison results
+├── designs/
+│   ├── figma-login-screen-42-1.png           # Figma: login screen (node 42:1)
+│   ├── figma-login-error-42-5.png            # Figma: error state (node 42:5)
+│   └── mockup-login-screen.pen               # Pencil: supplementary mockup
+└── images/
 ```
 
 ### Example 3: Security-Critical Feature (10-stage)
