@@ -162,6 +162,9 @@ performed codebase exploration. This prevents stage agents from re-reading the s
 - Orchestrator launched Explore agents before PL0
 - User provided Figma URLs or external context
   - When Figma URLs are provided, PL0 captures screenshots to `.context/designs/figma-*.png` and summarizes design context here
+
+> **Note**: Figma screenshot capture applies to ALL workflow triggers including `micro:`.
+> For `micro:`, create `.context/designs/` and save screenshots even though no `.context/planning.md` is generated.
 - Task involves modifying existing code (not greenfield)
 
 ### Template

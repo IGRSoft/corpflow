@@ -13,7 +13,19 @@ description: Workflow trigger prefixes (workflow:/fworkflow:/quick:/micro:) and 
 | `secure-workflow:` | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST | Security-critical (10-stage) |
 | `full-workflow:` | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST | Complete pipeline |
 | `emergency:` | IR→DV→QA→RE→FN | Hotfix/incident response |
-| `micro:` | Direct | Single-file changes |
+| `micro:` | Direct (with plan) | Single-file changes |
+
+## Micro Trigger Behavior
+
+`micro:` skips the full stage pipeline but still follows a lightweight flow:
+
+1. **Context setup**: If Figma URLs are provided, create `.context/designs/` and capture screenshots
+2. **Present plan**: Briefly describe the intended change (files, approach, design reference)
+3. **Wait for approval**: STOP and wait for explicit user approval before editing code
+4. **Execute**: Implement the change directly (no stage agents)
+5. **Verify**: Run formatter/build check
+
+Even trivial changes deserve a moment of alignment with the user.
 
 ## Command Options
 
