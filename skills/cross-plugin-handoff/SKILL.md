@@ -4,6 +4,16 @@ description: Protocol for handoffs between igrsoft workflow and external plugins
 effort: medium
 ---
 
+## Orchestrator Implementation Gate (BINDING)
+
+When the orchestrator receives results from ANY external plugin command (apple-developer:analyze-error, apple-developer:code-debug, debugging-toolkit:smart-debug, security-scanning:*, etc.) that include fix suggestions, code changes, or implementation recommendations:
+
+1. **PRESENT** the analysis results and proposed fix to the user
+2. **DO NOT** call Write, Edit, or any file-modifying Bash command
+3. **WAIT** for explicit user approval before implementing any changes
+
+**Exception**: If the user's original request explicitly includes implementation intent (e.g., "fix this and apply the changes", "auto-fix", "just fix it"), the approval gate is satisfied by the original request.
+
 # Cross-Plugin Handoff Protocol
 
 Defines the handoff protocol between igrsoft workflow stages and external plugin agents.
@@ -153,6 +163,31 @@ External agent should:
 1. Update task status to completed
 2. Write to `.context/development.md`
 3. Return compressed summary for next stage
+
+## Direct Orchestrator Dispatch
+
+The orchestrator loop resolves `metadata.agent` dynamically: bare names prepend `igrsoft:`, fully-qualified names (containing `:`) dispatch as-is. This enables PL0 to route stages directly to external plugin agents without an igrsoft intermediary.
+
+```typescript
+// PL0 creates a DV stage task routed directly to apple-developer
+TaskCreate({
+  subject: "DV0: Implement SwiftUI feature",
+  description: "Implement the onboarding flow using SwiftUI NavigationStack",
+  metadata: {
+    stage: "DV",
+    agent: "apple-developer:swift-pro",  // fully-qualified → dispatched directly
+    model: "opus",
+    workflow_id: workflowId
+  }
+});
+```
+
+Use direct dispatch when:
+- The task is entirely within one external plugin's domain (e.g., pure Swift/Apple work)
+- PL0 can determine at planning time that no igrsoft routing is needed
+- The external agent's handoff format (see below) is used for stage continuity
+
+Bare names like `"developer"` continue to resolve to `igrsoft:developer` — fully backward compatible.
 
 ## Handoff to QA Stage (QA)
 
