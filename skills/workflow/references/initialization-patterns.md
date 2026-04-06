@@ -272,8 +272,11 @@ When a task starts, the executor reads `metadata.agent` and spawns the agent:
 
 ```typescript
 const task = TaskGet({ taskId: currentTaskId });
-const agentType = task.metadata.agent;  // e.g., "developer"
+const agentType = task.metadata.agent;  // e.g., "developer" or "apple-developer:swift-pro"
 const model = task.metadata.model;      // e.g., "haiku"
+
+// Resolve plugin: qualified names used as-is, bare names prepend "igrsoft:"
+const subagentType = agentType.includes(':') ? agentType : `igrsoft:${agentType}`;
 
 // Build context-aware prompt
 const explorationExists = fileExists('.context/exploration.md');
@@ -288,7 +291,7 @@ for (const artifact of previousArtifacts) {
 }
 
 Task({
-  subagent_type: `igrsoft:${agentType}`,  // loads agent rules from frontmatter
+  subagent_type: subagentType,           // bare name → "igrsoft:{name}"; qualified → as-is
   model: model,                           // explicit model — do NOT rely on frontmatter inheritance
   prompt: prompt                           // context-enriched instructions
 });

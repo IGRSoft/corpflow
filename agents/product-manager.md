@@ -101,17 +101,19 @@ Use the **Unified Complexity Assessment** from `skills/workflow/SKILL.md § Dyna
 
 **Agent mapping for `metadata.agent`**:
 
-| Stage | Agent |
-|-------|-------|
-| AR0 | software-architector |
-| TL0 | team-lead |
-| DV0 | developer |
-| SR0 | security-reviewer |
-| QA0 | qa-engineer |
-| DC0 | technical-writer |
-| RE0 | release-engineer |
-| FN0 | project-manager |
-| ST0 | stakeholder |
+Bare names resolve to `igrsoft:{name}`. Fully-qualified names (containing `:`) are dispatched as-is — use when a stage should go directly to an external plugin agent.
+
+| Stage | Agent | Notes |
+|-------|-------|-------|
+| AR0 | software-architector | or `apple-developer:apple-architector` for Apple-only |
+| TL0 | team-lead | |
+| DV0 | developer | or `apple-developer:swift-pro`, `apple-developer:ios-developer`, etc. |
+| SR0 | security-reviewer | or `apple-developer:security-auditor`, `security-scanning:security-auditor` |
+| QA0 | qa-engineer | |
+| DC0 | technical-writer | |
+| RE0 | release-engineer | |
+| FN0 | project-manager | |
+| ST0 | stakeholder | |
 
 **See**: `skills/workflow/SKILL.md` for full assessment table. `skills/workflow/references/initialization-patterns.md § PL Creates Subsequent Tasks` for code pattern.
 

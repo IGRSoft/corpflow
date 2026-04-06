@@ -178,9 +178,10 @@ If validation fails:
 After PL0 completes and creates stage tasks, the orchestrator MUST:
 
 1. **Present PL0 results** to the user: complexity score, stages created (with agents), dependency chain, and key planning decisions
-2. **STOP and wait for explicit user approval** before executing any stage beyond PL0
-3. The user may adjust stages, re-prioritize, or skip stages before approving
-4. Only after the user confirms, execute the stage loop below:
+2. **STOP IMMEDIATELY**. Do NOT call Write, Edit, Task, or Bash with file-modifying commands. Do NOT delegate to any stage agent. Do NOT proceed to AR, TL, DV, or any other stage.
+3. **Wait for EXPLICIT user approval**. The user must say "approve", "proceed", "go ahead", "looks good", "yes", or similar affirmative. Silence is NOT approval. Asking a question is NOT approval.
+4. The user may adjust stages, re-prioritize, or skip stages before approving
+5. Only after the user explicitly confirms, execute the stage loop below:
 
 Unless `--auto-continue` flag was provided — in that case, skip the approval gate and proceed directly.
 
@@ -202,11 +203,15 @@ while (tasks.some(t => t.status !== "completed")) {
     const agentType = full.metadata.agent;
     const model = full.metadata.model;
 
+    // Resolve plugin: qualified names (e.g., "apple-developer:swift-pro") used as-is;
+    // bare names (e.g., "developer") → "igrsoft:developer"
+    const subagentType = agentType.includes(':') ? agentType : `igrsoft:${agentType}`;
+
     // 5. Mark in_progress
     TaskUpdate({ taskId: task.id, status: "in_progress" });
 
     // 6. Delegate to stage agent
-    Task({ subagent_type: `igrsoft:${agentType}`, model: model, prompt: full.description });
+    Task({ subagent_type: subagentType, model: model, prompt: full.description });
 
     // 7. Mark completed
     TaskUpdate({ taskId: task.id, status: "completed" });
@@ -221,6 +226,7 @@ while (tasks.some(t => t.status !== "completed")) {
 - NEVER skip TaskUpdate calls (both in_progress and completed)
 - NEVER execute a stage without checking blockedBy dependencies are completed
 - ALWAYS pass `model` from task metadata to the Agent tool — do NOT rely on agent frontmatter inheritance
+- `metadata.agent` accepts bare names (`"developer"` → `igrsoft:developer`) or fully-qualified plugin names (`"apple-developer:swift-pro"` → used as-is). Detection: presence of `:`
 - If a stage agent fails after 3 retries, escalate per the error handling chain
 - The orchestrator owns the loop; stage agents own their stage's work
 

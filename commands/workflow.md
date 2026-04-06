@@ -6,6 +6,14 @@ model: opus
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager)
 ---
 
+> **ORCHESTRATOR APPROVAL PROTOCOL (BINDING)**
+> After PL0 completes, the ORCHESTRATOR (you, the main Claude session) MUST:
+> 1. Present the plan summary to the user
+> 2. STOP. Do NOT call Write, Edit, or Bash with any file-modifying command
+> 3. Wait for the user to explicitly say "approve", "proceed", "go ahead", or similar
+> 4. Only then begin executing DV or any subsequent stage
+> This applies to YOU (the orchestrator), not just to subagents. Receiving a plan from a subagent is NOT approval to implement it.
+
 # Workflow Command
 
 Initialize a new workflow task with proper folder structure and Task System integration.
@@ -70,26 +78,6 @@ See `skills/shared/stage-codes.md` for stage details.
 # Emergency
 /emergency "Production login failing"
 ```
-
-## Micro Workflow (`micro:`)
-
-For `micro:` triggers, skip the full stage pipeline but follow this lightweight flow:
-
-1. **Capture design context** (if Figma URL provided):
-   - `mkdir -p .context/designs`
-   - Fetch Figma screenshot via `get_design_context`
-   - Save screenshot to `.context/designs/figma-[screen]-[node-id].png`
-2. **Explore**: Read the target file(s) and understand current implementation
-3. **Present plan**: Show the user:
-   - What file(s) will be changed
-   - What the change does
-   - Design reference (if any)
-4. **STOP and wait for user approval**
-5. **Implement**: Make the change directly
-6. **Format**: Run project formatter (e.g., `swiftformat .`)
-7. **Verify**: Build check if feasible
-
-No TaskCreate/TaskUpdate needed for micro. No `.context/planning.md` or stage artifacts.
 
 ## Execution Steps (MANDATORY)
 
