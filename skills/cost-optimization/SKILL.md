@@ -113,7 +113,7 @@ Savings: ~80% on overhead tokens
 | Simple bug fix | Skip AR stage, minimal TL stage |
 | Documentation-only | Skip DV stage, minimal QA stage |
 | Hotfix | Use `quick:` workflow (PL→DV→QA only) |
-| Trivial change | Use `micro:` (direct execution) |
+| Trivial change | Use `micro:` (plan → approve → execute) |
 
 **Workflow Selection Guide**:
 ```

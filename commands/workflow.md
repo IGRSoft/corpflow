@@ -71,6 +71,26 @@ See `skills/shared/stage-codes.md` for stage details.
 /emergency "Production login failing"
 ```
 
+## Micro Workflow (`micro:`)
+
+For `micro:` triggers, skip the full stage pipeline but follow this lightweight flow:
+
+1. **Capture design context** (if Figma URL provided):
+   - `mkdir -p .context/designs`
+   - Fetch Figma screenshot via `get_design_context`
+   - Save screenshot to `.context/designs/figma-[screen]-[node-id].png`
+2. **Explore**: Read the target file(s) and understand current implementation
+3. **Present plan**: Show the user:
+   - What file(s) will be changed
+   - What the change does
+   - Design reference (if any)
+4. **STOP and wait for user approval**
+5. **Implement**: Make the change directly
+6. **Format**: Run project formatter (e.g., `swiftformat .`)
+7. **Verify**: Build check if feasible
+
+No TaskCreate/TaskUpdate needed for micro. No `.context/planning.md` or stage artifacts.
+
 ## Execution Steps (MANDATORY)
 
 1. **Create context folder**: `mkdir -p .context/images`

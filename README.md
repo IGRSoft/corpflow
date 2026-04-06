@@ -77,7 +77,7 @@ Simply prefix your task with one of these triggers:
 workflow: [task description]   # Standard - PL0 creates stages after planning
 fworkflow: [task description]  # Fast - auto-continues through all stages
 quick: [task description]      # 3-stage workflow: PL → DV → QA
-micro: [task description]      # Direct execution, no workflow
+micro: [task description]      # Lightweight: plan → approve → execute
 ```
 
 When Claude detects these prefixes, it automatically invokes `/workflow` to set up the workflow context, Task System integration, and stage management.
@@ -106,7 +106,7 @@ fworkflow: /code-review PR #123
 
 | Trigger | Stages | Use For |
 |---------|--------|---------|
-| `micro: [task]` | Direct edit | Single-file fixes, typos |
+| `micro: [task]` | Plan → approve → edit | Single-file fixes, typos |
 | `quick: [task]` | PL → DV → QA | Small features, bug fixes |
 | `workflow: [task]` | Full 8 stages | Multi-file features, architectural changes |
 | `fworkflow: [task]` | Full 8 stages (auto-continue) | Trusted full workflows |

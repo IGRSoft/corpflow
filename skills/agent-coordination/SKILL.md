@@ -180,7 +180,7 @@ PL → DV → QA
 
 ### Micro Execution
 ```
-DV only
+[Figma capture if URL provided] → Present plan → Approval gate → DV only
 ```
 
 ## Handoff Message Format
