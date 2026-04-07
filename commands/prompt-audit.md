@@ -101,23 +101,23 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 | Agent | Model | Clarity | Efficiency | Consistency |
 |-------|-------|---------|------------|-------------|
 | designer | sonnet | 9/10 | 8/10 | 9/10 |
-| developer | sonnet | 9/10 | 8/10 | 9/10 |
-| product-manager | sonnet | 8/10 | 7/10 | 8/10 |
-| project-manager | sonnet | 8/10 | 7/10 | 8/10 |
+| developer | opus | 9/10 | 8/10 | 9/10 |
+| product-manager | opus | 8/10 | 7/10 | 8/10 |
+| project-manager | opus | 8/10 | 7/10 | 8/10 |
 | prompt-engineer | opus | 9/10 | 8/10 | 9/10 |
 | qa-engineer | haiku | 7/10 | 6/10 | 8/10 |
 | software-architector | opus | 9/10 | 8/10 | 9/10 |
 | stakeholder | sonnet | 8/10 | 8/10 | 8/10 |
-| team-lead | haiku | 7/10 | 7/10 | 8/10 |
+| team-lead | sonnet | 7/10 | 7/10 | 8/10 |
 | technical-writer | haiku | 7/10 | 7/10 | 7/10 |
-| workflow-engineer | haiku | 6/10 | 8/10 | 7/10 |
+| workflow-engineer | sonnet | 6/10 | 8/10 | 7/10 |
 
 ### Model Distribution
 | Model | Count | Percentage |
 |-------|-------|------------|
-| haiku | 4 | 36% |
-| sonnet | 5 | 45% |
-| opus | 2 | 18% |
+| haiku | 2 | 18% |
+| sonnet | 4 | 36% |
+| opus | 5 | 45% |
 
 ## Command Analysis
 

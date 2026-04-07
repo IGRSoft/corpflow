@@ -145,7 +145,7 @@ TaskCreate({
   subject: "PL0: Planning",
   description: "Define requirements, assess complexity, create stage tasks",
   activeForm: "Planning task requirements",
-  metadata: { stage: "PL", agent: "product-manager", model: "sonnet", workflow_id: workflowId, priority: "medium" }
+  metadata: { stage: "PL", agent: "product-manager", model: "opus", workflow_id: workflowId, priority: "medium" }
 });
 
 // Start immediately

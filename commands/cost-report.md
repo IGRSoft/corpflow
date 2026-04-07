@@ -142,7 +142,7 @@ Model Rates (per 1M tokens):
     "budget_limit": 0.50,
     "budget_used_percent": 56,
     "by_stage": {
-      "PL": { "tokens": 7500, "model": "sonnet", "cost": 0.023 },
+      "PL": { "tokens": 7500, "model": "opus", "cost": 0.023 },
       "AR": { "tokens": 15000, "model": "opus", "cost": 0.225 }
     },
     "alerts": []
