@@ -151,7 +151,7 @@ With `--worktree` mode in milestone workflows, true parallel DV stages across is
 | Task Complexity | Delegate To | Model | Rationale |
 |-----------------|-------------|-------|-----------|
 | Status check | qa-engineer | haiku | Simple validation |
-| Code review | developer | sonnet | Balanced analysis |
+| Code review | developer | opus | Balanced analysis |
 | Architecture decision | software-architector | opus | Complex tradeoffs |
 | Documentation | technical-writer | haiku | Template-based |
 | Test design | qa-engineer | sonnet | Coverage analysis |

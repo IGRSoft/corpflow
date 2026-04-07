@@ -11,7 +11,7 @@ Single source of truth for workflow stage codes.
 
 | Code | Stage | Agent | Model |
 |------|-------|-------|-------|
-| PL | Planning | product-manager | sonnet |
+| PL | Planning | product-manager | opus |
 | AR | Architecture | software-architector | opus |
 | TL | Team Lead | team-lead | sonnet |
 | DV | Development | developer | opus |
@@ -19,7 +19,7 @@ Single source of truth for workflow stage codes.
 | QA | QA Testing | qa-engineer | haiku |
 | DC | Documentation | technical-writer | haiku |
 | RE | Release Engineering | release-engineer | haiku |
-| FN | Finalization | project-manager | sonnet |
+| FN | Finalization | project-manager | opus |
 | ST | Stakeholder | stakeholder | sonnet |
 | IR | Incident Response | incident-responder | sonnet |
 
@@ -29,8 +29,8 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 
 | Model | Stages |
 |-------|--------|
-| opus | AR, DV, SR, TC, PE |
-| sonnet | PL, TL, FN, ST, IR, DS, ET, WE |
+| opus | PL, AR, DV, SR, FN, TC, PE |
+| sonnet | TL, ST, IR, DS, ET, WE |
 | haiku | QA, DC, RE |
 
 ## Support Agents (On-Demand)

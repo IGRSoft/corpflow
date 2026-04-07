@@ -83,7 +83,7 @@ See `skills/shared/stage-codes.md` for stage details.
 
 1. **Parse** task description and flags (`--milestone`, `--secure`, `--auto-continue`, etc.)
 2. **Create context folder**: `mkdir -p .context/images`
-3. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "product-manager", model: "sonnet", workflow_id: "<slug>", priority: "<priority>" } })`
+3. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "product-manager", model: "opus", workflow_id: "<slug>", priority: "<priority>" } })`
 4. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 5. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM creates `.context/planning.md`, assesses complexity, creates stage tasks with `metadata.agent`
 6. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`

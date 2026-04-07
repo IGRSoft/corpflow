@@ -124,9 +124,9 @@ Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool ca
 | Sub-Task | Delegate To | Model |
 |----------|-------------|-------|
 | Status check | Self | haiku |
-| Code implementation | developer | sonnet |
+| Code implementation | developer | opus |
 | Architecture question | software-architector | opus |
-| Apple/Swift architecture | apple-developer:apple-architector | sonnet |
+| Apple/Swift architecture | apple-developer:apple-architector | opus |
 | Technical decision | technical-lead | opus |
 | Test design | qa-engineer | haiku/sonnet |
 

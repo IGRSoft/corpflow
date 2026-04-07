@@ -4,7 +4,7 @@
 
 | Stage | Model | Rationale |
 |-------|-------|-----------|
-| PL | sonnet | Planning and generation |
+| PL | opus | Planning and generation |
 | AR | opus | Complex architecture decisions |
 | TL | sonnet | Coordination and delegation |
 | DV | opus | Implementation depth |
@@ -12,7 +12,7 @@
 | QA | haiku | Test execution and validation |
 | DC | haiku | Documentation generation |
 | RE | haiku | Release operations |
-| FN | sonnet | Final coordination |
+| FN | opus | Final coordination |
 | ST | sonnet | Business review |
 
 Override via Task `model` parameter when stage complexity warrants it. See `cost-optimization.md` for cost tiers.
