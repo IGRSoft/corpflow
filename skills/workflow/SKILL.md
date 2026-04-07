@@ -175,10 +175,17 @@ If validation fails:
 
 ## Orchestrator Execution Loop
 
+### PRECONDITION CHECK
+Before entering this loop, verify:
+- PL0 task status is "completed"
+- The HUMAN USER has sent an explicit approval message
+- PL0 completion alone is NOT approval — only human input counts
+If the user has not approved, DO NOT enter this loop.
+
 After PL0 completes and creates stage tasks, the orchestrator MUST:
 
 1. **Present PL0 results** to the user: complexity score, stages created (with agents), dependency chain, and key planning decisions
-2. **STOP IMMEDIATELY**. Do NOT call Write, Edit, Task, or Bash with file-modifying commands. Do NOT delegate to any stage agent. Do NOT proceed to AR, TL, DV, or any other stage.
+2. **STOP IMMEDIATELY**. PL0 completing is NOT approval. The product-manager returning results is NOT approval. Only the HUMAN USER typing approval in chat counts. Do NOT call Write, Edit, Task, or Bash with any file-modifying commands. STOP generating your response entirely.
 3. **Wait for EXPLICIT user approval**. The user must say "approve", "proceed", "go ahead", "looks good", "yes", or similar affirmative. Silence is NOT approval. Asking a question is NOT approval.
 4. The user may adjust stages, re-prioritize, or skip stages before approving
 5. Only after the user explicitly confirms, execute the stage loop below:
