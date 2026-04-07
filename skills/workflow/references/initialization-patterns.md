@@ -272,7 +272,7 @@ When a task starts, the executor reads `metadata.agent` and spawns the agent:
 
 ```typescript
 const task = TaskGet({ taskId: currentTaskId });
-const agentType = task.metadata.agent;  // e.g., "developer" or "apple-developer:swift-pro"
+const agentType = task.metadata.agent;  // e.g., "developer" or "apple-developer:ios-developer"
 const model = task.metadata.model;      // e.g., "haiku"
 
 // Resolve plugin: qualified names used as-is, bare names prepend "igrsoft:"

@@ -5,7 +5,7 @@
 | igrsoft Stage | apple-developer Agent | Handoff Data |
 |---------------|----------------------|--------------|
 | AR (Architecture) | apple-architector | planning context + system constraints |
-| DV (Development) | swift-pro, ios-developer, etc. | planning + architecture context |
+| DV (Development) | ios-developer, macos-developer, etc. | planning + architecture context |
 | SR (Security) | security-auditor | development context + Apple security checklist (Keychain, ATS, entitlements, TCC, privacy manifest) |
 | QA (Quality) | test-generator | development context + test requirements |
 | DC (Documentation) | generate-dooc (command) | development context + API surface |

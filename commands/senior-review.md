@@ -117,7 +117,7 @@ Before finalizing, verify:
 This command works with:
 - `/estimate --detailed` - Initial estimation
 - `/export-estimate` - Updated CSV export
-- Platform agents (swift-pro, kotlin-pro, etc.)
+- Platform agents (apple-developer, ios-developer, kotlin-pro, etc.)
 
 ## Related
 

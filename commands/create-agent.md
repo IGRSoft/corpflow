@@ -145,7 +145,7 @@ When using `--tools`, specify a preset name or a comma-separated tool list:
 | design | Read, Glob, Grep, Write, ToolSearch, TaskGet, TaskList |
 
 ### Cross-Plugin Delegation
-Add Task delegation syntax to any preset: `--tools full,Task(apple-developer:swift-pro)`
+Add Task delegation syntax to any preset: `--tools full,Task(apple-developer:ios-developer)`
 
 ## Agent Structure Guidelines
 

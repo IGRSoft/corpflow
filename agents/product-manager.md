@@ -113,7 +113,7 @@ Bare names resolve to `igrsoft:{name}`. Fully-qualified names (containing `:`) a
 |-------|-------|-------|
 | AR0 | software-architector | or `apple-developer:apple-architector` for Apple-only |
 | TL0 | team-lead | |
-| DV0 | developer | or `apple-developer:swift-pro`, `apple-developer:ios-developer`, etc. |
+| DV0 | developer | or `apple-developer:apple-developer`, `apple-developer:ios-developer`, etc. |
 | SR0 | security-reviewer | or `apple-developer:security-auditor`, `security-scanning:security-auditor` |
 | QA0 | qa-engineer | |
 | DC0 | technical-writer | |
