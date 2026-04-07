@@ -47,7 +47,7 @@ Generate cost analysis for completed or in-progress workflows with token usage b
 ### By Stage
 | Stage | Tokens | Model | Cost | % of Total |
 |-------|--------|-------|------|------------|
-| P | 7,500 | sonnet | $0.023 | 17% |
+| P | 7,500 | opus | $0.113 | 17% |
 | A | 15,000 | opus | $0.225 | 33% |
 | T | 4,000 | sonnet | $0.012 | 9% |
 | D | 18,500 | sonnet | $0.056 | 41% |
@@ -142,7 +142,7 @@ Model Rates (per 1M tokens):
     "budget_limit": 0.50,
     "budget_used_percent": 56,
     "by_stage": {
-      "PL": { "tokens": 7500, "model": "opus", "cost": 0.023 },
+      "PL": { "tokens": 7500, "model": "opus", "cost": 0.113 },
       "AR": { "tokens": 15000, "model": "opus", "cost": 0.225 }
     },
     "alerts": []
