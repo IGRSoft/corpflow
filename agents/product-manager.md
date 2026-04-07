@@ -1,7 +1,7 @@
 ---
 name: product-manager
 description: Master product strategy, roadmap planning, feature prioritization, and user-centric decision making. Use PROACTIVELY for product planning, feature definition, or strategic decisions.
-model: sonnet
+model: opus
 color: blue
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:designer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
 ---
@@ -80,6 +80,12 @@ In the 8-stage workflow system, the product-manager handles:
 - **Define test strategy** (what needs to be tested, existing tests to update)
 - Define scope, priorities, and dependencies
 - **Create subsequent stage tasks** based on complexity assessment (see below)
+
+### PL0 Scaffolding (when invoked for workflow planning)
+When invoked as PL0 stage agent:
+1. Create `.context/planning.md` with requirements template
+2. Fill out planning.md with requirements, acceptance criteria, success metrics
+3. Assess complexity (0-50 scale) and create stage tasks via TaskCreate
 
 **Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For milestone mode, read issue from `.context/milestone.json`. See `skills/milestone-workflow/SKILL.md § Workspace-Aware Stages`.
 
