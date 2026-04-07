@@ -115,7 +115,7 @@ Transfer task to external plugin agent:
 TaskUpdate({
   taskId: "{id}",
   status: "in_progress",
-  owner: "apple-developer:swift-pro",  // or specific agent
+  owner: "apple-developer:ios-developer",  // or specific agent
   metadata: {
     // Include worktree context when applicable
     workspace_path: ".worktrees/milestone-1/42",  // if worktree mode
@@ -175,7 +175,7 @@ TaskCreate({
   description: "Implement the onboarding flow using SwiftUI NavigationStack",
   metadata: {
     stage: "DV",
-    agent: "apple-developer:swift-pro",  // fully-qualified → dispatched directly
+    agent: "apple-developer:ios-developer",  // fully-qualified → dispatched directly
     model: "opus",
     workflow_id: workflowId
   }

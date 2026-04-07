@@ -87,7 +87,7 @@ The command automatically routes to specialized developers:
 
 | Platform | Primary Agent | Fallback |
 |----------|--------------|----------|
-| apple | swift-pro | ios/macos/watchos/tvos/visionos-developer |
+| apple | apple-developer | ios/macos/watchos/tvos/visionos-developer |
 | android | kotlin patterns | java patterns |
 | web | typescript | javascript |
 

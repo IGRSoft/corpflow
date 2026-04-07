@@ -74,7 +74,7 @@ Select based on `--platform` flag and ticket content:
 | watchOS-specific ticket | `watchos-developer` | apple-developer |
 | tvOS-specific ticket | `tvos-developer` | apple-developer |
 | visionOS-specific ticket | `visionos-developer` | apple-developer |
-| Swift concurrency / language | `swift-pro` | apple-developer |
+| Swift concurrency / language | `apple-developer` | apple-developer |
 | Automated batch fix | `code-fixer` | apple-developer |
 | Documentation-only ticket | `technical-writer` | igrsoft |
 | Agent/command/skill ticket | `prompt-engineer` | igrsoft |

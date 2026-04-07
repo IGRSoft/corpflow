@@ -210,7 +210,7 @@ while (tasks.some(t => t.status !== "completed")) {
     const agentType = full.metadata.agent;
     const model = full.metadata.model;
 
-    // Resolve plugin: qualified names (e.g., "apple-developer:swift-pro") used as-is;
+    // Resolve plugin: qualified names (e.g., "apple-developer:ios-developer") used as-is;
     // bare names (e.g., "developer") → "igrsoft:developer"
     const subagentType = agentType.includes(':') ? agentType : `igrsoft:${agentType}`;
 
@@ -233,7 +233,7 @@ while (tasks.some(t => t.status !== "completed")) {
 - NEVER skip TaskUpdate calls (both in_progress and completed)
 - NEVER execute a stage without checking blockedBy dependencies are completed
 - ALWAYS pass `model` from task metadata to the Agent tool — do NOT rely on agent frontmatter inheritance
-- `metadata.agent` accepts bare names (`"developer"` → `igrsoft:developer`) or fully-qualified plugin names (`"apple-developer:swift-pro"` → used as-is). Detection: presence of `:`
+- `metadata.agent` accepts bare names (`"developer"` → `igrsoft:developer`) or fully-qualified plugin names (`"apple-developer:ios-developer"` → used as-is). Detection: presence of `:`
 - If a stage agent fails after 3 retries, escalate per the error handling chain
 - The orchestrator owns the loop; stage agents own their stage's work
 
