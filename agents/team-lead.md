@@ -3,6 +3,8 @@ name: team-lead
 description: Engineering team leadership with team coordination, performance management, and agile practices. Use PROACTIVELY for team management, sprint planning, or resource coordination.
 model: sonnet
 color: cyan
+effort: medium
+maxTurns: 30
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:technical-lead)
 ---
 

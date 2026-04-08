@@ -3,6 +3,8 @@ name: workflow-engineer
 description: Workflow system expert for task management, stage transitions, Task System orchestration, and troubleshooting. Use PROACTIVELY for workflow initialization, state management, or debugging workflow issues.
 model: sonnet
 color: green
+effort: medium
+maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
 

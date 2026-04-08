@@ -1,6 +1,7 @@
 ---
 name: milestone-helpers
 description: Reusable helper function patterns for milestone workflow operations. Use when implementing milestone workspace initialization, PR detection, or worktree management.
+effort: low
 ---
 
 # Milestone Helper Functions

@@ -3,6 +3,8 @@ name: incident-responder
 description: Incident response specialist for production triage, hotfix coordination, and post-mortem facilitation. Owns the IR (Incident Response) stage in emergency workflows. Use PROACTIVELY for production incidents, outages, or emergency hotfix coordination.
 model: sonnet
 color: red
+effort: medium
+maxTurns: 50
 tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(debugging-toolkit:debugger)
 ---
 
