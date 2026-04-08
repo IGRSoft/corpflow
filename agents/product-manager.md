@@ -3,7 +3,7 @@ name: product-manager
 description: Master product strategy, roadmap planning, feature prioritization, and user-centric decision making. Use PROACTIVELY for product planning, feature definition, or strategic decisions.
 model: opus
 color: blue
-effort: medium
+effort: high
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:designer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
 ---

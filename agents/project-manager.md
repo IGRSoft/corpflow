@@ -3,7 +3,7 @@ name: project-manager
 description: Master project management with agile methodologies, task coordination, resource allocation, and risk management. Use PROACTIVELY for project planning, task management, or resource coordination.
 model: opus
 color: cyan
-effort: medium
+effort: high
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
