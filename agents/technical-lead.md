@@ -3,6 +3,8 @@ name: technical-lead
 description: Technical excellence champion for code quality, technical decisions, debt management, and implementation guidance. Use PROACTIVELY for deep technical reviews, technology evaluation, or code quality enforcement.
 model: opus
 color: magenta
+effort: high
+maxTurns: 60
 tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 

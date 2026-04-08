@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Comprehensive 10-stage workflow system (PL→AR→TL→DV→SR→QA→DC→RE→FN→ST) for task management with security review, release engineering, and incident response",
-    "version": "3.0.0"
+    "version": "3.3.0"
   },
   "plugins": [
     {
       "name": "igrsoft",
       "source": "./",
       "description": "10-stage workflow system (PL→AR→TL→DV→SR→QA→DC→RE→FN→ST) with Task System integration, security review, release engineering, incident response, and cross-plugin handoffs",
-      "version": "3.0.0",
+      "version": "3.3.0",
       "author": {
         "name": "igrsoft",
         "url": "https://github.com/igrsoft"
