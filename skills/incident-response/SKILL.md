@@ -114,7 +114,106 @@ Rollback is UNSAFE when:
 - [ ] Rollback would cause worse issues
 ```
 
-See references/ for communication templates, post-mortem framework, and common incident runbooks.
+## Incident Runbook Structure
+
+Production runbooks follow this structure:
+
+```
+1. Overview & Impact
+2. Detection & Alerts
+3. Initial Triage (First 5 Minutes)
+4. Mitigation Steps
+5. Root Cause Investigation
+6. Resolution Procedures
+7. Verification & Rollback
+8. Communication Templates
+9. Escalation Matrix
+```
+
+### Triage Checklist (First 5 Minutes)
+
+```markdown
+- [ ] Which customers/users are affected?
+- [ ] What percentage of traffic is impacted?
+- [ ] Are there financial or compliance implications?
+- [ ] What's the blast radius across services?
+- [ ] When did the issue start? (correlate with deployments)
+- [ ] Are alerts firing? Which ones?
+```
+
+## Blameless Post-Mortem Template
+
+```markdown
+# Postmortem: [Incident Title]
+
+**Date**: YYYY-MM-DD
+**Authors**: [names]
+**Severity**: P[0-3]
+**Duration**: [minutes/hours]
+
+## Executive Summary
+[1-2 sentences: what happened, impact, resolution]
+
+## Impact
+- Users affected: [count/percentage]
+- Revenue impact: [if applicable]
+- Support tickets: [count]
+
+## Timeline (UTC)
+| Time | Event |
+|------|-------|
+| HH:MM | [Event] |
+
+## Root Cause
+[Technical explanation of what caused the incident]
+
+## Contributing Factors
+- [System factor, not individual]
+- [Process gap]
+
+## What Went Well
+- [Effective response actions]
+
+## What Could Be Improved
+- [Process improvements]
+
+## Action Items
+| Priority | Action | Owner | Due |
+|----------|--------|-------|-----|
+| P1 | [Prevent recurrence] | [name] | [date] |
+| P2 | [Improve detection] | [name] | [date] |
+```
+
+### Post-Mortem Triggers
+
+- P0 or P1 incident
+- Customer-facing outage > 15 minutes
+- Data loss or security incident
+- Near-miss that could have been severe
+- Novel failure mode
+
+### Blameless Culture Principles
+
+| Blame-Focused | Blameless |
+|---------------|-----------|
+| "Who caused this?" | "What conditions allowed this?" |
+| "Someone made a mistake" | "The system allowed this mistake" |
+| Punish individuals | Improve systems |
+
+## On-Call Handoff
+
+### Shift Transition Checklist
+
+```markdown
+- [ ] Active incidents documented
+- [ ] Ongoing investigations summarized
+- [ ] Recent deployments/changes listed
+- [ ] Known issues with workarounds noted
+- [ ] Upcoming maintenance/releases flagged
+- [ ] Alerting setup verified for incoming engineer
+```
+
+See references/ for communication templates and common incident runbooks.
 
 ## Integration Points
 

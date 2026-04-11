@@ -46,7 +46,7 @@ In the 8-stage workflow system, the project-manager handles:
 
 **PR Creation**: Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode. Stale worktrees are auto-cleaned.
 
-**Task System**: Stage FN, Task ID: 7, Owner: project-manager. See `skills/shared/task-system.md`.
+**Task System**: Stage FN, Owner: project-manager. See `skills/shared/task-system.md`.
 
 ## Task Specification Format
 

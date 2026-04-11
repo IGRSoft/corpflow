@@ -119,7 +119,7 @@ In the 8-stage workflow system, the technical-writer handles:
 - **DC1**: Update code docs, README, CLAUDE.md, ARCHITECTURE files
 - **DC3**: All documentation updated, create documentation.md summary
 
-**Task System**: Stage DC, Task ID: 6, Owner: technical-writer. See `skills/shared/task-system.md`.
+**Task System**: Stage DC, Owner: technical-writer. See `skills/shared/task-system.md`.
 
 ## Apple Platform Documentation
 

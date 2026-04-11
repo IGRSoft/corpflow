@@ -256,6 +256,62 @@ Ethics-reviewer can be invoked at any stage:
 | Calibrated | Appropriate uncertainty |
 | Transparent | No hidden issues |
 
+## Multi-Reviewer Coordination
+
+### Review Dimension Allocation
+
+| Dimension | Focus | Include When |
+|-----------|-------|-------------|
+| **Security** | Vulnerabilities, auth, input validation | Code handling user input or auth |
+| **Performance** | Query efficiency, memory, caching | Data access or hot path changes |
+| **Architecture** | SOLID, coupling, patterns | Structural changes or new modules |
+| **Testing** | Coverage, quality, edge cases | New functionality added |
+| **Accessibility** | WCAG, ARIA, keyboard nav | UI/frontend changes |
+
+### Recommended Review Combinations
+
+| Scenario | Dimensions |
+|----------|-----------|
+| API endpoint changes | Security, Performance, Architecture |
+| UI component changes | Architecture, Testing, Accessibility |
+| Data model changes | Security, Performance, Architecture |
+| New feature (full) | Security, Performance, Architecture, Testing |
+
+### Finding Consolidation
+
+When multiple reviewers report findings:
+1. **Deduplicate**: Merge findings at same file:line
+2. **Resolve conflicts**: Use higher severity when reviewers disagree
+3. **Organize by severity**: Group as Critical > High > Medium > Low
+4. **Cross-reference**: Note findings appearing in multiple dimensions
+
+### Severity Calibration
+
+| Severity | Criteria | Action |
+|----------|----------|--------|
+| Critical | Exploitable, high impact, easy to find | Block release |
+| High | Exploitable or significant impact | Fix before merge |
+| Medium | Potential risk, moderate impact | Track, fix soon |
+| Low | Minor risk, defense in depth | Advisory |
+
+## Task Decomposition for Parallel Work
+
+### File Ownership Boundaries
+
+When decomposing work for parallel agents:
+1. Assign exclusive file ownership per agent — no overlap
+2. Define interface contracts at ownership boundaries
+3. Create shared types/interfaces before parallel execution
+4. Never modify files owned by another agent without team-lead approval
+
+### Hypothesis-Driven Debugging
+
+For complex bugs with multiple potential causes:
+1. Generate N hypotheses covering different failure categories
+2. Assign each hypothesis to an investigator agent
+3. Each investigator gathers confirming/falsifying evidence
+4. Arbitrate across findings, rank by confidence and evidence strength
+
 See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, and PostToolUse format-on-save safety), agent teams comparison, MCP elicitation patterns, and team communication protocols (message types, anti-patterns, deadlock resolution).
 
 ## Related

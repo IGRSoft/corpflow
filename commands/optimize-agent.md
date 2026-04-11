@@ -154,6 +154,7 @@ You are a QA engineer specializing in test strategy, test case design, and quali
 - **consistency**: Format, terminology, structure, conventions
 - **tools**: Tool access, permissions, integration
 - **model**: Model selection optimization (haiku/sonnet/opus)
+- **failure-modes**: Classify common failures (instruction misunderstanding, output format, context loss, tool misuse, constraint violations)
 
 ## Optimization Criteria
 
@@ -173,6 +174,23 @@ You are a QA engineer specializing in test strategy, test case design, and quali
 - haiku: Procedural, checklist-based, formatting tasks
 - sonnet: Analysis, implementation, coordination tasks
 - opus: Architecture, strategy, complex reasoning tasks
+
+### Failure Mode Analysis
+When `--focus failure-modes` is specified, classify observed failures:
+- **Instruction misunderstanding**: Role or task confusion
+- **Output format errors**: Structure or formatting issues
+- **Context loss**: Long conversation degradation
+- **Tool misuse**: Incorrect or inefficient tool selection
+- **Constraint violations**: Safety or business rule breaches
+- **Edge case handling**: Unusual input scenarios
+
+Add constitutional self-check mechanisms where failures are common:
+```markdown
+Before responding, verify:
+1. Output matches required format
+2. All constraints satisfied
+3. No conflicting information
+```
 
 ## Integration
 

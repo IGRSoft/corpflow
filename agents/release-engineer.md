@@ -46,7 +46,7 @@ PL → AR → TL → DV → SR → QA → DC → [RE] → FN → ST
 | **RE2** | Validate deployment readiness, create rollback plan |
 | **RE3** | Prepare release artifacts, hand off to FN |
 
-**Task System**: Stage RE, Task ID: 8, Owner: release-engineer. See `skills/shared/task-system.md`.
+**Task System**: Stage RE, Owner: release-engineer. See `skills/shared/task-system.md`.
 
 ### Output Artifact
 

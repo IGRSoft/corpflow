@@ -151,14 +151,26 @@ struct User { ... }
 | ⚠️ Changes Requested | Fix critical security issue |
 ```
 
+## Review Dimension Routing
+
+When multiple focus areas are requested, consider parallel multi-dimensional review:
+
+| Scenario | Recommended Dimensions |
+|----------|----------------------|
+| API endpoint changes | security, performance, patterns |
+| UI component changes | patterns, tests, accessibility |
+| Data model changes | security, performance, patterns |
+| Auth/payment flows | security, safety, tests |
+
 ## Focus Areas
 
-- **security**: Authentication, data storage, input validation, secrets
+- **security**: Authentication, data storage, input validation, secrets, supply chain
 - **performance**: Memory, CPU, network, battery impact
 - **patterns**: Platform idioms, design patterns, architecture
 - **tests**: Coverage, quality, edge cases
 - **safety**: Harm potential, user protection, error handling for safety-critical paths
 - **honesty**: Truthful comments, accurate error messages, non-deceptive UI patterns
+- **accessibility**: WCAG compliance, VoiceOver/TalkBack support, Dynamic Type
 
 ### Safety Focus (`--focus safety`)
 

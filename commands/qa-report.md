@@ -2,8 +2,8 @@
 name: qa-report
 description: Generate a comprehensive QA summary report with test results, coverage, and quality metrics
 argument-hint: '[--workflow-id ID]'
-allowed-tools: Read, Glob, Grep, TaskList
 model: sonnet
+allowed-tools: Read, Glob, Grep, TaskList
 ---
 
 # QA Report Command
