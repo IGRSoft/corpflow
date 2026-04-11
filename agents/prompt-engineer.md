@@ -87,6 +87,29 @@ When creating or optimizing agents that participate in the 8-stage workflow:
 7. **Recommend Testing** - Suggest validation approaches
 8. **Plan Iteration** - Identify future improvement opportunities
 
+## Failure Mode Analysis
+
+When optimizing agents, classify observed failures by root cause:
+
+| Failure Mode | Symptoms | Fix Strategy |
+|--------------|----------|-------------|
+| Instruction misunderstanding | Wrong task interpretation | Sharpen purpose, add examples |
+| Output format errors | Structure/formatting wrong | Add explicit templates |
+| Context loss | Degraded quality in long sessions | Add self-verification checkpoints |
+| Tool misuse | Wrong tool selection | Add tool selection guidance |
+| Constraint violations | Safety/business rule breaches | Strengthen DO NOT section |
+| Edge case handling | Unexpected input failures | Add edge case examples |
+
+### Constitutional Self-Check Pattern
+
+For agents with recurring failures, add critique-and-revise:
+```markdown
+Before responding, verify:
+1. Output matches required format
+2. All constraints satisfied
+3. No conflicting information with prior stages
+```
+
 ## Agent Quality Checklist
 
 - [ ] Clear, specific purpose statement
@@ -100,6 +123,7 @@ When creating or optimizing agents that participate in the 8-stage workflow:
 - [ ] Maintainable structure
 - [ ] Description ≤ 250 characters (skill/command enforced cap since CC 2.1.86)
 - [ ] New frontmatter fields considered: `effort`, `maxTurns`, `disallowedTools` (v2.1.78), `initialPrompt` (v2.1.83), `paths:` YAML list (v2.1.84)
+- [ ] Failure modes identified and mitigated
 
 ## Command Quality Checklist
 

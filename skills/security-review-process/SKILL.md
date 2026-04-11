@@ -84,6 +84,37 @@ func getResource(id: String, requestingUser: User) throws -> Resource {
 }
 ```
 
+## DevSecOps Pipeline Integration
+
+### Shift-Left Security Checklist
+
+| Phase | Security Activity | Tools |
+|-------|-------------------|-------|
+| Code | SAST scanning, secrets detection | Semgrep, CodeQL, gitleaks |
+| Build | Dependency scanning, SBOM generation | Snyk, OWASP Dependency-Check |
+| Container | Image scanning, runtime policies | Trivy, Aqua, Docker Scout |
+| Deploy | Config validation, IaC scanning | Checkov, tfsec |
+| Runtime | DAST scanning, monitoring | OWASP ZAP, runtime protection |
+
+### Supply Chain Security
+
+- [ ] Dependencies pinned to exact versions
+- [ ] No typosquatting risk in package names
+- [ ] SBOM generated for release artifacts
+- [ ] Package provenance verified (SLSA framework)
+- [ ] Lock files committed and reviewed
+- [ ] No dependencies with restrictive/incompatible licenses
+
+### Cloud Security Posture
+
+| Domain | Checks |
+|--------|--------|
+| IAM | Least privilege, no wildcard permissions, MFA enforced |
+| Network | Security groups locked down, no public access to internals |
+| Data | Encryption at rest/in transit, key rotation configured |
+| Logging | Audit trails enabled, log integrity protected |
+| Secrets | No plaintext secrets, rotation policies in place |
+
 ## Integration Points
 
 - **security-reviewer agent**: Uses this checklist for SR stage

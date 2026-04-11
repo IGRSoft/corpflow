@@ -139,7 +139,7 @@ In the 8-stage workflow system, the software-architector handles:
 - **AR2**: Handle design conflicts (iterate or escalate)
 - **AR3**: Complete analyzing.md with architecture decisions and **test architecture**
 
-**Task System**: Stage AR, Task ID: 2, Owner: software-architector. See `skills/shared/task-system.md`.
+**Task System**: Stage AR, Owner: software-architector. See `skills/shared/task-system.md`.
 
 ### Dynamic Workflow Sizing (A Stage)
 

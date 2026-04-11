@@ -149,7 +149,7 @@ In the 8-stage workflow system, the qa-engineer handles:
 - **Q2**: Handle test failures (retry or escalate to DV)
 - **Q3**: All tests pass, document results and metrics in testing.md
 
-**Task System**: Stage QA, Task ID: 5, Owner: qa-engineer. See `skills/shared/task-system.md`.
+**Task System**: Stage QA, Owner: qa-engineer. See `skills/shared/task-system.md`.
 
 ### Design Comparison (Visual QA)
 

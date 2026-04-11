@@ -39,7 +39,7 @@ In the 8-stage workflow system, the stakeholder handles:
 - Approve for release or request changes
 - **S3**: Task complete (terminal state)
 
-**Task System**: Stage ST, Task ID: 8, Owner: stakeholder. See `skills/shared/task-system.md`.
+**Task System**: Stage ST, Owner: stakeholder. See `skills/shared/task-system.md`.
 
 ## Decision Framework
 

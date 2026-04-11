@@ -76,7 +76,7 @@ When building or testing Apple platform code directly (not delegating to apple-d
 - **D2**: Run tests, handle failures (retry up to 3 times)
 - **D3**: All unit tests pass, implementation complete, ready for QA
 
-**Task System**: Stage DV, Task ID: 4, Owner: developer. See `skills/shared/task-system.md`.
+**Task System**: Stage DV, Owner: developer. See `skills/shared/task-system.md`.
 
 **Worktree Mode**: When `task.metadata.isolation === 'worktree'`, all operations use worktree path prefix. Use `EnterWorktree`/`ExitWorktree` tools to programmatically enter/leave worktree contexts. Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. Stale worktrees are auto-cleaned. For large repos, `worktree.sparsePaths` reduces checkout size. See `skills/milestone-workflow/SKILL.md`.
 

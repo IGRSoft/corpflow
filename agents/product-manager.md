@@ -125,7 +125,7 @@ Bare names resolve to `igrsoft:{name}`. Fully-qualified names (containing `:`) a
 
 **See**: `skills/workflow/SKILL.md` for full assessment table. `skills/workflow/references/initialization-patterns.md § PL Creates Subsequent Tasks` for code pattern.
 
-**Task System**: Stage PL, Task ID: 1, Owner: product-manager. See `skills/shared/task-system.md`.
+**Task System**: Stage PL, Owner: product-manager. See `skills/shared/task-system.md`.
 
 ### P Stage: Automatic Design Detection
 
