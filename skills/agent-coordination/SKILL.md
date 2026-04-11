@@ -256,7 +256,7 @@ Ethics-reviewer can be invoked at any stage:
 | Calibrated | Appropriate uncertainty |
 | Transparent | No hidden issues |
 
-See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, and PostToolUse format-on-save safety), agent teams comparison, and MCP elicitation patterns.
+See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, and PostToolUse format-on-save safety), agent teams comparison, MCP elicitation patterns, and team communication protocols (message types, anti-patterns, deadlock resolution).
 
 ## Related
 

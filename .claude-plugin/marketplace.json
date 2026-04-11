@@ -44,7 +44,7 @@
       "category": "workflows",
       "strict": true,
       "commands": [
-        "./commands/a11y-audit.md",
+        "./commands/accessibility-audit.md",
         "./commands/api-docs.md",
         "./commands/appstore-iap.md",
         "./commands/appstore-info.md",
@@ -109,6 +109,7 @@
         "./agents/workflow-engineer.md"
       ],
       "skills": [
+        "./skills/SKILL.md",
         "./skills/agent-coordination/SKILL.md",
         "./skills/appstore-screenshots/SKILL.md",
         "./skills/claude-constitution/SKILL.md",
@@ -117,15 +118,19 @@
         "./skills/cross-plugin-handoff/SKILL.md",
         "./skills/csv-export-templates/SKILL.md",
         "./skills/estimation/SKILL.md",
-        "./skills/shared/five-whys.md",
         "./skills/incident-response/SKILL.md",
-        "./skills/milestone-workflow/SKILL.md",
-        "./skills/pencil-design-workflow/SKILL.md",
+        "./skills/pencil-design/SKILL.md",
         "./skills/release-engineering/SKILL.md",
-        "./skills/security-review-process/SKILL.md",
         "./skills/review/SKILL.md",
+        "./skills/security-review-process/SKILL.md",
+        "./skills/shared/constitutional-base.md",
+        "./skills/shared/five-whys.md",
+        "./skills/shared/milestone-helpers/SKILL.md",
+        "./skills/shared/stage-codes.md",
+        "./skills/shared/task-system.md",
         "./skills/task-folder-organization/SKILL.md",
         "./skills/workflow/SKILL.md",
+        "./skills/workflow-milestone/SKILL.md",
         "./skills/workflow-testing-strategy/SKILL.md"
       ]
     }
