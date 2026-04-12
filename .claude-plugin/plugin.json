@@ -1,7 +1,7 @@
 {
   "name": "igrsoft",
   "description": "Comprehensive 10-stage workflow system (PL→AR→TL→DV→SR→QA→DC→RE→FN→ST) for task management with Task System integration, security review, release engineering, and incident response.",
-  "version": "3.3.0",
+  "version": "3.5.0",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
@@ -38,6 +38,14 @@
     "post-compact-hook",
     "mcp-elicitation",
     "worktree-sparse",
-    "exit-worktree"
+    "exit-worktree",
+    "monitor-tool",
+    "focus-mode",
+    "effort-default-high",
+    "ca-certificates",
+    "keep-coding-instructions",
+    "skill-frontmatter-name",
+    "mcp-dynamic-inherit",
+    "settings-resilience"
   ]
 }

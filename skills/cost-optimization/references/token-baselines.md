@@ -48,6 +48,15 @@ Typical token usage by workflow stage (sonnet model):
 | SSE transport + SDK transcript writes: linear time (was quadratic) | 2.1.90 | Long sessions no longer slow down |
 | `--resume` prompt-cache miss fix (regression since 2.1.69) | 2.1.90 | Full cache hit on first resumed request |
 | Edit tool uses shorter `old_string` anchors | 2.1.91 | Fewer output tokens per edit |
+| Per-model and cache-hit breakdown in `/cost` | 2.1.92 | Better cost attribution per model |
+| Default effort changed from medium to high (non-Pro) | 2.1.94 | Higher base cost; explicit `effort: medium` for savings |
+| Write tool diff computation 60% faster (large files) | 2.1.92 | Faster edits on files with tabs/`&`/`$` |
+| Session transcript size improvements | 2.1.97 | Smaller transcripts in long sessions |
+| Compaction duplicate transcript fix | 2.1.97 | Less wasted context from duplicates |
+| MCP HTTP/SSE memory leak fix (50 MB/hr) | 2.1.97 | Stable memory in long MCP sessions |
+| Session memory leak fix (virtual scroller) | 2.1.101 | Prevents gradual memory growth |
+| Focus mode self-contained summaries | 2.1.101 | Better context compression in focus view |
+| OS CA certificate store trust by default | 2.1.101 | Enterprise TLS proxies work without setup |
 
 These are automatic — no agent or workflow changes needed. They compound across multi-stage workflows.
 

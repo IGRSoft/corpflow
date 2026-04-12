@@ -123,6 +123,9 @@ Before responding, verify:
 - [ ] Maintainable structure
 - [ ] Description ≤ 250 characters (skill/command enforced cap since CC 2.1.86)
 - [ ] New frontmatter fields considered: `effort`, `maxTurns`, `disallowedTools` (v2.1.78), `initialPrompt` (v2.1.83), `paths:` YAML list (v2.1.84)
+- [ ] `keep-coding-instructions` considered for output styles (v2.1.94)
+- [ ] Skill `name:` frontmatter matches intended invocation name (v2.1.94)
+- [ ] Skill `context` and `agent` frontmatter fields tested (v2.1.101 fix)
 - [ ] Failure modes identified and mitigated
 
 ## Command Quality Checklist

@@ -184,6 +184,22 @@ SR stage retains ownership and sign-off authority. Apple security-auditor findin
 | **Low** | Minor risk, defense in depth | Advisory, best practice |
 | **Info** | No immediate risk | Documentation only |
 
+## Claude Code Permission Security (v2.1.97-2.1.101)
+
+When reviewing CC-managed workflows, check for these hardened permission patterns:
+
+| Security Fix | Version | Review Focus |
+|-------------|---------|-------------|
+| dangerously-skip-permissions downgrade | 2.1.97 | Verify no workflows rely on skipping permissions |
+| Bash permission bypass hardening | 2.1.97/2.1.98 | Review Bash commands for bypass patterns |
+| Compound command bypass fix | 2.1.98 | Check `&&`/`\|\|` chained commands |
+| Env-var prefix check fix | 2.1.98 | Review `FOO=bar cmd` patterns |
+| /dev/tcp redirect blocked | 2.1.98 | Check for network redirect attempts |
+| Wildcard rule hardening | 2.1.98 | Review permission allow rules for over-broad wildcards |
+| Deny rule override fix | 2.1.98/2.1.101 | Verify deny rules take precedence |
+| Subagent permission inheritance | 2.1.98 | Check subagent permission scope |
+| Command injection in LSP which fallback | 2.1.101 | Review LSP configuration |
+
 ## Escalation Rules
 
 | Situation | Escalate To |

@@ -104,6 +104,26 @@ The `PermissionDenied` hook fires after auto-mode classifier denials. Return `{r
 
 PostToolUse format-on-save hooks no longer cause "File content has changed" errors between consecutive Edit/Write calls. Safe to use PostToolUse hooks that rewrite files (linters, formatters) without breaking subsequent edits.
 
+### hookSpecificOutput.sessionTitle (v2.1.94+)
+
+`UserPromptSubmit` hooks receive `hookSpecificOutput.sessionTitle` in their payload, enabling hooks to react to or log the session title.
+
+### Hook Error Stderr (v2.1.98+)
+
+Hook errors now include the first line of stderr in the transcript for self-diagnosis without `--debug`.
+
+### Settings Resilience (v2.1.101+)
+
+Unrecognized hook event names in `settings.json` no longer break the entire settings file. Forward-compatible hook configurations survive CC downgrades gracefully.
+
+### permissions.deny Override (v2.1.101+)
+
+`permissions.deny` rules now correctly override PreToolUse hook `permissionDecision: "ask"` decisions. A deny rule takes precedence over a hook that returns "ask".
+
+### Plugin Hook allowManagedHooksOnly (v2.1.101+)
+
+Plugin hooks from force-enabled plugins now run when `allowManagedHooksOnly` is set, restricting execution to managed hook types only.
+
 ## Agent Teams Lifecycle Hooks
 
 When agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), additional hook events are available:

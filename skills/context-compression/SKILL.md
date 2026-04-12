@@ -243,6 +243,8 @@ When context exceeds budget:
 | User request | Manual compression |
 | Post-compaction | Deferred tool schemas preserved — no need to re-fetch after compaction |
 | Auto-compact thrash | v2.1.89 detects when context refills immediately after compaction 3 times and stops with actionable error instead of burning API calls |
+| Focus mode | Focus view (Ctrl+O) generates self-contained summaries; v2.1.101 improves completeness |
+| Compaction duplicates | Compaction no longer produces duplicate transcript entries (fixed v2.1.97) |
 
 ### PostCompact Hook
 

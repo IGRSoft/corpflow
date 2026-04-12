@@ -155,9 +155,27 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 
 > Named subagents appear in `@`-mention typeahead suggestions (v2.1.89+), making it easier to reference and communicate with running agents via `SendMessage`.
 
+> `/agents` displays a tabbed layout (Running/Library tabs) with a `* N running` indicator next to agent types with live instances (v2.1.97/2.1.98).
+
+### Monitor Tool for Background Events (v2.1.98+)
+
+The `Monitor` tool streams events (stdout lines) from background scripts started via Bash with `run_in_background`. Use for watching build output during DV, streaming test results during QA, or log tailing during IR. Unlike polling with `Read`, Monitor provides event-driven notifications without sleep loops.
+
 ### MCP Large Result Handling
 
 MCP servers can annotate tool results with `_meta["anthropic/maxResultSizeChars"]` to allow results up to 500K characters without truncation (v2.1.91+). Useful for large outputs like database schemas or build logs from XcodeBuildMCP.
+
+### MCP Tool Inheritance (v2.1.101+)
+
+Subagents inherit MCP tools from dynamically-injected MCP servers in the parent session. Cross-plugin MCP tools (XcodeBuildMCP, Pencil, etc.) are available to stage agents without explicit `tools:` frontmatter entries for each MCP tool.
+
+### Subagent Worktree Access (v2.1.101+)
+
+Sub-agents in isolated worktrees automatically receive Read/Edit access to their own worktree directory. No explicit tool grant needed.
+
+### Background Subagent Partial Progress (v2.1.98+)
+
+Background subagents that fail now report partial progress instead of returning nothing. Orchestrators can inspect partial results for recovery.
 
 ## Coordination Patterns
 
