@@ -107,6 +107,10 @@ TaskUpdate({ taskId: "7", addBlockedBy: ["5", "6"] });  // FN ← QA AND DC
 
 Use `--sequential` when DC requires test results.
 
+### Monitor Tool Integration (v2.1.98+)
+
+Use the `Monitor` tool to stream events from background processes during workflow stages. Replaces polling patterns for build output, test progress, and log streaming. Available to any agent with Bash access.
+
 ### Never Parallelize
 
 - AR before PL (needs requirements)

@@ -189,6 +189,18 @@ Use direct dispatch when:
 
 Bare names like `"developer"` continue to resolve to `igrsoft:developer` — fully backward compatible.
 
+### Skill Name Resolution (v2.1.94+)
+
+Plugin skills use the frontmatter `name` field for invocation instead of directory basename. Cross-plugin skill references must use the `name:` value, not the directory path.
+
+### /reload-plugins (v2.1.98+)
+
+`/reload-plugins` picks up new skills without requiring a full restart. Use after plugin updates to make new skills available immediately.
+
+### MCP Dynamic Server Inheritance (v2.1.101+)
+
+Subagents inherit MCP tools from dynamically-injected servers. Cross-plugin handoffs to external agents that rely on MCP tools (e.g., XcodeBuildMCP) work without explicit MCP tool grants in the subagent's `tools:` list, as long as the parent session has the MCP server connected.
+
 ## Handoff to QA Stage (QA)
 
 ### From apple-developer to qa-engineer

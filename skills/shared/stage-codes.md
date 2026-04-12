@@ -47,6 +47,8 @@ Support agents don't own workflow stages but can be invoked on-demand via Task t
 
 > Model column uses aliases (`opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-5`) are also supported in agent frontmatter. Use aliases for portability across providers. Opus 4.6 is the default across all providers (Anthropic, Bedrock, Vertex, Foundry).
 
+> **Default effort is now `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans (v2.1.94). Only Pro plan retains medium default. Agents with explicit `effort:` frontmatter are unaffected.
+
 ## Agent Frontmatter Fields (v2.1.78+)
 
 | Field | Type | Version | Purpose |
@@ -59,6 +61,14 @@ Support agents don't own workflow stages but can be invoked on-demand via Task t
 ### Skill/Command Frontmatter (v2.1.80+)
 
 Skills and slash commands can declare `effort` in YAML frontmatter to set effort level when invoked.
+
+### keep-coding-instructions Frontmatter (v2.1.94+)
+
+The `keep-coding-instructions` field in plugin output style frontmatter preserves coding instructions across style changes.
+
+### Skill Name Resolution (v2.1.94+)
+
+Plugin skills use the frontmatter `name` field for invocation instead of directory basename. Ensure all SKILL.md files have accurate `name:` frontmatter. Skills also honor `context` and `agent` frontmatter fields (fixed v2.1.101).
 
 ### paths: Frontmatter (v2.1.84+)
 

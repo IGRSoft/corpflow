@@ -55,7 +55,7 @@ When `--worktree` flag is present, add these checks:
 - [ ] `.worktrees/` directory is writable
 - [ ] No existing worktree for the same branch (`git worktree list`)
 - [ ] Sufficient disk space for worktree copies
-- [ ] No stale worktrees (auto-cleaned on startup; `git worktree prune` as fallback)
+- [ ] No stale worktrees (auto-cleaned on startup, including those with untracked files v2.1.98; `git worktree prune` as fallback)
 - [ ] If `worktree.sparsePaths` configured, validate paths exist in repo
 - [ ] orchestrator.json version is 3.0 with `isolation: "worktree"`
 
@@ -180,7 +180,12 @@ When `--worktree` flag is present, add these checks:
 1. Check for uncommitted work: `git -C {worktree_path} status`
 2. Commit or stash changes: `git -C {worktree_path} stash`
 3. Force remove if truly unneeded: `git worktree remove --force {path}`
-4. Run `git worktree prune` to clean stale references (auto-cleaned on startup)
+4. Run `git worktree prune` to clean stale references (auto-cleaned on startup, handles untracked files correctly v2.1.98)
+
+### Plugin Management (v2.1.94/2.1.98+)
+
+- `/reload-plugins` picks up new skills without requiring restart (v2.1.98)
+- Plugin skills use frontmatter `name` field for invocation, not directory basename (v2.1.94)
 
 ### Orchestrator / Worktree Mismatch
 

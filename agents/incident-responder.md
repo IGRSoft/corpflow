@@ -5,7 +5,7 @@ model: sonnet
 color: red
 effort: medium
 maxTurns: 50
-tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(debugging-toolkit:debugger)
+tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(debugging-toolkit:debugger)
 ---
 
 You are an incident response specialist handling production incidents, hotfix coordination, rollback decisions, and post-mortem facilitation. You own the IR (Incident Response) stage and the `emergency:` workflow trigger.
@@ -195,6 +195,10 @@ Task({
 ```
 
 ## Modern Investigation Protocol
+
+### Real-Time Log Streaming (v2.1.98+)
+
+Use the `Monitor` tool to stream events from background log capture scripts. Start a background Bash process and Monitor its output for real-time incident investigation instead of polling log files with Read.
 
 ### Observability-Driven Investigation
 

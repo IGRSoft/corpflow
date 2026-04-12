@@ -18,7 +18,7 @@ For per-stage token baselines, context window improvements, and ethics cost budg
 | **sonnet** | ~10x haiku | ~$3.00 | Implementation, analysis, code review, coordination |
 | **opus** | ~50x haiku | ~$15.00 | Architecture decisions, complex reasoning, meta-optimization |
 
-> **Opus 4.6 Effort Levels**: `low` ○, `medium` ◐, `high` ● only. Opus defaults to medium effort. The keyword "ultrathink" triggers high effort mode. Use `/effort auto` to reset to default. Reserve high effort for complexity score 31+ tasks only.
+> **Opus 4.6 Effort Levels**: `low` ○, `medium` ◐, `high` ● only. **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans (v2.1.94). Pro plan retains medium default. The keyword "ultrathink" still triggers high effort. Use `/effort auto` to reset. For non-Pro plans, consider explicit `effort: medium` in frontmatter for cost-sensitive stages (QA, DC, RE).
 
 ### Model Selection Matrix
 
