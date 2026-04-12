@@ -2,6 +2,7 @@
 name: pencil-design-workflow
 description: Design mockup generation workflow using Pencil MCP tools for the Designer agent. Use when generating design mockups, creating .pen files, or integrating design tokens.
 effort: high
+keep-coding-instructions: true
 paths:
   - "**/*.pen"
 ---

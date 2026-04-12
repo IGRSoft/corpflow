@@ -2,6 +2,7 @@
 name: appstore-screenshots
 description: Device specs, layout patterns, typography, and Pencil MCP workflow for App Store screenshot generation. Use when creating App Store screenshots or marketing visuals.
 effort: high
+keep-coding-instructions: true
 paths:
   - "**/AppStore/**"
   - "**/*.pen"

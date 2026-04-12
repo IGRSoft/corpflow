@@ -67,6 +67,8 @@ emergency: [description]
 | RE | release-engineer | Prepare hotfix release |
 | FN | project-manager | Execute emergency deployment |
 
+> **DV Hotfix Tip (v2.1.98+)**: Use the Monitor tool to stream build output during hotfix implementation. Combine `run_in_background` Bash with Monitor for real-time error detection instead of polling. See `skills/agent-coordination/SKILL.md §Monitor Tool`.
+
 ## Decision Framework
 
 ### Hotfix vs Rollback vs Mitigation

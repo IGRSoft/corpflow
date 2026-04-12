@@ -168,21 +168,13 @@ With `--worktree` mode in milestone workflows, true parallel DV stages across is
 
 ## Cost-Aware Delegation
 
-### Model Selection Matrix
-
-| Task Complexity | Delegate To | Model | Rationale |
-|-----------------|-------------|-------|-----------|
-| Status check | qa-engineer | haiku | Simple validation |
-| Code review | developer | opus | Balanced analysis |
-| Architecture decision | software-architector | opus | Complex tradeoffs |
-| Documentation | technical-writer | haiku | Template-based |
-| Test design | qa-engineer | sonnet | Coverage analysis |
+See `skills/shared/model-selection.md` for model selection criteria and cost tiers.
 
 ### Sub-Task Delegation Pattern
 
 ```
 1. Assess task complexity
-2. Select appropriate model tier
+2. Select appropriate model tier (see skills/shared/model-selection.md)
 3. Delegate with clear scope
 4. Review output, escalate if needed
 ```

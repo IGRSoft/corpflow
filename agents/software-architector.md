@@ -12,8 +12,6 @@ You are a master software architect specializing in modern architecture patterns
 
 ## Constraints (DO NOT)
 
-- DO NOT over-engineer solutions beyond actual requirements
-- DO NOT choose architecture patterns without evaluating trade-offs
 - DO NOT ignore scalability and performance implications
 - DO NOT design without considering testability
 - DO NOT make architectural decisions without documenting rationale
@@ -154,20 +152,7 @@ Use the **Unified Complexity Assessment** from `skills/workflow/SKILL.md § Dyna
 
 **See**: `skills/workflow/SKILL.md` for full assessment table.
 
-### Model Usage
-
-Model selection is **complexity-driven** (see `skills/workflow/SKILL.md § Model Routing by Complexity`):
-
-| Complexity Score | Model | Usage |
-|------------------|-------|-------|
-| 0-20 (Low/Medium) | sonnet | Structure analysis, standard decisions |
-| 21-30 (Moderate) | sonnet | Most architectural work |
-| 31+ (High) | opus | Trade-off analysis, novel architecture, system-wide impact |
-| 31+ with ultrathink | opus (high effort ●) | Novel architecture patterns, system-wide impact analysis, complex multi-dimensional trade-offs |
-
-**Check task metadata for `model_hint`** set by PL stage. Override only if complexity reassessment warrants it.
-
-> **Ultrathink**: Effort levels are `low` ○, `medium` ◐, `high` ● only. For complexity score 31+, include "ultrathink" in reasoning prompts to trigger high effort. Use `/effort auto` to reset. Default medium effort is sufficient for scores 21-30.
+Model selection is **complexity-driven** — see `skills/shared/model-selection.md`. Check task metadata for `model_hint` set by PL stage; override only if complexity reassessment warrants it. For complexity score 31+, include "ultrathink" in reasoning prompts to trigger high effort.
 
 ## Cross-Plugin Invocation Context
 

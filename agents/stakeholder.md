@@ -78,35 +78,7 @@ In the 8-stage workflow system, the stakeholder handles:
 
 ## Budget Approval (3-Stage Model)
 
-### Calendar Month Billing Review
-
-Review AI agent costs using calendar month billing:
-
-| Month | Stage | AI Usage | Charge | Cumulative |
-|-------|-------|----------|--------|------------|
-| Month 1 | Required | Yes | [monthly rate] | [cumulative] |
-| Month 2 | Required | Yes | [monthly rate] | [cumulative] |
-| ... | ... | ... | ... | ... |
-
-### Stage Budget Approval
-
-Approve budget by stage:
-
-| Stage | Timeline | AI Cost | Dev Cost | Buffer | Total | Approved |
-|-------|----------|---------|----------|--------|-------|----------|
-| Required | Week 1-N | $X | $Y | 10% | $Z | [ ] |
-| Nice-to-have | Week N-M | $X | $Y | 10% | $Z | [ ] |
-| v1.1 | Week M-K | $X | $Y | 10% | $Z | [ ] |
-
-### ROI by Stage
-
-Calculate ROI for each stage:
-
-| Stage | Investment | Expected Return | ROI | Risk |
-|-------|------------|-----------------|-----|------|
-| Required | $X | MVP launch | High | Low |
-| Nice-to-have | $Y | User engagement | Medium | Medium |
-| v1.1 | $Z | Market expansion | Variable | High |
+Budget approval follows the 3-Stage Model — see `skills/shared/three-stage-planning.md` for stage definitions, calendar month billing, stage budget template, and ROI tables.
 
 ### Approval Checklist
 

@@ -154,44 +154,7 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 
 ## 3-Stage Sequential Model
 
-| Stage | Priority | Description | When |
-|-------|----------|-------------|------|
-| **Required** | P0 | Must complete by deadline | Weeks 1-N |
-| **Nice-to-have** | P1 | Stretch goals | After Required complete |
-| **Not Required** | P2 | Deferred features | After Nice-to-have (v1.1) |
-
-### Sequential Rules
-
-1. **No parallel development** between stages
-2. Each stage starts only after previous stage completes
-3. Gates must pass before stage transition
-4. Buffer calculated per stage (10%)
-
-### Calendar Month Billing (AI Agents)
-
-| Rule | Description |
-|------|-------------|
-| Rate | $200 per calendar month |
-| Trigger | Any AI agent usage in month |
-| Billing | Full $200 charged for partial month |
-| Example | 1 day in May = $200 for May |
-
-### Stage Budget Template
-
-| Stage | SP Min | SP Max | Hours Min | Hours Max | Weeks | New Months | AI Cost | Dev Cost Min | Dev Cost Max | Buffer | Total Min | Total Max |
-|-------|--------|--------|-----------|-----------|-------|------------|---------|-------------|-------------|--------|-----------|-----------|
-| Required | - | - | - | - | 1-N | N | $200×N | hMin×rate | hMax×rate | 10% | - | - |
-| Nice-to-have | - | - | - | - | N+1 to M | +X | $200×X | hMin×rate | hMax×rate | 10% | - | - |
-| v1.1 | - | - | - | - | M+1 to K | +Y | $200×Y | hMin×rate | hMax×rate | 10% | - | - |
-| **TOTAL** | - | - | - | - | K | N+X+Y | - | - | - | - | - | - |
-
-### Gate Template
-
-| Gate | Week | Criteria | Pass Action | Fail Action |
-|------|------|----------|-------------|-------------|
-| DEMO | N | All Required working | Proceed to Nice-to-have | Extend MVP |
-| NICE-TO-HAVE | M | All Nice-to-have working | Proceed to v1.1 | Ship MVP only |
-| v1.1 RELEASE | K | All v1.1 working | Ship v1.1 | Extend or defer |
+See `skills/shared/three-stage-planning.md` for stage definitions, sequential rules, calendar month billing, stage budget template, and gate criteria.
 
 ## Export Structure (8 Core Reports)
 
