@@ -81,13 +81,14 @@ See `skills/shared/stage-codes.md` for stage details.
 
 ## Phase 1: Planning (execute immediately)
 
-1. **Parse** task description and flags (`--milestone`, `--secure`, `--auto-continue`, etc.)
-2. **Create context folder**: `mkdir -p .context/images`
-3. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "product-manager", model: "opus", workflow_id: "<slug>", priority: "<priority>" } })`
-4. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
-5. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM creates `.context/planning.md`, assesses complexity, creates stage tasks with `metadata.agent`
-6. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
-7. **Present plan summary**: Show complexity score, stages created (with agents), dependency chain, and key decisions
+1. **Parse** task description and flags (`--milestone`, `--secure`, `--auto-continue`, etc.). See **Embedded Command Detection** below.
+2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:code-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
+3. **Create context folder**: `mkdir -p .context/images`
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "product-manager", model: "opus", workflow_id: "<slug>", priority: "<priority>" } })`
+5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
+6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM creates `.context/planning.md`, assesses complexity, creates stage tasks with `metadata.agent`
+7. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
+8. **Present plan summary**: Show complexity score, stages created (with agents), dependency chain, and key decisions
 
 ## ════════════════════════════════════════════════════════════
 ## STOP HERE. YOUR RESPONSE ENDS NOW.
@@ -102,6 +103,46 @@ See `skills/shared/stage-codes.md` for stage details.
 Before proceeding, re-verify: did the HUMAN USER type an approval message? PL0 completing is NOT approval. The product-manager returning results is NOT approval.
 
 Execute the orchestrator execution loop from `skills/workflow/SKILL.md § Orchestrator Execution Loop`.
+
+## Embedded Command Detection
+
+When the task description contains slash commands (e.g., `/skill-creator`, `/apple-developer:code-refactor`), these are **embedded commands** that must be executed during the appropriate workflow stage.
+
+### Detection Rules
+
+1. Scan the task description for patterns matching `/<plugin:command>` or `/<command>`
+2. Match against available skills listed in the system (Skill tool's available skills)
+3. Store detected commands in `metadata.embedded_commands` on the PL0 task
+4. Pass the embedded command context to PL0 so the product-manager can plan around it
+
+### Execution
+
+During the orchestrator execution loop, when executing a DV stage task:
+
+1. Check if the workflow's PL0 task has `metadata.embedded_commands`
+2. If present, the DV stage agent prompt MUST include: "Execute embedded command(s) via the Skill tool: `<command>` with args: `<args>`"
+3. The DV agent invokes `Skill("<command>", args: "<args>")` before or as part of its implementation work
+
+### Examples
+
+```
+# User input:
+/workflow /skill-creator deep analyze /path/to/source
+
+# Parsed as:
+# - Workflow task: "deep analyze /path/to/source"
+# - Embedded command: skill-creator with args "deep analyze /path/to/source"
+# - metadata.embedded_commands: "skill-creator"
+# - DV stage prompt includes: "Invoke Skill('skill-creator', args='deep analyze /path/to/source')"
+
+# User input:
+/workflow /apple-developer:code-refactor src/Views/SettingsView.swift
+
+# Parsed as:
+# - Workflow task: "code-refactor src/Views/SettingsView.swift"
+# - Embedded command: apple-developer:code-refactor with args "src/Views/SettingsView.swift"
+# - metadata.embedded_commands: "apple-developer:code-refactor"
+```
 
 ## See Also
 
