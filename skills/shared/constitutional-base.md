@@ -25,4 +25,4 @@ Hard constraint violations: **IMMEDIATE STOP** → USER
 
 ## Full Reference
 
-See `skills/claude-constitution.md` for complete constitutional principles.
+See `${CLAUDE_SKILL_DIR}/../claude-constitution/SKILL.md` for complete constitutional principles.

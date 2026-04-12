@@ -97,12 +97,33 @@ Use the **Unified Complexity Assessment** from `skills/workflow/SKILL.md § Dyna
 
 1. **Assess complexity** using the 5-factor table (patterns, integration, concerns, risk, docs)
 2. **Sum scores** (0-50 total)
-3. **Create stage tasks** based on score — use complexity table and agent mapping from `skills/workflow/SKILL.md § Dynamic Workflow Sizing`.
+3. **Create stage tasks** based on score (each with `metadata.agent` for executor resolution):
+   - Score 0-10 (Low): Create DV0, QA0
+   - Score 11-20 (Medium): Create AR0, DV0, QA0
+   - Score 21-30 (Moderate): Create AR0, TL0, DV0, QA0
+   - Score 31-40 (High): Create AR0, TL0, DV0, QA0, DC0, FN0, ST0
+   - Score 41-50 (Critical): Create AR0, TL0, DV0, SR0, QA0, DC0, RE0, FN0, ST0
 
 4. **Set dependency chain** between created tasks using `TaskUpdate({ addBlockedBy })`
 5. **Mark PL0 completed** after creating all stage tasks
 
-**See**: `skills/workflow/SKILL.md` for full assessment table and agent mapping. `skills/workflow/references/initialization-patterns.md § PL Creates Subsequent Tasks` for code pattern.
+**Agent mapping for `metadata.agent`**:
+
+Bare names resolve to `igrsoft:{name}`. Fully-qualified names (containing `:`) are dispatched as-is — use when a stage should go directly to an external plugin agent.
+
+| Stage | Agent | Notes |
+|-------|-------|-------|
+| AR0 | software-architector | or `apple-developer:apple-architector` for Apple-only |
+| TL0 | team-lead | |
+| DV0 | developer | or `apple-developer:apple-developer`, `apple-developer:ios-developer`, etc. |
+| SR0 | security-reviewer | or `apple-developer:security-auditor`, `security-scanning:security-auditor` |
+| QA0 | qa-engineer | |
+| DC0 | technical-writer | |
+| RE0 | release-engineer | |
+| FN0 | project-manager | |
+| ST0 | stakeholder | |
+
+**See**: `skills/workflow/SKILL.md` for full assessment table. `skills/workflow/references/initialization-patterns.md § PL Creates Subsequent Tasks` for code pattern.
 
 **Task System**: Stage PL, Owner: product-manager. See `skills/shared/task-system.md`.
 
@@ -137,12 +158,31 @@ When design detection threshold is met, invoke Designer via `Task(subagent_type:
 
 ### Figma Design Capture
 
-When a Figma URL is provided, capture design screenshots regardless of the keyword-based score.
+When a Figma URL is provided in the task description or user input, capture design screenshots regardless of the keyword-based design detection score.
 
-1. Detect Figma URLs matching `figma.com/design/` pattern (including branch URLs)
-2. Call `get_design_context` → `get_screenshot` → `get_metadata` for each URL
-3. Save to `.context/designs/figma-[screen]-[node-id].png`
-4. Summarize design context in planning.md under Figma Design References
+#### Figma URL Detection
+
+Scan the task description for URLs matching:
+
+```
+figma\.com/design/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
+```
+
+- Group 1: `fileKey`, Group 4: `nodeId` (convert `-` to `:` for API calls)
+- Branch URLs: `figma.com/design/:fileKey/branch/:branchKey/...` → use `branchKey` as fileKey
+- URLs without `node-id` are valid — capture the top-level frame
+
+#### Capture Workflow
+
+1. Parse `fileKey` and `nodeId` from the URL
+2. `mcp__plugin_figma_figma__get_design_context({ fileKey, nodeId })` — code hints + screenshot + component info
+3. `mcp__plugin_figma_figma__get_screenshot({ fileKey, nodeId })` — standalone screenshot image
+4. `mcp__plugin_figma_figma__get_metadata({ fileKey, nodeId })` — node name for descriptive filename
+5. Save screenshots to `.context/designs/figma-[screen]-[node-id].png`
+   - `[screen]`: node name from metadata (lowercased, spaces → hyphens)
+   - `[node-id]`: Figma node ID with colons → dashes (filesystem-safe)
+6. If multiple Figma URLs provided, repeat for each
+7. Summarize design context (colors, layout, components) in planning.md under Figma Design References
 
 #### Coexistence with Pencil Mockups
 
