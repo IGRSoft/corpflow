@@ -217,6 +217,13 @@ while (tasks.some(t => t.status !== "completed")) {
     // 5. Mark in_progress
     TaskUpdate({ taskId: task.id, status: "in_progress" });
 
+    // 5a. Resolve embedded commands for DV stages
+    //     If workflow has embedded_commands metadata, inject Skill invocation into DV prompt
+    if (full.metadata.stage === "DV" && workflow_embedded_commands) {
+      const skillInvocation = `IMPORTANT: Before implementing, invoke the embedded command via Skill tool: Skill("${embedded_cmd}", args="${embedded_args}")`;
+      full.description = skillInvocation + "\n\n" + full.description;
+    }
+
     // 6. Delegate to stage agent
     Task({ subagent_type: subagentType, model: model, prompt: full.description });
 

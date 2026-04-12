@@ -93,9 +93,13 @@ quick: Add validation to login form
 
 ### Combining with Other Commands
 
-You can embed slash commands within workflow triggers. The workflow system will:
+You can embed slash commands within workflow triggers. The orchestrator will:
 1. Set up the context and planning
-2. Execute the embedded command during the appropriate stage
+2. Detect the embedded `/command` pattern and store it in `metadata.embedded_commands`
+3. Pass the command to the DV stage agent, which invokes it via the `Skill` tool
+4. The embedded command's output feeds into the DV stage implementation
+
+Embedded commands are detected by matching `/<name>` or `/<plugin:name>` patterns against available skills. The command arguments are preserved and passed through.
 
 ```
 workflow: /apple-developer:code-refactor src/Views/SettingsView.swift
