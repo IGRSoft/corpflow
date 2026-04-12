@@ -76,17 +76,7 @@ Use `skills/estimation/SKILL.md` for complexity scoring. Track costs via `/cost-
 
 Key artifacts: roadmap_milestones.csv, budget_estimate.csv, phase_summary.csv, risk_assessment.csv
 
-## 3-Stage Project Planning
-
-Categorize features into three sequential stages with gate transitions:
-
-| Stage | Priority | Criteria |
-|-------|----------|----------|
-| Required (P0) | Must have | Critical for MVP/deadline |
-| Nice-to-have (P1) | Should have | Adds value, not critical |
-| Not Required (P2) | Could have | Deferred to future version |
-
-**Rules**: Plan stages sequentially. Define gate criteria for each transition. Calculate 10% buffer per stage. Track calendar months for AI billing (minimize month overlap).
+See `skills/shared/three-stage-planning.md` for 3-stage model, calendar month billing, stage budget template, and gate criteria.
 
 ## Completion Verification
 

@@ -117,61 +117,15 @@ Based on `--platform` flag, select device sets from the `appstore-screenshots` s
 
 ### Step 6 — Create .pen Files with Pencil MCP
 
-Create `AppStore/screenshots/` directory for output files.
+Create `AppStore/screenshots/` directory for output files. Follow the Pencil MCP workflow in `skills/appstore-screenshots/SKILL.md §Building with batch_design`.
 
-**For each platform .pen file:**
-
-1. **Open document** — `mcp__pencil__open_document({ filePathOrTemplate: "AppStore/screenshots/{platform}.pen" })`
-
-2. **For each device size**, create a device frame:
-```typescript
-mcp__pencil__batch_design({
-  operations: `
-device=I(document, {type: "frame", name: "iPhone 6.9 (1320x2868)", width: 1320, height: 2868})
-`
-})
-```
-
-3. **For each slide within the device**, create layers (max 25 ops per batch_design call):
-
-**With bg.png:**
-```typescript
-mcp__pencil__batch_design({
-  operations: `
-slide=I("device-id", {type: "frame", name: "Slide 1 - Core Value", width: W, height: H, clipsContent: true})
-bg=I(slide, {type: "image", name: "Background", width: W, height: H, imageFill: "fill"})
-G(bg, "file", "/absolute/path/to/AppStore/images/bg.png")
-ss=I(slide, {type: "image", name: "Screenshot", x: X, y: Y, width: SW, height: SH, cornerRadius: 32, imageFill: "fill"})
-G(ss, "file", "/absolute/path/to/AppStore/images/01-home.png")
-headline=I(slide, {type: "text", name: "Headline", content: "Your Core Value", x: HX, y: HY, width: HW, fontSize: FS, fontWeight: "700", fill: "#ffffff", textAlign: "center"})
-subtitle=I(slide, {type: "text", name: "Subtitle", content: "A short benefit", x: SX, y: SY, width: SW2, fontSize: FS2, fontWeight: "400", fill: "#ffffff", opacity: 0.75, textAlign: "center"})
-`
-})
-```
-
-**Without bg.png (gradient fallback):**
-```typescript
-// Use gradient fill on the slide frame itself
-slide=I("device-id", {type: "frame", name: "Slide 1", width: W, height: H, clipsContent: true, fillType: "gradient", gradientType: "linear", gradientAngle: 180, gradientStops: [{"color": "#1a1a2e", "position": 0}, {"color": "#16213e", "position": 1}]})
-```
-
-**Full-bleed layout (tvOS/watchOS):**
-```typescript
-slide=I("device-id", {type: "frame", name: "Slide 1", width: W, height: H, clipsContent: true})
-bg=I(slide, {type: "image", name: "Background", width: W, height: H, imageFill: "fill"})
-G(bg, "file", "/absolute/path/to/bg.png")
-ss=I(slide, {type: "image", name: "Screenshot", width: W, height: H, imageFill: "fill"})
-G(ss, "file", "/absolute/path/to/01-home.png")
-```
-
-**Layout formulas** — Apply from the `appstore-screenshots` skill:
-- Rotate layouts A, B, C, D — never repeat consecutively
-- First and last slides use Layout A or D
-- Compute screenshot position using aspect ratio formulas
-- Phone screenshots: `ss_h = H * ratio`, `ss_w = ss_h / (19.5/9)`, `ss_x = (W - ss_w) / 2`
-- macOS screenshots: `ss_h = H * ratio`, `ss_w = ss_h * 1.6`, `ss_x = (W - ss_w) / 2`
-
-**Batching strategy**: Each slide uses ~7 operations (frame + bg image + G() + screenshot image + G() + headline + subtitle). Batch up to 3 slides per `batch_design` call to stay under 25-op limit.
+Key rules:
+- Max 25 ops per `batch_design` call; batch up to 3 slides per call (~7 ops/slide)
+- Rotate layouts A, B, C, D — never repeat consecutively; first and last slides use Layout A or D
+- With bg.png: frame + bg image + G() + screenshot + G() + headline + subtitle
+- Without bg.png: gradient fill on slide frame (fillType: "gradient")
+- Full-bleed (tvOS/watchOS): bg image fill + screenshot fill, no text layers
+- Phone aspect ratio formula: `ss_h = H * ratio`, `ss_w = ss_h / (19.5/9)`, `ss_x = (W - ss_w) / 2`
 
 ### Step 7 — Visual Validation
 
