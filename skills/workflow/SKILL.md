@@ -180,17 +180,16 @@ If validation fails:
 ## Orchestrator Execution Loop
 
 ### PRECONDITION CHECK
-Before entering this loop, verify:
-- PL0 task status is "completed"
-- The HUMAN USER has sent an explicit approval message
-- PL0 completion alone is NOT approval — only human input counts
-If the user has not approved, DO NOT enter this loop.
+Before entering this loop, verify BOTH signals:
+- **Signal 1 (TaskList audit)**: Call `TaskList()`, find the PL0 task, verify its status is `completed`. If PL0 does not exist or is not completed, STOP — workflow not initialized or planning incomplete.
+- **Signal 2 (Human approval)**: The HUMAN USER has sent an explicit approval message ("approve", "proceed", "go", "yes", "continue") AFTER PL0 was marked completed. PL0 completion alone is NOT approval. A subagent returning results is NOT approval. A tool succeeding is NOT approval. Only the human user's explicit text message qualifies.
+If either signal is missing, DO NOT enter this loop.
 
 After PL0 completes and creates stage tasks, the orchestrator MUST:
 
 1. **Present PL0 results** to the user: complexity score, stages created (with agents), dependency chain, and key planning decisions
-2. **STOP IMMEDIATELY**. PL0 completing is NOT approval. The product-manager returning results is NOT approval. Only the HUMAN USER typing approval in chat counts. Do NOT call Write, Edit, Task, or Bash with any file-modifying commands. STOP generating your response entirely.
-3. **Wait for EXPLICIT user approval**. The user must say "approve", "proceed", "go ahead", "looks good", "yes", or similar affirmative. Silence is NOT approval. Asking a question is NOT approval.
+2. **STOP IMMEDIATELY**. Do NOT call Write, Edit, Task, or Bash with any file-modifying commands. STOP generating your response entirely.
+3. **Wait for EXPLICIT user approval**. Silence is NOT approval. Asking a question is NOT approval.
 4. The user may adjust stages, re-prioritize, or skip stages before approving
 5. Only after the user explicitly confirms, execute the stage loop below:
 

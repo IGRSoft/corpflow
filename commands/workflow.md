@@ -81,6 +81,11 @@ See `skills/shared/stage-codes.md` for stage details.
 
 ## Phase 1: Planning (execute immediately)
 
+> **BINDING CONSTRAINTS FOR PHASE 1**
+> 1. After PL0 completes: STOP. Do NOT call Write, Edit, Bash, or any file-modifying tool.
+> 2. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/images` and TaskCreate/TaskUpdate calls are permitted. ALL file modifications belong to DV stage or later.
+> 3. **Context-Interruption Recovery**: If workflow execution is interrupted (auth flows, user clarifications, tool failures), upon resumption MUST verify: (a) PL0 task exists with status `completed`, (b) HUMAN USER sent explicit approval AFTER PL0 completed. If either is false, restart from appropriate phase.
+
 1. **Parse** task description and flags (`--milestone`, `--secure`, `--auto-continue`, etc.). See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:code-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
 3. **Create context folder**: `mkdir -p .context/images`
