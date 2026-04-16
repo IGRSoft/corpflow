@@ -179,6 +179,10 @@ If validation fails:
 
 ## Orchestrator Execution Loop
 
+### CRITICAL: Delegation-Only Rule
+
+The orchestrator NEVER writes implementation code directly. ALL stage work is delegated to stage agents via the Agent tool. Using Edit/Write on source files, running build commands, or marking tasks completed without first delegating to an agent are all violations. The orchestrator's job is to manage the loop — read tasks, resolve agents, delegate, track status. If you find yourself editing source code, STOP — delegate to the stage agent instead.
+
 ### PRECONDITION CHECK
 Before entering this loop, verify BOTH signals:
 - **Signal 1 (TaskList audit)**: Call `TaskList()`, find the PL0 task, verify its status is `completed`. If PL0 does not exist or is not completed, STOP — workflow not initialized or planning incomplete.
@@ -192,6 +196,7 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 3. **Wait for EXPLICIT user approval**. Silence is NOT approval. Asking a question is NOT approval.
 4. The user may adjust stages, re-prioritize, or skip stages before approving
 5. Only after the user explicitly confirms, execute the stage loop below:
+6. **Re-validate before executing**: Call `TaskList()` to get all stage tasks. For each task, verify `metadata.agent` and `metadata.model` are set. This checkpoint prevents drift — the orchestrator re-grounds itself in the delegation rules before touching any stage.
 
 Unless `--auto-continue` flag was provided — in that case, skip the approval gate and proceed directly.
 
@@ -242,9 +247,11 @@ while (tasks.some(t => t.status !== "completed")) {
 **Key rules**:
 - NEVER skip TaskUpdate calls (both in_progress and completed)
 - NEVER execute a stage without checking blockedBy dependencies are completed
-- ALWAYS pass `model` from task metadata to the Agent tool — do NOT rely on agent frontmatter inheritance
+- ALWAYS pass `model` from task metadata to the Agent tool — if task has `model: opus`, the Agent call MUST include `model: "opus"`. Omitting or mismatching is a violation. Do NOT rely on agent frontmatter inheritance
 - `metadata.agent` accepts bare names (`"developer"` → `igrsoft:developer`) or fully-qualified plugin names (`"apple-developer:ios-developer"` → used as-is). Detection: presence of `:`
 - If a stage agent fails after 3 retries, escalate per the error handling chain
+- NEVER mark a task `completed` without first delegating to an agent and receiving its results — completion without delegation is the most common violation
+- The orchestrator uses ONLY TaskCreate, TaskUpdate, TaskGet, TaskList, and Agent tools. Edit/Write/Bash on source files belong to stage agents, not the orchestrator
 - The orchestrator owns the loop; stage agents own their stage's work
 
 ## Related
