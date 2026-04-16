@@ -165,7 +165,7 @@ Then [expected result]
 
 - Priority: P{n}
 - Complexity: {low|medium|high}
-- Estimated stages: {e.g., PL → DV → QA → FN}
+- Estimated stages: {e.g., PL → DV → DR → QA → FN}
 ```
 
 The `Agent Assignments` table uses pipe-delimited markdown — parseable by `milestone-workflow` skill with regex `/\| Implementation \| `(.+?)` \|/`.

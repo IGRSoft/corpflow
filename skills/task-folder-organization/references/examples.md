@@ -71,16 +71,17 @@ When a user attaches images during a workflow task, copy them to `.context/image
 
 ## Folder Structure Examples
 
-### Example 1: Simple Bug Fix (8-stage, low complexity)
+### Example 1: Simple Bug Fix (9-stage, low complexity)
 
 ```
 .context/
 ├── planning.md
 ├── development.md
+├── developer-review.md
 └── testing.md
 ```
 
-### Example 2: Feature Development (8-stage, full)
+### Example 2: Feature Development (9-stage, full)
 
 ```
 .context/
@@ -88,6 +89,7 @@ When a user attaches images during a workflow task, copy them to `.context/image
 ├── analyzing.md
 ├── coordination.md
 ├── development.md
+├── developer-review.md
 ├── testing.md
 ├── documentation.md
 ├── complete.md
@@ -132,7 +134,7 @@ When a user attaches images during a workflow task, copy them to `.context/image
 └── images/
 ```
 
-### Example 3: Security-Critical Feature (10-stage)
+### Example 3: Security-Critical Feature (11-stage)
 
 ```
 .context/
@@ -140,7 +142,8 @@ When a user attaches images during a workflow task, copy them to `.context/image
 ├── analyzing.md
 ├── coordination.md
 ├── development.md
-├── security-review.md     # SR stage output [NEW]
+├── developer-review.md    # DR stage output
+├── security-review.md     # SR stage output
 ├── testing.md
 ├── documentation.md
 ├── release-prep.md        # RE stage output [NEW]
@@ -155,8 +158,9 @@ When a user attaches images during a workflow task, copy them to `.context/image
 
 ```
 .context/
-├── incident-report.md     # IR stage output [NEW]
+├── incident-report.md     # IR stage output
 ├── development.md
+├── developer-review.md    # DR stage output
 ├── testing.md
 ├── release-prep.md        # RE stage output
 └── complete.md

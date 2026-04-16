@@ -51,10 +51,10 @@ Guidelines for incident triage, hotfix coordination, and post-mortem facilitatio
 emergency: [description]
      │
      ▼
-┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
-│   IR    │ → │   DV    │ → │   QA    │ → │   RE    │ → │   FN    │
-│ Triage  │    │ Hotfix  │    │  Test   │    │ Release │    │ Deploy  │
-└─────────┘    └─────────┘    └─────────┘    └─────────┘    └─────────┘
+┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
+│   IR    │ → │   DV    │ → │   DR    │ → │   QA    │ → │   RE    │ → │   FN    │
+│ Triage  │    │ Hotfix  │    │ Review  │    │  Test   │    │ Release │    │ Deploy  │
+└─────────┘    └─────────┘    └─────────┘    └─────────┘    └─────────┘    └─────────┘
 ```
 
 ### Stage Responsibilities

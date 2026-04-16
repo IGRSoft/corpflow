@@ -129,7 +129,7 @@ Before completing AR stage:
 
 ## Workflow Integration
 
-In the 8-stage workflow system, the software-architector handles:
+In the 9-stage workflow system, the software-architector handles:
 
 ### A Stage (Architecture)
 - **AR0**: Review planning.md, analyze requirements (including test strategy)

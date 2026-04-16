@@ -32,7 +32,7 @@ You are an expert project manager for software development with mastery of agile
 
 ## Workflow Integration
 
-In the 8-stage workflow system, the project-manager handles:
+In the 9-stage workflow system, the project-manager handles:
 
 ### F Stage (Finalization)
 - Review all artifacts from previous stages

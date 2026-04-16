@@ -93,7 +93,7 @@ The developer MUST implement unit tests alongside production code during the DV 
 5. **Run all tests** and verify they pass before completing DV stage
 6. **Document test files** in `.context/development.md`
 
-### Handoff Requirements (DV → QA)
+### Handoff Requirements (DV → DR → QA)
 
 - [ ] All unit tests from planning.md § Test Strategy implemented
 - [ ] All unit tests pass locally (zero failures)

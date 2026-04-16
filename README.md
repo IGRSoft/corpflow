@@ -1,12 +1,12 @@
 # Company Workflow Plugin
 
-A comprehensive 8-stage workflow system for Claude Code with Task System integration, stage transitions, approval gates, and structured task management.
+A comprehensive 9-stage workflow system for Claude Code with Task System integration, stage transitions, approval gates, and structured task management.
 
 claude-code min version: "2.1.101"
 
 ## Features
 
-- **8-Stage Workflow**: Planning → Architecture → Team Lead → Development → QA → Documentation → Finalization → Stakeholder
+- **9-Stage Workflow**: Planning → Architecture → Team Lead → Development → Developer Review → QA → Documentation → Finalization → Stakeholder
 - **Task System Integration**: Native `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` tools
 - **Native Dependencies**: `blockedBy` arrays for explicit dependency management
 - **Cross-Session Persistence**: Tasks persist across sessions
@@ -76,7 +76,7 @@ Simply prefix your task with one of these triggers:
 ```
 workflow: [task description]   # Standard - PL0 creates stages after planning
 fworkflow: [task description]  # Fast - auto-continues through all stages
-quick: [task description]      # 3-stage workflow: PL → DV → QA
+quick: [task description]      # 4-stage workflow: PL → DV → DR → QA
 micro: [task description]      # Lightweight: plan → approve → execute
 ```
 
@@ -111,22 +111,23 @@ fworkflow: /code-review PR #123
 | Trigger | Stages | Use For |
 |---------|--------|---------|
 | `micro: [task]` | Plan → approve → edit | Single-file fixes, typos |
-| `quick: [task]` | PL → DV → QA | Small features, bug fixes |
-| `workflow: [task]` | Full 8 stages | Multi-file features, architectural changes |
-| `fworkflow: [task]` | Full 8 stages (auto-continue) | Trusted full workflows |
+| `quick: [task]` | PL → DV → DR → QA | Small features, bug fixes |
+| `workflow: [task]` | Full 9 stages | Multi-file features, architectural changes |
+| `fworkflow: [task]` | Full 9 stages (auto-continue) | Trusted full workflows |
 
-## 8-Stage Workflow
+## 9-Stage Workflow
 
 | Code | Stage | Agent | Purpose |
 |------|-------|-------|---------|
-| P | Planning | product-manager | Define requirements |
-| A | Architecture | software-architector | Design solution |
-| T | Team Lead | team-lead | Coordinate approach |
-| D | Development | [language-pro] | Implement solution |
-| Q | QA | qa-engineer | Test and validate |
-| W | Documentation | technical-writer | Write technical docs |
-| F | Finalization | project-manager | Prepare release |
-| S | Stakeholder | stakeholder | Final approval |
+| PL | Planning | product-manager | Define requirements |
+| AR | Architecture | software-architector | Design solution |
+| TL | Team Lead | team-lead | Coordinate approach |
+| DV | Development | [language-pro] | Implement solution |
+| DR | Developer Review | technical-lead | Code quality review |
+| QA | QA | qa-engineer | Test and validate |
+| DC | Documentation | technical-writer | Write technical docs |
+| FN | Finalization | project-manager | Prepare release |
+| ST | Stakeholder | stakeholder | Final approval |
 
 ## Task System Initialization
 
@@ -156,6 +157,7 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ├── planning.md              # PL stage
 ├── analyzing.md             # AR stage
 ├── development.md           # DV stage
+├── developer-review.md      # DR stage
 ├── testing.md               # QA stage
 ├── documentation.md         # DC stage
 ├── complete.md              # FN stage
@@ -170,15 +172,15 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 
 | Agent | Description | Workflow Stage |
 |-------|-------------|----------------|
-| `product-manager` | Product strategy, requirements | P (Planning) |
-| `software-architector` | Architecture, design patterns | A (Architecture) |
-| `team-lead` | Team coordination, code reviews | T (Team Lead) |
-| `developer` | Dynamic platform developer routing | D (Development) |
-| `qa-engineer` | Testing, quality assurance | Q (QA) |
-| `technical-writer` | Documentation | W (Documentation) |
-| `project-manager` | Sprint management, releases | F (Finalization) |
-| `stakeholder` | Business approval, ROI | S (Stakeholder) |
-| `designer` | UI/UX strategy, design systems | P (Planning) |
+| `product-manager` | Product strategy, requirements | PL (Planning) |
+| `software-architector` | Architecture, design patterns | AR (Architecture) |
+| `team-lead` | Team coordination, code reviews | TL (Team Lead) |
+| `developer` | Dynamic platform developer routing | DV (Development) |
+| `qa-engineer` | Testing, quality assurance | QA (QA) |
+| `technical-writer` | Documentation | DC (Documentation) |
+| `project-manager` | Sprint management, releases | FN (Finalization) |
+| `stakeholder` | Business approval, ROI | ST (Stakeholder) |
+| `designer` | UI/UX strategy, design systems | PL (Planning) |
 | `ethics-reviewer` | Constitutional compliance, harm assessment | Support |
 | `prompt-engineer` | Agent/command optimization | Support |
 | `workflow-engineer` | Workflow troubleshooting | Support |

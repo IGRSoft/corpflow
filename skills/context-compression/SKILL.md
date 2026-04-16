@@ -171,7 +171,8 @@ Maximum tokens to pass between stages:
 | **PL→AR** | 500 | Requirements, constraints, user needs |
 | **AR→TL** | 300 | Architecture decisions, patterns, risks |
 | **TL→DV** | 400 | Implementation approach, file assignments, deadlines |
-| **DV→QA** | 300 | What changed, test focus areas, edge cases |
+| **DV→DR** | 300 | What changed, code areas, implementation decisions |
+| **DR→QA** | 300 | Review findings, test focus areas, flagged issues |
 | **QA→DC** | 200 | Test results summary, documentation needs |
 | **DC→FN** | 200 | Doc changes, release items, changelog |
 | **FN→ST** | 150 | Executive summary, approval checklist |
@@ -185,7 +186,8 @@ When running on Opus 4.6 with Max/Team/Enterprise plans, the context window is 1
 | **PL→AR** | 500 | 2,000 |
 | **AR→TL** | 300 | 1,200 |
 | **TL→DV** | 400 | 1,600 |
-| **DV→QA** | 300 | 1,200 |
+| **DV→DR** | 300 | 1,200 |
+| **DR→QA** | 300 | 1,200 |
 | **QA→DC** | 200 | 800 |
 | **DC→FN** | 200 | 800 |
 | **FN→ST** | 150 | 600 |

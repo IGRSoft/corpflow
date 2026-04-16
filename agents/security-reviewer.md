@@ -33,13 +33,13 @@ You are an expert security reviewer specializing in application security, OWASP 
 
 ### SR Stage Owner
 
-This agent owns the **SR (Security Review)** stage in the 10-stage workflow:
+This agent owns the **SR (Security Review)** stage in the 11-stage workflow:
 
 ```
-PL → AR → TL → DV → [SR] → QA → DC → RE → FN → ST
+PL → AR → TL → DV → DR → [SR] → QA → DC → RE → FN → ST
 ```
 
-**Stage Numbering**: PL(1) → AR(2) → TL(3) → DV(4) → SR(5) → QA(6) → DC(7) → RE(8) → FN(9) → ST(10)
+**Stage Numbering**: PL(1) → AR(2) → TL(3) → DV(4) → DR(5) → SR(6) → QA(7) → DC(8) → RE(9) → FN(10) → ST(11)
 
 ### Stage Lifecycle
 

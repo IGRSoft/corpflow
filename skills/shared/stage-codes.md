@@ -1,13 +1,13 @@
 ---
 name: stage-codes
-description: Reference table of all workflow stage codes (PL/AR/TL/DV/SR/QA/DC/RE/FN/ST/IR). Use when looking up stage codes, agents, or workflow stage sequences.
+description: Reference table of all workflow stage codes (PL/AR/TL/DV/DR/SR/QA/DC/RE/FN/ST/IR). Use when looking up stage codes, agents, or workflow stage sequences.
 ---
 
 # Stage Codes Reference
 
 Single source of truth for workflow stage codes.
 
-## Primary Stages (10-Stage)
+## Primary Stages (11-Stage)
 
 | Code | Stage | Agent | Model |
 |------|-------|-------|-------|
@@ -15,6 +15,7 @@ Single source of truth for workflow stage codes.
 | AR | Architecture | software-architector | opus |
 | TL | Team Lead | team-lead | sonnet |
 | DV | Development | developer | opus |
+| DR | Developer Review | technical-lead | sonnet |
 | SR | Security Review | security-reviewer | opus |
 | QA | QA Testing | qa-engineer | haiku |
 | DC | Documentation | technical-writer | haiku |
@@ -30,7 +31,7 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 | Model | Stages |
 |-------|--------|
 | opus | PL, AR, DV, SR, FN, TC, PE |
-| sonnet | TL, ST, IR, DS, ET, WE |
+| sonnet | TL, DR, ST, IR, DS, ET, WE |
 | haiku | QA, DC, RE |
 
 ## Support Agents (On-Demand)
@@ -83,9 +84,10 @@ paths:
 ## Workflow Pipelines
 
 ```
-8-stage:  PL → AR → TL → DV → QA → DC → FN → ST
-10-stage: PL → AR → TL → DV → SR → QA → DC → RE → FN → ST
-Emergency: IR → DV → QA → RE → FN
+9-stage:   PL → AR → TL → DV → DR → QA → DC → FN → ST
+11-stage:  PL → AR → TL → DV → DR → SR → QA → DC → RE → FN → ST
+Emergency: IR → DV → DR → QA → RE → FN
+quick:     PL → DV → DR → QA
 ```
 
 ## Subject Numbering
@@ -96,6 +98,7 @@ Task subjects use `[CODE][N]:` format with 0-based index per stage code:
 PL0: Planning          ← PL is always 0 only (singleton)
 AR0: Architecture
 DV0: Development       ← agents can split: DV0, DV1, DV2
+DR0: Developer Review  ← always present after DV
 QA0: QA Testing        ← agents can split: QA0, QA1
 ```
 
@@ -113,6 +116,7 @@ QA0: QA Testing        ← agents can split: QA0, QA1
 | AR | analyzing.md |
 | TL | coordination.md |
 | DV | development.md |
+| DR | developer-review.md |
 | SR | security-review.md |
 | QA | testing.md |
 | DC | documentation.md |

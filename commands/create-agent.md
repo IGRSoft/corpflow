@@ -24,7 +24,7 @@ Create new agent definitions with proper structure, model selection, and best pr
 - `--model <haiku|sonnet|opus>` - Model selection (default: auto-select)
 - `--template <minimal|standard|comprehensive>` - Template style (default: standard)
 - `--tools <preset|list>` - Tool access preset or comma-separated list (see Tool Presets)
-- `--stage <code>` - Workflow stage integration: PL, AR, TL, DV, SR, QA, DC, RE, FN, ST, IR
+- `--stage <code>` - Workflow stage integration: PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR
 - `--output <path>` - Output path (default: agents/<name>.md)
 
 ## Examples
@@ -179,7 +179,7 @@ tools: Read, Glob, Grep, Write, Edit, TaskUpdate, TaskGet, TaskList
 - No overlap with other agents
 
 ### Workflow Integration
-- Stage codes (PL, AR, TL, DV, SR, QA, DC, RE, FN, ST, IR)
+- Stage codes (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR)
 - Task System integration
 - Handoff protocols
 

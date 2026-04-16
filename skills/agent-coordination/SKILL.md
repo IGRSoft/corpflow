@@ -40,6 +40,7 @@ Do NOT re-read files listed there unless you need additional detail.
 | AR | Yes | Selective | Only files needing architectural analysis |
 | TL | Yes | No | Coordination only |
 | DV | Yes | Yes (modify targets) | Must read files it will modify |
+| DR | Yes | Yes (changed files) | Must review actual changes |
 | QA | Yes | Yes (changed files) | Must review actual changes |
 | DC | Yes | No | Documentation from artifacts |
 
@@ -66,9 +67,9 @@ Do NOT re-read files listed there unless you need additional detail.
 ### Escalation Chains
 
 ```
-10-stage: ST→FN→RE→DC→QA→SR→DV→TL→AR→PL→USER
-8-stage:  ST→FN→DC→QA→DV→TL→AR→PL→USER
-Emergency: FN→RE→QA→DV→IR→USER
+11-stage: ST→FN→RE→DC→QA→SR→DR→DV→TL→AR→PL→USER
+9-stage:  ST→FN→DC→QA→DR→DV→TL→AR→PL→USER
+Emergency: FN→RE→QA→DR→DV→IR→USER
 Ethics: Any→ethics-reviewer→stakeholder→USER
 ```
 
@@ -181,19 +182,19 @@ Background subagents that fail now report partial progress instead of returning 
 
 ### Sequential Pipeline (Default)
 ```
-PL→AR→TL→DV→QA→DC→FN→ST
+PL→AR→TL→DV→DR→QA→DC→FN→ST
 ```
 
 ### Parallel Documentation
 ```
        ┌→ DC ─┐
-DV →──┤       ├→ FN
+DR →──┤       ├→ FN
        └→ QA ─┘
 ```
 
 ### Quick Workflow
 ```
-PL → DV → QA
+PL → DV → DR → QA
 ```
 
 ### Micro Execution
@@ -321,6 +322,19 @@ When decomposing work for parallel agents:
 2. Define interface contracts at ownership boundaries
 3. Create shared types/interfaces before parallel execution
 4. Never modify files owned by another agent without team-lead approval
+
+### TL-Initiated DV Splitting
+
+TL can split DV0 into parallel streams (DV0, DV1, DV2...) during coordination. Each stream runs in its own worktree after TL completes. The orchestrator picks up new tasks via `TaskList()` refresh — no loop changes needed.
+
+**Split criteria**: 2+ independent file groups with cleanly separable ownership and small interface surface between streams.
+
+**Anti-patterns**:
+- Splitting tightly coupled files across streams (causes merge conflicts)
+- Splitting small scope work (coordination overhead exceeds time saved)
+- Missing DR0 rewiring (DR0 must depend on ALL DVN tasks, not just DV0)
+
+**Coordination artifact**: TL documents the split in `.context/coordination.md` with a "Parallel Streams" section listing each stream's scope, file ownership, and interface contracts.
 
 ### Hypothesis-Driven Debugging
 
