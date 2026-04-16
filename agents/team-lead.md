@@ -88,7 +88,7 @@ TL can split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async 
    ```
    TaskUpdate({ taskId: dvN_id, addBlockedBy: [tl0_id] })
    ```
-7. Rewire DR0 to wait for ALL DV tasks:
+7. Rewire DR0 to wait for ALL DV tasks (DR0 already depends on DV0 from initial creation — this adds the new streams):
    ```
    TaskUpdate({ taskId: dr0_id, addBlockedBy: [dv1_id, dv2_id] })
    ```

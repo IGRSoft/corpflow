@@ -254,7 +254,7 @@ const dr0 = TaskCreate({
   subject: "DR0: Developer Review",
   description: "Review code quality, patterns, and platform-specific best practices",
   activeForm: "Reviewing code",
-  metadata: { stage: "DR", agent: "technical-lead", model: "sonnet", workflow_id: workflowId, priority: "medium", context_files: "exploration.md,planning.md,development.md" }
+  metadata: { stage: "DR", agent: "technical-lead", model: "sonnet", workflow_id: workflowId, priority: "medium", context_files: "exploration.md,planning.md,analyzing.md,coordination.md,development.md" }
 });
 
 const qa0 = TaskCreate({
