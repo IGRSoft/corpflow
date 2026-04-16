@@ -112,16 +112,16 @@ Savings: ~80% on overhead tokens
 |----------|--------|
 | Simple bug fix | Skip AR stage, minimal TL stage |
 | Documentation-only | Skip DV stage, minimal QA stage |
-| Hotfix | Use `quick:` workflow (PL→DV→QA only) |
+| Hotfix | Use `quick:` workflow (PL→DV→DR→QA only) |
 | Trivial change | Use `micro:` (plan → approve → execute) |
 
 **Workflow Selection Guide**:
 ```
 Complexity → Workflow → Stages → Est. Cost
 Trivial    → micro:   → 1      → $0.01-0.02
-Simple     → quick:   → 3      → $0.05-0.10
-Standard   → workflow:→ 8      → $0.20-0.40
-Complex    → workflow:→ 8+iter → $0.50-1.00+
+Simple     → quick:   → 4      → $0.05-0.10
+Standard   → workflow:→ 9      → $0.20-0.40
+Complex    → workflow:→ 9+iter → $0.50-1.00+
 ```
 
 ## Budget Tracking

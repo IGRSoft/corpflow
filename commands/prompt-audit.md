@@ -58,7 +58,7 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 **Issue**: Outdated workflow stage references
 **Location**: `agents/workflow-engineer.md:52`
 **Details**: References removed stage "R" (Review)
-**Fix**: Update to current 8-stage system (PL→AR→TL→DV→QA→DC→FN→ST)
+**Fix**: Update to current 9-stage system (PL→AR→TL→DV→DR→QA→DC→FN→ST)
 
 ### 2. Command: estimate
 **Issue**: Missing required section

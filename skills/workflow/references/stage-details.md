@@ -8,6 +8,7 @@
 | AR | opus | Complex architecture decisions |
 | TL | sonnet | Coordination and delegation |
 | DV | opus | Implementation depth |
+| DR | sonnet | Code review (read-only) |
 | SR | opus | Security analysis complexity |
 | QA | haiku | Test execution and validation |
 | DC | haiku | Documentation generation |
@@ -23,8 +24,9 @@ Override via Task `model` parameter when stage complexity warrants it. See `cost
 |-------|-------|-----------|
 | PL | product-manager | Requirements, acceptance criteria, test strategy, assess complexity, create subsequent stage tasks with `metadata.agent` |
 | AR | software-architector | Technical design, test architecture, validate PL sizing |
-| TL | team-lead | Coordinate approach, allocate resources |
+| TL | team-lead | Coordinate approach, allocate resources, split DV into parallel streams when warranted |
 | DV | developer | Implement solution + unit tests, run formatter, verify build + tests pass |
+| DR | technical-lead | Invoke /code-review-dev, produce developer-review.md |
 | SR | security-reviewer | OWASP audit, vulnerability scan |
 | QA | qa-engineer | Test plan, execute tests, all tests pass |
 | DC | technical-writer | Update docs, README, ARCHITECTURE |
@@ -38,7 +40,7 @@ Override via Task `model` parameter when stage complexity warrants it. See `cost
 Use `--ethics-review` for high-risk features:
 
 ```
-PL → ET → AR → TL → DV → QA → DC → FN → ST
+PL → ET → AR → TL → DV → DR → QA → DC → FN → ST
 ```
 
 **High-risk indicators**: User tracking, algorithmic recommendations, financial transactions, content moderation, AI/ML decisions, children/vulnerable populations.

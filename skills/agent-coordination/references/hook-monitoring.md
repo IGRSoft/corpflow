@@ -163,7 +163,7 @@ Use cases: stop teammate when its issue is complete, when milestone budget is ex
 
 | Workflow Pattern | Subagents | Agent Teams |
 |-----------------|-----------|-------------|
-| Standard 8/10-stage | Default | Not recommended |
+| Standard 9/11-stage | Default | Not recommended |
 | Cross-plugin handoff (DV→apple-developer) | Default | Not applicable |
 | Milestone sequential issues | Default (orchestrator) | Not recommended |
 | Milestone parallel independent issues | Task-based tracks | Optional (experimental) |

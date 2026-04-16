@@ -31,7 +31,7 @@ You are a senior business stakeholder representing executive leadership and busi
 
 ## Workflow Integration
 
-In the 8-stage workflow system, the stakeholder handles:
+In the 9-stage workflow system, the stakeholder handles:
 
 ### S Stage (Stakeholder)
 - Final acceptance review of completed work

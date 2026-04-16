@@ -72,7 +72,7 @@ When planning features, define the test strategy in planning.md. Include: test s
 
 ## Workflow Integration
 
-In the 8-stage workflow system, the product-manager handles:
+In the 9-stage workflow system, the product-manager handles:
 
 ### PL0 Stage (Planning)
 - **Detect workspace context** from task metadata
@@ -98,11 +98,11 @@ Use the **Unified Complexity Assessment** from `skills/workflow/SKILL.md § Dyna
 1. **Assess complexity** using the 5-factor table (patterns, integration, concerns, risk, docs)
 2. **Sum scores** (0-50 total)
 3. **Create stage tasks** based on score (each with `metadata.agent` for executor resolution):
-   - Score 0-10 (Low): Create DV0, QA0
-   - Score 11-20 (Medium): Create AR0, DV0, QA0
-   - Score 21-30 (Moderate): Create AR0, TL0, DV0, QA0
-   - Score 31-40 (High): Create AR0, TL0, DV0, QA0, DC0, FN0, ST0
-   - Score 41-50 (Critical): Create AR0, TL0, DV0, SR0, QA0, DC0, RE0, FN0, ST0
+   - Score 0-10 (Low): Create DV0, DR0, QA0
+   - Score 11-20 (Medium): Create AR0, DV0, DR0, QA0
+   - Score 21-30 (Moderate): Create AR0, TL0, DV0, DR0, QA0
+   - Score 31-40 (High): Create AR0, TL0, DV0, DR0, QA0, DC0, FN0, ST0
+   - Score 41-50 (Critical): Create AR0, TL0, DV0, DR0, SR0, QA0, DC0, RE0, FN0, ST0
 
 4. **Set dependency chain** between created tasks using `TaskUpdate({ addBlockedBy })`
 5. **Mark PL0 completed** after creating all stage tasks
@@ -116,6 +116,7 @@ Bare names resolve to `igrsoft:{name}`. Fully-qualified names (containing `:`) a
 | AR0 | software-architector | or `apple-developer:apple-architector` for Apple-only |
 | TL0 | team-lead | |
 | DV0 | developer | or `apple-developer:apple-developer`, `apple-developer:ios-developer`, etc. |
+| DR0 | technical-lead | Invokes /code-review-dev |
 | SR0 | security-reviewer | or `apple-developer:security-auditor`, `security-scanning:security-auditor` |
 | QA0 | qa-engineer | |
 | DC0 | technical-writer | |

@@ -72,7 +72,7 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 | Unknowns | 2 | Well-documented OAuth providers |
 
 ### Recommended Workflow
-**Tier**: `workflow:` (Full 8-stage)
+**Tier**: `workflow:` (Full 9-stage)
 **Rationale**: Security-sensitive, multiple files, requires architecture review
 
 ### Resource Requirements
@@ -175,9 +175,9 @@ See `skills/shared/three-stage-planning.md` for stage definitions, sequential ru
 IF size = XS AND no security concerns:
   → micro: (direct edit)
 ELSE IF size <= S AND single component:
-  → quick: (PL → DV → QA)
+  → quick: (PL → DV → DR → QA)
 ELSE IF size <= L:
-  → workflow: (full 8-stage)
+  → workflow: (full 9-stage)
 ELSE:
   → Consider splitting into smaller tasks
 ```

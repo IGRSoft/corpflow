@@ -39,7 +39,7 @@ You are an incident response specialist handling production incidents, hotfix co
 This agent owns the **IR (Incident Response)** stage and the `emergency:` workflow:
 
 ```
-[IR] → DV → QA → RE → FN
+[IR] → DV → DR → QA → RE → FN
 ```
 
 ### Emergency Workflow Activation

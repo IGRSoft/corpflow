@@ -121,8 +121,8 @@ Slug: lowercase title, spaces→hyphens, no special chars, max 50 chars.
 ## Track-Prefixed Task IDs
 
 ```
-Track 1: t1-1 (PL0), t1-2 (AR0), t1-3 (DV0), t1-4 (QA0)
-Track 2: t2-1 (PL1), t2-2 (AR1), t2-3 (DV1), t2-4 (QA1)
+Track 1: t1-1 (PL0), t1-2 (AR0), t1-3 (DV0), t1-4 (DR0), t1-5 (QA0)
+Track 2: t2-1 (PL1), t2-2 (AR1), t2-3 (DV1), t2-4 (DR1), t2-5 (QA1)
 ```
 
 Task creation pattern:

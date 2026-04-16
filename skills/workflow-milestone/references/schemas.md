@@ -95,7 +95,7 @@
   "git": { "branch_name": "feature/42-add-login-flow", "base_branch": "develop" },
   "workflow": { "track": 1, "task_prefix": "t1", "complexity_score": 18 },
   "execution": { "current_stage": "DV", "retry_count": 0 },
-  "task_ids": { "PL": "t1-1", "AR": "t1-2", "DV": "t1-3", "QA": "t1-4" }
+  "task_ids": { "PL": "t1-1", "AR": "t1-2", "DV": "t1-3", "DR": "t1-4", "QA": "t1-5" }
 }
 ```
 
@@ -113,6 +113,6 @@
   },
   "workflow": { "track": 1, "task_prefix": "t1", "complexity_score": 18 },
   "execution": { "current_stage": "DV", "retry_count": 0 },
-  "task_ids": { "PL": "t1-1", "AR": "t1-2", "DV": "t1-3", "QA": "t1-4" }
+  "task_ids": { "PL": "t1-1", "AR": "t1-2", "DV": "t1-3", "DR": "t1-4", "QA": "t1-5" }
 }
 ```

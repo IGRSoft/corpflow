@@ -177,7 +177,7 @@ This command is used by:
 - Manually, when a new Claude Code version adds features the plugin should leverage
 - As a prerequisite before running `/prompt-audit`
 
-Not part of the 8/10-stage workflow — standalone maintenance command with stage code **PE**. Recommended cadence: run within one week of each Claude Code release. Use `--dry-run` first to review impact scope, then apply.
+Not part of the 9/11-stage workflow — standalone maintenance command with stage code **PE**. Recommended cadence: run within one week of each Claude Code release. Use `--dry-run` first to review impact scope, then apply.
 
 ## Edge Cases
 

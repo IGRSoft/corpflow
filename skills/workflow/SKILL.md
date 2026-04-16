@@ -11,10 +11,10 @@ Single source of truth for task workflow management using the Task System.
 ## Workflow Evolution (v2.0)
 
 ```
-8-stage:  PL → AR → TL → DV → QA → DC → FN → ST
-10-stage: PL → AR → TL → DV → SR → QA → DC → RE → FN → ST
-                             ↑              ↑
-                       Security Review    Release Engineering
+9-stage:   PL → AR → TL → DV → DR → QA → DC → FN → ST
+11-stage:  PL → AR → TL → DV → DR → SR → QA → DC → RE → FN → ST
+                              ↑              ↑
+                        Developer Review  Security Review (optional)
 ```
 
 **Stage codes and triggers**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md` and `${CLAUDE_SKILL_DIR}/../shared/workflow-triggers.md`
@@ -41,11 +41,11 @@ PL0 assesses complexity and creates only the stages needed. No pre-creation or d
 
 | Score | Complexity | PL0 Creates |
 |-------|------------|-------------|
-| 0-10 | Low | DV0, QA0 |
-| 11-20 | Medium | AR0, DV0, QA0 |
-| 21-30 | Moderate | AR0, TL0, DV0, QA0 |
-| 31-40 | High | AR0, TL0, DV0, QA0, DC0, FN0, ST0 |
-| 41-50 | Critical | AR0, TL0, DV0, SR0, QA0, DC0, RE0, FN0, ST0 |
+| 0-10 | Low | DV0, DR0, QA0 |
+| 11-20 | Medium | AR0, DV0, DR0, QA0 |
+| 21-30 | Moderate | AR0, TL0, DV0, DR0, QA0 |
+| 31-40 | High | AR0, TL0, DV0, DR0, QA0, DC0, FN0, ST0 |
+| 41-50 | Critical | AR0, TL0, DV0, DR0, SR0, QA0, DC0, RE0, FN0, ST0 |
 
 **Security-sensitive features** auto-include SR0:
 - Authentication/authorization, payment processing, PII handling
@@ -100,9 +100,10 @@ See `milestone-workflow.md` for full workspace documentation.
 ### W + Q Parallel (Default)
 
 ```typescript
-TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // QA ← DV
-TaskUpdate({ taskId: "6", addBlockedBy: ["4"] });  // DC ← DV
-TaskUpdate({ taskId: "7", addBlockedBy: ["5", "6"] });  // FN ← QA AND DC
+TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // DR ← DV
+TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // QA ← DR
+TaskUpdate({ taskId: "7", addBlockedBy: ["5"] });  // DC ← DR
+TaskUpdate({ taskId: "8", addBlockedBy: ["6", "7"] });  // FN ← QA AND DC
 ```
 
 Use `--sequential` when DC requires test results.
@@ -115,7 +116,8 @@ Use the `Monitor` tool to stream events from background processes during workflo
 
 - AR before PL (needs requirements)
 - DV before TL (needs coordination)
-- QA before DV (can't test unwritten code)
+- DR before DV (can't review unwritten code)
+- QA before DR (DR must review code before QA tests)
 
 ## Error Handling
 
@@ -126,9 +128,9 @@ Each stage: max 3 retries. Track via task metadata or error.md.
 ### Escalation Chains
 
 ```
-10-stage: ST → FN → RE → DC → QA → SR → DV → TL → AR → PL → USER
-8-stage:  ST → FN → DC → QA → DV → TL → AR → PL → USER
-Emergency: FN → RE → QA → DV → IR → USER
+11-stage: ST → FN → RE → DC → QA → SR → DR → DV → TL → AR → PL → USER
+9-stage:  ST → FN → DC → QA → DR → DV → TL → AR → PL → USER
+Emergency: FN → RE → QA → DR → DV → IR → USER
 ```
 
 Document errors in `.context/error.md` with problem, root cause, attempted solutions.
@@ -140,8 +142,9 @@ Document errors in `.context/error.md` with problem, root cause, attempted solut
 | Test Strategy | PL → AR |
 | Test Architecture | AR → TL |
 | Code Format | DV complete |
-| Build Pass | DV → QA |
-| Unit Tests Written + Pass | DV → QA |
+| Build Pass | DV → DR |
+| Unit Tests Written + Pass | DV → DR |
+| Developer Review Pass | DR → QA |
 | All Tests Pass (Unit + Integration + E2E) | QA → DC |
 
 ## Optimization Hooks
@@ -170,7 +173,7 @@ Before executing any workflow stage, the orchestrator MUST validate:
 
 1. **TaskList check**: Call `TaskList()` and verify at least one task exists with `metadata.workflow_id` matching the current workflow
 2. **PL0 exists**: Verify a task with subject starting with `PL0:` exists
-3. **Stage tasks exist**: After PL0 completes, verify PL0 created subsequent stage tasks (at minimum DV0 and QA0 for any complexity level)
+3. **Stage tasks exist**: After PL0 completes, verify PL0 created subsequent stage tasks (at minimum DV0, DR0, and QA0 for any complexity level)
 
 If validation fails:
 - No tasks exist → Workflow not initialized. Re-run initialization (TaskCreate PL0)
@@ -230,6 +233,12 @@ while (tasks.some(t => t.status !== "completed")) {
     if (full.metadata.stage === "DV" && workflow_embedded_commands) {
       const skillInvocation = `IMPORTANT: Before implementing, invoke the embedded command via Skill tool: Skill("${embedded_cmd}", args="${embedded_args}")`;
       full.description = skillInvocation + "\n\n" + full.description;
+    }
+
+    // 5b. Inject code-review-dev Skill invocation for DR stages
+    if (full.metadata.stage === "DR") {
+      const reviewInvocation = `IMPORTANT: Execute developer code review via Skill tool: Skill("code-review-dev"). Save findings summary to .context/developer-review.md`;
+      full.description = reviewInvocation + "\n\n" + full.description;
     }
 
     // 6. Delegate to stage agent

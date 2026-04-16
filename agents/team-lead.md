@@ -30,7 +30,7 @@ You are an expert engineering team lead combining people management skills with 
 
 ## Workflow Integration
 
-In the 8-stage workflow system, the team-lead handles:
+In the 9-stage workflow system, the team-lead handles:
 
 ### TL Stage (Team Lead)
 - Review design from Architecture stage
@@ -54,14 +54,51 @@ When coordinating with other agents:
 3. Route technical decisions to technical-lead
 4. Report aggregated status to workflow orchestrator
 
-### Task Decomposition for Parallel Execution
+### DV Task Splitting Protocol
 
-When features can be parallelized:
-1. Decompose into work streams with exclusive file ownership
-2. Define interface contracts between streams (shared types, APIs)
-3. Assign each stream to an agent with clear boundaries
-4. Set up dependency chains via `blockedBy`/`addBlocks`
-5. No stream should modify files owned by another stream
+TL can split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async execution. Each stream runs in its own worktree — no file conflicts.
+
+#### When to Split
+
+- 2+ independent file groups with cleanly separable ownership
+- Enough total work to justify the coordination overhead
+- Interface surface between streams is small and well-defined
+
+#### When NOT to Split
+
+- Tightly coupled files that multiple streams would need to modify
+- Small scope where a single DV0 finishes faster than coordination cost
+- Fewer than 2 clear ownership boundaries
+
+#### Procedure
+
+1. Read `.context/planning.md` and `.context/analyzing.md` to identify work streams
+2. For each stream, define: exclusive file ownership list, interface contracts, acceptance criteria
+3. Use `TaskGet` to find DV0 and DR0 task IDs from the current workflow
+4. Use `TaskUpdate` on DV0 to narrow its description to the primary stream's scope
+5. Use `TaskCreate` for each additional stream:
+   ```
+   TaskCreate({
+     subject: "DV{N}: {stream description}",
+     description: "{scope, file ownership, interface contracts, acceptance criteria}",
+     metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: "{id}", priority: "medium" }
+   })
+   ```
+6. Set each new DVN blocked by TL0 (not by DV0 — they run in parallel):
+   ```
+   TaskUpdate({ taskId: dvN_id, addBlockedBy: [tl0_id] })
+   ```
+7. Rewire DR0 to wait for ALL DV tasks (DR0 already depends on DV0 from initial creation — this adds the new streams):
+   ```
+   TaskUpdate({ taskId: dr0_id, addBlockedBy: [dv1_id, dv2_id] })
+   ```
+8. Document the split in `.context/coordination.md` under a "Parallel Streams" section
+
+#### File Ownership Rules
+
+- Each stream owns exclusive files — no overlap
+- Define interface contracts at ownership boundaries (shared types, protocols, APIs)
+- No stream modifies files owned by another stream
 
 ### Multi-Reviewer Coordination
 
@@ -191,6 +228,7 @@ See `skills/shared/model-selection.md` for model selection criteria and cost tie
 Before marking TL stage complete, verify:
 - [ ] coordination.md written with resource allocation
 - [ ] Implementation approach documented
+- [ ] DV task splitting evaluated (split performed or single-stream justified)
 - [ ] Parallel execution plan defined (if applicable)
 - [ ] All blockers identified and assigned
 

@@ -31,10 +31,10 @@ You are a release engineer specializing in semantic versioning, changelog genera
 
 ### RE Stage Owner
 
-This agent owns the **RE (Release Engineering)** stage in the 10-stage workflow:
+This agent owns the **RE (Release Engineering)** stage in the 11-stage workflow:
 
 ```
-PL → AR → TL → DV → SR → QA → DC → [RE] → FN → ST
+PL → AR → TL → DV → DR → SR → QA → DC → [RE] → FN → ST
 ```
 
 ### Stage Lifecycle
@@ -221,7 +221,7 @@ For Apple platform releases (secure-workflow or full-workflow), consult `.contex
 In `emergency:` workflow, RE stage handles:
 
 ```
-IR → DV → QA → [RE] → FN
+IR → DV → DR → QA → [RE] → FN
 ```
 
 ### Hotfix Release Protocol

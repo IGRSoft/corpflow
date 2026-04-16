@@ -127,8 +127,8 @@ Location: `.worktrees/orchestrator.json`
 Each issue runs the full staged workflow independently:
 
 ```
-Issue #27 → feature/27-watermark → PL→AR→TL→DV→QA→DC→FN→ST → PR → complete
-Issue #26 → feature/26-font-family → PL→AR→TL→DV→QA→DC→FN→ST → PR → complete
+Issue #27 → feature/27-watermark → PL→AR→TL→DV→DR→QA→DC→FN→ST → PR → complete
+Issue #26 → feature/26-font-family → PL→AR→TL→DV→DR→QA→DC→FN→ST → PR → complete
 ```
 
 See `shared/milestone-helpers.md` for helper functions.
@@ -250,17 +250,25 @@ const dv0 = TaskCreate({
   metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium", context_files: "exploration.md,planning.md,analyzing.md,coordination.md" }
 });
 
+const dr0 = TaskCreate({
+  subject: "DR0: Developer Review",
+  description: "Review code quality, patterns, and platform-specific best practices",
+  activeForm: "Reviewing code",
+  metadata: { stage: "DR", agent: "technical-lead", model: "sonnet", workflow_id: workflowId, priority: "medium", context_files: "exploration.md,planning.md,analyzing.md,coordination.md,development.md" }
+});
+
 const qa0 = TaskCreate({
   subject: "QA0: QA Testing",
   description: "Test theme switching, contrast ratios, persistence",
   activeForm: "Testing solution",
-  metadata: { stage: "QA", agent: "qa-engineer", model: "haiku", workflow_id: workflowId, priority: "medium", context_files: "exploration.md,planning.md,testing.md" }
+  metadata: { stage: "QA", agent: "qa-engineer", model: "haiku", workflow_id: workflowId, priority: "medium", context_files: "exploration.md,planning.md,developer-review.md,testing.md" }
 });
 
 // Chain dependencies using captured IDs (PL0 is taskId "1" from initial creation)
 TaskUpdate({ taskId: ar0, addBlockedBy: ["1"] });  // AR0 ← PL0
 TaskUpdate({ taskId: dv0, addBlockedBy: [ar0] });  // DV0 ← AR0
-TaskUpdate({ taskId: qa0, addBlockedBy: [dv0] });  // QA0 ← DV0
+TaskUpdate({ taskId: dr0, addBlockedBy: [dv0] });  // DR0 ← DV0
+TaskUpdate({ taskId: qa0, addBlockedBy: [dr0] });  // QA0 ← DR0
 
 // Mark PL0 completed
 TaskUpdate({ taskId: "1", status: "completed" });
@@ -299,23 +307,62 @@ Task({
 
 ## Stage Sub-Task Splitting
 
-Any stage agent (except PL) can split its work into sub-tasks:
+Two patterns for splitting DV into sub-tasks:
+
+### TL-Initiated Split (Parallel Streams)
+
+TL creates DVN tasks during coordination. All streams run concurrently after TL completes. DR0 waits for all.
+
+```
+                  ┌→ DV0 ─┐
+PL0 → AR0 → TL0 ─┤→ DV1 ─├→ DR0 → QA0
+                  └→ DV2 ─┘
+```
+
+```typescript
+// TL narrows DV0 scope to primary stream
+TaskUpdate({ taskId: dv0_id, description: "Implement theme color tokens (owns: Source/Theme/Colors/)" });
+
+// TL creates parallel streams
+const dv1 = TaskCreate({
+  subject: "DV1: Implement theme switcher",
+  description: "Add toggle and persistence (owns: Source/Settings/Theme/)",
+  metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium" }
+});
+
+const dv2 = TaskCreate({
+  subject: "DV2: Implement dark mode assets",
+  description: "Create dark variants for all image assets (owns: Assets/Dark/)",
+  metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium" }
+});
+
+// All DVN blocked by TL0 (not DV0) — enables true parallelism
+TaskUpdate({ taskId: dv1, addBlockedBy: [tl0_id] });
+TaskUpdate({ taskId: dv2, addBlockedBy: [tl0_id] });
+
+// DR0 must wait for ALL DV tasks
+TaskUpdate({ taskId: dr0_id, addBlockedBy: [dv1, dv2] });
+```
+
+### DV-Initiated Split (Sequential Sub-tasks)
+
+DV agent splits during its own execution. Sub-tasks are children of DV0 — sequential, not parallel.
 
 ```typescript
 // Developer splits DV0 into focused sub-tasks
-TaskCreate({
+const dv1 = TaskCreate({
   subject: "DV1: Implement theme color tokens",
   description: "Create semantic color tokens for light/dark themes",
   metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium" }
 });
 
-TaskCreate({
+const dv2 = TaskCreate({
   subject: "DV2: Implement theme switcher",
   description: "Add toggle and persistence for theme preference",
   metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium" }
 });
 
-// DV1 and DV2 can run in parallel or sequentially
-TaskUpdate({ taskId: "5", addBlockedBy: ["3"] });  // DV1 ← DV0
-TaskUpdate({ taskId: "6", addBlockedBy: ["3"] });  // DV2 ← DV0
+// Sequential: DV1 and DV2 blocked by DV0
+TaskUpdate({ taskId: dv1, addBlockedBy: [dv0_id] });
+TaskUpdate({ taskId: dv2, addBlockedBy: [dv0_id] });
 ```

@@ -33,7 +33,7 @@ Lead Session (workflow-engineer):
   1. Fetch milestone issues
   2. Create agent team with one teammate per issue (max 5)
   3. Each teammate: issue context, workspace path, branch name
-  4. Teammates execute independently: PL→DV→QA→FN
+  4. Teammates execute independently: PL→DV→DR→QA→FN
   5. Lead monitors via shared task list
   6. Each teammate creates its own PR
   7. Lead synthesizes results and cleans up team

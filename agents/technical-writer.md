@@ -112,7 +112,7 @@ Use PostgreSQL for relational data
 
 ## Workflow Integration
 
-In the 8-stage workflow system, the technical-writer handles:
+In the 9-stage workflow system, the technical-writer handles:
 
 ### DC Stage (Documentation)
 - **DC0**: Analyze artifacts, discover documentation needing updates

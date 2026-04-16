@@ -61,7 +61,7 @@ For documentation lookup, use Context7 (`resolve-library-id` → `query-docs`) o
 
 ## Workflow Integration
 
-In the 8-stage workflow system, the qa-engineer handles:
+In the 9-stage workflow system, the qa-engineer handles:
 
 ### Q Stage (QA Testing)
 - **Q0**: Analyze requirements, review DV's unit tests, identify coverage gaps

@@ -35,9 +35,9 @@ Initialize a new workflow task with proper folder structure and Task System inte
 
 | Type | Stages | Trigger |
 |------|--------|---------|
-| Standard | PL→AR→TL→DV→QA→DC→FN→ST | `/workflow` |
-| Secure | PL→AR→TL→DV→SR→QA→DC→RE→FN→ST | `--secure` |
-| Emergency | IR→DV→QA→RE→FN | `/emergency` |
+| Standard | PL→AR→TL→DV→DR→QA→DC→FN→ST | `/workflow` |
+| Secure | PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST | `--secure` |
+| Emergency | IR→DV→DR→QA→RE→FN | `/emergency` |
 
 See `skills/shared/stage-codes.md` for stage details.
 
@@ -53,7 +53,7 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--platform <apple\|android\|web\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
 | `--sequential` | DC waits for QA |
-| `--secure` / `--full` | Use 10-stage workflow |
+| `--secure` / `--full` | Use 11-stage workflow |
 | `--worktree` | Use git worktrees for issue isolation (requires --milestone). Configure `worktree.sparsePaths` in settings.json for large repos |
 
 ## Examples
