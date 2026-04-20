@@ -34,6 +34,8 @@ Two artifacts — two purposes — two locations.
 | `sim` | `launch_app_logs_sim`, `start_sim_log_cap` | `sim-iphone15-20260420-143201.log` |
 | `incident` | IR background tails | `incident-20260420-090512.log` |
 | `hotfix` | Emergency DV stream | `hotfix-auth-20260420-103344.log` |
+| `cost` | `SubagentStop` hook JSONL | `cost-dv-20260420-141522.jsonl` |
+| `audit` | Orchestrator/agent audit trail (append-only, no timestamp) | `audit.jsonl` |
 
 ### Scope
 

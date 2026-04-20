@@ -157,9 +157,10 @@ Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool ca
 
 ## Audit Trail
 
-Every material workflow action writes one JSONL line to `.context/audit.log`.
-This file is append-only and outlives individual stage artifacts — on resume or
-incident review, the audit tail is the single source of truth for what happened.
+Every material workflow action writes one JSONL line to `.context/logs/audit.jsonl`
+(routed under the `logs/` folder per `logging-conventions` skill). The file is
+append-only and outlives individual stage artifacts — on resume or incident
+review, the audit tail is the single source of truth for what happened.
 
 ### Writers
 
@@ -188,9 +189,10 @@ incident review, the audit tail is the single source of truth for what happened.
 ### Append Pattern (Bash)
 
 ```bash
+mkdir -p .context/logs
 jq -c --arg ts "$(date -u +%FT%TZ)" \
   '. + {ts: $ts}' <<< '{"actor":"orchestrator","action":"stage_transition","subject":"DV0→DR0","result":"ok","task_id":"4"}' \
-  >> .context/audit.log
+  >> .context/logs/audit.jsonl
 ```
 
 ### Retention

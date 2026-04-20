@@ -291,7 +291,7 @@ TS=$(date -u +%Y%m%d-%H%M%S)
 OUT=".context/logs/post-compact-${TS}.json"
 
 # 1. Audit tail — last 20 lines are enough to reconstruct stage transitions
-AUDIT_TAIL=$(tail -n 20 .context/audit.log 2>/dev/null | jq -sc '.' || echo '[]')
+AUDIT_TAIL=$(tail -n 20 .context/logs/audit.jsonl 2>/dev/null | jq -sc '.' || echo '[]')
 
 # 2. In-progress task (if any)
 IN_PROGRESS=$(ls -t .context/errors/*.md 2>/dev/null | head -n 1 || echo "")

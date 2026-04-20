@@ -322,7 +322,7 @@ while (tasks.some(t => t.status !== "completed")) {
 ## Resume After Interruption
 
 The orchestrator loop is restartable. On reattach (PostCompact, session crash,
-`--resume` flag), diagnose state via `TaskList()` + `.context/audit.log` tail
+`--resume` flag), diagnose state via `TaskList()` + `.context/logs/audit.jsonl` tail
 before resuming.
 
 ### State → Action Table
@@ -340,7 +340,7 @@ before resuming.
 
 ### Resume Procedure
 
-1. `tail -n 50 .context/audit.log | jq .` — last 50 audit lines
+1. `tail -n 50 .context/logs/audit.jsonl | jq .` — last 50 audit lines
 2. `TaskList()` — current Task System state
 3. Cross-reference with `stage-contracts.md` — identify first incomplete stage
 4. Re-read that stage's `.context/*.md` artifact (if partial)
