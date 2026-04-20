@@ -325,6 +325,50 @@ while (tasks.some(t => t.status !== "completed")) {
 - The orchestrator uses ONLY TaskCreate, TaskUpdate, TaskGet, TaskList, and Agent tools. Edit/Write/Bash on source files belong to stage agents, not the orchestrator
 - The orchestrator owns the loop; stage agents own their stage's work
 
+## Post-Workflow Self-Improvement
+
+After the execution loop exits (all tasks completed, including ST), the orchestrator runs a final check to handle any learnings captured at ST.
+
+### Post-ST Procedure
+
+1. **Check for learnings artifact:** `fs.existsSync(".context/learnings.md")`.
+   - Absent → nothing to do. Workflow complete.
+   - Present → continue.
+
+2. **Surface to user:** read `.context/learnings.md` and present it to the user. Focus attention on the `## Proposed Updates` checklist.
+
+3. **Wait for user approval decisions.** The user indicates which proposals to accept by checking boxes (`- [ ]` → `- [x]`). The orchestrator MUST NOT auto-check boxes or assume approval.
+
+4. **Read checked items:** parse `.context/learnings.md` for lines matching `- [x]` under `## Proposed Updates`. Each checked item is a proposal to apply.
+   - If zero checked items → skip to step 6.
+
+5. **Delegate to prompt-engineer** with one `Agent` call carrying the full list of checked proposals:
+   ```typescript
+   Task({
+     subagent_type: "igrsoft:prompt-engineer",
+     model: "opus",
+     prompt: `Apply self-improvement learnings from .context/learnings.md.
+              Apply ONLY checked items (- [x]). Follow the Apply Protocol in your agent definition.
+              Do not propose new changes; only apply approved ones.
+              Return a summary of applied/skipped proposals and the commit SHAs created.`
+   });
+   ```
+   The prompt-engineer applies each proposal as its own commit with a `version:` bump (see `agents/prompt-engineer.md § Self-Improvement Patch Application`).
+
+6. **Audit entry:** append one line to `.context/logs/audit.jsonl`:
+   ```json
+   {"actor": "orchestrator", "action": "self_improvement_applied", "subject": "<workflow_id>", "applied_count": N, "skipped_count": M, "result": "ok"}
+   ```
+
+7. **Terminate.** Workflow is now fully complete. Do not re-enter the execution loop.
+
+### Safety invariants
+
+- DO NOT apply proposals the user did not explicitly check.
+- DO NOT re-run self-improvement on the orchestrator's own post-ST activity (no recursion).
+- DO NOT modify `.context/learnings.md` after ST produced it; the prompt-engineer only reads it.
+- If `learnings.md` is malformed (no `## Proposed Updates` section) → log warning, skip apply, continue to terminate.
+
 ## Resume After Interruption
 
 The orchestrator loop is restartable. On reattach (PostCompact, session crash,

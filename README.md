@@ -285,6 +285,7 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 - `estimation/SKILL.md` - Complexity estimation methods
 - `milestone-workflow.md` - Milestone-based workflow tracking
 - `review/SKILL.md` - Senior review guidelines
+- `self-improvement/SKILL.md` - ST-stage retrospective: diff-based learning from user edits; writes `.context/learnings.md` with per-proposal approval checklist, scoped to in-context agents/skills/commands only
 - `workflow-testing-strategy.md` - Workflow-integrated testing planning for PL/AR stages
 
 ### Tools
@@ -353,6 +354,14 @@ ST → FN → QA → DV → TL → AR → PL → USER
 ```
 /standup                            # Check progress
 /context-status                     # Context analysis
+```
+
+### Post-Workflow Learning
+```
+/improve-yourself                   # Retrospective: propose agent/skill/command updates from user edits
+/improve-yourself --since <ref>     # Explicit baseline (default: last agent commit)
+/improve-yourself --dry-run         # Inspect proposals without applying
+/improve-yourself --apply           # Apply user-checked proposals via prompt-engineer
 ```
 
 ## License

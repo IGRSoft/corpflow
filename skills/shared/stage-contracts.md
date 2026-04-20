@@ -28,7 +28,7 @@ Single source of truth for what each workflow stage consumes, produces, and how 
 | **DC** | technical-writer | haiku | `.context/development.md`, `.context/analyzing.md` | `.context/documentation.md` with sections: Doc Changes, README Updates, API Docs | `documentation.md` exists + docs diff present | `.context/errors/technical-writer.md` |
 | **RE** | release-engineer | haiku | `.context/development.md`, `.context/testing.md`, `.context/documentation.md` | `.context/release-prep.md` with sections: Version Bump, Changelog, Deployment Checklist | `release-prep.md` exists + version bump proposed + changelog entry drafted | `.context/errors/release-engineer.md` |
 | **FN** | project-manager | opus | All upstream `.context/*.md` | `.context/complete.md` with sections: Summary, Files Changed, Stage Timings, Next Actions + commit/PR created | `complete.md` exists + commit created OR PR opened | `.context/errors/project-manager.md` |
-| **ST** | stakeholder | sonnet | `.context/complete.md` | `.context/approval.md` with sections: Decision, Feedback, Follow-ups | `approval.md` exists + Decision ∈ {approved, rejected, changes-requested} | `.context/errors/stakeholder.md` |
+| **ST** | stakeholder | sonnet | `.context/complete.md` | `.context/approval.md` with sections: Decision, Feedback, Follow-ups, Self-Improvement + **optional** `.context/learnings.md` (only when in-scope user changes detected — see `skills/self-improvement/SKILL.md`) | `approval.md` exists + Decision ∈ {approved, rejected, changes-requested} + `self-improvement` skill invocation recorded (either `learnings.md` present or log entry `Result: no-changes` in `.context/logs/self-improve-*.log`) | `.context/errors/stakeholder.md` |
 | **IR** | incident-responder | sonnet | User incident report | `.context/incident-report.md` with sections: Required Fix, Constraints, Blast Radius, Verification Command | `incident-report.md` exists + all 4 sections non-empty | `.context/errors/incident-responder.md` |
 | **ET** | ethics-reviewer | opus | `.context/planning.md` + high-risk keyword match | `.context/ethics-review.md` with sections: Risk Assessment, Mitigation, Decision | `ethics-review.md` exists + Decision ∈ {pass, block, conditional} | `.context/errors/ethics-reviewer.md` |
 
@@ -68,3 +68,4 @@ When TL splits DV into DV0/DV1/DV2 (parallel streams):
 - `skills/agent-coordination/SKILL.md` § Error Handling — retry/escalate matrix
 - `skills/logging-conventions/SKILL.md` — raw capture paths (`.context/logs/`)
 - `skills/task-folder-organization/SKILL.md` — artifact naming and retention
+- `skills/self-improvement/SKILL.md` — optional `.context/learnings.md` produced at ST
