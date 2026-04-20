@@ -198,7 +198,7 @@ Task({
 
 ### Real-Time Log Streaming (v2.1.98+)
 
-Use the `Monitor` tool to stream events from background log capture scripts. Start a background Bash process and Monitor its output for real-time incident investigation instead of polling log files with Read. Tee capture to `.context/logs/incident-<YYYYMMDD-HHMMSS>.log` (see `logging-conventions` skill) so the tail survives the session and can be cited in `incident-report.md`.
+Use the `Monitor` tool to stream events from background log capture scripts. Start a background Bash process and Monitor its output for real-time incident investigation instead of polling log files with Read. Tee capture to `.context/logs/incident-<YYYYMMDD-HHMMSS>.log` (see `logging-conventions` skill) for persistence into `incident-report.md`.
 
 ### Observability-Driven Investigation
 

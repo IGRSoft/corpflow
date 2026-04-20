@@ -17,7 +17,6 @@ Two artifacts — two purposes — two locations.
 | `error.md` | `.context/error.md` | Human / agent narrative | Escalation story: what went wrong, retry count, handoff context |
 | `*.log` | `.context/logs/` | Machine-written stdout/stderr | Raw runtime capture for post-hoc inspection |
 
-Never conflate them. If you are writing sentences, it belongs in `error.md`. If you are piping a stream, it belongs in `logs/`.
 
 ## Filename Grammar
 
@@ -66,8 +65,8 @@ When called from Claude Code's `Bash` tool with `run_in_background: true`, use t
 ## Cleanup & Retention
 
 - **Per-task hygiene**: `.context/logs/` is cleared together with the rest of `.context/` when the task archives (workflow FN stage or `/workflow` completion).
-- **Size guard**: Agents should truncate logs > 10 MB by rotating to `<name>.1.log`, `<name>.2.log` (keep last 3).
-- **Secrets**: Do not log secrets, tokens, or keychain data. If a tool prints them, redact before `tee` (e.g., `sed -E 's/(token=)[^ ]+/\1REDACTED/'`).
+- **Size guard**: Each filename has a unique timestamp, so no rotation. Large logs remain readable; agents should stream or truncate on disk if needed.
+- **Secrets**: Do not log secrets, tokens, or keychain data. If a tool prints them, redact before `tee` (e.g., `sed -E 's/(authorization|api[_-]?key|password|token|secret|bearer)[=:]\s*\S+/\1=REDACTED/'`). This pattern is starter-level; review the output to ensure no credentials leaked.
 - **Git**: `.context/` follows the project's existing ignore policy — no special handling.
 
 ## Cross References
