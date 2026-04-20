@@ -70,7 +70,7 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
     },
     "context_files": {
       "type": "string",
-      "pattern": "^([a-z0-9/_.-]+\\.(md|json|png|jpg|pen)(,[a-z0-9/_.-]+\\.(md|json|png|jpg|pen))*)?$"
+      "pattern": "^([a-z0-9/_.-]+\\.(md|json|jsonl|png|jpg|pen)(,[a-z0-9/_.-]+\\.(md|json|jsonl|png|jpg|pen))*)?$"
     },
     "error_file": {
       "type": "string",
@@ -82,7 +82,7 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
       "maximum": 3
     },
     "error_escalated_to": {
-      "enum": ["PL", "AR", "TL", "DV", "DR", "SR", "QA", "DC", "RE", "FN"]
+      "enum": ["PL", "AR", "TL", "DV", "DR", "SR", "QA", "DC", "RE", "FN", "ST", "IR", "ET"]
     },
     "track": {
       "type": "integer",

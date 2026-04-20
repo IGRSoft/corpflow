@@ -82,7 +82,7 @@ When called from Claude Code's `Bash` tool with `run_in_background: true`, use t
 
 1. **Writing runtime output into `errors/<agent>.md`** — those files are for narrative escalation; raw captures belong in `logs/`.
 2. **Writing to `.context/error.md`** — retired path. Use `.context/errors/<agent>.md` (per-agent) instead.
-2. **Missing timestamp** — without it, re-runs clobber prior evidence. Always include `$(date -u +%Y%m%d-%H%M%S)`.
-3. **Scattering to `/tmp`** — logs outside `.context/` are invisible to downstream stages and get lost on workspace reset.
-4. **Logging secrets** — redact before `tee`; never commit logs that might contain credentials.
-5. **Creating a sibling `log/` folder** — canonical name is `logs/` (plural). One folder per project.
+3. **Missing timestamp** — without it, re-runs clobber prior evidence. Always include `$(date -u +%Y%m%d-%H%M%S)`.
+4. **Scattering to `/tmp`** — logs outside `.context/` are invisible to downstream stages and get lost on workspace reset.
+5. **Logging secrets** — redact before `tee`; never commit logs that might contain credentials.
+6. **Creating a sibling `log/` folder** — canonical name is `logs/` (plural). One folder per project.

@@ -155,7 +155,7 @@ mkdir -p .context/logs
 STAGE="${CLAUDE_TASK_METADATA_STAGE:-unknown}"
 TS=$(date -u +%Y%m%d-%H%M%S)
 LOG=".context/logs/cost-${STAGE}-${TS}.jsonl"
-jq -c --arg ts "$(date -u +%FT%TZ)" '{
+jq -cn --arg ts "$(date -u +%FT%TZ)" '{
   ts: $ts,
   agent_type: env.CLAUDE_SUBAGENT_TYPE,
   task_id: env.CLAUDE_TASK_ID,
@@ -165,7 +165,7 @@ jq -c --arg ts "$(date -u +%FT%TZ)" '{
   output_tokens: (env.CLAUDE_OUTPUT_TOKENS // "0" | tonumber),
   duration_ms: (env.CLAUDE_DURATION_MS // "0" | tonumber),
   status: env.CLAUDE_SUBAGENT_STATUS
-}' /dev/null >> "$LOG"
+}' >> "$LOG"
 ```
 
 ### Schema

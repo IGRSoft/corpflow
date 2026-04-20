@@ -294,6 +294,12 @@ OUT=".context/logs/post-compact-${TS}.json"
 AUDIT_TAIL=$(tail -n 20 .context/logs/audit.jsonl 2>/dev/null | jq -sc '.' || echo '[]')
 
 # 2. In-progress task (if any)
+# NOTE: mtime ordering of error files is unreliable — file timestamps do not
+# correlate with task state. Correct approach: query the Task System via
+# TaskList for status=in_progress, or parse the tail of audit.jsonl to find
+# the most recent `subagent_stopped` entry without a matching `completed`.
+# Then derive the owning agent/stage and read `.context/errors/<agent>.md`.
+# The line below is a best-effort fallback for reference only.
 IN_PROGRESS=$(ls -t .context/errors/*.md 2>/dev/null | head -n 1 || echo "")
 
 # 3. Emit recovery blob

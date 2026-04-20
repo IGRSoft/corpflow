@@ -370,7 +370,7 @@ the orchestrator is expected to `STOP IMMEDIATELY` and wait for the user. A
     "PreToolUse": [
       {
         "matcher": "Write|Edit|Bash",
-        "if": "task:PL0.status == 'completed' && !audit:approval_received",
+        "if": "test -f .context/logs/audit.jsonl && ! grep -q approval_received .context/logs/audit.jsonl",
         "command": ".claude/hooks/approval-gate.sh",
         "mode": "warn"
       }
