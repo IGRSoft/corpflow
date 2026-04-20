@@ -53,7 +53,6 @@
     "enter-worktree-path",
     "plugin-monitors",
     "prompt-caching-1h",
-    "subagent-stall-timeout",
-    "sandbox-denied-domains"
+    "subagent-stall-timeout"
   ]
 }

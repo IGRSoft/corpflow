@@ -101,8 +101,8 @@ When planning workflows with ethics components:
 
 | Ethics Activity | Typical Tokens | Model | Est. Cost |
 |-----------------|----------------|-------|-----------|
-| Quick ethics check | 2,000-5,000 | sonnet | $0.006-0.015 |
-| Standard ethics review | 5,000-10,000 | sonnet | $0.015-0.03 |
+| Quick ethics check | 2,000-5,000 | opus | $0.03-0.075 |
+| Standard ethics review | 5,000-10,000 | opus | $0.075-0.15 |
 | Comprehensive ethics audit | 15,000-30,000 | opus | $0.225-0.45 |
 | Hard constraint analysis | 5,000-10,000 | opus | $0.075-0.15 |
 
