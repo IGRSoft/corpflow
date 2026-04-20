@@ -35,7 +35,8 @@ project-root/
 ├── .context/           # Workflow artifacts
 │   ├── planning.md
 │   ├── designs/        # Designer-generated .pen mockups
-│   └── images/         # User-attached screenshots, diagrams
+│   ├── images/         # User-attached screenshots, diagrams
+│   └── logs/           # Runtime capture logs (build, test, monitor, sim, incident)
 ├── src/
 ├── tests/
 └── ...
@@ -45,7 +46,7 @@ project-root/
 
 ### Flat Layout
 
-All markdown files are stored directly in `.context/` (no subfolders except for `designs/` and `images/`):
+All markdown files are stored directly in `.context/` (no subfolders except for `designs/`, `images/`, and `logs/`):
 
 ```
 .context/
@@ -64,7 +65,8 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 ├── deployment.md            # Deployment plan (if applicable)
 ├── error.md                 # Error log for escalations (created on errors)
 ├── designs/                 # Design assets: Figma screenshots (.png) and Pencil mockups (.pen)
-└── images/                  # User-attached screenshots, diagrams
+├── images/                  # User-attached screenshots, diagrams
+└── logs/                    # Runtime capture logs: build/test/monitor/sim/incident/hotfix
 ```
 
 ### Required Files
@@ -105,6 +107,18 @@ Product Manager's planning document containing:
 - **milestone.json**: GitHub milestone context (when `--milestone` used)
 - **deployment.md**: Deployment plan (if applicable)
 - **error.md**: Error log for escalation scenarios
+- **logs/**: Runtime capture logs (see `logging-conventions` skill)
+
+### Runtime Logs (`logs/`)
+
+`logs/` holds **raw runtime capture** — background `Bash` stdout, `Monitor`-tool streams, simulator log captures, and incident-investigation tails. It is **distinct from `error.md`**:
+
+| Artifact | Lives At | Contains |
+|----------|----------|----------|
+| `error.md` | `.context/error.md` | Human-authored escalation narrative |
+| `*.log`   | `.context/logs/`    | Machine-written raw runtime output |
+
+Filename grammar: `<kind>-<scope>-<timestamp>.log` where `<kind>` ∈ {build, test, monitor, sim, incident, hotfix}. See the `logging-conventions` skill for patterns, examples, and cleanup policy.
 
 ### Milestone Context File (`milestone.json`)
 
@@ -138,6 +152,7 @@ Files are named by **workflow stage** and stored in `.context/`:
 | **incident-report.md** | **IR (Incident Response)** | **incident-responder** |
 | deployment.md | Optional | deployment-engineer |
 | error.md | On error | Any agent |
+| logs/*.log | Runtime capture | Any agent with Bash/Monitor |
 
 ### Documentation Standards
 
@@ -157,7 +172,7 @@ See references/ for detailed examples of folder structures across workflow varia
 
 1. **No .context folder**: Documenting in random locations
 2. **Skipping Task System initialization**: No way to track progress
-3. **Creating subfolders**: Keep all .md files in .context/ root (except designs/ and images/)
+3. **Creating subfolders**: Keep all .md files in .context/ root (except `designs/`, `images/`, and `logs/`)
 4. **Ignoring errors**: Always create error.md when escalation is needed
 5. **Multiple context folders**: Only one .context/ per project
 6. **Wrong .context/ location in worktree mode**: In worktree mode, `.context/` must be inside the worktree directory, not in the main repo's `.workspaces/`
@@ -167,6 +182,6 @@ See references/ for detailed examples of folder structures across workflow varia
 1. **Always create .context/**: Even for small tasks
 2. **Document decisions**: Explain WHY, not just WHAT
 3. **Update Task System**: Keep task status current
-4. **Flat structure**: All .md files in .context/ (designs/ and images/ are the only subdirectories)
+4. **Flat structure**: All .md files in .context/ (`designs/`, `images/`, and `logs/` are the only subdirectories)
 5. **Log errors**: Create error.md when issues require escalation
 6. **Clean up**: Archive or clear .context/ when starting new tasks

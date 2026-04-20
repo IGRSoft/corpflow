@@ -55,7 +55,7 @@ Prefer XcodeBuildMCP tools over raw `xcodebuild` commands:
 2. `test_sim` → run tests (replaces `xcodebuild test`)
 3. `get_coverage_report` / `get_file_coverage` → coverage analysis (replaces manual lcov parsing)
 
-For long test runs, combine with Monitor tool: start `test_sim` via Bash with `run_in_background`, then use Monitor to stream pass/fail events in real time (v2.1.98+).
+For long test runs, combine with Monitor tool: start `test_sim` via Bash with `run_in_background`, then use Monitor to stream pass/fail events in real time (v2.1.98+). Tee stdout to `.context/logs/test-qa-<YYYYMMDD-HHMMSS>.log` for persistence into `testing.md` (see `logging-conventions` skill).
 
 For documentation lookup, use Context7 (`resolve-library-id` → `query-docs`) or Ref (`ref_search_documentation`).
 
