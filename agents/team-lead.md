@@ -76,12 +76,17 @@ TL can split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async 
 2. For each stream, define: exclusive file ownership list, interface contracts, acceptance criteria
 3. Use `TaskGet` to find DV0 and DR0 task IDs from the current workflow
 4. Use `TaskUpdate` on DV0 to narrow its description to the primary stream's scope
-5. Use `TaskCreate` for each additional stream:
+5. Use `TaskCreate` for each additional stream. All DVN share `developer.md` — retry sections are scoped per-task (`## DV1 Retry N`, `## DV2 Retry N`):
    ```
    TaskCreate({
      subject: "DV{N}: {stream description}",
      description: "{scope, file ownership, interface contracts, acceptance criteria}",
-     metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: "{id}", priority: "medium" }
+     metadata: {
+       stage: "DV", agent: "developer", model: "opus",
+       error_file: ".context/errors/developer.md",
+       context_files: "planning.md,analyzing.md,coordination.md,.context/errors/developer.md",
+       workflow_id: "{id}", priority: "medium"
+     }
    })
    ```
 6. Set each new DVN blocked by TL0 (not by DV0 — they run in parallel):

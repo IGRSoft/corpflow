@@ -235,33 +235,55 @@ After planning completes, PL0 creates stage tasks based on complexity score. Eac
 // Example: PL0 creates stages for a medium-complexity task
 const workflowId = "dark-mode-2025";
 
-// Capture task IDs returned by TaskCreate
+// Capture task IDs returned by TaskCreate.
+// NOTE: context_files includes error_file per task-system § context_files ↔ error_file coupling.
+// If omitted, the orchestrator appends it at delegation time (normalizeMetadata).
 const ar0 = TaskCreate({
   subject: "AR0: Architecture",
   description: "Design dark mode architecture with theme switching",
   activeForm: "Architecting solution",
-  metadata: { stage: "AR", agent: "software-architector", model: "opus", workflow_id: workflowId, priority: "medium", context_files: "exploration.md,planning.md" }
+  metadata: {
+    stage: "AR", agent: "software-architector", model: "opus",
+    error_file: ".context/errors/software-architector.md",
+    context_files: "exploration.md,planning.md,.context/errors/software-architector.md",
+    workflow_id: workflowId, priority: "medium"
+  }
 });
 
 const dv0 = TaskCreate({
   subject: "DV0: Development",
   description: "Implement dark mode theme system and color tokens",
   activeForm: "Implementing code",
-  metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium", context_files: "exploration.md,planning.md,analyzing.md,coordination.md" }
+  metadata: {
+    stage: "DV", agent: "developer", model: "opus",
+    error_file: ".context/errors/developer.md",
+    context_files: "exploration.md,planning.md,analyzing.md,coordination.md,.context/errors/developer.md",
+    workflow_id: workflowId, priority: "medium"
+  }
 });
 
 const dr0 = TaskCreate({
   subject: "DR0: Developer Review",
   description: "Review code quality, patterns, and platform-specific best practices",
   activeForm: "Reviewing code",
-  metadata: { stage: "DR", agent: "technical-lead", model: "sonnet", workflow_id: workflowId, priority: "medium", context_files: "exploration.md,planning.md,analyzing.md,coordination.md,development.md" }
+  metadata: {
+    stage: "DR", agent: "technical-lead", model: "sonnet",
+    error_file: ".context/errors/technical-lead.md",
+    context_files: "exploration.md,planning.md,analyzing.md,coordination.md,development.md,.context/errors/technical-lead.md",
+    workflow_id: workflowId, priority: "medium"
+  }
 });
 
 const qa0 = TaskCreate({
   subject: "QA0: QA Testing",
   description: "Test theme switching, contrast ratios, persistence",
   activeForm: "Testing solution",
-  metadata: { stage: "QA", agent: "qa-engineer", model: "sonnet", workflow_id: workflowId, priority: "medium", context_files: "exploration.md,planning.md,developer-review.md,testing.md" }
+  metadata: {
+    stage: "QA", agent: "qa-engineer", model: "sonnet",
+    error_file: ".context/errors/qa-engineer.md",
+    context_files: "exploration.md,planning.md,developer-review.md,testing.md,.context/errors/qa-engineer.md",
+    workflow_id: workflowId, priority: "medium"
+  }
 });
 
 // Chain dependencies using captured IDs (PL0 is taskId "1" from initial creation)
@@ -323,17 +345,28 @@ PL0 → AR0 → TL0 ─┤→ DV1 ─├→ DR0 → QA0
 // TL narrows DV0 scope to primary stream
 TaskUpdate({ taskId: dv0_id, description: "Implement theme color tokens (owns: Source/Theme/Colors/)" });
 
-// TL creates parallel streams
+// TL creates parallel streams. All DVN share the same error_file (developer.md)
+// with distinct section headers per sub-task (## DV1 Retry N, ## DV2 Retry N).
 const dv1 = TaskCreate({
   subject: "DV1: Implement theme switcher",
   description: "Add toggle and persistence (owns: Source/Settings/Theme/)",
-  metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium" }
+  metadata: {
+    stage: "DV", agent: "developer", model: "opus",
+    error_file: ".context/errors/developer.md",
+    context_files: "planning.md,analyzing.md,coordination.md,.context/errors/developer.md",
+    workflow_id: workflowId, priority: "medium"
+  }
 });
 
 const dv2 = TaskCreate({
   subject: "DV2: Implement dark mode assets",
   description: "Create dark variants for all image assets (owns: Assets/Dark/)",
-  metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium" }
+  metadata: {
+    stage: "DV", agent: "developer", model: "opus",
+    error_file: ".context/errors/developer.md",
+    context_files: "planning.md,analyzing.md,coordination.md,.context/errors/developer.md",
+    workflow_id: workflowId, priority: "medium"
+  }
 });
 
 // All DVN blocked by TL0 (not DV0) — enables true parallelism
@@ -349,17 +382,28 @@ TaskUpdate({ taskId: dr0_id, addBlockedBy: [dv1, dv2] });
 DV agent splits during its own execution. Sub-tasks are children of DV0 — sequential, not parallel.
 
 ```typescript
-// Developer splits DV0 into focused sub-tasks
+// Developer splits DV0 into focused sub-tasks.
+// Sub-tasks share developer.md — orchestrator auto-appends error_file to context_files.
 const dv1 = TaskCreate({
   subject: "DV1: Implement theme color tokens",
   description: "Create semantic color tokens for light/dark themes",
-  metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium" }
+  metadata: {
+    stage: "DV", agent: "developer", model: "opus",
+    error_file: ".context/errors/developer.md",
+    context_files: "planning.md,analyzing.md,.context/errors/developer.md",
+    workflow_id: workflowId, priority: "medium"
+  }
 });
 
 const dv2 = TaskCreate({
   subject: "DV2: Implement theme switcher",
   description: "Add toggle and persistence for theme preference",
-  metadata: { stage: "DV", agent: "developer", model: "opus", workflow_id: workflowId, priority: "medium" }
+  metadata: {
+    stage: "DV", agent: "developer", model: "opus",
+    error_file: ".context/errors/developer.md",
+    context_files: "planning.md,analyzing.md,.context/errors/developer.md",
+    workflow_id: workflowId, priority: "medium"
+  }
 });
 
 // Sequential: DV1 and DV2 blocked by DV0

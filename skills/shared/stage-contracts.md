@@ -36,11 +36,11 @@ Single source of truth for what each workflow stage consumes, produces, and how 
 
 The orchestrator runs validation between `TaskUpdate({status: "completed"})` and the next stage's `status: in_progress`:
 
-1. **File check**: Read `metadata.context_files` for next stage — verify every path exists on disk.
+1. **File check**: Read `metadata.context_files` for next stage — verify every path exists on disk. `metadata.error_file` is always present in `context_files` (orchestrator auto-appends on `TaskCreate`/`TaskUpdate`); treat its absence on disk as "no prior retries" (not a failure).
 2. **Section check**: Grep the output artifact for required section headers.
 3. **Side-artifact check**: For DV/QA stages, confirm corresponding `.context/logs/` capture exists (build/test logs).
 4. **Metadata check**: Validate task `metadata` against `task-system` § JSON Schema.
-5. **Error file check**: If `retry_count > 0`, `metadata.error_file` MUST exist.
+5. **Error file check**: If `retry_count > 0`, `metadata.error_file` MUST exist on disk AND appear in `context_files`.
 
 Failure at any step → do NOT transition. Append a `missing_input` entry to the *next* stage's error file and block until resolved.
 

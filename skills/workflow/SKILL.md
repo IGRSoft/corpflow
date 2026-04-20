@@ -270,9 +270,15 @@ while (tasks.some(t => t.status !== "completed")) {
     // 4.5. Soft context_files validation — warn, don't abort
     //      Low-complexity workflows legitimately skip upstream stages,
     //      so a missing listed file is a warning appended to the prompt.
+    //      Exception: error_file absence is expected on first attempt
+    //      (retry_count === 0) — suppress that specific warning.
     if (full.metadata.context_files) {
       const listed = full.metadata.context_files.split(',').map(s => s.trim());
-      const missing = listed.filter(p => !fs.existsSync(p));
+      const retryCount = full.metadata.retry_count ?? 0;
+      const missing = listed.filter(p =>
+        !fs.existsSync(p) &&
+        !(p === full.metadata.error_file && retryCount === 0)
+      );
       if (missing.length > 0) {
         full.description =
           `NOTE: Expected context files missing: ${missing.join(', ')}. ` +

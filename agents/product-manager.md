@@ -232,6 +232,7 @@ const et = TaskCreate({
     agent: "ethics-reviewer",
     model: "opus",
     error_file: ".context/errors/ethics-reviewer.md",
+    context_files: "planning.md,.context/errors/ethics-reviewer.md",
     workflow_id: "<current>"
   }
 });
