@@ -180,25 +180,87 @@ figma\.com/design/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
 - Branch URLs: `figma.com/design/:fileKey/branch/:branchKey/...` → use `branchKey` as fileKey
 - URLs without `node-id` are valid — capture the top-level frame
 
+#### State Input Contract
+
+State is derived **only from explicit user input** — no heuristic sibling scanning.
+
+- One URL, no annotation → `state: default`
+- For non-default states, the user must list one URL per state using any of:
+  - URL fragment: `https://figma.com/design/FOO/Login?node-id=42-7#state=error`
+  - Query parameter: `https://figma.com/design/FOO/Login?node-id=42-7&state=error`
+  - Inline annotation in the task description: `<url> [state: error]`
+- Valid values: `default | error | empty | loading | hover | disabled | success`
+- Unknown values are preserved as-is (tolerant); QA reports unusual states in `testing.md`
+
 #### Capture Workflow
 
-1. Parse `fileKey` and `nodeId` from the URL
+1. Parse `fileKey`, `nodeId`, and `state` from each URL (state defaults to `default`)
 2. `mcp__plugin_figma_figma__get_design_context({ fileKey, nodeId })` — code hints + screenshot + component info
 3. `mcp__plugin_figma_figma__get_screenshot({ fileKey, nodeId })` — standalone screenshot image
 4. `mcp__plugin_figma_figma__get_metadata({ fileKey, nodeId })` — node name for descriptive filename
-5. Save screenshots to `.context/designs/figma-[screen]-[node-id].png`
+5. Save screenshots to `.context/designs/figma-[screen]-[state]-[node-id].png`
    - `[screen]`: node name from metadata (lowercased, spaces → hyphens)
+   - `[state]`: from the State Input Contract above; defaults to `default`
    - `[node-id]`: Figma node ID with colons → dashes (filesystem-safe)
 6. If multiple Figma URLs provided, repeat for each
-7. Summarize design context (colors, layout, components) in planning.md under Figma Design References
+7. Summarize design context (colors, layout, components) in `planning.md` under Figma Design References
+8. Write `.context/designs/figma-registry.md` (see Registry Generation below)
+
+If a Figma MCP call fails for one URL, continue with the remaining URLs, write the registry with successfully-captured rows, and append a failure note to `.context/errors/product-manager.md`.
+
+#### Registry Generation
+
+After capturing all screenshots, write `.context/designs/figma-registry.md` using the following structure:
+
+```markdown
+# Figma Design Registry
+
+Produced by: PL stage (product-manager)
+Consumed by: QA stage (qa-engineer)
+
+## Entries
+
+| ID | Screen | State | Device | Figma Node | Screenshot | Target File(s) | AC Ref |
+|----|--------|-------|--------|------------|------------|----------------|--------|
+| design-001 | login | default | iPhone 15 | 42:1 | figma-login-default-42-1.png | LoginView.swift | AC-1, AC-2 |
+| design-002 | login | error   | iPhone 15 | 42:7 | figma-login-error-42-7.png   | LoginView.swift | AC-3 |
+
+## Source URLs
+
+- design-001: https://figma.com/design/FOO/Login?node-id=42-1
+- design-002: https://figma.com/design/FOO/Login?node-id=42-7#state=error
+
+## Capture Metadata
+
+- Captured at: <ISO-8601 timestamp>
+- Captured by: igrsoft:product-manager (PL0)
+- Figma file version: <from get_metadata if available, else `unknown`>
+```
+
+**Column semantics** (order is authoritative — QA parsers rely on it):
+
+| Column | Source | Default if unknown |
+|--------|--------|--------------------|
+| `ID` | Sequential `design-NNN` within the task | — |
+| `Screen` | Figma node name (lowercased, spaces → hyphens) | node-id if metadata missing |
+| `State` | Per State Input Contract above | `default` |
+| `Device` | Task context (e.g. "iPhone 15", "Desktop 1440", "iPad") | `unspecified` |
+| `Figma Node` | Node ID in API format (colons) | — |
+| `Screenshot` | Filename only, relative to `.context/designs/` | — |
+| `Target File(s)` | Implementation files from `planning.md § Scope`, comma-separated | `?` |
+| `AC Ref` | Acceptance criterion IDs from `planning.md § Acceptance Criteria` | blank |
+
+Reference the registry from `planning.md § Figma Design References`:
+
+> See `.context/designs/figma-registry.md` for the full node → screenshot → target mapping.
 
 #### Coexistence with Pencil Mockups
 
 | Condition | Action |
 |-----------|--------|
-| Figma URL present | Capture Figma screenshots (always) |
-| Design keyword score >= 5, no Figma URL | Invoke Designer for Pencil mockups (existing behavior) |
-| Both Figma URL AND score >= 5 | Capture Figma screenshots AND invoke Designer; Figma screenshots are the authoritative design reference |
+| Figma URL present | Capture Figma screenshots (always) + write registry |
+| Design keyword score >= 5, no Figma URL | Invoke Designer for Pencil mockups (existing behavior); no registry |
+| Both Figma URL AND score >= 5 | Capture Figma screenshots + write registry AND invoke Designer; Figma screenshots are the authoritative design reference |
 
 ### P Stage: Automatic Ethics Gate Detection
 

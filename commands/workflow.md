@@ -109,6 +109,21 @@ Before proceeding, re-verify: did the HUMAN USER type an approval message? PL0 c
 
 Execute the orchestrator execution loop from `skills/workflow/SKILL.md § Orchestrator Execution Loop`.
 
+## Phase 3: Post-Workflow Self-Improvement
+
+After the execution loop exits (ST completed), run the Post-Workflow Self-Improvement procedure from `skills/workflow/SKILL.md § Post-Workflow Self-Improvement`.
+
+Flow:
+1. Check whether `.context/learnings.md` exists. If absent → workflow done, terminate.
+2. If present → display its contents and **STOP**. Wait for the user to check the boxes of proposals they approve (`- [ ]` → `- [x]`). Orchestrator MUST NOT auto-check or assume.
+3. User replies with approval ("apply checked", "go", or similar). Orchestrator then re-reads `learnings.md`, parses the checked items, and delegates to `igrsoft:prompt-engineer` for application (see `agents/prompt-engineer.md § Self-Improvement Patch Application`).
+4. Each applied proposal becomes its own commit with a `version:` bump on the target frontmatter (rollback-safe via `git revert <sha>`).
+
+Key invariants:
+- Never auto-apply proposals — the user must explicitly check boxes AND signal approval.
+- Proposals are scoped to agents/skills/commands that actually participated in this workflow's context (see `skills/self-improvement/SKILL.md § Step 4`).
+- Post-ST audit entry written to `.context/logs/audit.jsonl` records `applied_count` and `skipped_count`.
+
 ## Embedded Command Detection
 
 When the task description contains slash commands (e.g., `/skill-creator`, `/apple-developer:code-refactor`), these are **embedded commands** that must be executed during the appropriate workflow stage.
