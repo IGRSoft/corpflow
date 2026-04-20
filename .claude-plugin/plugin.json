@@ -54,6 +54,18 @@
     "plugin-monitors",
     "prompt-caching-1h",
     "subagent-stall-timeout",
-    "context-logs-convention"
+    "context-logs-convention",
+    "per-agent-error-files",
+    "stage-contracts",
+    "metadata-json-schema",
+    "error-decision-tree",
+    "cost-tracking-hook",
+    "audit-trail",
+    "resume-protocol",
+    "approval-gate-hook",
+    "state-machine-diagram",
+    "ethics-gate-autodetect",
+    "postcompact-recovery",
+    "ir-dv-contract"
   ]
 }

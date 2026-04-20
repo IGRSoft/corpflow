@@ -10,7 +10,7 @@
 | DV | opus | Implementation depth |
 | DR | sonnet | Code review (read-only) |
 | SR | opus | Security analysis complexity |
-| QA | haiku | Test execution and validation |
+| QA | sonnet | Test strategy decisions, multimodal design comparison, 19-tool orchestration |
 | DC | haiku | Documentation generation |
 | RE | haiku | Release operations |
 | FN | opus | Final coordination |

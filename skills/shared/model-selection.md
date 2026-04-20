@@ -65,7 +65,7 @@ effort: low
 
 Use `model` parameter on Task() calls to override per delegation:
 ```
-Task({ subagent_type: "igrsoft:qa-engineer", model: "haiku", prompt: "..." })
+Task({ subagent_type: "igrsoft:qa-engineer", model: "sonnet", prompt: "..." })
 ```
 
 Team agents inherit leader's model by default. Override only when complexity warrants it.

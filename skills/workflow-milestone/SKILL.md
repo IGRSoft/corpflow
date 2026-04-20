@@ -133,7 +133,7 @@ TaskCreate({
   taskId: `t${track}-1`,
   subject: `PL${stageIndex}: Planning - Issue #${issueNumber}`,
   metadata: {
-    stage: "PL", agent: "product-manager",
+    stage: "PL", agent: "igrsoft:product-manager",
     issue_number: issueNumber, track: track,
     workspace_path: `.workspaces/milestone-${milestone}/${issueNumber}`
   }

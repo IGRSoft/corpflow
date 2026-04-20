@@ -13,12 +13,15 @@ Patterns for coordinating agents across workflow stages, managing handoffs, and 
 
 ## Handoff Protocol
 
+**Per-stage I/O contracts**: See `${CLAUDE_SKILL_DIR}/../shared/stage-contracts.md` for the full Inputs → Outputs → Validation table that every stage agent's Completion Verification references.
+
 ```
-1. Current agent completes work
+1. Current agent completes work (output matches stage-contracts Required Outputs)
 2. Updates task: TaskUpdate({ taskId: "X", status: "completed" })
-3. Creates stage artifact (e.g., planning.md)
+3. Creates stage artifact (e.g., planning.md) with required sections
 4. Writes compressed handoff (50-100 tokens)
-5. Next agent starts: TaskUpdate({ taskId: "Y", status: "in_progress" })
+5. Orchestrator validates against stage-contracts before transition
+6. Next agent starts: TaskUpdate({ taskId: "Y", status: "in_progress" })
 ```
 
 ### Orchestrator → PL0 Handoff
@@ -54,15 +57,45 @@ Do NOT re-read files listed there unless you need additional detail.
 
 ## Error Handling
 
-### Error Classification
+### Error Decision Tree
 
-| Type | Retry? | Escalate To |
-|------|--------|-------------|
-| Transient (API, network) | Yes (3x) | None |
-| Logic (bug, wrong approach) | Yes (2x) | Same agent |
-| Dependency (missing input) | No | Previous stage |
-| Requirements (unclear) | No | PL stage |
-| Architecture (design flaw) | No | AR stage |
+```mermaid
+stateDiagram-v2
+    [*] --> Failure
+    Failure --> Classify
+    Classify --> Transient: 5xx / rate-limit / network
+    Classify --> Logic: bug / wrong approach
+    Classify --> MissingInput: required artifact absent
+    Classify --> Ambiguous: requirements unclear
+    Classify --> DesignFlaw: architecture blocks implementation
+    Classify --> HardConstraint: ethics / security / legal block
+    Transient --> RetrySame: retry_count++
+    Logic --> RetrySame: retry_count++ with corrective context
+    RetrySame --> Succeeded: fix works
+    RetrySame --> Exhausted: retry_count == 3
+    MissingInput --> EscalatePrev
+    Ambiguous --> EscalatePL
+    DesignFlaw --> EscalateAR
+    HardConstraint --> Abort
+    Exhausted --> EscalatePrev
+    EscalatePrev --> [*]: error_escalated_to set
+    EscalatePL --> [*]: error_escalated_to = "PL"
+    EscalateAR --> [*]: error_escalated_to = "AR"
+    Abort --> [*]: stage blocked
+    Succeeded --> [*]: retry_count reset
+```
+
+### Retry / Escalate Matrix
+
+| Classification | Retry? | Max | Backoff | Escalation Target | Metadata Update |
+|----------------|--------|-----|---------|-------------------|-----------------|
+| `transient` | Yes | 3 | 2^n seconds | None (retry same agent) | `retry_count++` |
+| `logic` | Yes | 2 | None | Same agent (add corrective context on retry 2) | `retry_count++` |
+| `missing_input` | No | 0 | — | Previous stage per chain | `error_escalated_to` set |
+| `ambiguous_requirements` | No | 0 | — | PL stage | `error_escalated_to = "PL"` |
+| `design_flaw` | No | 0 | — | AR stage | `error_escalated_to = "AR"` |
+| `hard_constraint` (ethics/security) | No | 0 | — | Abort + block human intervention | `error_escalated_to = "ST"` |
+| `exhausted` (`retry_count == 3`) | No | — | — | Previous stage per chain | `error_escalated_to` set, `retry_count` reset on handoff |
 
 ### Escalation Chains
 
@@ -75,16 +108,20 @@ Ethics: Any→ethics-reviewer→stakeholder→USER
 
 ### Error Documentation
 
-Create `.context/error.md`:
+Append to `.context/errors/<agent>.md` (per-agent, one file per `metadata.agent` basename). Single file shared across retries and task splits (DV0/DV1/DV2 → `developer.md`):
+
 ```markdown
-## [STAGE] Error - [TIMESTAMP]
-**Classification**: [type]
-**Retry Count**: [X/max]
+## [STAGE][N] Retry [X/max] — [TIMESTAMP]
+**Agent**: [agent name]
+**Task ID**: [task_id]
+**Classification**: [transient | logic | missing_input | ambiguous_requirements | design_flaw | hard_constraint | exhausted]
 ### Problem
 [Description]
 ### Resolution Path
 - [ ] [Action]
 ```
+
+Raw captures (build/test/monitor stdout) go to `.context/logs/` per `logging-conventions`.
 
 ## Parallel Execution
 
@@ -118,6 +155,76 @@ Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool ca
 - DV before TL (needs coordination)
 - QA before DV (can't test unwritten code)
 
+## Audit Trail
+
+Every material workflow action writes one JSONL line to `.context/logs/audit.jsonl`
+(routed under the `logs/` folder per `logging-conventions` skill). The file is
+append-only and outlives individual stage artifacts — on resume or incident
+review, the audit tail is the single source of truth for what happened.
+
+### Writers
+
+| Actor | Action Examples |
+|-------|-----------------|
+| Orchestrator | `workflow_init`, `stage_transition`, `approval_received`, `resume` |
+| Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation` |
+| `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
+| `SubagentStop` hook | `subagent_stopped` (paired with cost-*.jsonl entry) |
+
+### Schema
+
+```jsonc
+{
+  "ts": "ISO-8601 UTC",
+  "actor": "orchestrator|<agent-name>|hook:<name>",
+  "action": "workflow_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped",
+  "subject": "task ID or artifact path",
+  "result": "ok|error|deferred|blocked",
+  "task_id": "optional — Task System ID",
+  "artifact": "optional — .context/ path",
+  "metadata": { "...": "action-specific extras" }
+}
+```
+
+### Append Pattern (Bash)
+
+```bash
+mkdir -p .context/logs
+jq -c --arg ts "$(date -u +%FT%TZ)" \
+  '. + {ts: $ts}' <<< '{"actor":"orchestrator","action":"stage_transition","subject":"DV0→DR0","result":"ok","task_id":"4"}' \
+  >> .context/logs/audit.jsonl
+```
+
+### Retention
+
+Follows `.context/` hygiene — cleared on task archival (FN stage or `/workflow`
+completion). Do NOT rotate within a task; the full trail is required for
+PostCompact recovery and incident post-mortems.
+
+## Task Decomposition
+
+When should a stage split into sub-tasks? The decision depends on *who* initiates
+the split and *what* the dependency shape is. Pick one pattern — do not mix.
+
+### Decision Table
+
+| Condition | Pattern | Effect | Example |
+|-----------|---------|--------|---------|
+| Independent sub-scopes, different owners | **TL-initiated (parallel)** | DVN tasks blocked by TL0; all run concurrently; DR0 blocked by all DVN | `theme colors` + `theme switcher` + `dark assets` |
+| Sequential discovery (later work depends on earlier) | **DV-initiated (sequential)** | DVN tasks blocked by DV0; run one after another | `implement auth` then `migrate existing users` then `deprecate old endpoints` |
+| Single cohesive scope with <3 files | **No split** | DV0 handles entirely | `fix null check in login validator` |
+| Cross-cutting refactor spanning many modules | **TL-initiated (parallel)** with `track` metadata | Each stream gets own worktree (if `--worktree`) | `rename User → Account across auth/api/db` |
+| Stage already failed and retry needs narrower scope | **DV-initiated (sequential)** | DV1 creates focused retry; retry_count resets | DV0 failed on full feature → DV1 focused on auth module only |
+
+See `workflow/references/initialization-patterns.md § Stage Sub-Task Splitting`
+for full code patterns.
+
+### When NOT to Split
+
+- **PL/FN/ST** — always singletons (PL0, FN0, ST0). Do not split.
+- **Trivial scope** — splitting a 5-file change into 3 sub-tasks adds orchestration cost without benefit.
+- **Shared mutable state** — if two streams need to edit the same file, serialize instead of parallelizing (merge conflicts cost more than the latency saved).
+
 ## Agent Selection
 
 ### Sub-Task Delegation
@@ -129,7 +236,7 @@ Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool ca
 | Architecture question | software-architector | opus |
 | Apple/Swift architecture | apple-developer:apple-architector | opus |
 | Technical decision | technical-lead | opus |
-| Test design | qa-engineer | haiku/sonnet |
+| Test design | qa-engineer | sonnet |
 
 > **Cross-plugin AR collaboration**: For Apple platform projects, `software-architector` consults `apple-developer:apple-architector` during AR stage for Swift app architecture (pattern selection, DI, navigation, concurrency). See `cross-plugin-handoff` skill for the full protocol.
 
@@ -160,7 +267,34 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 
 ### Monitor Tool for Background Events (v2.1.98+)
 
-The `Monitor` tool streams events (stdout lines) from background scripts started via Bash with `run_in_background`. Use for watching build output during DV, streaming test results during QA, or log tailing during IR. Unlike polling with `Read`, Monitor provides event-driven notifications without sleep loops. Tee the background stream into `.context/logs/monitor-<agent>-<timestamp>.log` so the capture persists after the Monitor session ends — see `logging-conventions` skill.
+The `Monitor` tool streams events (stdout lines) from background scripts started
+via Bash with `run_in_background`. Event-driven — no polling loops. Tee the
+background stream into `.context/logs/monitor-<agent>-<timestamp>.log` so the
+capture persists after the Monitor session ends — see `logging-conventions` skill.
+
+#### Per-Stage Monitor Usage
+
+| Stage | Scenario | Background Command | Monitor Purpose |
+|-------|----------|--------------------|-----------------|
+| DV | Build iteration during implementation | `xcodebuild … 2>&1 \| tee .context/logs/build-<slug>-<ts>.log` | Watch compile errors live; abort early on first failure |
+| DV | Swift Package resolution | `swift build 2>&1 \| tee .context/logs/build-spm-<ts>.log` | Detect dependency resolution issues |
+| QA | XCTest run | `xcodebuild test … 2>&1 \| tee .context/logs/test-<slug>-<ts>.log` | Stream pass/fail per test; stop on first red |
+| QA | Simulator app logs | `xcrun simctl spawn … log stream … \| tee .context/logs/sim-<dev>-<ts>.log` | Watch runtime behavior during manual test |
+| IR | Production log tail | `ssh prod tail -f /var/log/app.log \| tee .context/logs/incident-<ts>.log` | Identify recurring error pattern |
+| DR/SR | Static analysis | `swiftlint --reporter json 2>&1 \| tee .context/logs/monitor-lint-<ts>.log` | Stream warnings to triage severity in real time |
+| RE | Release build | `xcodebuild archive … 2>&1 \| tee .context/logs/build-release-<ts>.log` | Watch signing / archive steps; abort on signing failure |
+| FN | CI run after push | `gh run watch <run-id> \| tee .context/logs/monitor-ci-<ts>.log` | Watch PR checks progress |
+
+**Common pattern**: start background Bash with `run_in_background: true`, note
+the returned shell ID, then attach `Monitor` to that ID. When Monitor detaches
+(timeout, stage transition), the `.log` file is still readable via `Read`.
+
+#### Stall Timeout (v2.1.113+)
+
+Subagents stalled for more than 10 minutes now fail with a clear error rather
+than hanging indefinitely. Monitor sessions inherit this guard — if the
+background process stops producing output for >10min, treat as failure and
+escalate per `Error Handling § Retry / Escalate Matrix`.
 
 ### MCP Large Result Handling
 

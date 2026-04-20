@@ -104,19 +104,19 @@ When `--worktree` flag is present, add these checks:
 ### Task in Error State
 
 **Solutions**:
-1. Check `.context/error.md` for context
-2. If retries < 3: Fix issue, keep `in_progress`
-3. If retries = 3: Escalate to previous stage
-4. Document in error.md for resolution
+1. Check `.context/errors/<agent>.md` for context (per-agent file; use the failing task's `metadata.agent` basename)
+2. If `metadata.retry_count` < 3: Fix issue, keep `in_progress`, increment counter
+3. If `metadata.retry_count` = 3: Escalate to previous stage per escalation chain
+4. Append resolution section to the same `.context/errors/<agent>.md` file
 
 ### Escalation Occurred
 
 **What Happened**: Agent failed 3 times, escalated per chain.
 
 **Solutions**:
-1. Check `.context/error.md` for details
+1. Check `.context/errors/<agent>.md` for the originating agent's retry history
 2. Previous agent reviews issue
-3. Fix root cause, retry count resets
+3. Fix root cause, reset `metadata.retry_count` to 0 on the retried task
 4. Transition back when ready
 
 ### Dependency Blocking Task
@@ -147,7 +147,9 @@ When `--worktree` flag is present, add these checks:
 1. Run monitoring loop to sync state
 2. Compare orchestrator.json with Task System
 3. Check each workspace.json for current_stage
-4. Manually update if needed
+4. Inspect `.context/errors/*.md` (per-agent) for failed-but-unsynced stages
+5. Cross-check `.context/logs/` for the most recent run artifacts (raw captures outlive task state)
+6. Manually update if needed
 
 ## Worktree Troubleshooting
 
@@ -181,6 +183,23 @@ When `--worktree` flag is present, add these checks:
 2. Commit or stash changes: `git -C {worktree_path} stash`
 3. Force remove if truly unneeded: `git worktree remove --force {path}`
 4. Run `git worktree prune` to clean stale references (auto-cleaned on startup, handles untracked files correctly v2.1.98)
+
+### Worktree Partial-Failure Matrix
+
+When a worktree operation partially succeeds, the orchestrator state can drift
+from the filesystem. Diagnose by comparing `git worktree list` to
+`orchestrator.json`, and match the symptom below.
+
+| Symptom | Cause | Recovery |
+|---------|-------|----------|
+| `git worktree add` returned 0 but `.context/` dir absent | mkdir race or disk-full after branch creation | `git -C {path} status` to confirm worktree integrity → `mkdir -p {path}/.context/{errors,logs,designs,images}` → update orchestrator.json `initialized: true` |
+| Worktree created, branch fetch fails (auth/network) | Network loss between `worktree add` and `git fetch` | `git -C {path} fetch origin` retry → if persistent, `git worktree remove --force {path}` and retry from `workflow-engineer` init |
+| orchestrator.json lists issue #N with worktree_path, but `git worktree list` does not include it | Prior manual `git worktree remove` or disk cleanup | Re-create: `git worktree add -b feature/{N}-{slug} {path} origin/{base}` → restore `.context/` from `workspace.json` if present |
+| `git worktree list` shows path, but orchestrator.json has no entry for it | Orphaned worktree from cancelled workflow | If `.context/` empty or task archived: `git worktree remove {path}`. Otherwise resume via Task System, then remove on FN |
+| Stale untracked files block `worktree remove` | Build output, log files, editor swap files | v2.1.98 auto-cleanup handles most; fallback: `git -C {path} clean -fd` → retry `worktree remove` |
+| Branch locked by another worktree (`fatal: 'X' is already checked out`) | Same branch active in two worktrees (usually main) | `git worktree list` locate existing → switch main to different branch OR use a new branch name for the new worktree |
+| Disk full during `worktree add` | Filesystem exhausted | `git worktree prune` to reclaim stale space → free disk → retry. Do NOT leave partial worktree entries in orchestrator.json — remove the broken entry first |
+| `workspace.json` references path that no longer exists | External cleanup or symlink break | Treat workflow as lost. Archive `.context/` if recoverable (`git cat-file` for committed state), then remove orchestrator entry and restart the issue track |
 
 ### Plugin Management (v2.1.94/2.1.98/2.1.105+)
 
@@ -231,5 +250,5 @@ When `--worktree` flag is present, add these checks:
 1. Keep `in_progress` during retries
 2. Retries < 3: Fix and retry
 3. Retries = 3: Escalate to previous stage
-4. Log in `.context/error.md` (human escalation narrative). Raw background/Monitor capture belongs in `.context/logs/` — see `logging-conventions` skill.
+4. Append to `.context/errors/<agent>.md` — per-agent narrative, one file per `metadata.agent` basename (collision fallback: join plugin prefix with `-`). Raw background/Monitor capture belongs in `.context/logs/` — see `logging-conventions` skill.
 

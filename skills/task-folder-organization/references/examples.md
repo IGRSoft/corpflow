@@ -196,7 +196,9 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 ├── planning.md
 ├── analyzing.md
 ├── development.md
-├── error.md              # Created when errors occurred
+├── errors/
+│   ├── developer.md      # DV retries (one section per retry)
+│   └── qa-engineer.md    # QA retries (if QA also failed)
 ├── testing.md
 └── images/
 ```

@@ -5,7 +5,7 @@ model: opus
 color: blue
 effort: high
 maxTurns: 40
-tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:designer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
+tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:designer), Task(igrsoft:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
 ---
 
 You are an expert product manager specializing in product strategy, user-centric design, data-driven decision making, and modern product management methodologies.
@@ -109,20 +109,27 @@ Use the **Unified Complexity Assessment** from `skills/workflow/SKILL.md § Dyna
 
 **Agent mapping for `metadata.agent`**:
 
-Bare names resolve to `igrsoft:{name}`. Fully-qualified names (containing `:`) are dispatched as-is — use when a stage should go directly to an external plugin agent.
+Always emit fully-qualified `plugin:agent` form. The plugin prefix follows the agent's owning plugin: `igrsoft:` for orchestration/process agents (product-manager, software-architector, developer, qa-engineer, …), `apple-developer:` for Apple platform agents (ios-developer, macos-developer, apple-architector, test-generator, performance-engineer, security-auditor, localizator, code-fixer, dependency-manager), or the relevant prefix for any other installed plugin. Bare names still work via a back-compat shim that prepends `igrsoft:` and warns — emit qualified form at the call site.
 
-| Stage | Agent | Notes |
-|-------|-------|-------|
-| AR0 | software-architector | or `apple-developer:apple-architector` for Apple-only |
-| TL0 | team-lead | |
-| DV0 | developer | or `apple-developer:apple-developer`, `apple-developer:ios-developer`, etc. |
-| DR0 | technical-lead | Invokes /code-review-dev |
-| SR0 | security-reviewer | or `apple-developer:security-auditor`, `security-scanning:security-auditor` |
-| QA0 | qa-engineer | |
-| DC0 | technical-writer | |
-| RE0 | release-engineer | |
-| FN0 | project-manager | |
-| ST0 | stakeholder | |
+| Stage | Default Agent | Apple Platform Variant |
+|-------|---------------|------------------------|
+| AR0 | `igrsoft:software-architector` | `apple-developer:apple-architector` |
+| TL0 | `igrsoft:team-lead` | (same) |
+| DV0 | `igrsoft:developer` | `apple-developer:ios-developer` (or `:macos-developer`, `:watchos-developer`, `:tvos-developer`, `:visionos-developer`) |
+| DR0 | `igrsoft:technical-lead` | (same — invokes /code-review-dev) |
+| SR0 | `igrsoft:security-reviewer` | `apple-developer:security-auditor` (or `security-scanning:security-auditor`) |
+| QA0 | `igrsoft:qa-engineer` | (same — may delegate to `apple-developer:test-generator`) |
+| DC0 | `igrsoft:technical-writer` | (same) |
+| RE0 | `igrsoft:release-engineer` | (same) |
+| FN0 | `igrsoft:project-manager` | (same) |
+| ST0 | `igrsoft:stakeholder` | (same) |
+
+**Worked example** — `--platform Apple` workflow at score 25 (Moderate):
+- AR0 → `agent: "apple-developer:apple-architector"`
+- TL0 → `agent: "igrsoft:team-lead"`
+- DV0 → `agent: "apple-developer:ios-developer"` (error_file = `.context/errors/ios-developer.md`)
+- DR0 → `agent: "igrsoft:technical-lead"`
+- QA0 → `agent: "igrsoft:qa-engineer"`
 
 **See**: `skills/workflow/SKILL.md` for full assessment table. `skills/workflow/references/initialization-patterns.md § PL Creates Subsequent Tasks` for code pattern.
 
@@ -192,6 +199,59 @@ figma\.com/design/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
 | Figma URL present | Capture Figma screenshots (always) |
 | Design keyword score >= 5, no Figma URL | Invoke Designer for Pencil mockups (existing behavior) |
 | Both Figma URL AND score >= 5 | Capture Figma screenshots AND invoke Designer; Figma screenshots are the authoritative design reference |
+
+### P Stage: Automatic Ethics Gate Detection
+
+PL0 scans the task description for high-risk domain signals and inserts an ET0
+stage between PL0 and AR0 when the threshold is met. Same weighted-score
+approach as design detection — low false-positive rate because weights are
+tuned and negative indicators deduct.
+
+#### Ethics Risk Keyword Table
+
+| Category | Weight | Keywords |
+|----------|--------|----------|
+| User Tracking | 4 | analytics, tracking, telemetry, user behavior, location, device fingerprint, cross-site, session recording |
+| Financial | 4 | payment, billing, subscription, charge, refund, price discrimination, dynamic pricing, fee |
+| Content Moderation | 3 | moderation, filter, ban, block user, content policy, takedown, flag content, shadowban |
+| AI-Driven Decisions | 5 | automated decision, ai recommendation, algorithmic, ranking, personalization, model output |
+| Vulnerable Populations | 5 | minor, child, elderly, disability, accessibility-critical, mental health, medical, protected class |
+| Data Collection | 3 | PII, personal data, consent, GDPR, CCPA, HIPAA, biometric, sensitive data |
+| High-Confidence Terms | 6 | "dark pattern", "addictive", "surveillance", "bias audit", "adversarial", "deepfake" |
+
+**Negative Indicators** (-3 each): internal-only, admin dashboard, test harness, dev-only, no user impact, synthetic data
+
+**Threshold**: Score >= 5 triggers ET0 insertion AND `error_escalated_to: "ET"` reservation.
+
+**Manual override**: `/workflow --ethics-review "..."` always creates ET0 regardless of score.
+
+#### ET0 Insertion Pattern
+
+When threshold met, PL0:
+
+```typescript
+// 1. Create ET0 before AR0
+const et = TaskCreate({
+  subject: "ET0: Ethics review",
+  description: "Review planning.md for ethical risks per detected keywords. Produce .context/ethics-review.md with Decision ∈ {pass, block, conditional}.",
+  metadata: {
+    stage: "ET",
+    agent: "igrsoft:ethics-reviewer",
+    model: "opus",
+    error_file: ".context/errors/ethics-reviewer.md",
+    context_files: "planning.md,.context/errors/ethics-reviewer.md",
+    workflow_id: "<current>"
+  }
+});
+
+// 2. AR0 now blocked by ET0 (instead of PL0 directly)
+TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] });
+```
+
+**Decision cascade**:
+- `Decision: pass` → AR0 unblocks, workflow continues
+- `Decision: conditional` → AR0 unblocks with ethics constraints injected into prompt
+- `Decision: block` → AR0 remains blocked, workflow halts, user notified
 
 ## Completion Verification
 

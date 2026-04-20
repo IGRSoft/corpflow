@@ -83,13 +83,13 @@ See `skills/shared/stage-codes.md` for stage details.
 
 > **BINDING CONSTRAINTS FOR PHASE 1**
 > 1. After PL0 completes: STOP. Do NOT call Write, Edit, Bash, or any file-modifying tool.
-> 2. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/images` and TaskCreate/TaskUpdate calls are permitted. ALL file modifications belong to DV stage or later.
+> 2. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/images .context/errors` and TaskCreate/TaskUpdate calls are permitted. ALL file modifications belong to DV stage or later.
 > 3. **Context-Interruption Recovery**: If workflow execution is interrupted (auth flows, user clarifications, tool failures), upon resumption MUST verify: (a) PL0 task exists with status `completed`, (b) HUMAN USER sent explicit approval AFTER PL0 completed. If either is false, restart from appropriate phase.
 
 1. **Parse** task description and flags (`--milestone`, `--secure`, `--auto-continue`, etc.). See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:code-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
-3. **Create context folder**: `mkdir -p .context/images`
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "product-manager", model: "opus", workflow_id: "<slug>", priority: "<priority>" } })`
+3. **Create context folders**: `mkdir -p .context/images .context/errors`
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", workflow_id: "<slug>", priority: "<priority>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.)
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM creates `.context/planning.md`, assesses complexity, creates stage tasks with `metadata.agent`
 7. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
@@ -148,6 +148,38 @@ During the orchestrator execution loop, when executing a DV stage task:
 # - Embedded command: apple-developer:code-refactor with args "src/Views/SettingsView.swift"
 # - metadata.embedded_commands: "apple-developer:code-refactor"
 ```
+
+### Error Handling
+
+Embedded command execution MUST NOT silently fall back to generic DV work.
+If the Skill invocation fails, the DV stage MUST record the failure and
+escalate — otherwise the user's intent is lost.
+
+#### Failure Modes
+
+| Failure | Detection | Required Behavior |
+|---------|-----------|-------------------|
+| Skill name not resolvable | `Skill()` returns "skill not found" | Write `.context/errors/developer.md` entry with `Classification: missing_input`; escalate to TL (or PL if no TL0) |
+| Skill execution errors mid-run | Skill tool returns non-success | `retry_count++`, append entry to `.context/errors/developer.md`; if `retry_count == 3`, set `error_escalated_to: "TL"` (or `"PL"` if no TL0) |
+| Skill args malformed | Skill rejects at parse | Classification `ambiguous_requirements`; escalate to PL (requires planning revision) |
+| Skill produces no artifact expected by downstream stage | stage-contract validation fails | Classification `missing_input`; escalate to the stage whose contract was violated |
+
+#### Prohibited Fallback
+
+> DV MUST NOT proceed with generic implementation when the embedded command
+> fails. The user explicitly requested that specific workflow by embedding
+> the command; ignoring it is a silent deviation from their intent.
+
+The DV agent's prompt template enforces this: on Skill failure, it halts and
+writes an error entry with `metadata.embedded_command_failure: true` before
+returning to the orchestrator.
+
+#### Escalation Target
+
+- **If TL0 exists**: escalate to TL (team lead decides whether to retry,
+  split the work, or revise approach).
+- **If no TL0 (low-complexity workflow)**: escalate to PL. PL may add TL0 to
+  the workflow, revise embedded command choice, or remove the embedding.
 
 ## See Also
 

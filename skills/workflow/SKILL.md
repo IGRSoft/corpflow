@@ -17,6 +17,35 @@ Single source of truth for task workflow management using the Task System.
                         Developer Review  Security Review (optional)
 ```
 
+### State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Initialized: /workflow <task>
+    Initialized --> Planning: PL0 spawned
+    Planning --> ApprovalWaiting: PL0 completed
+    Planning --> ErrorRetry: PL0 failed
+    ApprovalWaiting --> Executing: user approves OR --auto-continue
+    ApprovalWaiting --> [*]: user rejects
+    Executing --> WorktreeCheckout: --worktree mode
+    Executing --> MilestoneTrack: --milestone mode
+    Executing --> StageActive: standard mode
+    WorktreeCheckout --> StageActive
+    MilestoneTrack --> StageActive
+    StageActive --> StageActive: next stage (blockedBy resolved)
+    StageActive --> ErrorRetry: stage failure
+    ErrorRetry --> StageActive: retry_count < 3, fix applied
+    ErrorRetry --> Escalated: retry_count == 3 OR hard_constraint
+    Escalated --> StageActive: previous-stage fix applied
+    Escalated --> [*]: abort / hard_constraint / user stop
+    StageActive --> Completed: all tasks completed
+    Completed --> [*]
+    ApprovalWaiting --> PostCompactRecovery: context compacted
+    StageActive --> PostCompactRecovery: context compacted
+    PostCompactRecovery --> ApprovalWaiting: was awaiting approval
+    PostCompactRecovery --> StageActive: was mid-stage
+```
+
 **Stage codes and triggers**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md` and `${CLAUDE_SKILL_DIR}/../shared/workflow-triggers.md`
 
 **Task System integration**: See `${CLAUDE_SKILL_DIR}/../shared/task-system.md`
@@ -123,7 +152,7 @@ Use the `Monitor` tool to stream events from background processes during workflo
 
 ### Retry Logic
 
-Each stage: max 3 retries. Track via task metadata or error.md.
+Each stage: max 3 retries. Track via `metadata.retry_count` (per-task) and append a narrative entry to `.context/errors/<agent>.md` (per-agent — see `task-folder-organization` skill § Per-Agent Error Files). Raw stdout/stderr goes to `.context/logs/retry-<stage>-<ts>.log` per `logging-conventions`.
 
 ### Escalation Chains
 
@@ -133,7 +162,7 @@ Each stage: max 3 retries. Track via task metadata or error.md.
 Emergency: FN → RE → QA → DR → DV → IR → USER
 ```
 
-Document errors in `.context/error.md` with problem, root cause, attempted solutions.
+Document errors in `.context/errors/<agent>.md` (per-agent, append-only; one `## Retry N — <ts>` section per failure) with problem, classification, root cause, attempted solutions. Raw captures belong in `.context/logs/` per `logging-conventions`.
 
 ## Rule Checks
 
@@ -174,11 +203,16 @@ Before executing any workflow stage, the orchestrator MUST validate:
 1. **TaskList check**: Call `TaskList()` and verify at least one task exists with `metadata.workflow_id` matching the current workflow
 2. **PL0 exists**: Verify a task with subject starting with `PL0:` exists
 3. **Stage tasks exist**: After PL0 completes, verify PL0 created subsequent stage tasks (at minimum DV0, DR0, and QA0 for any complexity level)
+4. **Stage contract check**: Verify upstream outputs match the next stage's Required Inputs per `shared/stage-contracts.md` (file exists + required sections present)
+5. **Metadata schema check**: Validate next task's metadata against `shared/task-system.md` § JSON Schema (non-PL tasks require `stage`, `agent`, `model`, `error_file`)
+6. **Model alias check**: `metadata.model ∈ {opus, sonnet, haiku}` — reject unknown aliases before `Task()` delegation
+7. **Workspace existence** (milestone/worktree mode only): verify `metadata.workspace_path` directory exists and `workspace.json` is readable
 
 If validation fails:
 - No tasks exist → Workflow not initialized. Re-run initialization (TaskCreate PL0)
 - PL0 exists but no subsequent tasks → PL0 did not complete properly. Re-run PL0
 - Tasks exist but are orphaned (no workflow_id) → Log warning and attempt to match by subject pattern
+- Contract violation → Do NOT transition. Append `missing_input` entry to next stage's `.context/errors/<agent>.md` and block.
 
 ## Orchestrator Execution Loop
 
@@ -221,9 +255,37 @@ while (tasks.some(t => t.status !== "completed")) {
     const agentType = full.metadata.agent;
     const model = full.metadata.model;
 
-    // Resolve plugin: qualified names (e.g., "apple-developer:ios-developer") used as-is;
-    // bare names (e.g., "developer") → "igrsoft:developer"
-    const subagentType = agentType.includes(':') ? agentType : `igrsoft:${agentType}`;
+    // Resolve plugin:
+    //   bare (no `:`)        e.g. "developer"                 → "igrsoft:developer"
+    //   2-part ("plugin:name") e.g. "apple-developer:ios-developer" → used as-is
+    //   3-part ("a:b:c")     → UNSUPPORTED. Orchestrator MUST error out:
+    //     "Invalid agent reference '{agentType}': only bare or plugin-qualified names supported."
+    //   The basename for .context/errors/<basename>.md is the last `:`-separated segment.
+    const colonCount = (agentType.match(/:/g) ?? []).length;
+    if (colonCount > 1) {
+      throw new Error(`Invalid agent reference '${agentType}': only bare or plugin-qualified names supported.`);
+    }
+    const subagentType = colonCount === 1 ? agentType : `igrsoft:${agentType}`;
+
+    // 4.5. Soft context_files validation — warn, don't abort
+    //      Low-complexity workflows legitimately skip upstream stages,
+    //      so a missing listed file is a warning appended to the prompt.
+    //      Exception: error_file absence is expected on first attempt
+    //      (retry_count === 0) — suppress that specific warning.
+    if (full.metadata.context_files) {
+      const listed = full.metadata.context_files.split(',').map(s => s.trim());
+      const retryCount = full.metadata.retry_count ?? 0;
+      const missing = listed.filter(p =>
+        !fs.existsSync(p) &&
+        !(p === full.metadata.error_file && retryCount === 0)
+      );
+      if (missing.length > 0) {
+        full.description =
+          `NOTE: Expected context files missing: ${missing.join(', ')}. ` +
+          `Proceed using what is available; do not fabricate content.\n\n` +
+          full.description;
+      }
+    }
 
     // 5. Mark in_progress
     TaskUpdate({ taskId: task.id, status: "in_progress" });
@@ -262,6 +324,80 @@ while (tasks.some(t => t.status !== "completed")) {
 - NEVER mark a task `completed` without first delegating to an agent and receiving its results — completion without delegation is the most common violation
 - The orchestrator uses ONLY TaskCreate, TaskUpdate, TaskGet, TaskList, and Agent tools. Edit/Write/Bash on source files belong to stage agents, not the orchestrator
 - The orchestrator owns the loop; stage agents own their stage's work
+
+## Resume After Interruption
+
+The orchestrator loop is restartable. On reattach (PostCompact, session crash,
+`--resume` flag), diagnose state via `TaskList()` + `.context/logs/audit.jsonl` tail
+before resuming.
+
+### State → Action Table
+
+| TaskList Shape | Audit Tail | Action |
+|----------------|------------|--------|
+| No tasks | — | Workflow never initialized. Start over with `/workflow <task>` |
+| PL0 only, `pending` | — | PL0 not started. Delegate PL0 and wait for approval |
+| PL0 only, `in_progress` | no `subagent_stopped` for PL0 | PL0 crashed mid-stage. Re-delegate PL0 (idempotent) |
+| PL0 `completed`, no stage tasks | — | PL0 did not create stages. Re-run PL0 |
+| PL0 `completed`, stage tasks `pending`, no `approval_received` line | — | Awaiting user approval. STOP and prompt user |
+| PL0 `completed`, `approval_received` present, some stages `in_progress` | most recent `subagent_stopped` `result: error` | Mid-stage failure. Read `.context/errors/<agent>.md`, honor `retry_count` |
+| PL0 `completed`, all stages `completed` except FN | — | Near-done. Resume at FN to create `complete.md` + PR |
+| Stages `in_progress` with no `metadata.retry_count` | missing audit lines | Stale task state. Re-derive from most recent `.context/logs/` capture |
+
+### Resume Procedure
+
+1. `tail -n 50 .context/logs/audit.jsonl | jq .` — last 50 audit lines
+2. `TaskList()` — current Task System state
+3. Cross-reference with `stage-contracts.md` — identify first incomplete stage
+4. Re-read that stage's `.context/*.md` artifact (if partial)
+5. If `metadata.retry_count > 0`, read `.context/errors/<agent>.md` for retry history
+6. Continue from the execution loop's `while (tasks.some(...))` — no need to replay completed stages
+7. Write a `resume` audit entry: `{actor: "orchestrator", action: "resume", subject: "<workflow_id>", result: "ok"}`
+
+See `context-compression.md § PostCompact Recovery` for the compaction-specific flow.
+
+## Approval Gate Hook
+
+The approval gate between PL0 and stage execution is currently honor-system —
+the orchestrator is expected to `STOP IMMEDIATELY` and wait for the user. A
+`PreToolUse` hook (v2.1.85+) can enforce this programmatically.
+
+### Advisory Rollout (Phase 1)
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Bash",
+        "if": "test -f .context/logs/audit.jsonl && ! grep -q approval_received .context/logs/audit.jsonl",
+        "command": ".claude/hooks/approval-gate.sh",
+        "mode": "warn"
+      }
+    ]
+  }
+}
+```
+
+### Blocking Rollout (Phase 2, after observation)
+
+Change `mode: "warn"` to `mode: "deny"`. The hook returns `defer` (v2.1.89+)
+with guidance: "Workflow awaiting user approval after PL0. Reply 'approve',
+'proceed', 'go', 'yes', or 'continue' to unblock."
+
+### `--auto-continue` Short-Circuit
+
+When `/workflow --auto-continue` is used, the orchestrator sets
+`TaskUpdate({taskId: "PL0", metadata: {approved: "auto"}})` and writes an
+`approval_received` audit line with `result: "auto"`. The hook's `if`
+expression evaluates false and execution proceeds without user input.
+
+### Safety Valve
+
+If the hook misfires (blocks legitimate post-approval work), the user can
+always remove the hook stanza from `settings.json` and retry. No persistent
+state is stored in the hook itself — the Task System metadata + audit log
+remain authoritative.
 
 ## Related
 

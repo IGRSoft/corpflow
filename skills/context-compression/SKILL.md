@@ -275,6 +275,59 @@ The `PreCompact` hook (v2.1.105+) fires **before** automatic context compaction 
 
 Use cases: gate compaction during critical multi-stage handoffs (PreCompact), re-inject critical task state, log compression metrics, recover workflow context in long multi-stage sessions (PostCompact).
 
+#### Example: `tools/post-compact-recovery.sh`
+
+Minimal recovery script that re-injects the audit tail, the in-progress task
+ID, and a pointer to `stage-contracts.md` so the orchestrator can resume.
+
+```bash
+#!/usr/bin/env bash
+# PostCompact recovery: emit a JSON blob that the orchestrator can read on
+# first turn after compaction. Written to .context/logs/post-compact-<ts>.json.
+
+set -euo pipefail
+mkdir -p .context/logs
+TS=$(date -u +%Y%m%d-%H%M%S)
+OUT=".context/logs/post-compact-${TS}.json"
+
+# 1. Audit tail — last 20 lines are enough to reconstruct stage transitions
+AUDIT_TAIL=$(tail -n 20 .context/logs/audit.jsonl 2>/dev/null | jq -sc '.' || echo '[]')
+
+# 2. In-progress task (if any)
+# NOTE: mtime ordering of error files is unreliable — file timestamps do not
+# correlate with task state. Correct approach: query the Task System via
+# TaskList for status=in_progress, or parse the tail of audit.jsonl to find
+# the most recent `subagent_stopped` entry without a matching `completed`.
+# Then derive the owning agent/stage and read `.context/errors/<agent>.md`.
+# The line below is a best-effort fallback for reference only.
+IN_PROGRESS=$(ls -t .context/errors/*.md 2>/dev/null | head -n 1 || echo "")
+
+# 3. Emit recovery blob
+jq -n \
+  --argjson audit "$AUDIT_TAIL" \
+  --arg active_error "$IN_PROGRESS" \
+  --arg contracts "skills/shared/stage-contracts.md" \
+  --arg resume_guide "skills/workflow/SKILL.md#resume-after-interruption" \
+  '{
+    recovery: {
+      audit_tail: $audit,
+      active_error_file: $active_error,
+      stage_contracts_ref: $contracts,
+      resume_guide_ref: $resume_guide,
+      instruction: "Read active_error_file and audit_tail, then resume per resume_guide_ref. Do NOT replay completed stages."
+    }
+  }' > "$OUT"
+
+echo "PostCompact recovery written to $OUT" >&2
+```
+
+After compaction, the orchestrator's next turn reads the most recent
+`post-compact-*.json`, follows the `resume_guide_ref`, and continues the
+execution loop from the first incomplete stage.
+
+See `skills/workflow/SKILL.md § Resume After Interruption` for the full state
+table and procedure.
+
 ### Session Recap (v2.1.108+)
 
 Claude Code auto-generates a session recap at key moments (also available via `/recap` or `--recap` on resume). Recaps are self-contained summaries that survive compaction and can be used as handoff context between workflow sessions. Telemetry-disabled users also receive recaps (fixed v2.1.110).

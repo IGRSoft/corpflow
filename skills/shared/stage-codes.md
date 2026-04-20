@@ -17,7 +17,7 @@ Single source of truth for workflow stage codes.
 | DV | Development | developer | opus |
 | DR | Developer Review | technical-lead | sonnet |
 | SR | Security Review | security-reviewer | opus |
-| QA | QA Testing | qa-engineer | haiku |
+| QA | QA Testing | qa-engineer | sonnet |
 | DC | Documentation | technical-writer | haiku |
 | RE | Release Engineering | release-engineer | haiku |
 | FN | Finalization | project-manager | opus |
@@ -31,8 +31,8 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 | Model | Stages |
 |-------|--------|
 | opus | PL, AR, DV, SR, FN, TC, PE, ET |
-| sonnet | TL, DR, ST, IR, DS, WE |
-| haiku | QA, DC, RE |
+| sonnet | TL, DR, QA, ST, IR, DS, WE |
+| haiku | DC, RE |
 
 ## Support Agents (On-Demand)
 

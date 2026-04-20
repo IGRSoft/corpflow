@@ -9,7 +9,7 @@
     "figma@claude-plugins-official": false,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false,
     "cicd-automation@claude-code-workflows": false,
-    "skill-creator@claude-plugins-official": false,
+    "skill-creator@claude-plugins-official": true,
     "agent-orchestration@claude-code-workflows": false,
     "security-scanning@claude-code-workflows": false
   }

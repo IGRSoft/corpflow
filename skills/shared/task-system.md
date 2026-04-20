@@ -32,18 +32,109 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 
 | Field | Purpose |
 |-------|---------|
-| `stage` | Stage code unnumbered (PL, AR, TL, DV, etc.) |
-| `agent` | Agent to execute this task (e.g., `software-architector`). Model resolved from agent frontmatter |
-| `model` | Model alias for this stage (opus, sonnet, haiku). Used by orchestrator when spawning agent |
-| `context_files` | Comma-separated list of `.context/` artifacts this stage should read |
+| `stage` | Stage code unnumbered (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) |
+| `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (e.g., `igrsoft:software-architector`, `apple-developer:ios-developer`). Bare names are accepted via a back-compat shim that prepends `igrsoft:` and emits a deprecation warning — emit qualified form at the call site |
+| `model` | Model alias for this stage (opus, sonnet, haiku). Always pass explicitly to `Task()` — do not rely on frontmatter inheritance |
+| `context_files` | Comma-separated list of `.context/` artifacts this stage should read. MUST include `error_file` — orchestrator appends automatically on `TaskCreate`/`TaskUpdate` if omitted |
+| `error_file` | Path `.context/errors/<agent-basename>.md`. Auto-derived from `agent` if absent. Basename = last `:`-separated segment; collisions joined with `-`. Auto-appended to `context_files` so the stage agent reads its own prior retry narrative |
+| `retry_count` | Integer 0–3. Incremented on retry; resets on escalation or success |
+| `error_escalated_to` | Stage code the failure escalated to when `retry_count` reached 3 |
 | `workflow_id` | Links task to workflow instance |
 | `priority` | high, medium, low |
 | `milestone_number` | GitHub milestone (--milestone mode) |
 | `issue_number` | GitHub issue being worked |
 | `workspace_path` | Workspace directory (milestone mode) or worktree path |
-| `track` | Parallel track number |
+| `track` | Parallel track number 1–5 |
 | `isolation` | `"worktree"` when using git worktree isolation (--worktree flag) |
 | `worktree_branch` | Branch name in worktree (convenience field, worktree mode only) |
+| `approved` | `"user"` after explicit post-PL0 approval, `"auto"` for `--auto-continue`, absent otherwise |
+
+### JSON Schema
+
+Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL tasks require `stage`, `agent`, `model`, `error_file`.
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "stage": {
+      "enum": ["PL", "AR", "TL", "DV", "DR", "SR", "QA", "DC", "RE", "FN", "ST", "IR", "ET"]
+    },
+    "agent": {
+      "type": "string",
+      "pattern": "^([a-z0-9-]+:)?[a-z0-9-]+$"
+    },
+    "model": {
+      "enum": ["opus", "sonnet", "haiku"]
+    },
+    "context_files": {
+      "type": "string",
+      "pattern": "^([a-z0-9/_.-]+\\.(md|json|jsonl|png|jpg|pen)(,[a-z0-9/_.-]+\\.(md|json|jsonl|png|jpg|pen))*)?$"
+    },
+    "error_file": {
+      "type": "string",
+      "pattern": "^\\.context/errors/[a-z0-9-]+\\.md$"
+    },
+    "retry_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "error_escalated_to": {
+      "enum": ["PL", "AR", "TL", "DV", "DR", "SR", "QA", "DC", "RE", "FN", "ST", "IR", "ET"]
+    },
+    "track": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "isolation": {
+      "enum": ["worktree"]
+    },
+    "priority": {
+      "enum": ["high", "medium", "low"]
+    },
+    "approved": {
+      "enum": ["user", "auto"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "stage": { "not": { "const": "PL" } } },
+        "required": ["stage"]
+      },
+      "then": {
+        "required": ["stage", "agent", "model", "error_file"]
+      }
+    }
+  ]
+}
+```
+
+**error_file derivation** (orchestrator populates if absent):
+- `agent: "igrsoft:developer"` → `error_file: ".context/errors/developer.md"` (last segment)
+- `agent: "apple-developer:ios-developer"` → `error_file: ".context/errors/ios-developer.md"` (last segment)
+- Basename collision across plugins → join with `-`: `.context/errors/apple-developer-ios-developer.md`
+
+**context_files ↔ error_file coupling**: On every `TaskCreate` and `TaskUpdate`,
+the orchestrator ensures `metadata.error_file` appears in `metadata.context_files`
+(appended if absent, deduped if already present). This guarantees the stage
+agent receives its own error history in its reading scope — on retry, it can
+see what it tried before and why it failed.
+
+```typescript
+// Orchestrator normalization (runs before Task() delegation)
+function normalizeMetadata(meta) {
+  const basename = meta.agent.split(':').pop();
+  meta.error_file ??= `.context/errors/${basename}.md`;
+  const files = new Set((meta.context_files ?? '').split(',').map(s => s.trim()).filter(Boolean));
+  files.add(meta.error_file);
+  meta.context_files = [...files].join(',');
+  return meta;
+}
+```
 
 ## Status Values
 

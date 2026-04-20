@@ -37,10 +37,32 @@ In the 9-stage workflow system, the project-manager handles:
 ### F Stage (Finalization)
 - Review all artifacts from previous stages
 - Run final builds and tests
-- Create complete.md summarizing the work
+- Create complete.md summarizing the work (include Stage Timings recap)
 - Create release.md with release notes
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
+
+### complete.md Stage Timings Template
+
+Aggregate from `.context/logs/cost-*.jsonl` (written by SubagentStop hook; see
+`skills/cost-optimization/SKILL.md` § Per-Stage Tracking). When the hook is
+absent, omit the table and note "cost hook not configured".
+
+```markdown
+## Stage Timings
+
+| Stage | Agent | Model | Tokens (in/out) | Duration | Cost | Retries |
+|-------|-------|-------|-----------------|----------|------|---------|
+| PL | product-manager | opus | 2100 / 1400 | 45s | $0.14 | 0 |
+| AR | software-architector | opus | 3800 / 2100 | 1m12s | $0.22 | 0 |
+| DV | developer | opus | 8200 / 4600 | 3m08s | $0.47 | 1 |
+| DR | technical-lead | sonnet | 3400 / 1200 | 42s | $0.03 | 0 |
+| QA | qa-engineer | sonnet | 4100 / 1800 | 1m05s | $0.04 | 0 |
+| DC | technical-writer | haiku | 1800 / 900 | 28s | $0.002 | 0 |
+| **Total** | — | — | **23,400 / 12,000** | **6m40s** | **$0.90** | **1** |
+
+Generated from `.context/logs/cost-*.jsonl` via `/cost-report --format md`.
+```
 
 **Workspace Mode**: Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. See `skills/milestone-workflow/SKILL.md § Workspace-Aware F Stage`.
 

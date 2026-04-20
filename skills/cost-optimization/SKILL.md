@@ -124,6 +124,71 @@ Standard   → workflow:→ 9      → $0.20-0.40
 Complex    → workflow:→ 9+iter → $0.50-1.00+
 ```
 
+## Per-Stage Tracking
+
+Hook-based capture of every subagent invocation produces a per-stage JSONL trail
+for the `/cost-report` aggregator and the FN-stage timing recap.
+
+### SubagentStop Hook
+
+Add to project `settings.json`:
+
+```json
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "matcher": "igrsoft:.*",
+        "command": ".claude/hooks/cost-log.sh",
+        "if": "$CLAUDE_TASK_METADATA_STAGE != ''"
+      }
+    ]
+  }
+}
+```
+
+### Capture Script (`.claude/hooks/cost-log.sh`)
+
+```bash
+#!/usr/bin/env bash
+mkdir -p .context/logs
+STAGE="${CLAUDE_TASK_METADATA_STAGE:-unknown}"
+TS=$(date -u +%Y%m%d-%H%M%S)
+LOG=".context/logs/cost-${STAGE}-${TS}.jsonl"
+jq -cn --arg ts "$(date -u +%FT%TZ)" '{
+  ts: $ts,
+  agent_type: env.CLAUDE_SUBAGENT_TYPE,
+  task_id: env.CLAUDE_TASK_ID,
+  stage: env.CLAUDE_TASK_METADATA_STAGE,
+  model: env.CLAUDE_TASK_METADATA_MODEL,
+  input_tokens: (env.CLAUDE_INPUT_TOKENS // "0" | tonumber),
+  output_tokens: (env.CLAUDE_OUTPUT_TOKENS // "0" | tonumber),
+  duration_ms: (env.CLAUDE_DURATION_MS // "0" | tonumber),
+  status: env.CLAUDE_SUBAGENT_STATUS
+}' >> "$LOG"
+```
+
+### Schema
+
+```jsonc
+{
+  "ts": "ISO-8601 UTC",
+  "agent_type": "e.g., igrsoft:developer",
+  "task_id": "Task System ID",
+  "stage": "PL|AR|TL|DV|DR|SR|QA|DC|RE|FN|ST|IR|ET",
+  "model": "opus|sonnet|haiku",
+  "input_tokens": 0,
+  "output_tokens": 0,
+  "duration_ms": 0,
+  "status": "completed|error|cancelled"
+}
+```
+
+### Aggregation
+
+`/cost-report` reads all `.context/logs/cost-*.jsonl` files, groups by `stage`,
+and renders the `### By Stage` table. See `commands/cost-report.md` § Data Source.
+
 ## Budget Tracking
 
 ### Cost Estimation Formula
