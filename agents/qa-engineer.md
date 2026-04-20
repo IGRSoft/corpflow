@@ -75,13 +75,25 @@ In the 9-stage workflow system, the qa-engineer handles:
 
 When design references exist in `.context/designs/`, perform visual comparison during Q1 (after functional testing).
 
-#### When to Perform
+#### Registry-Driven Comparison (Primary Path)
 
-Check for design assets:
-- `Glob({ pattern: ".context/designs/figma-*.png" })` — Figma screenshots
-- `Glob({ pattern: ".context/designs/mockup-*.pen" })` — Pencil mockups
+If `.context/designs/figma-registry.md` exists, it is the authoritative source — parse its Entries table and run comparison row-by-row:
 
-If either exists, execute design comparison. Figma screenshots take precedence as the authoritative reference when both exist.
+1. For each row, load the Figma screenshot at `.context/designs/<Screenshot>` with `Read`.
+2. Navigate the implementation to the screen named in `Target File(s)` (platform workflow below).
+3. Capture an implementation screenshot.
+4. Compare both via Claude multimodal vision (see Visual Comparison below).
+5. Append one row to `testing.md § Design Comparison` using the canonical template (below).
+
+Parser tolerance: unknown columns are ignored; rows missing required columns (`ID`, `Screenshot`, `Target File(s)`) are skipped and logged as `missing_input` in `.context/errors/qa-engineer.md`.
+
+#### Fallback: Glob Discovery (Legacy Tasks)
+
+If the registry is missing, glob `.context/designs/figma-*.png` and compare what's there — the legacy behavior. Flag the missing registry in `testing.md § Design Comparison` as a process gap:
+
+> No `figma-registry.md` found; using glob fallback. Screen/state/target mapping inferred from filenames only.
+
+Pencil `.pen` mockups (`.context/designs/mockup-*.pen`) are compared independently of the Figma registry: load Pencil tools via `ToolSearch({ query: "+pencil" })`, then use `mcp__pencil__get_screenshot({ filePath, nodeId })` to render the mockup for visual comparison.
 
 #### Implementation Screenshot Capture
 
@@ -100,22 +112,26 @@ Use the `Read` tool to load both the design screenshot and the implementation sc
 - State representation (default, error, empty, loading)
 - Icon and image placement
 
-#### Pencil Mockup Comparison
+#### Severity Taxonomy (canonical)
 
-For `.pen` mockups, load Pencil tools via `ToolSearch({ query: "+pencil" })`, then use `mcp__pencil__get_screenshot({ filePath, nodeId })` to render the mockup for visual comparison.
+- **Critical**: Layout broken, missing components, unusable state
+- **Major**: Noticeable visual difference — wrong colors, spacing off by > 8px, wrong copy
+- **Minor**: Subtle spacing or color difference, typography nuance
 
 #### Reporting
 
-Document results in `testing.md` under a `## Design Comparison` section:
+Document results in `testing.md § Design Comparison` using the canonical table:
 
-| Design Reference | Implementation Screenshot | Verdict |
-|-----------------|--------------------------|---------|
-| `figma-login-screen-42-1.png` | Simulator screenshot | Match / Mismatch |
+| ID | Screen | State | Verdict | Severity | Notes |
+|----|--------|-------|---------|----------|-------|
+| design-001 | login | default | Match    | — | — |
+| design-002 | login | error   | Mismatch | Major | Error banner color off (#FF3B30 vs #D32F2F) |
 
-**Discrepancy severity**:
-- **Critical**: Layout broken, missing components
-- **Major**: Noticeable visual difference (wrong colors, spacing off by > 8px)
-- **Minor**: Subtle spacing or color difference
+When using the registry path, every registry row MUST appear as exactly one row in this table.
+
+After the table, include a one-line AC coverage summary:
+
+> AC coverage: N of M acceptance criteria from `planning.md` have matching design-verified screens.
 
 ## Boundaries
 
