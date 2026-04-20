@@ -3,7 +3,7 @@ name: prompt-engineer
 description: Elite AI prompt engineering specialist for optimizing and creating agents, commands, skills, and improving AI logic. Masters prompt architecture, model selection, token efficiency, and multi-agent coordination. Use PROACTIVELY for agent/command creation, prompt optimization, or AI behavior improvement.
 model: opus
 color: yellow
-effort: high
+effort: xhigh
 maxTurns: 50
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---

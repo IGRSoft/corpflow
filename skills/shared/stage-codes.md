@@ -30,8 +30,8 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 
 | Model | Stages |
 |-------|--------|
-| opus | PL, AR, DV, SR, FN, TC, PE |
-| sonnet | TL, DR, ST, IR, DS, ET, WE |
+| opus | PL, AR, DV, SR, FN, TC, PE, ET |
+| sonnet | TL, DR, ST, IR, DS, WE |
 | haiku | QA, DC, RE |
 
 ## Support Agents (On-Demand)
@@ -40,13 +40,13 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 |------|-------|-------|------------|
 | DS | designer | sonnet | PL, AR, DV, QA |
 | TC | technical-lead | opus | AR, TL, DV, QA |
-| ET | ethics-reviewer | sonnet | Any stage |
+| ET | ethics-reviewer | opus | Any stage |
 | PE | prompt-engineer | opus | Agent optimization |
 | WE | workflow-engineer | sonnet | Workflow troubleshooting |
 
 Support agents don't own workflow stages but can be invoked on-demand via Task tool.
 
-> Model column uses aliases (`opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-5`) are also supported in agent frontmatter. Use aliases for portability across providers. Opus 4.6 is the default across all providers (Anthropic, Bedrock, Vertex, Foundry).
+> Model column uses aliases (`opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-7`) are also supported in agent frontmatter. Use aliases for portability across providers. **Opus 4.7** is the latest Claude model (v2.1.111+); Opus 4.6 remains supported. Auto mode is available for Max subscribers on Opus 4.7 and no longer requires `--enable-auto-mode` (v2.1.111).
 
 > **Default effort is now `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans (v2.1.94). Only Pro plan retains medium default. Agents with explicit `effort:` frontmatter are unaffected.
 
@@ -54,7 +54,7 @@ Support agents don't own workflow stages but can be invoked on-demand via Task t
 
 | Field | Type | Version | Purpose |
 |-------|------|---------|---------|
-| `effort` | `low`/`medium`/`high` | 2.1.78 | Set default effort level for agent |
+| `effort` | `low`/`medium`/`high`/`xhigh`/`max` | 2.1.78 (xhigh added 2.1.111) | Set default effort level for agent |
 | `maxTurns` | number | 2.1.78 | Limit agent turn count |
 | `disallowedTools` | comma-separated | 2.1.78 | Block specific tools from agent |
 | `initialPrompt` | string | 2.1.83 | Auto-submit first turn on agent start |

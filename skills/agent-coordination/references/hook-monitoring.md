@@ -23,6 +23,12 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 > PreToolUse/PostToolUse hooks receive `file_path` as an absolute path for Write/Edit/Read tools, matching documented behavior (confirmed v2.1.89).
 
+> `PreCompact` hook (v2.1.105+) fires **before** automatic compaction and can block it by returning exit code 2 — useful for guarding critical stage handoffs from premature summarization. See `context-compression` skill for the paired `PostCompact` recovery pattern.
+
+> Background monitor support for plugins via `monitors` manifest key (v2.1.105+). Declare long-running monitors that stream events into the session without occupying a foreground tool call.
+
+> Subagents that stall fail with a clear error after 10 minutes (v2.1.113). Orchestrators should surface this error and either retry the stage or escalate rather than waiting indefinitely. Crash fix (v2.1.114): permission dialog no longer crashes when an agent teams teammate requests tool permission.
+
 ### Project-Level Configuration
 
 Add to project `settings.json` for workflow-wide monitoring:

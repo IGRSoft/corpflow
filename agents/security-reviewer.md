@@ -3,7 +3,7 @@ name: security-reviewer
 description: Security review specialist for OWASP compliance, vulnerability scanning, and secure coding validation. Owns the SR (Security Review) stage in secure/full workflows. Use PROACTIVELY for security audits, vulnerability assessment, or OWASP compliance checks.
 model: opus
 color: red
-effort: high
+effort: xhigh
 maxTurns: 50
 tools: Read, Glob, Grep, Bash, Write, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:security-auditor)
 ---

@@ -57,6 +57,19 @@ Typical token usage by workflow stage (sonnet model):
 | Session memory leak fix (virtual scroller) | 2.1.101 | Prevents gradual memory growth |
 | Focus mode self-contained summaries | 2.1.101 | Better context compression in focus view |
 | OS CA certificate store trust by default | 2.1.101 | Enterprise TLS proxies work without setup |
+| Stalled API stream handling (5-min timeout, retry non-streaming) | 2.1.105 | Reduces stuck requests that burn cache |
+| `WebFetch` strips `<style>` and `<script>` contents | 2.1.105 | Less noise in fetched documentation |
+| MCP large-output truncation improvements | 2.1.105 | More efficient MCP payload handling |
+| Recap feature for session context | 2.1.108 | Configurable via `/recap` for session summaries |
+| Model can discover/invoke built-in slash commands via Skill tool | 2.1.108 | Agents can call `/compact`, `/model`, etc. as skills |
+| `ENABLE_PROMPT_CACHING_1H` env var for 1-hour cache TTL | 2.1.108 | Extended cache across longer sessions |
+| Reduced memory footprint for file reads + syntax highlighting | 2.1.108 | Lower per-agent memory overhead |
+| Tab-completing `/resume` improvements | 2.1.111 | Faster resume selection |
+| `/skills` menu token-sort toggle (press `t`) | 2.1.111 | Surfaces cost-heavy skills first |
+| Read-only bash commands with glob patterns skip permission prompts | 2.1.111 | Fewer interruptions in auto mode |
+| Subagents that stall fail with clear error after 10 minutes | 2.1.113 | Prevents silent hangs consuming budget |
+| Native Claude Code binary replaces bundled JS CLI | 2.1.113 | Faster startup; per-platform optional dependency |
+| Agent teams teammate permission dialog crash fix | 2.1.114 | Prevents crash when teammate requests tool permission |
 
 These are automatic — no agent or workflow changes needed. They compound across multi-stage workflows.
 
