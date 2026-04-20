@@ -179,7 +179,7 @@ Maximum tokens to pass between stages:
 
 ### Extended Context Budget (1M Window)
 
-When running on Opus 4.6 with Max/Team/Enterprise plans, the context window is 1M tokens. Handoff budgets scale proportionally:
+When running on Opus 4.6/4.7 with Max/Team/Enterprise plans, the context window is 1M tokens. Handoff budgets scale proportionally:
 
 | Handoff | Standard Budget | Extended Budget (1M) |
 |---------|----------------|---------------------|
@@ -248,13 +248,20 @@ When context exceeds budget:
 | Focus mode | Focus view (Ctrl+O) generates self-contained summaries; v2.1.101 improves completeness |
 | Compaction duplicates | Compaction no longer produces duplicate transcript entries (fixed v2.1.97) |
 
-### PostCompact Hook
+### PreCompact & PostCompact Hooks
 
-The `PostCompact` hook fires after automatic context compaction completes. Use it for workflow context recovery:
+The `PreCompact` hook (v2.1.105+) fires **before** automatic context compaction begins. Return exit code 2 to block compaction (useful when critical stage work is in-flight and cannot afford summarization). The `PostCompact` hook (v2.1.76+) fires **after** compaction completes and is used for context recovery.
 
 ```json
 {
   "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "./tools/pre-compact-guard.sh" }
+        ]
+      }
+    ],
     "PostCompact": [
       {
         "hooks": [
@@ -266,7 +273,11 @@ The `PostCompact` hook fires after automatic context compaction completes. Use i
 }
 ```
 
-Use cases: re-inject critical task state, log compression metrics, recover workflow context in long multi-stage sessions.
+Use cases: gate compaction during critical multi-stage handoffs (PreCompact), re-inject critical task state, log compression metrics, recover workflow context in long multi-stage sessions (PostCompact).
+
+### Session Recap (v2.1.108+)
+
+Claude Code auto-generates a session recap at key moments (also available via `/recap` or `--recap` on resume). Recaps are self-contained summaries that survive compaction and can be used as handoff context between workflow sessions. Telemetry-disabled users also receive recaps (fixed v2.1.110).
 
 ### Context Size Estimation
 

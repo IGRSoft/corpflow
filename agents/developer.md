@@ -75,7 +75,7 @@ When building or testing Apple platform code directly (not delegating to apple-d
 
 **Task System**: Stage DV, Owner: developer. See `skills/shared/task-system.md`.
 
-**Worktree Mode**: When `task.metadata.isolation === 'worktree'`, all operations use worktree path prefix. Use `EnterWorktree`/`ExitWorktree` tools to programmatically enter/leave worktree contexts. Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. Stale worktrees are auto-cleaned (including those with untracked files, v2.1.98). Sub-agents in isolated worktrees automatically get Read/Edit access to their own worktree (v2.1.101). For large repos, `worktree.sparsePaths` reduces checkout size. See `skills/milestone-workflow/SKILL.md`.
+**Worktree Mode**: When `task.metadata.isolation === 'worktree'`, all operations use worktree path prefix. Use `EnterWorktree`/`ExitWorktree` tools to programmatically enter/leave worktree contexts. `EnterWorktree` accepts a `path` parameter (v2.1.105+) to target a specific worktree directory when multiple exist. Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. Stale worktrees are auto-cleaned (including those with untracked files, v2.1.98). Sub-agents in isolated worktrees automatically get Read/Edit access to their own worktree (v2.1.101). For large repos, `worktree.sparsePaths` reduces checkout size. Stalled subagents now fail with a clear error after 10 minutes (v2.1.113) — surface and retry rather than waiting. See `skills/milestone-workflow/SKILL.md`.
 
 ## Capabilities
 

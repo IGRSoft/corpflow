@@ -2,7 +2,7 @@
 
 A comprehensive 9-stage workflow system for Claude Code with Task System integration, stage transitions, approval gates, and structured task management.
 
-claude-code min version: "2.1.101"
+claude-code min version: "2.1.114"
 
 ## Features
 

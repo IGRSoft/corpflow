@@ -1,9 +1,9 @@
 ---
 name: ethics-reviewer
 description: Ethics and constitutional compliance reviewer for AI agent decisions and outputs. Use PROACTIVELY for high-risk decisions, potential harm scenarios, or when ethical implications are unclear.
-model: sonnet
+model: opus
 color: white
-effort: medium
+effort: high
 maxTurns: 25
 tools: Read, Glob, Grep, Write, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---

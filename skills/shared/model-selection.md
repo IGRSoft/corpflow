@@ -14,7 +14,7 @@ effort: low
 | **sonnet** | ~10x haiku | ~$3.00 | Implementation, analysis, code review, coordination |
 | **opus** | ~50x haiku | ~$15.00 | Architecture decisions, complex reasoning, meta-optimization |
 
-> **Opus 4.6 Effort Levels**: `low` ○, `medium` ◐, `high` ● only. **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans (v2.1.94). Pro plan retains medium default. The keyword "ultrathink" still triggers high effort. Use `/effort auto` to reset.
+> **Opus 4.7 Effort Levels**: `low` ○, `medium` ◐, `high` ●, `xhigh` ⬣ (v2.1.111+), `max` ⬛. **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans (v2.1.94). Pro plan retains medium default. The keyword "ultrathink" still triggers high effort. Use `/effort auto` to reset; `/effort` opens an interactive slider with arrow-key navigation (v2.1.111). Opus 4.6 remains supported.
 
 ## Selection Criteria
 

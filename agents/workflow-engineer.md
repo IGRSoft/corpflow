@@ -182,10 +182,14 @@ When `--worktree` flag is present, add these checks:
 3. Force remove if truly unneeded: `git worktree remove --force {path}`
 4. Run `git worktree prune` to clean stale references (auto-cleaned on startup, handles untracked files correctly v2.1.98)
 
-### Plugin Management (v2.1.94/2.1.98+)
+### Plugin Management (v2.1.94/2.1.98/2.1.105+)
 
 - `/reload-plugins` picks up new skills without requiring restart (v2.1.98)
 - Plugin skills use frontmatter `name` field for invocation, not directory basename (v2.1.94)
+- Plugins can declare background monitors via `monitors` manifest key (v2.1.105); these stream events without occupying a foreground tool call
+- `EnterWorktree` accepts a `path` parameter (v2.1.105) to target a specific worktree directory
+- Subagents stalled for more than 10 minutes now fail with a clear error (v2.1.113) — escalate or retry rather than waiting indefinitely
+- Permission dialog crash fixed when an agent teams teammate requests tool permission (v2.1.114)
 
 ### Orchestrator / Worktree Mismatch
 

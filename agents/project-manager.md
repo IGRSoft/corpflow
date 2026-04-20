@@ -3,7 +3,7 @@ name: project-manager
 description: Master project management with agile methodologies, task coordination, resource allocation, and risk management. Use PROACTIVELY for project planning, task management, or resource coordination.
 model: opus
 color: cyan
-effort: high
+effort: medium
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -44,7 +44,7 @@ In the 9-stage workflow system, the project-manager handles:
 
 **Workspace Mode**: Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. See `skills/milestone-workflow/SKILL.md § Workspace-Aware F Stage`.
 
-**PR Creation**: Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode. Stale worktrees are auto-cleaned.
+**PR Creation**: Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode (use `EnterWorktree` with `path` parameter (v2.1.105+) to target the correct worktree when multiple exist). Stale worktrees are auto-cleaned.
 
 **Task System**: Stage FN, Owner: project-manager. See `skills/shared/task-system.md`.
 
