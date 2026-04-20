@@ -231,5 +231,5 @@ When `--worktree` flag is present, add these checks:
 1. Keep `in_progress` during retries
 2. Retries < 3: Fix and retry
 3. Retries = 3: Escalate to previous stage
-4. Log in `.context/error.md`
+4. Log in `.context/error.md` (human escalation narrative). Raw background/Monitor capture belongs in `.context/logs/` — see `logging-conventions` skill.
 

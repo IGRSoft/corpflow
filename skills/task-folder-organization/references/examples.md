@@ -30,6 +30,11 @@ The Designer agent generates .pen design mockups for UI-related tasks using the 
 | Figma Screenshots | Product Manager (PL) | `.context/designs/figma-*.png` | PNG |
 | Screenshots | User | `.context/images/screenshot-*.png` | PNG/JPG |
 | Diagrams | User | `.context/images/diagram-*.png` | PNG/SVG |
+| Build Logs | DV / background Bash | `.context/logs/build-*.log` | plain text |
+| Test Logs | QA / test_sim | `.context/logs/test-*.log` | plain text |
+| Monitor Streams | Any agent w/ Monitor | `.context/logs/monitor-*.log` | plain text |
+| Simulator Logs | DV / QA (launch_app_logs_sim) | `.context/logs/sim-*.log` | plain text |
+| Incident Tails | IR / incident-responder | `.context/logs/incident-*.log` | plain text |
 
 **Naming**:
 - Pencil: `mockup-[feature]-[screen]-[variant].pen`
@@ -96,6 +101,24 @@ When a user attaches images during a workflow task, copy them to `.context/image
 ├── approval.md
 └── images/
     └── feature-mockup.png
+```
+
+### Example 2a: Feature with Background Build/Test Logs
+
+Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands in `.context/logs/`. Names follow `<kind>-<scope>-<timestamp>.log`.
+
+```
+.context/
+├── planning.md
+├── development.md
+├── developer-review.md
+├── testing.md
+├── complete.md
+└── logs/
+    ├── build-20260420-141522.log           # DV: build_sim run
+    ├── test-qa-20260420-143008.log         # QA: test_sim run
+    ├── monitor-developer-20260420-142250.log  # Monitor stream during DV
+    └── sim-iphone15-20260420-143201.log    # QA: launch_app_logs_sim
 ```
 
 ### Example 2b: Feature with Designer-Generated Pencil Mockups

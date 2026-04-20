@@ -160,7 +160,7 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 
 ### Monitor Tool for Background Events (v2.1.98+)
 
-The `Monitor` tool streams events (stdout lines) from background scripts started via Bash with `run_in_background`. Use for watching build output during DV, streaming test results during QA, or log tailing during IR. Unlike polling with `Read`, Monitor provides event-driven notifications without sleep loops.
+The `Monitor` tool streams events (stdout lines) from background scripts started via Bash with `run_in_background`. Use for watching build output during DV, streaming test results during QA, or log tailing during IR. Unlike polling with `Read`, Monitor provides event-driven notifications without sleep loops. Tee the background stream into `.context/logs/monitor-<agent>-<timestamp>.log` so the capture persists after the Monitor session ends — see `logging-conventions` skill.
 
 ### MCP Large Result Handling
 

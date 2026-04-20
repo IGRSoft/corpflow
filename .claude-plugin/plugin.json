@@ -53,6 +53,7 @@
     "enter-worktree-path",
     "plugin-monitors",
     "prompt-caching-1h",
-    "subagent-stall-timeout"
+    "subagent-stall-timeout",
+    "context-logs-convention"
   ]
 }
