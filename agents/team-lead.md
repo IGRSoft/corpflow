@@ -82,7 +82,7 @@ TL can split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async 
      subject: "DV{N}: {stream description}",
      description: "{scope, file ownership, interface contracts, acceptance criteria}",
      metadata: {
-       stage: "DV", agent: "developer", model: "opus",
+       stage: "DV", agent: "igrsoft:developer", model: "opus",
        error_file: ".context/errors/developer.md",
        context_files: "planning.md,analyzing.md,coordination.md,.context/errors/developer.md",
        workflow_id: "{id}", priority: "medium"

@@ -145,7 +145,7 @@ TaskCreate({
   subject: "PL0: Planning",
   description: "Define requirements, assess complexity, create stage tasks",
   activeForm: "Planning task requirements",
-  metadata: { stage: "PL", agent: "product-manager", model: "opus", workflow_id: workflowId, priority: "medium" }
+  metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", workflow_id: workflowId, priority: "medium" }
 });
 
 // Start immediately
@@ -243,7 +243,7 @@ const ar0 = TaskCreate({
   description: "Design dark mode architecture with theme switching",
   activeForm: "Architecting solution",
   metadata: {
-    stage: "AR", agent: "software-architector", model: "opus",
+    stage: "AR", agent: "igrsoft:software-architector", model: "opus",
     error_file: ".context/errors/software-architector.md",
     context_files: "exploration.md,planning.md,.context/errors/software-architector.md",
     workflow_id: workflowId, priority: "medium"
@@ -255,7 +255,7 @@ const dv0 = TaskCreate({
   description: "Implement dark mode theme system and color tokens",
   activeForm: "Implementing code",
   metadata: {
-    stage: "DV", agent: "developer", model: "opus",
+    stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
     context_files: "exploration.md,planning.md,analyzing.md,coordination.md,.context/errors/developer.md",
     workflow_id: workflowId, priority: "medium"
@@ -267,7 +267,7 @@ const dr0 = TaskCreate({
   description: "Review code quality, patterns, and platform-specific best practices",
   activeForm: "Reviewing code",
   metadata: {
-    stage: "DR", agent: "technical-lead", model: "sonnet",
+    stage: "DR", agent: "igrsoft:technical-lead", model: "sonnet",
     error_file: ".context/errors/technical-lead.md",
     context_files: "exploration.md,planning.md,analyzing.md,coordination.md,development.md,.context/errors/technical-lead.md",
     workflow_id: workflowId, priority: "medium"
@@ -279,7 +279,7 @@ const qa0 = TaskCreate({
   description: "Test theme switching, contrast ratios, persistence",
   activeForm: "Testing solution",
   metadata: {
-    stage: "QA", agent: "qa-engineer", model: "sonnet",
+    stage: "QA", agent: "igrsoft:qa-engineer", model: "sonnet",
     error_file: ".context/errors/qa-engineer.md",
     context_files: "exploration.md,planning.md,developer-review.md,testing.md,.context/errors/qa-engineer.md",
     workflow_id: workflowId, priority: "medium"
@@ -298,14 +298,15 @@ TaskUpdate({ taskId: "1", status: "completed" });
 
 ## Task Execution Pattern
 
-When a task starts, the executor reads `metadata.agent` and spawns the agent:
+When a task starts, the executor reads `metadata.agent` and spawns the agent. **Convention**: `metadata.agent` MUST be fully-qualified `plugin:agent` form (e.g., `igrsoft:developer`, `apple-developer:ios-developer`). Bare names are accepted by the back-compat shim below but are deprecated and should be replaced.
 
 ```typescript
 const task = TaskGet({ taskId: currentTaskId });
-const agentType = task.metadata.agent;  // e.g., "developer" or "apple-developer:ios-developer"
+const agentType = task.metadata.agent;  // e.g., "igrsoft:developer" or "apple-developer:ios-developer"
 const model = task.metadata.model;      // e.g., "haiku"
 
-// Resolve plugin: qualified names used as-is, bare names prepend "igrsoft:"
+// Back-compat shim: qualified names used as-is. Bare names prepend "igrsoft:" and
+// log a deprecation warning — emit qualified form at the call site instead.
 const subagentType = agentType.includes(':') ? agentType : `igrsoft:${agentType}`;
 
 // Build context-aware prompt
@@ -321,7 +322,7 @@ for (const artifact of previousArtifacts) {
 }
 
 Task({
-  subagent_type: subagentType,           // bare name → "igrsoft:{name}"; qualified → as-is
+  subagent_type: subagentType,           // qualified `plugin:agent` (bare → "igrsoft:{name}" via back-compat shim)
   model: model,                           // explicit model — do NOT rely on frontmatter inheritance
   prompt: prompt                           // context-enriched instructions
 });
@@ -351,7 +352,7 @@ const dv1 = TaskCreate({
   subject: "DV1: Implement theme switcher",
   description: "Add toggle and persistence (owns: Source/Settings/Theme/)",
   metadata: {
-    stage: "DV", agent: "developer", model: "opus",
+    stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
     context_files: "planning.md,analyzing.md,coordination.md,.context/errors/developer.md",
     workflow_id: workflowId, priority: "medium"
@@ -362,7 +363,7 @@ const dv2 = TaskCreate({
   subject: "DV2: Implement dark mode assets",
   description: "Create dark variants for all image assets (owns: Assets/Dark/)",
   metadata: {
-    stage: "DV", agent: "developer", model: "opus",
+    stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
     context_files: "planning.md,analyzing.md,coordination.md,.context/errors/developer.md",
     workflow_id: workflowId, priority: "medium"
@@ -388,7 +389,7 @@ const dv1 = TaskCreate({
   subject: "DV1: Implement theme color tokens",
   description: "Create semantic color tokens for light/dark themes",
   metadata: {
-    stage: "DV", agent: "developer", model: "opus",
+    stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
     context_files: "planning.md,analyzing.md,.context/errors/developer.md",
     workflow_id: workflowId, priority: "medium"
@@ -399,7 +400,7 @@ const dv2 = TaskCreate({
   subject: "DV2: Implement theme switcher",
   description: "Add toggle and persistence for theme preference",
   metadata: {
-    stage: "DV", agent: "developer", model: "opus",
+    stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
     context_files: "planning.md,analyzing.md,.context/errors/developer.md",
     workflow_id: workflowId, priority: "medium"

@@ -33,7 +33,7 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 | Field | Purpose |
 |-------|---------|
 | `stage` | Stage code unnumbered (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) |
-| `agent` | Agent to execute this task (e.g., `software-architector`, `apple-developer:ios-developer`). Bare names prepend `igrsoft:`; qualified names used as-is |
+| `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (e.g., `igrsoft:software-architector`, `apple-developer:ios-developer`). Bare names are accepted via a back-compat shim that prepends `igrsoft:` and emits a deprecation warning — emit qualified form at the call site |
 | `model` | Model alias for this stage (opus, sonnet, haiku). Always pass explicitly to `Task()` — do not rely on frontmatter inheritance |
 | `context_files` | Comma-separated list of `.context/` artifacts this stage should read. MUST include `error_file` — orchestrator appends automatically on `TaskCreate`/`TaskUpdate` if omitted |
 | `error_file` | Path `.context/errors/<agent-basename>.md`. Auto-derived from `agent` if absent. Basename = last `:`-separated segment; collisions joined with `-`. Auto-appended to `context_files` so the stage agent reads its own prior retry narrative |
@@ -114,7 +114,7 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
 ```
 
 **error_file derivation** (orchestrator populates if absent):
-- `agent: "developer"` → `error_file: ".context/errors/developer.md"`
+- `agent: "igrsoft:developer"` → `error_file: ".context/errors/developer.md"` (last segment)
 - `agent: "apple-developer:ios-developer"` → `error_file: ".context/errors/ios-developer.md"` (last segment)
 - Basename collision across plugins → join with `-`: `.context/errors/apple-developer-ios-developer.md`
 

@@ -109,20 +109,27 @@ Use the **Unified Complexity Assessment** from `skills/workflow/SKILL.md § Dyna
 
 **Agent mapping for `metadata.agent`**:
 
-Bare names resolve to `igrsoft:{name}`. Fully-qualified names (containing `:`) are dispatched as-is — use when a stage should go directly to an external plugin agent.
+Always emit fully-qualified `plugin:agent` form. The plugin prefix follows the agent's owning plugin: `igrsoft:` for orchestration/process agents (product-manager, software-architector, developer, qa-engineer, …), `apple-developer:` for Apple platform agents (ios-developer, macos-developer, apple-architector, test-generator, performance-engineer, security-auditor, localizator, code-fixer, dependency-manager), or the relevant prefix for any other installed plugin. Bare names still work via a back-compat shim that prepends `igrsoft:` and warns — emit qualified form at the call site.
 
-| Stage | Agent | Notes |
-|-------|-------|-------|
-| AR0 | software-architector | or `apple-developer:apple-architector` for Apple-only |
-| TL0 | team-lead | |
-| DV0 | developer | or `apple-developer:apple-developer`, `apple-developer:ios-developer`, etc. |
-| DR0 | technical-lead | Invokes /code-review-dev |
-| SR0 | security-reviewer | or `apple-developer:security-auditor`, `security-scanning:security-auditor` |
-| QA0 | qa-engineer | |
-| DC0 | technical-writer | |
-| RE0 | release-engineer | |
-| FN0 | project-manager | |
-| ST0 | stakeholder | |
+| Stage | Default Agent | Apple Platform Variant |
+|-------|---------------|------------------------|
+| AR0 | `igrsoft:software-architector` | `apple-developer:apple-architector` |
+| TL0 | `igrsoft:team-lead` | (same) |
+| DV0 | `igrsoft:developer` | `apple-developer:ios-developer` (or `:macos-developer`, `:watchos-developer`, `:tvos-developer`, `:visionos-developer`) |
+| DR0 | `igrsoft:technical-lead` | (same — invokes /code-review-dev) |
+| SR0 | `igrsoft:security-reviewer` | `apple-developer:security-auditor` (or `security-scanning:security-auditor`) |
+| QA0 | `igrsoft:qa-engineer` | (same — may delegate to `apple-developer:test-generator`) |
+| DC0 | `igrsoft:technical-writer` | (same) |
+| RE0 | `igrsoft:release-engineer` | (same) |
+| FN0 | `igrsoft:project-manager` | (same) |
+| ST0 | `igrsoft:stakeholder` | (same) |
+
+**Worked example** — `--platform Apple` workflow at score 25 (Moderate):
+- AR0 → `agent: "apple-developer:apple-architector"`
+- TL0 → `agent: "igrsoft:team-lead"`
+- DV0 → `agent: "apple-developer:ios-developer"` (error_file = `.context/errors/ios-developer.md`)
+- DR0 → `agent: "igrsoft:technical-lead"`
+- QA0 → `agent: "igrsoft:qa-engineer"`
 
 **See**: `skills/workflow/SKILL.md` for full assessment table. `skills/workflow/references/initialization-patterns.md § PL Creates Subsequent Tasks` for code pattern.
 
@@ -229,7 +236,7 @@ const et = TaskCreate({
   description: "Review planning.md for ethical risks per detected keywords. Produce .context/ethics-review.md with Decision ∈ {pass, block, conditional}.",
   metadata: {
     stage: "ET",
-    agent: "ethics-reviewer",
+    agent: "igrsoft:ethics-reviewer",
     model: "opus",
     error_file: ".context/errors/ethics-reviewer.md",
     context_files: "planning.md,.context/errors/ethics-reviewer.md",

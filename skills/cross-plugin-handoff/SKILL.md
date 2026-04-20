@@ -166,7 +166,7 @@ External agent should:
 
 ## Direct Orchestrator Dispatch
 
-The orchestrator loop resolves `metadata.agent` dynamically: bare names prepend `igrsoft:`, fully-qualified names (containing `:`) dispatch as-is. This enables PL0 to route stages directly to external plugin agents without an igrsoft intermediary.
+The orchestrator loop dispatches `metadata.agent` directly. **Convention**: always emit fully-qualified `plugin:agent` form (e.g., `igrsoft:developer`, `apple-developer:ios-developer`). A back-compat shim still prepends `igrsoft:` to bare names but logs a deprecation warning. This convention enables PL0 to route stages to any plugin agent — `igrsoft:`, `apple-developer:`, or any other installed plugin — using identical syntax at every call site.
 
 ```typescript
 // PL0 creates a DV stage task routed directly to apple-developer.

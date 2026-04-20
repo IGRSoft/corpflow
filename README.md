@@ -139,7 +139,7 @@ TaskCreate({
   subject: "PL0: Planning",
   description: "Define requirements, assess complexity, create stage tasks",
   activeForm: "Planning...",
-  metadata: { stage: "PL", agent: "product-manager", workflow_id: "dark-mode", priority: "medium" }
+  metadata: { stage: "PL", agent: "igrsoft:product-manager", workflow_id: "dark-mode", priority: "medium" }
 });
 
 // Start PL0
