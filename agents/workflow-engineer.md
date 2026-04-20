@@ -104,19 +104,19 @@ When `--worktree` flag is present, add these checks:
 ### Task in Error State
 
 **Solutions**:
-1. Check `.context/error.md` for context
-2. If retries < 3: Fix issue, keep `in_progress`
-3. If retries = 3: Escalate to previous stage
-4. Document in error.md for resolution
+1. Check `.context/errors/<agent>.md` for context (per-agent file; use the failing task's `metadata.agent` basename)
+2. If `metadata.retry_count` < 3: Fix issue, keep `in_progress`, increment counter
+3. If `metadata.retry_count` = 3: Escalate to previous stage per escalation chain
+4. Append resolution section to the same `.context/errors/<agent>.md` file
 
 ### Escalation Occurred
 
 **What Happened**: Agent failed 3 times, escalated per chain.
 
 **Solutions**:
-1. Check `.context/error.md` for details
+1. Check `.context/errors/<agent>.md` for the originating agent's retry history
 2. Previous agent reviews issue
-3. Fix root cause, retry count resets
+3. Fix root cause, reset `metadata.retry_count` to 0 on the retried task
 4. Transition back when ready
 
 ### Dependency Blocking Task
@@ -147,7 +147,9 @@ When `--worktree` flag is present, add these checks:
 1. Run monitoring loop to sync state
 2. Compare orchestrator.json with Task System
 3. Check each workspace.json for current_stage
-4. Manually update if needed
+4. Inspect `.context/errors/*.md` (per-agent) for failed-but-unsynced stages
+5. Cross-check `.context/logs/` for the most recent run artifacts (raw captures outlive task state)
+6. Manually update if needed
 
 ## Worktree Troubleshooting
 
@@ -231,5 +233,5 @@ When `--worktree` flag is present, add these checks:
 1. Keep `in_progress` during retries
 2. Retries < 3: Fix and retry
 3. Retries = 3: Escalate to previous stage
-4. Log in `.context/error.md` (human escalation narrative). Raw background/Monitor capture belongs in `.context/logs/` — see `logging-conventions` skill.
+4. Append to `.context/errors/<agent>.md` — per-agent narrative, one file per `metadata.agent` basename (collision fallback: join plugin prefix with `-`). Raw background/Monitor capture belongs in `.context/logs/` — see `logging-conventions` skill.
 

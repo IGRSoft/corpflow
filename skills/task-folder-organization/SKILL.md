@@ -36,6 +36,7 @@ project-root/
 │   ├── planning.md
 │   ├── designs/        # Designer-generated .pen mockups
 │   ├── images/         # User-attached screenshots, diagrams
+│   ├── errors/         # Per-agent escalation narratives (developer.md, qa-engineer.md, ...)
 │   └── logs/           # Runtime capture logs (build, test, monitor, sim, incident)
 ├── src/
 ├── tests/
@@ -46,7 +47,7 @@ project-root/
 
 ### Flat Layout
 
-All markdown files are stored directly in `.context/` (no subfolders except for `designs/`, `images/`, and `logs/`):
+All markdown files are stored directly in `.context/` (no subfolders except for `designs/`, `images/`, `errors/`, and `logs/`):
 
 ```
 .context/
@@ -63,9 +64,9 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 ├── incident-report.md       # Incident triage, RCA (IR stage - emergency) [NEW]
 ├── milestone.json           # GitHub milestone context (when --milestone used)
 ├── deployment.md            # Deployment plan (if applicable)
-├── error.md                 # Error log for escalations (created on errors)
 ├── designs/                 # Design assets: Figma screenshots (.png) and Pencil mockups (.pen)
 ├── images/                  # User-attached screenshots, diagrams
+├── errors/                  # Per-agent escalation narratives (see Per-Agent Error Files)
 └── logs/                    # Runtime capture logs: build/test/monitor/sim/incident/hotfix
 ```
 
@@ -106,17 +107,27 @@ Product Manager's planning document containing:
 **Always Optional:**
 - **milestone.json**: GitHub milestone context (when `--milestone` used)
 - **deployment.md**: Deployment plan (if applicable)
-- **error.md**: Error log for escalation scenarios
+- **errors/**: Per-agent escalation narratives (see below)
 - **logs/**: Runtime capture logs (see `logging-conventions` skill)
+
+### Per-Agent Error Files (`errors/`)
+
+`errors/` holds **per-agent escalation narratives** — one file per agent, created on failure. One file per agent prevents parallel stages (QA+DC, TL-split DVN streams, milestone tracks) from clobbering each other and preserves per-agent failure history.
+
+- Filename: `.context/errors/<agent-basename>.md`
+- Basename = last `:`-separated segment of `metadata.agent` (e.g., `developer`, `qa-engineer`, `ios-developer` for `apple-developer:ios-developer`)
+- Collision fallback: when two plugins would yield the same basename, join with `-`: `apple-developer-ios-developer.md`
+- Format: append-only, one `## Retry N — <ts>` section per failure. Machine-readable metadata line after each header (classification, task_id, retry_count).
+- Multi-run within same agent (TL split `DV0`/`DV1`/`DV2`): single `developer.md` with per-task sections (`## DV0 Retry 1`, `## DV1 Retry 1`, ...).
 
 ### Runtime Logs (`logs/`)
 
-`logs/` holds **raw runtime capture** — background `Bash` stdout, `Monitor`-tool streams, simulator log captures, and incident-investigation tails. It is **distinct from `error.md`**:
+`logs/` holds **raw runtime capture** — background `Bash` stdout, `Monitor`-tool streams, simulator log captures, and incident-investigation tails. It is **distinct from `errors/`**:
 
 | Artifact | Lives At | Contains |
 |----------|----------|----------|
-| `error.md` | `.context/error.md` | Human-authored escalation narrative |
-| `*.log`   | `.context/logs/`    | Machine-written raw runtime output |
+| `<agent>.md` | `.context/errors/<agent>.md` | Human/agent-authored escalation narrative (per agent) |
+| `*.log`      | `.context/logs/`             | Machine-written raw runtime output |
 
 Filename grammar: `<kind>-<scope>-<timestamp>.log` where `<kind>` ∈ {build, test, monitor, sim, incident, hotfix}. See the `logging-conventions` skill for patterns, examples, and cleanup policy.
 
@@ -151,7 +162,7 @@ Files are named by **workflow stage** and stored in `.context/`:
 | approval.md | ST (Stakeholder) | stakeholder |
 | **incident-report.md** | **IR (Incident Response)** | **incident-responder** |
 | deployment.md | Optional | deployment-engineer |
-| error.md | On error | Any agent |
+| errors/&lt;agent&gt;.md | On error | Owning agent (one file per agent) |
 | logs/*.log | Runtime capture | Any agent with Bash/Monitor |
 
 ### Documentation Standards
@@ -172,16 +183,17 @@ See references/ for detailed examples of folder structures across workflow varia
 
 1. **No .context folder**: Documenting in random locations
 2. **Skipping Task System initialization**: No way to track progress
-3. **Creating subfolders**: Keep all .md files in .context/ root (except `designs/`, `images/`, and `logs/`)
-4. **Ignoring errors**: Always create error.md when escalation is needed
+3. **Creating subfolders**: Keep all .md files in .context/ root (except `designs/`, `images/`, `errors/`, and `logs/`)
+4. **Ignoring errors**: Always append to `.context/errors/<agent>.md` when escalation is needed
 5. **Multiple context folders**: Only one .context/ per project
 6. **Wrong .context/ location in worktree mode**: In worktree mode, `.context/` must be inside the worktree directory, not in the main repo's `.workspaces/`
+7. **Single shared error file**: Never write to `.context/error.md` — that path is retired. Use per-agent files under `.context/errors/`.
 
 ### DO
 
 1. **Always create .context/**: Even for small tasks
 2. **Document decisions**: Explain WHY, not just WHAT
 3. **Update Task System**: Keep task status current
-4. **Flat structure**: All .md files in .context/ (`designs/`, `images/`, and `logs/` are the only subdirectories)
-5. **Log errors**: Create error.md when issues require escalation
+4. **Flat structure**: All .md files in .context/ (`designs/`, `images/`, `errors/`, and `logs/` are the only subdirectories)
+5. **Log errors**: Append to `.context/errors/<agent>.md` (per-agent) when issues require escalation
 6. **Clean up**: Archive or clear .context/ when starting new tasks

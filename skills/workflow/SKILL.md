@@ -123,7 +123,7 @@ Use the `Monitor` tool to stream events from background processes during workflo
 
 ### Retry Logic
 
-Each stage: max 3 retries. Track via task metadata or error.md.
+Each stage: max 3 retries. Track via `metadata.retry_count` (per-task) and append a narrative entry to `.context/errors/<agent>.md` (per-agent — see `task-folder-organization` skill § Per-Agent Error Files). Raw stdout/stderr goes to `.context/logs/retry-<stage>-<ts>.log` per `logging-conventions`.
 
 ### Escalation Chains
 
@@ -133,7 +133,7 @@ Each stage: max 3 retries. Track via task metadata or error.md.
 Emergency: FN → RE → QA → DR → DV → IR → USER
 ```
 
-Document errors in `.context/error.md` with problem, root cause, attempted solutions.
+Document errors in `.context/errors/<agent>.md` (per-agent, append-only; one `## Retry N — <ts>` section per failure) with problem, classification, root cause, attempted solutions. Raw captures belong in `.context/logs/` per `logging-conventions`.
 
 ## Rule Checks
 
@@ -174,11 +174,14 @@ Before executing any workflow stage, the orchestrator MUST validate:
 1. **TaskList check**: Call `TaskList()` and verify at least one task exists with `metadata.workflow_id` matching the current workflow
 2. **PL0 exists**: Verify a task with subject starting with `PL0:` exists
 3. **Stage tasks exist**: After PL0 completes, verify PL0 created subsequent stage tasks (at minimum DV0, DR0, and QA0 for any complexity level)
+4. **Stage contract check**: Verify upstream outputs match the next stage's Required Inputs per `shared/stage-contracts.md` (file exists + required sections present)
+5. **Metadata schema check**: Validate next task's metadata against `shared/task-system.md` § JSON Schema (non-PL tasks require `stage`, `agent`, `model`, `error_file`)
 
 If validation fails:
 - No tasks exist → Workflow not initialized. Re-run initialization (TaskCreate PL0)
 - PL0 exists but no subsequent tasks → PL0 did not complete properly. Re-run PL0
 - Tasks exist but are orphaned (no workflow_id) → Log warning and attempt to match by subject pattern
+- Contract violation → Do NOT transition. Append `missing_input` entry to next stage's `.context/errors/<agent>.md` and block.
 
 ## Orchestrator Execution Loop
 

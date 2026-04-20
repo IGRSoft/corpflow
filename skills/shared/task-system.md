@@ -32,18 +32,91 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 
 | Field | Purpose |
 |-------|---------|
-| `stage` | Stage code unnumbered (PL, AR, TL, DV, etc.) |
-| `agent` | Agent to execute this task (e.g., `software-architector`). Model resolved from agent frontmatter |
-| `model` | Model alias for this stage (opus, sonnet, haiku). Used by orchestrator when spawning agent |
+| `stage` | Stage code unnumbered (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) |
+| `agent` | Agent to execute this task (e.g., `software-architector`, `apple-developer:ios-developer`). Bare names prepend `igrsoft:`; qualified names used as-is |
+| `model` | Model alias for this stage (opus, sonnet, haiku). Always pass explicitly to `Task()` — do not rely on frontmatter inheritance |
 | `context_files` | Comma-separated list of `.context/` artifacts this stage should read |
+| `error_file` | Path `.context/errors/<agent-basename>.md`. Auto-derived from `agent` if absent. Basename = last `:`-separated segment; collisions joined with `-` |
+| `retry_count` | Integer 0–3. Incremented on retry; resets on escalation or success |
+| `error_escalated_to` | Stage code the failure escalated to when `retry_count` reached 3 |
 | `workflow_id` | Links task to workflow instance |
 | `priority` | high, medium, low |
 | `milestone_number` | GitHub milestone (--milestone mode) |
 | `issue_number` | GitHub issue being worked |
 | `workspace_path` | Workspace directory (milestone mode) or worktree path |
-| `track` | Parallel track number |
+| `track` | Parallel track number 1–5 |
 | `isolation` | `"worktree"` when using git worktree isolation (--worktree flag) |
 | `worktree_branch` | Branch name in worktree (convenience field, worktree mode only) |
+| `approved` | `"user"` after explicit post-PL0 approval, `"auto"` for `--auto-continue`, absent otherwise |
+
+### JSON Schema
+
+Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL tasks require `stage`, `agent`, `model`, `error_file`.
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "stage": {
+      "enum": ["PL", "AR", "TL", "DV", "DR", "SR", "QA", "DC", "RE", "FN", "ST", "IR", "ET"]
+    },
+    "agent": {
+      "type": "string",
+      "pattern": "^([a-z0-9-]+:)?[a-z0-9-]+$"
+    },
+    "model": {
+      "enum": ["opus", "sonnet", "haiku"]
+    },
+    "context_files": {
+      "type": "string",
+      "pattern": "^([a-z0-9/_.-]+\\.(md|json|png|jpg|pen)(,[a-z0-9/_.-]+\\.(md|json|png|jpg|pen))*)?$"
+    },
+    "error_file": {
+      "type": "string",
+      "pattern": "^\\.context/errors/[a-z0-9-]+\\.md$"
+    },
+    "retry_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "error_escalated_to": {
+      "enum": ["PL", "AR", "TL", "DV", "DR", "SR", "QA", "DC", "RE", "FN"]
+    },
+    "track": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "isolation": {
+      "enum": ["worktree"]
+    },
+    "priority": {
+      "enum": ["high", "medium", "low"]
+    },
+    "approved": {
+      "enum": ["user", "auto"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "stage": { "not": { "const": "PL" } } },
+        "required": ["stage"]
+      },
+      "then": {
+        "required": ["stage", "agent", "model", "error_file"]
+      }
+    }
+  ]
+}
+```
+
+**error_file derivation** (orchestrator populates if absent):
+- `agent: "developer"` → `error_file: ".context/errors/developer.md"`
+- `agent: "apple-developer:ios-developer"` → `error_file: ".context/errors/ios-developer.md"` (last segment)
+- Basename collision across plugins → join with `-`: `.context/errors/apple-developer-ios-developer.md`
 
 ## Status Values
 

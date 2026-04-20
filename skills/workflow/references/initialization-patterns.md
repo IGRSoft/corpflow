@@ -261,7 +261,7 @@ const qa0 = TaskCreate({
   subject: "QA0: QA Testing",
   description: "Test theme switching, contrast ratios, persistence",
   activeForm: "Testing solution",
-  metadata: { stage: "QA", agent: "qa-engineer", model: "haiku", workflow_id: workflowId, priority: "medium", context_files: "exploration.md,planning.md,developer-review.md,testing.md" }
+  metadata: { stage: "QA", agent: "qa-engineer", model: "sonnet", workflow_id: workflowId, priority: "medium", context_files: "exploration.md,planning.md,developer-review.md,testing.md" }
 });
 
 // Chain dependencies using captured IDs (PL0 is taskId "1" from initial creation)

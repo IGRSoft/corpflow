@@ -1,6 +1,6 @@
 ---
 name: logging-conventions
-description: Route runtime log capture to `.context/logs/`. Use when an agent pipes build, test, simulator, Monitor, or incident output via background Bash or `tee`. Covers filename grammar, `error.md` vs `logs/` split, and cleanup.
+description: Route runtime log capture to `.context/logs/`. Use when an agent pipes build, test, simulator, Monitor, or incident output via background Bash or `tee`. Covers filename grammar, `errors/<agent>.md` vs `logs/` split, and cleanup.
 effort: low
 ---
 
@@ -14,7 +14,7 @@ Two artifacts — two purposes — two locations.
 
 | Artifact | Location | Author | Purpose |
 |----------|----------|--------|---------|
-| `error.md` | `.context/error.md` | Human / agent narrative | Escalation story: what went wrong, retry count, handoff context |
+| `errors/<agent>.md` | `.context/errors/<agent>.md` | Owning agent, narrative | Escalation story per agent: what went wrong, retry count, handoff context. One file per agent — parallel-safe for TL-split DVN, milestone tracks, and QA+DC parallel patterns. |
 | `*.log` | `.context/logs/` | Machine-written stdout/stderr | Raw runtime capture for post-hoc inspection |
 
 
@@ -74,11 +74,12 @@ When called from Claude Code's `Bash` tool with `run_in_background: true`, use t
 - `skills/task-folder-organization/SKILL.md` — canonical `.context/` folder rules.
 - `skills/agent-coordination/SKILL.md` §Monitor Tool for Background Events — tool mechanics.
 - `skills/incident-response/SKILL.md` — IR-specific log tailing.
-- `agents/workflow-engineer.md` §Handle Error — `error.md` escalation (narrative counterpart).
+- `agents/workflow-engineer.md` §Handle Error — per-agent `errors/<agent>.md` escalation (narrative counterpart).
 
 ## Common Mistakes
 
-1. **Writing runtime output into `error.md`** — that file is for narrative escalation; raw captures belong in `logs/`.
+1. **Writing runtime output into `errors/<agent>.md`** — those files are for narrative escalation; raw captures belong in `logs/`.
+2. **Writing to `.context/error.md`** — retired path. Use `.context/errors/<agent>.md` (per-agent) instead.
 2. **Missing timestamp** — without it, re-runs clobber prior evidence. Always include `$(date -u +%Y%m%d-%H%M%S)`.
 3. **Scattering to `/tmp`** — logs outside `.context/` are invisible to downstream stages and get lost on workspace reset.
 4. **Logging secrets** — redact before `tee`; never commit logs that might contain credentials.

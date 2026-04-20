@@ -105,7 +105,7 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 | product-manager | opus | 8/10 | 7/10 | 8/10 |
 | project-manager | opus | 8/10 | 7/10 | 8/10 |
 | prompt-engineer | opus | 9/10 | 8/10 | 9/10 |
-| qa-engineer | haiku | 7/10 | 6/10 | 8/10 |
+| qa-engineer | sonnet | 8/10 | 7/10 | 9/10 |
 | software-architector | opus | 9/10 | 8/10 | 9/10 |
 | stakeholder | sonnet | 8/10 | 8/10 | 8/10 |
 | team-lead | sonnet | 7/10 | 7/10 | 8/10 |
@@ -155,8 +155,7 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 3. Standardize platform option format
 
 ### Priority 2 (Fix Soon)
-1. Change qa-engineer model to haiku
-2. Clarify qa-engineer/technical-writer boundaries
+1. Clarify qa-engineer/technical-writer boundaries
 3. Add examples to test-plan command
 4. Add Related sections to 5 commands
 

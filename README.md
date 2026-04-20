@@ -161,9 +161,12 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ├── testing.md               # QA stage
 ├── documentation.md         # DC stage
 ├── complete.md              # FN stage
-├── error.md                 # Error log (if needed)
+├── errors/                  # Per-agent error narratives (if needed)
+│   ├── developer.md         # DV retries
+│   └── qa-engineer.md       # QA retries
 ├── designs/                 # Designer-generated .pen mockups
-└── images/                  # User-attached visual assets
+├── images/                  # User-attached visual assets
+└── logs/                    # Raw runtime capture (build/test/monitor)
 ```
 
 ## Components
@@ -289,11 +292,13 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ## Error Handling
 
 ### Retry Logic
-Each stage can retry up to 3 times before escalation. Error context tracked in `.context/error.md`:
+Each stage can retry up to 3 times before escalation. Error narrative tracked per-agent in `.context/errors/<agent>.md` (parallel-safe for concurrent stage failures). Raw build/test captures go to `.context/logs/` per `logging-conventions` skill.
 
 ```markdown
-## Development Error - 2025-01-26
-**Retry**: 2/3
+## Retry 2 — 2026-04-20T14:32:10Z
+**Agent**: developer (DV0)
+**Classification**: logic
+**retry_count**: 2
 ```
 
 ### Escalation Chain

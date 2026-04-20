@@ -13,12 +13,15 @@ Patterns for coordinating agents across workflow stages, managing handoffs, and 
 
 ## Handoff Protocol
 
+**Per-stage I/O contracts**: See `${CLAUDE_SKILL_DIR}/../shared/stage-contracts.md` for the full Inputs → Outputs → Validation table that every stage agent's Completion Verification references.
+
 ```
-1. Current agent completes work
+1. Current agent completes work (output matches stage-contracts Required Outputs)
 2. Updates task: TaskUpdate({ taskId: "X", status: "completed" })
-3. Creates stage artifact (e.g., planning.md)
+3. Creates stage artifact (e.g., planning.md) with required sections
 4. Writes compressed handoff (50-100 tokens)
-5. Next agent starts: TaskUpdate({ taskId: "Y", status: "in_progress" })
+5. Orchestrator validates against stage-contracts before transition
+6. Next agent starts: TaskUpdate({ taskId: "Y", status: "in_progress" })
 ```
 
 ### Orchestrator → PL0 Handoff
@@ -54,15 +57,45 @@ Do NOT re-read files listed there unless you need additional detail.
 
 ## Error Handling
 
-### Error Classification
+### Error Decision Tree
 
-| Type | Retry? | Escalate To |
-|------|--------|-------------|
-| Transient (API, network) | Yes (3x) | None |
-| Logic (bug, wrong approach) | Yes (2x) | Same agent |
-| Dependency (missing input) | No | Previous stage |
-| Requirements (unclear) | No | PL stage |
-| Architecture (design flaw) | No | AR stage |
+```mermaid
+stateDiagram-v2
+    [*] --> Failure
+    Failure --> Classify
+    Classify --> Transient: 5xx / rate-limit / network
+    Classify --> Logic: bug / wrong approach
+    Classify --> MissingInput: required artifact absent
+    Classify --> Ambiguous: requirements unclear
+    Classify --> DesignFlaw: architecture blocks implementation
+    Classify --> HardConstraint: ethics / security / legal block
+    Transient --> RetrySame: retry_count++
+    Logic --> RetrySame: retry_count++ with corrective context
+    RetrySame --> Succeeded: fix works
+    RetrySame --> Exhausted: retry_count == 3
+    MissingInput --> EscalatePrev
+    Ambiguous --> EscalatePL
+    DesignFlaw --> EscalateAR
+    HardConstraint --> Abort
+    Exhausted --> EscalatePrev
+    EscalatePrev --> [*]: error_escalated_to set
+    EscalatePL --> [*]: error_escalated_to = "PL"
+    EscalateAR --> [*]: error_escalated_to = "AR"
+    Abort --> [*]: stage blocked
+    Succeeded --> [*]: retry_count reset
+```
+
+### Retry / Escalate Matrix
+
+| Classification | Retry? | Max | Backoff | Escalation Target | Metadata Update |
+|----------------|--------|-----|---------|-------------------|-----------------|
+| `transient` | Yes | 3 | 2^n seconds | None (retry same agent) | `retry_count++` |
+| `logic` | Yes | 2 | None | Same agent (add corrective context on retry 2) | `retry_count++` |
+| `missing_input` | No | 0 | — | Previous stage per chain | `error_escalated_to` set |
+| `ambiguous_requirements` | No | 0 | — | PL stage | `error_escalated_to = "PL"` |
+| `design_flaw` | No | 0 | — | AR stage | `error_escalated_to = "AR"` |
+| `hard_constraint` (ethics/security) | No | 0 | — | Abort + block human intervention | `error_escalated_to = "ST"` |
+| `exhausted` (`retry_count == 3`) | No | — | — | Previous stage per chain | `error_escalated_to` set, `retry_count` reset on handoff |
 
 ### Escalation Chains
 
@@ -75,16 +108,20 @@ Ethics: Any→ethics-reviewer→stakeholder→USER
 
 ### Error Documentation
 
-Create `.context/error.md`:
+Append to `.context/errors/<agent>.md` (per-agent, one file per `metadata.agent` basename). Single file shared across retries and task splits (DV0/DV1/DV2 → `developer.md`):
+
 ```markdown
-## [STAGE] Error - [TIMESTAMP]
-**Classification**: [type]
-**Retry Count**: [X/max]
+## [STAGE][N] Retry [X/max] — [TIMESTAMP]
+**Agent**: [agent name]
+**Task ID**: [task_id]
+**Classification**: [transient | logic | missing_input | ambiguous_requirements | design_flaw | hard_constraint | exhausted]
 ### Problem
 [Description]
 ### Resolution Path
 - [ ] [Action]
 ```
+
+Raw captures (build/test/monitor stdout) go to `.context/logs/` per `logging-conventions`.
 
 ## Parallel Execution
 
@@ -129,7 +166,7 @@ Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool ca
 | Architecture question | software-architector | opus |
 | Apple/Swift architecture | apple-developer:apple-architector | opus |
 | Technical decision | technical-lead | opus |
-| Test design | qa-engineer | haiku/sonnet |
+| Test design | qa-engineer | sonnet |
 
 > **Cross-plugin AR collaboration**: For Apple platform projects, `software-architector` consults `apple-developer:apple-architector` during AR stage for Swift app architecture (pattern selection, DI, navigation, concurrency). See `cross-plugin-handoff` skill for the full protocol.
 
