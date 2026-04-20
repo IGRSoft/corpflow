@@ -184,6 +184,23 @@ When `--worktree` flag is present, add these checks:
 3. Force remove if truly unneeded: `git worktree remove --force {path}`
 4. Run `git worktree prune` to clean stale references (auto-cleaned on startup, handles untracked files correctly v2.1.98)
 
+### Worktree Partial-Failure Matrix
+
+When a worktree operation partially succeeds, the orchestrator state can drift
+from the filesystem. Diagnose by comparing `git worktree list` to
+`orchestrator.json`, and match the symptom below.
+
+| Symptom | Cause | Recovery |
+|---------|-------|----------|
+| `git worktree add` returned 0 but `.context/` dir absent | mkdir race or disk-full after branch creation | `git -C {path} status` to confirm worktree integrity → `mkdir -p {path}/.context/{errors,logs,designs,images}` → update orchestrator.json `initialized: true` |
+| Worktree created, branch fetch fails (auth/network) | Network loss between `worktree add` and `git fetch` | `git -C {path} fetch origin` retry → if persistent, `git worktree remove --force {path}` and retry from `workflow-engineer` init |
+| orchestrator.json lists issue #N with worktree_path, but `git worktree list` does not include it | Prior manual `git worktree remove` or disk cleanup | Re-create: `git worktree add -b feature/{N}-{slug} {path} origin/{base}` → restore `.context/` from `workspace.json` if present |
+| `git worktree list` shows path, but orchestrator.json has no entry for it | Orphaned worktree from cancelled workflow | If `.context/` empty or task archived: `git worktree remove {path}`. Otherwise resume via Task System, then remove on FN |
+| Stale untracked files block `worktree remove` | Build output, log files, editor swap files | v2.1.98 auto-cleanup handles most; fallback: `git -C {path} clean -fd` → retry `worktree remove` |
+| Branch locked by another worktree (`fatal: 'X' is already checked out`) | Same branch active in two worktrees (usually main) | `git worktree list` locate existing → switch main to different branch OR use a new branch name for the new worktree |
+| Disk full during `worktree add` | Filesystem exhausted | `git worktree prune` to reclaim stale space → free disk → retry. Do NOT leave partial worktree entries in orchestrator.json — remove the broken entry first |
+| `workspace.json` references path that no longer exists | External cleanup or symlink break | Treat workflow as lost. Archive `.context/` if recoverable (`git cat-file` for committed state), then remove orchestrator entry and restart the issue track |
+
 ### Plugin Management (v2.1.94/2.1.98/2.1.105+)
 
 - `/reload-plugins` picks up new skills without requiring restart (v2.1.98)

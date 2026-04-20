@@ -198,13 +198,24 @@ Generates `cost-report.csv` in `.context/`.
 ```
 Side-by-side comparison with another workflow.
 
+## Data Source
+
+Reads `.context/logs/cost-*.jsonl` written by the `SubagentStop` hook (see
+`skills/cost-optimization/SKILL.md` § Per-Stage Tracking). Each JSONL line is
+one subagent invocation — the aggregator groups by `stage`, sums `input_tokens`
++ `output_tokens`, and applies the `model` rate.
+
+If `.context/logs/cost-*.jsonl` is absent, the command falls back to estimated
+baselines from `skills/cost-optimization/references/token-baselines.md` and
+prints a warning that the hook is not configured.
+
 ## Integration
 
 This command is used:
 - Throughout workflow for cost monitoring
 - At stage transitions for optimization checks
 - At workflow completion for final analysis
-- By project-manager (FN stage) for budget reporting
+- By project-manager (FN stage) for budget reporting and timing recap
 
 ## Related
 

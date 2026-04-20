@@ -193,6 +193,58 @@ figma\.com/design/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
 | Design keyword score >= 5, no Figma URL | Invoke Designer for Pencil mockups (existing behavior) |
 | Both Figma URL AND score >= 5 | Capture Figma screenshots AND invoke Designer; Figma screenshots are the authoritative design reference |
 
+### P Stage: Automatic Ethics Gate Detection
+
+PL0 scans the task description for high-risk domain signals and inserts an ET0
+stage between PL0 and AR0 when the threshold is met. Same weighted-score
+approach as design detection — low false-positive rate because weights are
+tuned and negative indicators deduct.
+
+#### Ethics Risk Keyword Table
+
+| Category | Weight | Keywords |
+|----------|--------|----------|
+| User Tracking | 4 | analytics, tracking, telemetry, user behavior, location, device fingerprint, cross-site, session recording |
+| Financial | 4 | payment, billing, subscription, charge, refund, price discrimination, dynamic pricing, fee |
+| Content Moderation | 3 | moderation, filter, ban, block user, content policy, takedown, flag content, shadowban |
+| AI-Driven Decisions | 5 | automated decision, ai recommendation, algorithmic, ranking, personalization, model output |
+| Vulnerable Populations | 5 | minor, child, elderly, disability, accessibility-critical, mental health, medical, protected class |
+| Data Collection | 3 | PII, personal data, consent, GDPR, CCPA, HIPAA, biometric, sensitive data |
+| High-Confidence Terms | 6 | "dark pattern", "addictive", "surveillance", "bias audit", "adversarial", "deepfake" |
+
+**Negative Indicators** (-3 each): internal-only, admin dashboard, test harness, dev-only, no user impact, synthetic data
+
+**Threshold**: Score >= 5 triggers ET0 insertion AND `error_escalated_to: "ET"` reservation.
+
+**Manual override**: `/workflow --ethics-review "..."` always creates ET0 regardless of score.
+
+#### ET0 Insertion Pattern
+
+When threshold met, PL0:
+
+```typescript
+// 1. Create ET0 before AR0
+const et = TaskCreate({
+  subject: "ET0: Ethics review",
+  description: "Review planning.md for ethical risks per detected keywords. Produce .context/ethics-review.md with Decision ∈ {pass, block, conditional}.",
+  metadata: {
+    stage: "ET",
+    agent: "ethics-reviewer",
+    model: "opus",
+    error_file: ".context/errors/ethics-reviewer.md",
+    workflow_id: "<current>"
+  }
+});
+
+// 2. AR0 now blocked by ET0 (instead of PL0 directly)
+TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] });
+```
+
+**Decision cascade**:
+- `Decision: pass` → AR0 unblocks, workflow continues
+- `Decision: conditional` → AR0 unblocks with ethics constraints injected into prompt
+- `Decision: block` → AR0 remains blocked, workflow halts, user notified
+
 ## Completion Verification
 
 Before marking PL0 complete, verify:

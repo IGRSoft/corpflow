@@ -1,7 +1,7 @@
 {
   "name": "igrsoft",
   "description": "Comprehensive 11-stage workflow system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with Task System integration, developer review, security review, release engineering, and incident response.",
-  "version": "3.7.0",
+  "version": "3.8.0",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
@@ -58,6 +58,14 @@
     "per-agent-error-files",
     "stage-contracts",
     "metadata-json-schema",
-    "error-decision-tree"
+    "error-decision-tree",
+    "cost-tracking-hook",
+    "audit-trail",
+    "resume-protocol",
+    "approval-gate-hook",
+    "state-machine-diagram",
+    "ethics-gate-autodetect",
+    "postcompact-recovery",
+    "ir-dv-contract"
   ]
 }

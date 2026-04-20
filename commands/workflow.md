@@ -149,6 +149,38 @@ During the orchestrator execution loop, when executing a DV stage task:
 # - metadata.embedded_commands: "apple-developer:code-refactor"
 ```
 
+### Error Handling
+
+Embedded command execution MUST NOT silently fall back to generic DV work.
+If the Skill invocation fails, the DV stage MUST record the failure and
+escalate — otherwise the user's intent is lost.
+
+#### Failure Modes
+
+| Failure | Detection | Required Behavior |
+|---------|-----------|-------------------|
+| Skill name not resolvable | `Skill()` returns "skill not found" | Write `.context/errors/developer.md` entry with `Classification: missing_input`; escalate to TL (or PL if no TL0) |
+| Skill execution errors mid-run | Skill tool returns non-success | `retry_count++`, append entry to `.context/errors/developer.md`; if `retry_count == 3`, set `error_escalated_to: "TL"` (or `"PL"` if no TL0) |
+| Skill args malformed | Skill rejects at parse | Classification `ambiguous_requirements`; escalate to PL (requires planning revision) |
+| Skill produces no artifact expected by downstream stage | stage-contract validation fails | Classification `missing_input`; escalate to the stage whose contract was violated |
+
+#### Prohibited Fallback
+
+> DV MUST NOT proceed with generic implementation when the embedded command
+> fails. The user explicitly requested that specific workflow by embedding
+> the command; ignoring it is a silent deviation from their intent.
+
+The DV agent's prompt template enforces this: on Skill failure, it halts and
+writes an error entry with `metadata.embedded_command_failure: true` before
+returning to the orchestrator.
+
+#### Escalation Target
+
+- **If TL0 exists**: escalate to TL (team lead decides whether to retry,
+  split the work, or revise approach).
+- **If no TL0 (low-complexity workflow)**: escalate to PL. PL may add TL0 to
+  the workflow, revise embedded command choice, or remove the embedding.
+
 ## See Also
 
 - `skills/workflow/SKILL.md` — execution loop, dynamic sizing, workflow modes

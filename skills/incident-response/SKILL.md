@@ -69,6 +69,37 @@ emergency: [description]
 
 > **DV Hotfix Tip (v2.1.98+)**: Use the Monitor tool to stream build output during hotfix implementation. Combine `run_in_background` Bash with Monitor for real-time error detection instead of polling. Tee the build stream into `.context/logs/hotfix-<YYYYMMDD-HHMMSS>.log` so the evidence survives into `complete.md` / `release-prep.md`. See `${CLAUDE_SKILL_DIR}/../agent-coordination/SKILL.md §Monitor Tool` and `${CLAUDE_SKILL_DIR}/../logging-conventions/SKILL.md`.
 
+### IR → DV Handoff Contract
+
+`incident-report.md` MUST contain these four sections before IR can transition
+to DV. The orchestrator validates per `shared/stage-contracts.md § IR`. If any
+section is empty, DV is not dispatched and IR is re-queued with a
+`missing_input` error entry.
+
+#### Required Sections
+
+| Section | Content | Purpose |
+|---------|---------|---------|
+| **Required Fix** | Concrete code-level change or data correction needed. Not a description of the problem — the *solution*. | Prevents DV from re-diagnosing |
+| **Constraints** | What DV MUST NOT do (no schema changes, no new dependencies, keep wire format stable, etc.) | Protects production invariants |
+| **Blast Radius** | Files/modules DV may touch. Explicit allow-list. | Prevents scope creep during emergency |
+| **Verification Command** | Exact command QA will run (`curl …`, `xcodebuild test -only-testing:X`, manual steps) | Aligns QA criteria upfront |
+
+#### DV Delegation Prompt
+
+When IR completes and DV is dispatched, the orchestrator's prompt MUST include
+the phrase:
+
+> Focus strictly on the Required Fix in `.context/incident-report.md`. Do NOT
+> modify files outside the listed Blast Radius. Do NOT refactor, clean up,
+> reformat, or improve adjacent code. Emergencies are not the time for scope
+> expansion. If the Required Fix cannot be implemented within the Blast
+> Radius, STOP and escalate back to IR via `error_escalated_to: "IR"` — do
+> NOT expand scope unilaterally.
+
+This language is mandatory, not a suggestion — the prompt template in
+`commands/emergency.md` enforces it.
+
 ## Decision Framework
 
 ### Hotfix vs Rollback vs Mitigation

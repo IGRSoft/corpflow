@@ -155,6 +155,74 @@ Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool ca
 - DV before TL (needs coordination)
 - QA before DV (can't test unwritten code)
 
+## Audit Trail
+
+Every material workflow action writes one JSONL line to `.context/audit.log`.
+This file is append-only and outlives individual stage artifacts — on resume or
+incident review, the audit tail is the single source of truth for what happened.
+
+### Writers
+
+| Actor | Action Examples |
+|-------|-----------------|
+| Orchestrator | `workflow_init`, `stage_transition`, `approval_received`, `resume` |
+| Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation` |
+| `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
+| `SubagentStop` hook | `subagent_stopped` (paired with cost-*.jsonl entry) |
+
+### Schema
+
+```jsonc
+{
+  "ts": "ISO-8601 UTC",
+  "actor": "orchestrator|<agent-name>|hook:<name>",
+  "action": "workflow_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped",
+  "subject": "task ID or artifact path",
+  "result": "ok|error|deferred|blocked",
+  "task_id": "optional — Task System ID",
+  "artifact": "optional — .context/ path",
+  "metadata": { "...": "action-specific extras" }
+}
+```
+
+### Append Pattern (Bash)
+
+```bash
+jq -c --arg ts "$(date -u +%FT%TZ)" \
+  '. + {ts: $ts}' <<< '{"actor":"orchestrator","action":"stage_transition","subject":"DV0→DR0","result":"ok","task_id":"4"}' \
+  >> .context/audit.log
+```
+
+### Retention
+
+Follows `.context/` hygiene — cleared on task archival (FN stage or `/workflow`
+completion). Do NOT rotate within a task; the full trail is required for
+PostCompact recovery and incident post-mortems.
+
+## Task Decomposition
+
+When should a stage split into sub-tasks? The decision depends on *who* initiates
+the split and *what* the dependency shape is. Pick one pattern — do not mix.
+
+### Decision Table
+
+| Condition | Pattern | Effect | Example |
+|-----------|---------|--------|---------|
+| Independent sub-scopes, different owners | **TL-initiated (parallel)** | DVN tasks blocked by TL0; all run concurrently; DR0 blocked by all DVN | `theme colors` + `theme switcher` + `dark assets` |
+| Sequential discovery (later work depends on earlier) | **DV-initiated (sequential)** | DVN tasks blocked by DV0; run one after another | `implement auth` then `migrate existing users` then `deprecate old endpoints` |
+| Single cohesive scope with <3 files | **No split** | DV0 handles entirely | `fix null check in login validator` |
+| Cross-cutting refactor spanning many modules | **TL-initiated (parallel)** with `track` metadata | Each stream gets own worktree (if `--worktree`) | `rename User → Account across auth/api/db` |
+| Stage already failed and retry needs narrower scope | **DV-initiated (sequential)** | DV1 creates focused retry; retry_count resets | DV0 failed on full feature → DV1 focused on auth module only |
+
+See `workflow/references/initialization-patterns.md § Stage Sub-Task Splitting`
+for full code patterns.
+
+### When NOT to Split
+
+- **PL/FN/ST** — always singletons (PL0, FN0, ST0). Do not split.
+- **Trivial scope** — splitting a 5-file change into 3 sub-tasks adds orchestration cost without benefit.
+- **Shared mutable state** — if two streams need to edit the same file, serialize instead of parallelizing (merge conflicts cost more than the latency saved).
+
 ## Agent Selection
 
 ### Sub-Task Delegation
@@ -197,7 +265,34 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 
 ### Monitor Tool for Background Events (v2.1.98+)
 
-The `Monitor` tool streams events (stdout lines) from background scripts started via Bash with `run_in_background`. Use for watching build output during DV, streaming test results during QA, or log tailing during IR. Unlike polling with `Read`, Monitor provides event-driven notifications without sleep loops. Tee the background stream into `.context/logs/monitor-<agent>-<timestamp>.log` so the capture persists after the Monitor session ends — see `logging-conventions` skill.
+The `Monitor` tool streams events (stdout lines) from background scripts started
+via Bash with `run_in_background`. Event-driven — no polling loops. Tee the
+background stream into `.context/logs/monitor-<agent>-<timestamp>.log` so the
+capture persists after the Monitor session ends — see `logging-conventions` skill.
+
+#### Per-Stage Monitor Usage
+
+| Stage | Scenario | Background Command | Monitor Purpose |
+|-------|----------|--------------------|-----------------|
+| DV | Build iteration during implementation | `xcodebuild … 2>&1 \| tee .context/logs/build-<slug>-<ts>.log` | Watch compile errors live; abort early on first failure |
+| DV | Swift Package resolution | `swift build 2>&1 \| tee .context/logs/build-spm-<ts>.log` | Detect dependency resolution issues |
+| QA | XCTest run | `xcodebuild test … 2>&1 \| tee .context/logs/test-<slug>-<ts>.log` | Stream pass/fail per test; stop on first red |
+| QA | Simulator app logs | `xcrun simctl spawn … log stream … \| tee .context/logs/sim-<dev>-<ts>.log` | Watch runtime behavior during manual test |
+| IR | Production log tail | `ssh prod tail -f /var/log/app.log \| tee .context/logs/incident-<ts>.log` | Identify recurring error pattern |
+| DR/SR | Static analysis | `swiftlint --reporter json 2>&1 \| tee .context/logs/monitor-lint-<ts>.log` | Stream warnings to triage severity in real time |
+| RE | Release build | `xcodebuild archive … 2>&1 \| tee .context/logs/build-release-<ts>.log` | Watch signing / archive steps; abort on signing failure |
+| FN | CI run after push | `gh run watch <run-id> \| tee .context/logs/monitor-ci-<ts>.log` | Watch PR checks progress |
+
+**Common pattern**: start background Bash with `run_in_background: true`, note
+the returned shell ID, then attach `Monitor` to that ID. When Monitor detaches
+(timeout, stage transition), the `.log` file is still readable via `Read`.
+
+#### Stall Timeout (v2.1.113+)
+
+Subagents stalled for more than 10 minutes now fail with a clear error rather
+than hanging indefinitely. Monitor sessions inherit this guard — if the
+background process stops producing output for >10min, treat as failure and
+escalate per `Error Handling § Retry / Escalate Matrix`.
 
 ### MCP Large Result Handling
 
