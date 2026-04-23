@@ -33,6 +33,9 @@ stateDiagram-v2
     WorktreeCheckout --> StageActive
     MilestoneTrack --> StageActive
     StageActive --> StageActive: next stage (blockedBy resolved)
+    StageActive --> FNGateWaiting: next task stage==FN AND fn_gate==required
+    FNGateWaiting --> StageActive: user approves OR fn_gate==bypass
+    FNGateWaiting --> [*]: user rejects
     StageActive --> ErrorRetry: stage failure
     ErrorRetry --> StageActive: retry_count < 3, fix applied
     ErrorRetry --> Escalated: retry_count == 3 OR hard_constraint
@@ -41,8 +44,10 @@ stateDiagram-v2
     StageActive --> Completed: all tasks completed
     Completed --> [*]
     ApprovalWaiting --> PostCompactRecovery: context compacted
+    FNGateWaiting --> PostCompactRecovery: context compacted
     StageActive --> PostCompactRecovery: context compacted
     PostCompactRecovery --> ApprovalWaiting: was awaiting approval
+    PostCompactRecovery --> FNGateWaiting: was awaiting FN approval
     PostCompactRecovery --> StageActive: was mid-stage
 ```
 
@@ -287,6 +292,23 @@ while (tasks.some(t => t.status !== "completed")) {
       }
     }
 
+    // 4.9. FN approval gate — STOP before any FN-stage task unless bypassed
+    //      See § FN Gate below for the pre-FN summary template.
+    if (full.metadata.stage === "FN") {
+      const pl0 = tasks.find(t => t.metadata?.stage === "PL");
+      const gateMode = pl0?.metadata?.fn_gate ?? "required";  // default safe
+      if (gateMode !== "bypass") {
+        // (a) Build pre-FN summary from .context/planning.md,
+        //     .context/developer-review.md, .context/testing.md.
+        // (b) Print summary to user. Do NOT call TaskUpdate.
+        //     Do NOT delegate. FN task stays `pending`.
+        // (c) Write `fn_gate_waiting` audit line.
+        // (d) End the orchestrator turn — wait for HUMAN approval.
+        return;  // exits the entire execution loop; resume happens in a fresh turn
+      }
+      // bypass → fall through to normal delegation
+    }
+
     // 5. Mark in_progress
     TaskUpdate({ taskId: task.id, status: "in_progress" });
 
@@ -324,6 +346,89 @@ while (tasks.some(t => t.status !== "completed")) {
 - NEVER mark a task `completed` without first delegating to an agent and receiving its results — completion without delegation is the most common violation
 - The orchestrator uses ONLY TaskCreate, TaskUpdate, TaskGet, TaskList, and Agent tools. Edit/Write/Bash on source files belong to stage agents, not the orchestrator
 - The orchestrator owns the loop; stage agents own their stage's work
+
+## FN Gate
+
+A second human-in-the-loop checkpoint immediately before any FN-stage task. The orchestrator MUST present a pre-FN summary and STOP unless the PL0 task carries `metadata.fn_gate = "bypass"`.
+
+### Gate semantics
+
+- **Carrier**: `PL0.metadata.fn_gate ∈ {"required", "bypass"}`. PL0 sets the value at workflow init based on invocation flags (see `commands/workflow.md` Phase 1, step 4).
+- **Default**: missing or unrecognized value → treat as `"required"` (`?? "required"`). This makes in-flight workflows safe across the change.
+- **Bypass triggers**: `--auto-continue`, `--milestone:N`, `--worktree`. (`/emergency` is a documented TODO — not yet wired.)
+- **Trigger condition**: gate fires when the next ready task has `metadata.stage === "FN"` AND `gateMode !== "bypass"`.
+- **Effect**: the orchestrator prints the pre-FN summary, writes a `fn_gate_waiting` audit entry, and `return`s from the execution loop. The FN task stays `pending`. The orchestrator MUST NOT call `TaskUpdate` for the FN task.
+
+### `return` vs `continue`
+
+The gate uses `return` (exit the loop), not `continue` (skip to next iteration). Rationale: any other ready task would also re-enter the loop on the next turn anyway, and exiting avoids partial side-effects (e.g., starting a sibling task while the user is reviewing the FN summary). Mirrors the PL0 gate pattern.
+
+### Resume after approval
+
+On the next orchestrator turn (triggered by the user's `approve`/`go`/`yes`/`continue`/`proceed` message):
+
+1. Re-enter the loop. The FN task is still `pending`.
+2. The gate check runs again. If the user adjusted PL0 metadata (e.g., set `fn_gate = "bypass"`), the gate now passes.
+3. Otherwise: treat the user's most recent approval message as FN approval and proceed past the gate. Disambiguation: only one gate can be active at a time — PL0 is `completed` and no stage task is `in_progress`, so the approval can only be FN.
+4. Write an `approval_received` audit entry with `subject: "FN"`.
+
+### Pre-FN summary template
+
+Build directly from artifacts written by upstream stages — no agent roundtrip needed.
+
+```
+## FN gate — review before push
+
+### Change surface
+- N commits on branch `<branch>`: <short shas + titles>
+- Target: PR against `<base-branch>`
+- Net diff: +X / -Y lines across N files
+
+### Quality evidence
+- QA verdict: <GO/NO-GO>           (.context/testing.md)
+- DR verdict: <PASS/CONCERNS>      (.context/developer-review.md)
+- Tests: <M passed / N failed>
+
+### Planned FN actions
+- [ ] Create commit(s) with conventional-format messages
+- [ ] Push branch with upstream tracking
+- [ ] Open PR against <base-branch> with Motivation / Changes / Notes
+
+Reply `approve` to proceed, or describe any changes needed.
+```
+
+Source files (per `skills/shared/stage-contracts.md`):
+
+| Field | Source |
+|-------|--------|
+| Branch / commits | `git status` + `git log <base>..HEAD --oneline` |
+| QA verdict | `.context/testing.md` (GO/NO-GO line) |
+| DR verdict | `.context/developer-review.md` (PASS/CONCERNS) |
+| Diff stats | `git diff <base>..HEAD --shortstat` |
+| Base branch | `workspace.json § base_branch` (milestone) or repo default |
+
+### User amendment at the gate
+
+If the user replies with edits instead of `approve` (e.g., "change the commit message to X"), the orchestrator:
+
+1. Updates the FN task description via `TaskUpdate({taskId, description: ...})`.
+2. Re-builds and re-presents the pre-FN summary.
+3. STOPs again. The FN task remains `pending` throughout.
+
+### Post-amendment audit
+
+Each gate transition writes an audit line:
+
+```json
+{"actor":"orchestrator","action":"fn_gate_waiting","subject":"FN0","result":"pending"}
+{"actor":"orchestrator","action":"approval_received","subject":"FN0","result":"ok"}
+```
+
+Bypassed gates write a single line:
+
+```json
+{"actor":"orchestrator","action":"fn_gate_bypass","subject":"FN0","result":"ok","reason":"auto-continue|milestone|worktree"}
+```
 
 ## Post-Workflow Self-Improvement
 
@@ -385,7 +490,8 @@ before resuming.
 | PL0 `completed`, no stage tasks | — | PL0 did not create stages. Re-run PL0 |
 | PL0 `completed`, stage tasks `pending`, no `approval_received` line | — | Awaiting user approval. STOP and prompt user |
 | PL0 `completed`, `approval_received` present, some stages `in_progress` | most recent `subagent_stopped` `result: error` | Mid-stage failure. Read `.context/errors/<agent>.md`, honor `retry_count` |
-| PL0 `completed`, all stages `completed` except FN | — | Near-done. Resume at FN to create `complete.md` + PR |
+| PL0 `completed`, all stages `completed` except FN, FN `pending`, audit tail has `fn_gate_waiting` for FN | — | At FN gate. Re-present pre-FN summary; STOP and wait for human approval (unless `PL0.metadata.fn_gate == "bypass"`) |
+| PL0 `completed`, all stages `completed` except FN | — | Near-done. Re-enter loop; FN gate check decides whether to STOP or proceed |
 | Stages `in_progress` with no `metadata.retry_count` | missing audit lines | Stale task state. Re-derive from most recent `.context/logs/` capture |
 
 ### Resume Procedure
@@ -432,9 +538,13 @@ with guidance: "Workflow awaiting user approval after PL0. Reply 'approve',
 ### `--auto-continue` Short-Circuit
 
 When `/workflow --auto-continue` is used, the orchestrator sets
-`TaskUpdate({taskId: "PL0", metadata: {approved: "auto"}})` and writes an
-`approval_received` audit line with `result: "auto"`. The hook's `if`
-expression evaluates false and execution proceeds without user input.
+`TaskUpdate({taskId: "PL0", metadata: {approved: "auto", fn_gate: "bypass"}})`
+and writes an `approval_received` audit line with `result: "auto"`. The hook's
+`if` expression evaluates false and execution proceeds without user input.
+
+The `fn_gate: "bypass"` value is read by the FN gate check in the execution
+loop (see § FN Gate). The same bypass flag is set by `--milestone:N` and
+`--worktree` so per-issue or unattended runs do not stall at FN.
 
 ### Safety Valve
 
