@@ -306,7 +306,10 @@ while (tasks.some(t => t.status !== "completed")) {
         // (d) End the orchestrator turn — wait for HUMAN approval.
         return;  // exits the entire execution loop; resume happens in a fresh turn
       }
-      // bypass → fall through to normal delegation
+      // bypass branch:
+      // (a) Write `fn_gate_bypass` audit line with reason derived from
+      //     PL0.metadata (auto-continue | milestone | worktree).
+      // (b) Fall through to normal delegation.
     }
 
     // 5. Mark in_progress
@@ -508,9 +511,11 @@ See `context-compression.md § PostCompact Recovery` for the compaction-specific
 
 ## Approval Gate Hook
 
-The approval gate between PL0 and stage execution is currently honor-system —
-the orchestrator is expected to `STOP IMMEDIATELY` and wait for the user. A
-`PreToolUse` hook (v2.1.85+) can enforce this programmatically.
+The approval gates (PL0 and FN) are currently honor-system — the orchestrator
+is expected to `STOP IMMEDIATELY` and wait for the user. `PreToolUse` hooks
+(v2.1.85+) can enforce each gate programmatically. Each hook scopes its grep
+by `subject` so that PL0 approval does not satisfy the FN predicate (and vice
+versa).
 
 ### Advisory Rollout (Phase 1)
 
@@ -520,7 +525,13 @@ the orchestrator is expected to `STOP IMMEDIATELY` and wait for the user. A
     "PreToolUse": [
       {
         "matcher": "Write|Edit|Bash",
-        "if": "test -f .context/logs/audit.jsonl && ! grep -q approval_received .context/logs/audit.jsonl",
+        "if": "test -f .context/logs/audit.jsonl && ! grep -q 'approval_received.*\"subject\":\"PL0\"' .context/logs/audit.jsonl",
+        "command": ".claude/hooks/approval-gate.sh",
+        "mode": "warn"
+      },
+      {
+        "matcher": "Bash",
+        "if": "test -f .context/logs/audit.jsonl && grep -q 'fn_gate_waiting.*\"subject\":\"FN0\"' .context/logs/audit.jsonl && ! grep -q 'approval_received.*\"subject\":\"FN0\"' .context/logs/audit.jsonl && ! grep -q 'fn_gate_bypass.*\"subject\":\"FN0\"' .context/logs/audit.jsonl",
         "command": ".claude/hooks/approval-gate.sh",
         "mode": "warn"
       }
@@ -528,6 +539,11 @@ the orchestrator is expected to `STOP IMMEDIATELY` and wait for the user. A
   }
 }
 ```
+
+The second stanza only fires once `fn_gate_waiting` has been written (so it
+is dormant before FN is reached) and clears once either `approval_received`
+or `fn_gate_bypass` is written for `FN0`. The `Bash` matcher covers FN's
+commit/push/PR calls without blocking earlier stages' write/edit activity.
 
 ### Blocking Rollout (Phase 2, after observation)
 
@@ -539,12 +555,16 @@ with guidance: "Workflow awaiting user approval after PL0. Reply 'approve',
 
 When `/workflow --auto-continue` is used, the orchestrator sets
 `TaskUpdate({taskId: "PL0", metadata: {approved: "auto", fn_gate: "bypass"}})`
-and writes an `approval_received` audit line with `result: "auto"`. The hook's
-`if` expression evaluates false and execution proceeds without user input.
+and writes an `approval_received` audit line with `subject: "PL0"` and
+`result: "auto"`. The PL0 hook's `if` expression evaluates false and execution
+proceeds without user input.
 
 The `fn_gate: "bypass"` value is read by the FN gate check in the execution
-loop (see § FN Gate). The same bypass flag is set by `--milestone:N` and
-`--worktree` so per-issue or unattended runs do not stall at FN.
+loop (see § FN Gate). When bypass fires, the orchestrator writes an
+`fn_gate_bypass` audit line with `subject: "FN0"` and the triggering `reason`,
+which clears the FN hook predicate. The same bypass flag is set by
+`--milestone:N` and `--worktree` so per-issue or unattended runs do not stall
+at FN.
 
 ### Safety Valve
 
