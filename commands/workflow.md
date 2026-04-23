@@ -7,12 +7,25 @@ allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCre
 ---
 
 > **ORCHESTRATOR APPROVAL PROTOCOL (BINDING)**
-> After PL0 completes, the ORCHESTRATOR (you, the main Claude session) MUST:
-> 1. Present the plan summary to the user
-> 2. STOP. Do NOT call Write, Edit, or Bash with any file-modifying command
-> 3. Wait for the user to explicitly say "approve", "proceed", "go ahead", or similar
-> 4. Only then begin executing DV or any subsequent stage
-> This applies to YOU (the orchestrator), not just to subagents. Receiving a plan from a subagent is NOT approval to implement it.
+> The orchestrator has TWO approval gates that each require explicit HUMAN approval:
+>
+> **Gate 1 — After PL0 (planning) completes:**
+> 1. Present the plan summary (complexity score, stages, agents)
+> 2. STOP. Do NOT call Write, Edit, Task, or Bash with any file-modifying command
+> 3. Wait for the user to explicitly say "approve", "proceed", "go", "yes", or "continue"
+> 4. Only then begin DV or any subsequent stage
+>
+> **Gate 2 — Before FN (finalization) starts:**
+> 1. Present the pre-FN summary (planned commits, branch, PR target, QA/DR verdicts) — see `skills/workflow/SKILL.md § FN Gate`
+> 2. STOP. Do NOT mark FN `in_progress`; do NOT delegate to the FN agent
+> 3. Wait for explicit human approval as above
+> 4. Only then let FN run commits, push, and PR creation
+>
+> **Bypass flags** (skip BOTH gates): `--auto-continue`, `--milestone:N`, `--worktree`. These modes set `metadata.fn_gate = "bypass"` on PL0; the orchestrator's gate check honors that field.
+>
+> Receiving results from a subagent is NEVER approval. Only the HUMAN user's explicit text message qualifies.
+>
+> **TODO**: `/emergency` workflows currently fall through to the standard PL0-gate path; FN-gate bypass for `/emergency` will be wired when the emergency trigger is formalized.
 
 # Workflow Command
 
@@ -89,7 +102,7 @@ See `skills/shared/stage-codes.md` for stage details.
 1. **Parse** task description and flags (`--milestone`, `--secure`, `--auto-continue`, etc.). See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:code-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
 3. **Create context folders**: `mkdir -p .context/images .context/errors`
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", workflow_id: "<slug>", priority: "<priority>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.)
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", workflow_id: "<slug>", priority: "<priority>", fn_gate: "<required|bypass>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). Set `fn_gate: "bypass"` when invoked with `--auto-continue`, `--milestone:N`, or `--worktree`; otherwise `"required"`.
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM creates `.context/planning.md`, assesses complexity, creates stage tasks with `metadata.agent`
 7. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
@@ -100,14 +113,15 @@ See `skills/shared/stage-codes.md` for stage details.
 ## ════════════════════════════════════════════════════════════
 ## Do NOT proceed. Do NOT call any tools. WAIT for user input.
 ## The user must type "approve" / "proceed" / "continue" / "go" / "yes" / "y".
-## EXCEPTION: --auto-continue or --worktree flag was specified.
+## EXCEPTION: `--auto-continue`, `--milestone:N`, or `--worktree`.
+## (These flags also bypass the FN gate via metadata.fn_gate = "bypass".)
 ## ════════════════════════════════════════════════════════════
 
 ## Phase 2: Execute Stages (only after user approval)
 
 Before proceeding, re-verify: did the HUMAN USER type an approval message? PL0 completing is NOT approval. The product-manager returning results is NOT approval.
 
-Execute the orchestrator execution loop from `skills/workflow/SKILL.md § Orchestrator Execution Loop`.
+Execute the orchestrator execution loop from `skills/workflow/SKILL.md § Orchestrator Execution Loop`. The loop enforces a second approval gate immediately before any FN-stage task — see `skills/workflow/SKILL.md § FN Gate` for the pre-FN summary template and bypass semantics.
 
 ## Phase 3: Post-Workflow Self-Improvement
 
