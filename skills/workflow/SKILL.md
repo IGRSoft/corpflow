@@ -328,6 +328,57 @@ while (tasks.some(t => t.status !== "completed")) {
       full.description = reviewInvocation + "\n\n" + full.description;
     }
 
+    // 5c. Pre-warm XcodeBuildMCP for Apple DV/DR/QA stages
+    //     XcodeBuildMCP is registered globally as `npx -y xcodebuildmcp@latest mcp`
+    //     (stdio, lazy-spawn). Subagents only inherit MCP servers that are
+    //     ALREADY RUNNING in the parent session at delegation time. If we
+    //     delegate before the parent has issued any XcodeBuildMCP call, the
+    //     child (especially in worktree isolation) inherits an unstarted
+    //     reference and the first tool call fails with "tool not available".
+    //     Warm the server in the parent ONCE per workflow before the first
+    //     Apple-platform stage that needs it.
+    const APPLE_STAGES = new Set(["DV","DR","QA"]);
+    const APPLE_AGENTS = /^(developer|technical-lead|qa-engineer)$/;
+    const isAppleStage =
+      APPLE_STAGES.has(full.metadata.stage) &&
+      ( full.metadata.platform === "apple" ||
+        ( !full.metadata.platform &&
+          APPLE_AGENTS.test(agentType.split(":").pop()) &&
+          // workspace contains Apple markers
+          ["*.xcodeproj","*.xcworkspace","Package.swift"]
+            .some(g => glob.sync(g, { cwd: process.cwd(), dot: false }).length > 0)
+        )
+      );
+    if (isAppleStage && !state.xcodeMcpWarmed) {
+      let warmed = false;
+      for (let attempt = 1; attempt <= 2 && !warmed; attempt++) {
+        try {
+          await mcp__XcodeBuildMCP__session_show_defaults({});
+          warmed = true;
+          appendAudit({ action: "mcp_warmup_attempt",
+                        metadata: { server: "XcodeBuildMCP", attempt, result: "ok" } });
+        } catch (err) {
+          appendAudit({ action: "mcp_warmup_attempt",
+                        metadata: { server: "XcodeBuildMCP", attempt, result: "fail",
+                                    reason: String(err).slice(0, 200) } });
+          if (attempt === 1) await sleep(3000);  // npx cold-start budget
+        }
+      }
+      state.xcodeMcpWarmed = warmed;
+      if (!warmed) {
+        appendAudit({ action: "mcp_warmup_failed",
+                      metadata: { server: "XcodeBuildMCP" } });
+        const banner =
+          `IMPORTANT: XcodeBuildMCP warmup failed in the orchestrator. ` +
+          `Treat mcp__XcodeBuildMCP__* as UNAVAILABLE. Fall back to ` +
+          `xcodebuild via Bash for build/test (tee output to the same ` +
+          `.context/logs/* paths) and record the fallback in ` +
+          `.context/development.md § Decisions so QA/DR see it.`;
+        full.description = banner + "\n\n" + full.description;
+      }
+      // warmup succeeded → child inherits a live XcodeBuildMCP server.
+    }
+
     // 6. Delegate to stage agent
     Task({ subagent_type: subagentType, model: model, prompt: full.description });
 
@@ -349,6 +400,43 @@ while (tasks.some(t => t.status !== "completed")) {
 - NEVER mark a task `completed` without first delegating to an agent and receiving its results — completion without delegation is the most common violation
 - The orchestrator uses ONLY TaskCreate, TaskUpdate, TaskGet, TaskList, and Agent tools. Edit/Write/Bash on source files belong to stage agents, not the orchestrator
 - The orchestrator owns the loop; stage agents own their stage's work
+
+### Pre-DV MCP warmup
+
+XcodeBuildMCP (and any MCP server registered as `npx -y …` over stdio) is
+**lazy-spawned**: Claude Code only starts the process on the first tool
+call. Subagents inherit MCP servers that were already running in the
+parent at delegation time (`agent-coordination § MCP Tool Inheritance`)
+— but they do NOT trigger a spawn on inheritance. If the orchestrator
+delegates DV before issuing any XcodeBuildMCP call, the child agent
+(especially in `isolation: worktree`) inherits an unstarted reference
+and the first `mcp__XcodeBuildMCP__*` call fails with "tool not
+available."
+
+Step `5c` in the execution loop above warms the server in the parent
+session before the first Apple-platform stage. Contract:
+
+- **Trigger**: `metadata.stage ∈ {DV,DR,QA}` AND
+  (`metadata.platform === "apple"` OR
+   `metadata.subagent` matches `^(developer|technical-lead|qa-engineer)$`
+   AND the workspace contains an Apple marker — `*.xcodeproj`,
+   `*.xcworkspace`, or `Package.swift`).
+- **Action**: one call to `mcp__XcodeBuildMCP__session_show_defaults`
+  with one retry after a 3-second backoff (covers npx cold-start).
+- **Audit**: every attempt writes one
+  `audit.jsonl` line `action: "mcp_warmup_attempt"` with
+  `metadata: {server, attempt, result, reason?}`. On final failure,
+  one additional `action: "mcp_warmup_failed"` line.
+- **Failure mode**: do NOT abort the stage. Inject a banner at the
+  top of `full.description` instructing the agent to use Bash
+  `xcodebuild` fallback and to record the fallback in
+  `.context/development.md § Decisions`.
+- **Idempotency**: cache `state.xcodeMcpWarmed = true` after the
+  first successful call so the orchestrator does not re-warm on each
+  Apple stage in the same workflow run.
+
+This pattern generalises to any lazy-spawn `npx`-based MCP. Add a
+new trigger block when introducing one (e.g., Pencil, Sosumi).
 
 ## FN Gate
 

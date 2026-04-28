@@ -302,7 +302,11 @@ MCP servers can annotate tool results with `_meta["anthropic/maxResultSizeChars"
 
 ### MCP Tool Inheritance (v2.1.101+)
 
-Subagents inherit MCP tools from dynamically-injected MCP servers in the parent session. Cross-plugin MCP tools (XcodeBuildMCP, Pencil, etc.) are available to stage agents without explicit `tools:` frontmatter entries for each MCP tool.
+Subagents inherit MCP tools from MCP servers that are **already running** in the parent session at delegation time. Cross-plugin MCP tools (XcodeBuildMCP, Pencil, etc.) are available to stage agents without explicit `tools:` frontmatter entries for each MCP tool — **provided the parent has already spawned the server**.
+
+For lazy-spawned servers — anything registered as `npx -y …` over stdio (XcodeBuildMCP, Pencil, etc.) — Claude Code starts the process only on the first tool call in a given session. Subagents inherit the server reference but inheritance does NOT trigger a spawn. If the orchestrator delegates before any tool call, the child (especially under `isolation: worktree`) inherits an unstarted reference and the first `mcp__<server>__*` call fails with "tool not available".
+
+The orchestrator MUST issue one warmup call before delegating to a child that needs a lazy-spawned server. See `workflow § Pre-DV MCP warmup` for the canonical pattern (trigger conditions, retry budget, audit lines, fallback banner). The pattern generalises to any new lazy-spawn MCP — add a new trigger block when introducing one.
 
 ### Subagent Worktree Access (v2.1.101+)
 
