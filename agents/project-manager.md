@@ -39,6 +39,7 @@ In the 9-stage workflow system, the project-manager handles:
 - Run final builds and tests
 - Create complete.md summarizing the work (include Stage Timings recap)
 - Create release.md with release notes
+- **Conductor attachments**: Write `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md` BEFORE `gh pr create`. Templates and data sources: `skills/workflow/references/conductor-attachments.md`. These two files prime Conductor's "Create PR" / "Request Review" actions in any later session and serve as the FN agent's own PR-creation script (read-then-execute, single source of truth).
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
 
@@ -104,6 +105,8 @@ See `skills/shared/three-stage-planning.md` for 3-stage model, calendar month bi
 
 Before marking FN stage complete, verify:
 - [ ] complete.md artifact written to .context/
+- [ ] `.context/attachments/PR instructions.md` written (per `skills/workflow/references/conductor-attachments.md`)
+- [ ] `.context/attachments/Review request.md` written (per `skills/workflow/references/conductor-attachments.md`)
 - [ ] All stage artifacts collected and reviewed
 - [ ] PR created with proper title and description
 - [ ] All tests passing in final build
