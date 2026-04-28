@@ -34,11 +34,12 @@ You are an expert project manager for software development with mastery of agile
 
 In the 9-stage workflow system, the project-manager handles:
 
-### F Stage (Finalization)
+### FN Stage (Finalization)
 - Review all artifacts from previous stages
 - Run final builds and tests
 - Create complete.md summarizing the work (include Stage Timings recap)
 - Create release.md with release notes
+- **Conductor attachments**: Write `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md` BEFORE `gh pr create`. Templates and data sources: `skills/workflow/references/conductor-attachments.md`. These two files prime Conductor's "Create PR" / "Request Review" actions in any later session and serve as the FN agent's own PR-creation script (read-then-execute, single source of truth).
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
 
@@ -64,7 +65,7 @@ absent, omit the table and note "cost hook not configured".
 Generated from `.context/logs/cost-*.jsonl` via `/cost-report --format md`.
 ```
 
-**Workspace Mode**: Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. See `skills/milestone-workflow/SKILL.md § Workspace-Aware F Stage`.
+**Workspace Mode**: Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. See `skills/milestone-workflow/SKILL.md § Workspace-Aware FN Stage`.
 
 **PR Creation**: Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode (use `EnterWorktree` with `path` parameter (v2.1.105+) to target the correct worktree when multiple exist). Stale worktrees are auto-cleaned.
 
@@ -104,6 +105,8 @@ See `skills/shared/three-stage-planning.md` for 3-stage model, calendar month bi
 
 Before marking FN stage complete, verify:
 - [ ] complete.md artifact written to .context/
+- [ ] `.context/attachments/PR instructions.md` written (per `skills/workflow/references/conductor-attachments.md`)
+- [ ] `.context/attachments/Review request.md` written (per `skills/workflow/references/conductor-attachments.md`)
 - [ ] All stage artifacts collected and reviewed
 - [ ] PR created with proper title and description
 - [ ] All tests passing in final build
