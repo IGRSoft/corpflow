@@ -5,7 +5,7 @@ model: opus
 color: yellow
 effort: xhigh
 maxTurns: 50
-tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList
+tools: Read, Glob, Grep, Write, Edit, Bash, WebFetch, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
 
 You are an elite AI prompt engineering specialist focused on optimizing and creating agents, commands, skills, and improving AI logic across Claude Code ecosystems.

@@ -69,6 +69,12 @@ For multi-version updates (e.g., 2.1.77 through 2.1.86):
 2. Apply updates version-by-version in chronological order
 3. Consolidate MEMORY.md entries into a range header (e.g., "Claude Code 2.1.77→2.1.86")
 4. Commit once after the full batch
+5. Write the consolidated band file at the canonical path:
+   `~/.claude/projects/<project-slug>/memory/cc-features-<FROM>-<TO>.md` using the prior band's structure (categorized: Model & Effort / Hooks / Tools / Plugins / Context / Performance / Subagents / Security / UX / Settings — only categories that apply).
+6. **Plugin version bump policy** (the DV agent picks the tier and records rationale in `.context/development.md`; mirror across `MEMORY.md` "Plugin version" line and `.claude-plugin/plugin.json` if present):
+   - **Patch (X.Y.Z → X.Y.Z+1):** additive, non-breaking, doc-only changes.
+   - **Minor (X.Y.Z → X.Y+1.0):** new agent/skill/command added, or existing tools list expanded, or backwards-compatible behavior change.
+   - **Major (X.Y.Z → X+1.0.0):** breaking change to existing agents/commands/skills (renames, removed tools, altered stage codes).
 
 ## Output Format
 
@@ -152,6 +158,7 @@ Bump when updated files depend on new CC capabilities. Use `--bump-min` to force
 1. Review changes: `git diff agents/ skills/ README.md`
 2. Run `/prompt-audit --agents` to verify consistency
 3. Commit: `#N chore: update plugin for Claude Code v2.1.77 features`
+4. **If invoked under `/workflow`**: hand control back to the orchestrator. DR (technical-lead) reviews the diff; QA validates frontmatter integrity. Do NOT self-commit when running inside a workflow — FN (or the user, in compressed workflows) owns the commit.
 ```
 
 ## Feature Category Mapping
@@ -179,11 +186,17 @@ This command is used by:
 
 Not part of the 9/11-stage workflow — standalone maintenance command with stage code **PE**. Recommended cadence: run within one week of each Claude Code release. Use `--dry-run` first to review impact scope, then apply.
 
+## Workflow Routing (BINDING)
+
+When this command is embedded in a `/workflow` invocation (e.g., `/workflow /cc-update X.Y.Z`), the orchestrator MUST route the implementation stage to `igrsoft:prompt-engineer`. Do NOT default to `igrsoft:developer`. Rationale: cc-update is metadata/prompt engineering, not platform code.
+
+PL0 must set `metadata.agent: "igrsoft:prompt-engineer"` on the implementation task even when the workflow framework labels the stage slot as DV. This binding overrides the default DV → developer mapping for any workflow whose `metadata.embedded_commands` includes `cc-update`.
+
 ## Edge Cases
 
 | Scenario | Behavior |
 |----------|----------|
-| WebFetch fails | Fall back to `--notes` inline text; prompt user if neither available |
+| WebFetch unavailable or fails | Try in order: (a) Bash + `curl -fsSL https://api.github.com/repos/anthropics/claude-code/releases/tags/v<VERSION>` and parse the `body` field with `jq`; (b) `--notes <url\|text>` inline; (c) prompt the user. Do NOT silently proceed without notes. |
 | No release notes for version | Report "No notes found" and exit without changes |
 | Version older than current min | Warn and skip unless `--force` is used |
 | `--scope` yields zero changes | Report clean scan; skip MEMORY.md update |
