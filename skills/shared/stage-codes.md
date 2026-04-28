@@ -58,6 +58,11 @@ Support agents don't own workflow stages but can be invoked on-demand via Task t
 | `maxTurns` | number | 2.1.78 | Limit agent turn count |
 | `disallowedTools` | comma-separated | 2.1.78 | Block specific tools from agent |
 | `initialPrompt` | string | 2.1.83 | Auto-submit first turn on agent start |
+| `permissionMode` | string | 2.1.119 (honored under `--agent`) | Controls permission flow for built-in agents launched via `--agent <name>` |
+| `mcpServers` | YAML map | 2.1.117 (main-thread) | MCP servers loaded for both subagent and main-thread (`--agent`) sessions |
+| `hooks` | YAML map | 2.1.116 (main-thread) | Hooks now also fire for main-thread (`--agent`) runs |
+
+> **`--print` mode honors agent frontmatter** (v2.1.119+): `tools:` and `disallowedTools:` are now enforced in `--print`/SDK runs, matching interactive-mode behavior. Plugin agents shipping a least-privilege `tools:` line keep that contract in non-interactive flows.
 
 ### Skill/Command Frontmatter (v2.1.80+)
 

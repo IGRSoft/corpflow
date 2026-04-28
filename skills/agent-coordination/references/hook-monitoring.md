@@ -130,6 +130,50 @@ Unrecognized hook event names in `settings.json` no longer break the entire sett
 
 Plugin hooks from force-enabled plugins now run when `allowManagedHooksOnly` is set, restricting execution to managed hook types only.
 
+### Main-Thread Agent Hooks (v2.1.116+)
+
+Agent frontmatter `hooks:` now fire when the agent runs as a main-thread agent via `--agent <name>`. Previously hooks declared in agent frontmatter only ran for subagent invocations. Plugin agents that ship lifecycle hooks (e.g., audit-trail writers) now apply consistently in both subagent and main-thread modes. **Companion fix (v2.1.118)**: agent-type hooks no longer fail with "Messages are required for agent hooks" when configured for events other than `Stop`/`SubagentStop`.
+
+### Agent Frontmatter mcpServers (v2.1.117+)
+
+Agent frontmatter `mcpServers` are now loaded for main-thread agent sessions invoked via `--agent`. Plugin agents that declare MCP server requirements get the same server set in interactive `--agent` runs as in subagent delegations.
+
+### MCP Tool Hooks (v2.1.118+)
+
+Hooks can invoke MCP tools directly via `type: "mcp_tool"` (previously `command` and `http` only). Useful for hooks that need to call MCP server actions (e.g., elicitations, tool searches) without shelling out:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "mcp_tool", "server": "audit-mcp", "tool": "log_event" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### PostToolUse duration_ms (v2.1.119+)
+
+`PostToolUse` and `PostToolUseFailure` hook inputs now include `duration_ms` — tool execution time excluding permission prompts and `PreToolUse` hooks. Useful for cost/perf telemetry and slow-tool alerting in workflow audit trails.
+
+### PostToolUse Output Replacement (v2.1.121+)
+
+`PostToolUse` hooks can now replace tool output for **all tools** (previously MCP-only) by setting `hookSpecificOutput.updatedToolOutput`. Workflow agents can use this to redact secrets, normalize line endings, or inject structured envelopes into tool results before they hit the model's context.
+
+```json
+{
+  "hookSpecificOutput": {
+    "updatedToolOutput": "<sanitized output>"
+  }
+}
+```
+
+> Async `PostToolUse` hooks that emit no response payload no longer write empty entries to the session transcript (v2.1.119 fix).
+
 ## Agent Teams Lifecycle Hooks
 
 When agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), additional hook events are available:

@@ -316,6 +316,22 @@ Sub-agents in isolated worktrees automatically receive Read/Edit access to their
 
 Background subagents that fail now report partial progress instead of returning nothing. Orchestrators can inspect partial results for recovery.
 
+### Forked Subagents (v2.1.117+)
+
+External builds of Claude Code can enable forked subagents by setting `CLAUDE_CODE_FORK_SUBAGENT=1`. As of v2.1.121 this also works in non-interactive sessions (SDK and `claude -p`). Use forked subagents when a stage needs a deterministic snapshot of the parent's context rather than a fresh session.
+
+### Subagent Worktree Isolation Reuse (v2.1.119+)
+
+Agent tool with `isolation: "worktree"` no longer reuses **stale** worktrees from prior sessions — each delegation gets a fresh worktree. Removes the failure mode where a previous run's untracked files leaked into a new stage.
+
+### Subagent cwd Restoration on Resume (v2.1.118+)
+
+Subagents resumed via `SendMessage` now correctly restore the explicit `cwd` they were spawned with. Stages that resume mid-task no longer fall back to the parent's cwd unexpectedly.
+
+### TaskList Sort Order (v2.1.119+)
+
+`TaskList` now returns tasks **sorted by ID** (was: arbitrary filesystem order). Stage agents can rely on iteration order matching creation order for stable handoff math (e.g., "the latest DV task is the highest-numbered DVN").
+
 ## Coordination Patterns
 
 ### Sequential Pipeline (Default)
@@ -482,7 +498,7 @@ For complex bugs with multiple potential causes:
 3. Each investigator gathers confirming/falsifying evidence
 4. Arbitrate across findings, rank by confidence and evidence strength
 
-See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, and PostToolUse format-on-save safety), agent teams comparison, MCP elicitation patterns, and team communication protocols (message types, anti-patterns, deadlock resolution).
+See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, PostToolUse format-on-save safety, MCP-tool-typed hooks (v2.1.118), `duration_ms` in PostToolUse payload (v2.1.119), and PostToolUse output replacement via `updatedToolOutput` (v2.1.121)), agent teams comparison, MCP elicitation patterns, and team communication protocols (message types, anti-patterns, deadlock resolution).
 
 ## Related
 
