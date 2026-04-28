@@ -66,9 +66,12 @@ When platform is `apple`, further route based on context:
 ## MCP Build Verification
 
 When building or testing Apple platform code directly (not delegating to apple-developer agents):
-1. Call `session_show_defaults` to verify project/scheme/simulator
-2. Use `build_sim` or `build_run_sim` instead of `xcodebuild` via Bash
-3. Use `test_sim` instead of `xcodebuild test` via Bash
+
+1. **Warmup + verify.** Call `mcp__XcodeBuildMCP__session_show_defaults` once to verify project/scheme/simulator. Treat this call as the warmup. The orchestrator should already have warmed XcodeBuildMCP before delegating (see `workflow § Pre-DV MCP warmup`); this call is the second line of defence for older orchestrator versions, `fworkflow:` runs that bypass the loop, or any path where the warmup did not fire.
+   - If the call returns "tool not available" or any error indicating the server is not reachable, retry **once** after a 3-second wait (covers `npx -y xcodebuildmcp@latest` cold-start).
+   - On second failure, write one `audit.jsonl` line `action: "mcp_unavailable"` with `metadata: {server: "XcodeBuildMCP", reason: <error>}`, switch to the Bash fallback for the rest of the stage, and record the fallback in `.context/development.md § Decisions` (one line: `XcodeBuildMCP unreachable; using Bash xcodebuild fallback — <reason>`) so QA/DR see it. Do NOT abort the stage.
+2. **Build.** Use `mcp__XcodeBuildMCP__build_sim` or `build_run_sim`. If warmup failed, substitute `xcodebuild -project … -scheme … -destination …` via Bash and tee output to the same `.context/logs/build-developer-<ts>.log` path so QA/DR are unaffected.
+3. **Test.** Use `mcp__XcodeBuildMCP__test_sim`. If warmup failed, substitute `xcodebuild test -project … -scheme … -destination …` via Bash and tee to `.context/logs/test-developer-<ts>.log`.
 
 ## Workflow Integration
 
