@@ -298,7 +298,9 @@ while (tasks.some(t => t.status !== "completed")) {
       const pl0 = tasks.find(t => t.metadata?.stage === "PL");
       const gateMode = pl0?.metadata?.fn_gate ?? "required";  // default safe
       if (gateMode !== "bypass") {
-        // (a) Build pre-FN summary from .context/planning.md,
+        // (a) Build pre-FN summary from the resolved plan file
+        //     (`task.metadata.plan_file`; fallback: newest `.context/planning-*.md`,
+        //     then legacy `.context/planning.md`),
         //     .context/developer-review.md, .context/testing.md.
         // (b) Print summary to user. Do NOT call TaskUpdate.
         //     Do NOT delegate. FN task stays `pending`.

@@ -20,7 +20,7 @@ Agents whose output survived user review unchanged. Positive signal (4Ls: "Liked
 ```markdown
 ## What Worked
 
-- `agents/product-manager.md` — planning.md accepted without edits
+- `agents/product-manager.md` — `<plan_file>` (e.g. `planning-0.md`) accepted without edits
 - `agents/qa-engineer.md` — testing.md accepted without edits
 ```
 
@@ -72,7 +72,7 @@ Observational only. The user can skim but is not asked to act.
 ```markdown
 ## Deferred (Low Confidence)
 
-- `.context/planning.md` L8 — single-word wording tweak (`approach` → `strategy`). Confidence: low. Park until N≥2 similar tweaks accumulate across workflows.
+- `.context/planning-0.md` L8 — single-word wording tweak (`approach` → `strategy`). Confidence: low. Park until N≥2 similar tweaks accumulate across workflows.
 ```
 
 If cross-workflow accumulation ever ships (v2), items escalate from Deferred into Proposed when pattern count ≥ 2.

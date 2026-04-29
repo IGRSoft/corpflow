@@ -72,7 +72,7 @@ TL can split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async 
 
 #### Procedure
 
-1. Read `.context/planning.md` and `.context/analyzing.md` to identify work streams
+1. Read the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`) and `.context/analyzing.md` to identify work streams
 2. For each stream, define: exclusive file ownership list, interface contracts, acceptance criteria
 3. Use `TaskGet` to find DV0 and DR0 task IDs from the current workflow
 4. Use `TaskUpdate` on DV0 to narrow its description to the primary stream's scope
@@ -84,7 +84,8 @@ TL can split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async 
      metadata: {
        stage: "DV", agent: "igrsoft:developer", model: "opus",
        error_file: ".context/errors/developer.md",
-       context_files: "planning.md,analyzing.md,coordination.md,.context/errors/developer.md",
+       context_files: `${task.metadata.plan_file},analyzing.md,coordination.md,.context/errors/developer.md`,
+       plan_file: task.metadata.plan_file,
        workflow_id: "{id}", priority: "medium"
      }
    })

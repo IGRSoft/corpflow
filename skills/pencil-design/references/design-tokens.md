@@ -61,7 +61,7 @@ mcp__pencil__open_document({
 
 ## Reference Format in Documentation
 
-When documenting mockups, use this format in planning.md:
+When documenting mockups, use this format in the plan file (`<plan_file>` — `.context/planning-N.md`; e.g. `planning-0.md`):
 
 ```markdown
 ## Visual Mockups

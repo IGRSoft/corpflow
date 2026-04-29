@@ -31,7 +31,7 @@ Generate a comprehensive test plan from requirements or code changes. Creates st
 ```
 /test-plan "User authentication with OAuth"
 /test-plan --from-pr 123
-/test-plan --from-file .context/planning.md --coverage
+/test-plan --from-file .context/planning-0.md --coverage    # or any planning-N.md the PL produced
 ```
 
 ## Output Format

@@ -41,7 +41,7 @@ Provide Swift app architecture for the igrsoft workflow AR stage:
 {task_description}
 
 ## Planning Context (compressed)
-{planning_summary from .context/planning.md}
+{planning_summary from .context/<plan_file> — resolve via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`}
 
 ## System Architecture Constraints
 - API patterns: {REST/GraphQL/gRPC decisions}
@@ -94,7 +94,7 @@ System constraints override app-level preferences. If apple-architector's patter
 Before delegating, prepare context from workflow artifacts:
 
 ```markdown
-## Compressed Planning Context (from .context/planning.md)
+## Compressed Planning Context (from .context/<plan_file>)
 - Feature: {feature_name}
 - User stories: {count} stories
 - Acceptance criteria: {key_criteria}
@@ -179,7 +179,8 @@ TaskCreate({
     agent: "apple-developer:ios-developer",  // fully-qualified → dispatched directly
     model: "opus",
     error_file: ".context/errors/ios-developer.md",
-    context_files: "planning.md,analyzing.md,.context/errors/ios-developer.md",
+    context_files: `${planFile},analyzing.md,.context/errors/ios-developer.md`,
+    plan_file: planFile,  // e.g. "planning-0.md"
     workflow_id: workflowId
   }
 });

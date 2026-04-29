@@ -94,10 +94,10 @@ Budget approval follows the 3-Stage Model — see `skills/shared/three-stage-pla
 ### Step 1: Review Artifacts
 Read `.context/complete.md` for implementation summary.
 Read `.context/testing.md` for QA results.
-Read `.context/planning.md` for original acceptance criteria.
+Read the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`) for original acceptance criteria.
 
 ### Step 2: Verify Acceptance Criteria
-Compare implementation against planning.md acceptance criteria:
+Compare implementation against `<plan_file>` acceptance criteria:
 - Mark each criterion as **PASS**, **PARTIAL**, or **FAIL**
 - For PARTIAL/FAIL, document specific gaps
 
@@ -126,7 +126,7 @@ After the decision is recorded, **always invoke** the `self-improvement` skill. 
 ## Completion Verification
 
 Before marking ST stage complete, verify:
-- [ ] All acceptance criteria from planning.md evaluated
+- [ ] All acceptance criteria from `<plan_file>` evaluated
 - [ ] Each criterion marked PASS, PARTIAL, or FAIL
 - [ ] approval.md artifact written to .context/
 - [ ] Clear decision: Approved, Changes Requested, or Rejected

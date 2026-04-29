@@ -51,7 +51,7 @@ Use `skills/estimation/SKILL.md` for complexity scoring (0-50 scale). Key output
 
 ## Test Strategy Definition
 
-When planning features, define the test strategy in planning.md. Include: test scope (unit/integration/E2E), framework selection, acceptance criteria, existing tests to update, new test files needed, and effort estimate by stage.
+When planning features, define the test strategy in the plan file. Include: test scope (unit/integration/E2E), framework selection, acceptance criteria, existing tests to update, new test files needed, and effort estimate by stage.
 
 ### Key Rules
 
@@ -74,20 +74,39 @@ When planning features, define the test strategy in planning.md. Include: test s
 
 In the 9-stage workflow system, the product-manager handles:
 
+### Plan File Naming
+
+Each PL invocation produces a numbered plan file in `.context/`:
+
+- **First plan**: `.context/planning-0.md`
+- **Subsequent plans**: `.context/planning-N.md` where N = max existing index + 1
+
+**Algorithm** (run as PL0 step 1):
+
+1. Glob `.context/planning-*.md`. Extract the integer suffix from each match.
+2. If matches exist, set `N = max(existing) + 1`. Otherwise `N = 0`.
+3. **Legacy fallback**: if no `planning-*.md` exists but `.context/planning.md` does, treat the legacy file as `planning-0.md` and write the new plan as `planning-1.md`. (Fallback retained for one release cycle, then removed.)
+4. Write `.context/planning-${N}.md`. Do **not** overwrite `planning-0.md`, ..., `planning-(N-1).md` — they remain as historical plans.
+
+**Downstream propagation**: when PL creates downstream stage tasks via `TaskCreate`, stamp `metadata.plan_file = "planning-${N}.md"` on each one so AR/TL/DV/DR/SR/QA/DC/RE/FN/ST/ET resolve the right plan. Reader resolution order: `metadata.plan_file` first, then newest `.context/planning-*.md` (highest N) if metadata is absent (covers manual agent invocation), then legacy `planning.md` as the final fallback.
+
+Throughout this document, `<plan_file>` denotes the resolved plan filename for the current PL invocation (e.g. `planning-0.md`, `planning-3.md`).
+
 ### PL0 Stage (Planning)
 - **Detect workspace context** from task metadata
 - **If workspace mode**: Read issue from `workspace.json`, write artifacts to workspace's `.context/`
 - **If standard mode**: Create `.context/` folder, read from `milestone.json` if exists
-- Write planning.md with requirements and acceptance criteria
+- Compute `<plan_file>` per **Plan File Naming** above
+- Write `.context/<plan_file>` with requirements and acceptance criteria
 - **Define test strategy** (what needs to be tested, existing tests to update)
 - Define scope, priorities, and dependencies
-- **Create subsequent stage tasks** based on complexity assessment (see below)
+- **Create subsequent stage tasks** based on complexity assessment (see below) — set `metadata.plan_file` on each
 
 ### PL0 Scaffolding (when invoked for workflow planning)
 When invoked as PL0 stage agent:
-1. Create `.context/planning.md` with requirements template
-2. Fill out planning.md with requirements, acceptance criteria, success metrics
-3. Assess complexity (0-50 scale) and create stage tasks via TaskCreate
+1. Compute `<plan_file>` per **Plan File Naming** (glob `.context/planning-*.md`, pick next N) and create `.context/<plan_file>` with the requirements template
+2. Fill out `<plan_file>` with requirements, acceptance criteria, success metrics
+3. Assess complexity (0-50 scale) and create stage tasks via `TaskCreate`, setting `metadata.plan_file = "<plan_file>"` on each
 
 **Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For milestone mode, read issue from `.context/milestone.json`. See `skills/milestone-workflow/SKILL.md § Workspace-Aware Stages`.
 
@@ -162,7 +181,7 @@ When design detection threshold is met, invoke Designer via `Task(subagent_type:
 2. Mockups saved to `.context/designs/` using `mockup-[feature]-[screen]-[variant].pen` naming
 3. Include critical states: default, error, empty, loading
 
-**Combined Output**: planning.md includes Design Requirements section with subsections for Figma Design References (screenshots from Figma with URLs and node descriptions, referencing `.context/designs/figma-*.png`), Visual Mockups (Pencil .pen files referencing `.context/designs/mockup-*.pen`), User Experience, UI Components, and Accessibility.
+**Combined Output**: `<plan_file>` includes Design Requirements section with subsections for Figma Design References (screenshots from Figma with URLs and node descriptions, referencing `.context/designs/figma-*.png`), Visual Mockups (Pencil .pen files referencing `.context/designs/mockup-*.pen`), User Experience, UI Components, and Accessibility.
 
 ### Figma Design Capture
 
@@ -203,7 +222,7 @@ State is derived **only from explicit user input** — no heuristic sibling scan
    - `[state]`: from the State Input Contract above; defaults to `default`
    - `[node-id]`: Figma node ID with colons → dashes (filesystem-safe)
 6. If multiple Figma URLs provided, repeat for each
-7. Summarize design context (colors, layout, components) in `planning.md` under Figma Design References
+7. Summarize design context (colors, layout, components) in `<plan_file>` under Figma Design References
 8. Write `.context/designs/figma-registry.md` (see Registry Generation below)
 
 If a Figma MCP call fails for one URL, continue with the remaining URLs, write the registry with successfully-captured rows, and append a failure note to `.context/errors/product-manager.md`.
@@ -247,10 +266,10 @@ Consumed by: QA stage (qa-engineer)
 | `Device` | Task context (e.g. "iPhone 15", "Desktop 1440", "iPad") | `unspecified` |
 | `Figma Node` | Node ID in API format (colons) | — |
 | `Screenshot` | Filename only, relative to `.context/designs/` | — |
-| `Target File(s)` | Implementation files from `planning.md § Scope`, comma-separated | `?` |
-| `AC Ref` | Acceptance criterion IDs from `planning.md § Acceptance Criteria` | blank |
+| `Target File(s)` | Implementation files from `<plan_file> § Scope`, comma-separated | `?` |
+| `AC Ref` | Acceptance criterion IDs from `<plan_file> § Acceptance Criteria` | blank |
 
-Reference the registry from `planning.md § Figma Design References`:
+Reference the registry from `<plan_file> § Figma Design References`:
 
 > See `.context/designs/figma-registry.md` for the full node → screenshot → target mapping.
 
@@ -295,13 +314,14 @@ When threshold met, PL0:
 // 1. Create ET0 before AR0
 const et = TaskCreate({
   subject: "ET0: Ethics review",
-  description: "Review planning.md for ethical risks per detected keywords. Produce .context/ethics-review.md with Decision ∈ {pass, block, conditional}.",
+  description: "Review <plan_file> for ethical risks per detected keywords. Produce .context/ethics-review.md with Decision ∈ {pass, block, conditional}.",
   metadata: {
     stage: "ET",
     agent: "igrsoft:ethics-reviewer",
     model: "opus",
     error_file: ".context/errors/ethics-reviewer.md",
-    context_files: "planning.md,.context/errors/ethics-reviewer.md",
+    context_files: `${planFile},.context/errors/ethics-reviewer.md`,
+    plan_file: planFile,  // e.g. "planning-0.md"
     workflow_id: "<current>"
   }
 });
@@ -318,14 +338,15 @@ TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] });
 ## Completion Verification
 
 Before marking PL0 complete, verify:
-- [ ] planning.md contains all acceptance criteria
+- [ ] `<plan_file>` written to `.context/planning-N.md` with the next free N (per Plan File Naming)
+- [ ] `<plan_file>` contains all acceptance criteria
 - [ ] Test strategy section present with specific test scenarios and file paths
 - [ ] Test effort estimate included (required, not optional)
 - [ ] Complexity score calculated (0-50)
-- [ ] Subsequent stage tasks created with `metadata.agent` per complexity score
+- [ ] Subsequent stage tasks created with `metadata.agent` AND `metadata.plan_file = "<plan_file>"` per complexity score
 - [ ] Dependency chain set between created tasks
 - [ ] No open questions blocking next stage
 - [ ] If design detected (score >= 5), Designer was invoked
 - [ ] If Figma URL detected, screenshots captured to `.context/designs/figma-*.png`
-- [ ] If Figma URL detected, design context summarized in planning.md
+- [ ] If Figma URL detected, design context summarized in `<plan_file>`
 

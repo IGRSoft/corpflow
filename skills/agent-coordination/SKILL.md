@@ -18,7 +18,7 @@ Patterns for coordinating agents across workflow stages, managing handoffs, and 
 ```
 1. Current agent completes work (output matches stage-contracts Required Outputs)
 2. Updates task: TaskUpdate({ taskId: "X", status: "completed" })
-3. Creates stage artifact (e.g., planning.md) with required sections
+3. Creates stage artifact (e.g., `planning-0.md` for the first PL run, `planning-1.md` for the next; see `agents/product-manager.md § Plan File Naming`) with required sections
 4. Writes compressed handoff (50-100 tokens)
 5. Orchestrator validates against stage-contracts before transition
 6. Next agent starts: TaskUpdate({ taskId: "Y", status: "in_progress" })

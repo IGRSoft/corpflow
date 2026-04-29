@@ -154,7 +154,7 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 
 ```
 .context/
-├── planning.md              # PL stage
+├── planning-0.md            # PL stage (first plan; subsequent PL runs add planning-1.md, planning-2.md, …)
 ├── analyzing.md             # AR stage
 ├── development.md           # DV stage
 ├── developer-review.md      # DR stage

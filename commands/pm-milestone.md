@@ -14,7 +14,7 @@ Generate GitHub milestone tickets with agent assignments for implementation, tes
 
 ```
 /pm-milestone "Feature description" --milestone N
-/pm-milestone --from-prd .context/planning.md --milestone N
+/pm-milestone --from-prd .context/planning-0.md --milestone N    # or any planning-N.md the PL produced
 /pm-milestone "Feature description"                          # Creates new milestone
 /pm-milestone "Feature description" --milestone N --dry-run  # Preview only
 ```
@@ -221,7 +221,7 @@ Next: `/workflow --milestone:{N}` to execute all tickets
 /pm-milestone "Add dark mode support" --milestone 3 --platform apple
 
 # Preview tickets from a PRD without creating
-/pm-milestone --from-prd .context/planning.md --milestone 5 --dry-run
+/pm-milestone --from-prd .context/planning-0.md --milestone 5 --dry-run
 
 # Create secure tickets (adds security-reviewer)
 /pm-milestone "Implement OAuth2 flow" --milestone 2 --secure

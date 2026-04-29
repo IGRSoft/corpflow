@@ -1,5 +1,9 @@
 # Milestone Initialization & Workflow Setup
 
+## Conventions used in this document
+
+- **`planFile`** — the plan filename PL produced for the current workflow run (`planning-N.md`, e.g. `planning-0.md`, `planning-3.md`). Computed by PL0 per `agents/product-manager.md § Plan File Naming`. Every downstream task carries it as `metadata.plan_file`; the same value is interpolated into `context_files`. Stage agents resolve the plan file from `task.metadata.plan_file` first, then newest `.context/planning-*.md`, then legacy `.context/planning.md`.
+
 ## Milestone Initialization
 
 When `--milestone:N` is specified:
@@ -164,7 +168,7 @@ performed codebase exploration. This prevents stage agents from re-reading the s
   - When Figma URLs are provided, PL0 captures screenshots to `.context/designs/figma-*.png` and summarizes design context here
 
 > **Note**: Figma screenshot capture applies to ALL workflow triggers including `micro:`.
-> For `micro:`, create `.context/designs/` and save screenshots even though no `.context/planning.md` is generated.
+> For `micro:`, create `.context/designs/` and save screenshots even though no `.context/planning-N.md` is generated.
 - Task involves modifying existing code (not greenfield)
 
 ### Template
@@ -245,7 +249,8 @@ const ar0 = TaskCreate({
   metadata: {
     stage: "AR", agent: "igrsoft:software-architector", model: "opus",
     error_file: ".context/errors/software-architector.md",
-    context_files: "exploration.md,planning.md,.context/errors/software-architector.md",
+    context_files: `exploration.md,${planFile},.context/errors/software-architector.md`,
+    plan_file: planFile,  // e.g. "planning-0.md" — propagated so AR resolves the right plan
     workflow_id: workflowId, priority: "medium"
   }
 });
@@ -257,7 +262,8 @@ const dv0 = TaskCreate({
   metadata: {
     stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
-    context_files: "exploration.md,planning.md,analyzing.md,coordination.md,.context/errors/developer.md",
+    context_files: `exploration.md,${planFile},analyzing.md,coordination.md,.context/errors/developer.md`,
+    plan_file: planFile,
     workflow_id: workflowId, priority: "medium"
   }
 });
@@ -269,7 +275,8 @@ const dr0 = TaskCreate({
   metadata: {
     stage: "DR", agent: "igrsoft:technical-lead", model: "sonnet",
     error_file: ".context/errors/technical-lead.md",
-    context_files: "exploration.md,planning.md,analyzing.md,coordination.md,development.md,.context/errors/technical-lead.md",
+    context_files: `exploration.md,${planFile},analyzing.md,coordination.md,development.md,.context/errors/technical-lead.md`,
+    plan_file: planFile,
     workflow_id: workflowId, priority: "medium"
   }
 });
@@ -281,7 +288,8 @@ const qa0 = TaskCreate({
   metadata: {
     stage: "QA", agent: "igrsoft:qa-engineer", model: "sonnet",
     error_file: ".context/errors/qa-engineer.md",
-    context_files: "exploration.md,planning.md,developer-review.md,testing.md,.context/errors/qa-engineer.md",
+    context_files: `exploration.md,${planFile},developer-review.md,testing.md,.context/errors/qa-engineer.md`,
+    plan_file: planFile,
     workflow_id: workflowId, priority: "medium"
   }
 });
@@ -354,7 +362,8 @@ const dv1 = TaskCreate({
   metadata: {
     stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
-    context_files: "planning.md,analyzing.md,coordination.md,.context/errors/developer.md",
+    context_files: `${planFile},analyzing.md,coordination.md,.context/errors/developer.md`,
+    plan_file: planFile,
     workflow_id: workflowId, priority: "medium"
   }
 });
@@ -365,7 +374,8 @@ const dv2 = TaskCreate({
   metadata: {
     stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
-    context_files: "planning.md,analyzing.md,coordination.md,.context/errors/developer.md",
+    context_files: `${planFile},analyzing.md,coordination.md,.context/errors/developer.md`,
+    plan_file: planFile,
     workflow_id: workflowId, priority: "medium"
   }
 });
@@ -391,7 +401,8 @@ const dv1 = TaskCreate({
   metadata: {
     stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
-    context_files: "planning.md,analyzing.md,.context/errors/developer.md",
+    context_files: `${planFile},analyzing.md,.context/errors/developer.md`,
+    plan_file: planFile,
     workflow_id: workflowId, priority: "medium"
   }
 });
@@ -402,7 +413,8 @@ const dv2 = TaskCreate({
   metadata: {
     stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
-    context_files: "planning.md,analyzing.md,.context/errors/developer.md",
+    context_files: `${planFile},analyzing.md,.context/errors/developer.md`,
+    plan_file: planFile,
     workflow_id: workflowId, priority: "medium"
   }
 });
