@@ -38,7 +38,7 @@ when using the app at night...
 Q: Independent toggle vs system-linked preference?
 Constraint: Cannot modify existing ColorConstants
 
-Details: .context/planning.md
+Details: .context/<plan_file> (e.g. planning-0.md)
 ```
 
 ## Before/After: Architecture Handoff

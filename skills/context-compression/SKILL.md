@@ -89,7 +89,7 @@ Standard format for stage transitions (target: 50-100 tokens):
 - Priority: P1 - user-requested, affects 40% of users
 
 ### Artifacts Created
-- `.context/planning.md` - Requirements and acceptance criteria
+- `.context/<plan_file>` (e.g. `planning-0.md`) - Requirements and acceptance criteria
 
 ### Open Questions for A Stage
 - Should dark mode respect system preference or be independent toggle?
@@ -138,8 +138,8 @@ Tests: AuthManagerTests.swift (3 new cases)
 - REQ-2: Theme persists across app restarts
 - REQ-3: Respects system appearance preference (configurable)
 
-Acceptance: 5 criteria in planning.md#acceptance
-Risks: 2 identified (compatibility, migration) - see planning.md#risks
+Acceptance: 5 criteria in <plan_file>#acceptance
+Risks: 2 identified (compatibility, migration) - see <plan_file>#risks
 ```
 
 ### For Architecture Context

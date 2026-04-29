@@ -7,7 +7,7 @@ Every classified diff hunk must be mapped to exactly one owning file (the "targe
 | # | Pattern of changed file | Target | Notes |
 |---|--------------------------|--------|-------|
 | 1 | `agents/<name>.md`, `skills/**/SKILL.md`, `commands/<name>.md` | The file itself | User edited the prompt directly — self-signal. Map to that file. |
-| 2 | `.context/planning.md` | `agents/product-manager.md` | Producer lookup via stage-contracts. |
+| 2 | `.context/planning-*.md` (numbered, e.g. `planning-0.md`, `planning-1.md`; also legacy `.context/planning.md`) | `agents/product-manager.md` | Producer lookup via stage-contracts. Match the glob — every numbered plan is owned by PM. |
 | 3 | `.context/analyzing.md` | `agents/software-architector.md` | |
 | 4 | `.context/coordination.md` | `agents/team-lead.md` | |
 | 5 | `.context/development.md` | `metadata.agent` of the DV task (resolve from `TaskList`) | Platform-aware: could be `igrsoft:developer`, `apple-developer:ios-developer`, etc. |

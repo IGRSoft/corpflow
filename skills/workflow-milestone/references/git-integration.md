@@ -36,7 +36,7 @@ git worktree prune
 
 | Stage | Workspace Actions |
 |-------|-------------------|
-| PL | Read issue from workspace.json, write planning.md |
+| PL | Read issue from workspace.json, write `<plan_file>` (numbered `planning-N.md` per `agents/product-manager.md § Plan File Naming`) |
 | DV | Branch checked out, commit to workspace branch |
 | FN | Push branch, create PR, signal orchestrator |
 

@@ -78,7 +78,7 @@ Proposal: deferred (single-word swap, no systemic signal).
 
 ### Example 4 — `structure/high`
 
-Diff (in `.context/planning.md`):
+Diff (in `.context/planning-0.md`):
 ```diff
 + ## Risk Assessment
 + - Risk 1 ...

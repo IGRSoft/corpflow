@@ -109,7 +109,7 @@ Test method names: descriptive, no `test_` prefix. Example: `loginValidCredentia
 
 | DV Stage (Developer) | QA Stage (QA Engineer) |
 |----------------------|------------------------|
-| Unit tests per planning.md specs | Additional edge case tests |
+| Unit tests per `<plan_file>` specs | Additional edge case tests |
 | Mock implementations for dependencies | Coverage gap analysis |
 | Happy path + known error cases | Boundary and stress tests |
 | Test data builders/fixtures | Test quality review |

@@ -33,7 +33,7 @@ The `.context/` folder is located at the project root:
 ```
 project-root/
 ├── .context/           # Workflow artifacts
-│   ├── planning.md
+│   ├── planning-0.md   # First plan; subsequent runs add planning-1.md, planning-2.md, ...
 │   ├── designs/        # Designer-generated .pen mockups
 │   ├── images/         # User-attached screenshots, diagrams
 │   ├── errors/         # Per-agent escalation narratives (developer.md, qa-engineer.md, ...)
@@ -51,7 +51,7 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 
 ```
 .context/
-├── planning.md              # Requirements, acceptance criteria (PL stage)
+├── planning-0.md            # First plan: requirements, acceptance criteria (PL stage). Each subsequent PL run writes planning-1.md, planning-2.md, ... (see agents/product-manager.md § Plan File Naming)
 ├── analyzing.md             # Technical design, architecture (AR stage)
 ├── coordination.md          # Team coordination (TL stage)
 ├── development.md           # Implementation notes (DV stage)
@@ -72,7 +72,7 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 
 ### Required Files
 
-#### 1. `planning.md`
+#### 1. `planning-N.md` (numbered: `planning-0.md`, `planning-1.md`, ...)
 
 Product Manager's planning document containing:
 - Problem statement
@@ -150,7 +150,7 @@ Files are named by **workflow stage** and stored in `.context/`:
 
 | File | Stage | Owner |
 |------|-------|-------|
-| planning.md | PL (Planning) | product-manager |
+| planning-N.md (e.g. planning-0.md) | PL (Planning) | product-manager |
 | analyzing.md | AR (Architecture) | software-architector |
 | coordination.md | TL (Team Lead) | team-lead |
 | development.md | DV (Development) | developer |

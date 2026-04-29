@@ -104,7 +104,7 @@ See `skills/shared/stage-codes.md` for stage details.
 3. **Create context folders**: `mkdir -p .context/images .context/errors`
 4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", workflow_id: "<slug>", priority: "<priority>", fn_gate: "<required|bypass>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). Set `fn_gate: "bypass"` when invoked with `--auto-continue`, `--milestone:N`, or `--worktree`; otherwise `"required"`.
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
-6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM creates `.context/planning.md`, assesses complexity, creates stage tasks with `metadata.agent`
+6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next plan filename per `agents/product-manager.md § Plan File Naming` (first run: `.context/planning-0.md`; subsequent runs: `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`
 7. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
 8. **Present plan summary**: Show complexity score, stages created (with agents), dependency chain, and key decisions
 

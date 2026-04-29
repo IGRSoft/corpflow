@@ -131,7 +131,9 @@ When using the registry path, every registry row MUST appear as exactly one row 
 
 After the table, include a one-line AC coverage summary:
 
-> AC coverage: N of M acceptance criteria from `planning.md` have matching design-verified screens.
+> AC coverage: N of M acceptance criteria from `<plan_file>` have matching design-verified screens.
+
+(`<plan_file>` resolves from `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`.)
 
 ## Boundaries
 
@@ -173,6 +175,6 @@ Before marking QA stage complete, verify:
 - [ ] New test files created or existing tests updated
 - [ ] testing.md artifact written to .context/
 - [ ] Test coverage meets threshold for changed code
-- [ ] All edge cases from planning.md are covered
+- [ ] All edge cases from `<plan_file>` are covered
 - [ ] If design screenshots exist in `.context/designs/`, design comparison performed
 - [ ] Design discrepancies documented in testing.md with severity

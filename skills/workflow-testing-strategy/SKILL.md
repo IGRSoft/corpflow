@@ -34,7 +34,7 @@ For Swift Testing and XCTest framework syntax, AAA pattern, and DV/QA boundary, 
 ## Handoff to Q Stage
 
 QA stage receives from DV:
-1. **Test scope** from planning.md - WHAT was planned to test
+1. **Test scope** from `<plan_file>` (resolved via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`) - WHAT was planned to test
 2. **Test architecture** from analyzing.md - HOW tests are structured
 3. **Implemented unit tests** from development.md - WHAT tests DV already wrote
 4. **Existing tests to update** list - WHERE changes were made
@@ -43,7 +43,7 @@ QA stage then:
 - **Reviews** developer's unit tests for quality and completeness
 - **Identifies gaps** in test coverage (edge cases, boundaries)
 - **Adds missing tests** for scenarios not covered by DV
-- **Runs integration and E2E tests** as defined in planning.md
+- **Runs integration and E2E tests** as defined in `<plan_file>`
 - **Validates** all acceptance criteria are tested
 - **Reports** test metrics in testing.md
 

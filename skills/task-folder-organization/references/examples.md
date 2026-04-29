@@ -76,11 +76,13 @@ When a user attaches images during a workflow task, copy them to `.context/image
 
 ## Folder Structure Examples
 
+> **Note on `planning-N.md`**: each example below shows a single-plan workspace, so the plan file is `planning-0.md`. If PL is invoked again in the same `.context/` (e.g. mid-workflow re-plan), the next plan is written to `planning-1.md`, then `planning-2.md`, and so on — earlier plans are preserved. See `agents/product-manager.md § Plan File Naming`.
+
 ### Example 1: Simple Bug Fix (9-stage, low complexity)
 
 ```
 .context/
-├── planning.md
+├── planning-0.md
 ├── development.md
 ├── developer-review.md
 └── testing.md
@@ -90,7 +92,7 @@ When a user attaches images during a workflow task, copy them to `.context/image
 
 ```
 .context/
-├── planning.md
+├── planning-0.md
 ├── analyzing.md
 ├── coordination.md
 ├── development.md
@@ -109,7 +111,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 
 ```
 .context/
-├── planning.md
+├── planning-0.md
 ├── development.md
 ├── developer-review.md
 ├── testing.md
@@ -125,7 +127,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 
 ```
 .context/
-├── planning.md                               # References mockups in Design Requirements
+├── planning-0.md                               # References mockups in Design Requirements
 ├── analyzing.md                              # Reviews mockup feasibility
 ├── coordination.md
 ├── development.md                            # Uses mockups as implementation guide
@@ -145,7 +147,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 
 ```
 .context/
-├── planning.md                               # References Figma screenshots in Design Requirements
+├── planning-0.md                               # References Figma screenshots in Design Requirements
 ├── exploration.md                            # Contains Figma design context summary
 ├── analyzing.md
 ├── development.md                            # Uses Figma screenshots as implementation guide
@@ -161,7 +163,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 
 ```
 .context/
-├── planning.md
+├── planning-0.md
 ├── analyzing.md
 ├── coordination.md
 ├── development.md
@@ -193,7 +195,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 
 ```
 .context/
-├── planning.md
+├── planning-0.md
 ├── analyzing.md
 ├── development.md
 ├── errors/
@@ -208,7 +210,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 ```
 .context/
 ├── milestone.json        # GitHub milestone context
-├── planning.md
+├── planning-0.md
 ├── analyzing.md
 ├── development.md
 ├── testing.md
@@ -222,7 +224,7 @@ When using `--worktree` with milestones, `.context/` lives inside each worktree:
 ```
 .worktrees/milestone-1/42/              # Git worktree root (full source copy)
 ├── .context/                            # Workflow artifacts
-│   ├── planning.md
+│   ├── planning-0.md
 │   ├── analyzing.md
 │   ├── development.md
 │   ├── testing.md

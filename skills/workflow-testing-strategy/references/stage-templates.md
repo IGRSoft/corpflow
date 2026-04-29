@@ -2,7 +2,7 @@
 
 ## P Stage: Test Strategy Definition
 
-### What to Include in planning.md
+### What to Include in `<plan_file>` (e.g. `planning-0.md`)
 
 ```markdown
 ## Test Strategy
@@ -86,7 +86,7 @@ The developer MUST implement unit tests alongside production code during the DV 
 
 ### Developer Responsibilities
 
-1. **Read test specs** from `.context/planning.md § Test Strategy`
+1. **Read test specs** from `.context/<plan_file> § Test Strategy` (resolve `<plan_file>` via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`)
 2. **Read test architecture** from `.context/analyzing.md § Test Architecture` (if available)
 3. **Create test files** using the specified testing framework
 4. **Follow test patterns** defined in the architecture (DI, mocking strategy, etc.)
@@ -95,7 +95,7 @@ The developer MUST implement unit tests alongside production code during the DV 
 
 ### Handoff Requirements (DV → DR → QA)
 
-- [ ] All unit tests from planning.md § Test Strategy implemented
+- [ ] All unit tests from `<plan_file> § Test Strategy` implemented
 - [ ] All unit tests pass locally (zero failures)
 - [ ] Test file paths listed in development.md
 - [ ] Mock/stub implementations created as needed
@@ -104,7 +104,7 @@ The developer MUST implement unit tests alongside production code during the DV 
 
 | DV Stage (Developer) | QA Stage (QA Engineer) |
 |----------------------|------------------------|
-| Unit tests per planning.md specs | Additional edge case tests |
+| Unit tests per `<plan_file>` specs | Additional edge case tests |
 | Mock implementations | Coverage gap analysis |
 | Happy path + known error cases | Boundary and stress tests |
 | Test data builders/fixtures | Integration and E2E tests |
