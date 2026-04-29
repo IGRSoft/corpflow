@@ -78,14 +78,18 @@ TL can split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async 
 4. Use `TaskUpdate` on DV0 to narrow its description to the primary stream's scope
 5. Use `TaskCreate` for each additional stream. All DVN share `developer.md` — retry sections are scoped per-task (`## DV1 Retry N`, `## DV2 Retry N`):
    ```
+   // Resolve plan file with fallback before creating tasks
+   const resolvedPlanFile = task.metadata.plan_file
+     ?? newestGlob(".context/planning-*.md")  // picks highest N
+     ?? "planning.md";                         // legacy fallback
    TaskCreate({
      subject: "DV{N}: {stream description}",
      description: "{scope, file ownership, interface contracts, acceptance criteria}",
      metadata: {
        stage: "DV", agent: "igrsoft:developer", model: "opus",
        error_file: ".context/errors/developer.md",
-       context_files: `${task.metadata.plan_file},analyzing.md,coordination.md,.context/errors/developer.md`,
-       plan_file: task.metadata.plan_file,
+       context_files: `${resolvedPlanFile},analyzing.md,coordination.md,.context/errors/developer.md`,
+       plan_file: resolvedPlanFile,
        workflow_id: "{id}", priority: "medium"
      }
    })
