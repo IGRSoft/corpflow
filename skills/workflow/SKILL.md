@@ -352,18 +352,23 @@ while (tasks.some(t => t.status !== "completed")) {
         )
       );
     if (isAppleStage && !state.xcodeMcpWarmed) {
+      // See `agent-coordination § MCP Unavailability Detection` for the canonical regex.
+      const MCP_UNAVAILABLE_RE = /(tool not available|server (not reachable|unavailable)|connection refused|ECONNREFUSED|EPIPE|ETIMEDOUT|timed? ?out|spawn ENOENT|command not found|InputValidationError)/i;
       let warmed = false;
-      for (let attempt = 1; attempt <= 2 && !warmed; attempt++) {
+      for (let attempt = 1; attempt <= 3 && !warmed; attempt++) {
         try {
           await mcp__XcodeBuildMCP__session_show_defaults({});
           warmed = true;
           appendAudit({ action: "mcp_warmup_attempt",
                         metadata: { server: "XcodeBuildMCP", attempt, result: "ok" } });
         } catch (err) {
+          const reason = String(err?.message ?? err).slice(0, 500);
+          const classified = MCP_UNAVAILABLE_RE.test(reason) ? "transient" : "fatal";
           appendAudit({ action: "mcp_warmup_attempt",
                         metadata: { server: "XcodeBuildMCP", attempt, result: "fail",
-                                    reason: String(err).slice(0, 200) } });
-          if (attempt === 1) await sleep(3000);  // npx cold-start budget
+                                    classified, reason: reason.slice(0, 200) } });
+          if (classified === "fatal") throw err;        // real bug — don't burn the budget
+          if (attempt < 3) await sleep(8000);            // npx cold-start budget (P95 ~16s over 2 sleeps)
         }
       }
       state.xcodeMcpWarmed = warmed;
@@ -423,11 +428,14 @@ session before the first Apple-platform stage. Contract:
    `metadata.subagent` matches `^(developer|technical-lead|qa-engineer)$`
    AND the workspace contains an Apple marker — `*.xcodeproj`,
    `*.xcworkspace`, or `Package.swift`).
-- **Action**: one call to `mcp__XcodeBuildMCP__session_show_defaults`
-  with one retry after a 3-second backoff (covers npx cold-start).
+- **Action**: up to 3 calls to `mcp__XcodeBuildMCP__session_show_defaults`,
+  with 8-second backoffs between attempts (covers npx first-fetch P95).
+  Failure messages are classified against
+  `agent-coordination § MCP Unavailability Detection` — only matches retry,
+  non-matches re-throw immediately as real bugs.
 - **Audit**: every attempt writes one
   `audit.jsonl` line `action: "mcp_warmup_attempt"` with
-  `metadata: {server, attempt, result, reason?}`. On final failure,
+  `metadata: {server, attempt, result, classified, reason?}`. On final failure,
   one additional `action: "mcp_warmup_failed"` line.
 - **Failure mode**: do NOT abort the stage. Inject a banner at the
   top of `full.description` instructing the agent to use Bash
