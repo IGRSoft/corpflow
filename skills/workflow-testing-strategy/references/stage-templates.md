@@ -90,13 +90,13 @@ The developer MUST implement unit tests alongside production code during the DV 
 2. **Read test architecture** from `.context/analyzing.md § Test Architecture` (if available)
 3. **Create test files** using the specified testing framework
 4. **Follow test patterns** defined in the architecture (DI, mocking strategy, etc.)
-5. **Run all tests** and verify they pass before completing DV stage
+5. **Run tests scoped to changed code** (the new/updated tests plus any tests covering modified production files) and verify they pass before completing DV stage. Full project-suite regression is deferred to QA.
 6. **Document test files** in `.context/development.md`
 
 ### Handoff Requirements (DV → DR → QA)
 
 - [ ] All unit tests from `<plan_file> § Test Strategy` implemented
-- [ ] All unit tests pass locally (zero failures)
+- [ ] All unit tests covering changed code pass locally (zero failures in the scoped/related test set; full-suite regression is QA's gate)
 - [ ] Test file paths listed in development.md
 - [ ] Mock/stub implementations created as needed
 

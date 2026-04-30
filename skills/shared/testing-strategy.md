@@ -107,9 +107,12 @@ Test method names: descriptive, no `test_` prefix. Example: `loginValidCredentia
 
 ## DV vs QA Boundary
 
+DV runs the **scoped/related test set** — new tests plus tests covering changed production files. QA runs the **full project test suite** as the regression gate. This division keeps the DV iteration loop fast while preserving regression coverage.
+
 | DV Stage (Developer) | QA Stage (QA Engineer) |
 |----------------------|------------------------|
 | Unit tests per `<plan_file>` specs | Additional edge case tests |
 | Mock implementations for dependencies | Coverage gap analysis |
 | Happy path + known error cases | Boundary and stress tests |
 | Test data builders/fixtures | Test quality review |
+| **Run scoped tests** (changed/affected only) | **Run full test suite** (regression gate) |
