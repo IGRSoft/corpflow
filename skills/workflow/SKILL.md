@@ -386,6 +386,24 @@ while (tasks.some(t => t.status !== "completed")) {
       // warmup succeeded → child inherits a live XcodeBuildMCP server.
     }
 
+    // 5d. Inject Conductor-attachments requirement for FN stages
+    //     Ensures project-manager always creates .context/attachments/ files
+    //     regardless of how PL0 described the FN task. Mirrors 5b (DR injection).
+    //     Templates: skills/workflow/references/conductor-attachments.md
+    if (full.metadata.stage === "FN") {
+      const fnInjection = [
+        "IMPORTANT — Conductor attachments (FN-stage requirement, non-optional):",
+        "Before running `gh pr create`, write both files per",
+        "`skills/workflow/references/conductor-attachments.md`:",
+        "  • `.context/attachments/PR instructions.md`",
+        "  • `.context/attachments/Review request.md`",
+        "Run `mkdir -p .context/attachments` first.",
+        "Also write `.context/complete.md` (workflow summary + Stage Timings).",
+        "Then read `PR instructions.md` and follow it as the PR-creation script.",
+      ].join("\n");
+      full.description = full.description + "\n\n" + fnInjection;
+    }
+
     // 6. Delegate to stage agent
     Task({ subagent_type: subagentType, model: model, prompt: full.description });
 
@@ -491,6 +509,9 @@ Build directly from artifacts written by upstream stages — no agent roundtrip 
 - Tests: <M passed / N failed>
 
 ### Planned FN actions
+- [ ] Write `.context/attachments/PR instructions.md` (Conductor attachment)
+- [ ] Write `.context/attachments/Review request.md` (Conductor attachment)
+- [ ] Write `.context/complete.md` (workflow summary + stage timings)
 - [ ] Create commit(s) with conventional-format messages
 - [ ] Push branch with upstream tracking
 - [ ] Open PR against <base-branch> with Motivation / Changes / Notes
