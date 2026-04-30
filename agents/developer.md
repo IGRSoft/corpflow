@@ -79,8 +79,8 @@ When building or testing Apple platform code directly (not delegating to apple-d
 - **D0**: Analyze requirements, set up development environment, read test specs from `<plan_file>`
 - **D1**: Implement code changes. Every build attempt is captured via tee → `.context/logs/build-developer-<ts>.log` (filename grammar: `logging-conventions`)
 - **D1.5**: Write unit tests per `<plan_file> § Test Strategy`
-- **D2**: Run tests via tee → `.context/logs/test-developer-<ts>.log`. On failure, classify per `agent-coordination § Error Handling` (transient | logic | missing_input | ambiguous_requirements | design_flaw | hard_constraint | exhausted), append a `## DV[N] Retry [X/3] — <ts>` block to `.context/errors/developer.md` matching the schema in that skill (lines 113–122), and emit one `audit.jsonl` line `action: "retry_attempt"` with `metadata: {retry: X, classification: <code>, log_path: <test log>}`. Max 3 attempts before escalation per the matrix.
-- **D3**: All unit tests pass, implementation complete, ready for QA. Emit one `audit.jsonl` line `action: "artifact_created"` with `artifact: ".context/development.md"` after the artifact write.
+- **D2**: Run tests **scoped to the changed files / current task** (e.g. `-only-testing:` for xcodebuild, `--filter` for swift test, or the equivalent on other platforms) via tee → `.context/logs/test-developer-<ts>.log`. The full project test suite is QA's responsibility, not DV's. On failure, classify per `agent-coordination § Error Handling` (transient | logic | missing_input | ambiguous_requirements | design_flaw | hard_constraint | exhausted), append a `## DV[N] Retry [X/3] — <ts>` block to `.context/errors/developer.md` matching the schema in that skill (lines 113–122), and emit one `audit.jsonl` line `action: "retry_attempt"` with `metadata: {retry: X, classification: <code>, log_path: <test log>}`. Max 3 attempts before escalation per the matrix.
+- **D3**: All scoped/changed-code unit tests pass, implementation complete, ready for QA (full-suite regression is QA's gate). Emit one `audit.jsonl` line `action: "artifact_created"` with `artifact: ".context/development.md"` after the artifact write.
 
 **Task System**: Stage DV, Owner: developer. See `skills/shared/task-system.md`.
 
@@ -130,7 +130,7 @@ When `<plan_file>` includes a Test Strategy section, developers MUST implement u
 2. **Read test architecture** from `.context/analyzing.md § Test Architecture` (if AR stage ran)
 3. **Create test files** using the framework specified in `<plan_file>` (Swift Testing, XCTest, etc.)
 4. **Follow test patterns** defined in the architecture document
-5. **Run all tests** and verify they pass before marking DV complete
+5. **Run tests scoped to changed code** (the new tests plus any tests covering modified production files) and verify they pass before marking DV complete. Full-suite regression is QA's responsibility.
 6. **Document test files** created in `.context/development.md`
 
 #### What DV Writes vs What QA Adds
@@ -215,7 +215,7 @@ On every `Task(specialist)` invocation, append one `audit.jsonl` line: `action: 
 Before marking DV stage complete, verify:
 - [ ] All planned features implemented
 - [ ] Unit tests written per `<plan_file>` test specs
-- [ ] All unit tests pass (zero failures)
+- [ ] All unit tests covering changed code pass (zero failures in the scoped/related test set; full-suite regression is QA's gate)
 - [ ] Test file paths documented in development.md
 - [ ] Code compiles without errors
 - [ ] development.md artifact written to .context/

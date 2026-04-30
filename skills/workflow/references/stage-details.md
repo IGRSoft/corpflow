@@ -25,7 +25,7 @@ Override via Task `model` parameter when stage complexity warrants it. See `cost
 | PL | product-manager | Requirements, acceptance criteria, test strategy, assess complexity, create subsequent stage tasks with `metadata.agent` |
 | AR | software-architector | Technical design, test architecture, validate PL sizing |
 | TL | team-lead | Coordinate approach, allocate resources, split DV into parallel streams when warranted |
-| DV | developer | Implement solution + unit tests, run formatter, verify build + tests pass |
+| DV | developer | Implement solution + unit tests, run formatter, verify build + scoped tests pass (tests covering changed code; full-suite regression deferred to QA) |
 | DR | technical-lead | Invoke /code-review-dev, produce developer-review.md |
 | SR | security-reviewer | OWASP audit, vulnerability scan |
 | QA | qa-engineer | Test plan, execute tests, all tests pass |
