@@ -65,7 +65,7 @@ In the 9-stage workflow system, the qa-engineer handles:
 
 ### Q Stage (QA Testing)
 - **Q0**: Analyze requirements, review DV's unit tests, identify coverage gaps
-- **Q1**: Add missing edge case tests, run full test suite (unit + integration + E2E)
+- **Q1**: Add missing edge case tests, run full test suite (unit + integration + E2E). **UI test gate**: read `metadata.requires_ui_tests` from `<plan_file>`. If `false` or absent (default), append `-skip-testing:<UITestTarget>` once per UI test target on the scheme so unit + integration still run as the regression gate; record `ui_tests_skipped: true` in `testing.md § Notes`. If `true`, run the full suite including UI bundles. See `skills/shared/testing-strategy.md § UI Test Gate`.
 - **Q2**: Handle test failures (retry or escalate to DV)
 - **Q3**: All tests pass, document results and metrics in testing.md
 
@@ -73,7 +73,9 @@ In the 9-stage workflow system, the qa-engineer handles:
 
 ### Design Comparison (Visual QA)
 
-When design references exist in `.context/designs/`, perform visual comparison during Q1 (after functional testing).
+**Gate**: only run when `metadata.requires_ui_tests: true` in `<plan_file>` **and** design references exist in `.context/designs/`. If the flag is `false` or absent, skip this entire section and record one line in `testing.md § Design Comparison`: `Skipped — requires_ui_tests=false in plan`. See `skills/shared/testing-strategy.md § UI Test Gate`.
+
+When the gate is open, perform visual comparison during Q1 (after functional testing).
 
 #### Registry-Driven Comparison (Primary Path)
 

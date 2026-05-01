@@ -58,6 +58,20 @@ When planning features, define the test strategy in the plan file. Include: test
 1. **DV writes unit tests** as part of implementation; QA validates integration/E2E
 2. **Framework selection**: Swift Testing (`@Suite`, `@Test`, `#expect`) for unit tests; XCTest for UI tests
 3. **Coverage expectations**: New features require 3+ unit test scenarios; bug fixes require regression tests; refactors must identify all affected existing tests
+
+### Required Metadata: `requires_ui_tests`
+
+Every plan file (`planning-N.md`) MUST declare `requires_ui_tests: <bool>` in its frontmatter. This is the single gate DV (step D2) and QA (step Q1 + Visual Comparison) read to decide whether to invoke UI test bundles or run visual design comparison.
+
+**Default**: `false`. UI tests are slow and simulator-bound; off-by-default keeps DV/QA fast on backend, refactor, and doc-only tasks.
+
+**Set to `true` only when at least one applies:**
+- New SwiftUI/UIKit views or screens are introduced
+- Visual design artifacts exist in `.context/designs/` (Figma registry, mockups) that need verification
+- Layout, styling, or animation changes that require a screen capture to validate
+- Stakeholder explicitly requests UI verification
+
+When `false`, DV/QA append `-skip-testing:<UITestTarget>` to `test_sim`/`xcodebuild test` and skip visual comparison entirely. See `skills/shared/testing-strategy.md § UI Test Gate` for the full protocol.
 4. **Test effort estimate is required** (not optional) — broken down by type, hours, and stage (DV/QA)
 
 ## Feature Stage Prioritization

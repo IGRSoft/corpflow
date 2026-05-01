@@ -116,3 +116,45 @@ DV runs the **scoped/related test set** — new tests plus tests covering change
 | Happy path + known error cases | Boundary and stress tests |
 | Test data builders/fixtures | Test quality review |
 | **Run scoped tests** (changed/affected only) | **Run full test suite** (regression gate) |
+
+## UI Test Gate
+
+UI tests (XCUITest bundles, Visual QA / Design Comparison) are slow and simulator-bound. They run **only when explicitly requested** by the plan file — never by auto-detection.
+
+### Contract
+
+- **Flag**: `requires_ui_tests: <bool>` in `<plan_file>` frontmatter (`planning-N.md`).
+- **Default**: `false`. Off-by-default keeps DV/QA fast on backend, refactor, and doc-only tasks.
+- **Writer**: PL stage / `agents/product-manager.md` § Test Strategy Definition.
+- **Readers**:
+  - DV step D2 (`agents/developer.md`) — gates `test_sim` UI bundles.
+  - QA step Q1 (`agents/qa-engineer.md`) — gates `test_sim` UI bundles in the full-suite run.
+  - QA Design Comparison (`agents/qa-engineer.md` § Design Comparison) — gates the entire Visual QA section.
+- **DR** (`agents/technical-lead.md`) does not run tests at all (read-only review); the flag does not apply there.
+
+### When to set `requires_ui_tests: true`
+
+At least one must apply:
+
+- New SwiftUI/UIKit views or screens
+- Visual design artifacts in `.context/designs/` that need verification
+- Layout, styling, or animation changes that require a screen capture to validate
+- Stakeholder explicitly requests UI verification
+
+### Skip mechanics
+
+When the flag is `false` or absent:
+
+```bash
+# XcodeBuildMCP equivalent — pass via test_sim args
+xcodebuild test \
+  -project MyApp.xcodeproj \
+  -scheme MyApp \
+  -destination 'platform=iOS Simulator,name=iPhone 16' \
+  -skip-testing:MyAppUITests \
+  -skip-testing:OtherUITestTarget
+```
+
+One `-skip-testing:<Target>` per UI test target on the scheme (discover via `mcp__XcodeBuildMCP__list_schemes`).
+
+DV records `ui_tests_skipped: true` in `.context/development.md § Decisions`. QA records the same in `testing.md § Notes`, and writes `Skipped — requires_ui_tests=false in plan` in `testing.md § Design Comparison`.
