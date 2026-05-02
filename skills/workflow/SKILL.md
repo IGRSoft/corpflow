@@ -221,6 +221,58 @@ If validation fails:
 
 ## Orchestrator Execution Loop
 
+### Cache-Friendly Prompt Layout & state.json (handoff-protocol)
+
+The orchestrator builds every delegation prompt in a **binding** order so consecutive `Task()` calls within the same `workflow_id` share a byte-identical prefix and benefit from Anthropic's prompt cache. Spec source: `skills/workflow/references/handoff-protocol.md#cache-prefix`.
+
+**Preamble layout (binding)**:
+
+```
+[1] Plugin/agent contract reminder         ← stable across ALL stages (cacheable)
+[2] Workflow header (id, plan, exploration)← stable across ALL stages (cacheable)
+[3] state.json blob (inlined JSON)         ← evolves per stage
+[4] Stage contract excerpt                 ← stable WITHIN stage type (cacheable)
+─────── (cache prefix boundary) ───────
+[5] task.description                       ← dynamic per delegation
+[6] retry hints (if retry_count > 0)       ← dynamic per delegation
+[7] Stage-specific banners (DR Skill, FN Conductor, MCP fallback) ← SUFFIX, dynamic
+```
+
+**Step 0 (NEW) — Read state.json before each delegation**:
+
+```typescript
+const stateRaw = fs.existsSync(".context/state.json")
+  ? fs.readFileSync(".context/state.json", "utf8")
+  : null;
+// stateRaw goes inline into preamble section [3] as a fenced JSON code block.
+// If null, F1 fallback applies: orchestrator uses metadata.context_files only,
+// no cache-friendly preamble (legacy mode).
+```
+
+**Step 6.5 (NEW) — After Task() returns, patch state.json from artifact frontmatter**:
+
+```typescript
+// Re-read state.json (in-agent write should already have happened).
+const stagePost = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
+const code = full.metadata.stage;
+if (stagePost.stages?.[code]?.status !== "completed") {
+  // Agent forgot to patch the ledger. Parse the artifact's `handoff:` frontmatter
+  // (yq or awk fallback per handoff-protocol.md#fallback-paths F2/F3) and
+  // atomic-merge into state.json. This is the orchestrator's belt-and-suspenders
+  // layer (the third, after in-agent write and the optional SubagentStop hook).
+  const artifactPath = stageArtifactMap[code];  // e.g. "DV" → ".context/development.md"
+  const handoff = parseFrontmatter(artifactPath);  // null if missing → F3 fallback
+  const patch = handoff
+    ? buildPatchFromHandoff(code, handoff)
+    : { stages: { [code]: { status: "completed", artifact: artifactPath, verdict: "ok" } } };
+  atomicMergeStateJson(patch);  // read → merge → temp → fsync → rename
+}
+```
+
+**Banner relocation (R3)**: stage-specific banners (DR Skill, FN Conductor, MCP fallback warning) are appended AFTER `full.description` (suffix), not prepended. Prefixes [1][2][3][4] stay byte-identical across stages so the cache prefix boundary stretches as far as possible.
+
+The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: timestamps, ENV expansions that vary per call, random IDs, retry counters, file mtimes, agent names beyond `workflow_id`. CI lint (`skills/workflow/references/cache-lint.sh`) asserts byte-stability across consecutive stages of the same `workflow_id`.
+
 ### CRITICAL: Delegation-Only Rule
 
 The orchestrator NEVER writes implementation code directly. ALL stage work is delegated to stage agents via the Agent tool. Using Edit/Write on source files, running build commands, or marking tasks completed without first delegating to an agent are all violations. The orchestrator's job is to manage the loop — read tasks, resolve agents, delegate, track status. If you find yourself editing source code, STOP — delegate to the stage agent instead.
@@ -305,6 +357,207 @@ while (tasks.some(t => t.status !== "completed")) {
         // (b) Print summary to user. Do NOT call TaskUpdate.
         //     Do NOT delegate. FN task stays `pending`.
         // (c) Write `fn_gate_waiting` audit line.
+
+        // 4.85. Pre-gate Conductor-attachments writer
+        //
+        // BUG FIX (fn-attachments-pre-gate): Step 5d injects the attachment-write
+        // requirement into the FN agent's prompt, but step 5d only runs AFTER this
+        // `return`. On the gated path (default), the orchestrator exits here and
+        // the FN agent never runs — so `.context/attachments/` files are never
+        // written. Conductor falls back to built-in generic templates.
+        //
+        // TWO-WRITER CONTRACT (idempotent):
+        //   1. Orchestrator pre-gate (this block): writes both files immediately
+        //      before the gate `return` using best-available data (DR/QA verdicts
+        //      from upstream artifacts, git state at gate time). Conductor sees
+        //      workflow-aware files even if the user never approves the gate.
+        //   2. FN agent post-approval: step 5d instructs it to overwrite both files
+        //      with final data (post-commit git state). No skip, no merge — always
+        //      overwrite from scratch.
+        //   Both writers source from `skills/workflow/references/conductor-attachments.md`
+        //   — single source of truth. See § "When to write" for the full contract.
+        //
+        // FAILURE POLICY: wrap in try/catch — on failure, log WARN to audit.jsonl
+        //   (action: `fn_attachments_preseed_failed`) and proceed to `return`.
+        //   Degrades gracefully to today's behaviour (Conductor built-in templates).
+        try {
+          // Resolve data sources per conductor-attachments.md § Data sources
+          const branch = execFile("git", ["rev-parse", "--abbrev-ref", "HEAD"]).stdout.trim() || "unknown";
+          let baseBranch = "main";
+          try {
+            baseBranch = execFile("git", ["symbolic-ref", "refs/remotes/origin/HEAD"])
+              .stdout.trim().replace(/^refs\/remotes\/origin\//, "") || "main";
+          } catch (_) { /* default to main */ }
+          const uncommitted = parseInt(
+            execFile("bash", ["-c", "git status --porcelain | wc -l"]).stdout.trim(), 10) || 0;
+          let upstreamLine = "There is no upstream branch yet.";
+          try {
+            execFile("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+            upstreamLine = `Upstream tracking: origin/${branch}.`;
+          } catch (_) { /* no upstream */ }
+
+          // Derive conventional-commit type from plan file Goal section
+          let commitType = "feat";
+          try {
+            const planPath = full.metadata.plan_file
+              ?? (glob.sync(".context/planning-*.md").sort().pop())
+              ?? ".context/planning.md";
+            const planContent = fs.readFileSync(planPath, "utf8");
+            const typeMatch = planContent.match(/\b(fix|refactor|perf|docs|chore|test|ci|build|style|feat)\b/i);
+            if (typeMatch) commitType = typeMatch[1].toLowerCase();
+          } catch (_) { /* fall back to feat */ }
+
+          // Resolve DR and QA verdicts; defensive default: `verdict: unknown`
+          let drVerdict = "verdict: unknown";
+          let drConcerns = "(none flagged)";
+          try {
+            const drContent = fs.readFileSync(".context/developer-review.md", "utf8");
+            const drMatch = drContent.match(/Approval Status[^\n]*/);
+            if (drMatch) drVerdict = drMatch[0].trim();
+            const issuesSection = drContent.match(/## Issues Found\n([\s\S]*?)(?=\n##|$)/);
+            if (issuesSection && issuesSection[1].trim()) {
+              drConcerns = issuesSection[1].trim().split("\n")
+                .map(l => l.trim()).filter(Boolean).map(l => `- ${l}`).join("\n");
+            }
+          } catch (_) { /* missing artifact — use defaults */ }
+
+          let qaVerdict = "verdict: unknown";
+          let qaNotes = "(none)";
+          try {
+            const qaContent = fs.readFileSync(".context/testing.md", "utf8");
+            const qaMatch = qaContent.match(/GO\/NO-GO[^\n]*/i) || qaContent.match(/verdict[^\n]*/i);
+            if (qaMatch) qaVerdict = qaMatch[0].trim();
+            const resultsSection = qaContent.match(/## Results\n([\s\S]*?)(?=\n##|$)/);
+            if (resultsSection && resultsSection[1].trim()) {
+              qaNotes = resultsSection[1].trim().split("\n")
+                .map(l => l.trim()).filter(Boolean).filter(l => !/blocking/i.test(l))
+                .map(l => `- ${l}`).join("\n") || "(none)";
+            }
+          } catch (_) { /* missing artifact — use defaults */ }
+
+          const workflowId = pl0?.metadata?.workflow_id ?? "unknown";
+          const isoTs = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+          const issueRef = pl0?.metadata?.issue_ref ?? "";
+          const issueLine = issueRef ? `  Prefix the commit subject with \`#${issueRef}\`.` : "";
+
+          // Write both files using verbatim templates from conductor-attachments.md
+          fs.mkdirSync(".context/attachments", { recursive: true });
+
+          const prInstructions = [
+            `<!-- Generated by igrsoft FN stage. workflow_id: ${workflowId}, ts: ${isoTs} -->`,
+            "",
+            "The igrsoft workflow has finished and is ready to ship.",
+            "",
+            `There are ${uncommitted} uncommitted changes.`,
+            `The current branch is ${branch}.`,
+            `The target branch is origin/${baseBranch}.`,
+            "",
+            upstreamLine,
+            "",
+            "The user requested a PR.",
+            "",
+            "Follow these steps to create the PR:",
+            "",
+            "- If you have any skills related to creating PRs, invoke them now. Instructions there should take precedence over these instructions.",
+            "- Run `git diff` to review uncommitted changes.",
+            "- Read `.context/complete.md` for the workflow summary, files changed, and stage timings — use it to draft the PR title and body.",
+            `- Commit format: \`<TYPE>[scope]: <Summary>\` per \`rules/git-conventions.md\` (Conventional Commits 1.0.0). Suggested type for this workflow: **${commitType}** (derived from PL planning).`,
+            issueLine,
+            "- Push to origin (set upstream if not yet tracked).",
+            "- Use the `mcp__conductor__GetWorkspaceDiff` tool to review the PR diff.",
+            `- Use \`gh pr create --base ${baseBranch}\` to open the PR. Keep the title under 72 characters. Body sections: \`## Motivation\`, \`## Changes\`, \`## Notes\`. Describe ALL changes in the workspace diff, not only the most recent commit.`,
+            '- Do NOT add "Generated with Claude Code" or "Co-Authored-By: Claude" footers.',
+            "",
+            "If any step fails, ask the user for help.",
+          ].join("\n");
+
+          const reviewRequest = [
+            `<!-- Generated by igrsoft FN stage. workflow_id: ${workflowId}, ts: ${isoTs} -->`,
+            "",
+            "# Review guidelines",
+            "",
+            "You are acting as a reviewer for code produced by an automated multi-stage",
+            "workflow. The workflow has already passed an internal Developer Review (DR)",
+            "and QA stage; your job is to catch what those stages missed.",
+            "",
+            "## Workflow context",
+            "",
+            `- Workflow ID: ${workflowId}`,
+            `- Branch: ${branch}  →  Target: origin/${baseBranch}`,
+            `- DR verdict: ${drVerdict}   (\`.context/developer-review.md\`)`,
+            `- QA verdict: ${qaVerdict}   (\`.context/testing.md\`)`,
+            "- Summary: see `.context/complete.md` § Summary",
+            "",
+            "## Focus areas (auto-extracted)",
+            "",
+            "DR concerns the workflow surfaced but did not block on:",
+            drConcerns,
+            "",
+            "QA observations worth a second look:",
+            qaNotes,
+            "",
+            "## When to flag a finding",
+            "",
+            "1. It meaningfully impacts accuracy, performance, security, or maintainability.",
+            "2. It is discrete, actionable, and was introduced by this branch.",
+            "3. The original author would fix it if they were aware.",
+            "4. The bug does not rely on unstated assumptions about the codebase.",
+            "5. It is not just an intentional change.",
+            "",
+            "If nothing meets the bar, return zero findings — do not invent issues to look thorough.",
+            "",
+            "## Comment style",
+            "",
+            "- One comment per distinct issue. Use a multi-line range only when needed.",
+            "- Use ` ```suggestion ` blocks ONLY for concrete replacement code; preserve exact leading whitespace; no commentary inside the block.",
+            "- One paragraph max per comment. Inline code via backticks; code blocks ≤ 3 lines.",
+            '- Tone: matter-of-fact, not accusatory; not flattering. No "Great job", no "Thanks for".',
+            "- Severity must match impact — do not over-claim.",
+            "",
+            "## Getting the diff",
+            "",
+            "Prefer `mcp__conductor__GetWorkspaceDiff` (start with `stat: true`, then request specific files).",
+            "",
+            "Fallback when the tool is unavailable:",
+            "",
+            "```bash",
+            `MERGE_BASE=$(git merge-base origin/${baseBranch} HEAD)`,
+            "git diff $MERGE_BASE HEAD       # committed changes",
+            "git diff HEAD                    # uncommitted work in progress",
+            "```",
+            "",
+            "Review both outputs together. No need to mention which strategy you used.",
+            "",
+            "## Output",
+            "",
+            "Post inline comments via `mcp__conductor__DiffComment`. **One comment per unique issue.** Then write a top-level summary list:",
+            "",
+            "```",
+            "### #1 <Short title>",
+            "<One-paragraph explanation>",
+            "File: <path>",
+            "",
+            "### #2 <Short title>",
+            "…",
+            "```",
+          ].join("\n");
+
+          // Atomic writes: write to tmp, then rename — prevents partial reads by Conductor
+          const prTmp = ".context/attachments/.pr-instructions.tmp";
+          const rvTmp = ".context/attachments/.review-request.tmp";
+          fs.writeFileSync(prTmp, prInstructions, "utf8");
+          fs.writeFileSync(rvTmp, reviewRequest, "utf8");
+          fs.renameSync(prTmp, ".context/attachments/PR instructions.md");
+          fs.renameSync(rvTmp, ".context/attachments/Review request.md");
+
+          appendAudit({ action: "fn_attachments_preseed",
+                        metadata: { branch, baseBranch, workflowId, ts: isoTs } });
+        } catch (preseedErr) {
+          appendAudit({ action: "fn_attachments_preseed_failed",
+                        metadata: { reason: String(preseedErr?.message ?? preseedErr).slice(0, 300) } });
+          // Proceed to gate return regardless — degrades to Conductor built-in templates.
+        }
+
         // (d) End the orchestrator turn — wait for HUMAN approval.
         return;  // exits the entire execution loop; resume happens in a fresh turn
       }
@@ -324,10 +577,13 @@ while (tasks.some(t => t.status !== "completed")) {
       full.description = skillInvocation + "\n\n" + full.description;
     }
 
-    // 5b. Inject code-review-dev Skill invocation for DR stages
+    // 5b. Inject code-review-dev Skill invocation for DR stages.
+    //     handoff-protocol: APPEND as suffix (section [7]) so the preamble
+    //     prefix [1][2][3][4][5] stays byte-identical with neighbour stages
+    //     and the prompt cache prefix boundary is preserved.
     if (full.metadata.stage === "DR") {
       const reviewInvocation = `IMPORTANT: Execute developer code review via Skill tool: Skill("code-review-dev"). Save findings summary to .context/developer-review.md`;
-      full.description = reviewInvocation + "\n\n" + full.description;
+      full.description = full.description + "\n\n" + reviewInvocation;
     }
 
     // 5c. Pre-warm XcodeBuildMCP for Apple DV/DR/QA stages
@@ -381,7 +637,9 @@ while (tasks.some(t => t.status !== "completed")) {
           `xcodebuild via Bash for build/test (tee output to the same ` +
           `.context/logs/* paths) and record the fallback in ` +
           `.context/development.md § Decisions so QA/DR see it.`;
-        full.description = banner + "\n\n" + full.description;
+        // handoff-protocol: SUFFIX banner (section [7]) — preserves the
+        // cache prefix boundary at the [1][2][3][4][5] line.
+        full.description = full.description + "\n\n" + banner;
       }
       // warmup succeeded → child inherits a live XcodeBuildMCP server.
     }
@@ -406,6 +664,23 @@ while (tasks.some(t => t.status !== "completed")) {
 
     // 6. Delegate to stage agent
     Task({ subagent_type: subagentType, model: model, prompt: full.description });
+
+    // 6.5. handoff-protocol: patch state.json from artifact frontmatter if the
+    //      agent didn't already do so. Belt-and-suspenders layer #3 (after
+    //      in-agent atomic write and the optional SubagentStop hook).
+    //      See handoff-protocol.md#fallback-paths F2/F3.
+    if (fs.existsSync(".context/state.json")) {
+      const post = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
+      const code = full.metadata.stage;
+      if (post.stages?.[code]?.status !== "completed") {
+        const artifactPath = stageArtifactMap[code];  // e.g. ".context/development.md"
+        const handoff = parseFrontmatter(artifactPath);  // null → F3 fallback
+        const patch = handoff
+          ? buildPatchFromHandoff(code, handoff)
+          : { stages: { [code]: { status: "completed", artifact: artifactPath, verdict: "ok" } } };
+        atomicMergeStateJson(patch);
+      }
+    }
 
     // 7. Mark completed
     TaskUpdate({ taskId: task.id, status: "completed" });
