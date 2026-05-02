@@ -392,8 +392,8 @@ while (tasks.some(t => t.status !== "completed")) {
             execFile("bash", ["-c", "git status --porcelain | wc -l"]).stdout.trim(), 10) || 0;
           let upstreamLine = "There is no upstream branch yet.";
           try {
-            execFile("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
-            upstreamLine = `Upstream tracking: origin/${branch}.`;
+            const upstreamRef = execFile("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]).stdout.trim();
+            upstreamLine = `Upstream tracking: ${upstreamRef}.`;
           } catch (_) { /* no upstream */ }
 
           // Derive conventional-commit type from plan file Goal section

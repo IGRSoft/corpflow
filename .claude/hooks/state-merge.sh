@@ -128,7 +128,7 @@ if [[ -z "$ART" && -n "$STAGE" ]]; then
 fi
 
 if [[ -z "$ART" || ! -f "$ART" ]]; then
-  log WARN "no artifact path resolved (CLAUDE_ARTIFACT_PATH=$CLAUDE_ARTIFACT_PATH stage=$STAGE)"
+  log WARN "no artifact path resolved (CLAUDE_ARTIFACT_PATH=${CLAUDE_ARTIFACT_PATH:-} stage=$STAGE)"
   exit 0
 fi
 

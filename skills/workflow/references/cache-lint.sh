@@ -213,7 +213,6 @@ prefix_lint() {
 # ---------- Self-test ----------
 self_test() {
   local td
-  local td
   td=$(mktemp -d -t cache-lint-XXXXXX)
   trap "rm -rf '$td'" EXIT
 
