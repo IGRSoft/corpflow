@@ -225,3 +225,47 @@ Before marking DV stage complete, verify:
 - [ ] `.context/logs/audit.jsonl` contains `approval_check`, `platform_detected`, and `artifact_created` entries (plus `delegation` if routed; `retry_attempt` per retry)
 - [ ] Append the completed checklist verbatim as `## DV Completion Checklist` in `.context/development.md` with `[x]` boxes ticked — orchestrator validation greps for this header
 
+
+## Handoff Protocol
+
+### Required Inputs (handoff-protocol)
+
+1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
+2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
+3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
+
+**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
+
+### Frontmatter Template
+
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/development.md`).
+
+```yaml
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "<N files modified, M tests added>"
+  files_touched:
+    - path/to/file1.md
+    - path/to/file2.md
+  next_stage_focus: "DR reviews snippet uniformity across 12 agents; grep checks in DR instructions"
+  refs:
+    decisions: analyzing.md#decisions
+    coordination: coordination.md#fan-out
+    tests: development.md#tests-added
+---
+```
+
+### Completion Verification (handoff-protocol)
+
+Before marking this stage complete, verify all of the following:
+
+- [ ] Your artifact (`.context/development.md`) starts with `---
+handoff:
+` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
+- [ ] Frontmatter includes all required fields for stage `DV` per the per-stage required-field matrix (see `analyzing.md#schemas`).
+- [ ] `.context/state.json` has been patched with `stages.DV` (status, artifact, verdict) and `handoffs["TL→DV"]` (≤300-char summary ending with `ref:` pointer).
+- [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
+
+The orchestrator will verify `stages.DV.status == "completed"` after this task returns. If still `in_progress`, it will run the SubagentStop hook to repair the ledger from your frontmatter.

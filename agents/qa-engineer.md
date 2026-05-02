@@ -180,3 +180,46 @@ Before marking QA stage complete, verify:
 - [ ] All edge cases from `<plan_file>` are covered
 - [ ] If design screenshots exist in `.context/designs/`, design comparison performed
 - [ ] Design discrepancies documented in testing.md with severity
+
+## Handoff Protocol
+
+### Required Inputs (handoff-protocol)
+
+1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
+2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
+3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
+
+**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
+
+### Frontmatter Template
+
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/testing.md`).
+
+```yaml
+---
+handoff:
+  stage: QA
+  verdict: go
+  summary: "<N unit tests pass, M integration checks. Coverage X%>"
+  files_touched:
+    - tests/added/test-file.sh
+  key_decisions:
+    - { id: qa1, summary: "Coverage X%, target met", anchor: "testing.md#coverage" }
+  refs:
+    dev: development.md#files-changed
+    results: testing.md#results
+---
+```
+
+### Completion Verification (handoff-protocol)
+
+Before marking this stage complete, verify all of the following:
+
+- [ ] Your artifact (`.context/testing.md`) starts with `---
+handoff:
+` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
+- [ ] Frontmatter includes all required fields for stage `QA` per the per-stage required-field matrix (see `analyzing.md#schemas`).
+- [ ] `.context/state.json` has been patched with `stages.QA` (status, artifact, verdict) and `handoffs["DR→QA"]` (≤300-char summary ending with `ref:` pointer).
+- [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
+
+The orchestrator will verify `stages.QA.status == "completed"` after this task returns. If still `in_progress`, it will run the SubagentStop hook to repair the ledger from your frontmatter.

@@ -252,3 +252,47 @@ IR → DV → DR → QA → [RE] → FN
 | Compliance issue | stakeholder (ST) |
 | Security concern | security-reviewer (SR) |
 
+
+## Handoff Protocol
+
+### Required Inputs (handoff-protocol)
+
+1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
+2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
+3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
+
+**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
+
+### Frontmatter Template
+
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/release.md`).
+
+```yaml
+---
+handoff:
+  stage: RE
+  verdict: ok
+  summary: "Release artifacts prepared. Version bumped to X.Y.Z"
+  files_touched:
+    - plugin.json
+    - MEMORY.md
+  key_decisions:
+    - { id: re1, summary: "Version X.Y.Z", anchor: "release.md#version" }
+  refs:
+    artifacts: release.md#artifacts
+    version: release.md#version
+---
+```
+
+### Completion Verification (handoff-protocol)
+
+Before marking this stage complete, verify all of the following:
+
+- [ ] Your artifact (`.context/release.md`) starts with `---
+handoff:
+` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
+- [ ] Frontmatter includes all required fields for stage `RE` per the per-stage required-field matrix (see `analyzing.md#schemas`).
+- [ ] `.context/state.json` has been patched with `stages.RE` (status, artifact, verdict) and `handoffs["DC→RE"]` (≤300-char summary ending with `ref:` pointer).
+- [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
+
+The orchestrator will verify `stages.RE.status == "completed"` after this task returns. If still `in_progress`, it will run the SubagentStop hook to repair the ledger from your frontmatter.
