@@ -287,6 +287,7 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 - `review/SKILL.md` - Senior review guidelines
 - `self-improvement/SKILL.md` - ST-stage retrospective: diff-based learning from user edits; writes `.context/learnings.md` with per-proposal approval checklist, scoped to in-context agents/skills/commands only
 - `workflow-testing-strategy.md` - Workflow-integrated testing planning for PL/AR stages
+- `workflow/references/handoff-protocol.md` - Inter-stage handoff schema: state.json ledger, frontmatter contract, cache-friendly prompt layout
 
 ### Tools
 
