@@ -20,6 +20,49 @@ Defines the handoff protocol between igrsoft workflow stages and external plugin
 
 For plugin-specific protocol tables and error handling, see `${CLAUDE_SKILL_DIR}/references/plugin-protocols.md`
 
+## Frontmatter Schema (BINDING for cross-plugin agents)
+
+The canonical schema lives at `skills/workflow/references/handoff-protocol.md` (frontmatter + state.json + cache layout). Cross-plugin agents (e.g. `apple-developer:ios-developer`, `apple-developer:macos-developer`, `debugging-toolkit:*`, `security-scanning:*`) MUST adopt the **full schema** when they take over a workflow stage:
+
+- Artifact starts with `---\nhandoff:\n` YAML block per `handoff-protocol.md#frontmatter-schema`.
+- Per-stage required fields per `handoff-protocol.md#frontmatter-schema § Per-stage required-field matrix`.
+- state.json patched per `handoff-protocol.md#atomic-write` (or omitted — orchestrator's SubagentStop hook will repair).
+
+Copy-paste templates for the 12 stages live in `coordination.md#shared-snippets § Snippet C` (snippets C-1 … C-12). Cross-plugin agents copy the appropriate stage template and substitute placeholders.
+
+### Why full schema (not relaxed subset)
+
+One parser is simpler than two. The required fields per stage are minimal (DV needs `files_touched`; DR/SR need `key_decisions`; PL/AR need `key_decisions + next_stage_focus`). A relaxed subset would require a separate parser path in the orchestrator and harness — not worth the cost.
+
+### Worked example: apple-developer:ios-developer takes over DV
+
+```yaml
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "Implemented dark-mode token in iOS app. 6 Swift files modified, 4 tests added."
+  files_touched:
+    - Sources/Theme/ThemeManager.swift
+    - Sources/Settings/ThemeToggleViewModel.swift
+    - Tests/ThemeManagerTests.swift
+  next_stage_focus: "DR reviews ThemeManager DI; QA runs UI snapshot regression"
+  refs:
+    decisions: analyzing.md#decisions
+    tests: development.md#tests-added
+---
+```
+
+The `error_file` for an apple-developer agent is `.context/errors/ios-developer.md` (last segment of qualified name) per `task-system.md § error_file derivation`.
+
+## #relaxed-profile
+
+Reserved subsection for a future relaxed-profile schema in case the apple-developer team formally objects to full-schema adoption.
+
+**Status**: deferred. Full schema is mandated by current TL/DV decision (see TL coordination.md#open-questions q6).
+
+If/when relaxed profile is negotiated, this section will define the minimum fields (likely `stage + verdict + summary + refs`) and the parser switch logic (e.g. presence of `profile: relaxed` flag in the frontmatter). Until then, cross-plugin agents follow the full schema above.
+
 ## When AR Stage Collaborates with apple-architector
 
 Unlike DV stage delegation where task ownership transfers, the AR stage uses a **consultation model** — `software-architector` retains task ownership and merges results.
