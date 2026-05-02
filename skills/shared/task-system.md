@@ -35,7 +35,9 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 | `stage` | Stage code unnumbered (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) |
 | `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (e.g., `igrsoft:software-architector`, `apple-developer:ios-developer`). Bare names are accepted via a back-compat shim that prepends `igrsoft:` and emits a deprecation warning — emit qualified form at the call site |
 | `model` | Model alias for this stage (opus, sonnet, haiku). Always pass explicitly to `Task()` — do not rely on frontmatter inheritance |
-| `context_files` | Comma-separated list of `.context/` artifacts this stage should read. MUST include `error_file` — orchestrator appends automatically on `TaskCreate`/`TaskUpdate` if omitted |
+| `context_refs` | JSON-encoded array of anchor refs (e.g. `["analyzing.md#decisions","planning-0.md#requirements"]`) the stage agent should grep instead of reading whole files. Preferred over `context_files` (handoff-protocol mode). When present, agent reads `state.json` + only these anchors |
+| `state_file` | Path to the workflow state ledger. Default `.context/state.json`. Read by the stage agent before delegation (per `skills/workflow/references/handoff-protocol.md#state-json-schema`). Absent state.json triggers fallback path F1 (legacy `context_files` mode) |
+| `context_files` | (Legacy fallback.) Comma-separated list of `.context/` artifacts this stage should read in full when `state.json` is absent or `context_refs` is missing. MUST include `error_file` — orchestrator appends automatically on `TaskCreate`/`TaskUpdate` if omitted. Retained for AC-16/AC-17 backward-compat |
 | `error_file` | Path `.context/errors/<agent-basename>.md`. Auto-derived from `agent` if absent. Basename = last `:`-separated segment; collisions joined with `-`. Auto-appended to `context_files` so the stage agent reads its own prior retry narrative |
 | `retry_count` | Integer 0–3. Incremented on retry; resets on escalation or success |
 | `error_escalated_to` | Stage code the failure escalated to when `retry_count` reached 3 |
@@ -68,9 +70,19 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
     "model": {
       "enum": ["opus", "sonnet", "haiku"]
     },
+    "context_refs": {
+      "type": "string",
+      "description": "JSON-encoded array of anchor refs, e.g. '[\"analyzing.md#decisions\",\"planning-0.md#requirements\"]'. Preferred (handoff-protocol mode)."
+    },
+    "state_file": {
+      "type": "string",
+      "default": ".context/state.json",
+      "pattern": "^\\.context/[a-z0-9/_.-]+\\.json$"
+    },
     "context_files": {
       "type": "string",
-      "pattern": "^([a-z0-9/_.-]+\\.(md|json|jsonl|png|jpg|pen)(,[a-z0-9/_.-]+\\.(md|json|jsonl|png|jpg|pen))*)?$"
+      "pattern": "^([a-z0-9/_.-]+\\.(md|json|jsonl|png|jpg|pen)(,[a-z0-9/_.-]+\\.(md|json|jsonl|png|jpg|pen))*)?$",
+      "description": "Legacy fallback. Used when state.json is absent (path F1)."
     },
     "error_file": {
       "type": "string",
@@ -123,6 +135,8 @@ the orchestrator ensures `metadata.error_file` appears in `metadata.context_file
 (appended if absent, deduped if already present). This guarantees the stage
 agent receives its own error history in its reading scope — on retry, it can
 see what it tried before and why it failed.
+
+**context_refs vs context_files (handoff-protocol mode)**: When `metadata.context_refs` is set, the stage agent reads `state_file` + only the listed anchors (preferred mode, ≥30% input-token reduction). When absent or `state_file` does not exist on disk, the agent falls back to reading every path in `context_files` in full (legacy mode, fallback path F1). Both fields MAY be set simultaneously — `context_refs` wins when state.json is present; `context_files` is the safety net. See `skills/workflow/references/handoff-protocol.md#fallback-paths`.
 
 ```typescript
 // Orchestrator normalization (runs before Task() delegation)
