@@ -3,6 +3,63 @@
 ## Conventions used in this document
 
 - **`planFile`** — the plan filename PL produced for the current workflow run (`planning-N.md`, e.g. `planning-0.md`, `planning-3.md`). Computed by PL0 per `agents/product-manager.md § Plan File Naming`. Every downstream task carries it as `metadata.plan_file`; the same value is interpolated into `context_files`. Stage agents resolve the plan file from `task.metadata.plan_file` first, then newest `.context/planning-*.md`, then legacy `.context/planning.md`.
+- **handoff-protocol mode** — the preferred metadata mode (per `skills/workflow/references/handoff-protocol.md`): tasks carry `state_file` + `context_refs` (anchor list); legacy `context_files` is retained for fallback path F1 (state.json absent). Examples below show both forms — use `context_refs` for new code; keep `context_files` as the safety net.
+
+## PL0 state.json Initialization (Phase 1)
+
+PL0 (or `commands/workflow.md` Phase 1) creates `.context/state.json` immediately after `mkdir -p .context/`. This seeds the workflow ledger that every subsequent stage reads and patches.
+
+```bash
+mkdir -p .context/
+
+# Atomic write: temp + fsync + rename
+tmp=".context/.state.json.$$.${RANDOM}.tmp"
+cat > "$tmp" <<EOF
+{
+  "version": 1,
+  "workflow_id": "${WORKFLOW_ID}",
+  "plan_file": ".context/${PLAN_FILE}",
+  "platform": "${PLATFORM:-all}",
+  "stages": { "PL": { "status": "in_progress" } },
+  "facts": {
+    "files_modified": [],
+    "tests_added": [],
+    "decisions": [],
+    "open_questions": [],
+    "verdicts": {}
+  },
+  "handoffs": {}
+}
+EOF
+sync "$tmp" 2>/dev/null || true
+mv -f "$tmp" .context/state.json
+```
+
+Subsequent stage agents read `.context/state.json` first; if absent, they fall back to legacy `metadata.context_files` mode (path F1). See `handoff-protocol.md#fallback-paths`.
+
+### Sample TaskCreate using context_refs (handoff-protocol mode)
+
+```typescript
+const ar0 = TaskCreate({
+  subject: "AR0: Architecture",
+  description: "Design dark mode architecture with theme switching",
+  activeForm: "Architecting solution",
+  metadata: {
+    stage: "AR", agent: "igrsoft:software-architector", model: "opus",
+    error_file: ".context/errors/software-architector.md",
+    state_file: ".context/state.json",
+    context_refs: JSON.stringify([
+      `${planFile}#requirements`,
+      `${planFile}#scope`,
+      `${planFile}#acceptance-criteria`
+    ]),
+    // Legacy fallback (path F1) — kept so workflow runs even if state.json absent:
+    context_files: `${planFile},.context/errors/software-architector.md`,
+    plan_file: planFile,
+    workflow_id: workflowId, priority: "medium"
+  }
+});
+```
 
 ## Milestone Initialization
 

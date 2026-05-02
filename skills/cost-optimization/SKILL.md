@@ -189,6 +189,59 @@ jq -cn --arg ts "$(date -u +%FT%TZ)" '{
 `/cost-report` reads all `.context/logs/cost-*.jsonl` files, groups by `stage`,
 and renders the `### By Stage` table. See `commands/cost-report.md` § Data Source.
 
+## Prompt Caching (1h TTL) & Handoff Protocol
+
+The handoff protocol (`skills/workflow/references/handoff-protocol.md`) is built around the Anthropic prompt cache. Two recommendations make the savings real:
+
+### Recommended `settings.json` stanza
+
+```json
+{
+  "env": {
+    "ENABLE_PROMPT_CACHING_1H": "1"
+  }
+}
+```
+
+Why: the default 5-min TTL is shorter than many stage durations (especially DV/QA on complex features). The 1h TTL keeps the preamble cache warm across slow stages. Users without this flag still see savings on retries within a single stage but lose cross-stage cache hits on long stages. (RK-8 in `analyzing.md#risks`.)
+
+### state-merge.sh SubagentStop hook
+
+The handoff protocol uses an OPTIONAL `.claude/hooks/state-merge.sh` SubagentStop hook as a belt-and-suspenders layer for state.json updates. Add to project `settings.json`:
+
+```json
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "matcher": "igrsoft:.*",
+        "command": ".claude/hooks/state-merge.sh",
+        "if": "$CLAUDE_TASK_METADATA_STAGE != ''"
+      }
+    ]
+  }
+}
+```
+
+Hook contract (per `analyzing.md#integration-points § IP-2`):
+
+- Reads `CLAUDE_ARTIFACT_PATH` (or globs `.context/<artifact-name>.md` per stage code as fallback).
+- Parses the artifact's `handoff:` frontmatter (yq if available; awk subset fallback).
+- Idempotent: if state.json already reflects this frontmatter, exits 0 silently.
+- Otherwise atomic-merges into state.json (read → merge → temp → fsync → rename per `handoff-protocol.md#atomic-write`).
+- Exits 0 always — MUST NOT block stage transition. Failures log to `.context/logs/state-merge.log`.
+
+### Expected cache_read_input_tokens ratio
+
+Per `handoff-protocol.md#cache-prefix`:
+
+- Stage 1 (PL): 0% (cold cache).
+- Stage 2..N, no retry: ≈ 20% (cross-stage prefix [1]+[2] cached).
+- Stage 2..N, retry within same stage: ≈ 80% (full preamble cached).
+- Cross-stage average: ≈ 60% — meets AC-14 threshold.
+
+CI lint (`skills/workflow/references/cache-lint.sh`) asserts byte-stability of preamble sections [1]+[2]+[4] across consecutive stages of the same `workflow_id`. Drift collapses cache-hit rate.
+
 ## Budget Tracking
 
 ### Cost Estimation Formula

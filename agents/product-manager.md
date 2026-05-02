@@ -364,3 +364,47 @@ Before marking PL0 complete, verify:
 - [ ] If Figma URL detected, screenshots captured to `.context/designs/figma-*.png`
 - [ ] If Figma URL detected, design context summarized in `<plan_file>`
 
+
+## Handoff Protocol
+
+### Required Inputs (handoff-protocol)
+
+1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
+2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
+3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
+
+**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
+
+### Frontmatter Template
+
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/planning-N.md`).
+
+```yaml
+---
+handoff:
+  stage: PL
+  verdict: ok
+  summary: "<one-line summary ≤200 chars>"
+  key_decisions:
+    - { id: pd1, summary: "<decision>", anchor: "planning-0.md#scope" }
+  next_stage_focus: "<imperative: what AR must grep/design>"
+  open_questions:
+    - "q1: <question text> (AR to decide)"
+  refs:
+    spec: .context/attachments/<spec-file>
+    plan: .context/planning-0.md#requirements
+---
+```
+
+### Completion Verification (handoff-protocol)
+
+Before marking this stage complete, verify all of the following:
+
+- [ ] Your artifact (`.context/planning-N.md`) starts with `---
+handoff:
+` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
+- [ ] Frontmatter includes all required fields for stage `PL` per the per-stage required-field matrix (see `analyzing.md#schemas`).
+- [ ] `.context/state.json` has been patched with `stages.PL` (status, artifact, verdict) and `handoffs["USER→PL"]` (≤300-char summary ending with `ref:` pointer).
+- [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
+
+The orchestrator will verify `stages.PL.status == "completed"` after this task returns. If still `in_progress`, it will run the SubagentStop hook to repair the ledger from your frontmatter.

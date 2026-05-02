@@ -10,9 +10,27 @@ Single source of truth for what each workflow stage consumes, produces, and how 
 ## How to Read a Contract
 
 - **Inputs**: required `.context/` artifacts and metadata the stage reads before starting. Missing required inputs → `missing_input` escalation (see `agent-coordination` § Error Handling).
-- **Outputs**: artifacts the stage MUST produce before setting `status: completed`. Each lists the minimum sections.
+- **Outputs**: artifacts the stage MUST produce before setting `status: completed`. Each lists the minimum sections. **Every output artifact MUST start with a `---\nhandoff:\n` YAML frontmatter block** conforming to the schema in `skills/workflow/references/handoff-protocol.md#frontmatter-schema`. Per-stage required fields are defined in that file's per-stage matrix.
 - **Validation**: the exact check the orchestrator runs on stage completion. If false, the stage is not considered complete.
 - **Error File**: per-agent narrative path (`metadata.error_file`). Auto-derived from `metadata.agent` basename. See `task-system` § Metadata Fields.
+
+## Required Inputs (handoff-protocol)
+
+Every stage agent reads inputs in this order, anchor-first:
+
+1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
+2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
+3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
+
+**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
+
+## Required Outputs (handoff-protocol)
+
+Every stage's output artifact MUST:
+
+1. Start with `---\nhandoff:\n` YAML frontmatter (≤30 lines, ≤200 tokens) matching the per-stage required-field matrix in `skills/workflow/references/handoff-protocol.md#frontmatter-schema`.
+2. Use H2 anchors from the per-stage allow-list in `handoff-protocol.md#anchor-allow-list` (kebab-case, no spaces, no underscores).
+3. Patch `.context/state.json` atomically (read → merge → temp → fsync → rename per `handoff-protocol.md#atomic-write`) with `stages.<CODE>` (status, artifact, verdict, retry_count) and `handoffs["<PREV>→<CODE>"]` (≤300-char summary ending in `ref:` pointer).
 
 ## Contract Table
 
@@ -36,11 +54,14 @@ Single source of truth for what each workflow stage consumes, produces, and how 
 
 The orchestrator runs validation between `TaskUpdate({status: "completed"})` and the next stage's `status: in_progress`:
 
-1. **File check**: Read `metadata.context_files` for next stage — verify every path exists on disk. `metadata.error_file` is always present in `context_files` (orchestrator auto-appends on `TaskCreate`/`TaskUpdate`); treat its absence on disk as "no prior retries" (not a failure).
-2. **Section check**: Grep the output artifact for required section headers.
-3. **Side-artifact check**: For DV/QA stages, confirm corresponding `.context/logs/` capture exists (build/test logs).
-4. **Metadata check**: Validate task `metadata` against `task-system` § JSON Schema.
-5. **Error file check**: If `retry_count > 0`, `metadata.error_file` MUST exist on disk AND appear in `context_files`.
+1. **File check**: Read `metadata.context_refs` (anchor-based, preferred) or `metadata.context_files` (legacy fallback) for next stage — verify every referenced file exists on disk. `metadata.error_file` is always present in `context_files` (orchestrator auto-appends on `TaskCreate`/`TaskUpdate`); treat its absence on disk as "no prior retries" (not a failure).
+2. **Frontmatter check**: `head -1 <artifact>` MUST equal `---`; `grep -c '^handoff:' <artifact>` MUST equal `1` within the top-of-file block. Missing frontmatter triggers fallback path F3 (orchestrator derives a minimal handoff record).
+3. **Anchor lint (DR gate)**: For each produced artifact, verify all H2 headings match the per-stage allow-list in `skills/workflow/references/handoff-protocol.md#anchor-allow-list`. DR runs `cache-lint.sh --anchor-lint <artifact>` as a stage gate. CI runs the same on PRs touching `skills/` or `agents/` as a safety net.
+4. **Section check**: Grep the output artifact for required section headers.
+5. **Side-artifact check**: For DV/QA stages, confirm corresponding `.context/logs/` capture exists (build/test logs).
+6. **Metadata check**: Validate task `metadata` against `task-system` § JSON Schema.
+7. **Error file check**: If `retry_count > 0`, `metadata.error_file` MUST exist on disk AND appear in `context_files`.
+8. **state.json patch check**: After Task() returns, orchestrator re-reads `.context/state.json`. If `stages.<CODE>.status` is still `in_progress`, parse the artifact's `handoff:` frontmatter and atomic-merge into state.json (third belt-and-suspenders layer; see `handoff-protocol.md#fallback-paths` F2/F3).
 
 Failure at any step → do NOT transition. Append a `missing_input` entry to the *next* stage's error file and block until resolved.
 
@@ -63,8 +84,9 @@ When TL splits DV into DV0/DV1/DV2 (parallel streams):
 
 ## Cross References
 
+- `skills/workflow/references/handoff-protocol.md` — canonical state.json + frontmatter + anchor specs
 - `skills/shared/stage-codes.md` — code/agent/model lookup
-- `skills/shared/task-system.md` — metadata schema, `error_file` derivation
+- `skills/shared/task-system.md` — metadata schema, `error_file` derivation, `context_refs`/`state_file`
 - `skills/agent-coordination/SKILL.md` § Error Handling — retry/escalate matrix
 - `skills/logging-conventions/SKILL.md` — raw capture paths (`.context/logs/`)
 - `skills/task-folder-organization/SKILL.md` — artifact naming and retention

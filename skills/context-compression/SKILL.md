@@ -8,6 +8,59 @@ effort: medium
 
 Systematic approaches for managing context across agent handoffs, optimizing token usage while preserving decision-critical information.
 
+## State Ledger as Compression Primitive
+
+The single most effective compression technique is the workflow state ledger (`.context/state.json`, ≤500 tokens). It supersedes most ad-hoc summary patterns: every stage reads the ledger as the canonical compressed view of all upstream stages.
+
+- **What lives in the ledger**: stage status, verdict, retry_count, top decisions, open questions, handoff one-liners. NEVER diffs, file contents, or test output (fetch from disk).
+- **What stays in artifacts**: full reasoning, tables, code snippets, evidence. The ledger points; the artifact carries.
+- **Eviction order on overflow** (defined in `skills/workflow/references/handoff-protocol.md#state-json-schema`): drop completed-stage artifact paths once handoff strings capture essentials → drop resolved open questions → drop decisions older than 2 stages back.
+
+The ledger is created by PL0 and patched atomically (`#atomic-write`) by every stage on completion. Downstream stages read it FIRST, before any artifact, and use it to decide which anchors to grep.
+
+## Cache-Friendly Prompt Layout
+
+The orchestrator's prompt layout is the second-most-effective compression: prefix-prefix equality with the Anthropic prompt cache turns repeated cross-stage tokens into cache reads (free).
+
+Binding order (per `handoff-protocol.md#cache-prefix`):
+
+```
+[1] Plugin/agent contract reminder         ← stable across ALL stages
+[2] Workflow header (id, plan, exploration)← stable across ALL stages
+[3] state.json blob (inlined JSON)         ← evolves per stage
+[4] Stage contract excerpt                 ← stable WITHIN stage type
+─────── (cache prefix boundary) ───────
+[5] task.description                       ← dynamic
+[6] retry hints                            ← dynamic
+[7] Stage-specific banners (DR/FN/MCP)     ← suffix, dynamic
+```
+
+Forbidden in [1][2][4]: timestamps, ENV expansions, random IDs, retry counters, file mtimes, agent-specific names beyond `workflow_id`. CI lint (`skills/workflow/references/cache-lint.sh`) asserts byte-stability.
+
+Expected `cache_read_input_tokens`: ≈20% on cross-stage transitions, ≈80% on retries within a stage, ≈60% on cross-stage average — meets AC-14 threshold of `≥60%` for stages 2–N.
+
+## Handoff Frontmatter as Canonical Compression Form
+
+Every stage artifact starts with a `---\nhandoff:\n` YAML block (≤200 tokens, ≤30 lines) that summarizes the artifact's verdict, top decisions, and refs. Downstream stages grep this block instead of the full artifact when they only need the verdict, decisions, or refs.
+
+Example (DV stage):
+
+```yaml
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "Implemented ThemeManager + binding. 8 files modified, 3 tests added."
+  files_touched:
+    - Source/Theme/ThemeManager.swift
+    - Source/Settings/ThemeToggleViewModel.swift
+  next_stage_focus: "DR reviews ThemeManager dependency injection"
+  refs: { decisions: analyzing.md#decisions, tests: development.md#tests-added }
+---
+```
+
+DR reads this block (≈70 tokens) instead of the full `development.md` (often 2–5k tokens) — a >95% compression on the upstream-summary path. Full file is read only when DR needs to inspect a specific anchor flagged in `next_stage_focus`.
+
 ## Core Principles
 
 ### 1. Reference, Don't Duplicate

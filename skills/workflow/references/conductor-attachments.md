@@ -28,7 +28,17 @@ The FN stage produces both files so:
 
 ## When to write
 
-In `agents/project-manager.md § F Stage`, immediately **before** invoking
+**Two writers, idempotent**: the orchestrator writes both files PRE-FN-GATE
+(so Conductor sees them even if the user never approves the gate). The FN
+agent re-writes them with final data after gate approval. Both writers source
+from this template — single source of truth.
+
+| Writer | When | Data quality |
+|--------|------|-------------|
+| Orchestrator pre-gate | Immediately before the FN gate's `return` in `skills/workflow/SKILL.md` (gated path only; bypass path falls through to delegation) | Best-available: DR/QA verdicts from upstream artifacts, git state at gate time |
+| FN agent post-approval | In `agents/project-manager.md § FN Stage`, before `gh pr create` | Final: same sources but fresher git state (post-commit) |
+
+In `agents/project-manager.md § FN Stage`, immediately **before** invoking
 `gh pr create`:
 
 ```bash
@@ -37,7 +47,10 @@ mkdir -p .context/attachments
 
 Then `Write` both files using the templates below. After writing, run
 `gh pr create` using the data from `PR instructions.md`. Both files are
-overwritten on every FN run (idempotent).
+overwritten on every FN run (idempotent). Pre-existing files from the
+orchestrator pre-seed are expected — the FN agent MUST overwrite them with
+final data (no skip, no merge). Idempotent: re-running the FN agent
+re-writes files from scratch.
 
 ## Data sources
 

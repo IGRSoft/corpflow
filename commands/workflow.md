@@ -101,7 +101,24 @@ See `skills/shared/stage-codes.md` for stage details.
 
 1. **Parse** task description and flags (`--milestone`, `--secure`, `--auto-continue`, etc.). See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:code-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
-3. **Create context folders**: `mkdir -p .context/images .context/errors`
+3. **Create context folders**: `mkdir -p .context/images .context/errors .context/logs`
+3a. **Initialize state.json (handoff-protocol)**: Atomic-write `.context/state.json` seed using temp+fsync+rename per `skills/workflow/references/handoff-protocol.md#atomic-write`. PL0 stage marked `in_progress`. Schema per `handoff-protocol.md#state-json-schema`. Backward-compat: if creation fails (e.g. read-only filesystem), log a warning and continue — F1 fallback (legacy `metadata.context_files` mode) keeps the workflow operational.
+   ```bash
+   tmp=".context/.state.json.$$.${RANDOM}.tmp"
+   cat > "$tmp" <<EOF
+   {
+     "version": 1,
+     "workflow_id": "<slug>",
+     "plan_file": ".context/planning-0.md",
+     "platform": "<platform>",
+     "stages": { "PL": { "status": "in_progress" } },
+     "facts": { "files_modified": [], "tests_added": [], "decisions": [], "open_questions": [], "verdicts": {} },
+     "handoffs": {}
+   }
+   EOF
+   sync "$tmp" 2>/dev/null || true
+   mv -f "$tmp" .context/state.json
+   ```
 4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", workflow_id: "<slug>", priority: "<priority>", fn_gate: "<required|bypass>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). Set `fn_gate: "bypass"` when invoked with `--auto-continue`, `--milestone:N`, or `--worktree`; otherwise `"required"`.
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next plan filename per `agents/product-manager.md § Plan File Naming` (first run: `.context/planning-0.md`; subsequent runs: `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`
