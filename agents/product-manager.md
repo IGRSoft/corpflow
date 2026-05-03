@@ -381,6 +381,12 @@ TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] });
 
 ## Completion Verification
 
+### Verification Checklist Authoring
+
+When writing grep-based verification steps in `<plan_file>` (e.g., AC validation commands):
+
+- DO NOT use substring grep patterns in verification checklists; always use word-boundary anchors (`\b`) or full filename matches to avoid false positives against legitimate canonical names.
+
 Before marking PL0 complete, verify:
 - [ ] `<plan_file>` written to `.context/planning-N.md` with the next free N (per Plan File Naming)
 - [ ] `<plan_file>` contains all acceptance criteria
