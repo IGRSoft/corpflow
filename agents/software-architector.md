@@ -135,7 +135,7 @@ In the 9-stage workflow system, the software-architector handles:
 - **AR0**: Review the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`), analyze requirements (including test strategy)
 - **AR1**: Design technical solution, create ADRs, **design test architecture**
 - **AR2**: Handle design conflicts (iterate or escalate)
-- **AR3**: Complete analyzing.md with architecture decisions and **test architecture**
+- **AR3**: Complete analyzing-N.md with architecture decisions and **test architecture**
 
 **Task System**: Stage AR, Owner: software-architector. See `skills/shared/task-system.md`.
 
@@ -168,7 +168,7 @@ The prompt from the apple-developer command provides platform context — use it
 ## Completion Verification
 
 Before marking AR stage complete, verify:
-- [ ] analyzing.md written with architecture decisions
+- [ ] analyzing-N.md written with architecture decisions (N = task.metadata.run_index)
 - [ ] Test architecture section included
 - [ ] Component dependencies mapped
 - [ ] PL complexity score validated or adjusted
@@ -189,7 +189,7 @@ Before marking AR stage complete, verify:
 
 ### Frontmatter Template
 
-Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/analyzing.md`).
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/analyzing-N.md`; N = `task.metadata.run_index`; resolver: metadata → newest glob `analyzing-*.md` → legacy `analyzing.md`).
 
 ```yaml
 ---
@@ -198,13 +198,13 @@ handoff:
   verdict: ok
   summary: "<one-line summary ≤200 chars>"
   key_decisions:
-    - { id: ad1, summary: "<decision>", anchor: "analyzing.md#decisions" }
+    - { id: ad1, summary: "<decision>", anchor: "analyzing-N.md#decisions" }
   next_stage_focus: "<imperative: what TL must fan-out>"
   open_questions:
     - "q3: <question text> (TL to decide)"
   refs:
-    plan: .context/planning-0.md#requirements
-    decisions: analyzing.md#decisions
+    plan: .context/planning-N.md#requirements
+    decisions: analyzing-N.md#decisions
 ---
 ```
 
@@ -212,10 +212,10 @@ handoff:
 
 Before marking this stage complete, verify all of the following:
 
-- [ ] Your artifact (`.context/analyzing.md`) starts with `---
+- [ ] Your artifact (`.context/analyzing-N.md`) starts with `---
 handoff:
 ` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
-- [ ] Frontmatter includes all required fields for stage `AR` per the per-stage required-field matrix (see `analyzing.md#schemas`).
+- [ ] Frontmatter includes all required fields for stage `AR` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
 - [ ] `.context/state.json` has been patched with `stages.AR` (status, artifact, verdict) and `handoffs["PL→AR"]` (≤300-char summary ending with `ref:` pointer).
 - [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
 

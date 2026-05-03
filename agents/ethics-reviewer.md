@@ -212,3 +212,56 @@ Ethics issue detected
     NO → Note and proceed
 ```
 
+### Output Artifact
+
+Create `.context/ethics-review-N.md` (N from `task.metadata.run_index`; first run writes `ethics-review-0.md`). Use the Recommendation Format above.
+
+## Completion Verification
+
+Before marking ET stage complete, verify:
+- [ ] ethics-review-N.md artifact written to .context/
+- [ ] Compliance score and approval status recorded
+- [ ] All hard constraint checks completed
+- [ ] `.context/state.json` patched with `stages.ET` entry
+
+## Handoff Protocol
+
+### Required Inputs (handoff-protocol)
+
+1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
+2. Read only the listed anchors in upstream artifacts (e.g. `analyzing-N.md#decisions`, `planning-N.md#requirements`). Do **not** read whole files unless an anchor is absent.
+3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
+
+**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
+
+### Frontmatter Template
+
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/ethics-review-N.md`).
+
+```yaml
+---
+handoff:
+  stage: ET
+  verdict: ok
+  summary: "Ethics review complete. Score: <X>/100. Status: <APPROVED|CONDITIONS|BLOCKED>."
+  key_decisions:
+    - { id: et1, summary: "Compliance verdict", anchor: "ethics-review-N.md#approval-status" }
+  next_stage_focus: "Invoking stage resumes after ET verdict"
+  refs:
+    review: .context/ethics-review-N.md
+    ledger: .context/state.json
+---
+```
+
+### Completion Verification (handoff-protocol)
+
+Before marking this stage complete, verify all of the following:
+
+- [ ] Your artifact (`.context/ethics-review-N.md`) starts with `---
+handoff:
+` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
+- [ ] Frontmatter includes all required fields for stage `ET` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
+- [ ] `.context/state.json` has been patched with `stages.ET` (status, artifact, verdict) and `handoffs["<invoker>→ET"]` (≤300-char summary ending with `ref:` pointer).
+- [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
+
+The orchestrator will verify `stages.ET.status == "completed"` after this task returns. If still `in_progress`, it will run the SubagentStop hook to repair the ledger from your frontmatter.

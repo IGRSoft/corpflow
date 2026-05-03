@@ -111,6 +111,7 @@ See `skills/shared/stage-codes.md` for stage details.
      "workflow_id": "<slug>",
      "plan_file": ".context/planning-0.md",
      "platform": "<platform>",
+     "run_index": 0,
      "stages": { "PL": { "status": "in_progress" } },
      "facts": { "files_modified": [], "tests_added": [], "decisions": [], "open_questions": [], "verdicts": {} },
      "handoffs": {}

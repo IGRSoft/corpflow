@@ -96,7 +96,7 @@ After (120 tokens):
 **Selected**: JWT tokens
 **Rejected**: Sessions (stateful), API keys (no rotation), OAuth (overkill)
 **Rationale**: Stateless, rotatable, fits microservice architecture
-**ADR**: .context/analyzing.md#adr-001
+**ADR**: .context/analyzing-N.md#adr-001
 ```
 
 ### 3. Use Structured Formats
@@ -212,7 +212,7 @@ Key components: ThemeManager (new), ColorPalette (modified)
 Dependencies: None added
 ADRs: ADR-001 (theme abstraction) - ACCEPTED
 
-Details: .context/analyzing.md
+Details: .context/analyzing-N.md
 ```
 
 ## Context Budget by Handoff

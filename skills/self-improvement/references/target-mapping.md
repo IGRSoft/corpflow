@@ -8,16 +8,16 @@ Every classified diff hunk must be mapped to exactly one owning file (the "targe
 |---|--------------------------|--------|-------|
 | 1 | `agents/<name>.md`, `skills/**/SKILL.md`, `commands/<name>.md` | The file itself | User edited the prompt directly — self-signal. Map to that file. |
 | 2 | `.context/planning-*.md` (numbered, e.g. `planning-0.md`, `planning-1.md`; also legacy `.context/planning.md`) | `agents/product-manager.md` | Producer lookup via stage-contracts. Match the glob — every numbered plan is owned by PM. |
-| 3 | `.context/analyzing.md` | `agents/software-architector.md` | |
-| 4 | `.context/coordination.md` | `agents/team-lead.md` | |
-| 5 | `.context/development.md` | `metadata.agent` of the DV task (resolve from `TaskList`) | Platform-aware: could be `igrsoft:developer`, `apple-developer:ios-developer`, etc. |
-| 6 | `.context/developer-review.md` | `agents/technical-lead.md` | |
-| 7 | `.context/security-review.md` | `agents/security-reviewer.md` | |
-| 8 | `.context/testing.md` | `agents/qa-engineer.md` | |
-| 9 | `.context/documentation.md` | `agents/technical-writer.md` | |
-| 10 | `.context/release-prep.md` | `agents/release-engineer.md` | |
-| 11 | `.context/complete.md` | `agents/project-manager.md` | |
-| 12 | `.context/approval.md` | `agents/stakeholder.md` | Edits to own artifact — self-improvement for ST itself. |
+| 3 | `.context/analyzing-*.md` | `agents/software-architector.md` | Match the glob — every numbered artifact owned by AR. |
+| 4 | `.context/coordination-*.md` | `agents/team-lead.md` | |
+| 5 | `.context/development-*.md` | `metadata.agent` of the DV task (resolve from `TaskList`) | Platform-aware: could be `igrsoft:developer`, `apple-developer:ios-developer`, etc. |
+| 6 | `.context/developer-review-*.md` | `agents/technical-lead.md` | |
+| 7 | `.context/security-review-*.md` | `agents/security-reviewer.md` | |
+| 8 | `.context/testing-*.md` | `agents/qa-engineer.md` | |
+| 9 | `.context/documentation-*.md` | `agents/technical-writer.md` | |
+| 10 | `.context/release-*.md` | `agents/release-engineer.md` | |
+| 11 | `.context/complete-summary-*.md` | `agents/project-manager.md` | |
+| 12 | `.context/retrospective-*.md` | `agents/stakeholder.md` | Edits to own artifact — self-improvement for ST itself. |
 | 13 | Source code (`src/**`, `app/**`, `lib/**`, `Sources/**`) | Resolved DV agent (same lookup as row 5) | Default to `agents/developer.md` if DV agent missing. |
 | 14 | `README.md`, `docs/**`, `*.md` at repo root | `agents/technical-writer.md` | Only if DC stage ran in this workflow. |
 | 15 | Tests (`tests/**`, `**/*Tests.swift`, `**/*_test.py`, `spec/**`) | `agents/qa-engineer.md` | Only if QA stage ran. |
@@ -35,7 +35,7 @@ else:
     log under "Out-of-Context Discards"; do NOT include in learnings.md
 ```
 
-**Why:** if the user edited an artifact produced by an agent that did not participate in this workflow (e.g., user tweaked `.context/security-review.md` from a previous run while running a non-secure workflow), we must not propose updates to `agents/security-reviewer.md` — SR did not participate, so the edit belongs to a different feedback loop.
+**Why:** if the user edited an artifact produced by an agent that did not participate in this workflow (e.g., user tweaked `.context/security-review-N.md` from a previous run while running a non-secure workflow), we must not propose updates to `agents/security-reviewer.md` — SR did not participate, so the edit belongs to a different feedback loop.
 
 ## Platform-Aware Resolution
 

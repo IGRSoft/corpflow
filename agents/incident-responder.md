@@ -62,7 +62,7 @@ emergency: Production login failing for 50% of users
 
 ### Output Artifact
 
-Create `.context/incident-report.md`:
+Create `.context/incident-N.md` (N from `task.metadata.run_index`; first run writes `incident-0.md`):
 
 ```markdown
 ## Incident Report
@@ -250,14 +250,14 @@ Conduct post-mortem when:
 ### Required Inputs (handoff-protocol)
 
 1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
-2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
+2. Read only the listed anchors in upstream artifacts (e.g. `analyzing-N.md#decisions`, `planning-N.md#requirements`). Do **not** read whole files unless an anchor is absent.
 3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
 
 **Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
 
 ### Frontmatter Template
 
-Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/incident.md`).
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/incident-N.md`).
 
 ```yaml
 ---
@@ -266,11 +266,11 @@ handoff:
   verdict: ok
   summary: "Root cause: <X>. Fix plan: <Y>. Blast radius: <Z>"
   key_decisions:
-    - { id: ir1, summary: "Root cause identified", anchor: "incident.md#root-cause" }
+    - { id: ir1, summary: "Root cause identified", anchor: "incident-N.md#root-cause" }
   next_stage_focus: "DV implements fix; QA runs regression"
   refs:
-    root_cause: incident.md#root-cause
-    fix_plan: incident.md#fix-plan
+    root_cause: incident-N.md#root-cause
+    fix_plan: incident-N.md#fix-plan
 ---
 ```
 
@@ -278,10 +278,10 @@ handoff:
 
 Before marking this stage complete, verify all of the following:
 
-- [ ] Your artifact (`.context/incident.md`) starts with `---
+- [ ] Your artifact (`.context/incident-N.md`) starts with `---
 handoff:
 ` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
-- [ ] Frontmatter includes all required fields for stage `IR` per the per-stage required-field matrix (see `analyzing.md#schemas`).
+- [ ] Frontmatter includes all required fields for stage `IR` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
 - [ ] `.context/state.json` has been patched with `stages.IR` (status, artifact, verdict) and `handoffs["USER→IR"]` (≤300-char summary ending with `ref:` pointer).
 - [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
 

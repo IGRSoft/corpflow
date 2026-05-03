@@ -88,9 +88,9 @@ When `false`, DV/QA append `-skip-testing:<UITestTarget>` to `test_sim`/`xcodebu
 
 In the 9-stage workflow system, the product-manager handles:
 
-### Plan File Naming
+### Plan File & Run Index Naming
 
-Each PL invocation produces a numbered plan file in `.context/`:
+Each PL invocation produces a numbered plan file in `.context/` and stamps a shared run index on every downstream task:
 
 - **First plan**: `.context/planning-0.md`
 - **Subsequent plans**: `.context/planning-N.md` where N = max existing index + 1
@@ -101,10 +101,37 @@ Each PL invocation produces a numbered plan file in `.context/`:
 2. If matches exist, set `N = max(existing) + 1`. Otherwise `N = 0`.
 3. **Legacy fallback**: if no `planning-*.md` exists but `.context/planning.md` does, treat the legacy file as `planning-0.md` and write the new plan as `planning-1.md`. (Fallback retained for one release cycle, then removed.)
 4. Write `.context/planning-${N}.md`. Do **not** overwrite `planning-0.md`, ..., `planning-(N-1).md` — they remain as historical plans.
+5. **state.json reset** (new run in existing `.context/`): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, and empty `facts.*` (preserves `version`, `workflow_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
 
-**Downstream propagation**: when PL creates downstream stage tasks via `TaskCreate`, stamp `metadata.plan_file = "planning-${N}.md"` on each one so AR/TL/DV/DR/SR/QA/DC/RE/FN/ST/ET resolve the right plan. Reader resolution order: `metadata.plan_file` first, then newest `.context/planning-*.md` (highest N) if metadata is absent (covers manual agent invocation), then legacy `planning.md` as the final fallback.
+**Downstream propagation**: when PL creates downstream stage tasks via `TaskCreate`, stamp **both** `metadata.plan_file = "planning-${N}.md"` AND `metadata.run_index = N` on each one. Every stage agent uses `run_index` to resolve its artifact path as `<basename>-${N}.md`. Reader resolution order for `plan_file`: `metadata.plan_file` first, then newest `.context/planning-*.md` (highest N) if metadata is absent, then legacy `planning.md` as the final fallback.
 
 Throughout this document, `<plan_file>` denotes the resolved plan filename for the current PL invocation (e.g. `planning-0.md`, `planning-3.md`).
+
+### Stage Artifact Naming
+
+Every stage (AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) writes its artifact as `<basename>-N.md` where N is the same integer as `planning-N.md` for this run.
+
+**Artifact base names**:
+
+| Stage | Basename | Full artifact (run N) |
+|-------|----------|-----------------------|
+| AR | analyzing | `analyzing-N.md` |
+| TL | coordination | `coordination-N.md` |
+| DV | development | `development-N.md` |
+| DR | developer-review | `developer-review-N.md` |
+| SR | security-review | `security-review-N.md` |
+| QA | testing | `testing-N.md` |
+| DC | documentation | `documentation-N.md` |
+| RE | release | `release-N.md` |
+| FN | complete-summary | `complete-summary-N.md` |
+| ST | retrospective | `retrospective-N.md` |
+| IR | incident | `incident-N.md` |
+| ET | ethics-review | `ethics-review-N.md` |
+
+**Three-step resolver** (every stage agent uses this):
+1. `task.metadata.run_index` → `<basename>-${N}.md`.
+2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
+3. Legacy unnumbered `<basename>.md` (one release cycle fallback; log WARN when used).
 
 ### PL0 Stage (Planning)
 - **Detect workspace context** from task metadata
@@ -120,7 +147,7 @@ Throughout this document, `<plan_file>` denotes the resolved plan filename for t
 When invoked as PL0 stage agent:
 1. Compute `<plan_file>` per **Plan File Naming** (glob `.context/planning-*.md`, pick next N) and create `.context/<plan_file>` with the requirements template
 2. Fill out `<plan_file>` with requirements, acceptance criteria, success metrics
-3. Assess complexity (0-50 scale) and create stage tasks via `TaskCreate`, setting `metadata.plan_file = "<plan_file>"` on each
+3. Assess complexity (0-50 scale) and create stage tasks via `TaskCreate`, setting `metadata.plan_file = "<plan_file>"` AND `metadata.run_index = N` on each
 
 **Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For milestone mode, read issue from `.context/milestone.json`. See `skills/milestone-workflow/SKILL.md § Workspace-Aware Stages`.
 
@@ -139,6 +166,8 @@ Use the **Unified Complexity Assessment** from `skills/workflow/SKILL.md § Dyna
 
 4. **Set dependency chain** between created tasks using `TaskUpdate({ addBlockedBy })`
 5. **Mark PL0 completed** after creating all stage tasks
+
+Every `TaskCreate` for a downstream stage MUST include `metadata.run_index = N` and `metadata.plan_file = "planning-${N}.md"`. Stage artifact paths embedded in the task description use `<basename>-${N}.md` (e.g., `analyzing-${N}.md`, `development-${N}.md`).
 
 **Agent mapping for `metadata.agent`**:
 
@@ -328,7 +357,7 @@ When threshold met, PL0:
 // 1. Create ET0 before AR0
 const et = TaskCreate({
   subject: "ET0: Ethics review",
-  description: "Review <plan_file> for ethical risks per detected keywords. Produce .context/ethics-review.md with Decision ∈ {pass, block, conditional}.",
+  description: `Review ${planFile} for ethical risks per detected keywords. Produce .context/ethics-review-${N}.md with Decision ∈ {pass, block, conditional}.`,
   metadata: {
     stage: "ET",
     agent: "igrsoft:ethics-reviewer",
@@ -336,6 +365,7 @@ const et = TaskCreate({
     error_file: ".context/errors/ethics-reviewer.md",
     context_files: `${planFile},.context/errors/ethics-reviewer.md`,
     plan_file: planFile,  // e.g. "planning-0.md"
+    run_index: N,
     workflow_id: "<current>"
   }
 });
@@ -357,7 +387,7 @@ Before marking PL0 complete, verify:
 - [ ] Test strategy section present with specific test scenarios and file paths
 - [ ] Test effort estimate included (required, not optional)
 - [ ] Complexity score calculated (0-50)
-- [ ] Subsequent stage tasks created with `metadata.agent` AND `metadata.plan_file = "<plan_file>"` per complexity score
+- [ ] Subsequent stage tasks created with `metadata.agent`, `metadata.plan_file = "<plan_file>"`, AND `metadata.run_index = N` per complexity score
 - [ ] Dependency chain set between created tasks
 - [ ] No open questions blocking next stage
 - [ ] If design detected (score >= 5), Designer was invoked
@@ -392,7 +422,7 @@ handoff:
     - "q1: <question text> (AR to decide)"
   refs:
     spec: .context/attachments/<spec-file>
-    plan: .context/planning-0.md#requirements
+    plan: .context/planning-N.md#requirements
 ---
 ```
 

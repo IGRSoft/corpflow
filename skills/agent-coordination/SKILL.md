@@ -498,7 +498,7 @@ TL can split DV0 into parallel streams (DV0, DV1, DV2...) during coordination. E
 - Splitting small scope work (coordination overhead exceeds time saved)
 - Missing DR0 rewiring (DR0 must depend on ALL DVN tasks, not just DV0)
 
-**Coordination artifact**: TL documents the split in `.context/coordination.md` with a "Parallel Streams" section listing each stream's scope, file ownership, and interface contracts.
+**Coordination artifact**: TL documents the split in `.context/coordination-N.md` with a "Parallel Streams" section listing each stream's scope, file ownership, and interface contracts.
 
 ### Hypothesis-Driven Debugging
 

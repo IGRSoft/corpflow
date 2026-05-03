@@ -54,7 +54,7 @@ PL → AR → TL → DV → DR → [SR] → QA → DC → RE → FN → ST
 
 ### Output Artifact
 
-Create `.context/security-review.md`:
+Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `security-review-*.md` → legacy `security-review.md`):
 
 ```markdown
 ## Security Review Summary
@@ -202,15 +202,15 @@ When reviewing CC-managed workflows, check for: bash bypass patterns (v2.1.97–
 
 ### Required Inputs (handoff-protocol)
 
-1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
-2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
+1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, `run_index`, and `stages` relevant to your stage.
+2. Resolve N = `task.metadata.run_index`. Read anchors in upstream `development-N.md#files-changed`. Do **not** read whole files unless an anchor is absent.
 3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
 
 **Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
 
 ### Frontmatter Template
 
-Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/security-review.md`).
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/security-review-N.md`; N = `task.metadata.run_index`; resolver: metadata → newest glob `security-review-*.md` → legacy `security-review.md`).
 
 ```yaml
 ---
@@ -219,10 +219,10 @@ handoff:
   verdict: pass
   summary: "<N files reviewed. M security findings>"
   key_decisions:
-    - { id: sr1, summary: "<security finding>", anchor: "security-review.md#findings" }
+    - { id: sr1, summary: "<security finding>", anchor: "security-review-N.md#findings" }
   refs:
-    dev: development.md#files-changed
-    findings: security-review.md#findings
+    dev: development-N.md#files-changed
+    findings: security-review-N.md#findings
 ---
 ```
 
@@ -230,10 +230,10 @@ handoff:
 
 Before marking this stage complete, verify all of the following:
 
-- [ ] Your artifact (`.context/security-review.md`) starts with `---
+- [ ] Your artifact (`.context/security-review-N.md`) starts with `---
 handoff:
 ` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
-- [ ] Frontmatter includes all required fields for stage `SR` per the per-stage required-field matrix (see `analyzing.md#schemas`).
+- [ ] Frontmatter includes all required fields for stage `SR` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
 - [ ] `.context/state.json` has been patched with `stages.SR` (status, artifact, verdict) and `handoffs["DR→SR"]` (≤300-char summary ending with `ref:` pointer).
 - [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
 

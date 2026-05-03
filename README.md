@@ -154,13 +154,18 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 
 ```
 .context/
-├── planning-0.md            # PL stage (first plan; subsequent PL runs add planning-1.md, planning-2.md, …)
-├── analyzing.md             # AR stage
-├── development.md           # DV stage
-├── developer-review.md      # DR stage
-├── testing.md               # QA stage
-├── documentation.md         # DC stage
-├── complete.md              # FN stage
+├── planning-0.md            # PL stage (run 0; subsequent PL runs add planning-1.md, planning-2.md, …)
+├── analyzing-0.md           # AR stage (run 0)
+├── coordination-0.md        # TL stage (run 0)
+├── development-0.md         # DV stage (run 0)
+├── developer-review-0.md    # DR stage (run 0)
+├── security-review-0.md     # SR stage (run 0, secure/full variant)
+├── testing-0.md             # QA stage (run 0)
+├── documentation-0.md       # DC stage (run 0)
+├── release-0.md             # RE stage (run 0, secure/full variant)
+├── complete-summary-0.md    # FN stage (run 0)
+├── retrospective-0.md       # ST stage (run 0)
+├── state.json               # Workflow ledger (shared across runs)
 ├── errors/                  # Per-agent error narratives (if needed)
 │   ├── developer.md         # DV retries
 │   └── qa-engineer.md       # QA retries
@@ -168,6 +173,8 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ├── images/                  # User-attached visual assets
 └── logs/                    # Raw runtime capture (build/test/monitor)
 ```
+
+All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.metadata.run_index` (stamped by PL0 on every downstream task). First run uses N=0.
 
 ## Components
 

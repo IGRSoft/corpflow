@@ -92,8 +92,8 @@ Budget approval follows the 3-Stage Model — see `skills/shared/three-stage-pla
 ## Acceptance Review Procedure
 
 ### Step 1: Review Artifacts
-Read `.context/complete.md` for implementation summary.
-Read `.context/testing.md` for QA results.
+Read `.context/complete-summary-N.md` for implementation summary (N from `task.metadata.run_index`; fallback: newest `.context/complete-summary-*.md`, then legacy `.context/complete-summary.md`).
+Read `.context/testing-N.md` for QA results (same resolver).
 Read the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`) for original acceptance criteria.
 
 ### Step 2: Verify Acceptance Criteria
@@ -102,7 +102,7 @@ Compare implementation against `<plan_file>` acceptance criteria:
 - For PARTIAL/FAIL, document specific gaps
 
 ### Step 3: Decision
-- **All PASS** → Approve, write approval.md, mark ST complete
+- **All PASS** → Approve, write retrospective-N.md, mark ST complete
 - **Any PARTIAL** → Request specific changes with clear instructions, return to FN
 - **Any FAIL** → Reject with detailed explanation, escalate to project-manager
 
@@ -121,14 +121,14 @@ After the decision is recorded, **always invoke** the `self-improvement` skill. 
 
 **User approval:** the orchestrator (`commands/workflow.md`) reads `learnings.md` after ST completes, presents checked proposals for user confirmation, and routes each approved item to `prompt-engineer` for application. This stakeholder agent does NOT apply proposals itself.
 
-**Artifact summary in approval.md:** include a short `## Self-Improvement` section referencing `learnings.md` (if produced) or noting "no user changes detected since FN commit."
+**Artifact summary in retrospective-N.md:** include a short `## Self-Improvement` section referencing `learnings.md` (if produced) or noting "no user changes detected since FN commit."
 
 ## Completion Verification
 
 Before marking ST stage complete, verify:
 - [ ] All acceptance criteria from `<plan_file>` evaluated
 - [ ] Each criterion marked PASS, PARTIAL, or FAIL
-- [ ] approval.md artifact written to .context/
+- [ ] retrospective-N.md artifact written to .context/
 - [ ] Clear decision: Approved, Changes Requested, or Rejected
 - [ ] `self-improvement` skill invoked (Step 4); `.context/learnings.md` written if in-scope changes detected, otherwise log-only short-circuit confirmed
 
@@ -138,14 +138,14 @@ Before marking ST stage complete, verify:
 ### Required Inputs (handoff-protocol)
 
 1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
-2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
+2. Read only the listed anchors in upstream artifacts (e.g. `analyzing-N.md#decisions`, `planning-N.md#requirements`). Do **not** read whole files unless an anchor is absent.
 3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
 
 **Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
 
 ### Frontmatter Template
 
-Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/retrospective.md`).
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/retrospective-N.md`).
 
 ```yaml
 ---
@@ -154,9 +154,9 @@ handoff:
   verdict: approve
   summary: "Approved. <N follow-ups filed or 'No follow-ups'>."
   key_decisions:
-    - { id: st1, summary: "Approve merge", anchor: "complete-summary.md#decision" }
+    - { id: st1, summary: "Approve merge", anchor: "complete-summary-N.md#decision" }
   refs:
-    summary: .context/complete-summary.md
+    summary: .context/complete-summary-N.md
 ---
 ```
 
@@ -164,10 +164,10 @@ handoff:
 
 Before marking this stage complete, verify all of the following:
 
-- [ ] Your artifact (`.context/retrospective.md`) starts with `---
+- [ ] Your artifact (`.context/retrospective-N.md`) starts with `---
 handoff:
 ` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
-- [ ] Frontmatter includes all required fields for stage `ST` per the per-stage required-field matrix (see `analyzing.md#schemas`).
+- [ ] Frontmatter includes all required fields for stage `ST` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
 - [ ] `.context/state.json` has been patched with `stages.ST` (status, artifact, verdict) and `handoffs["FN→ST"]` (≤300-char summary ending with `ref:` pointer).
 - [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
 

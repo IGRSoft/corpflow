@@ -76,16 +76,16 @@ When a user attaches images during a workflow task, copy them to `.context/image
 
 ## Folder Structure Examples
 
-> **Note on `planning-N.md`**: each example below shows a single-plan workspace, so the plan file is `planning-0.md`. If PL is invoked again in the same `.context/` (e.g. mid-workflow re-plan), the next plan is written to `planning-1.md`, then `planning-2.md`, and so on — earlier plans are preserved. See `agents/product-manager.md § Plan File Naming`.
+> **Note on `planning-N.md`**: each example below shows a single-plan workspace (run 0), so the plan file is `planning-0.md` and all stage artifacts use suffix `-0`. If PL reruns (e.g. mid-workflow re-plan), N increments and all downstream artifacts for that run use the new suffix. Earlier runs are preserved. See `agents/product-manager.md § Plan File & Run Index Naming`.
 
 ### Example 1: Simple Bug Fix (9-stage, low complexity)
 
 ```
 .context/
 ├── planning-0.md
-├── development.md
-├── developer-review.md
-└── testing.md
+├── development-0.md
+├── developer-review-0.md
+└── testing-0.md
 ```
 
 ### Example 2: Feature Development (9-stage, full)
@@ -93,14 +93,14 @@ When a user attaches images during a workflow task, copy them to `.context/image
 ```
 .context/
 ├── planning-0.md
-├── analyzing.md
-├── coordination.md
-├── development.md
-├── developer-review.md
-├── testing.md
-├── documentation.md
-├── complete.md
-├── approval.md
+├── analyzing-0.md
+├── coordination-0.md
+├── development-0.md
+├── developer-review-0.md
+├── testing-0.md
+├── documentation-0.md
+├── complete-summary-0.md
+├── retrospective-0.md
 └── images/
     └── feature-mockup.png
 ```
@@ -112,10 +112,10 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 ```
 .context/
 ├── planning-0.md
-├── development.md
-├── developer-review.md
-├── testing.md
-├── complete.md
+├── development-0.md
+├── developer-review-0.md
+├── testing-0.md
+├── complete-summary-0.md
 └── logs/
     ├── build-20260420-141522.log           # DV: build_sim run
     ├── test-qa-20260420-143008.log         # QA: test_sim run
@@ -128,13 +128,13 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 ```
 .context/
 ├── planning-0.md                               # References mockups in Design Requirements
-├── analyzing.md                              # Reviews mockup feasibility
-├── coordination.md
-├── development.md                            # Uses mockups as implementation guide
-├── testing.md                                # Validates against mockups
-├── documentation.md
-├── complete.md
-├── approval.md
+├── analyzing-0.md                              # Reviews mockup feasibility
+├── coordination-0.md
+├── development-0.md                            # Uses mockups as implementation guide
+├── testing-0.md                                # Validates against mockups
+├── documentation-0.md
+├── complete-summary-0.md
+├── retrospective-0.md
 ├── designs/
 │   ├── mockup-user-profile-main.pen          # Designer: main profile screen
 │   ├── mockup-user-profile-edit.pen          # Designer: edit mode
@@ -148,10 +148,10 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 ```
 .context/
 ├── planning-0.md                               # References Figma screenshots in Design Requirements
-├── exploration.md                            # Contains Figma design context summary
-├── analyzing.md
-├── development.md                            # Uses Figma screenshots as implementation guide
-├── testing.md                                # Design comparison results
+├── exploration.md                              # Contains Figma design context summary
+├── analyzing-0.md
+├── development-0.md                            # Uses Figma screenshots as implementation guide
+├── testing-0.md                                # Design comparison results
 ├── designs/
 │   ├── figma-login-screen-42-1.png           # Figma: login screen (node 42:1)
 │   ├── figma-login-error-42-5.png            # Figma: error state (node 42:5)
@@ -164,16 +164,16 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 ```
 .context/
 ├── planning-0.md
-├── analyzing.md
-├── coordination.md
-├── development.md
-├── developer-review.md    # DR stage output
-├── security-review.md     # SR stage output
-├── testing.md
-├── documentation.md
-├── release-prep.md        # RE stage output [NEW]
-├── complete.md
-├── approval.md
+├── analyzing-0.md
+├── coordination-0.md
+├── development-0.md
+├── developer-review-0.md
+├── security-review-0.md
+├── testing-0.md
+├── documentation-0.md
+├── release-0.md
+├── complete-summary-0.md
+├── retrospective-0.md
 └── images/
     ├── auth-flow.png
     └── security-diagram.png
@@ -183,12 +183,12 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 
 ```
 .context/
-├── incident-report.md     # IR stage output
-├── development.md
-├── developer-review.md    # DR stage output
-├── testing.md
-├── release-prep.md        # RE stage output
-└── complete.md
+├── incident-0.md
+├── development-0.md
+├── developer-review-0.md
+├── testing-0.md
+├── release-0.md
+└── complete-summary-0.md
 ```
 
 ### Example 5: Task with Errors
@@ -196,12 +196,12 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 ```
 .context/
 ├── planning-0.md
-├── analyzing.md
-├── development.md
+├── analyzing-0.md
+├── development-0.md
 ├── errors/
 │   ├── developer.md      # DV retries (one section per retry)
 │   └── qa-engineer.md    # QA retries (if QA also failed)
-├── testing.md
+├── testing-0.md
 └── images/
 ```
 
@@ -211,9 +211,9 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 .context/
 ├── milestone.json        # GitHub milestone context
 ├── planning-0.md
-├── analyzing.md
-├── development.md
-├── testing.md
+├── analyzing-0.md
+├── development-0.md
+├── testing-0.md
 └── images/
 ```
 
@@ -225,9 +225,9 @@ When using `--worktree` with milestones, `.context/` lives inside each worktree:
 .worktrees/milestone-1/42/              # Git worktree root (full source copy)
 ├── .context/                            # Workflow artifacts
 │   ├── planning-0.md
-│   ├── analyzing.md
-│   ├── development.md
-│   ├── testing.md
+│   ├── analyzing-0.md
+│   ├── development-0.md
+│   ├── testing-0.md
 │   └── designs/
 ├── workspace.json                       # Workspace metadata (isolation: "worktree")
 ├── handoff.md                           # Compressed context
@@ -237,3 +237,26 @@ When using `--worktree` with milestones, `.context/` lives inside each worktree:
 ```
 
 **Key difference**: In worktree mode, the project source files are duplicated inside each issue directory. This provides complete source-level isolation but uses more disk space.
+
+### Example 8: Multi-Run Same `.context/`
+
+When PL reruns (scope change, re-plan), artifacts from all runs coexist. `state.json`, `errors/`, and `logs/` are shared.
+
+```
+.context/
+├── planning-0.md           # Original plan (run 0)
+├── analyzing-0.md
+├── development-0.md
+├── testing-0.md
+├── complete-summary-0.md
+├── planning-1.md           # Re-plan (run 1, scope change)
+├── analyzing-1.md
+├── development-1.md
+├── testing-1.md
+├── complete-summary-1.md
+├── state.json              # Shared ledger (reset per run, patches accumulate)
+├── errors/
+│   └── developer.md        # Errors from any run
+└── logs/
+    └── build-*.log
+```

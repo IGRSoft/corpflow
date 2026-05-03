@@ -18,7 +18,7 @@ Two entry points:
 Both paths execute the same pipeline and produce the same `.context/learnings.md`.
 
 Pre-conditions:
-- `.context/complete.md` exists (automatic path — FN stage finished) OR a `--since <ref>` baseline (manual path)
+- `.context/complete-summary-N.md` exists (automatic path — FN stage finished; N from `run_index`) OR a `--since <ref>` baseline (manual path)
 - Current branch has at least one commit authored by a stage agent (automatic) OR reachable commits in the diff range (manual)
 
 Post-conditions:
@@ -88,7 +88,7 @@ commands/workflow.md
 **Mapping rules (apply first match):** full table in `references/target-mapping.md`.
 
 1. **Direct edit to a prompt file** (`agents/*.md`, `skills/**/SKILL.md`, `commands/*.md`) → target is that file itself (self-edit signal).
-2. **Edit to `.context/<stage-artifact>.md`** → target is the agent that produced that artifact (look up via stage-contracts.md: any `planning-N.md` (or legacy `planning.md`) → product-manager, `development.md` → developer, etc.).
+2. **Edit to `.context/<stage-artifact>-N.md`** → target is the agent that produced that artifact (look up via stage-contracts.md: any `planning-N.md` (or legacy `planning.md`) → product-manager, `development-N.md` → developer, etc.).
 3. **Edit to source code file** → target is the DV-stage agent for the current workflow (`developer` or whichever platform-specific agent was assigned in `metadata.agent`).
 4. **Edit to docs (`README.md`, `docs/**`)** → target is `technical-writer` (DC stage).
 5. **No match** → discard, logged only.
@@ -168,7 +168,7 @@ See `agents/prompt-engineer.md § Self-Improvement Patch Application` for the ap
 ## Test Scenarios (for skill-creator validation)
 
 1. **Zero-change:** agent commits, user approves without edits → no `learnings.md` written; log records `Result: no-changes`.
-2. **In-context change:** user edits `.context/development.md` wording → proposal targets `agents/developer.md` with `tone` category.
+2. **In-context change:** user edits `.context/development-N.md` wording → proposal targets `agents/developer.md` with `tone` category.
 3. **Out-of-context change:** user edits `agents/security-reviewer.md` (but workflow was not `--secure`, so SR did not run) → discarded, no proposal surfaced. Discard logged.
 4. **Multi-file change:** user edits both a source file (maps to developer) and `README.md` (maps to technical-writer, if DC ran) → two proposals.
 5. **Low-confidence:** wording change of ≤2 words flagged `tone/low` → placed in Deferred.

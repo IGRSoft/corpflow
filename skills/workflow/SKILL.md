@@ -249,6 +249,31 @@ const stateRaw = fs.existsSync(".context/state.json")
 // no cache-friendly preamble (legacy mode).
 ```
 
+**Artifact path helper** (resolves numbered path with fallback):
+
+```typescript
+const ARTIFACT_BASE: Record<string, string> = {
+  PL: "planning", AR: "analyzing", TL: "coordination",
+  DV: "development", DR: "developer-review", SR: "security-review",
+  QA: "testing", DC: "documentation", RE: "release",
+  FN: "complete-summary", ST: "retrospective", IR: "incident",
+  ET: "ethics-review",
+};
+function stageArtifactPath(code: string, runIndex: number): string {
+  const base = ARTIFACT_BASE[code];
+  const numbered = `.context/${base}-${runIndex}.md`;
+  if (fs.existsSync(numbered)) return numbered;
+  // Newest-glob fallback (covers legacy or out-of-band writes)
+  const matches = glob.sync(`.context/${base}-*.md`).sort((a, b) => {
+    const n = (f: string) => parseInt(f.match(/-([0-9]+)\.md$/)?.[1] ?? "0", 10);
+    return n(a) - n(b);
+  });
+  if (matches.length > 0) return matches.pop()!;
+  // Legacy unnumbered fallback (one release cycle)
+  return `.context/${base}.md`;
+}
+```
+
 **Step 6.5 (NEW) — After Task() returns, patch state.json from artifact frontmatter**:
 
 ```typescript
@@ -260,7 +285,8 @@ if (stagePost.stages?.[code]?.status !== "completed") {
   // (yq or awk fallback per handoff-protocol.md#fallback-paths F2/F3) and
   // atomic-merge into state.json. This is the orchestrator's belt-and-suspenders
   // layer (the third, after in-agent write and the optional SubagentStop hook).
-  const artifactPath = stageArtifactMap[code];  // e.g. "DV" → ".context/development.md"
+  const runIndex = full.metadata.run_index ?? 0;
+  const artifactPath = stageArtifactPath(code, runIndex);  // e.g. "DV" → ".context/development-0.md"
   const handoff = parseFrontmatter(artifactPath);  // null if missing → F3 fallback
   const patch = handoff
     ? buildPatchFromHandoff(code, handoff)
@@ -353,7 +379,7 @@ while (tasks.some(t => t.status !== "completed")) {
         // (a) Build pre-FN summary from the resolved plan file
         //     (`task.metadata.plan_file`; fallback: newest `.context/planning-*.md`,
         //     then legacy `.context/planning.md`),
-        //     .context/developer-review.md, .context/testing.md.
+        //     .context/developer-review-N.md, .context/testing-N.md.
         // (b) Print summary to user. Do NOT call TaskUpdate.
         //     Do NOT delegate. FN task stays `pending`.
         // (c) Write `fn_gate_waiting` audit line.
@@ -407,11 +433,15 @@ while (tasks.some(t => t.status !== "completed")) {
             if (typeMatch) commitType = typeMatch[1].toLowerCase();
           } catch (_) { /* fall back to feat */ }
 
+          // Resolve run index for numbered artifacts
+          const runIndex = full.metadata.run_index ?? 0;
+
           // Resolve DR and QA verdicts; defensive default: `verdict: unknown`
           let drVerdict = "verdict: unknown";
           let drConcerns = "(none flagged)";
           try {
-            const drContent = fs.readFileSync(".context/developer-review.md", "utf8");
+            const drPath = stageArtifactPath("DR", runIndex);
+            const drContent = fs.readFileSync(drPath, "utf8");
             const drMatch = drContent.match(/Approval Status[^\n]*/);
             if (drMatch) drVerdict = drMatch[0].trim();
             const issuesSection = drContent.match(/## Issues Found\n([\s\S]*?)(?=\n##|$)/);
@@ -424,7 +454,8 @@ while (tasks.some(t => t.status !== "completed")) {
           let qaVerdict = "verdict: unknown";
           let qaNotes = "(none)";
           try {
-            const qaContent = fs.readFileSync(".context/testing.md", "utf8");
+            const qaPath = stageArtifactPath("QA", runIndex);
+            const qaContent = fs.readFileSync(qaPath, "utf8");
             const qaMatch = qaContent.match(/GO\/NO-GO[^\n]*/i) || qaContent.match(/verdict[^\n]*/i);
             if (qaMatch) qaVerdict = qaMatch[0].trim();
             const resultsSection = qaContent.match(/## Results\n([\s\S]*?)(?=\n##|$)/);
@@ -460,7 +491,7 @@ while (tasks.some(t => t.status !== "completed")) {
             "",
             "- If you have any skills related to creating PRs, invoke them now. Instructions there should take precedence over these instructions.",
             "- Run `git diff` to review uncommitted changes.",
-            "- Read `.context/complete.md` for the workflow summary, files changed, and stage timings — use it to draft the PR title and body.",
+            "- Read `.context/complete-summary-N.md` for the workflow summary, files changed, and stage timings — use it to draft the PR title and body (N from run_index; fallback: newest `.context/complete-summary-*.md`).",
             `- Commit format: \`<TYPE>[scope]: <Summary>\` per \`rules/git-conventions.md\` (Conventional Commits 1.0.0). Suggested type for this workflow: **${commitType}** (derived from PL planning).`,
             issueLine,
             "- Push to origin (set upstream if not yet tracked).",
@@ -484,9 +515,9 @@ while (tasks.some(t => t.status !== "completed")) {
             "",
             `- Workflow ID: ${workflowId}`,
             `- Branch: ${branch}  →  Target: origin/${baseBranch}`,
-            `- DR verdict: ${drVerdict}   (\`.context/developer-review.md\`)`,
-            `- QA verdict: ${qaVerdict}   (\`.context/testing.md\`)`,
-            "- Summary: see `.context/complete.md` § Summary",
+            `- DR verdict: ${drVerdict}   (\`.context/developer-review-${runIndex}.md\`)`,
+            `- QA verdict: ${qaVerdict}   (\`.context/testing-${runIndex}.md\`)`,
+            "- Summary: see `.context/complete-summary-N.md` § Summary",
             "",
             "## Focus areas (auto-extracted)",
             "",
@@ -582,7 +613,8 @@ while (tasks.some(t => t.status !== "completed")) {
     //     prefix [1][2][3][4][5] stays byte-identical with neighbour stages
     //     and the prompt cache prefix boundary is preserved.
     if (full.metadata.stage === "DR") {
-      const reviewInvocation = `IMPORTANT: Execute developer code review via Skill tool: Skill("code-review-dev"). Save findings summary to .context/developer-review.md`;
+      const runIndex = full.metadata.run_index ?? 0;
+      const reviewInvocation = `IMPORTANT: Execute developer code review via Skill tool: Skill("code-review-dev"). Save findings summary to .context/developer-review-${runIndex}.md`;
       full.description = full.description + "\n\n" + reviewInvocation;
     }
 
@@ -631,12 +663,13 @@ while (tasks.some(t => t.status !== "completed")) {
       if (!warmed) {
         appendAudit({ action: "mcp_warmup_failed",
                       metadata: { server: "XcodeBuildMCP" } });
+        const runIndex = full.metadata.run_index ?? 0;
         const banner =
           `IMPORTANT: XcodeBuildMCP warmup failed in the orchestrator. ` +
           `Treat mcp__XcodeBuildMCP__* as UNAVAILABLE. Fall back to ` +
           `xcodebuild via Bash for build/test (tee output to the same ` +
           `.context/logs/* paths) and record the fallback in ` +
-          `.context/development.md § Decisions so QA/DR see it.`;
+          `.context/development-${runIndex}.md § Decisions so QA/DR see it.`;
         // handoff-protocol: SUFFIX banner (section [7]) — preserves the
         // cache prefix boundary at the [1][2][3][4][5] line.
         full.description = full.description + "\n\n" + banner;
@@ -656,7 +689,7 @@ while (tasks.some(t => t.status !== "completed")) {
         "  • `.context/attachments/PR instructions.md`",
         "  • `.context/attachments/Review request.md`",
         "Run `mkdir -p .context/attachments` first.",
-        "Also write `.context/complete.md` (workflow summary + Stage Timings).",
+        "Also write `.context/complete-summary-N.md` (workflow summary + Stage Timings; N = task.metadata.run_index).",
         "Then read `PR instructions.md` and follow it as the PR-creation script.",
       ].join("\n");
       full.description = full.description + "\n\n" + fnInjection;
@@ -673,7 +706,8 @@ while (tasks.some(t => t.status !== "completed")) {
       const post = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
       const code = full.metadata.stage;
       if (post.stages?.[code]?.status !== "completed") {
-        const artifactPath = stageArtifactMap[code];  // e.g. ".context/development.md"
+        const runIndex = full.metadata.run_index ?? 0;
+        const artifactPath = stageArtifactPath(code, runIndex);  // e.g. ".context/development-0.md"
         const handoff = parseFrontmatter(artifactPath);  // null → F3 fallback
         const patch = handoff
           ? buildPatchFromHandoff(code, handoff)
@@ -733,7 +767,7 @@ session before the first Apple-platform stage. Contract:
 - **Failure mode**: do NOT abort the stage. Inject a banner at the
   top of `full.description` instructing the agent to use Bash
   `xcodebuild` fallback and to record the fallback in
-  `.context/development.md § Decisions`.
+  `.context/development-N.md § Decisions`.
 - **Idempotency**: cache `state.xcodeMcpWarmed = true` after the
   first successful call so the orchestrator does not re-warm on each
   Apple stage in the same workflow run.
@@ -779,14 +813,14 @@ Build directly from artifacts written by upstream stages — no agent roundtrip 
 - Net diff: +X / -Y lines across N files
 
 ### Quality evidence
-- QA verdict: <GO/NO-GO>           (.context/testing.md)
-- DR verdict: <PASS/CONCERNS>      (.context/developer-review.md)
+- QA verdict: <GO/NO-GO>           (.context/testing-N.md)
+- DR verdict: <PASS/CONCERNS>      (.context/developer-review-N.md)
 - Tests: <M passed / N failed>
 
 ### Planned FN actions
 - [ ] Write `.context/attachments/PR instructions.md` (Conductor attachment)
 - [ ] Write `.context/attachments/Review request.md` (Conductor attachment)
-- [ ] Write `.context/complete.md` (workflow summary + stage timings)
+- [ ] Write `.context/complete-summary-N.md` (workflow summary + stage timings)
 - [ ] Create commit(s) with conventional-format messages
 - [ ] Push branch with upstream tracking
 - [ ] Open PR against <base-branch> with Motivation / Changes / Notes
@@ -799,8 +833,8 @@ Source files (per `skills/shared/stage-contracts.md`):
 | Field | Source |
 |-------|--------|
 | Branch / commits | `git status` + `git log <base>..HEAD --oneline` |
-| QA verdict | `.context/testing.md` (GO/NO-GO line) |
-| DR verdict | `.context/developer-review.md` (PASS/CONCERNS) |
+| QA verdict | `.context/testing-N.md` (GO/NO-GO line; N from run_index) |
+| DR verdict | `.context/developer-review-N.md` (PASS/CONCERNS; N from run_index) |
 | Diff stats | `git diff <base>..HEAD --shortstat` |
 | Base branch | `workspace.json § base_branch` (milestone) or repo default |
 

@@ -133,7 +133,7 @@ For Apple projects (`.xcodeproj`, `.xcworkspace`, `Package.swift` with SwiftUI/U
 ## Completion Verification
 
 Before marking DC stage complete, verify:
-- [ ] documentation.md artifact written to .context/
+- [ ] documentation-N.md artifact written to .context/ (N = task.metadata.run_index)
 - [ ] README updated if public API changed
 - [ ] Code comments added for complex logic
 - [ ] All new public APIs documented
@@ -143,15 +143,15 @@ Before marking DC stage complete, verify:
 
 ### Required Inputs (handoff-protocol)
 
-1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
-2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
+1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, `run_index`, and `stages` relevant to your stage.
+2. Resolve N = `task.metadata.run_index`. Read anchors in upstream `development-N.md#files-changed`, `analyzing-N.md#decisions`. Do **not** read whole files unless an anchor is absent.
 3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
 
 **Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
 
 ### Frontmatter Template
 
-Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/documentation.md`).
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/documentation-N.md`; N = `task.metadata.run_index`; resolver: metadata → newest glob `documentation-*.md` → legacy `documentation.md`).
 
 ```yaml
 ---
@@ -162,8 +162,8 @@ handoff:
   files_touched:
     - docs/file1.md
   refs:
-    dev: development.md#files-changed
-    docs: documentation.md#files-changed
+    dev: development-N.md#files-changed
+    docs: documentation-N.md#files-changed
 ---
 ```
 
@@ -171,10 +171,10 @@ handoff:
 
 Before marking this stage complete, verify all of the following:
 
-- [ ] Your artifact (`.context/documentation.md`) starts with `---
+- [ ] Your artifact (`.context/documentation-N.md`) starts with `---
 handoff:
 ` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
-- [ ] Frontmatter includes all required fields for stage `DC` per the per-stage required-field matrix (see `analyzing.md#schemas`).
+- [ ] Frontmatter includes all required fields for stage `DC` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
 - [ ] `.context/state.json` has been patched with `stages.DC` (status, artifact, verdict) and `handoffs["QA→DC"]` (≤300-char summary ending with `ref:` pointer).
 - [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
 

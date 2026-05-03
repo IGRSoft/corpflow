@@ -90,7 +90,7 @@ section is empty, DV is not dispatched and IR is re-queued with a
 When IR completes and DV is dispatched, the orchestrator's prompt MUST include
 the phrase:
 
-> Focus strictly on the Required Fix in `.context/incident-report.md`. Do NOT
+> Focus strictly on the Required Fix in `.context/incident-N.md`. Do NOT
 > modify files outside the listed Blast Radius. Do NOT refactor, clean up,
 > reformat, or improve adjacent code. Emergencies are not the time for scope
 > expansion. If the Required Fix cannot be implemented within the Blast
