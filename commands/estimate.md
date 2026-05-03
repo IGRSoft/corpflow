@@ -147,7 +147,7 @@ See `skills/shared/three-stage-planning.md § Stage Budget Template` for column 
 
 ### T-Shirt Sizes
 
-See `skills/estimation/SKILL.md § T-Shirt Sizing and § Story Points to Hours.`
+See `skills/estimation/SKILL.md § T-Shirt Sizing → Story Points (Range) and § Story Points to Hours.`
 
 Worked-example header (canonical values live in the skill):
 
