@@ -264,7 +264,10 @@ function stageArtifactPath(code: string, runIndex: number): string {
   const numbered = `.context/${base}-${runIndex}.md`;
   if (fs.existsSync(numbered)) return numbered;
   // Newest-glob fallback (covers legacy or out-of-band writes)
-  const matches = glob.sync(`.context/${base}-*.md`).sort();
+  const matches = glob.sync(`.context/${base}-*.md`).sort((a, b) => {
+    const n = (f: string) => parseInt(f.match(/-([0-9]+)\.md$/)?.[1] ?? "0", 10);
+    return n(a) - n(b);
+  });
   if (matches.length > 0) return matches.pop()!;
   // Legacy unnumbered fallback (one release cycle)
   return `.context/${base}.md`;
@@ -610,6 +613,7 @@ while (tasks.some(t => t.status !== "completed")) {
     //     prefix [1][2][3][4][5] stays byte-identical with neighbour stages
     //     and the prompt cache prefix boundary is preserved.
     if (full.metadata.stage === "DR") {
+      const runIndex = full.metadata.run_index ?? 0;
       const reviewInvocation = `IMPORTANT: Execute developer code review via Skill tool: Skill("code-review-dev"). Save findings summary to .context/developer-review-${runIndex}.md`;
       full.description = full.description + "\n\n" + reviewInvocation;
     }
@@ -659,6 +663,7 @@ while (tasks.some(t => t.status !== "completed")) {
       if (!warmed) {
         appendAudit({ action: "mcp_warmup_failed",
                       metadata: { server: "XcodeBuildMCP" } });
+        const runIndex = full.metadata.run_index ?? 0;
         const banner =
           `IMPORTANT: XcodeBuildMCP warmup failed in the orchestrator. ` +
           `Treat mcp__XcodeBuildMCP__* as UNAVAILABLE. Fall back to ` +
