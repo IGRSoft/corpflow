@@ -70,6 +70,7 @@ Then `Write` both files using the templates below, overwriting any pre-seed from
 | Timestamp | ISO 8601, UTC, second precision |
 | Existing PR URL (idempotency probe) | `gh pr view --json url,state -q '"\(.state) \(.url)"' 2>/dev/null` (empty = no PR). Resolved by the consumer agent at execute time, NOT by the FN-stage writer |
 | `<CLOSES_LINE>` placeholder | `Closes #<ISSUE>` if `ISSUE_REF` present, else empty line |
+| `<ISSUE_LINE>` placeholder | `- Issue: #<ISSUE> — include \`Closes #<ISSUE>\` in the PR body to auto-close on merge.` if `ISSUE_REF` present, else empty string (line omitted) |
 | `<UPSTREAM_LINE>` placeholder | `Upstream tracking: origin/<BRANCH>.` if `git rev-parse @{u}` succeeds, else `No upstream branch yet — use \`git push -u origin <BRANCH>\`.` |
 
 ## Template — `PR instructions.md`
