@@ -28,7 +28,7 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 - `--export` - Runs the estimation, then invokes `/export-estimate` with the same `--platform`/`--dir` args to produce 13 CSV files defined in `skills/csv-export-templates/SKILL.md`. Requires `--detailed` (quick estimates have no breakdown to export).
 - `--platform <apple|android|web|all>` - Platform-specific templates (default: all)
 - `--multiplier <hours>` - Override SP multiplier (default: 6)
-- `--ai-rate <amount>` - AI agent monthly rate (default: current billing rate)
+- `--ai-rate <amount>` - AI agent monthly rate (no default — if omitted, AI cost row shows [ai-cost skipped: --ai-rate not set])
 - `--dev-rate <amount>` - Developer hourly rate (no default — required for budget calculation; estimate runs without budget if omitted)
 
 ## Examples
