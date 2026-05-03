@@ -52,7 +52,7 @@ strip_ts() {
   sed 's/ts: [0-9T:Z-]\{20,\}/<ISO_TS>/g' "$1"
 }
 
-# ---------- writer function (mirrors SKILL.md step 4.85 logic) ----------
+# ---------- writer function (mirrors SKILL.md step 4.9.1 logic) ----------
 # Arguments: $1=workdir $2=workflow_id $3=branch $4=base_branch
 # Reads fixtures from $1/.context/{developer-review.md,testing.md,planning-1.md}
 # Writes to $1/.context/attachments/

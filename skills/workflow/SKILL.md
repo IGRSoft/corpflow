@@ -384,210 +384,8 @@ while (tasks.some(t => t.status !== "completed")) {
         //     Do NOT delegate. FN task stays `pending`.
         // (c) Write `fn_gate_waiting` audit line.
 
-        // 4.85. Pre-gate Conductor-attachments writer
-        //
-        // BUG FIX (fn-attachments-pre-gate): Step 5d injects the attachment-write
-        // requirement into the FN agent's prompt, but step 5d only runs AFTER this
-        // `return`. On the gated path (default), the orchestrator exits here and
-        // the FN agent never runs — so `.context/attachments/` files are never
-        // written. Conductor falls back to built-in generic templates.
-        //
-        // TWO-WRITER CONTRACT (idempotent):
-        //   1. Orchestrator pre-gate (this block): writes both files immediately
-        //      before the gate `return` using best-available data (DR/QA verdicts
-        //      from upstream artifacts, git state at gate time). Conductor sees
-        //      workflow-aware files even if the user never approves the gate.
-        //   2. FN agent post-approval: step 5d instructs it to overwrite both files
-        //      with final data (post-commit git state). No skip, no merge — always
-        //      overwrite from scratch.
-        //   Both writers source from `skills/workflow/references/conductor-attachments.md`
-        //   — single source of truth. See § "When to write" for the full contract.
-        //
-        // FAILURE POLICY: wrap in try/catch — on failure, log WARN to audit.jsonl
-        //   (action: `fn_attachments_preseed_failed`) and proceed to `return`.
-        //   Degrades gracefully to today's behaviour (Conductor built-in templates).
-        try {
-          // Resolve data sources per conductor-attachments.md § Data sources
-          const branch = execFile("git", ["rev-parse", "--abbrev-ref", "HEAD"]).stdout.trim() || "unknown";
-          let baseBranch = "main";
-          try {
-            baseBranch = execFile("git", ["symbolic-ref", "refs/remotes/origin/HEAD"])
-              .stdout.trim().replace(/^refs\/remotes\/origin\//, "") || "main";
-          } catch (_) { /* default to main */ }
-          const uncommitted = parseInt(
-            execFile("bash", ["-c", "git status --porcelain | wc -l"]).stdout.trim(), 10) || 0;
-          let upstreamLine = "There is no upstream branch yet.";
-          try {
-            const upstreamRef = execFile("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]).stdout.trim();
-            upstreamLine = `Upstream tracking: ${upstreamRef}.`;
-          } catch (_) { /* no upstream */ }
-
-          // Derive conventional-commit type from plan file Goal section
-          let commitType = "feat";
-          try {
-            const planPath = full.metadata.plan_file
-              ?? (glob.sync(".context/planning-*.md").sort().pop())
-              ?? ".context/planning.md";
-            const planContent = fs.readFileSync(planPath, "utf8");
-            const typeMatch = planContent.match(/\b(fix|refactor|perf|docs|chore|test|ci|build|style|feat)\b/i);
-            if (typeMatch) commitType = typeMatch[1].toLowerCase();
-          } catch (_) { /* fall back to feat */ }
-
-          // Resolve run index for numbered artifacts
-          const runIndex = full.metadata.run_index ?? 0;
-
-          // Resolve DR and QA verdicts; defensive default: `verdict: unknown`
-          let drVerdict = "verdict: unknown";
-          let drConcerns = "(none flagged)";
-          try {
-            const drPath = stageArtifactPath("DR", runIndex);
-            const drContent = fs.readFileSync(drPath, "utf8");
-            const drMatch = drContent.match(/Approval Status[^\n]*/);
-            if (drMatch) drVerdict = drMatch[0].trim();
-            const issuesSection = drContent.match(/## Issues Found\n([\s\S]*?)(?=\n##|$)/);
-            if (issuesSection && issuesSection[1].trim()) {
-              drConcerns = issuesSection[1].trim().split("\n")
-                .map(l => l.trim()).filter(Boolean).map(l => `- ${l}`).join("\n");
-            }
-          } catch (_) { /* missing artifact — use defaults */ }
-
-          let qaVerdict = "verdict: unknown";
-          let qaNotes = "(none)";
-          try {
-            const qaPath = stageArtifactPath("QA", runIndex);
-            const qaContent = fs.readFileSync(qaPath, "utf8");
-            const qaMatch = qaContent.match(/GO\/NO-GO[^\n]*/i) || qaContent.match(/verdict[^\n]*/i);
-            if (qaMatch) qaVerdict = qaMatch[0].trim();
-            const resultsSection = qaContent.match(/## Results\n([\s\S]*?)(?=\n##|$)/);
-            if (resultsSection && resultsSection[1].trim()) {
-              qaNotes = resultsSection[1].trim().split("\n")
-                .map(l => l.trim()).filter(Boolean).filter(l => !/blocking/i.test(l))
-                .map(l => `- ${l}`).join("\n") || "(none)";
-            }
-          } catch (_) { /* missing artifact — use defaults */ }
-
-          const workflowId = pl0?.metadata?.workflow_id ?? "unknown";
-          const isoTs = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-          const issueRef = pl0?.metadata?.issue_ref ?? "";
-          const issueLine = issueRef ? `  Prefix the commit subject with \`#${issueRef}\`.` : "";
-
-          // Write both files using verbatim templates from conductor-attachments.md
-          fs.mkdirSync(".context/attachments", { recursive: true });
-
-          const prInstructions = [
-            `<!-- Generated by igrsoft FN stage. workflow_id: ${workflowId}, ts: ${isoTs} -->`,
-            "",
-            "The igrsoft workflow has finished and is ready to ship.",
-            "",
-            `There are ${uncommitted} uncommitted changes.`,
-            `The current branch is ${branch}.`,
-            `The target branch is origin/${baseBranch}.`,
-            "",
-            upstreamLine,
-            "",
-            "The user requested a PR.",
-            "",
-            "Follow these steps to create the PR:",
-            "",
-            "- If you have any skills related to creating PRs, invoke them now. Instructions there should take precedence over these instructions.",
-            "- Run `git diff` to review uncommitted changes.",
-            "- Read `.context/complete-summary-N.md` for the workflow summary, files changed, and stage timings — use it to draft the PR title and body (N from run_index; fallback: newest `.context/complete-summary-*.md`).",
-            `- Commit format: \`<TYPE>[scope]: <Summary>\` per \`rules/git-conventions.md\` (Conventional Commits 1.0.0). Suggested type for this workflow: **${commitType}** (derived from PL planning).`,
-            issueLine,
-            "- Push to origin (set upstream if not yet tracked).",
-            "- Use the `mcp__conductor__GetWorkspaceDiff` tool to review the PR diff.",
-            `- Use \`gh pr create --base ${baseBranch}\` to open the PR. Keep the title under 72 characters. Body sections: \`## Motivation\`, \`## Changes\`, \`## Notes\`. Describe ALL changes in the workspace diff, not only the most recent commit.`,
-            '- Do NOT add "Generated with Claude Code" or "Co-Authored-By: Claude" footers.',
-            "",
-            "If any step fails, ask the user for help.",
-          ].join("\n");
-
-          const reviewRequest = [
-            `<!-- Generated by igrsoft FN stage. workflow_id: ${workflowId}, ts: ${isoTs} -->`,
-            "",
-            "# Review guidelines",
-            "",
-            "You are acting as a reviewer for code produced by an automated multi-stage",
-            "workflow. The workflow has already passed an internal Developer Review (DR)",
-            "and QA stage; your job is to catch what those stages missed.",
-            "",
-            "## Workflow context",
-            "",
-            `- Workflow ID: ${workflowId}`,
-            `- Branch: ${branch}  →  Target: origin/${baseBranch}`,
-            `- DR verdict: ${drVerdict}   (\`.context/developer-review-${runIndex}.md\`)`,
-            `- QA verdict: ${qaVerdict}   (\`.context/testing-${runIndex}.md\`)`,
-            "- Summary: see `.context/complete-summary-N.md` § Summary",
-            "",
-            "## Focus areas (auto-extracted)",
-            "",
-            "DR concerns the workflow surfaced but did not block on:",
-            drConcerns,
-            "",
-            "QA observations worth a second look:",
-            qaNotes,
-            "",
-            "## When to flag a finding",
-            "",
-            "1. It meaningfully impacts accuracy, performance, security, or maintainability.",
-            "2. It is discrete, actionable, and was introduced by this branch.",
-            "3. The original author would fix it if they were aware.",
-            "4. The bug does not rely on unstated assumptions about the codebase.",
-            "5. It is not just an intentional change.",
-            "",
-            "If nothing meets the bar, return zero findings — do not invent issues to look thorough.",
-            "",
-            "## Comment style",
-            "",
-            "- One comment per distinct issue. Use a multi-line range only when needed.",
-            "- Use ` ```suggestion ` blocks ONLY for concrete replacement code; preserve exact leading whitespace; no commentary inside the block.",
-            "- One paragraph max per comment. Inline code via backticks; code blocks ≤ 3 lines.",
-            '- Tone: matter-of-fact, not accusatory; not flattering. No "Great job", no "Thanks for".',
-            "- Severity must match impact — do not over-claim.",
-            "",
-            "## Getting the diff",
-            "",
-            "Prefer `mcp__conductor__GetWorkspaceDiff` (start with `stat: true`, then request specific files).",
-            "",
-            "Fallback when the tool is unavailable:",
-            "",
-            "```bash",
-            `MERGE_BASE=$(git merge-base origin/${baseBranch} HEAD)`,
-            "git diff $MERGE_BASE HEAD       # committed changes",
-            "git diff HEAD                    # uncommitted work in progress",
-            "```",
-            "",
-            "Review both outputs together. No need to mention which strategy you used.",
-            "",
-            "## Output",
-            "",
-            "Post inline comments via `mcp__conductor__DiffComment`. **One comment per unique issue.** Then write a top-level summary list:",
-            "",
-            "```",
-            "### #1 <Short title>",
-            "<One-paragraph explanation>",
-            "File: <path>",
-            "",
-            "### #2 <Short title>",
-            "…",
-            "```",
-          ].join("\n");
-
-          // Atomic writes: write to tmp, then rename — prevents partial reads by Conductor
-          const prTmp = ".context/attachments/.pr-instructions.tmp";
-          const rvTmp = ".context/attachments/.review-request.tmp";
-          fs.writeFileSync(prTmp, prInstructions, "utf8");
-          fs.writeFileSync(rvTmp, reviewRequest, "utf8");
-          fs.renameSync(prTmp, ".context/attachments/PR instructions.md");
-          fs.renameSync(rvTmp, ".context/attachments/Review request.md");
-
-          appendAudit({ action: "fn_attachments_preseed",
-                        metadata: { branch, baseBranch, workflowId, ts: isoTs } });
-        } catch (preseedErr) {
-          appendAudit({ action: "fn_attachments_preseed_failed",
-                        metadata: { reason: String(preseedErr?.message ?? preseedErr).slice(0, 300) } });
-          // Proceed to gate return regardless — degrades to Conductor built-in templates.
-        }
+        // 4.9.1. Pre-gate Conductor-attachments writer
+        //        See § Pre-gate Conductor-attachments writer for the imperative checklist.
 
         // (d) End the orchestrator turn — wait for HUMAN approval.
         return;  // exits the entire execution loop; resume happens in a fresh turn
@@ -785,7 +583,33 @@ A second human-in-the-loop checkpoint immediately before any FN-stage task. The 
 - **Default**: missing or unrecognized value → treat as `"required"` (`?? "required"`). This makes in-flight workflows safe across the change.
 - **Bypass triggers**: `--auto-continue`, `--milestone:N`, `--worktree`. (`/emergency` is a documented TODO — not yet wired.)
 - **Trigger condition**: gate fires when the next ready task has `metadata.stage === "FN"` AND `gateMode !== "bypass"`.
-- **Effect**: the orchestrator prints the pre-FN summary, writes a `fn_gate_waiting` audit entry, and `return`s from the execution loop. The FN task stays `pending`. The orchestrator MUST NOT call `TaskUpdate` for the FN task.
+- **Effect, in order**:
+  1. Run the **Pre-gate Conductor-attachments writer** (§ below) — produces `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md`.
+  2. Print the pre-FN summary to the user.
+  3. Append `fn_gate_waiting` audit entry.
+  4. `return` from the execution loop. The FN task stays `pending`. The orchestrator MUST NOT call `TaskUpdate` for the FN task.
+
+### Pre-gate Conductor-attachments writer
+
+Runs **before** printing the pre-FN summary, on the gated path only (bypass path falls through to FN-agent writer #2). Idempotent: every FN-gate entry overwrites both files from scratch.
+
+Steps (orchestrator executes directly; do NOT delegate):
+
+1. `Bash: mkdir -p .context/attachments`
+2. `Bash: git rev-parse --abbrev-ref HEAD`              → BRANCH
+3. `Bash: git symbolic-ref refs/remotes/origin/HEAD`   → BASE_BRANCH (default `main` on failure)
+4. `Bash: git status --porcelain | wc -l`              → UNCOMMITTED
+5. `Bash: git rev-parse --abbrev-ref --symbolic-full-name @{u}` → UPSTREAM (or "no upstream" on non-zero exit)
+6. `Read: <plan_file>` (resolve via `FN0.metadata.plan_file`; fallback newest `.context/planning-*.md`) → derive COMMIT_TYPE from first match of `\b(fix|refactor|perf|docs|chore|test|ci|build|style|feat)\b` (default `feat`)
+7. `Read: .context/developer-review-N.md` (N = `FN0.metadata.run_index`) → DR_VERDICT, DR_CONCERNS (defensive default `verdict: unknown` / `(none flagged)` if file absent)
+8. `Read: .context/testing-N.md` → QA_VERDICT, QA_NOTES (defensive default `verdict: unknown` / `(none)` if file absent)
+9. `Write: .context/attachments/PR instructions.md` using template in `skills/workflow/references/conductor-attachments.md § Template — PR instructions.md`
+10. `Write: .context/attachments/Review request.md` using template in `skills/workflow/references/conductor-attachments.md § Template — Review request.md`
+11. **Verify**: `Bash: test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md"`
+    - On success → append `fn_attachments_preseed` audit line
+    - On failure → append `fn_attachments_preseed_failed` audit line AND prepend a `> WARN: pre-seed failed — Conductor will use built-in defaults.` line to the pre-FN summary so the user sees it before approving
+
+Each `Read` step is independently fault-tolerant. Do NOT wrap the whole sequence in a single try/catch — failure of one input must not skip the writes.
 
 ### `return` vs `continue`
 
@@ -801,6 +625,8 @@ On the next orchestrator turn (triggered by the user's `approve`/`go`/`yes`/`con
 4. Write an `approval_received` audit entry with `subject: "FN"`.
 
 ### Pre-FN summary template
+
+Before printing this summary, complete the **Pre-gate Conductor-attachments writer** above. Replace each `- [ ]` with `- [x]` for any Planned FN action whose output already exists on disk (the two attachment writes should be `[x]`).
 
 Build directly from artifacts written by upstream stages — no agent roundtrip needed.
 
