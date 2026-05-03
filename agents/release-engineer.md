@@ -50,7 +50,7 @@ PL → AR → TL → DV → DR → SR → QA → DC → [RE] → FN → ST
 
 ### Output Artifact
 
-Create `.context/release-prep.md`:
+Create `.context/release-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `release-*.md` → legacy `release.md`). Note: legacy name was `release-prep.md`; aligned to `release.md` per handoff-protocol canonical map.
 
 ```markdown
 ## Release Preparation Summary
@@ -190,7 +190,7 @@ Create `.context/release-prep.md`:
 - [ ] TestFlight build uploaded for beta validation
 ```
 
-For Apple platform releases (secure-workflow or full-workflow), consult `.context/security-review.md` for Apple security review findings from the SR stage. For expedited review (P0/P1 hotfixes), request via App Store Connect — typical turnaround 24-48 hours.
+For Apple platform releases (secure-workflow or full-workflow), consult `.context/security-review-N.md` for Apple security review findings from the SR stage. For expedited review (P0/P1 hotfixes), request via App Store Connect — typical turnaround 24-48 hours.
 
 ### Android Play Store
 
@@ -257,15 +257,15 @@ IR → DV → DR → QA → [RE] → FN
 
 ### Required Inputs (handoff-protocol)
 
-1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
-2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
+1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, `run_index`, and `stages` relevant to your stage.
+2. Resolve N = `task.metadata.run_index`. Read anchors in upstream `documentation-N.md#files-changed`, `testing-N.md#results`. Do **not** read whole files unless an anchor is absent.
 3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
 
 **Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
 
 ### Frontmatter Template
 
-Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/release.md`).
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/release-N.md`; N = `task.metadata.run_index`; resolver: metadata → newest glob `release-*.md` → legacy `release.md`).
 
 ```yaml
 ---
@@ -277,10 +277,10 @@ handoff:
     - plugin.json
     - MEMORY.md
   key_decisions:
-    - { id: re1, summary: "Version X.Y.Z", anchor: "release.md#version" }
+    - { id: re1, summary: "Version X.Y.Z", anchor: "release-N.md#version" }
   refs:
-    artifacts: release.md#artifacts
-    version: release.md#version
+    artifacts: release-N.md#artifacts
+    version: release-N.md#version
 ---
 ```
 
@@ -288,10 +288,10 @@ handoff:
 
 Before marking this stage complete, verify all of the following:
 
-- [ ] Your artifact (`.context/release.md`) starts with `---
+- [ ] Your artifact (`.context/release-N.md`) starts with `---
 handoff:
 ` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
-- [ ] Frontmatter includes all required fields for stage `RE` per the per-stage required-field matrix (see `analyzing.md#schemas`).
+- [ ] Frontmatter includes all required fields for stage `RE` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
 - [ ] `.context/state.json` has been patched with `stages.RE` (status, artifact, verdict) and `handoffs["DC→RE"]` (≤300-char summary ending with `ref:` pointer).
 - [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
 

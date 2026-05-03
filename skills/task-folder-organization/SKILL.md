@@ -51,23 +51,47 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 
 ```
 .context/
-├── planning-0.md            # First plan: requirements, acceptance criteria (PL stage). Each subsequent PL run writes planning-1.md, planning-2.md, ... (see agents/product-manager.md § Plan File Naming)
-├── analyzing.md             # Technical design, architecture (AR stage)
-├── coordination.md          # Team coordination (TL stage)
-├── development.md           # Implementation notes (DV stage)
-├── security-review.md       # OWASP audit, findings (SR stage) [NEW]
-├── testing.md               # Test plan, results (QA stage)
-├── documentation.md         # Documentation plan (DC stage)
-├── release-prep.md          # Version, changelog, readiness (RE stage) [NEW]
-├── complete.md              # Final validation (FN stage)
-├── approval.md              # Stakeholder sign-off (ST stage)
-├── incident-report.md       # Incident triage, RCA (IR stage - emergency) [NEW]
+├── planning-0.md            # First plan (PL run 0); subsequent runs add planning-1.md, planning-2.md, ...
+├── analyzing-0.md           # Technical design, architecture (AR stage, run 0)
+├── coordination-0.md        # Team coordination (TL stage, run 0)
+├── development-0.md         # Implementation notes (DV stage, run 0)
+├── developer-review-0.md    # Code review findings (DR stage, run 0)
+├── security-review-0.md     # OWASP audit, findings (SR stage, run 0)
+├── testing-0.md             # Test plan, results (QA stage, run 0)
+├── documentation-0.md       # Documentation plan (DC stage, run 0)
+├── release-0.md             # Version, changelog, readiness (RE stage, run 0)
+├── complete-summary-0.md    # Final validation (FN stage, run 0)
+├── retrospective-0.md       # Stakeholder sign-off (ST stage, run 0)
+├── incident-0.md            # Incident triage, RCA (IR stage - emergency, run 0)
+├── ethics-review-0.md       # Ethics compliance review (ET stage, run 0)
 ├── milestone.json           # GitHub milestone context (when --milestone used)
 ├── deployment.md            # Deployment plan (if applicable)
+├── state.json               # Workflow ledger (shared across runs)
 ├── designs/                 # Design assets: Figma screenshots (.png) and Pencil mockups (.pen)
 ├── images/                  # User-attached screenshots, diagrams
 ├── errors/                  # Per-agent escalation narratives (see Per-Agent Error Files)
 └── logs/                    # Runtime capture logs: build/test/monitor/sim/incident/hotfix
+```
+
+Each stage artifact uses the pattern `<basename>-N.md` where N equals `task.metadata.run_index` (integer stamped by PL0 on every downstream task). First run uses N=0. Subsequent PL reruns increment N. `state.json`, `errors/`, `logs/`, `designs/`, and `images/` are shared across all runs.
+
+### Multi-Run Layout
+
+When PL0 reruns (e.g. scope change, re-plan), it increments the run index and writes `planning-1.md`, `planning-2.md`, etc. All downstream agents inherit the new N via `task.metadata.run_index` and write `<basename>-1.md`, `<basename>-2.md`, etc. alongside the previous run's files. `state.json`, `errors/`, `logs/`, `designs/`, and `images/` are **always shared** — never duplicated per run.
+
+```
+.context/
+├── planning-0.md       # Run 0
+├── analyzing-0.md
+├── development-0.md
+├── complete-summary-0.md
+├── planning-1.md       # Run 1 (re-plan)
+├── analyzing-1.md
+├── development-1.md
+├── complete-summary-1.md
+├── state.json          # Shared (reset + patched each run)
+├── errors/             # Shared (cumulative across runs)
+└── logs/               # Shared (cumulative across runs)
 ```
 
 ### Required Files
@@ -84,25 +108,26 @@ Product Manager's planning document containing:
 ### Optional Files (by Workflow Variant)
 
 **8-Stage Workflow (standard):**
-- **analyzing.md**: Architecture decisions (AR stage)
-- **coordination.md**: Team coordination (TL stage)
-- **development.md**: Implementation notes (DV stage)
-- **testing.md**: Test plan and results (QA stage)
-- **documentation.md**: Documentation plan (DC stage)
-- **complete.md**: Final validation (FN stage)
-- **approval.md**: Stakeholder sign-off (ST stage)
+- **analyzing-N.md**: Architecture decisions (AR stage)
+- **coordination-N.md**: Team coordination (TL stage)
+- **development-N.md**: Implementation notes (DV stage)
+- **developer-review-N.md**: Code review findings (DR stage)
+- **testing-N.md**: Test plan and results (QA stage)
+- **documentation-N.md**: Documentation plan (DC stage)
+- **complete-summary-N.md**: Final validation (FN stage)
+- **retrospective-N.md**: Stakeholder sign-off (ST stage)
 
 **10-Stage Workflow (secure/full):**
 - All of the above, plus:
-- **security-review.md**: OWASP audit, security findings (SR stage)
-- **release-prep.md**: Version, changelog, deployment readiness (RE stage)
+- **security-review-N.md**: OWASP audit, security findings (SR stage)
+- **release-N.md**: Version, changelog, deployment readiness (RE stage)
 
 **Emergency Workflow:**
-- **incident-report.md**: Incident triage, RCA (IR stage)
-- **development.md**: Hotfix implementation (DV stage)
-- **testing.md**: Regression tests (QA stage)
-- **release-prep.md**: Hotfix release (RE stage)
-- **complete.md**: Emergency deployment (FN stage)
+- **incident-N.md**: Incident triage, RCA (IR stage)
+- **development-N.md**: Hotfix implementation (DV stage)
+- **testing-N.md**: Regression tests (QA stage)
+- **release-N.md**: Hotfix release (RE stage)
+- **complete-summary-N.md**: Emergency deployment (FN stage)
 
 **Always Optional:**
 - **milestone.json**: GitHub milestone context (when `--milestone` used)
@@ -151,17 +176,20 @@ Files are named by **workflow stage** and stored in `.context/`:
 | File | Stage | Owner |
 |------|-------|-------|
 | planning-N.md (e.g. planning-0.md) | PL (Planning) | product-manager |
-| analyzing.md | AR (Architecture) | software-architector |
-| coordination.md | TL (Team Lead) | team-lead |
-| development.md | DV (Development) | developer |
-| **security-review.md** | **SR (Security Review)** | **security-reviewer** |
-| testing.md | QA (QA Testing) | qa-engineer |
-| documentation.md | DC (Documentation) | technical-writer |
-| **release-prep.md** | **RE (Release Engineering)** | **release-engineer** |
-| complete.md | FN (Finalization) | project-manager |
-| approval.md | ST (Stakeholder) | stakeholder |
-| **incident-report.md** | **IR (Incident Response)** | **incident-responder** |
+| analyzing-N.md | AR (Architecture) | software-architector |
+| coordination-N.md | TL (Team Lead) | team-lead |
+| development-N.md | DV (Development) | developer |
+| developer-review-N.md | DR (Developer Review) | technical-lead |
+| security-review-N.md | SR (Security Review) | security-reviewer |
+| testing-N.md | QA (QA Testing) | qa-engineer |
+| documentation-N.md | DC (Documentation) | technical-writer |
+| release-N.md | RE (Release Engineering) | release-engineer |
+| complete-summary-N.md | FN (Finalization) | project-manager |
+| retrospective-N.md | ST (Stakeholder) | stakeholder |
+| incident-N.md | IR (Incident Response) | incident-responder |
+| ethics-review-N.md | ET (Ethics Review) | ethics-reviewer |
 | deployment.md | Optional | deployment-engineer |
+| state.json | Shared ledger | All stages |
 | errors/&lt;agent&gt;.md | On error | Owning agent (one file per agent) |
 | logs/*.log | Runtime capture | Any agent with Bash/Monitor |
 

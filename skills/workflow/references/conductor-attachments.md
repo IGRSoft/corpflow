@@ -16,7 +16,7 @@ Conductor (the parallel-agents Mac app) injects attachments from
 
 If absent, Conductor falls back to its built-in defaults — generic, with no
 workflow context (no DR/QA verdicts, no conventional-commit type, no resolved
-base branch, no link to `.context/complete.md`).
+base branch, no link to `.context/complete-summary-N.md`).
 
 The FN stage produces both files so:
 
@@ -62,10 +62,10 @@ re-writes files from scratch.
 | Upstream tracked? | `git rev-parse --abbrev-ref --symbolic-full-name @{u}` (non-zero exit = no upstream) |
 | Conventional-commit type | Derived from `.context/<plan_file> § Goal` (resolve via `FN0.metadata.plan_file`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`) — feat/fix/refactor/perf/docs/chore/test/ci/build/style; falls back to `feat` |
 | Issue ref | `workspace.json § issue_number` (milestone mode) or `metadata.issue_ref` from PL0; else omit |
-| DR verdict | First "Approval Status" line in `.context/developer-review.md` |
-| QA verdict | First "GO/NO-GO" line in `.context/testing.md` |
-| DR concerns | Lines under `## Issues Found` in `.context/developer-review.md` |
-| QA blocking defects | Lines under `## Results` flagged blocking in `.context/testing.md` |
+| DR verdict | First "Approval Status" line in `.context/developer-review-N.md` (N from `run_index`) |
+| QA verdict | First "GO/NO-GO" line in `.context/testing-N.md` (N from `run_index`) |
+| DR concerns | Lines under `## Issues Found` in `.context/developer-review-N.md` |
+| QA blocking defects | Lines under `## Results` flagged blocking in `.context/testing-N.md` |
 | Workflow ID | `PL0.metadata.workflow_id` |
 | Timestamp | ISO 8601, UTC, second precision |
 
@@ -90,7 +90,7 @@ Follow these steps to create the PR:
 
 - If you have any skills related to creating PRs, invoke them now. Instructions there should take precedence over these instructions.
 - Run `git diff` to review uncommitted changes.
-- Read `.context/complete.md` for the workflow summary, files changed, and stage timings — use it to draft the PR title and body.
+- Read `.context/complete-summary-N.md` for the workflow summary, files changed, and stage timings — use it to draft the PR title and body (N from `run_index`; fallback: newest `.context/complete-summary-*.md`, then legacy `.context/complete-summary.md`).
 - Commit format: `<TYPE>[scope]: <Summary>` per `rules/git-conventions.md` (Conventional Commits 1.0.0). Suggested type for this workflow: **<TYPE>** (derived from PL planning).
   <ISSUE_LINE>
   <!-- If issue ref: "Prefix the commit subject with `#<ISSUE>`." -->
@@ -117,9 +117,9 @@ and QA stage; your job is to catch what those stages missed.
 
 - Workflow ID: <WORKFLOW_ID>
 - Branch: <BRANCH>  →  Target: origin/<BASE_BRANCH>
-- DR verdict: <DR_VERDICT>   (`.context/developer-review.md`)
-- QA verdict: <QA_VERDICT>   (`.context/testing.md`)
-- Summary: see `.context/complete.md` § Summary
+- DR verdict: <DR_VERDICT>   (`.context/developer-review-N.md`)
+- QA verdict: <QA_VERDICT>   (`.context/testing-N.md`)
+- Summary: see `.context/complete-summary-N.md` § Summary
 
 ## Focus areas (auto-extracted)
 

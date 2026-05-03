@@ -157,4 +157,4 @@ xcodebuild test \
 
 One `-skip-testing:<Target>` per UI test target on the scheme (discover via `mcp__XcodeBuildMCP__list_schemes`).
 
-DV records `ui_tests_skipped: true` in `.context/development.md § Decisions`. QA records the same in `testing.md § Notes`, and writes `Skipped — requires_ui_tests=false in plan` in `testing.md § Design Comparison`.
+DV records `ui_tests_skipped: true` in `.context/development-N.md § Decisions`. QA records the same in `testing-N.md § Notes`, and writes `Skipped — requires_ui_tests=false in plan` in `testing-N.md § Design Comparison`.

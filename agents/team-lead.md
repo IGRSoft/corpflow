@@ -72,7 +72,7 @@ TL can split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async 
 
 #### Procedure
 
-1. Read the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`) and `.context/analyzing.md` to identify work streams
+1. Read the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`) and `.context/analyzing-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `analyzing-*.md` → legacy `analyzing.md`) to identify work streams
 2. For each stream, define: exclusive file ownership list, interface contracts, acceptance criteria
 3. Use `TaskGet` to find DV0 and DR0 task IDs from the current workflow
 4. Use `TaskUpdate` on DV0 to narrow its description to the primary stream's scope
@@ -88,8 +88,9 @@ TL can split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async 
      metadata: {
        stage: "DV", agent: "igrsoft:developer", model: "opus",
        error_file: ".context/errors/developer.md",
-       context_files: `${resolvedPlanFile},analyzing.md,coordination.md,.context/errors/developer.md`,
+       context_files: `${resolvedPlanFile},analyzing-${runIndex}.md,coordination-${runIndex}.md,.context/errors/developer.md`,
        plan_file: resolvedPlanFile,
+       run_index: runIndex,
        workflow_id: "{id}", priority: "medium"
      }
    })
@@ -102,7 +103,7 @@ TL can split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async 
    ```
    TaskUpdate({ taskId: dr0_id, addBlockedBy: [dv1_id, dv2_id] })
    ```
-8. Document the split in `.context/coordination.md` under a "Parallel Streams" section
+8. Document the split in `.context/coordination-N.md` under a "Parallel Streams" section
 
 #### File Ownership Rules
 
@@ -236,7 +237,7 @@ See `skills/shared/model-selection.md` for model selection criteria and cost tie
 ## Completion Verification
 
 Before marking TL stage complete, verify:
-- [ ] coordination.md written with resource allocation
+- [ ] coordination-N.md written with resource allocation (N = task.metadata.run_index)
 - [ ] Implementation approach documented
 - [ ] DV task splitting evaluated (split performed or single-stream justified)
 - [ ] Parallel execution plan defined (if applicable)
@@ -248,14 +249,14 @@ Before marking TL stage complete, verify:
 ### Required Inputs (handoff-protocol)
 
 1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
-2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
+2. Read only the listed anchors in upstream artifacts (e.g. `analyzing-N.md#decisions`, `planning-N.md#requirements`). Do **not** read whole files unless an anchor is absent.
 3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
 
 **Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
 
 ### Frontmatter Template
 
-Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/coordination.md`).
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/coordination-N.md`; N = `task.metadata.run_index`; resolver: metadata → newest glob `coordination-*.md` → legacy `coordination.md`).
 
 ```yaml
 ---
@@ -265,9 +266,9 @@ handoff:
   summary: "<one-line coordination summary ≤200 chars>"
   next_stage_focus: "<imperative: DV batch order + parallelization>"
   refs:
-    plan: .context/planning-0.md#requirements
-    arch: .context/analyzing.md#decisions
-    fan_out: coordination.md#fan-out
+    plan: .context/planning-N.md#requirements
+    arch: .context/analyzing-N.md#decisions
+    fan_out: coordination-N.md#fan-out
 ---
 ```
 
@@ -275,10 +276,10 @@ handoff:
 
 Before marking this stage complete, verify all of the following:
 
-- [ ] Your artifact (`.context/coordination.md`) starts with `---
+- [ ] Your artifact (`.context/coordination-N.md`) starts with `---
 handoff:
 ` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
-- [ ] Frontmatter includes all required fields for stage `TL` per the per-stage required-field matrix (see `analyzing.md#schemas`).
+- [ ] Frontmatter includes all required fields for stage `TL` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
 - [ ] `.context/state.json` has been patched with `stages.TL` (status, artifact, verdict) and `handoffs["AR→TL"]` (≤300-char summary ending with `ref:` pointer).
 - [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
 

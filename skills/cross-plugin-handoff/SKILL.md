@@ -143,7 +143,7 @@ Before delegating, prepare context from workflow artifacts:
 - Acceptance criteria: {key_criteria}
 - Constraints: {platform, performance, etc.}
 
-## Compressed Architecture Context (from .context/analyzing.md)
+## Compressed Architecture Context (from .context/analyzing-N.md)
 - Approach: {technical_approach}
 - Patterns: {architecture_patterns}
 - Key decisions: {decisions}
@@ -196,7 +196,7 @@ Implement the following for the igrsoft workflow DV stage:
 
 ## Expected Output
 1. Implementation code
-2. Write summary to .context/development.md
+2. Write summary to .context/development-N.md
 3. Return compressed handoff for QA stage (max 500 tokens)
 ```
 
@@ -204,7 +204,7 @@ Implement the following for the igrsoft workflow DV stage:
 
 External agent should:
 1. Update task status to completed
-2. Write to `.context/development.md`
+2. Write to `.context/development-N.md`
 3. Return compressed summary for next stage
 
 ## Direct Orchestrator Dispatch
@@ -222,7 +222,7 @@ TaskCreate({
     agent: "apple-developer:ios-developer",  // fully-qualified → dispatched directly
     model: "opus",
     error_file: ".context/errors/ios-developer.md",
-    context_files: `${planFile},analyzing.md,.context/errors/ios-developer.md`,
+    context_files: `${planFile},analyzing-${runIndex}.md,.context/errors/ios-developer.md`,
     plan_file: planFile,  // e.g. "planning-0.md"
     workflow_id: workflowId
   }

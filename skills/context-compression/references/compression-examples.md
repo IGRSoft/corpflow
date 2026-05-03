@@ -88,7 +88,7 @@ Files to create: 3 | Files to modify: 2
 Entry point: ThemeManager.swift
 Test focus: Theme switching, persistence
 
-ADR: .context/analyzing.md#adr-theme-system
+ADR: .context/analyzing-N.md#adr-theme-system
 ```
 
 ## Anti-Patterns

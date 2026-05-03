@@ -37,14 +37,14 @@ In the 9-stage workflow system, the project-manager handles:
 ### FN Stage (Finalization)
 - Review all artifacts from previous stages
 - Run final builds and tests
-- Create complete.md summarizing the work (include Stage Timings recap)
+- Create complete-summary-N.md summarizing the work (include Stage Timings recap)
 - Create release.md with release notes
 - **Conductor attachments**: Write `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md` BEFORE `gh pr create`. Templates and data sources: `skills/workflow/references/conductor-attachments.md`. These two files prime Conductor's "Create PR" / "Request Review" actions in any later session and serve as the FN agent's own PR-creation script (read-then-execute, single source of truth).
   - **Two-writer idempotent contract**: The orchestrator pre-seeds both files at FN-gate time (before the gate's `return`) so Conductor sees workflow-aware templates even if the user never approves the gate. When the FN agent runs post-approval, it MUST overwrite both files with final data — no skip, no merge, always overwrite from scratch. Re-running the FN agent re-writes files from scratch (idempotent). Pre-existing files at FN-stage start are expected and normal.
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
 
-### complete.md Stage Timings Template
+### complete-summary-N.md Stage Timings Template
 
 Aggregate from `.context/logs/cost-*.jsonl` (written by SubagentStop hook; see
 `skills/cost-optimization/SKILL.md` § Per-Stage Tracking). When the hook is
@@ -105,7 +105,7 @@ See `skills/shared/three-stage-planning.md` for 3-stage model, calendar month bi
 ## Completion Verification
 
 Before marking FN stage complete, verify:
-- [ ] complete.md artifact written to .context/
+- [ ] complete-summary-N.md artifact written to .context/
 - [ ] `.context/attachments/PR instructions.md` written with final data (per `skills/workflow/references/conductor-attachments.md`; overwrite any pre-seeded file from the orchestrator)
 - [ ] `.context/attachments/Review request.md` written with final data (per `skills/workflow/references/conductor-attachments.md`; overwrite any pre-seeded file from the orchestrator)
 - [ ] All stage artifacts collected and reviewed
@@ -119,26 +119,26 @@ Before marking FN stage complete, verify:
 ### Required Inputs (handoff-protocol)
 
 1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
-2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
+2. Read only the listed anchors in upstream artifacts (e.g. `analyzing-N.md#decisions`, `planning-N.md#requirements`). Do **not** read whole files unless an anchor is absent.
 3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
 
 **Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
 
 ### Frontmatter Template
 
-Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/complete-summary.md`).
+Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/complete-summary-N.md`).
 
 ```yaml
 ---
 handoff:
   stage: FN
   verdict: ok
-  summary: "All artifacts aggregated. complete-summary.md ready for ST approval."
+  summary: "All artifacts aggregated. complete-summary-N.md ready for ST approval."
   files_touched:
-    - .context/complete-summary.md
+    - .context/complete-summary-N.md
   next_stage_focus: "ST approves merge and confirms MEMORY.md version bump"
   refs:
-    summary: .context/complete-summary.md
+    summary: .context/complete-summary-N.md
     ledger: .context/state.json
 ---
 ```
@@ -147,10 +147,10 @@ handoff:
 
 Before marking this stage complete, verify all of the following:
 
-- [ ] Your artifact (`.context/complete-summary.md`) starts with `---
+- [ ] Your artifact (`.context/complete-summary-N.md`) starts with `---
 handoff:
 ` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
-- [ ] Frontmatter includes all required fields for stage `FN` per the per-stage required-field matrix (see `analyzing.md#schemas`).
+- [ ] Frontmatter includes all required fields for stage `FN` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
 - [ ] `.context/state.json` has been patched with `stages.FN` (status, artifact, verdict) and `handoffs["RE→FN"]` (≤300-char summary ending with `ref:` pointer).
 - [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
 

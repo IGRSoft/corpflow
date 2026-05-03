@@ -71,7 +71,7 @@ For multi-version updates (e.g., 2.1.77 through 2.1.86):
 4. Commit once after the full batch
 5. Write the consolidated band file at the canonical path:
    `~/.claude/projects/<project-slug>/memory/cc-features-<FROM>-<TO>.md` using the prior band's structure (categorized: Model & Effort / Hooks / Tools / Plugins / Context / Performance / Subagents / Security / UX / Settings — only categories that apply).
-6. **Plugin version bump policy** (the DV agent picks the tier and records rationale in `.context/development.md`; mirror across `MEMORY.md` "Plugin version" line and `.claude-plugin/plugin.json` if present):
+6. **Plugin version bump policy** (the DV agent picks the tier and records rationale in `.context/development-N.md`; mirror across `MEMORY.md` "Plugin version" line and `.claude-plugin/plugin.json` if present):
    - **Patch (X.Y.Z → X.Y.Z+1):** additive, non-breaking, doc-only changes.
    - **Minor (X.Y.Z → X.Y+1.0):** new agent/skill/command added, or existing tools list expanded, or backwards-compatible behavior change.
    - **Major (X.Y.Z → X+1.0.0):** breaking change to existing agents/commands/skills (renames, removed tools, altered stage codes).

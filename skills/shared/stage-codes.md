@@ -117,15 +117,18 @@ QA0: QA Testing        ← agents can split: QA0, QA1
 | Code | Artifact |
 |------|----------|
 | EX | exploration.md |
-| PL | planning-N.md (numbered per `agents/product-manager.md § Plan File Naming`; legacy `planning.md` accepted as fallback) |
-| AR | analyzing.md |
-| TL | coordination.md |
-| DV | development.md |
-| DR | developer-review.md |
-| SR | security-review.md |
-| QA | testing.md |
-| DC | documentation.md |
-| RE | release-prep.md |
-| FN | complete.md |
-| ST | approval.md |
-| IR | incident-report.md |
+| PL | planning-N.md (numbered per `agents/product-manager.md § Plan File & Run Index Naming`; legacy `planning.md` accepted as fallback) |
+| AR | analyzing-N.md |
+| TL | coordination-N.md |
+| DV | development-N.md |
+| DR | developer-review-N.md |
+| SR | security-review-N.md |
+| QA | testing-N.md |
+| DC | documentation-N.md |
+| RE | release-N.md |
+| FN | complete-summary-N.md |
+| ST | retrospective-N.md |
+| IR | incident-N.md |
+| ET | ethics-review-N.md |
+
+N inherits from PL0's `planning-N.md` (see `agents/product-manager.md § Plan File & Run Index Naming`). Legacy unnumbered names accepted as fallback for one release.

@@ -52,7 +52,7 @@ Single-writer invariant: at any moment exactly one stage agent is `in_progress`.
 
 ## #frontmatter-schema
 
-Every stage artifact (planning-N.md, analyzing.md, coordination.md, development.md, …) MUST start with a YAML block between `^---$` markers. Token budget ≤200. Line budget ≤30.
+Every stage artifact (planning-N.md, analyzing-N.md, coordination-N.md, development-N.md, …) MUST start with a YAML block between `^---$` markers. Token budget ≤200. Line budget ≤30.
 
 JSON-Schema-style spec:
 
@@ -144,12 +144,13 @@ JSON-Schema-style spec:
 $schema: https://json-schema.org/draft/2020-12/schema
 title: WorkflowStateLedger
 type: object
-required: [version, workflow_id, plan_file, platform, stages, facts, handoffs]
+required: [version, workflow_id, plan_file, platform, run_index, stages, facts, handoffs]
 properties:
   version: { type: integer, const: 1 }
   workflow_id: { type: string, pattern: '^[a-z0-9\-]+$' }
   plan_file: { type: string }
   platform: { type: string, enum: [all, apple, ios, macos, watchos, tvos, visionos, web, server] }
+  run_index: { type: integer, minimum: 0, default: 0 }
   stages:
     type: object
     additionalProperties:
@@ -216,6 +217,7 @@ PL0 (or `commands/workflow.md` Phase 1) writes the initial ledger:
   "workflow_id": "<from task metadata>",
   "plan_file": ".context/planning-0.md",
   "platform": "all",
+  "run_index": 0,
   "stages": {
     "PL": { "status": "in_progress" }
   },
@@ -229,6 +231,8 @@ PL0 (or `commands/workflow.md` Phase 1) writes the initial ledger:
   "handoffs": {}
 }
 ```
+
+**On a new PL run in an existing `.context/`**: PL0 atomically resets `stages` to `{PL: in_progress}`, resets `facts.*` to empty arrays/objects, and sets `run_index` to the new N. Historical run data lives in the on-disk `<stage>-N.md` artifacts, not in state.json.
 
 ---
 
@@ -245,7 +249,7 @@ Four documented degradation paths. Workflow MUST complete in all four (AC-16, AC
 
 ### F4 regeneration walk
 
-1. Glob `.context/{planning-*,analyzing,coordination,development,developer-review,security-review,testing,documentation,release,complete-summary,retrospective,incident,ethics-review}.md`.
+1. Glob `.context/{planning-*,analyzing-*,coordination-*,development-*,developer-review-*,security-review-*,testing-*,documentation-*,release-*,complete-summary-*,retrospective-*,incident-*,ethics-review-*}.md`. Also include legacy unnumbered names (one release cycle fallback): `.context/{analyzing,coordination,development,developer-review,security-review,testing,documentation,release,complete-summary,retrospective,incident,ethics-review}.md`.
 2. For each file, extract `handoff:` frontmatter (yq or fallback parser).
 3. Sort by stage order: PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET.
 4. Build state.json from PL0's frontmatter as seed.
@@ -258,23 +262,25 @@ Four documented degradation paths. Workflow MUST complete in all four (AC-16, AC
 
 Canonical mapping from stage code to artifact filename (used by orchestrator, hook, and F4 regeneration walk).
 
+All stage artifacts are numbered; N is allocated by PL0 (same value as `planning-N.md`) and propagated via `task.metadata.run_index`. Readers fall back to newest-glob (`<basename>-*.md`), then legacy unnumbered names (accepted for one release cycle).
+
 | Stage code | Artifact filename | Plural? |
 |------------|-------------------|---------|
 | PL | `planning-N.md` (N starts at 0) | yes |
-| AR | `analyzing.md` | no |
-| TL | `coordination.md` | no |
-| DV | `development.md` | no |
-| DR | `developer-review.md` | no |
-| SR | `security-review.md` | no |
-| QA | `testing.md` | no |
-| DC | `documentation.md` | no |
-| RE | `release.md` | no |
-| FN | `complete-summary.md` | no |
-| ST | `retrospective.md` | no |
-| IR | `incident.md` | no |
-| ET | `ethics-review.md` | no |
+| AR | `analyzing-N.md` | yes |
+| TL | `coordination-N.md` | yes |
+| DV | `development-N.md` | yes |
+| DR | `developer-review-N.md` | yes |
+| SR | `security-review-N.md` | yes |
+| QA | `testing-N.md` | yes |
+| DC | `documentation-N.md` | yes |
+| RE | `release-N.md` | yes |
+| FN | `complete-summary-N.md` | yes |
+| ST | `retrospective-N.md` | yes |
+| IR | `incident-N.md` | yes |
+| ET | `ethics-review-N.md` | yes |
 
-`PL` is the only stage that produces numbered artifacts (`planning-0.md`, `planning-1.md`, …); the writer is `agents/product-manager.md`. `metadata.plan_file` in task metadata pins the active plan; readers fall back to newest-glob (`planning-*.md`) and finally to legacy `planning.md` (deprecated).
+The same N is shared across all stages within a workflow run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. See `agents/product-manager.md § Plan File & Run Index Naming` for the full three-step resolver and propagation algorithm.
 
 ---
 
@@ -342,18 +348,18 @@ All stage artifacts MUST contain exactly the H2 headings (kebab-case, no undersc
 | Stage | Artifact | Mandatory H2 anchors |
 |-------|----------|-----------------------|
 | PL | planning-N.md | `## requirements`, `## acceptance-criteria`, `## scope`, `## out-of-scope`, `## risks`, `## complexity`, `## stages` |
-| AR | analyzing.md | `## decisions`, `## trade-offs`, `## patterns`, `## integration-points`, `## schemas`, `## open-questions`, `## risks` |
-| TL | coordination.md | `## fan-out`, `## shared-snippets`, `## sequence`, `## risks` |
-| DV | development.md | `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups` |
-| DR | developer-review.md | `## findings`, `## verdict`, `## blockers`, `## follow-ups` |
-| SR | security-review.md | `## findings`, `## verdict`, `## blockers`, `## threat-model` |
-| QA | testing.md | `## results`, `## coverage`, `## regressions`, `## verdict` |
-| DC | documentation.md | `## files-changed`, `## cross-references`, `## follow-ups` |
-| RE | release.md | `## artifacts`, `## version`, `## rollback-plan` |
-| FN | complete-summary.md | `## summary`, `## artifacts`, `## followups`, `## metrics` |
-| ST | retrospective.md | `## decision`, `## learnings`, `## followups` |
-| IR | incident.md | `## root-cause`, `## fix-plan`, `## blast-radius` |
-| ET | ethics-review.md | `## findings`, `## verdict`, `## mitigations` |
+| AR | analyzing-N.md | `## decisions`, `## trade-offs`, `## patterns`, `## integration-points`, `## schemas`, `## open-questions`, `## risks` |
+| TL | coordination-N.md | `## fan-out`, `## shared-snippets`, `## sequence`, `## risks` |
+| DV | development-N.md | `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups` |
+| DR | developer-review-N.md | `## findings`, `## verdict`, `## blockers`, `## follow-ups` |
+| SR | security-review-N.md | `## findings`, `## verdict`, `## blockers`, `## threat-model` |
+| QA | testing-N.md | `## results`, `## coverage`, `## regressions`, `## verdict` |
+| DC | documentation-N.md | `## files-changed`, `## cross-references`, `## follow-ups` |
+| RE | release-N.md | `## artifacts`, `## version`, `## rollback-plan` |
+| FN | complete-summary-N.md | `## summary`, `## artifacts`, `## followups`, `## metrics` |
+| ST | retrospective-N.md | `## decision`, `## learnings`, `## followups` |
+| IR | incident-N.md | `## root-cause`, `## fix-plan`, `## blast-radius` |
+| ET | ethics-review-N.md | `## findings`, `## verdict`, `## mitigations` |
 
 ### Convention rules
 

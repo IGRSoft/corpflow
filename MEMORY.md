@@ -4,13 +4,14 @@ Repository-tracked memory note. The authoritative cross-conversation memory live
 
 ## Version Tracking
 
-- Plugin version: **3.7.0** (handoff-protocol redesign on branch `feature/handoff-protocol`; minor bump per SemVer because the protocol is additive — `metadata.context_refs` + `state_file` are new fields, `state.json` is new infrastructure, legacy `metadata.context_files` path remains operational)
+- Plugin version: **3.8.0** (stage artifacts now numbered `<basename>-N.md` on branch `feature/helsinki`; minor bump per SemVer — additive with legacy unnumbered fallback retained for one release cycle)
 - Claude Code latest known: 2.1.121 (2026-04-28)
 - Claude Code min required: 2.1.114
 - Location: `/Users/korich/Projects/igrsoft/company-workflow`
 
 ## Optimization History
 
+- **2026-05-03**: v3.8.0 — Stage artifacts now numbered (`analyzing-N.md`, `coordination-N.md`, `development-N.md`, `developer-review-N.md`, `security-review-N.md`, `testing-N.md`, `documentation-N.md`, `release-N.md`, `complete-summary-N.md`, `retrospective-N.md`, `incident-N.md`, `ethics-review-N.md`) inheriting N from `planning-N.md` via `metadata.run_index` (integer stamped by PL0 on every downstream task). PL0 atomically resets `state.json` (`run_index`, `stages`, `facts`) on new run. Subdirs (`errors/`, `logs/`, `designs/`, `images/`) and `state.json` stay shared across runs. Legacy unnumbered names accepted as fallback for one release cycle. Four §4 renames applied: `release-prep.md`→`release.md`, `complete.md`→`complete-summary.md`, `incident-report.md`→`incident.md`, `approval.md`→`retrospective.md`. Branch: `feature/helsinki`.
 - **2026-05-01**: v3.7.0 — handoff-protocol redesign: `state.json` ledger + `handoff:` YAML frontmatter schema + cache-friendly preamble layout `[1][2][3][4][5][6][7]` across 12 stage agents + 7 skills + 1 command + 4 new files. Branch: `feature/handoff-protocol`. (24 in-scope edits + 2 version-bump edits = 26 files: 4 NEW + 22 EDIT.)
   - **NEW** `skills/workflow/references/handoff-protocol.md` — canonical spec.
   - **NEW** `skills/workflow/references/cache-lint.sh` — Bash POSIX prefix-stability + anchor-lint with `--self-test` (passes).

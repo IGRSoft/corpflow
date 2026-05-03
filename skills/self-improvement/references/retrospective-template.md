@@ -21,7 +21,7 @@ Agents whose output survived user review unchanged. Positive signal (4Ls: "Liked
 ## What Worked
 
 - `agents/product-manager.md` — `<plan_file>` (e.g. `planning-0.md`) accepted without edits
-- `agents/qa-engineer.md` — testing.md accepted without edits
+- `agents/qa-engineer.md` — testing-N.md accepted without edits
 ```
 
 If no agents fit → write `- (none — every in-scope artifact was edited)`.
@@ -33,8 +33,8 @@ Flat bullet list, one bullet per diff hunk. Keep it short — detail belongs in 
 ```markdown
 ## What the User Changed
 
-- `.context/development.md` L42–55 — `tone` — reworded approach summary
-- `.context/development.md` L102 — `accuracy` — corrected API name
+- `.context/development-N.md` L42–55 — `tone` — reworded approach summary
+- `.context/development-N.md` L102 — `accuracy` — corrected API name
 - `src/Models/User.swift` L18 — `domain-knowledge` — added Sendable conformance
 ```
 
