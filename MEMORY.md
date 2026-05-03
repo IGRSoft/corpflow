@@ -26,6 +26,7 @@ Repository-tracked memory note. The authoritative cross-conversation memory live
   - **EDIT** `.claude-plugin/plugin.json` — version `3.6.1` → `3.7.0`.
   - Backward-compat: paths F1 (state.json absent), F2 (agent ignores it), F3 (no frontmatter), F4 (corrupt state.json) all documented and exercised.
 - **2026-05-01**: UI Test Gate — DV step D2 + QA step Q1 + QA Visual Comparison gated on `metadata.requires_ui_tests=true` in `<plan_file>`. Branch: feature/uitest-gate.
+- 2026-05-03: FN-gate pre-seed fix — hoisted Pre-gate Conductor-attachments writer from pseudocode loop body into first-class SKILL.md H3; restructured conductor-attachments.md § When to write into Writer 1/Writer 2 subsections. Branch: feature/fn-gate-preseed-fix. No version bump (workflow doc restructuring).
 - 2026-04-29: PL produces numbered `planning-N.md`.
 - 2026-04-28: v3.6.1 — 2.1.115-121 integration.
 - 2026-04-20: ST self-improvement skill + `/improve-yourself` manual command.

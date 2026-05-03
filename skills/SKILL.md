@@ -32,6 +32,7 @@ Files in `shared/` are referenced by skills and agents, not loaded independently
 |------|---------|
 | [constitutional-base.md](shared/constitutional-base.md) | Base constitutional principles |
 | [five-whys.md](shared/five-whys.md) | Five Whys root cause analysis technique |
+| [git-conventions.md](shared/git-conventions.md) | Conventional Commits format, PR template, git safety rules |
 | [stage-codes.md](shared/stage-codes.md) | Workflow stage code definitions |
 | [task-system.md](shared/task-system.md) | Task System integration patterns |
 | [workflow-triggers.md](shared/workflow-triggers.md) | Workflow trigger patterns |
