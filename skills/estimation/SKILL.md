@@ -117,19 +117,19 @@ size       = T-shirt size from sizing table
 complexity = sum of 5 factors (0–25)
 security   = true if Risk Level ≥ 4 OR feature touches auth/PII/payments
 
-IF size == XS AND complexity ≤ 5 AND NOT security:
+IF size == XL:
+  → split before workflow tier selection
+ELSE IF size == XS AND complexity ≤ 5 AND NOT security:
   → micro:
 ELSE IF size == S AND NOT security:
   → quick:
 ELSE IF size ∈ {M, L} OR security:
   → workflow:
-ELSE IF size == XL:
-  → split before workflow tier selection
 ```
 
 Notes:
-- Any security-sensitive task (auth, PII, payments, Risk ≥ 4) routes to `workflow:` regardless of size.
 - XL must be split into ≤ L sub-tasks before tier selection runs.
+- Any security-sensitive task (auth, PII, payments, Risk ≥ 4) routes to `workflow:` regardless of size.
 - M never routes to `quick:` — the prior overlap with S has been resolved by the SP boundary fix above.
 
 ## Re-estimation Triggers
