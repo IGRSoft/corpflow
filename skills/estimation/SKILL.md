@@ -14,8 +14,8 @@ Standardized project estimation for Claude Code workflows.
 |------|--------|--------|-----------|-----------|----------|
 | XS | 1 | 1 | 6 | 6 | `micro:` |
 | S | 2 | 3 | 12 | 18 | `quick:` |
-| M | 3 | 5 | 18 | 30 | `workflow:` |
-| L | 5 | 10 | 30 | 60 | `workflow:` |
+| M | 4 | 5 | 24 | 30 | `workflow:` |
+| L | 6 | 10 | 36 | 60 | `workflow:` |
 | XL | 13 | 21 | 78 | 126 | Split first |
 
 ## Story Points to Hours
@@ -107,6 +107,41 @@ Phase % Min = Phase Hours Min / Total Hours Min × 100  |  Phase % Max = Phase H
 7. **Budget calculation**: Hours × rate + buffer
 8. **Senior review**: Platform-specific adjustments
 9. **Export**: Generate CSVs for Google Sheets
+
+## Workflow Tier Selection
+
+Canonical tier-selection logic. `commands/estimate.md` cites this section instead of duplicating it.
+
+```
+size       = T-shirt size from sizing table
+complexity = sum of 5 factors (0–25)
+security   = true if Risk Level ≥ 4 OR feature touches auth/PII/payments
+
+IF size == XL:
+  → split before workflow tier selection
+ELSE IF size == XS AND complexity ≤ 5 AND NOT security:
+  → micro:
+ELSE IF size == S AND NOT security:
+  → quick:
+ELSE IF size ∈ {M, L} OR security:
+  → workflow:
+```
+
+Notes:
+- XL must be split into ≤ L sub-tasks before tier selection runs.
+- Any security-sensitive task (auth, PII, payments, Risk ≥ 4) routes to `workflow:` regardless of size.
+- M never routes to `quick:` — the prior overlap with S has been resolved by the SP boundary fix above.
+
+## Re-estimation Triggers
+
+Re-run the estimate (e.g. via `/estimate --update`, an out-of-scope follow-up command) when **any** of the following occur:
+
+- **Scope change > 20%** — features added/removed shift total SP by more than a fifth.
+- **Complexity score change ≥ 3 points** — any of the 5 factors moves enough to bump the score by 3 or more.
+- **New external SDK introduced** — a dependency that was not in the baseline estimate now appears.
+- **Risk register adds a High-priority risk** — Probability × Impact crosses the High threshold per `skills/shared/risk-assessment.md`.
+
+Until `/estimate --update` exists, re-running `/estimate --detailed` against the new scope and replacing the prior estimate is acceptable.
 
 ## AI Agent Cost Estimation
 

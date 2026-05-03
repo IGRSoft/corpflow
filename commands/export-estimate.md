@@ -2,7 +2,7 @@
 name: export-estimate
 description: Generate CSV files from estimation data for Google Sheets import
 argument-hint: <task or milestone reference>
-allowed-tools: Read, Write
+allowed-tools: Read, Write, Glob
 model: haiku
 ---
 
@@ -48,11 +48,24 @@ exports/
 ├── 07_budget_estimate.csv      # Cost breakdown
 ├── 08_success_metrics.csv      # KPIs, acceptance criteria
 ├── 09_competitive_analysis.csv # Market positioning
-├── 10_ios_specifics.csv        # Platform details (or android/web)
-├── 11_swiftui_specifics.csv    # Framework details (varies by platform)
-├── 12_integration_specifics.csv # SDK/API details
+├── 10_<platform>_specifics.csv     # Platform details (see --platform variants below)
+├── 11_<framework>_specifics.csv    # Framework details (varies by platform)
+├── 12_integration_specifics.csv    # SDK/API details (per-platform integrations)
 └── 13_phase_summary.csv        # Phase rollup
 ```
+
+### Platform Variants (files 10, 11, 12)
+
+The naming and content of files 10–12 depend on `--platform`:
+
+| `--platform` | File 10 | File 11 | File 12 |
+|--------------|---------|---------|---------|
+| `apple`      | `10_ios_specifics.csv` | `11_swiftui_specifics.csv` | `12_integration_specifics.csv` (Apple SDKs/APIs) |
+| `android`    | `10_android_specifics.csv` | `11_jetpack_specifics.csv` | `12_integration_specifics.csv` (Android SDKs/APIs) |
+| `web`        | `10_web_specifics.csv` | `11_framework_specifics.csv` | `12_integration_specifics.csv` (web SDKs/APIs) |
+| `all` (default) | All three platform sets emitted side-by-side | — | — |
+
+See `skills/csv-export-templates/SKILL.md` for the canonical column schemas of each variant.
 
 ## Prerequisites
 
@@ -70,16 +83,15 @@ Requires completed estimation artifacts. Run after:
 | Headers | First row always |
 | Multiline | Quote cells with line breaks |
 
+For per-file column schemas, see skills/csv-export-templates/references/templates.md.
+
 ## Validation
 
-With `--validate`, checks:
-- SP Min sum matches across 04 and 13
-- SP Max sum matches across 04 and 13
-- Hours Min/Max sum matches across 07 and 13
-- Overview Min/Max totals match phase summary Min/Max
-- SP Min ≤ SP Max for every row
-- No phase Hours Max exceeds 160 hours
-- Week ranges are continuous
+Canonical validation rules live in `skills/csv-export-templates/SKILL.md § Validation Rules`. The `--validate` mode flag additionally:
+
+- Aborts the export with a non-zero exit and a row-level diff if any rule fails (the skill defines the rules; this command defines the failure mode).
+- Emits a `validation_report.csv` alongside the 13 files listing each rule and pass/fail status.
+- Is idempotent: re-running `--validate` against an existing export directory revalidates without rewriting files.
 
 ## Google Sheets Import
 

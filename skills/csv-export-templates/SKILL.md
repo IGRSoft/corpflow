@@ -6,6 +6,8 @@ effort: low
 
 # CSV Export Templates
 
+These 13 templates are the canonical export shape. /estimate and /export-estimate both reference this file; do not redefine the file list elsewhere.
+
 13-category export structure for Google Sheets import.
 
 For all 13 CSV template definitions, see `${CLAUDE_SKILL_DIR}/references/templates.md`
@@ -37,6 +39,19 @@ For all 13 CSV template definitions, see `${CLAUDE_SKILL_DIR}/references/templat
 | 11 | swiftui_specifics.csv | Framework details |
 | 12 | integration_specifics.csv | SDK/API details |
 | 13 | phase_summary.csv | Phase rollup |
+
+### Platform Variants (files 10 and 11)
+
+Files 10 and 11 are platform-specific. The exact filename and column schema depend on `--platform`:
+
+| `--platform` | File 10 | File 11 |
+|--------------|---------|---------|
+| `apple`      | `10_ios_specifics.csv` | `11_swiftui_specifics.csv` |
+| `android`    | `10_android_specifics.csv` | `11_jetpack_specifics.csv` |
+| `web`        | `10_web_specifics.csv` | `11_framework_specifics.csv` |
+| `all` (default) | All three platform sets emitted side-by-side | — |
+
+File 12 (`integration_specifics.csv`) keeps a stable filename across platforms but its rows enumerate platform-relevant SDKs/APIs (Apple SDKs for `apple`, Android/Jetpack APIs for `android`, web SDKs for `web`).
 
 ## Validation Rules
 
