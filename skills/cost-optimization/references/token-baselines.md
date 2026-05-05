@@ -70,6 +70,10 @@ Typical token usage by workflow stage (sonnet model):
 | Subagents that stall fail with clear error after 10 minutes | 2.1.113 | Prevents silent hangs consuming budget |
 | Native Claude Code binary replaces bundled JS CLI | 2.1.113 | Faster startup; per-platform optional dependency |
 | Agent teams teammate permission dialog crash fix | 2.1.114 | Prevents crash when teammate requests tool permission |
+| Subagent progress summaries use prompt cache (~3× cache_creation reduction) | 2.1.128 | Direct cache_creation reduction on multi-agent runs |
+| Idle subagent summaries no longer fire repeatedly | 2.1.128 | Caps worst-case token cost on stalled subagents |
+| Read-only Bash siblings: failure no longer cancels parallel peers | 2.1.128 | Mirrors 2.1.72 row for read-only Bash; reduces wasted retries |
+| 1M-context autocompact threshold respected (no premature "Prompt is too long") | 2.1.128 | Keeps full context budget usable on Opus 4.7 |
 
 These are automatic — no agent or workflow changes needed. They compound across multi-stage workflows.
 

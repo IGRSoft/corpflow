@@ -147,7 +147,7 @@ With `--worktree` mode, additional parallelism becomes safe because each issue h
 
 ### Parallel Tool Call Safety
 
-Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool calls. Only `Bash` errors cascade. This makes parallel file reads and searches more reliable within agents.
+Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool calls. As of **v2.1.128**, failing read-only `Bash` calls (`grep`, `git diff`, `ls`, etc.) also no longer cancel siblings — only mutating `Bash` errors cascade. This makes parallel reads, searches, and shell probes more reliable within agents.
 
 ### Never Parallelize
 
