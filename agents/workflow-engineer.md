@@ -78,7 +78,7 @@ When `--worktree` flag is present, add these checks:
 | Failure | Cause | Fix |
 |---------|-------|-----|
 | Single branch for all issues | Missing branch-per-issue logic | Each issue MUST get own branch |
-| Branch from wrong base | Not using remote ref | Use `git fetch origin develop && git checkout -b ... origin/develop` |
+| Branch from wrong base | Not using remote ref | Use `git fetch origin develop && git checkout -b ... origin/develop` (manual override; the `EnterWorktree` tool branches from local HEAD as of v2.1.128) |
 | Missing orchestrator.json | Init skipped | Run milestone init before issues |
 | No PR created | FN stage incomplete | Ensure `gh pr create` runs per issue |
 | Duplicate PR for issue | PR check skipped | Check issue timeline for existing PRs first |
