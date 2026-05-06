@@ -242,4 +242,4 @@ These harms are NEVER acceptable regardless of benefits:
 - `/ethics-review` - Full constitutional compliance review
 - `/transparency-check` - Honesty and transparency verification
 - `agents/ethics-reviewer.md` - Ethics review agent
-- `skills/claude-constitution.md` - Constitutional principles
+- `skills/claude-constitution/SKILL.md` - Constitutional principles

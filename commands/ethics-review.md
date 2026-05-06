@@ -190,4 +190,4 @@ Can be invoked at any workflow stage:
 - `/transparency-check` - Verify honesty properties
 - `/risk-assess` - General risk assessment
 - `agents/ethics-reviewer.md` - Ethics review agent
-- `skills/claude-constitution.md` - Constitutional principles
+- `skills/claude-constitution/SKILL.md` - Constitutional principles

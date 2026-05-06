@@ -277,4 +277,4 @@ Protects the epistemic autonomy and rational agency of users.
 - `/ethics-review` - Full constitutional compliance review
 - `/harm-assessment` - Harm potential evaluation
 - `agents/ethics-reviewer.md` - Ethics review agent
-- `skills/claude-constitution.md` - Constitutional principles
+- `skills/claude-constitution/SKILL.md` - Constitutional principles
