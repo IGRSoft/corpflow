@@ -137,3 +137,13 @@ Watch for these during review:
 1. [Action 1]
 2. [Action 2]
 ```
+
+## Review Feedback Hygiene
+
+When acting on review comments before re-requesting review (mirrors the PR-feedback discipline in upstream review-agent-governance pattern):
+
+- [ ] Every blocking comment is addressed (fixed, or explicitly justified in a reply) before re-requesting review
+- [ ] Each fix references the specific comment it resolves (commit message or PR thread reply)
+- [ ] No silent scope expansion: changes outside the original review request are flagged separately
+- [ ] Re-request review only after CI/local checks pass on the updated diff
+- [ ] If a comment is rejected, document the rationale in the thread — do not close without reply

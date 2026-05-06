@@ -301,4 +301,4 @@ This command works with:
 - [ethics-reviewer](../agents/ethics-reviewer.md) - Ethics review agent
 - [ethics-review](./ethics-review.md) - Ethics review command
 - [harm-assessment](./harm-assessment.md) - Harm assessment command
-- [claude-constitution](../skills/claude-constitution.md) - Constitutional principles
+- [claude-constitution](../skills/claude-constitution/SKILL.md) - Constitutional principles

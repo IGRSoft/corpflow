@@ -252,4 +252,4 @@ This command is used:
 - [arch-review](./arch-review.md) - Architecture review
 - [ethics-review](./ethics-review.md) - Ethics review command
 - [transparency-check](./transparency-check.md) - Transparency verification
-- [claude-constitution](../skills/claude-constitution.md) - Constitutional principles
+- [claude-constitution](../skills/claude-constitution/SKILL.md) - Constitutional principles
