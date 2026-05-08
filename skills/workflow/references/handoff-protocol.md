@@ -368,6 +368,28 @@ All stage artifacts MUST contain exactly the H2 headings (kebab-case, no undersc
 3. Anchor IDs are derived by GitHub-style slugify (lowercase, spaces→hyphens, strip punctuation). The H2 title MUST be the kebab-case form already; we don't rely on slugify.
 4. `key_decisions[].anchor` and `refs.*` MUST resolve to a real `## <slug>` heading in the target file. The handoff harness validates this.
 
+### Anchor Pre-Flight (PostToolUse hook)
+
+By default, anchor-lint runs at the DR gate. That is post-hoc — a missing anchor in `planning-N.md` only surfaces after AR/TL/DV have already paid the full-file re-read cost. To catch omissions at the producing stage, register a PostToolUse hook on `Write`/`Edit` of `.context/*-N.md` artifacts:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "if": "$CLAUDE_TOOL_INPUT_FILE_PATH =~ ^\\.context/(planning|analyzing|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+\\.md$",
+        "command": "skills/workflow/references/cache-lint.sh --anchor-lint \"$CLAUDE_TOOL_INPUT_FILE_PATH\""
+      }
+    ]
+  }
+}
+```
+
+When the hook fails (non-zero exit), the agent that produced the artifact sees the diagnostic and amends the file before continuing — no downstream stages incur the cost. The DR-gate lint remains as a CI safety net for non-hook environments.
+
+**Cost**: lint runs in O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit; net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
+
 ---
 
 ## Future work (out of scope for v1)

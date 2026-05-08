@@ -10,31 +10,23 @@ Comprehensive strategies for managing AI agent costs, tracking token usage, and 
 
 For per-stage token baselines, context window improvements, and ethics cost budgeting, see `${CLAUDE_SKILL_DIR}/references/token-baselines.md`
 
-## Model Cost Tiers
+## Model Cost Tiers & Selection Matrix
 
-| Model | Relative Cost | Cost/1M Tokens | Use For |
-|-------|---------------|----------------|---------|
-| **haiku** | 1x (baseline) | ~$0.25 | Formatting, routing, checklists, status checks |
-| **sonnet** | ~10x haiku | ~$3.00 | Implementation, analysis, code review, coordination |
-| **opus** | ~50x haiku | ~$15.00 | Architecture decisions, complex reasoning, meta-optimization |
+Canonical tables live in `${CLAUDE_SKILL_DIR}/../shared/model-selection.md` (§ Cost Tiers, § Selection Matrix by Task Type). For non-Pro plans, prefer explicit `effort: medium` in frontmatter for cost-sensitive stages (QA, DC, RE). For long-running sessions that benefit from extended cache retention, set `ENABLE_PROMPT_CACHING_1H=1` to use a 1-hour prompt cache TTL (v2.1.108).
 
-> **Opus 4.7 Effort Levels**: `low` ○, `medium` ◐, `high` ●, `xhigh` ⬣ (v2.1.111+), `max` ⬛. **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans (v2.1.94). Pro plan retains medium default. The keyword "ultrathink" still triggers high effort. Use `/effort auto` to reset; `/effort` opens an interactive slider (v2.1.111). For non-Pro plans, consider explicit `effort: medium` in frontmatter for cost-sensitive stages (QA, DC, RE). For long-running sessions that benefit from extended cache retention, set `ENABLE_PROMPT_CACHING_1H=1` to use a 1-hour prompt cache TTL (v2.1.108).
+## Per-Effort Thinking-Budget Ceilings
 
-### Model Selection Matrix
+Effort levels (`low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛) map to thinking-token ceilings. Use these as a budget signal — Claude Code does not enforce them, but they justify per-agent `effort:` assignments and let reviewers calibrate complexity to cost.
 
-| Task Type | Recommended Model | Rationale |
-|-----------|-------------------|-----------|
-| Status checks | haiku | Simple validation |
-| Task status updates | haiku | Mechanical operation |
-| Code formatting | haiku | Rule-based transformation |
-| Platform routing | haiku | Pattern matching |
-| Code implementation | sonnet | Balanced complexity |
-| Code review | sonnet | Analysis + suggestions |
-| Test design | sonnet | Coverage analysis |
-| Team coordination | sonnet | Multi-factor decisions |
-| Architecture design | opus | Complex tradeoffs |
-| System analysis | opus | Deep reasoning |
-| Prompt optimization | opus | Meta-level thinking |
+| Effort  | Thinking Budget | Use For                                                       | Example Agents                                            |
+|---------|-----------------|---------------------------------------------------------------|-----------------------------------------------------------|
+| `low`     | ≤ 4K tokens     | Mechanical tasks, formatting, routing, status updates           | haiku-tier supports                                          |
+| `medium`  | ≤ 16K tokens    | Standard implementation, code review, coordination             | qa-engineer, technical-writer, release-engineer              |
+| `high`    | ≤ 32K tokens    | Multi-step reasoning, default for sonnet/opus on API/Team plans | developer, technical-lead, project-manager (default since v2.1.94) |
+| `xhigh`   | ≤ 50K tokens    | Hard tradeoffs, meta-optimization, architecture                | software-architector, security-reviewer, prompt-engineer     |
+| `max`     | ≤ 64K tokens    | Reserved for novel-domain research; cap risk of runaway thinking | (none assigned by default)                                   |
+
+**Rule of thumb**: increase effort one tier when a stage repeatedly retries with `classification: logic`; decrease one tier when the stage trivially passes on first try across three consecutive runs.
 
 ## Cost Reduction Strategies
 

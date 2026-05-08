@@ -103,7 +103,18 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 4. Write `.context/planning-${N}.md`. Do **not** overwrite `planning-0.md`, ..., `planning-(N-1).md` — they remain as historical plans.
 5. **state.json reset** (new run in existing `.context/`): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, and empty `facts.*` (preserves `version`, `workflow_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
 
-**Downstream propagation**: when PL creates downstream stage tasks via `TaskCreate`, stamp **both** `metadata.plan_file = "planning-${N}.md"` AND `metadata.run_index = N` on each one. Every stage agent uses `run_index` to resolve its artifact path as `<basename>-${N}.md`. Reader resolution order for `plan_file`: `metadata.plan_file` first, then newest `.context/planning-*.md` (highest N) if metadata is absent, then legacy `planning.md` as the final fallback.
+**Downstream propagation**: when PL creates downstream stage tasks via `TaskCreate`, stamp **all** of the following on each:
+
+| Key | Value | Purpose |
+|---|---|---|
+| `metadata.plan_file` | `"planning-${N}.md"` | Pin active plan |
+| `metadata.run_index` | `N` (integer) | Resolve `<basename>-${N}.md` artifacts |
+| `metadata.skip_exploration` | `true` if `.context/exploration.md` exists | Suppress redundant Glob/Grep in AR/TL/DV |
+| `metadata.exploration_anchors` | `["exploration.md#facts", "exploration.md#refs", "planning-${N}.md#requirements"]` (when `skip_exploration: true`) | Authoritative pre-explored set |
+
+Every stage agent uses `run_index` to resolve its artifact path as `<basename>-${N}.md`. Reader resolution order for `plan_file`: `metadata.plan_file` first, then newest `.context/planning-*.md` (highest N) if metadata is absent, then legacy `planning.md` as the final fallback.
+
+See `skills/agent-coordination/SKILL.md § metadata.skip_exploration Propagation` for the full propagation contract.
 
 Throughout this document, `<plan_file>` denotes the resolved plan filename for the current PL invocation (e.g. `planning-0.md`, `planning-3.md`).
 
@@ -148,6 +159,24 @@ When invoked as PL0 stage agent:
 1. Compute `<plan_file>` per **Plan File Naming** (glob `.context/planning-*.md`, pick next N) and create `.context/<plan_file>` with the requirements template
 2. Fill out `<plan_file>` with requirements, acceptance criteria, success metrics
 3. Assess complexity (0-50 scale) and create stage tasks via `TaskCreate`, setting `metadata.plan_file = "<plan_file>"` AND `metadata.run_index = N` on each
+
+### Mandatory Plan-File Anchor Schema
+
+`<plan_file>` MUST include all seven H2 anchors from `skills/workflow/references/handoff-protocol.md#anchor-allow-list § PL`. Downstream stages (AR, TL, DV, DR) read these anchors selectively; missing anchors trigger expensive full-file re-reads (see `stage-contracts § Required Inputs` step 3) and break the cache-friendly handoff layout.
+
+Required anchors (kebab-case, no underscores, no spaces):
+
+| Anchor | Content | Reader stage(s) |
+|--------|---------|-----------------|
+| `## requirements` | User-facing requirements, with IDs | AR, TL, DV |
+| `## acceptance-criteria` | Given/When/Then per requirement | DV, DR, QA |
+| `## scope` | What's included | TL, DV |
+| `## out-of-scope` | What's explicitly excluded | DV, DR |
+| `## risks` | Known unknowns, mitigations | AR, TL |
+| `## complexity` | Score 0–50 + factor breakdown | TL (sizing), FN (recap) |
+| `## stages` | Per-stage task list | TL, FN |
+
+PostToolUse anchor-lint (when configured per `handoff-protocol.md § Anchor Pre-Flight`) blocks the artifact write if any anchor is missing. Without the hook, validation falls through to DR-stage `cache-lint.sh --anchor-lint`; the cost is the same but discovered late — prefer the proactive check.
 
 **Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For milestone mode, read issue from `.context/milestone.json`. See `skills/milestone-workflow/SKILL.md § Workspace-Aware Stages`.
 

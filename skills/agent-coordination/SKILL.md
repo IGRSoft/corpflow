@@ -35,6 +35,25 @@ Read .context/exploration.md for codebase context.
 Do NOT re-read files listed there unless you need additional detail.
 ```
 
+#### `metadata.skip_exploration` Propagation
+
+When PL0 has produced `.context/exploration.md`, every downstream task it creates (AR0, TL0, DV0, …) MUST receive:
+
+| Metadata key | Type | Value |
+|---|---|---|
+| `skip_exploration` | boolean | `true` |
+| `exploration_anchors` | string[] | List of `<file>#<anchor>` pointers — e.g. `["exploration.md#facts", "exploration.md#refs", "planning-0.md#requirements"]` |
+
+Downstream agents (AR/TL/DV/DR) honour these by:
+
+- Treating `exploration_anchors` as the authoritative pre-explored set.
+- Not running Glob/Grep on the source tree for files already covered by the anchors.
+- Reading only the listed anchors instead of full files.
+
+**Why**: avoids redundant Glob/Grep cycles in AR/TL that PL has already paid the token cost for. Re-exploration is the largest avoidable AR/TL token expense after the cache prefix has been established.
+
+**Opt-out**: an agent that needs to widen scope (e.g. AR detects an undeclared dependency) MAY ignore `skip_exploration` and explore further, but MUST log one `audit.jsonl` line `action: "exploration_extended"` with `metadata: {reason: "<why>"}` so reviewers can see the broadened scope.
+
 ### Stage Agent File Read Rules
 
 | Stage | Read exploration.md | Read source files | Reason |

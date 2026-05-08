@@ -184,8 +184,9 @@ Before marking AR stage complete, verify:
 1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
 2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
 3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
+4. **Skip-exploration short-circuit**: If `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` (list of `<file>#<anchor>` refs) as the authoritative pre-explored set. Do NOT re-Glob/Grep the source tree for files already covered. Read only the listed anchors and start architecture work from those facts. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
 
-**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
+**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` to `.context/logs/fallback-${run_index:-0}.log` (single line; surfaces silent cache degradation per `stage-contracts § Required Inputs § F1`) and proceed normally.
 
 ### Frontmatter Template
 
