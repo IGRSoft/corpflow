@@ -176,7 +176,7 @@ Required anchors (kebab-case, no underscores, no spaces):
 | `## complexity` | Score 0–50 + factor breakdown | TL (sizing), FN (recap) |
 | `## stages` | Per-stage task list | TL, FN |
 
-PostToolUse anchor-lint (when configured per `handoff-protocol.md § Anchor Pre-Flight`) blocks the artifact write if any anchor is missing. Without the hook, validation falls through to DR-stage `cache-lint.sh --anchor-lint`; the cost is the same but discovered late — prefer the proactive check.
+PostToolUse anchor-lint (when configured per `handoff-protocol.md § Anchor Pre-Flight`) fires after the write and signals the agent to amend the artifact if any anchor is missing. Without the hook, validation falls through to DR-stage `cache-lint.sh --anchor-lint`; the cost is the same but discovered late — prefer the proactive check.
 
 **Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For milestone mode, read issue from `.context/milestone.json`. See `skills/milestone-workflow/SKILL.md § Workspace-Aware Stages`.
 

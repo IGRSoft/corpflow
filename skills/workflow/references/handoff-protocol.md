@@ -378,8 +378,7 @@ By default, anchor-lint runs at the DR gate. That is post-hoc — a missing anch
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
-        "if": "$CLAUDE_TOOL_INPUT_FILE_PATH =~ ^\\.context/(planning|analyzing|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+\\.md$",
-        "command": "skills/workflow/references/cache-lint.sh --anchor-lint \"$CLAUDE_TOOL_INPUT_FILE_PATH\""
+        "command": "if [[ \"$CLAUDE_TOOL_INPUT_FILE_PATH\" =~ \\.context/(planning|analyzing|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+\\.md$ ]]; then skills/workflow/references/cache-lint.sh --anchor-lint \"$CLAUDE_TOOL_INPUT_FILE_PATH\"; fi"
       }
     ]
   }
