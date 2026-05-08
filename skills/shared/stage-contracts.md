@@ -28,7 +28,22 @@ Every stage agent reads inputs in this order, anchor-first:
 2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
 3. Legacy unnumbered `<basename>.md` (one release cycle fallback; log WARN when used).
 
-**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
+**Backward-compatibility fallback (F1)**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Cache benefit collapses in this mode (no cache-friendly preamble), so this is **silent cache degradation**.
+
+To surface F1 entries, agents MUST emit one telemetry line:
+
+```bash
+mkdir -p .context/logs
+N="${run_index:-0}"
+printf '%s\t%s\t%s\t%s\n' \
+  "$(date -u +%FT%TZ)" \
+  "${metadata_agent:-unknown}" \
+  "F1" \
+  "state.json absent; using metadata.context_files" \
+  >> ".context/logs/fallback-${N}.log"
+```
+
+Then proceed with the legacy read. The fallback log is consumed by `/cost-report` to flag workflows that lost cache hits silently.
 
 ## Required Outputs (handoff-protocol)
 
@@ -68,7 +83,7 @@ The orchestrator runs validation between `TaskUpdate({status: "completed"})` and
 4. **Section check**: Grep the output artifact for required section headers.
 5. **Side-artifact check**: For DV/QA stages, confirm corresponding `.context/logs/` capture exists (build/test logs).
 6. **Metadata check**: Validate task `metadata` against `task-system` § JSON Schema.
-7. **Error file check**: If `retry_count > 0`, `metadata.error_file` MUST exist on disk AND appear in `context_files`.
+7. **Error file check**: If `retry_count > 0`, `metadata.error_file` MUST exist on disk AND appear in `context_files`. If `metadata.error_file` is set but the path does NOT exist on disk (e.g. orchestrator stamped the path but no agent has appended yet), treat the situation as `retry_count = 0` (no prior retries) — do NOT fail validation. The file is created lazily by the first appending agent (mkdir -p its parent, then append the retry block).
 8. **state.json patch check**: After Task() returns, orchestrator re-reads `.context/state.json`. If `stages.<CODE>.status` is still `in_progress`, parse the artifact's `handoff:` frontmatter and atomic-merge into state.json (third belt-and-suspenders layer; see `handoff-protocol.md#fallback-paths` F2/F3).
 
 Failure at any step → do NOT transition. Append a `missing_input` entry to the *next* stage's error file and block until resolved.
