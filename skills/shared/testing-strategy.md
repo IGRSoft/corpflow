@@ -151,7 +151,7 @@ Tests are slow (especially UI/simulator bundles). The gate decides — per workf
 
 ### When to choose each mode
 
-`build-only` (default — choose unless something else applies):
+`build-only` (opt-in — requires marker coverage; see Effective default note above):
 - Refactor without behavior change
 - Doc-only updates
 - Backend changes with full test markers maintained (rely on `@depends-on:` graph)

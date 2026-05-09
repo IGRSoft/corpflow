@@ -86,12 +86,12 @@ When building or testing Apple platform code directly (not delegating to apple-d
   2. Apply legacy alias: if only `requires_ui_tests` is present, map per `testing-strategy.md § Backward compatibility`.
   3. `git diff --name-only` against base; extract changed top-level symbols from each Swift source file (types, funcs, enums).
   4. Glob test files; parse `// @test-required`, `// @depends-on: <Symbol>`, `// @test-tag: <tag>` markers (and Swift Testing `.tags(...)` traits).
-  5. Selected = (`@test-required` set) ∪ (`@depends-on:` matches changed symbols) ∪ (covers-changed-files per the rule in `test-selection-syntax.md`) ∪ `metadata.always_required_tests`. Add module-level tests only if `test_mode=scoped`.
+  5. Selected = (`@test-required` set ∪ `@test-tag: smoke` set) ∪ (`@depends-on:` matches changed symbols) ∪ (covers-changed-files per the rule in `test-selection-syntax.md`) ∪ `metadata.always_required_tests`. Add module-level tests only if `test_mode=scoped`.
   6. Write `.context/development-N.md § Selected Tests` with the list (always-required, dependency-matched, excluded-with-reason).
   7. Write any parser warnings to `.context/logs/test-selection-warnings.md` (see schema in `test-selection-syntax.md § Warning log schema`).
 
   **Execution per mode**:
-  - `build-only`: build + run only the smoke set (`@test-required` ∪ `metadata.always_required_tests`). Do **not** run dependency-matched tests at DV — those run at QA.
+  - `build-only`: build + run only the smoke set (`@test-required` ∪ `@test-tag: smoke` ∪ `metadata.always_required_tests`). Do **not** run dependency-matched tests at DV — those run at QA.
   - `scoped`: build + run the full Selected Tests list (smoke + dep-matched + module-level + covers).
   - `full`: build + run Selected Tests at DV (sanity check); QA runs the full project suite.
 
