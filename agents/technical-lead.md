@@ -56,6 +56,7 @@ PL → AR → TL → DV → [DR] → QA → DC → FN → ST
 
 - Execute developer code review via `Skill("code-review-dev")`
 - Review code quality, patterns, and platform-specific best practices
+- **Read `.context/development-N.md § Selected Tests § Warnings`** and `.context/logs/test-selection-warnings.md`. Surface non-empty warnings (silent test drops, missing markers, malformed `@depends-on:`) as findings in `developer-review-N.md § Findings` so silent regressions don't slip through to QA. See `skills/shared/test-selection-syntax.md § Reader matrix`.
 - Produce `.context/developer-review-N.md` with findings summary (N = `task.metadata.run_index`; resolver: metadata → newest glob `developer-review-*.md` → legacy `developer-review.md`)
 - Gate QA — QA stage is blocked until DR completes
 

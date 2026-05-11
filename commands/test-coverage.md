@@ -111,6 +111,25 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 | Flaky Tests | 3 | ⚠️ Needs attention |
 | Avg Test Duration | 45ms | ✅ Good |
 
+## Selection Marker Coverage
+
+Reports the percentage of test files annotated with markers from `skills/shared/test-selection-syntax.md`. Low marker coverage means selective execution defaults to `covers-changed-files` (filename-correlation only) — degrading to `scoped` mode automatically.
+
+| Marker | Tests Annotated | % of Total | Status |
+|--------|-----------------|------------|--------|
+| `@test-required` | 5 | 10% | — |
+| `@depends-on:` | 18 | 36% | ⚠️ Below 50% target |
+| `@test-tag:` | 12 | 24% | — |
+| **Any marker** | **22** | **44%** | ⚠️ Below 50% target — `test_mode: build-only` will warn |
+
+### Untagged Tests (warn-only on first release; block once project sets `selective_tests_ready: true`)
+
+| File | Tests | Recommendation |
+|------|-------|----------------|
+| Tests/UserRepositoryTests.swift | 8 | Add `@depends-on: UserRepository` |
+| Tests/NetworkClientTests.swift | 12 | Add `@depends-on: NetworkClient` and `@test-tag: regression` |
+| Tests/AppLaunchTests.swift | 1 | Add `@test-required` (smoke test) |
+
 ## Testing Framework Compliance
 
 | Framework | Usage | Status |

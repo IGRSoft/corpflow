@@ -71,15 +71,37 @@ When building or testing Apple platform code directly (not delegating to apple-d
    - If the call fails and the error message matches the canonical `MCP_UNAVAILABLE_RE` pattern (see `agent-coordination § MCP Unavailability Detection`), retry up to **2×** with 8-second waits between attempts (covers `npx -y xcodebuildmcp@latest` cold-start; total budget ~16 s). Errors that do NOT match the pattern are real bugs — do not retry, re-raise.
    - After exhausting all 3 attempts (1 + 2 retries), write one `audit.jsonl` line `action: "mcp_unavailable"` with `metadata: {server: "XcodeBuildMCP", reason: <error>}`, switch to the Bash fallback for the rest of the stage, and record the fallback in `.context/development-N.md § Decisions` (one line: `XcodeBuildMCP unreachable; using Bash xcodebuild fallback — <reason>`) so QA/DR see it. Do NOT abort the stage.
 2. **Build.** Use `mcp__XcodeBuildMCP__build_sim` or `build_run_sim`. If warmup failed, substitute `xcodebuild -project … -scheme … -destination …` via Bash and tee output to the same `.context/logs/build-developer-<ts>.log` path so QA/DR are unaffected.
-3. **Test.** Use `mcp__XcodeBuildMCP__test_sim`. If warmup failed, substitute `xcodebuild test -project … -scheme … -destination …` via Bash and tee to `.context/logs/test-developer-<ts>.log`. **UI test gate**: Read `metadata.requires_ui_tests` from `<plan_file>` frontmatter. If `false` or absent (default), append `-skip-testing:<UITestTarget>` once per UI test target listed in `list_schemes` output to suppress UI bundles, and record `ui_tests_skipped: true` in `.context/development-N.md § Decisions`. If `true`, run all scoped tests including UI bundles. See `skills/shared/testing-strategy.md § UI Test Gate`.
+3. **Test.** Use `mcp__XcodeBuildMCP__test_sim`. If warmup failed, substitute `xcodebuild test -project … -scheme … -destination …` via Bash and tee to `.context/logs/test-developer-<ts>.log`. **Test Selection Gate**: see step D2 below for the full protocol. The `test_sim` invocation receives positive `-only-testing:<TestID>` flags (one per Selected Test), or no `-only-testing:` when `test_mode=full`. Do **not** use blanket `-skip-testing:` — selection is positive, not negative.
 
 ## Workflow Integration
 
 ### D Stage (Development)
 - **D0**: Analyze requirements, set up development environment, read test specs from `<plan_file>`
 - **D1**: Implement code changes. Every build attempt is captured via tee → `.context/logs/build-developer-<ts>.log` (filename grammar: `logging-conventions`)
-- **D1.5**: Write unit tests per `<plan_file> § Test Strategy`
-- **D2**: Run tests **scoped to the changed files / current task** (e.g. `-only-testing:` for xcodebuild, `--filter` for swift test, or the equivalent on other platforms) via tee → `.context/logs/test-developer-<ts>.log`. The full project test suite is QA's responsibility, not DV's. **UI test gate**: when `metadata.requires_ui_tests` is `false` or absent in `<plan_file>`, append `-skip-testing:<UITestTarget>` for every UI test target on the scheme (see MCP step 3 above and `skills/shared/testing-strategy.md § UI Test Gate`); when `true`, run them. On failure, classify per `agent-coordination § Error Handling` (transient | logic | missing_input | ambiguous_requirements | design_flaw | hard_constraint | exhausted), append a `## DV[N] Retry [X/3] — <ts>` block to `.context/errors/developer.md` matching the schema in that skill (lines 113–122), and emit one `audit.jsonl` line `action: "retry_attempt"` with `metadata: {retry: X, classification: <code>, log_path: <test log>}`. Max 3 attempts before escalation per the matrix.
+- **D1.5**: Write unit tests per `<plan_file> § Test Strategy`. **Annotate new tests** with markers from `skills/shared/test-selection-syntax.md`: add `// @test-required` for smoke tests, `// @depends-on: <Symbol>` for cross-file behavior coverage, and `// @test-tag: <tag>` for categorization. Annotation is the input that makes selective execution work — untagged tests fall back to filename/type-name correlation only.
+- **D2**: Compute the **Selected Tests** list from `<plan_file>` metadata + inline source markers, then run tests per `test_mode`. Tee output → `.context/logs/test-developer-<ts>.log`. See `skills/shared/testing-strategy.md § Test Selection Gate` and `skills/shared/test-selection-syntax.md` for the full protocol.
+
+  **Selection algorithm** (per `test-selection-syntax.md § Parser algorithm`):
+  1. Read `metadata.test_mode` (effective default: `scoped`), `metadata.always_required_tests`, `metadata.ui_visual_check` from `<plan_file>` frontmatter.
+  2. Apply legacy alias: if only `requires_ui_tests` is present, map per `testing-strategy.md § Backward compatibility`.
+  3. `git diff --name-only` against base; extract changed top-level symbols from each Swift source file (types, funcs, enums).
+  4. Glob test files; parse `// @test-required`, `// @depends-on: <Symbol>`, `// @test-tag: <tag>` markers (and Swift Testing `.tags(...)` traits).
+  5. Selected = (`@test-required` set ∪ `@test-tag: smoke` set) ∪ (`@depends-on:` matches changed symbols) ∪ (covers-changed-files per the rule in `test-selection-syntax.md`) ∪ `metadata.always_required_tests`. Add module-level tests only if `test_mode=scoped`.
+  6. Write `.context/development-N.md § Selected Tests` with the list (always-required, dependency-matched, excluded-with-reason).
+  7. Write any parser warnings to `.context/logs/test-selection-warnings.md` (see schema in `test-selection-syntax.md § Warning log schema`).
+
+  **Execution per mode**:
+  - `build-only`: build + run only the smoke set (`@test-required` ∪ `@test-tag: smoke` ∪ `metadata.always_required_tests`). Do **not** run dependency-matched tests at DV — those run at QA.
+  - `scoped`: build + run the full Selected Tests list (smoke + dep-matched + module-level + covers).
+  - `full`: build + run Selected Tests at DV (sanity check); QA runs the full project suite.
+
+  **Auto-promotion safety nets**:
+  - Selected Tests is empty AND `test_mode=build-only` → run smoke set; record `auto_promoted_mode: scoped` in `§ Decisions` so QA knows to run scoped at QA-stage.
+  - Platform has no marker handler (e.g., Android/Web) AND `test_mode ∈ {build-only, scoped}` → auto-promote to `full` for this run; record `auto_promoted_mode: full` in `§ Decisions`. Plan-level `test_mode` is **not** rewritten.
+
+  **Apple platform translation**: pass each Selected Test as `-only-testing:<TargetName>/<TypeName>/<methodName>` to `mcp__XcodeBuildMCP__test_sim` (no blanket `-skip-testing:`). When `test_mode=full`, omit `-only-testing:` entirely. UI test bundles run when included in Selected Tests OR when `test_mode=full` AND `ui_visual_check=true`.
+
+  **Failure handling**: on test failure, classify per `agent-coordination § Error Handling` (transient | logic | missing_input | ambiguous_requirements | design_flaw | hard_constraint | exhausted), append a `## DV[N] Retry [X/3] — <ts>` block to `.context/errors/developer.md` matching the schema in that skill (lines 113–122), and emit one `audit.jsonl` line `action: "retry_attempt"` with `metadata: {retry: X, classification: <code>, log_path: <test log>}`. Max 3 attempts before escalation per the matrix.
 - **D3**: All scoped/changed-code unit tests pass, implementation complete, ready for QA (full-suite regression is QA's gate). Emit one `audit.jsonl` line `action: "artifact_created"` with `artifact: ".context/development-N.md"` after the artifact write.
 
 **Task System**: Stage DV, Owner: developer. See `skills/shared/task-system.md`.
@@ -158,6 +180,34 @@ One row per material build/test/MCP call, in chronological order.
 | ts (UTC) | tool | scope | log_path | result |
 | -------- | ---- | ----- | -------- | ------ |
 | YYYYMMDD-HHMMSS | `build_sim` \| `test_sim` \| `Bash` \| … | `developer` \| `ios-sim` \| feature slug | `.context/logs/<file>` | ok \| fail \| skipped |
+
+### Selected Tests
+Required when `<plan_file>` declares `metadata.test_mode` (or legacy `requires_ui_tests`). Schema per `skills/shared/testing-strategy.md § Selected Tests`.
+
+```markdown
+| Mode | <build-only|scoped|full> |
+| Reason | <metadata source or auto-promotion> |
+| Auto-promoted? | <none|build-only→scoped|scoped→full> + reason |
+
+#### Always Required
+- <Target>/<Type>/<method> — `@test-required` at <file:line>
+- <Target>/<Type>/<method> — `metadata.always_required_tests`
+
+#### Dependency-Matched
+| Test | Matched on | Source |
+| ---- | ---------- | ------ |
+| ...  | ...        | ...    |
+
+#### Excluded (with reason)
+| Test | Reason |
+| ---- | ------ |
+| ...  | <no marker / mode=build-only / etc.> |
+
+#### Warnings (copy first 3 lines from .context/logs/test-selection-warnings.md if any)
+- ...
+```
+
+QA reads this section verbatim; DR reads the `Warnings` subsection to surface silent test drops.
 
 ### Blockers (omit section if empty)
 

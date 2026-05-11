@@ -51,12 +51,39 @@ Generate a comprehensive QA summary report for completed work, including test re
 
 ## Test Execution Summary
 
+### Test Selection Mode
+
+| Field | Value |
+|-------|-------|
+| `test_mode` (PL) | <build-only / scoped / full> |
+| Effective mode (after auto-promotion) | <same or promoted> |
+| Auto-promotion reason | <e.g., "Selected list empty under build-only" or "—"> |
+| Selected Tests count | N (DV) + M (QA additions) |
+| `ui_visual_check` | <true / false> |
+
 ### By Type
-| Type | Total | Passed | Failed | Skipped |
-|------|-------|--------|--------|---------|
+| Type | Total | Passed | Failed | Skipped (with reason) |
+|------|-------|--------|--------|------------------------|
 | Unit | 35 | 35 | 0 | 0 |
 | Integration | 12 | 10 | 2 | 0 |
 | E2E | 3 | 2 | 1 | 0 |
+| Visual Comparison | — | — | — | <"skipped — ui_visual_check=false" if applicable> |
+
+### Selected Tests Breakdown
+
+| Source | Count | Examples |
+|--------|-------|----------|
+| `@test-required` | N | AppLaunchTests.testLaunchSucceeds |
+| `metadata.always_required_tests` | N | AuthSmokeTests.testLoginRoundtrip |
+| `@depends-on:` matches | N | PaymentRefundTests.testRefundFlow ← `PaymentService` |
+| `covers-changed-files` | N | UserRepositoryTests ← `UserRepository.swift` |
+| Module-level (scoped only) | N | All NetworkingTests/* |
+| QA additions | N | <new edge-case tests> |
+| **Excluded** | N | <reason summary; e.g., "no marker, mode=build-only"> |
+
+### Selection Warnings
+
+Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty section means clean run.
 
 ### By Priority
 | Priority | Total | Passed | Failed |

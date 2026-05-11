@@ -65,7 +65,21 @@ In the 9-stage workflow system, the qa-engineer handles:
 
 ### Q Stage (QA Testing)
 - **Q0**: Analyze requirements, review DV's unit tests, identify coverage gaps
-- **Q1**: Add missing edge case tests, run full test suite (unit + integration + E2E). **UI test gate**: read `metadata.requires_ui_tests` from `<plan_file>`. If `false` or absent (default), append `-skip-testing:<UITestTarget>` once per UI test target on the scheme so unit + integration still run as the regression gate; record `ui_tests_skipped: true` in `testing.md § Notes`. If `true`, run the full suite including UI bundles. See `skills/shared/testing-strategy.md § UI Test Gate`.
+- **Q1**: Add missing edge-case tests, then dispatch test execution per the **Test Selection Gate** (see `skills/shared/testing-strategy.md § Test Selection Gate`).
+
+  **Three-mode dispatcher** — read `metadata.test_mode` from `<plan_file>` (effective default: `scoped`; apply legacy `requires_ui_tests` alias per testing-strategy.md if needed). Read `.context/development-N.md § Selected Tests` (DV's authored list).
+
+  | `test_mode` (DV's effective mode after auto-promotion, if any) | QA execution |
+  |---|---|
+  | `build-only` | Run **only Selected Tests** (positive `-only-testing:` per test ID). If list is empty, auto-promote to `scoped` and log to `testing-N.md § Notes`: `Selected Tests empty under build-only; promoted to scoped for safety.` |
+  | `scoped` | Run Selected Tests + any new edge-case tests added by QA + tests in any module touched by the diff. Pass each as `-only-testing:`. |
+  | `full` | Run the full project test suite (no `-only-testing:`). UI test bundles run unless platform omits them. |
+
+  **QA additions**: when QA writes new tests during edge-case review, append them to `testing-N.md § Selected Tests (QA additions)` with the same schema as DV's section. Include them in the test-run invocation.
+
+  **Warnings ingestion**: read `.context/logs/test-selection-warnings.md` after the run. Copy any `WARN:` lines to `testing-N.md § Notes`. If warnings are non-empty, escalate to DR or DV per `agent-coordination § Error Handling`.
+
+  **Visual comparison gate**: independent of `test_mode`. Run Design Comparison (see § Design Comparison below) when `metadata.ui_visual_check: true` AND `.context/designs/` has artifacts. Otherwise skip.
 - **Q2**: Handle test failures (retry or escalate to DV)
 - **Q3**: All tests pass, document results and metrics in testing.md
 
@@ -73,7 +87,9 @@ In the 9-stage workflow system, the qa-engineer handles:
 
 ### Design Comparison (Visual QA)
 
-**Gate**: only run when `metadata.requires_ui_tests: true` in `<plan_file>` **and** design references exist in `.context/designs/`. If the flag is `false` or absent, skip this entire section and record one line in `testing.md § Design Comparison`: `Skipped — requires_ui_tests=false in plan`. See `skills/shared/testing-strategy.md § UI Test Gate`.
+**Gate**: only run when `metadata.ui_visual_check: true` in `<plan_file>` **and** design references exist in `.context/designs/`. If the flag is `false` or absent, skip this entire section and record one line in `testing-N.md § Design Comparison`: `Skipped — ui_visual_check=false in plan`. See `skills/shared/testing-strategy.md § Test Selection Gate`.
+
+Legacy: if only `requires_ui_tests: true` is set (no `ui_visual_check`), treat as `ui_visual_check: true` per the backward-compat alias and emit a deprecation note in `testing-N.md § Notes`.
 
 When the gate is open, perform visual comparison during Q1 (after functional testing).
 

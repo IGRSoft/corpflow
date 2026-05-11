@@ -65,10 +65,25 @@ Generate a comprehensive test plan from requirements or code changes. Creates st
 
 ## Test Cases
 
+### Selection Markers (required for new test cases)
+
+Each generated test case MUST include selection metadata so DV's parser can include the test in the right Selected Tests list. See `skills/shared/test-selection-syntax.md`.
+
+| Field | Example | When |
+|-------|---------|------|
+| `@test-required` | comment marker on the test | Smoke / critical-path tests |
+| `@depends-on:` | one symbol per marker, e.g. `@depends-on: TokenService` | Cross-file behavior coverage |
+| `@test-tag:` | `smoke`, `regression`, `perf`, `ui`, `flaky` | Categorization |
+
+The output table for each test case (below) gains two columns: `Required?` and `Dependencies`. Columns may be empty if not applicable, but should not be omitted.
+
 ### Unit Tests
 
 #### UT-001: Token Validation
 - **Priority**: High
+- **Required?**: Yes (`@test-required`)
+- **Dependencies**: `TokenService`, `JWTValidator` (`@depends-on:`)
+- **Tag**: `smoke`
 - **Preconditions**: Valid JWT token available
 - **Steps**:
   1. Call `validateToken()` with valid token
