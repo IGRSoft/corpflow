@@ -90,19 +90,25 @@ When building or testing Apple platform code directly (not delegating to apple-d
   6. Write `.context/development-N.md § Selected Tests` with the list (always-required, dependency-matched, excluded-with-reason).
   7. Write any parser warnings to `.context/logs/test-selection-warnings.md` (see schema in `test-selection-syntax.md § Warning log schema`).
 
-  **Execution per mode**:
-  - `build-only`: build + run only the smoke set (`@test-required` ∪ `@test-tag: smoke` ∪ `metadata.always_required_tests`). Do **not** run dependency-matched tests at DV — those run at QA.
-  - `scoped`: build + run the full Selected Tests list (smoke + dep-matched + module-level + covers).
-  - `full`: build + run Selected Tests at DV (sanity check); QA runs the full project suite.
+  **Executed Tests (DV) derivation**: from the Selected Tests list, compute the subset that DV actually runs:
 
-  **Auto-promotion safety nets**:
-  - Selected Tests is empty AND `test_mode=build-only` → run smoke set; record `auto_promoted_mode: scoped` in `§ Decisions` so QA knows to run scoped at QA-stage.
+  1. `Executed Tests (DV)` = (`Selected Tests` ∩ test files in `git diff --name-only --diff-filter=AMR <base>...HEAD` where the destination of any rename is a test file) ∪ `metadata.always_required_tests`.
+  2. Tests matched only by `@depends-on:`, covers-changed-files, or module-level inclusion that were **not** Added/Modified by this DV run are deferred to QA. They remain in the `Selected Tests` artifact so QA executes them.
+  3. `<base>` is the workflow base branch (`origin/master` by default; honors `task.metadata.base_ref` when set).
+
+  **Execution per mode** (DV executes only `Executed Tests (DV)`; QA reads `Selected Tests` for broader run):
+  - `build-only`: build only. Run no tests at DV — QA runs the smoke set + Selected Tests.
+  - `scoped`: build + run `Executed Tests (DV)`. Dep-matched / covers-changed-files / module-level tests are not executed at DV unless their file is Added/Modified.
+  - `full`: build + run `Executed Tests (DV)` at DV (sanity check on what DV just touched); QA runs the full project suite.
+
+  **Auto-promotion / safety nets**:
+  - `Executed Tests (DV)` empty AND `Selected Tests` non-empty AND `test_mode ≠ build-only` (developer changed production code without touching tests) → run only the smoke set as a minimal sanity check; record `auto_executed: smoke_set` in `§ Decisions` so QA sees the gap and runs the full Selected Tests broadly.
   - Platform has no marker handler (e.g., Android/Web) AND `test_mode ∈ {build-only, scoped}` → auto-promote to `full` for this run; record `auto_promoted_mode: full` in `§ Decisions`. Plan-level `test_mode` is **not** rewritten.
 
-  **Apple platform translation**: pass each Selected Test as `-only-testing:<TargetName>/<TypeName>/<methodName>` to `mcp__XcodeBuildMCP__test_sim` (no blanket `-skip-testing:`). When `test_mode=full`, omit `-only-testing:` entirely. UI test bundles run when included in Selected Tests OR when `test_mode=full` AND `ui_visual_check=true`.
+  **Apple platform translation**: pass each test in `Executed Tests (DV)` as `-only-testing:<TargetName>/<TypeName>/<methodName>` to `mcp__XcodeBuildMCP__test_sim` (no blanket `-skip-testing:`). `-only-testing:` is required at DV regardless of mode (including `full`) because DV runs the Executed subset, not the full Selected list. UI test bundles run only when included in `Executed Tests (DV)` (e.g., a UI test file was Added/Modified). Broader UI execution is QA's responsibility, gated on `ui_visual_check=true`.
 
   **Failure handling**: on test failure, classify per `agent-coordination § Error Handling` (transient | logic | missing_input | ambiguous_requirements | design_flaw | hard_constraint | exhausted), append a `## DV[N] Retry [X/3] — <ts>` block to `.context/errors/developer.md` matching the schema in that skill (lines 113–122), and emit one `audit.jsonl` line `action: "retry_attempt"` with `metadata: {retry: X, classification: <code>, log_path: <test log>}`. Max 3 attempts before escalation per the matrix.
-- **D3**: All scoped/changed-code unit tests pass, implementation complete, ready for QA (full-suite regression is QA's gate). Emit one `audit.jsonl` line `action: "artifact_created"` with `artifact: ".context/development-N.md"` after the artifact write.
+- **D3**: All `Executed Tests (DV)` pass (subset of Selected Tests limited to test files Added/Modified this run + `always_required_tests`); implementation complete, ready for QA (QA executes the broader Selected Tests list and full-suite regression). Emit one `audit.jsonl` line `action: "artifact_created"` with `artifact: ".context/development-N.md"` after the artifact write.
 
 **Task System**: Stage DV, Owner: developer. See `skills/shared/task-system.md`.
 
@@ -203,11 +209,20 @@ Required when `<plan_file>` declares `metadata.test_mode` (or legacy `requires_u
 | ---- | ------ |
 | ...  | <no marker / mode=build-only / etc.> |
 
+#### Executed at DV
+List of tests that actually ran at DV (subset of Selected Tests). One row per test.
+
+| Test | Source | Status |
+| ---- | ------ | ------ |
+| <Target>/<Type>/<method> | Added \| Modified \| always_required \| smoke_safety_net | pass \| fail |
+
+Empty if `test_mode=build-only` (no tests at DV). When the safety net fires, `Source` is `smoke_safety_net` and `§ Decisions` carries `auto_executed: smoke_set`.
+
 #### Warnings (copy first 3 lines from .context/logs/test-selection-warnings.md if any)
 - ...
 ```
 
-QA reads this section verbatim; DR reads the `Warnings` subsection to surface silent test drops.
+QA reads `Always Required`, `Dependency-Matched`, and `Excluded` verbatim and executes the full Selected scope. DR reads `Warnings` to surface silent test drops and `Executed at DV` to confirm scope adherence.
 
 ### Blockers (omit section if empty)
 
@@ -265,7 +280,7 @@ On every `Task(specialist)` invocation, append one `audit.jsonl` line: `action: 
 Before marking DV stage complete, verify:
 - [ ] All planned features implemented
 - [ ] Unit tests written per `<plan_file>` test specs
-- [ ] All unit tests covering changed code pass (zero failures in the scoped/related test set; full-suite regression is QA's gate)
+- [ ] All `Executed Tests (DV)` pass — zero failures in tests Added/Modified this run plus `always_required_tests` (broader Selected Tests deferred to QA; full-suite regression is QA's gate)
 - [ ] Test file paths documented in development.md
 - [ ] Code compiles without errors
 - [ ] development-N.md artifact written to .context/ (N = task.metadata.run_index)

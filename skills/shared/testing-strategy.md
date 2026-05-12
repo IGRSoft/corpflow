@@ -147,7 +147,16 @@ Tests are slow (especially UI/simulator bundles). The gate decides — per workf
   - DV step D2 (`agents/developer.md`) — parses markers, computes Selected Tests, runs only when `test_mode ∈ {scoped, full}`.
   - QA step Q1 (`agents/qa-engineer.md`) — three-mode dispatcher.
   - QA Design Comparison (`agents/qa-engineer.md` § Design Comparison) — gated on `ui_visual_check=true` (NOT `test_mode`).
-- **DR** (`agents/technical-lead.md`) does not run tests; the gate does not apply.
+- **DR** (`agents/technical-lead.md`) does not run tests; the gate does not apply. DR's tool list and constraints explicitly forbid test execution — see `agents/technical-lead.md § Constraints` and § Bash Scope (DR) for the canonical forbidden-commands list (`xcodebuild test`, `swift test`, `xcrun simctl … test`, `npm/pnpm/yarn test`, `jest`, `vitest`, `pytest`, `go test`, `cargo test`, `rspec`, `mcp__XcodeBuildMCP__test_*`, `mcp__XcodeBuildMCP__swift_package_test`, `mcp__XcodeBuildMCP__build_run_*`). If DR thinks runtime verification is needed, it records a finding for QA — it never executes.
+
+### DV Executed vs Selected (scope split)
+
+DV's `Selected Tests` is the **handoff artifact** consumed by QA; DV's `Executed Tests (DV)` is the **subset DV actually runs**.
+
+- **Selected Tests** = full algorithm output (smoke ∪ dependency-matched ∪ covers-changed-files ∪ module-level ∪ `metadata.always_required_tests`). Always written to `development-N.md § Selected Tests`. QA executes this list.
+- **Executed Tests (DV)** = (Selected ∩ test files Added/Modified in `git diff --diff-filter=AMR <base>...HEAD`) ∪ `metadata.always_required_tests`. Only this subset runs at DV.
+- **Empty-set safety net**: if Executed Tests (DV) is empty AND Selected Tests is non-empty (production changed without touching tests), DV runs only the smoke set and records `auto_executed: smoke_set` in `§ Decisions`. QA still executes the full Selected list.
+- **Rationale**: DV's job is to verify the code+tests it just wrote/modified compile and pass. Broader regression (dep-matched, covers, module-level) belongs to QA so DV stays fast and QA owns the regression gate. See `agents/developer.md § D2` for the canonical derivation.
 
 ### When to choose each mode
 
