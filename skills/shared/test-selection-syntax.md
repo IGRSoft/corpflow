@@ -207,7 +207,7 @@ The marker grammar is platform-agnostic (line comments are universally parseable
 
 | Reader | What it does with markers/Selected Tests |
 |--------|------------------------------------------|
-| **DV** (`agents/developer.md` D2) | Parses markers; writes Selected Tests list and any warnings; runs build + smoke set in `build-only`, build + Selected Tests in `scoped`, build + Selected Tests in `full`. |
-| **QA** (`agents/qa-engineer.md` Q1) | Reads `development-N.md § Selected Tests`; runs the list (build-only/scoped) or full suite (full); reads `.context/logs/test-selection-warnings.md` and copies WARN lines to `testing-N.md § Notes`. |
-| **DR** (`agents/technical-lead.md`) | Reads `.context/logs/test-selection-warnings.md`; surfaces non-empty warnings as findings in `developer-review-N.md § Findings`. Does NOT execute tests. |
+| **DV** (`agents/developer.md` D2) | Parses markers; writes Selected Tests list and any warnings. Builds in every mode. Executes only `Executed Tests (DV)` = `Selected ∩ test files Added/Modified` (`git diff --diff-filter=AMR`) ∪ `metadata.always_required_tests`. Empty-set safety net: runs smoke set with `auto_executed: smoke_set`. See `testing-strategy.md § DV Executed vs Selected`. |
+| **QA** (`agents/qa-engineer.md` Q1) | Reads `development-N.md § Selected Tests` (full list, not DV's Executed subset); runs the list (build-only/scoped) or full suite (full); reads `.context/logs/test-selection-warnings.md` and copies WARN lines to `testing-N.md § Notes`. |
+| **DR** (`agents/technical-lead.md`) | Reads `.context/logs/test-selection-warnings.md` and `§ Executed at DV`; surfaces non-empty warnings as findings in `developer-review-N.md § Findings`. Does NOT execute tests — see `agents/technical-lead.md § Constraints` for the forbidden-commands list. |
 | **PL** (`agents/product-manager.md`) | Writes `metadata.test_mode`, `metadata.always_required_tests`, `metadata.ui_visual_check`. Does not parse markers. |
