@@ -102,8 +102,7 @@ When building or testing Apple platform code directly (not delegating to apple-d
   - `full`: build + run `Executed Tests (DV)` at DV (sanity check on what DV just touched); QA runs the full project suite.
 
   **Auto-promotion / safety nets**:
-  - `Executed Tests (DV)` empty AND `Selected Tests` non-empty (developer changed production code without touching tests) → run only the smoke set as a minimal sanity check; record `auto_executed: smoke_set` in `§ Decisions` so QA sees the gap and runs the full Selected Tests broadly.
-  - Selected Tests empty AND `test_mode=build-only` → run smoke set; record `auto_promoted_mode: scoped` in `§ Decisions` so QA knows to run scoped at QA-stage.
+  - `Executed Tests (DV)` empty AND `Selected Tests` non-empty AND `test_mode ≠ build-only` (developer changed production code without touching tests) → run only the smoke set as a minimal sanity check; record `auto_executed: smoke_set` in `§ Decisions` so QA sees the gap and runs the full Selected Tests broadly.
   - Platform has no marker handler (e.g., Android/Web) AND `test_mode ∈ {build-only, scoped}` → auto-promote to `full` for this run; record `auto_promoted_mode: full` in `§ Decisions`. Plan-level `test_mode` is **not** rewritten.
 
   **Apple platform translation**: pass each test in `Executed Tests (DV)` as `-only-testing:<TargetName>/<TypeName>/<methodName>` to `mcp__XcodeBuildMCP__test_sim` (no blanket `-skip-testing:`). `-only-testing:` is required at DV regardless of mode (including `full`) because DV runs the Executed subset, not the full Selected list. UI test bundles run only when included in `Executed Tests (DV)` (e.g., a UI test file was Added/Modified). Broader UI execution is QA's responsibility, gated on `ui_visual_check=true`.
