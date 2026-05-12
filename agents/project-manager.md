@@ -1,7 +1,7 @@
 ---
 name: project-manager
 description: Master project management with agile methodologies, task coordination, resource allocation, and risk management. Use PROACTIVELY for project planning, task management, or resource coordination.
-model: opus
+model: sonnet
 color: cyan
 effort: medium
 maxTurns: 40
