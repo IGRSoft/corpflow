@@ -255,23 +255,17 @@ IR → DV → DR → QA → [RE] → FN
 
 ## Handoff Protocol
 
-### Required Inputs (handoff-protocol)
+Required Inputs (anchor-first reads + F1 fallback), Completion Verification, run-index resolver, and atomic-write rules live in `skills/shared/stage-contracts.md § Required Inputs (handoff-protocol)` and `§ Completion Verification (handoff-protocol)`. Do not restate them here. Canonical per-stage template: `stage-contracts.md#tpl-re`. Prev→this label: `DC→RE`.
 
-1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, `run_index`, and `stages` relevant to your stage.
-2. Resolve N = `task.metadata.run_index`. Read anchors in upstream `documentation-N.md#files-changed`, `testing-N.md#results`. Do **not** read whole files unless an anchor is absent.
-3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
+### Frontmatter for this stage (RE)
 
-**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
-
-### Frontmatter Template
-
-Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/release-N.md`; N = `task.metadata.run_index`; resolver: metadata → newest glob `release-*.md` → legacy `release.md`).
+Paste at the top of `.context/release-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
 
 ```yaml
 ---
 handoff:
   stage: RE
-  verdict: ok
+  verdict: ok                  # ok / blocked
   summary: "Release artifacts prepared. Version bumped to X.Y.Z"
   files_touched:
     - plugin.json
@@ -283,16 +277,3 @@ handoff:
     version: release-N.md#version
 ---
 ```
-
-### Completion Verification (handoff-protocol)
-
-Before marking this stage complete, verify all of the following:
-
-- [ ] Your artifact (`.context/release-N.md`) starts with `---
-handoff:
-` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
-- [ ] Frontmatter includes all required fields for stage `RE` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
-- [ ] `.context/state.json` has been patched with `stages.RE` (status, artifact, verdict) and `handoffs["DC→RE"]` (≤300-char summary ending with `ref:` pointer).
-- [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
-
-The orchestrator will verify `stages.RE.status == "completed"` after this task returns. If still `in_progress`, it will run the SubagentStop hook to repair the ledger from your frontmatter.

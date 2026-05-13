@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # cache-lint.sh — preamble byte-stability lint for the handoff-protocol cache prefix.
 #
-# Two modes:
+# Modes:
 #
 #   1. Prefix lint (default):
 #        cache-lint.sh <prompt-log.jsonl>
@@ -25,11 +25,25 @@
 #      Stage is read from the artifact's `handoff:` frontmatter (yq if
 #      available; awk subset fallback). Exits 1 on missing/extra anchors.
 #
-#   3. Self-test:
+#   3. Frontmatter template lint:
+#        cache-lint.sh --frontmatter-template-lint <agent.md> [<agent.md> ...]
+#      For each stage agent, asserts:
+#        - The `## Handoff Protocol` section exists.
+#        - Inside it, there is exactly one fenced ```yaml block.
+#        - That block contains a `handoff:` mapping with a `stage:` value.
+#        - The `stage:` value matches the canonical agent→stage mapping.
+#        - The block is ≤30 lines (per handoff-protocol.md#frontmatter-schema).
+#      Drift-detection guard: catches "someone re-inlined boilerplate" or
+#      changed the per-stage frontmatter template inconsistently between
+#      agents and `skills/shared/stage-contracts.md § Per-Stage Frontmatter
+#      Templates`. Exits 1 on any failure; lists every offending agent.
+#
+#   4. Self-test:
 #        cache-lint.sh --self-test
-#      Runs both modes against built-in fixtures (tempdir). Exits 0 on pass.
+#      Runs all modes against built-in fixtures (tempdir). Exits 0 on pass.
 #
 # Reference: skills/workflow/references/handoff-protocol.md#cache-prefix
+#            skills/shared/stage-contracts.md#per-stage-frontmatter-templates
 # AR decisions implemented: AD-4 (cache-prefix invariants), AD-5 (anchors).
 # AC satisfied: AC-3 (anchor convention), AC-14 (cache stability).
 
@@ -210,6 +224,120 @@ prefix_lint() {
   return $rc
 }
 
+# ---------- Frontmatter template lint ----------
+# Canonical agent-basename → stage code mapping. Mirrors the §
+# Per-Stage Frontmatter Templates section in stage-contracts.md.
+agent_basename_to_stage() {
+  case "$1" in
+    product-manager) echo PL ;;
+    software-architector) echo AR ;;
+    team-lead) echo TL ;;
+    developer) echo DV ;;
+    technical-lead) echo DR ;;
+    security-reviewer) echo SR ;;
+    qa-engineer) echo QA ;;
+    technical-writer) echo DC ;;
+    release-engineer) echo RE ;;
+    project-manager) echo FN ;;
+    stakeholder) echo ST ;;
+    incident-responder) echo IR ;;
+    ethics-reviewer) echo ET ;;
+    *) echo "" ;;
+  esac
+}
+
+# Extract the contents of the first ```yaml fenced block that appears
+# AFTER the `## Handoff Protocol` H2 and BEFORE the next H2 heading.
+# Returns the YAML body (without the fence markers). Empty if not found.
+extract_handoff_yaml_block() {
+  local f="$1"
+  awk '
+    BEGIN { in_section = 0; in_fence = 0; emit = 0 }
+    /^## Handoff Protocol[[:space:]]*$/ { in_section = 1; next }
+    in_section && /^## / { exit }
+    in_section && /^```yaml[[:space:]]*$/ && !in_fence {
+      in_fence = 1; emit = 1; next
+    }
+    in_section && /^```[[:space:]]*$/ && in_fence {
+      in_fence = 0; exit
+    }
+    in_fence && emit { print }
+  ' "$f"
+}
+
+# Count the number of ```yaml ... ``` fenced blocks inside Handoff Protocol.
+count_handoff_yaml_blocks() {
+  local f="$1"
+  awk '
+    BEGIN { in_section = 0; in_fence = 0; n = 0 }
+    /^## Handoff Protocol[[:space:]]*$/ { in_section = 1; next }
+    in_section && /^## / { print n; exit_done = 1; exit }
+    in_section && /^```yaml[[:space:]]*$/ && !in_fence {
+      in_fence = 1; n++; next
+    }
+    in_section && /^```[[:space:]]*$/ && in_fence { in_fence = 0; next }
+    END { if (!exit_done) print n }
+  ' "$f"
+}
+
+frontmatter_template_lint() {
+  local rc=0 agent base stage_expected nblocks body stage_actual nlines
+  for agent in "$@"; do
+    [[ -f "$agent" ]] || { echo "frontmatter-template-lint: file not found: $agent" >&2; rc=1; continue; }
+
+    base=$(basename "$agent" .md)
+    stage_expected=$(agent_basename_to_stage "$base")
+    if [[ -z "$stage_expected" ]]; then
+      echo "frontmatter-template-lint: $agent: not a stage agent (no canonical mapping) — skipping" >&2
+      continue
+    fi
+
+    if ! grep -q '^## Handoff Protocol[[:space:]]*$' "$agent"; then
+      echo "frontmatter-template-lint: $agent FAIL: missing '## Handoff Protocol' section" >&2
+      rc=1; continue
+    fi
+
+    nblocks=$(count_handoff_yaml_blocks "$agent")
+    if [[ "$nblocks" != "1" ]]; then
+      echo "frontmatter-template-lint: $agent FAIL: expected exactly 1 fenced yaml block inside Handoff Protocol, found $nblocks" >&2
+      rc=1; continue
+    fi
+
+    body=$(extract_handoff_yaml_block "$agent")
+    if ! grep -q '^handoff:' <<< "$body"; then
+      echo "frontmatter-template-lint: $agent FAIL: yaml block has no top-level 'handoff:' key" >&2
+      rc=1; continue
+    fi
+
+    # Extract stage value (allow optional quotes / trailing comment).
+    stage_actual=$(awk '
+      /^[[:space:]]*stage:[[:space:]]*/ {
+        sub(/^[[:space:]]*stage:[[:space:]]*/, "")
+        sub(/[[:space:]]*#.*$/, "")
+        gsub(/[[:space:]"]+/, "")
+        print; exit
+      }
+    ' <<< "$body")
+    if [[ -z "$stage_actual" ]]; then
+      echo "frontmatter-template-lint: $agent FAIL: yaml block has no 'stage:' value" >&2
+      rc=1; continue
+    fi
+    if [[ "$stage_actual" != "$stage_expected" ]]; then
+      echo "frontmatter-template-lint: $agent FAIL: stage='$stage_actual' but agent maps to '$stage_expected'" >&2
+      rc=1; continue
+    fi
+
+    nlines=$(printf '%s\n' "$body" | wc -l | tr -d ' ')
+    if (( nlines > 30 )); then
+      echo "frontmatter-template-lint: $agent FAIL: yaml block has $nlines lines (limit 30 per handoff-protocol.md#frontmatter-schema)" >&2
+      rc=1; continue
+    fi
+
+    echo "frontmatter-template-lint: $agent (stage=$stage_actual, $nlines lines) ok"
+  done
+  return $rc
+}
+
 # ---------- Self-test ----------
 self_test() {
   local td
@@ -309,12 +437,118 @@ desc" '{workflow_id:"wf-self", stage:"TL", prompt:$prompt}' >> "$log"
     echo "self-test: prefix-lint drift detect: ok"
   fi
 
+  # Frontmatter template lint: positive fixture (stage agent shaped like
+  # the post-v3.9.0 collapsed agents).
+  cat > "$td/developer.md" <<'EOF'
+---
+name: developer
+description: dummy
+---
+
+# Developer
+
+## Handoff Protocol
+
+Required Inputs etc live in stage-contracts.md.
+
+### Frontmatter for this stage (DV)
+
+```yaml
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "<one-line ≤200 chars>"
+  files_touched:
+    - path/to/file1.md
+  next_stage_focus: "<imperative>"
+  refs:
+    decisions: analyzing-N.md#decisions
+---
+```
+
+## Other Section
+EOF
+  if "$0" --frontmatter-template-lint "$td/developer.md" >/dev/null 2>&1; then
+    echo "self-test: frontmatter-template-lint pass: ok"
+  else
+    echo "self-test: frontmatter-template-lint pass: FAIL" >&2; exit 1
+  fi
+
+  # Negative: stage mismatch
+  cat > "$td/qa-engineer.md" <<'EOF'
+---
+name: qa-engineer
+description: dummy
+---
+
+# QA
+
+## Handoff Protocol
+
+text
+
+### Frontmatter for this stage (QA)
+
+```yaml
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "wrong stage"
+  refs: { dev: development-N.md#files-changed }
+---
+```
+EOF
+  if "$0" --frontmatter-template-lint "$td/qa-engineer.md" >/dev/null 2>&1; then
+    echo "self-test: frontmatter-template-lint reject mismatch: FAIL (should have rejected stage mismatch)" >&2; exit 1
+  else
+    echo "self-test: frontmatter-template-lint reject mismatch: ok"
+  fi
+
+  # Negative: two yaml blocks (re-inlined boilerplate regression)
+  cat > "$td/team-lead.md" <<'EOF'
+---
+name: team-lead
+description: dummy
+---
+
+# TL
+
+## Handoff Protocol
+
+text
+
+```yaml
+---
+handoff:
+  stage: TL
+  verdict: ok
+  summary: "first"
+  refs: { plan: planning-N.md#requirements }
+---
+```
+
+```yaml
+extra: block
+```
+EOF
+  if "$0" --frontmatter-template-lint "$td/team-lead.md" >/dev/null 2>&1; then
+    echo "self-test: frontmatter-template-lint reject duplicate: FAIL (should have rejected two yaml blocks)" >&2; exit 1
+  else
+    echo "self-test: frontmatter-template-lint reject duplicate: ok"
+  fi
+
   echo "self-test: ALL PASS"
 }
 
 # ---------- main ----------
 case "${1:-}" in
   --anchor-lint) shift; [[ $# -ge 1 ]] || usage; anchor_lint "$1" ;;
+  --frontmatter-template-lint)
+    shift; [[ $# -ge 1 ]] || usage
+    frontmatter_template_lint "$@"; exit $?
+    ;;
   --self-test)   self_test ;;
   "") usage ;;
   *) prefix_lint "$1"; exit $? ;;

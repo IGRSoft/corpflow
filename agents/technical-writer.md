@@ -141,23 +141,17 @@ Before marking DC stage complete, verify:
 
 ## Handoff Protocol
 
-### Required Inputs (handoff-protocol)
+Required Inputs (anchor-first reads + F1 fallback), Completion Verification, run-index resolver, and atomic-write rules live in `skills/shared/stage-contracts.md § Required Inputs (handoff-protocol)` and `§ Completion Verification (handoff-protocol)`. Do not restate them here. Canonical per-stage template: `stage-contracts.md#tpl-dc`. Prev→this label: `QA→DC`.
 
-1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, `run_index`, and `stages` relevant to your stage.
-2. Resolve N = `task.metadata.run_index`. Read anchors in upstream `development-N.md#files-changed`, `analyzing-N.md#decisions`. Do **not** read whole files unless an anchor is absent.
-3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
+### Frontmatter for this stage (DC)
 
-**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
-
-### Frontmatter Template
-
-Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/documentation-N.md`; N = `task.metadata.run_index`; resolver: metadata → newest glob `documentation-*.md` → legacy `documentation.md`).
+Paste at the top of `.context/documentation-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
 
 ```yaml
 ---
 handoff:
   stage: DC
-  verdict: ok
+  verdict: ok                  # ok / blocked / escalate
   summary: "Updated N documentation files. Cross-references added."
   files_touched:
     - docs/file1.md
@@ -166,16 +160,3 @@ handoff:
     docs: documentation-N.md#files-changed
 ---
 ```
-
-### Completion Verification (handoff-protocol)
-
-Before marking this stage complete, verify all of the following:
-
-- [ ] Your artifact (`.context/documentation-N.md`) starts with `---
-handoff:
-` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
-- [ ] Frontmatter includes all required fields for stage `DC` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
-- [ ] `.context/state.json` has been patched with `stages.DC` (status, artifact, verdict) and `handoffs["QA→DC"]` (≤300-char summary ending with `ref:` pointer).
-- [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
-
-The orchestrator will verify `stages.DC.status == "completed"` after this task returns. If still `in_progress`, it will run the SubagentStop hook to repair the ledger from your frontmatter.

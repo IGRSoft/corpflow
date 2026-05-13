@@ -62,6 +62,27 @@ Stages Complete: P, A, T
 Estimated Remaining: ~$0.15
 ```
 
+### Cache Performance (validates AC-14)
+
+```
+### Cache Performance
+| Stage | input_tokens | cache_read | cache_create | hit_ratio | F1 fallbacks |
+|-------|--------------|------------|--------------|-----------|--------------|
+| PL    |        7,500 |          0 |        7,200 |       0%  |            0 |
+| AR    |       15,000 |      6,800 |        7,500 |      31%  |            0 |
+| TL    |        4,000 |      3,100 |          200 |      78%  |            0 |
+| DV    |       18,500 |     11,200 |        1,400 |      62%  |            0 |
+| DR    |        6,200 |      4,900 |          150 |      79%  |            0 |
+| QA    |        9,800 |      6,300 |          500 |      64%  |            0 |
+| **Average** | — | — | — | **52% ⚠** | **0** |
+```
+
+- `hit_ratio = cache_read_input_tokens / (input_tokens + cache_read_input_tokens)`.
+- Row flagged with ⚠ when ratio < 60%. Cross-stage **average** is the AC-14 target (≥ 60%); flag the average row when below.
+- PL is always 0% (cold cache); the average excludes PL once at least 3 downstream stages have data so a single cold prefix doesn't drag the headline.
+- `F1 fallbacks` counts lines in `.context/logs/fallback-${N}.log` for that stage (zero in healthy runs). A non-zero count means the agent ran without `.context/state.json` and lost cache benefit silently — investigate even if the headline ratio looks OK.
+- `n/a` appears when `CLAUDE_CACHE_READ_INPUT_TOKENS` was unset (older runtime); see `skills/cost-optimization/SKILL.md § Capture Script`.
+
 ### Optimization Report (`--optimize`)
 
 ```
@@ -205,9 +226,16 @@ Reads `.context/logs/cost-*.jsonl` written by the `SubagentStop` hook (see
 one subagent invocation — the aggregator groups by `stage`, sums `input_tokens`
 + `output_tokens`, and applies the `model` rate.
 
+The Cache Performance table additionally reads:
+
+- `cache_read_input_tokens` / `cache_creation_input_tokens` columns from the same JSONL (added in plugin v3.9.0; exported by Claude Code 2.1.114+ on `SubagentStop` as `CLAUDE_CACHE_READ_INPUT_TOKENS` / `CLAUDE_CACHE_CREATION_INPUT_TOKENS`).
+- `.context/logs/fallback-*.log` line counts for the F1 fallback column (one line per agent that fell back to legacy `metadata.context_files` mode; see `skills/shared/stage-contracts.md § F1`).
+
 If `.context/logs/cost-*.jsonl` is absent, the command falls back to estimated
 baselines from `skills/cost-optimization/references/token-baselines.md` and
-prints a warning that the hook is not configured.
+prints a warning that the hook is not configured. If the JSONL exists but the
+cache columns are missing or zero, the Cache Performance table renders `n/a`
+and prints a note pointing at the Capture Script update.
 
 ## Integration
 
