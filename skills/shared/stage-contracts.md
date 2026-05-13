@@ -45,6 +45,20 @@ printf '%s\t%s\t%s\t%s\n' \
 
 Then proceed with the legacy read. The fallback log is consumed by `/cost-report` to flag workflows that lost cache hits silently.
 
+> Agents MUST NOT restate this F1 telemetry snippet, the three-step run-index resolver, or the atomic-write pseudocode in their own files — link to `#f1-telemetry`, `#run-index-resolution`, or `handoff-protocol.md#atomic-write` instead. Drift checker: `cache-lint.sh --frontmatter-template-lint`.
+
+### #run-index-resolution
+
+Three-step resolver (canonical):
+
+1. `task.metadata.run_index` → `<basename>-${N}.md`.
+2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
+3. Legacy unnumbered `<basename>.md` (one release cycle fallback; log WARN when used).
+
+### #f1-telemetry
+
+See the F1 paragraph and bash snippet immediately above. Cross-references: `handoff-protocol.md#fallback-paths` (F1..F4 matrix), `/cost-report § Cache Performance` (operator surface).
+
 ## Required Outputs (handoff-protocol)
 
 Every stage's output artifact MUST:
@@ -104,6 +118,275 @@ When TL splits DV into DV0/DV1/DV2 (parallel streams):
 - Each sub-task has its own `retry_count`
 - All write to the same `.context/errors/developer.md` with distinct section headers (`## DV0 Retry 1 — …`, `## DV1 Retry 1 — …`)
 - Output artifact is a single `.context/development-N.md` — each sub-task appends its "Files Changed" block
+
+## Per-Stage Frontmatter Templates
+
+Canonical YAML templates for the `handoff:` block at the top of every stage artifact. Each agent's `## Handoff Protocol` section pastes the matching block verbatim (with placeholder substitutions) into `.context/<artifact>-N.md`; N is the run index resolved per `#run-index-resolution`.
+
+These are the single source of truth — agents MUST NOT diverge from the field shape below. To change a template, edit this section, then re-run `cache-lint.sh --frontmatter-template-lint agents/*.md` so every agent's inline copy is validated to match.
+
+### #tpl-pl — Planning (product-manager)
+
+```yaml
+---
+handoff:
+  stage: PL
+  verdict: ok                  # ok / blocked / escalate
+  summary: "<one-line summary ≤200 chars>"
+  key_decisions:
+    - { id: pd1, summary: "<decision>", anchor: "planning-N.md#scope" }
+  next_stage_focus: "<imperative: what AR must grep/design>"
+  open_questions:
+    - "q1: <question text> (AR to decide)"
+  refs:
+    spec: .context/attachments/<spec-file>
+    plan: .context/planning-N.md#requirements
+---
+```
+
+Prev→this label: `USER→PL`.
+
+### #tpl-ar — Architecture (software-architector)
+
+```yaml
+---
+handoff:
+  stage: AR
+  verdict: ok                  # ok / blocked / escalate
+  summary: "<one-line summary ≤200 chars>"
+  key_decisions:
+    - { id: ad1, summary: "<decision>", anchor: "analyzing-N.md#decisions" }
+  next_stage_focus: "<imperative: what TL must fan-out>"
+  open_questions:
+    - "q3: <question text> (TL to decide)"
+  refs:
+    plan: .context/planning-N.md#requirements
+    decisions: analyzing-N.md#decisions
+---
+```
+
+Prev→this label: `PL→AR`. Skip-exploration short-circuit applies — see `agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
+
+### #tpl-tl — Team Lead (team-lead)
+
+```yaml
+---
+handoff:
+  stage: TL
+  verdict: ok                  # ok / blocked / escalate
+  summary: "<one-line coordination summary ≤200 chars>"
+  next_stage_focus: "<imperative: DV batch order + parallelization>"
+  refs:
+    plan: .context/planning-N.md#requirements
+    arch: .context/analyzing-N.md#decisions
+    fan_out: coordination-N.md#fan-out
+---
+```
+
+Prev→this label: `AR→TL`. Skip-exploration short-circuit applies.
+
+### #tpl-dv — Development (developer)
+
+```yaml
+---
+handoff:
+  stage: DV
+  verdict: ok                  # ok / blocked / escalate
+  summary: "<N files modified, M tests added>"
+  files_touched:
+    - path/to/file1.md
+    - path/to/file2.md
+  next_stage_focus: "<imperative: what DR/QA must focus on>"
+  refs:
+    decisions: analyzing-N.md#decisions
+    coordination: coordination-N.md#fan-out
+    tests: development-N.md#tests-added
+---
+```
+
+Prev→this label: `TL→DV`.
+
+### #tpl-dr — Developer Review (technical-lead)
+
+```yaml
+---
+handoff:
+  stage: DR
+  verdict: pass                # pass / fail
+  summary: "<N files reviewed. M findings, all addressed / K blockers remain>"
+  key_decisions:
+    - { id: dr1, summary: "<finding or approval>", anchor: "developer-review-N.md#findings" }
+  refs:
+    dev: development-N.md#files-changed
+    findings: developer-review-N.md#findings
+---
+```
+
+Prev→this label: `DV→DR`.
+
+### #tpl-sr — Security Review (security-reviewer)
+
+```yaml
+---
+handoff:
+  stage: SR
+  verdict: pass                # pass / fail
+  summary: "<N files reviewed. M security findings>"
+  key_decisions:
+    - { id: sr1, summary: "<security finding>", anchor: "security-review-N.md#findings" }
+  refs:
+    dev: development-N.md#files-changed
+    findings: security-review-N.md#findings
+---
+```
+
+Prev→this label: `DR→SR`.
+
+### #tpl-qa — QA (qa-engineer)
+
+```yaml
+---
+handoff:
+  stage: QA
+  verdict: go                  # go / no-go
+  summary: "<N unit tests pass, M integration checks. Coverage X%>"
+  files_touched:
+    - tests/added/test-file.sh
+  key_decisions:
+    - { id: qa1, summary: "Coverage X%, target met", anchor: "testing-N.md#coverage" }
+  refs:
+    dev: development-N.md#files-changed
+    results: testing-N.md#results
+---
+```
+
+Prev→this label: `DR→QA` (or `SR→QA` when SR runs).
+
+### #tpl-dc — Documentation (technical-writer)
+
+```yaml
+---
+handoff:
+  stage: DC
+  verdict: ok                  # ok / blocked / escalate
+  summary: "Updated N documentation files. Cross-references added."
+  files_touched:
+    - docs/file1.md
+  refs:
+    dev: development-N.md#files-changed
+    docs: documentation-N.md#files-changed
+---
+```
+
+Prev→this label: `QA→DC`.
+
+### #tpl-re — Release Engineering (release-engineer)
+
+```yaml
+---
+handoff:
+  stage: RE
+  verdict: ok                  # ok / blocked
+  summary: "Release artifacts prepared. Version bumped to X.Y.Z"
+  files_touched:
+    - plugin.json
+    - MEMORY.md
+  key_decisions:
+    - { id: re1, summary: "Version X.Y.Z", anchor: "release-N.md#version" }
+  refs:
+    artifacts: release-N.md#artifacts
+    version: release-N.md#version
+---
+```
+
+Prev→this label: `DC→RE`.
+
+### #tpl-fn — Finalization (project-manager)
+
+```yaml
+---
+handoff:
+  stage: FN
+  verdict: ok                  # ok / blocked
+  summary: "All artifacts aggregated. complete-summary-N.md ready for ST approval."
+  files_touched:
+    - .context/complete-summary-N.md
+  next_stage_focus: "ST approves merge and confirms MEMORY.md version bump"
+  refs:
+    summary: .context/complete-summary-N.md
+    ledger: .context/state.json
+---
+```
+
+Prev→this label: `RE→FN` (or `DC→FN` when RE is absent).
+
+### #tpl-st — Stakeholder (stakeholder)
+
+```yaml
+---
+handoff:
+  stage: ST
+  verdict: approve             # approve / reject
+  summary: "Approved. <N follow-ups filed or 'No follow-ups'>."
+  key_decisions:
+    - { id: st1, summary: "Approve merge", anchor: "complete-summary-N.md#decision" }
+  refs:
+    summary: .context/complete-summary-N.md
+---
+```
+
+Prev→this label: `FN→ST`.
+
+### #tpl-ir — Incident Response (incident-responder)
+
+```yaml
+---
+handoff:
+  stage: IR
+  verdict: ok                  # ok / escalate
+  summary: "Root cause: <X>. Fix plan: <Y>. Blast radius: <Z>"
+  key_decisions:
+    - { id: ir1, summary: "Root cause identified", anchor: "incident-N.md#root-cause" }
+  next_stage_focus: "DV implements fix; QA runs regression"
+  refs:
+    root_cause: incident-N.md#root-cause
+    fix_plan: incident-N.md#fix-plan
+---
+```
+
+Prev→this label: `USER→IR`.
+
+### #tpl-et — Ethics Review (ethics-reviewer)
+
+```yaml
+---
+handoff:
+  stage: ET
+  verdict: pass                # pass / fail (block/conditional → fail with key_decisions)
+  summary: "Ethics review complete. Score: <X>/100. Status: <APPROVED|CONDITIONS|BLOCKED>."
+  key_decisions:
+    - { id: et1, summary: "Compliance verdict", anchor: "ethics-review-N.md#findings" }
+  next_stage_focus: "Invoking stage resumes after ET verdict"
+  refs:
+    review: .context/ethics-review-N.md
+    ledger: .context/state.json
+---
+```
+
+Prev→this label: `<invoker>→ET` (whichever stage triggered the ethics gate).
+
+## Completion Verification (handoff-protocol)
+
+Single source of truth for what every stage agent verifies before setting `status: completed`. Each agent's `## Handoff Protocol` section MUST reference this checklist rather than restating it.
+
+Before marking your stage complete, verify all of the following:
+
+- [ ] Your artifact (`.context/<artifact>-N.md`) starts with `---\nhandoff:` YAML frontmatter conforming to the per-stage template at `stage-contracts.md#tpl-<CODE>`.
+- [ ] Frontmatter includes all required fields for your stage `<CODE>` per `skills/workflow/references/handoff-protocol.md#frontmatter-schema` § Per-stage required-field matrix.
+- [ ] `.context/state.json` has been patched with `stages.<CODE>` (`status`, `artifact`, `verdict`, `retry_count`) and `handoffs["<PREV>→<CODE>"]` (≤300-char summary ending with `ref:` pointer). `<PREV>→<CODE>` is documented in the template's footer (e.g. `PL→AR`, `USER→IR`).
+- [ ] Atomic write used per `handoff-protocol.md#atomic-write` (read → merge → temp → `sync` → `mv -f`). NEVER write `.context/state.json` directly.
+
+The orchestrator verifies `stages.<CODE>.status == "completed"` after the task returns. If still `in_progress`, the SubagentStop hook repairs the ledger from the artifact's frontmatter (F3 fallback). If the artifact itself lacks frontmatter, the orchestrator derives a minimal handoff record from the agent's return text — but downstream cache hits collapse, so producing valid frontmatter is mandatory in steady state.
 
 ## Cross References
 

@@ -179,24 +179,19 @@ Before marking AR stage complete, verify:
 
 ## Handoff Protocol
 
-### Required Inputs (handoff-protocol)
+Required Inputs (anchor-first reads + F1 fallback), Completion Verification, run-index resolver, and atomic-write rules live in `skills/shared/stage-contracts.md § Required Inputs (handoff-protocol)` and `§ Completion Verification (handoff-protocol)`. Do not restate them here. Canonical per-stage template: `stage-contracts.md#tpl-ar`. Prev→this label: `PL→AR`.
 
-1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
-2. Read only the listed anchors in upstream artifacts (e.g. `analyzing.md#decisions`, `planning-0.md#requirements`). Do **not** read whole files unless an anchor is absent.
-3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
-4. **Skip-exploration short-circuit**: If `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` (list of `<file>#<anchor>` refs) as the authoritative pre-explored set. Do NOT re-Glob/Grep the source tree for files already covered. Read only the listed anchors and start architecture work from those facts. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
+**Skip-exploration short-circuit**: If `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` (list of `<file>#<anchor>` refs) as the authoritative pre-explored set. Do NOT re-Glob/Grep the source tree for files already covered. Read only the listed anchors and start architecture work from those facts. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
 
-**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` to `.context/logs/fallback-${run_index:-0}.log` (single line; surfaces silent cache degradation per `stage-contracts § Required Inputs § F1`) and proceed normally.
+### Frontmatter for this stage (AR)
 
-### Frontmatter Template
-
-Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/analyzing-N.md`; N = `task.metadata.run_index`; resolver: metadata → newest glob `analyzing-*.md` → legacy `analyzing.md`).
+Paste at the top of `.context/analyzing-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
 
 ```yaml
 ---
 handoff:
   stage: AR
-  verdict: ok
+  verdict: ok                  # ok / blocked / escalate
   summary: "<one-line summary ≤200 chars>"
   key_decisions:
     - { id: ad1, summary: "<decision>", anchor: "analyzing-N.md#decisions" }
@@ -208,16 +203,3 @@ handoff:
     decisions: analyzing-N.md#decisions
 ---
 ```
-
-### Completion Verification (handoff-protocol)
-
-Before marking this stage complete, verify all of the following:
-
-- [ ] Your artifact (`.context/analyzing-N.md`) starts with `---
-handoff:
-` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
-- [ ] Frontmatter includes all required fields for stage `AR` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
-- [ ] `.context/state.json` has been patched with `stages.AR` (status, artifact, verdict) and `handoffs["PL→AR"]` (≤300-char summary ending with `ref:` pointer).
-- [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
-
-The orchestrator will verify `stages.AR.status == "completed"` after this task returns. If still `in_progress`, it will run the SubagentStop hook to repair the ledger from your frontmatter.

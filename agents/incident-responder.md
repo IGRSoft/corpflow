@@ -247,23 +247,17 @@ Conduct post-mortem when:
 
 ## Handoff Protocol
 
-### Required Inputs (handoff-protocol)
+Required Inputs (anchor-first reads + F1 fallback), Completion Verification, run-index resolver, and atomic-write rules live in `skills/shared/stage-contracts.md § Required Inputs (handoff-protocol)` and `§ Completion Verification (handoff-protocol)`. Do not restate them here. Canonical per-stage template: `stage-contracts.md#tpl-ir`. Prev→this label: `USER→IR`.
 
-1. Read `.context/state.json` (the workflow ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, and `stages` relevant to your stage.
-2. Read only the listed anchors in upstream artifacts (e.g. `analyzing-N.md#decisions`, `planning-N.md#requirements`). Do **not** read whole files unless an anchor is absent.
-3. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
+### Frontmatter for this stage (IR)
 
-**Backward-compatibility fallback**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Log `INFO: state.json not found, legacy mode` and proceed normally.
-
-### Frontmatter Template
-
-Paste this block (with substitutions) at the top of the artifact this stage produces (`.context/incident-N.md`).
+Paste at the top of `.context/incident-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
 
 ```yaml
 ---
 handoff:
   stage: IR
-  verdict: ok
+  verdict: ok                  # ok / escalate
   summary: "Root cause: <X>. Fix plan: <Y>. Blast radius: <Z>"
   key_decisions:
     - { id: ir1, summary: "Root cause identified", anchor: "incident-N.md#root-cause" }
@@ -273,16 +267,3 @@ handoff:
     fix_plan: incident-N.md#fix-plan
 ---
 ```
-
-### Completion Verification (handoff-protocol)
-
-Before marking this stage complete, verify all of the following:
-
-- [ ] Your artifact (`.context/incident-N.md`) starts with `---
-handoff:
-` YAML frontmatter conforming to `skills/workflow/references/handoff-protocol.md`.
-- [ ] Frontmatter includes all required fields for stage `IR` per the per-stage required-field matrix (see `analyzing-N.md#schemas`).
-- [ ] `.context/state.json` has been patched with `stages.IR` (status, artifact, verdict) and `handoffs["USER→IR"]` (≤300-char summary ending with `ref:` pointer).
-- [ ] Atomic write used: read → merge → `.context/.state.json.$$.tmp` → `sync` → `mv -f` (see `skills/workflow/references/handoff-protocol.md#atomic-write`).
-
-The orchestrator will verify `stages.IR.status == "completed"` after this task returns. If still `in_progress`, it will run the SubagentStop hook to repair the ledger from your frontmatter.

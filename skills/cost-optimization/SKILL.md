@@ -155,10 +155,14 @@ jq -cn --arg ts "$(date -u +%FT%TZ)" '{
   model: env.CLAUDE_TASK_METADATA_MODEL,
   input_tokens: (env.CLAUDE_INPUT_TOKENS // "0" | tonumber),
   output_tokens: (env.CLAUDE_OUTPUT_TOKENS // "0" | tonumber),
+  cache_read_input_tokens: (env.CLAUDE_CACHE_READ_INPUT_TOKENS // "0" | tonumber),
+  cache_creation_input_tokens: (env.CLAUDE_CACHE_CREATION_INPUT_TOKENS // "0" | tonumber),
   duration_ms: (env.CLAUDE_DURATION_MS // "0" | tonumber),
   status: env.CLAUDE_SUBAGENT_STATUS
 }' >> "$LOG"
 ```
+
+`CLAUDE_CACHE_READ_INPUT_TOKENS` and `CLAUDE_CACHE_CREATION_INPUT_TOKENS` are exported by Claude Code 2.1.114+ on SubagentStop alongside `CLAUDE_INPUT_TOKENS`/`CLAUDE_OUTPUT_TOKENS`. The `// "0"` fallback keeps the line valid on older runtimes (those values stay 0, and `/cost-report § Cache Performance` flags the row with an `n/a` hit ratio).
 
 ### Schema
 
@@ -171,6 +175,8 @@ jq -cn --arg ts "$(date -u +%FT%TZ)" '{
   "model": "opus|sonnet|haiku",
   "input_tokens": 0,
   "output_tokens": 0,
+  "cache_read_input_tokens": 0,       // bytes served from prompt cache
+  "cache_creation_input_tokens": 0,   // bytes seeded into the cache this turn
   "duration_ms": 0,
   "status": "completed|error|cancelled"
 }
@@ -179,7 +185,10 @@ jq -cn --arg ts "$(date -u +%FT%TZ)" '{
 ### Aggregation
 
 `/cost-report` reads all `.context/logs/cost-*.jsonl` files, groups by `stage`,
-and renders the `### By Stage` table. See `commands/cost-report.md` § Data Source.
+and renders the `### By Stage` and `### Cache Performance` tables. The latter
+validates AC-14 (`cache_read_input_tokens` ≥ 60% cross-stage average) and
+counts F1 fallback firings from `.context/logs/fallback-*.log`. See
+`commands/cost-report.md § Data Source` and `§ Cache Performance`.
 
 ## Prompt Caching (1h TTL) & Handoff Protocol
 
