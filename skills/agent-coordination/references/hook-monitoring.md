@@ -174,6 +174,32 @@ Hooks can invoke MCP tools directly via `type: "mcp_tool"` (previously `command`
 
 > Async `PostToolUse` hooks that emit no response payload no longer write empty entries to the session transcript (v2.1.119 fix).
 
+### Hook Effort Visibility (v2.1.133+)
+
+Hook payloads now include `effort.level` (JSON field) and the `$CLAUDE_EFFORT` env var carries the active effort string (`low|medium|high|xhigh|max`). Audit/cost-tracking hooks can attribute spend to the effort tier without parsing model metadata. See `skills/shared/model-selection.md` for the tier model.
+
+### Exec-Form Hook Commands (v2.1.139+)
+
+Hooks accept an `args: string[]` array next to `command`, avoiding shell-string quoting issues for commands with paths/spaces:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "./tools/log.sh", "args": ["--stage", "DV", "--json"] }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### PostToolUse `continueOnBlock` (v2.1.139+)
+
+PostToolUse hook entries support `continueOnBlock: true` so a blocking hook earlier in the chain does not short-circuit subsequent hooks in the same matcher group. Use when independent observers (audit + cost) must both run even if one signals block.
+
 ## Agent Teams Lifecycle Hooks
 
 When agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), additional hook events are available:

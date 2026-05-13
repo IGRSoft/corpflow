@@ -282,6 +282,10 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 
 > Named subagents appear in `@`-mention typeahead suggestions (v2.1.89+), making it easier to reference and communicate with running agents via `SendMessage`.
 
+> Subagents now discover project + user + plugin skills natively (v2.1.133 fix). Orchestrators no longer need to inline-load skill instructions before delegation — the child can resolve `Skill("name")` from any source the parent could.
+
+> `subagent_type` matching is case- and separator-insensitive (v2.1.140). `Task({ subagent_type: "IGRSoft:Developer" })` resolves to the same agent as `igrsoft:developer`. Bare-name → `igrsoft:` prefix convention still applies for resolution priority, but typos in case/separator no longer fail-stop the call.
+
 > `/agents` displays a tabbed layout (Running/Library tabs) with a `* N running` indicator next to agent types with live instances (v2.1.97/2.1.98).
 
 ### Monitor Tool for Background Events (v2.1.98+)

@@ -18,6 +18,8 @@ effort: low
 
 > **Opus 4.7 context window** (v2.1.117 fix): Claude Code now correctly computes `/context` percentages against Opus 4.7's native **1M context window** rather than 200K — eliminates premature autocompacting on long Opus 4.7 sessions.
 
+> **Hook Effort Visibility** (v2.1.133+): hooks observe the active effort tier via `effort.level` (JSON payload) and the `$CLAUDE_EFFORT` env var. Cost/audit hooks can attribute spend per tier without parsing model metadata. See `skills/agent-coordination/references/hook-monitoring.md § Hook Effort Visibility`.
+
 ## Selection Criteria
 
 | Complexity | Model | Use Cases |
