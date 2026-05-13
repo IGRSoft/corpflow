@@ -74,6 +74,14 @@ Typical token usage by workflow stage (sonnet model):
 | Idle subagent summaries no longer fire repeatedly | 2.1.128 | Caps worst-case token cost on stalled subagents |
 | Read-only Bash siblings: failure no longer cancels parallel peers | 2.1.128 | Mirrors 2.1.72 row for read-only Bash; reduces wasted retries |
 | 1M-context autocompact threshold respected (no premature "Prompt is too long") | 2.1.128 | Keeps full context budget usable on Opus 4.7 |
+| 1h prompt cache TTL no longer silently downgrades to 5min | 2.1.129 | Long-running sessions actually realize 1h cache benefit; pairs with `ENABLE_PROMPT_CACHING_1H` (v2.1.108) |
+| `deniedMcpServers` supports `*://host` patterns | 2.1.129 | Tighter MCP egress control without per-scheme duplication |
+| `claude_code.pull_request.count` OTEL counter tallies MCP-tool-initiated PRs/MRs | 2.1.129 | Observability for MCP-driven workflow output |
+| `/context all` per-skill token estimates use model tokenizer | 2.1.139 | Skill listing token attribution accurate per active model (no more cross-tokenizer drift) |
+| `claude plugin details <name>` surfaces inventory + token cost | 2.1.139 | Per-plugin cost visibility before install/enable |
+| Hook payloads include `effort.level` + `$CLAUDE_EFFORT` env | 2.1.133 | Cost-tracking hooks attribute spend per effort tier |
+| Subagents discover project + user + plugin skills | 2.1.133 | Removes need to inline skill instructions before delegation (token savings on parent prompt) |
+| Stdio MCP servers receive `CLAUDE_PROJECT_DIR` | 2.1.139 | MCP tools can resolve project-relative paths without parent-passed args |
 
 These are automatic — no agent or workflow changes needed. They compound across multi-stage workflows.
 

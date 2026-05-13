@@ -130,6 +130,32 @@ Unrecognized hook event names in `settings.json` no longer break the entire sett
 
 Plugin hooks from force-enabled plugins now run when `allowManagedHooksOnly` is set, restricting execution to managed hook types only.
 
+### Hook Effort Visibility (v2.1.133+)
+
+Hook payloads now include `effort.level` (JSON field) and the `$CLAUDE_EFFORT` env var carries the active effort string (`low|medium|high|xhigh|max`). Audit/cost-tracking hooks can attribute spend to the effort tier without parsing model metadata. See `skills/shared/model-selection.md` for the tier model.
+
+### Exec-Form Hook Commands (v2.1.139+)
+
+Hooks accept an `args: string[]` array next to `command`, avoiding shell-string quoting issues for commands with paths/spaces:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "./tools/log.sh", "args": ["--stage", "DV", "--json"] }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### PostToolUse `continueOnBlock` (v2.1.139+)
+
+PostToolUse hook entries support `continueOnBlock: true` so a blocking hook earlier in the chain does not short-circuit subsequent hooks in the same matcher group. Use when independent observers (audit + cost) must both run even if one signals block.
+
 ### Main-Thread Agent Hooks (v2.1.116+)
 
 Agent frontmatter `hooks:` now fire when the agent runs as a main-thread agent via `--agent <name>`. Previously hooks declared in agent frontmatter only ran for subagent invocations. Plugin agents that ship lifecycle hooks (e.g., audit-trail writers) now apply consistently in both subagent and main-thread modes. **Companion fix (v2.1.118)**: agent-type hooks no longer fail with "Messages are required for agent hooks" when configured for events other than `Stop`/`SubagentStop`.
