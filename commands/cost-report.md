@@ -244,6 +244,26 @@ Reads `.context/logs/cost-*.jsonl` written by the `SubagentStop` hook (see
 one subagent invocation — the aggregator groups by `stage`, sums `input_tokens`
 + `output_tokens`, and applies the `model` rate.
 
+**Audit-trail input is deduplicated before aggregation** (v3.10.1+). The
+`### Effort Distribution` table sources `(stage, effort)` counts from
+`.context/logs/audit.jsonl`, which since v3.10.0 carries BOTH hook-emitted rows
+(`actor: "hook:audit-tooluse"`) and forward-compatible agent-emitted rows. Pipe
+through the canonical dedup filter before counting:
+
+```bash
+skills/agent-coordination/references/audit-dedup.sh .context/logs/audit.jsonl \
+  | jq -c 'select(.action == "tool_invoked")' \
+  | jq -s 'group_by([.metadata.stage // "unknown", .metadata.effort // "unknown"]) | …'
+```
+
+Without the dedup step, every hook+agent paired row inflates the `(stage, effort)`
+count by 1 — most visibly on stages where both writers fire (Write/Edit, TaskCreate/
+TaskUpdate). Dedup is keyed on `metadata.dedupe_key`; rows without one (singletons
+such as `approval_received`, `stage_transition`) pass through unchanged. See
+`skills/agent-coordination/SKILL.md § Writers` for the hook-authority rule and
+`skills/agent-coordination/references/audit-dedup.sh --self-test` to verify the
+filter against a synthetic fixture.
+
 The Cache Performance table additionally reads:
 
 - `cache_read_input_tokens` / `cache_creation_input_tokens` columns from the same JSONL (added in plugin v3.9.0; exported by Claude Code 2.1.114+ on `SubagentStop` as `CLAUDE_CACHE_READ_INPUT_TOKENS` / `CLAUDE_CACHE_CREATION_INPUT_TOKENS`).

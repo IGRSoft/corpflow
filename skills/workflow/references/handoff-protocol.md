@@ -167,6 +167,15 @@ properties:
     type: object
     required: [files_modified, tests_added, decisions, open_questions, verdicts]
     properties:
+      goal:
+        type: string
+        maxLength: 240
+        description: |
+          One-sentence statement of the workflow's intent, populated by PL0 from the user-supplied task
+          description (or the issue title in `--milestone:N` mode). Read by stage agents that need the
+          original intent without re-reading the plan file (e.g. AR sanity-checking architecture against
+          requirements, FN composing the PR title). Supersedes the `/goal` slash directive — the directive
+          would have been a second, drift-prone surface for the same value (v3.10.1).
       files_modified: { type: array, items: { type: string } }
       tests_added: { type: array, items: { type: string } }
       decisions:
@@ -222,6 +231,7 @@ PL0 (or `commands/workflow.md` Phase 1) writes the initial ledger:
     "PL": { "status": "in_progress" }
   },
   "facts": {
+    "goal": "<one-sentence intent — first 240 chars of task.description or issue title>",
     "files_modified": [],
     "tests_added": [],
     "decisions": [],
