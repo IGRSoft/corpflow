@@ -52,6 +52,22 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 | `worktree_branch` | Branch name in worktree (convenience field, worktree mode only) |
 | `approved` | `"user"` after explicit post-PL0 approval, `"auto"` for `--auto-continue`, absent otherwise |
 
+### Dispatch metadata (optional)
+
+These fields map to `claude agents run` CLI flags per `skills/agent-coordination/references/headless-dispatch.md`. All are optional and additive — the in-process orchestrator honours `model` (always) and `permission_mode` (audits per `skills/workflow/SKILL.md § Permission-Mode Pinning`); the rest are advisory in-process and consumed only by external CLI dispatchers.
+
+| Field | Purpose | Honoured in-process? |
+|-------|---------|----------------------|
+| `effort` | Effort tier (`low\|medium\|high\|xhigh\|max`) for this dispatch. Falls back to agent frontmatter when absent | Advisory |
+| `permission_mode` | Permission boundary (`default\|acceptEdits\|plan\|bypassPermissions`). PL0 SHOULD set `default` on SR/FN tasks under `--secure`/`--full` | **Yes — audited** |
+| `add_dirs` | Array of extra directories to expose to the dispatched session (`--add-dir`) | Advisory |
+| `mcp_config_path` | Path to a scoped MCP config (`--mcp-config`) for this dispatch | Advisory |
+| `plugin_dir_overrides` | Array of `--plugin-dir` paths (local plugin development) | Advisory |
+| `dangerously_skip_permissions` | Boolean. CI batch only; PL0 MUST NOT set this on PL/SR/FN tasks | Advisory; orchestrator MAY refuse |
+| `settings_path` | Path to alternative `settings.json` (`--settings`) for provider/org swap | Advisory |
+
+PL0's writer rules for these fields live in `agents/product-manager.md § Optional dispatch metadata`. The `workspace_path` field (already documented above) doubles as the `--cwd` source for headless dispatchers.
+
 ### JSON Schema
 
 Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL tasks require `stage`, `agent`, `model`, `error_file`.

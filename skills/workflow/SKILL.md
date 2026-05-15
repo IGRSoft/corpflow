@@ -493,6 +493,23 @@ while (tasks.some(t => t.status !== "completed")) {
       full.description = full.description + "\n\n" + fnInjection;
     }
 
+    // 5e. Permission-Mode Pinning (in-process honour of task.metadata.permission_mode)
+    //     When PL0 set `permission_mode: "default"` on this task (typically SR/FN under
+    //     --secure/--full/fworkflow), the orchestrator MUST NOT propagate
+    //     --dangerously-skip-permissions or equivalent shorthand into descendant Task()
+    //     calls or nested Bash invocations for this stage, and MUST audit the boundary.
+    //     The Task() tool has no permission-mode parameter today — this is a procedural
+    //     constraint backed by audit, not a runtime enforcement. See
+    //     skills/agent-coordination/references/headless-dispatch.md § Permission-Mode Pinning.
+    if (full.metadata.permission_mode === "default") {
+      appendAudit({
+        action: "permission_mode_pinned",
+        subject: task.id,
+        result: "ok",
+        metadata: { stage: full.metadata.stage, mode: "default" }
+      });
+    }
+
     // 6. Delegate to stage agent
     Task({ subagent_type: subagentType, model: model, prompt: full.description });
 

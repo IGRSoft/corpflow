@@ -185,10 +185,11 @@ review, the audit tail is the single source of truth for what happened.
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `workflow_init`, `stage_transition`, `approval_received`, `resume` |
+| Orchestrator | `workflow_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned` |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation` |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
 | `SubagentStop` hook | `subagent_stopped` (paired with cost-*.jsonl entry) |
+| External dispatcher | `external_dispatch` (CI/cron/user-shell invoked a stage via `claude agents run` — see `references/headless-dispatch.md`) |
 
 ### Schema
 
@@ -196,7 +197,7 @@ review, the audit tail is the single source of truth for what happened.
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "workflow_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped",
+  "action": "workflow_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped|permission_mode_pinned|external_dispatch",
   "subject": "task ID or artifact path",
   "result": "ok|error|deferred|blocked",
   "task_id": "optional — Task System ID",
@@ -285,6 +286,8 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 > Subagents now discover project + user + plugin skills natively (v2.1.133 fix). Orchestrators no longer need to inline-load skill instructions before delegation — the child can resolve `Skill("name")` from any source the parent could.
 
 > `subagent_type` matching is case- and separator-insensitive (v2.1.140). `Task({ subagent_type: "IGRSoft:Developer" })` resolves to the same agent as `igrsoft:developer`. Bare-name → `igrsoft:` prefix convention still applies for resolution priority, but typos in case/separator no longer fail-stop the call.
+
+> `claude agents` dispatch flags (v2.1.141 `--cwd`; v2.1.142 `--add-dir`, `--settings`, `--mcp-config`, `--plugin-dir`, `--permission-mode`, `--model`, `--effort`, `--dangerously-skip-permissions`) are mapped to `task.metadata` fields per the **`references/headless-dispatch.md`** translation table. PL0 populates the optional fields per `agents/product-manager.md § Optional dispatch metadata`; external runners consume them via the canonical one-liner in `commands/workflow.md § Headless dispatch`.
 
 > `/agents` displays a tabbed layout (Running/Library tabs) with a `* N running` indicator next to agent types with live instances (v2.1.97/2.1.98).
 
