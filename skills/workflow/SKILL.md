@@ -583,33 +583,47 @@ A second human-in-the-loop checkpoint immediately before any FN-stage task. The 
 - **Default**: missing or unrecognized value → treat as `"required"` (`?? "required"`). This makes in-flight workflows safe across the change.
 - **Bypass triggers**: `--auto-continue`, `--milestone:N`, `--worktree`. (`/emergency` is a documented TODO — not yet wired.)
 - **Trigger condition**: gate fires when the next ready task has `metadata.stage === "FN"` AND `gateMode !== "bypass"`.
-- **Effect, in order**:
-  1. Run the **Pre-gate Conductor-attachments writer** (§ below) — produces `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md`.
-  2. Print the pre-FN summary to the user.
-  3. Append `fn_gate_waiting` audit entry.
-  4. `return` from the execution loop. The FN task stays `pending`. The orchestrator MUST NOT call `TaskUpdate` for the FN task.
+- **Effect, in order** (6 steps — none skippable, none reorderable):
+  1. **Run the Pre-gate writer** (full procedure in *Pre-gate Conductor-attachments writer* subsection below). Produces both attachment files on disk. Do this **first**, before composing the summary or anything else — the summary template in this same section references both files as `[x]` Planned FN actions, and printing it while files are absent misleads the user.
+  2. **Verify pre-seed** — `Bash: test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md"`. On success → append `fn_attachments_preseed` audit line. On failure → append `fn_attachments_preseed_failed`, re-run step 1 once, then re-verify. If the second verify still fails, prepend `> WARN: attachment pre-seed failed — Conductor will use built-in defaults.` to the summary in step 4 so the user sees it before approving.
+  3. **Hard precondition for printing the summary**: do not proceed past this point until step 2 has succeeded (or its WARN has been queued for the summary). The summary describes the writer's outputs; emitting it while the outputs are silently missing is a soft failure with no recovery (Conductor caches the absent state).
+  4. **Print the pre-FN summary** (template at end of this section).
+  5. **Append `fn_gate_waiting`** audit entry.
+  6. **Re-verify, then `return`** — immediately before `return`, run `Bash: test -f` once more on both paths. On failure, append `fn_attachments_missing_at_return` audit line AND prepend a visible WARN to your final user message (this catches a writer that ran but wrote to the wrong path or was clobbered between step 2 and step 6). Then `return` from the execution loop. The FN task stays `pending`. The orchestrator MUST NOT call `TaskUpdate` for the FN task.
 
 ### Pre-gate Conductor-attachments writer
 
-Runs **before** printing the pre-FN summary, on the gated path only (bypass path falls through to FN-agent writer #2). Idempotent: every FN-gate entry overwrites both files from scratch.
+**Why this exists.** The two files this writer produces are how Conductor's *Create PR* / *Request Review* actions inherit workflow context in later sessions — DR/QA verdicts, resolved base branch, conventional-commit type, link to `complete-summary-N.md`. If they are absent, Conductor falls back to generic built-in templates and the FN agent (running post-approval) has no canonical script to follow. **Skipping this writer silently breaks the handoff — there is no recovery once the gate has returned**, because Conductor will cache the absent state for the duration of the next session. That is why the *Effect, in order* list above wraps this writer in three separate `test -f` checks (steps 2, 3, 6).
 
-Steps (orchestrator executes directly; do NOT delegate):
+The writer is unconditional on the gated path; bypass path falls through to FN-agent Writer 2 (in `agents/project-manager.md § FN Stage`). It is idempotent: every FN-gate entry overwrites both files from scratch. Run it directly — do not delegate to a subagent.
 
-1. `Bash: mkdir -p .context/attachments`
-2. `Bash: git rev-parse --abbrev-ref HEAD`              → BRANCH
-3. `Bash: git symbolic-ref refs/remotes/origin/HEAD`   → BASE_BRANCH (default `main` on failure)
-4. `Bash: git status --porcelain | wc -l`              → UNCOMMITTED
-5. `Bash: git rev-parse --abbrev-ref --symbolic-full-name @{u}` → UPSTREAM (or "no upstream" on non-zero exit)
-6. `Read: <plan_file>` (resolve via `FN0.metadata.plan_file`; fallback newest `.context/planning-*.md`) → derive COMMIT_TYPE from first match of `\b(fix|refactor|perf|docs|chore|test|ci|build|style|feat)\b` (default `feat`)
-7. `Read: .context/developer-review-N.md` (N = `FN0.metadata.run_index`) → DR_VERDICT, DR_CONCERNS (defensive default `verdict: unknown` / `(none flagged)` if file absent)
-8. `Read: .context/testing-N.md` → QA_VERDICT, QA_NOTES (defensive default `verdict: unknown` / `(none)` if file absent)
-9. `Write: .context/attachments/PR instructions.md` using template in `skills/workflow/references/conductor-attachments.md § Template — PR instructions.md`
-10. `Write: .context/attachments/Review request.md` using template in `skills/workflow/references/conductor-attachments.md § Template — Review request.md`
-11. **Verify**: `Bash: test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md"`
-    - On success → append `fn_attachments_preseed` audit line
-    - On failure → append `fn_attachments_preseed_failed` audit line AND prepend a `> WARN: pre-seed failed — Conductor will use built-in defaults.` line to the pre-FN summary so the user sees it before approving
+Steps:
 
-Each `Read` step is independently fault-tolerant. Do NOT wrap the whole sequence in a single try/catch — failure of one input must not skip the writes.
+1. **Gather all git state in one Bash call** (single tool invocation reduces the chance of abandoning mid-sequence; parse the four values from the output):
+
+   ```bash
+   mkdir -p .context/attachments
+   echo "BRANCH=$(git rev-parse --abbrev-ref HEAD)"
+   echo "BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo main)"
+   echo "UNCOMMITTED=$(git status --porcelain | wc -l | tr -d ' ')"
+   echo "UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo 'no upstream')"
+   ```
+
+2. `Read: <plan_file>` (resolve via `FN0.metadata.plan_file`; fallback newest `.context/planning-*.md`) → derive COMMIT_TYPE from first match of `\b(fix|refactor|perf|docs|chore|test|ci|build|style|feat)\b` (default `feat`).
+3. `Read: .context/developer-review-N.md` (N = `FN0.metadata.run_index`) → DR_VERDICT, DR_CONCERNS.
+4. `Read: .context/testing-N.md` → QA_VERDICT, QA_NOTES.
+5. `Write: .context/attachments/PR instructions.md` using template in `skills/workflow/references/conductor-attachments.md § Template — PR instructions.md`.
+6. `Write: .context/attachments/Review request.md` using template in `skills/workflow/references/conductor-attachments.md § Template — Review request.md`.
+
+Verification is owned by the *Effect, in order* list (step 2 immediately after this writer, step 6 immediately before `return`). Do not skip those — they exist because partial writer completion has happened in practice.
+
+**Fault tolerance — per-input policy** (each Read is independent; do NOT wrap the whole sequence in a single try/catch — failure of one optional input must not skip the Writes):
+
+| Input | Required? | If missing |
+|-------|-----------|-----------|
+| Plan file (step 2) | **Required** | Abort writer. Audit `fn_attachments_preseed_failed` with `reason: "plan_file_missing"`. The *Effect, in order* step 2 trip-wire will surface this to the user; do not write empty templates. |
+| `developer-review-N.md` (step 3) | Optional | Defaults: `DR_VERDICT="unknown"`, `DR_CONCERNS="(none flagged)"`. Proceed to write. |
+| `testing-N.md` (step 4) | Optional | Defaults: `QA_VERDICT="unknown"`, `QA_NOTES="(none)"`. Proceed to write. |
 
 ### `return` vs `continue`
 
@@ -626,9 +640,15 @@ On the next orchestrator turn (triggered by the user's `approve`/`go`/`yes`/`con
 
 ### Pre-FN summary template
 
-Before printing this summary, complete the **Pre-gate Conductor-attachments writer** above. Replace each `- [ ]` with `- [x]` for any Planned FN action whose output already exists on disk (the two attachment writes should be `[x]`).
+**Hard precondition (do not skip).** Before printing this summary, run:
 
-Build directly from artifacts written by upstream stages — no agent roundtrip needed.
+```bash
+test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md" && echo OK
+```
+
+If you do not see `OK`, run the *Pre-gate Conductor-attachments writer* above, then re-check. The summary lists those two file writes as `[x]` Planned FN actions — emitting it while either file is absent is a soft failure that the user has no way to detect, and Conductor will inherit the absent state into the next session. Only proceed past this check after `OK` is observed (or, on a second failure, after queuing the `> WARN:` line per *Effect, in order* step 2).
+
+Replace each `- [ ]` with `- [x]` for any Planned FN action whose output already exists on disk — the two attachment writes should now be `[x]`. Build the rest directly from artifacts written by upstream stages — no agent roundtrip needed.
 
 ```
 ## FN gate — review before push

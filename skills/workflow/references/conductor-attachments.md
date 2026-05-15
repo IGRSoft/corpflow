@@ -40,7 +40,7 @@ from this template — single source of truth.
 
 ### Writer 1 — Orchestrator pre-gate (tool-explicit)
 
-Runs in `skills/workflow/SKILL.md § Pre-gate Conductor-attachments writer` — see that section for the full ordered tool checklist. This writer fires on the gated path only. Goal: Conductor sees workflow-aware files even if the user never approves the gate.
+Runs as **Step 1 of the *Effect, in order* list** in `skills/workflow/SKILL.md § FN Gate` — not as a separate phase. The full procedure lives in `§ Pre-gate Conductor-attachments writer` (same FN Gate section). Three separate `test -f` trip-wires (Effect steps 2, 3, 6) wrap this writer so a skipped or partially-completed run cannot reach `return` silently. Fires on the gated path only. Goal: Conductor sees workflow-aware files even if the user never approves the gate.
 
 ### Writer 2 — FN agent post-approval
 
@@ -50,7 +50,15 @@ In `agents/project-manager.md § FN Stage`, immediately before `gh pr create`:
 mkdir -p .context/attachments
 ```
 
-Then `Write` both files using the templates below, overwriting any pre-seed from Writer 1 (no skip, no merge — always overwrite from scratch). After writing, run `gh pr create` using the data from `PR instructions.md`.
+Then `Write` both files using the templates below, overwriting any pre-seed from Writer 1 (no skip, no merge — always overwrite from scratch). Pre-existing files are expected and normal; do not assume the pre-seed is current.
+
+**Post-write verify (mirror of Writer 1's gate trip-wire)** — immediately after both `Write` calls:
+
+```bash
+test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md" && echo OK
+```
+
+On `OK`, run `gh pr create` using the data from `PR instructions.md`. On failure, abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and do NOT proceed to `gh pr create` — opening a PR without the attachments leaves Conductor in the degraded state Writer 1's trip-wire was designed to prevent.
 
 ## Data sources
 

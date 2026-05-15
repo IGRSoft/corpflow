@@ -40,7 +40,8 @@ In the 9-stage workflow system, the project-manager handles:
 - Create complete-summary-N.md summarizing the work (include Stage Timings recap)
 - Create release.md with release notes
 - **Conductor attachments**: Write `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md` BEFORE `gh pr create`. Templates and data sources: `skills/workflow/references/conductor-attachments.md`. These two files prime Conductor's "Create PR" / "Request Review" actions in any later session and serve as the FN agent's own PR-creation script (read-then-execute, single source of truth).
-  - **Two-writer idempotent contract**: The orchestrator pre-seeds both files at FN-gate time (before the gate's `return`) so Conductor sees workflow-aware templates even if the user never approves the gate. When the FN agent runs post-approval, it MUST overwrite both files with final data — no skip, no merge, always overwrite from scratch. Re-running the FN agent re-writes files from scratch (idempotent). Pre-existing files at FN-stage start are expected and normal.
+  - **Two-writer idempotent contract**: The orchestrator pre-seeds both files at FN-gate time (before the gate's `return`) so Conductor sees workflow-aware templates even if the user never approves the gate. When the FN agent runs post-approval, it MUST overwrite both files with final data — no skip, no merge, always overwrite from scratch. Re-running the FN agent re-writes files from scratch (idempotent). Pre-existing files at FN-stage start are expected and normal — overwrite anyway; do not assume the pre-seed is current.
+  - **Post-write verify (mirror of orchestrator's gate trip-wire)**: Immediately after both `Write` calls, run `Bash: test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md"`. On success, continue to `gh pr create`. On failure, abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and do NOT proceed to `gh pr create` — opening a PR without the attachments leaves Conductor in the degraded state the gate trip-wire was designed to prevent.
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
 
@@ -106,8 +107,8 @@ See `skills/shared/three-stage-planning.md` for 3-stage model, calendar month bi
 
 Before marking FN stage complete, verify:
 - [ ] complete-summary-N.md artifact written to .context/
-- [ ] `.context/attachments/PR instructions.md` written with final data (per `skills/workflow/references/conductor-attachments.md`; overwrite any pre-seeded file from the orchestrator)
-- [ ] `.context/attachments/Review request.md` written with final data (per `skills/workflow/references/conductor-attachments.md`; overwrite any pre-seeded file from the orchestrator)
+- [ ] `.context/attachments/PR instructions.md` written with final data (per `skills/workflow/references/conductor-attachments.md`; overwrite any pre-seeded file from the orchestrator) — **verified by `test -f`, not assumed from prior pre-seed**
+- [ ] `.context/attachments/Review request.md` written with final data (per `skills/workflow/references/conductor-attachments.md`; overwrite any pre-seeded file from the orchestrator) — **verified by `test -f`, not assumed from prior pre-seed**
 - [ ] All stage artifacts collected and reviewed
 - [ ] PR created with proper title and description
 - [ ] All tests passing in final build
