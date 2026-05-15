@@ -158,11 +158,12 @@ jq -cn --arg ts "$(date -u +%FT%TZ)" '{
   cache_read_input_tokens: (env.CLAUDE_CACHE_READ_INPUT_TOKENS // "0" | tonumber),
   cache_creation_input_tokens: (env.CLAUDE_CACHE_CREATION_INPUT_TOKENS // "0" | tonumber),
   duration_ms: (env.CLAUDE_DURATION_MS // "0" | tonumber),
+  effort: (env.CLAUDE_EFFORT // "unknown"),
   status: env.CLAUDE_SUBAGENT_STATUS
 }' >> "$LOG"
 ```
 
-`CLAUDE_CACHE_READ_INPUT_TOKENS` and `CLAUDE_CACHE_CREATION_INPUT_TOKENS` are exported by Claude Code 2.1.114+ on SubagentStop alongside `CLAUDE_INPUT_TOKENS`/`CLAUDE_OUTPUT_TOKENS`. The `// "0"` fallback keeps the line valid on older runtimes (those values stay 0, and `/cost-report § Cache Performance` flags the row with an `n/a` hit ratio).
+`CLAUDE_CACHE_READ_INPUT_TOKENS` and `CLAUDE_CACHE_CREATION_INPUT_TOKENS` are exported by Claude Code 2.1.114+ on SubagentStop alongside `CLAUDE_INPUT_TOKENS`/`CLAUDE_OUTPUT_TOKENS`. The `// "0"` fallback keeps the line valid on older runtimes (those values stay 0, and `/cost-report § Cache Performance` flags the row with an `n/a` hit ratio). `CLAUDE_EFFORT` is exported by CC 2.1.133+ (and hook stdin JSON also carries `effort.level`); on older runtimes the row gets `"unknown"` and `/cost-report § Effort Distribution` flags it accordingly.
 
 ### Schema
 
@@ -178,6 +179,7 @@ jq -cn --arg ts "$(date -u +%FT%TZ)" '{
   "cache_read_input_tokens": 0,       // bytes served from prompt cache
   "cache_creation_input_tokens": 0,   // bytes seeded into the cache this turn
   "duration_ms": 0,
+  "effort": "low|medium|high|xhigh|max|unknown",
   "status": "completed|error|cancelled"
 }
 ```
