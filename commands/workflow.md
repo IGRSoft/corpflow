@@ -238,7 +238,7 @@ Canonical one-liner (assumes `task.json` is one task's metadata blob and `prompt
 claude agents run \
   --cwd "$(jq -r '.metadata.workspace_path // "."' task.json)" \
   --plugin-dir "$PLUGIN_DIR" \
-  --model "$(jq -r .metadata.model task.json)" \
+  --model "$(jq -r '.metadata.model // "claude-sonnet-4-6"' task.json)" \
   --effort "$(jq -r '.metadata.effort // "high"' task.json)" \
   --permission-mode "$(jq -r '.metadata.permission_mode // "default"' task.json)" \
   -- "$(jq -r .metadata.agent task.json)" < prompt.txt

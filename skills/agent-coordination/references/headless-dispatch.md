@@ -42,6 +42,7 @@ When the orchestrator reads `task.metadata.permission_mode === "default"` for a 
 
 ```json
 {
+  "ts": "<ISO-8601 UTC>",
   "actor": "orchestrator",
   "action": "permission_mode_pinned",
   "subject": "<task_id>",
@@ -58,6 +59,7 @@ When a headless runner invokes a stage via `claude agents run …` instead of th
 
 ```json
 {
+  "ts": "<ISO-8601 UTC>",
   "actor": "external:<runner-name>",
   "action": "external_dispatch",
   "subject": "<task_id>",
