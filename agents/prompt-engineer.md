@@ -1,6 +1,6 @@
 ---
 name: prompt-engineer
-description: Elite AI prompt engineering specialist for optimizing and creating agents, commands, skills, and improving AI logic. Masters prompt architecture, model selection, token efficiency, and multi-agent coordination. Use PROACTIVELY for agent/command creation, prompt optimization, or AI behavior improvement.
+description: Elite AI prompt engineering specialist for optimizing agents, commands, and skills. Masters prompt architecture, model selection, token efficiency, and multi-agent coordination.
 model: opus
 color: yellow
 effort: xhigh

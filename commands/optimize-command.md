@@ -2,7 +2,7 @@
 name: optimize-command
 description: Analyze and optimize existing command definitions for usability, consistency, and completeness
 argument-hint: <command name or path>
-model: sonnet
+model: opus
 allowed-tools: Read, Glob, Grep, Write
 ---
 
@@ -163,6 +163,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 - **examples**: Coverage, diversity, practical scenarios
 - **output**: Format specification, clarity, completeness
 - **integration**: Related commands, agents, workflow stages
+- **frontmatter**: CC 2.1.86–2.1.142 frontmatter audit (description length, model fit, allowed-tools precision, argument-hint alignment) — see § Frontmatter Audit (CC 2.1.86+)
 
 ## Optimization Criteria
 
@@ -193,6 +194,23 @@ Analyze and optimize existing command definitions for usability, consistency, an
 - Related commands linked
 - Agent relationships documented
 - Workflow stage usage noted
+
+### Frontmatter Audit (CC 2.1.86+)
+
+Run on every command regardless of focus area. Treat findings here as blocking on the "Must Apply" tier. Reference rubric: `skills/shared/model-selection.md § Cost Tiers`.
+
+| Field | Audit Rule | Severity |
+|-------|------------|----------|
+| `description` | ≤250 characters (CC 2.1.86 cap). Same metric as agents. | P0 |
+| `model` | Strict membership: ∈ {`haiku`, `sonnet`, `opus`}. Tier per `model-selection.md`: meta-tooling and orchestration → `opus`; analysis/summary → `sonnet`; one-shot scans → `haiku`. Flag commands that optimize other prompts (`/optimize-*`, `/create-*`, `/prompt-audit`) running on `sonnet` or below — meta-optimization is opus tier. | P0 |
+| `allowed-tools` | Explicit list. Bash subcommand scoping required: `Bash(git:*)`, `Bash(gh:*)`, `Bash(swift test:*)` — never bare `Bash` unless the command's purpose is general shell access. Flag commands that declare `Write` without `Read` (likely incomplete). | P1 |
+| `argument-hint` | Must align with the Usage section's actual positional/optional surface. Count `--<flag>` mentions in `## Usage` vs hint; flag mismatch (e.g., hint says `<command name>` but Usage shows `--all`, `--focus`, `--dry-run` — hint missing the flag landscape). Use square brackets for optional positional, angle brackets for required. | P1 |
+| `$ARGUMENTS` substitution | If the command body references `$ARGUMENTS`, the frontmatter `argument-hint` MUST be non-empty. If the body has no `$ARGUMENTS` but `argument-hint` is set, suggest removing the hint. | P2 |
+| Option-to-example coverage | Every documented `--option` in `## Options` should appear at least once in `## Examples`. Compute: `set(options) − set(options-used-in-examples)`. Flag the diff with one-line "missing example for `--<flag>`". | P2 |
+| Output-format consistency | Output samples should match the schema declared in prose. If the command claims "JSON output via `--format json`", flag if the Output Format section shows only Markdown samples. | P2 |
+| Related links | Cross-reference targets (`./create-agent.md`, `../agents/prompt-engineer.md`) must resolve. Flag dead links. | P2 |
+
+Failures here are reported as a `## Frontmatter Findings` table before the existing scoring tables in § Output Format. Row schema mirrors `/optimize-agent`: `| Field | Observed | Required | Severity | Suggested edit |`.
 
 ## Integration
 

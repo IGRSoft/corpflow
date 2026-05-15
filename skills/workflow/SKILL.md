@@ -212,6 +212,7 @@ Before executing any workflow stage, the orchestrator MUST validate:
 5. **Metadata schema check**: Validate next task's metadata against `shared/task-system.md` § JSON Schema (non-PL tasks require `stage`, `agent`, `model`, `error_file`)
 6. **Model alias check**: `metadata.model ∈ {opus, sonnet, haiku}` — reject unknown aliases before `Task()` delegation
 7. **Workspace existence** (milestone/worktree mode only): verify `metadata.workspace_path` directory exists and `workspace.json` is readable
+8. **Artifact path resolution check** (non-blocking): for the next task's `metadata.run_index`, resolve the upstream artifact via the `stageArtifactPath()` helper below. Emit one `artifact_path_resolved` audit row with `result ∈ {ok, fallback_glob, fallback_legacy, miss}` and `metadata.resolved_path`. A `miss` result means the upstream stage produced no artifact and is treated by F3 in `references/handoff-protocol.md#fallback-paths` — warn but proceed. Catches run_index drift early (off-by-one between PL0 and stage tasks) before downstream stages burn tokens on fallback reads.
 
 If validation fails:
 - No tasks exist → Workflow not initialized. Re-run initialization (TaskCreate PL0)
@@ -374,7 +375,25 @@ while (tasks.some(t => t.status !== "completed")) {
     //      See § FN Gate below for the pre-FN summary template.
     if (full.metadata.stage === "FN") {
       const pl0 = tasks.find(t => t.metadata?.stage === "PL");
-      const gateMode = pl0?.metadata?.fn_gate ?? "required";  // default safe
+      const gateModeRaw = pl0?.metadata?.fn_gate;
+      const gateMode = gateModeRaw ?? "required";  // default safe (fail-closed)
+      // Validate gate value. Anything outside the closed set falls through
+      // to required behaviour (the `!== "bypass"` branch), but silent
+      // fall-through masks misconfiguration. Audit unrecognized values so
+      // PL0 writer drift surfaces in cost-report / incident review.
+      if (gateModeRaw !== undefined && gateModeRaw !== "required" && gateModeRaw !== "bypass") {
+        appendAudit({
+          actor: "orchestrator",
+          action: "fn_gate_invalid_value",
+          subject: "FN0",
+          result: "fallback_required",
+          metadata: {
+            observed: String(gateModeRaw).slice(0, 64),
+            pl0_task_id: pl0?.id ?? null,
+            note: "PL0.metadata.fn_gate must be 'required' or 'bypass' (see commands/workflow.md Phase 1 step 4). Treating as 'required'."
+          }
+        });
+      }
       if (gateMode !== "bypass") {
         // (a) Build pre-FN summary from the resolved plan file
         //     (`task.metadata.plan_file`; fallback: newest `.context/planning-*.md`,

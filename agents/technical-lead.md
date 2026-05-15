@@ -64,6 +64,9 @@ PL → AR → TL → DV → [DR] → QA → DC → FN → ST
 - Execute developer code review via `Skill("code-review-dev")`
 - Review code quality, patterns, and platform-specific best practices
 - **Read `.context/development-N.md § Selected Tests § Warnings`** and `.context/logs/test-selection-warnings.md`. Surface non-empty warnings (silent test drops, missing markers, malformed `@depends-on:`) as findings in `developer-review-N.md § Findings` so silent regressions don't slip through to QA. See `skills/shared/test-selection-syntax.md § Reader matrix`.
+- **DR3.5 — Warning Escalation**: when `.context/logs/test-selection-warnings.md` is non-empty (any `WARN:` line written by DV's selection parser), do BOTH of the following in addition to surfacing in `§ Findings`:
+  1. Append one `## DR[N] Retry [0/0] — <ts>` section to `.context/errors/developer.md` with `**Classification**: ambiguous_requirements` and a `### Resolution Path` listing each warning verbatim (one bullet per `WARN:` line). This converts an advisory drop into a tracked escalation so the orchestrator's retry/escalate matrix can route it (`escalate_to: DV`) instead of relying on DR-finding visibility alone.
+  2. Set `verdict: fail` on this DR run when ≥1 warning is of kind `unknown_symbol` or `missing_marker` (silent regression risk). `verdict: pass` is still permitted for `style_only` or `coverage_advisory` warnings — note the reason in `§ Findings`.
 - Produce `.context/developer-review-N.md` with findings summary (N = `task.metadata.run_index`; resolver: metadata → newest glob `developer-review-*.md` → legacy `developer-review.md`)
 - Gate QA — QA stage is blocked until DR completes
 
