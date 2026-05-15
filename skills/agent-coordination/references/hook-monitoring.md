@@ -23,11 +23,17 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 > PreToolUse/PostToolUse hooks receive `file_path` as an absolute path for Write/Edit/Read tools, matching documented behavior (confirmed v2.1.89).
 
-> `PreCompact` hook (v2.1.105+) fires **before** automatic compaction and can block it by returning exit code 2 — useful for guarding critical stage handoffs from premature summarization. See `context-compression` skill for the paired `PostCompact` recovery pattern.
+> `PreCompact` hook (v2.1.105+) fires **before** automatic compaction and can block it by returning exit code 2 — useful for guarding critical stage handoffs from premature summarization. See `context-compression` skill for the paired `PostCompact` recovery pattern. **As of plugin v3.10.0, `${CLAUDE_PLUGIN_ROOT}/hooks/precompact-checkpoint.sh` ships in `plugin.json` and snapshots `.context/state.json` to `.context/state.checkpoint-<ts>.json` on every compaction — never blocks (exit 0 always).**
 
 > Background monitor support for plugins via `monitors` manifest key (v2.1.105+). Declare long-running monitors that stream events into the session without occupying a foreground tool call.
 
 > Subagents that stall fail with a clear error after 10 minutes (v2.1.113). Orchestrators should surface this error and either retry the stage or escalate rather than waiting indefinitely. Crash fix (v2.1.114): permission dialog no longer crashes when an agent teams teammate requests tool permission.
+
+### Managed (plugin) vs ad-hoc (user) hooks
+
+**Plugin-managed hooks** ship in `.claude-plugin/plugin.json` and survive `allowManagedHooksOnly: true` enforcement. As of v3.10.0 the igrsoft plugin ships four managed hooks: `audit-tooluse` (PostToolUse), `audit-subagent` (SubagentStop), `precompact-checkpoint` (PreCompact), and a `mcp_tool` PushNotification at PL/FN Stop. The audit trail is a **plugin invariant** — these need to fire deterministically across every install.
+
+**Ad-hoc user hooks** go in project `settings.json` (or `~/.claude/settings.json`) and are for opt-in workflows like dashboard webhooks or external SIEM forwarding. Examples below remain valid templates for that case.
 
 ### Project-Level Configuration
 
@@ -156,9 +162,11 @@ Hooks can invoke MCP tools directly via `type: "mcp_tool"` (previously `command`
 }
 ```
 
+**Plugin v3.10.0 use:** `plugin.json` ships an `mcp_tool` hook on `Stop` matching `igrsoft:product-manager|igrsoft:project-manager` that fires `conductor.PushNotification` at the PL and FN approval gates. Gracefully no-ops if the conductor MCP server is unavailable.
+
 ### PostToolUse duration_ms (v2.1.119+)
 
-`PostToolUse` and `PostToolUseFailure` hook inputs now include `duration_ms` — tool execution time excluding permission prompts and `PreToolUse` hooks. Useful for cost/perf telemetry and slow-tool alerting in workflow audit trails.
+`PostToolUse` and `PostToolUseFailure` hook inputs now include `duration_ms` — tool execution time excluding permission prompts and `PreToolUse` hooks. Useful for cost/perf telemetry and slow-tool alerting in workflow audit trails. **Plugin v3.10.0:** `${CLAUDE_PLUGIN_ROOT}/hooks/audit-tooluse.sh` consumes `duration_ms` + `effort.level` and writes `metadata` of every `audit.jsonl` `tool_invoked` row.
 
 ### PostToolUse Output Replacement (v2.1.121+)
 

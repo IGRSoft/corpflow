@@ -83,6 +83,24 @@ Estimated Remaining: ~$0.15
 - `F1 fallbacks` counts lines in `.context/logs/fallback-${N}.log` for that stage (zero in healthy runs). A non-zero count means the agent ran without `.context/state.json` and lost cache benefit silently — investigate even if the headline ratio looks OK.
 - `n/a` appears when `CLAUDE_CACHE_READ_INPUT_TOKENS` was unset (older runtime); see `skills/cost-optimization/SKILL.md § Capture Script`.
 
+### Effort Distribution (validates per-stage budget envelope)
+
+```
+### Effort Distribution
+| Stage | low | medium | high | xhigh | max | unknown |
+|-------|-----|--------|------|-------|-----|---------|
+| PL    |   0 |      0 |    1 |     0 |   0 |       0 |
+| AR    |   0 |      0 |    1 |     0 |   0 |       0 |
+| TL    |   0 |      1 |    0 |     0 |   0 |       0 |
+| DV    |   0 |      0 |    2 |     1 |   0 |       0 |
+| DR    |   0 |      0 |    1 |     0 |   0 |       0 |
+| QA    |   0 |      1 |    0 |     0 |   0 |       0 |
+```
+
+- Count of `cost-*.jsonl` rows grouped by `(stage, effort)` (effort source: `CLAUDE_EFFORT` env var v2.1.133+ and/or hook stdin `effort.level`).
+- Mismatch with the per-stage `effort:` declared in the agent frontmatter (see `skills/shared/model-selection.md`) — flag as **budget drift**; common cause is operator `/effort` override mid-run or PL0 dispatch metadata writer setting a non-default effort.
+- `unknown` rows mean an older CC runtime that didn't export `CLAUDE_EFFORT`; non-zero `unknown` on every stage suggests upgrading the install.
+
 ### Optimization Report (`--optimize`)
 
 ```
@@ -229,6 +247,7 @@ one subagent invocation — the aggregator groups by `stage`, sums `input_tokens
 The Cache Performance table additionally reads:
 
 - `cache_read_input_tokens` / `cache_creation_input_tokens` columns from the same JSONL (added in plugin v3.9.0; exported by Claude Code 2.1.114+ on `SubagentStop` as `CLAUDE_CACHE_READ_INPUT_TOKENS` / `CLAUDE_CACHE_CREATION_INPUT_TOKENS`).
+- `effort` column added in plugin v3.10.0; sourced from `CLAUDE_EFFORT` (CC 2.1.133+) and powers `### Effort Distribution`.
 - `.context/logs/fallback-*.log` line counts for the F1 fallback column (one line per agent that fell back to legacy `metadata.context_files` mode; see `skills/shared/stage-contracts.md § F1`).
 
 If `.context/logs/cost-*.jsonl` is absent, the command falls back to estimated

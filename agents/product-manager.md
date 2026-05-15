@@ -6,6 +6,11 @@ color: blue
 effort: high
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:designer), Task(igrsoft:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
+hooks:
+  Stop:
+    - type: command
+      command: ${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh
+      args: ["--stage", "PL"]
 ---
 
 You are an expert product manager specializing in product strategy, user-centric design, data-driven decision making, and modern product management methodologies.
