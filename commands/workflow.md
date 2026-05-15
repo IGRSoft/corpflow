@@ -228,9 +228,28 @@ returning to the orchestrator.
 - **If no TL0 (low-complexity workflow)**: escalate to PL. PL may add TL0 to
   the workflow, revise embedded command choice, or remove the embedding.
 
+## Headless Dispatch (external runners)
+
+External orchestrators (CI, cron, the user's shell) can invoke a single stage via `claude agents run …` instead of the in-process Task() path. PL0 populates the optional dispatch fields documented in `skills/shared/task-system.md § Dispatch metadata`; the runner reads them and builds the flag string. Full table and per-stage examples live in `skills/agent-coordination/references/headless-dispatch.md`.
+
+Canonical one-liner (assumes `task.json` is one task's metadata blob and `prompt.txt` is the rendered stage prompt):
+
+```bash
+claude agents run \
+  --cwd "$(jq -r '.metadata.workspace_path // "."' task.json)" \
+  --plugin-dir "$PLUGIN_DIR" \
+  --model "$(jq -r '.metadata.model // "claude-sonnet-4-6"' task.json)" \
+  --effort "$(jq -r '.metadata.effort // "high"' task.json)" \
+  --permission-mode "$(jq -r '.metadata.permission_mode // "default"' task.json)" \
+  -- "$(jq -r .metadata.agent task.json)" < prompt.txt
+```
+
+The runner MUST append one `audit.jsonl` line `action: "external_dispatch"` per `skills/agent-coordination/SKILL.md § Audit Trail`. Do NOT pass `--dangerously-skip-permissions` from an interactive shell — it is reserved for CI batches with a deny-list in `settings.json`.
+
 ## See Also
 
 - `skills/workflow/SKILL.md` — execution loop, dynamic sizing, workflow modes
 - `skills/milestone-workflow/SKILL.md` — milestone mode, worktree mode
 - `skills/shared/stage-codes.md` — stage codes and track IDs
+- `skills/agent-coordination/references/headless-dispatch.md` — `task.metadata` → `claude agents` flag bridge
 - `agents/workflow-engineer.md` — troubleshooting

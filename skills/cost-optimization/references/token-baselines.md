@@ -82,6 +82,10 @@ Typical token usage by workflow stage (sonnet model):
 | `/context all` per-skill token estimates use model tokenizer | 2.1.139 | Skill listing token attribution accurate per active model (no more cross-tokenizer drift) |
 | `claude plugin details <name>` surfaces inventory + token cost | 2.1.139 | Per-plugin cost visibility before install/enable |
 | Stdio MCP servers receive `CLAUDE_PROJECT_DIR` | 2.1.139 | MCP tools can resolve project-relative paths without parent-passed args |
+| Reactive compaction first attempt seeds from overflow size | 2.1.142 | Avoids one wasted near-full-context retry per compaction cycle — direct token saving on long DV/QA sessions |
+| `MCP_TOOL_TIMEOUT` honoured by remote HTTP/SSE MCP servers | 2.1.142 | Long-running MCP tool calls no longer fail at the silent 60s cap; reduces retry token churn for slow XcodeBuildMCP/Pencil ops |
+| Background sessions survive macOS sleep/wake (daemon clock-jump detection) | 2.1.142 | Long-running `claude agents` dispatch no longer loses state to false-positive idle timeouts |
+| Fast mode (`/fast`) defaults to Opus 4.7 | 2.1.142 | Closes the cost gap where `/fast` would silently use Opus 4.6 without `xhigh` support — set `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE=1` to revert |
 
 These are automatic — no agent or workflow changes needed. They compound across multi-stage workflows.
 

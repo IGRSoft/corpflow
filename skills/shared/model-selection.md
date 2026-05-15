@@ -20,6 +20,8 @@ effort: low
 
 > **Hook Effort Visibility** (v2.1.133+): hooks observe the active effort tier via `effort.level` (JSON payload) and the `$CLAUDE_EFFORT` env var. Cost/audit hooks can attribute spend per tier without parsing model metadata. See `skills/agent-coordination/references/hook-monitoring.md § Hook Effort Visibility`.
 
+> **Fast Mode Default → Opus 4.7** (v2.1.142): `/fast` now uses Opus 4.7 by default (was Opus 4.6). Set `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE=1` to pin fast mode back to Opus 4.6. Plugin agents that rely on `xhigh` effort already require Opus 4.7 (v2.1.111+) — this default closes the last gap where a `/fast` session would silently downgrade to 4.6.
+
 ## Selection Criteria
 
 | Complexity | Model | Use Cases |

@@ -1,0 +1,91 @@
+# Headless Dispatch — `claude agents` Flag Bridge
+
+External orchestrators (CI runners, batch schedulers, the user's own shell) that want to invoke a workflow stage outside the in-process `Task()` path need a stable contract from `task.metadata` to `claude agents run` CLI flags. This reference is that contract.
+
+> Today the igrsoft orchestrator dispatches every stage in-process via `Task({ subagent_type, model, prompt })` (see `skills/workflow/SKILL.md` line ~497). The CLI flags listed below are honoured **only** by `claude agents run …` invocations. PL0 populates the fields anyway so any downstream dispatcher — in-process or CLI — reads from the same source of truth.
+
+## Translation Table
+
+| `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
+|---|---|---|---|---|
+| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-4-7`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6` |
+| `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN/RE→`medium` |
+| `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` | **Yes — audited** (see § Permission-Mode Pinning below) | SR/FN→`default`; DV under `--auto-continue`→`bypassPermissions` |
+| `workspace_path` | `--cwd <path>` | string | N/A (in-process inherits parent cwd) | milestone tracks → per-issue worktree |
+| `add_dirs` (array) | repeated `--add-dir <path>` | string[] | N/A | cross-repo work, monorepo siblings |
+| `mcp_config_path` | `--mcp-config <path>` | string | N/A | scoped MCP set per dispatch |
+| `plugin_dir_overrides` (array) | repeated `--plugin-dir <path>` | string[] | N/A | local plugin development |
+| `dangerously_skip_permissions` | `--dangerously-skip-permissions` | bool | Advisory; orchestrator MAY refuse | CI batch only, with a deny-list in `settings.json` |
+| `settings_path` | `--settings <path>` | string | N/A | provider / org config swap |
+
+"Advisory" = the field is recorded on the task and read by external dispatchers, but the in-process `Task()` tool has no equivalent parameter today. "Audited" = the orchestrator writes an `audit.jsonl` line when the field is set, even though it cannot enforce the mode on a `Task()` child.
+
+## Per-Stage Recommended Flag Sets
+
+The minimum recommended flag set per stage when dispatching from a headless runner. Substitute concrete IDs from `task.metadata` at call time.
+
+| Stage | Canonical headless one-liner |
+|---|---|
+| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-7 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` |
+| **DR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-7 --effort high --permission-mode acceptEdits -- igrsoft:technical-lead < dr-prompt.txt` |
+| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-7 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` |
+| **QA** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort high --permission-mode acceptEdits -- igrsoft:qa-engineer < qa-prompt.txt` |
+| **FN** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:project-manager < fn-prompt.txt` |
+| **RE** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:release-engineer < re-prompt.txt` |
+| **ST** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode acceptEdits -- igrsoft:stakeholder < st-prompt.txt` |
+
+The model/effort defaults track `skills/shared/model-selection.md`. Override per task when `metadata.model` / `metadata.effort` are set.
+
+## Permission-Mode Pinning (in-process)
+
+When the orchestrator reads `task.metadata.permission_mode === "default"` for a stage, it MUST NOT propagate `--dangerously-skip-permissions` or any equivalent shorthand into descendant `Task()` calls or nested `Bash` invocations for that stage, and MUST append one `audit.jsonl` line:
+
+```json
+{
+  "ts": "<ISO-8601 UTC>",
+  "actor": "orchestrator",
+  "action": "permission_mode_pinned",
+  "subject": "<task_id>",
+  "result": "ok",
+  "metadata": { "stage": "<code>", "mode": "default" }
+}
+```
+
+This is the one behaviour change the in-process orchestrator applies based on dispatch metadata. Every other flag listed above is advisory in-process and only takes effect when an external runner shells out `claude agents run …`.
+
+## External-Dispatch Audit Hook
+
+When a headless runner invokes a stage via `claude agents run …` instead of the in-process orchestrator, the runner MUST append one `audit.jsonl` line at the same workflow's `.context/logs/audit.jsonl`:
+
+```json
+{
+  "ts": "<ISO-8601 UTC>",
+  "actor": "external:<runner-name>",
+  "action": "external_dispatch",
+  "subject": "<task_id>",
+  "result": "ok",
+  "task_id": "<task_id>",
+  "metadata": {
+    "invoker": "<ci|cron|user-shell>",
+    "agent": "<plugin:agent>",
+    "flags": ["--model=…", "--effort=…", "--permission-mode=…", "--cwd=…"]
+  }
+}
+```
+
+Without this line, the post-workflow audit cannot distinguish in-process delegation from CLI dispatch — which matters for cost attribution, security review, and reproducibility.
+
+## Anti-Patterns
+
+- **Do not** pass `--dangerously-skip-permissions` from an interactive session. It is reserved for headless CI runs that already have a deny-list (`permissions.deny`, `autoMode.hard_deny`) in `settings.json`. Interactive sessions should leave it unset and let the permission UI handle prompts.
+- **Do not** mix `--cwd` and `task.metadata.workspace_path` pointing at different paths. The runner MUST resolve one canonical worktree directory and pass it consistently.
+- **Do not** set `dangerously_skip_permissions: true` on PL/SR/FN tasks — these are gated stages where human review is the entire point. PL0 SHOULD reject such metadata at validation time.
+- **Do not** treat the CLI flags as a replacement for agent-frontmatter `tools:` restrictions. The flags configure the *session*; the frontmatter restricts the *agent*. Both apply.
+
+## Related
+
+- `skills/shared/task-system.md § Dispatch metadata` — schema for the new optional fields.
+- `skills/agent-coordination/SKILL.md § Audit Trail` — schema for `permission_mode_pinned` and `external_dispatch` actions.
+- `skills/shared/model-selection.md` — model/effort tier defaults the table above tracks.
+- `agents/product-manager.md § Optional dispatch metadata` — PL0's writer rules for these fields.
+- `commands/workflow.md § Headless dispatch` — canonical headless one-liner using `jq` to read the metadata.

@@ -200,6 +200,24 @@ Hooks accept an `args: string[]` array next to `command`, avoiding shell-string 
 
 PostToolUse hook entries support `continueOnBlock: true` so a blocking hook earlier in the chain does not short-circuit subsequent hooks in the same matcher group. Use when independent observers (audit + cost) must both run even if one signals block.
 
+### Hook Terminal Sequences (v2.1.141+)
+
+Hook JSON output accepts a `terminalSequence` field for emitting terminal control sequences — desktop notifications (OSC 9 / OSC 99), window-title updates (OSC 0/2), and bells (BEL `\x07`) — without the hook owning a controlling terminal. Useful for `SubagentStop`, `StopFailure`, and `Stop` hooks in headless or background sessions where the parent UI should still notify the user.
+
+```json
+{
+  "hookSpecificOutput": {
+    "terminalSequence": "]9;Stage QA complete"
+  }
+}
+```
+
+Pair with the `monitors` manifest key (v2.1.105+) for plugin-level lifecycle notifications that survive the lack of a TTY (CI, `claude agents` background dispatch).
+
+### Hook Config Error Hints (v2.1.142+)
+
+Configuring a prompt-type or agent-type hook for `SessionStart`, `Setup`, or `SubagentStart` is now rejected at load with a clear "use a command-type hook instead" message rather than a silent runtime no-op. Stage-lifecycle hooks that need to react before any session message exists MUST be `type: "command"` (or `type: "mcp_tool"`).
+
 ## Agent Teams Lifecycle Hooks
 
 When agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), additional hook events are available:

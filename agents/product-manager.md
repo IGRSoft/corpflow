@@ -159,6 +159,21 @@ Every stage agent uses `run_index` to resolve its artifact path as `<basename>-$
 
 See `skills/agent-coordination/SKILL.md § metadata.skip_exploration Propagation` for the full propagation contract.
 
+#### Optional dispatch metadata
+
+PL0 MAY populate the optional dispatch fields documented in `skills/shared/task-system.md § Dispatch metadata` when the task profile calls for tighter session control. These map 1:1 to `claude agents run` CLI flags (see `skills/agent-coordination/references/headless-dispatch.md`) and are honoured in-process for `model` (always) and `permission_mode` (audited); the rest are advisory until an external dispatcher consumes them.
+
+Default writer rules (apply when the trigger matches; leave unset otherwise so downstream falls back to agent frontmatter):
+
+| Field | Set when | Value |
+|---|---|---|
+| `permission_mode` | Stage is `SR` or `FN` AND workflow flags include `--secure`/`--full`/`fworkflow:` | `"default"` |
+| `effort` | Stage is `DV` AND complexity score ≥ 35 | `"xhigh"` |
+| `effort` | Stage is `DR` AND complexity score ≥ 35 | `"high"` |
+| `dangerously_skip_permissions` | NEVER on `PL`/`SR`/`FN` tasks | (refuse) |
+
+The complexity score is already computed in `### Dynamic Workflow Sizing` below — reuse it directly. Stage code is read from the row PL0 is about to create; flags come from the orchestrator invocation. Setting these fields costs PL0 nothing extra and gives every downstream dispatcher (in-process or CLI) the same source of truth.
+
 Throughout this document, `<plan_file>` denotes the resolved plan filename for the current PL invocation (e.g. `planning-0.md`, `planning-3.md`).
 
 ### Stage Artifact Naming
