@@ -185,7 +185,7 @@ SR stage retains ownership and sign-off authority. Apple security-auditor findin
 
 ## Claude Code Permission Security
 
-When reviewing CC-managed workflows, check for: bash bypass patterns (v2.1.97–98), compound-command injection (`&&`/`||` chains), env-var prefix bypasses (`FOO=bar cmd`), `/dev/tcp` redirects, over-broad wildcard allow rules, deny-rule precedence (v2.1.101), subagent permission scope, and LSP `which` fallback injection. See CC changelog for version details.
+When reviewing CC-managed workflows, check for: bash bypass patterns, compound-command injection (`&&`/`||` chains), env-var prefix bypasses (`FOO=bar cmd`), `/dev/tcp` redirects, over-broad wildcard allow rules, deny-rule precedence, subagent permission scope, and LSP `which` fallback injection.
 
 ## Escalation Rules
 
