@@ -74,7 +74,7 @@ Generated from `.context/logs/cost-*.jsonl` via `/cost-report --format md`.
 
 **Workspace Mode**: Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. See `skills/milestone-workflow/SKILL.md § Workspace-Aware FN Stage`.
 
-**PR Creation**: Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode (use `EnterWorktree` with `path` parameter (v2.1.105+) to target the correct worktree when multiple exist; honors `worktree.baseRef` = `head`\|`fresh` setting v2.1.133+ — plugin assumes `head`). Stale worktrees are auto-cleaned.
+**PR Creation**: Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode (use `EnterWorktree` with `path` parameter to target the correct worktree when multiple exist; honors `worktree.baseRef` = `head`\|`fresh` setting — plugin assumes `head`). Stale worktrees are auto-cleaned.
 
 **Task System**: Stage FN, Owner: project-manager. See `skills/shared/task-system.md`.
 

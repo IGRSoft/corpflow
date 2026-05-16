@@ -55,7 +55,7 @@ When `--worktree` flag is present, add these checks:
 - [ ] `.worktrees/` directory is writable
 - [ ] No existing worktree for the same branch (`git worktree list`)
 - [ ] Sufficient disk space for worktree copies
-- [ ] No stale worktrees (auto-cleaned on startup, including those with untracked files v2.1.98; `git worktree prune` as fallback)
+- [ ] No stale worktrees (auto-cleaned on startup, including those with untracked files; `git worktree prune` as fallback)
 - [ ] If `worktree.sparsePaths` configured, validate paths exist in repo
 - [ ] orchestrator.json version is 3.0 with `isolation: "worktree"`
 
@@ -78,7 +78,7 @@ When `--worktree` flag is present, add these checks:
 | Failure | Cause | Fix |
 |---------|-------|-----|
 | Single branch for all issues | Missing branch-per-issue logic | Each issue MUST get own branch |
-| Branch from wrong base | Not using remote ref | Use `git fetch origin develop && git checkout -b ... origin/develop` (manual override; the `EnterWorktree` tool branches from local HEAD as of v2.1.128, configurable via `worktree.baseRef` = `head`\|`fresh` since v2.1.133) |
+| Branch from wrong base | Not using remote ref | Use `git fetch origin develop && git checkout -b ... origin/develop` (manual override; the `EnterWorktree` tool branches from local HEAD by default, configurable via `worktree.baseRef` = `head`\|`fresh`) |
 | Missing orchestrator.json | Init skipped | Run milestone init before issues |
 | No PR created | FN stage incomplete | Ensure `gh pr create` runs per issue |
 | Duplicate PR for issue | PR check skipped | Check issue timeline for existing PRs first |
@@ -182,7 +182,7 @@ When `--worktree` flag is present, add these checks:
 1. Check for uncommitted work: `git -C {worktree_path} status`
 2. Commit or stash changes: `git -C {worktree_path} stash`
 3. Force remove if truly unneeded: `git worktree remove --force {path}`
-4. Run `git worktree prune` to clean stale references (auto-cleaned on startup, handles untracked files correctly v2.1.98)
+4. Run `git worktree prune` to clean stale references (auto-cleaned on startup, handles untracked files correctly)
 
 ### Worktree Partial-Failure Matrix
 
@@ -196,19 +196,18 @@ from the filesystem. Diagnose by comparing `git worktree list` to
 | Worktree created, branch fetch fails (auth/network) | Network loss between `worktree add` and `git fetch` | `git -C {path} fetch origin` retry → if persistent, `git worktree remove --force {path}` and retry from `workflow-engineer` init |
 | orchestrator.json lists issue #N with worktree_path, but `git worktree list` does not include it | Prior manual `git worktree remove` or disk cleanup | Re-create: `git worktree add -b feature/{N}-{slug} {path} origin/{base}` → restore `.context/` from `workspace.json` if present |
 | `git worktree list` shows path, but orchestrator.json has no entry for it | Orphaned worktree from cancelled workflow | If `.context/` empty or task archived: `git worktree remove {path}`. Otherwise resume via Task System, then remove on FN |
-| Stale untracked files block `worktree remove` | Build output, log files, editor swap files | v2.1.98 auto-cleanup handles most; fallback: `git -C {path} clean -fd` → retry `worktree remove` |
+| Stale untracked files block `worktree remove` | Build output, log files, editor swap files | Auto-cleanup handles most; fallback: `git -C {path} clean -fd` → retry `worktree remove` |
 | Branch locked by another worktree (`fatal: 'X' is already checked out`) | Same branch active in two worktrees (usually main) | `git worktree list` locate existing → switch main to different branch OR use a new branch name for the new worktree |
 | Disk full during `worktree add` | Filesystem exhausted | `git worktree prune` to reclaim stale space → free disk → retry. Do NOT leave partial worktree entries in orchestrator.json — remove the broken entry first |
 | `workspace.json` references path that no longer exists | External cleanup or symlink break | Treat workflow as lost. Archive `.context/` if recoverable (`git cat-file` for committed state), then remove orchestrator entry and restart the issue track |
 
-### Plugin Management (v2.1.94/2.1.98/2.1.105+)
+### Plugin Management
 
-- `/reload-plugins` picks up new skills without requiring restart (v2.1.98)
-- Plugin skills use frontmatter `name` field for invocation, not directory basename (v2.1.94)
-- Plugins can declare background monitors via `monitors` manifest key (v2.1.105); these stream events without occupying a foreground tool call
-- `EnterWorktree` accepts a `path` parameter (v2.1.105) to target a specific worktree directory
-- Subagents stalled for more than 10 minutes now fail with a clear error (v2.1.113) — escalate or retry rather than waiting indefinitely
-- Permission dialog crash fixed when an agent teams teammate requests tool permission (v2.1.114)
+- `/reload-plugins` picks up new skills without requiring restart
+- Plugin skills use frontmatter `name` field for invocation, not directory basename
+- Plugins can declare background monitors via `monitors` manifest key; these stream events without occupying a foreground tool call
+- `EnterWorktree` accepts a `path` parameter to target a specific worktree directory
+- Subagents stalled for more than 10 minutes fail with a clear error — escalate or retry rather than waiting indefinitely
 
 ### Orchestrator / Worktree Mismatch
 
