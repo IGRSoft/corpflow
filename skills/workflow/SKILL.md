@@ -213,6 +213,7 @@ Before executing any workflow stage, the orchestrator MUST validate:
 6. **Model alias check**: `metadata.model ∈ {opus, sonnet, haiku}` — reject unknown aliases before `Task()` delegation
 7. **Workspace existence** (milestone/worktree mode only): verify `metadata.workspace_path` directory exists and `workspace.json` is readable
 8. **Artifact path resolution check** (non-blocking): for the next task's `metadata.run_index`, resolve the upstream artifact via the `stageArtifactPath()` helper below. Emit one `artifact_path_resolved` audit row with `result ∈ {ok, fallback_glob, fallback_legacy, miss}` and `metadata.resolved_path`. A `miss` result means the upstream stage produced no artifact and is treated by F3 in `references/handoff-protocol.md#fallback-paths` — warn but proceed. Catches run_index drift early (off-by-one between PL0 and stage tasks) before downstream stages burn tokens on fallback reads.
+9. **Hook installation check** (first stage only): Verify `state-merge.sh` SubagentStop hook is operational. Check: (a) `.claude/hooks/state-merge.sh` exists and is executable, OR (b) the plugin's `plugin.json` registers the SubagentStop hook entry. If neither is true, emit a warning: `"⚠ state-merge.sh hook not installed — run hook-install.sh"`. Do NOT block — the orchestrator's Step 6.5 provides Layer 3 coverage. See `references/initialization-patterns.md#hook-installation`.
 
 If validation fails:
 - No tasks exist → Workflow not initialized. Re-run initialization (TaskCreate PL0)
@@ -275,24 +276,34 @@ function stageArtifactPath(code: string, runIndex: number): string {
 }
 ```
 
-**Step 6.5 (NEW) — After Task() returns, patch state.json from artifact frontmatter**:
+**Step 6.5 — After Task() returns, enforce state.json patch (MANDATORY)**:
+
+After every `Task()` return and BEFORE `TaskUpdate(stage→completed)`, execute this three-layer check:
 
 ```typescript
-// Re-read state.json (in-agent write should already have happened).
-const stagePost = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
+// Layer check: re-read state.json.
+const statePost = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
 const code = full.metadata.stage;
-if (stagePost.stages?.[code]?.status !== "completed") {
-  // Agent forgot to patch the ledger. Parse the artifact's `handoff:` frontmatter
-  // (yq or awk fallback per handoff-protocol.md#fallback-paths F2/F3) and
-  // atomic-merge into state.json. This is the orchestrator's belt-and-suspenders
-  // layer (the third, after in-agent write and the optional SubagentStop hook).
-  const runIndex = full.metadata.run_index ?? 0;
-  const artifactPath = stageArtifactPath(code, runIndex);  // e.g. "DV" → ".context/development-0.md"
-  const handoff = parseFrontmatter(artifactPath);  // null if missing → F3 fallback
-  const patch = handoff
-    ? buildPatchFromHandoff(code, handoff)
-    : { stages: { [code]: { status: "completed", artifact: artifactPath, verdict: "ok" } } };
-  atomicMergeStateJson(patch);  // read → merge → temp → fsync → rename
+const runIndex = full.metadata.run_index ?? 0;
+const artifactPath = stageArtifactPath(code, runIndex);
+
+if (statePost.stages?.[code]?.status !== "completed") {
+  // Layer 1 (agent self-patch) missed. Invoke Layer 2 (state-merge hook) synchronously.
+  // This fires even if the SubagentStop hook event was not delivered.
+  // Uses Bash tool: CLAUDE_ARTIFACT_PATH=<path> CLAUDE_TASK_METADATA_STAGE=<code> bash .claude/hooks/state-merge.sh
+  runStateMergeHook(artifactPath, code);
+
+  // Re-read after hook.
+  const statePost2 = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
+  if (statePost2.stages?.[code]?.status !== "completed") {
+    // Layer 2 also missed (hook absent or artifact lacks frontmatter).
+    // Layer 3: orchestrator derives minimal patch from agent return text (F3 fallback).
+    const handoff = parseFrontmatter(artifactPath);  // null if missing → F3
+    const patch = handoff
+      ? buildPatchFromHandoff(code, handoff)
+      : { stages: { [code]: { status: "completed", artifact: artifactPath, verdict: "ok" } } };
+    atomicMergeStateJson(patch);  // read → merge → temp → fsync → rename
+  }
 }
 ```
 

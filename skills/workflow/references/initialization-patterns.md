@@ -37,6 +37,31 @@ mv -f "$tmp" .context/state.json
 
 Subsequent stage agents read `.context/state.json` first; if absent, they fall back to legacy `metadata.context_files` mode (path F1). See `handoff-protocol.md#fallback-paths`.
 
+## Hook Installation
+
+PL0 (or `commands/workflow.md` Phase 1) MUST verify the `state-merge.sh` SubagentStop hook is installed before proceeding. This hook is the Layer 2 safety net — it patches `state.json` from artifact frontmatter when stage agents forget to self-patch (Layer 1) or when the orchestrator's Step 6.5 check is skipped.
+
+```bash
+# Idempotent hook installation — run after state.json seed, before PL0 delegation.
+# Source: ${CLAUDE_PLUGIN_ROOT}/.claude/hooks/state-merge.sh (ships with igrsoft plugin).
+
+hook_src="${CLAUDE_PLUGIN_ROOT}/.claude/hooks/state-merge.sh"
+hook_dst=".claude/hooks/state-merge.sh"
+
+if [[ ! -x "$hook_dst" ]]; then
+  mkdir -p .claude/hooks
+  cp "$hook_src" "$hook_dst"
+  chmod +x "$hook_dst"
+fi
+```
+
+**PL0 invariant**: Before continuing to TaskCreate, verify:
+1. `.context/state.json` exists and is valid JSON
+2. `.claude/hooks/state-merge.sh` exists and is executable
+3. The plugin's `plugin.json` registers the SubagentStop hook (this is declarative — no project-local action needed)
+
+If hook source is not found (e.g. `CLAUDE_PLUGIN_ROOT` unset), log a warning and continue — the plugin.json-registered hook will still fire via the plugin hook system. The project-local copy is a belt-and-suspenders fallback for environments where plugin hooks are not supported.
+
 ### Sample TaskCreate using context_refs (handoff-protocol mode)
 
 ```typescript
