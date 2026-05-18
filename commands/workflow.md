@@ -120,6 +120,16 @@ See `skills/shared/stage-codes.md` for stage details.
    sync "$tmp" 2>/dev/null || true
    mv -f "$tmp" .context/state.json
    ```
+3b. **Verify SubagentStop hook installed**: After state.json seed, verify `.claude/hooks/state-merge.sh` exists and is executable AND the plugin's `plugin.json` registers the SubagentStop hook entry. If the project-local hook is missing, copy from `${CLAUDE_PLUGIN_ROOT}/.claude/hooks/state-merge.sh`. This hook is the Layer 2 safety net that patches state.json when agents skip self-patching. See `initialization-patterns.md#hook-installation`.
+   ```bash
+   hook_src="${CLAUDE_PLUGIN_ROOT}/.claude/hooks/state-merge.sh"
+   hook_dst=".claude/hooks/state-merge.sh"
+   if [[ ! -x "$hook_dst" ]] && [[ -f "$hook_src" ]]; then
+     mkdir -p .claude/hooks
+     cp "$hook_src" "$hook_dst" && chmod +x "$hook_dst"
+   fi
+   ```
+   **Regression guard**: If neither the plugin-registered hook NOR the project-local copy exist, emit a warning: `"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge (Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."` Do NOT block the workflow.
 4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", workflow_id: "<slug>", priority: "<priority>", fn_gate: "<required|bypass>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). Set `fn_gate: "bypass"` when invoked with `--auto-continue`, `--milestone:N`, or `--worktree`; otherwise `"required"`.
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next plan filename per `agents/product-manager.md § Plan File Naming` (first run: `.context/planning-0.md`; subsequent runs: `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`
@@ -140,6 +150,18 @@ See `skills/shared/stage-codes.md` for stage details.
 Before proceeding, re-verify: did the HUMAN USER type an approval message? PL0 completing is NOT approval. The product-manager returning results is NOT approval.
 
 Execute the orchestrator execution loop from `skills/workflow/SKILL.md § Orchestrator Execution Loop`. The loop enforces a second approval gate immediately before any FN-stage task — see `skills/workflow/SKILL.md § FN Gate` for the pre-FN summary template and bypass semantics.
+
+**BINDING: Post-delegation state.json enforcement** — After every `Task()` return and before `TaskUpdate(stage→completed)`, the orchestrator MUST:
+1. Re-read `.context/state.json` and check `stages.<CODE>.status`.
+2. If status is NOT `completed`, invoke the state-merge hook synchronously:
+   ```bash
+   CLAUDE_ARTIFACT_PATH=".context/<artifact>-N.md" \
+   CLAUDE_TASK_METADATA_STAGE="<CODE>" \
+   bash .claude/hooks/state-merge.sh
+   ```
+3. Re-read state.json again. If STILL not `completed`, apply the orchestrator's own F3 fallback (derive minimal patch from agent return text).
+
+This guarantees Layer 2 fires even if the SubagentStop hook event was not delivered (e.g. non-plugin environments). See `skills/workflow/SKILL.md § Step 6.5`.
 
 ## Phase 3: Post-Workflow Self-Improvement
 

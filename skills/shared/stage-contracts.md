@@ -375,18 +375,30 @@ handoff:
 
 Prev→this label: `<invoker>→ET` (whichever stage triggered the ethics gate).
 
-## Completion Verification (handoff-protocol)
+## Completion Verification — REQUIRED before return
 
-Single source of truth for what every stage agent verifies before setting `status: completed`. Each agent's `## Handoff Protocol` section MUST reference this checklist rather than restating it.
+Single source of truth for what every stage agent verifies before setting `status: completed`. Each agent's `## Handoff Protocol` section MUST reference this checklist rather than restating it. **Agents MUST repeat the numbered step outcomes verbatim in their return summary.**
 
-Before marking your stage complete, verify all of the following:
+Before marking your stage complete, execute these steps in order:
 
-- [ ] Your artifact (`.context/<artifact>-N.md`) starts with `---\nhandoff:` YAML frontmatter conforming to the per-stage template at `stage-contracts.md#tpl-<CODE>`.
-- [ ] Frontmatter includes all required fields for your stage `<CODE>` per `skills/workflow/references/handoff-protocol.md#frontmatter-schema` § Per-stage required-field matrix.
-- [ ] `.context/state.json` has been patched with `stages.<CODE>` (`status`, `artifact`, `verdict`, `retry_count`) and `handoffs["<PREV>→<CODE>"]` (≤300-char summary ending with `ref:` pointer). `<PREV>→<CODE>` is documented in the template's footer (e.g. `PL→AR`, `USER→IR`).
-- [ ] Atomic write used per `handoff-protocol.md#atomic-write` (read → merge → temp → `sync` → `mv -f`). NEVER write `.context/state.json` directly.
+1. **Artifact frontmatter**: Your artifact (`.context/<artifact>-N.md`) MUST start with `---\nhandoff:` YAML frontmatter conforming to the per-stage template at `stage-contracts.md#tpl-<CODE>`.
+2. **Required fields**: Frontmatter MUST include all required fields for your stage `<CODE>` per `skills/workflow/references/handoff-protocol.md#frontmatter-schema` § Per-stage required-field matrix.
+3. **Artifact filename**: Artifact MUST use the canonical name from `handoff-protocol.md#stage-artifact-map`. Non-canonical names (e.g. `architecture-0.md` instead of `analyzing-0.md`) break the SubagentStop safety net.
+4. **Patch state.json**: `.context/state.json` MUST be patched with `stages.<CODE>` (`status`, `artifact`, `verdict`, `retry_count`) and `handoffs["<PREV>→<CODE>"]` (≤300-char summary ending with `ref:` pointer). `<PREV>→<CODE>` is documented in the template's footer (e.g. `PL→AR`, `USER→IR`).
+5. **Atomic write**: Use `handoff-protocol.md#atomic-write` (read → merge → temp → `sync` → `mv -f`). NEVER write `.context/state.json` directly.
 
-The orchestrator verifies `stages.<CODE>.status == "completed"` after the task returns. If still `in_progress`, the SubagentStop hook repairs the ledger from the artifact's frontmatter (F3 fallback). If the artifact itself lacks frontmatter, the orchestrator derives a minimal handoff record from the agent's return text — but downstream cache hits collapse, so producing valid frontmatter is mandatory in steady state.
+```bash
+# Inline atomic-merge — run BEFORE returning (steps 4+5 combined)
+_sf=".context/state.json"
+_tmp="${_sf}.tmp.$$"
+jq --arg code "<CODE>" --arg artifact "<artifact>-N.md" --arg verdict "<pass|fail>" \
+   --arg prev_code "<PREV>" --arg summary "<≤300-char summary> ref:<artifact>" \
+   '.stages[$code] = {status:"completed", artifact:$artifact, verdict:$verdict} |
+    .handoffs[($prev_code + "→" + $code)] = $summary' \
+   "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
+```
+
+The orchestrator verifies `stages.<CODE>.status == "completed"` after the task returns. If still `in_progress`, the SubagentStop hook (`state-merge.sh`) repairs the ledger from the artifact's frontmatter (F2 fallback). If the artifact itself lacks frontmatter, the orchestrator derives a minimal handoff record from the agent's return text (F3) — but downstream cache hits collapse, so producing valid frontmatter is mandatory in steady state.
 
 ## Cross References
 

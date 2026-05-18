@@ -38,7 +38,15 @@
 #      agents and `skills/shared/stage-contracts.md § Per-Stage Frontmatter
 #      Templates`. Exits 1 on any failure; lists every offending agent.
 #
-#   4. Self-test:
+#   4. Filename lint:
+#        cache-lint.sh --filename-lint <context-dir>
+#      Scans all stage artifacts in the given .context/ directory and asserts
+#      each filename matches the canonical #stage-artifact-map from
+#      handoff-protocol.md. Stage is inferred from handoff: frontmatter.
+#      Flags non-canonical names (e.g. architecture-0.md instead of
+#      analyzing-0.md). Exits 1 on any violation.
+#
+#   5. Self-test:
 #        cache-lint.sh --self-test
 #      Runs all modes against built-in fixtures (tempdir). Exits 0 on pass.
 #
@@ -338,6 +346,61 @@ frontmatter_template_lint() {
   return $rc
 }
 
+# ---------- Filename lint ----------
+# Canonical stage → artifact basename mapping (mirrors handoff-protocol.md#stage-artifact-map).
+canonical_basename_for_stage() {
+  case "$1" in
+    PL) echo "planning" ;;
+    AR) echo "analyzing" ;;
+    TL) echo "coordination" ;;
+    DV) echo "development" ;;
+    DR) echo "developer-review" ;;
+    SR) echo "security-review" ;;
+    QA) echo "testing" ;;
+    DC) echo "documentation" ;;
+    RE) echo "release" ;;
+    FN) echo "complete-summary" ;;
+    ST) echo "retrospective" ;;
+    IR) echo "incident" ;;
+    ET) echo "ethics-review" ;;
+    *) echo "" ;;
+  esac
+}
+
+filename_lint() {
+  local ctx_dir="$1"
+  [[ -d "$ctx_dir" ]] || { echo "filename-lint: directory not found: $ctx_dir" >&2; exit 2; }
+
+  local rc=0 count=0
+  for artifact in "$ctx_dir"/*.md; do
+    [[ -f "$artifact" ]] || continue
+
+    local stage
+    stage=$(extract_stage "$artifact")
+    [[ -z "$stage" ]] && continue
+
+    count=$((count + 1))
+    local expected_base
+    expected_base=$(canonical_basename_for_stage "$stage")
+    [[ -z "$expected_base" ]] && continue
+
+    local actual_name
+    actual_name=$(basename "$artifact")
+    if ! printf '%s' "$actual_name" | grep -qE "^${expected_base}-[0-9]+\\.md\$"; then
+      echo "filename-lint: $artifact (stage=$stage) FAIL: expected '${expected_base}-N.md', got '$actual_name'" >&2
+      rc=1
+    fi
+  done
+
+  if [[ $count -eq 0 ]]; then
+    echo "filename-lint: no artifacts with handoff frontmatter found in $ctx_dir" >&2
+    return 1
+  fi
+
+  [[ $rc -eq 0 ]] && echo "filename-lint: $count artifacts checked, all canonical"
+  return $rc
+}
+
 # ---------- Self-test ----------
 self_test() {
   local td
@@ -539,6 +602,51 @@ EOF
     echo "self-test: frontmatter-template-lint reject duplicate: ok"
   fi
 
+  # Filename lint: positive — canonical names
+  mkdir -p "$td/ctx"
+  cat > "$td/ctx/development-0.md" <<'EOF'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "self-test"
+  refs: { plan: planning-0.md#requirements }
+---
+## files-changed
+EOF
+  cat > "$td/ctx/testing-0.md" <<'EOF'
+---
+handoff:
+  stage: QA
+  verdict: pass
+  summary: "self-test"
+  refs: { dev: development-0.md#files-changed }
+---
+## results
+EOF
+  if "$0" --filename-lint "$td/ctx" >/dev/null 2>&1; then
+    echo "self-test: filename-lint pass: ok"
+  else
+    echo "self-test: filename-lint pass: FAIL" >&2; exit 1
+  fi
+
+  # Filename lint: negative — non-canonical name
+  cat > "$td/ctx/architecture-0.md" <<'EOF'
+---
+handoff:
+  stage: AR
+  verdict: ok
+  summary: "wrong name"
+  refs: { plan: planning-0.md }
+---
+## decisions
+EOF
+  if "$0" --filename-lint "$td/ctx" >/dev/null 2>&1; then
+    echo "self-test: filename-lint reject non-canonical: FAIL (should have flagged architecture-0.md)" >&2; exit 1
+  else
+    echo "self-test: filename-lint reject non-canonical: ok"
+  fi
+
   echo "self-test: ALL PASS"
 }
 
@@ -548,6 +656,10 @@ case "${1:-}" in
   --frontmatter-template-lint)
     shift; [[ $# -ge 1 ]] || usage
     frontmatter_template_lint "$@"; exit $?
+    ;;
+  --filename-lint)
+    shift; [[ $# -ge 1 ]] || usage
+    filename_lint "$1"; exit $?
     ;;
   --self-test)   self_test ;;
   "") usage ;;

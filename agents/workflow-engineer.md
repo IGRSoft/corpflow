@@ -151,6 +151,32 @@ When `--worktree` flag is present, add these checks:
 5. Cross-check `.context/logs/` for the most recent run artifacts (raw captures outlive task state)
 6. Manually update if needed
 
+### state.json Stuck at PL.in_progress
+
+**Symptoms**: Workflow ran through multiple stages, but `.context/state.json` still shows `stages.PL.status: "in_progress"` and empty `handoffs`.
+
+**Root cause**: All three state.json enforcement layers failed — agents skipped self-patching (Layer 1), SubagentStop hook was not installed (Layer 2), and orchestrator Step 6.5 was not executed (Layer 3).
+
+**Runbook**:
+1. **Check hook installation**: `bash skills/workflow/references/hook-install.sh --check`. If missing, install: `bash skills/workflow/references/hook-install.sh`
+2. **Verify settings registration**: Check `.claude-plugin/plugin.json` contains a `SubagentStop` hook entry pointing to `state-merge.sh`
+3. **Manual repair** — run the hook for each stage artifact:
+   ```bash
+   for artifact in .context/{planning,analyzing,coordination,development,developer-review,testing,documentation}-*.md; do
+     [[ -f "$artifact" ]] || continue
+     stage=$(awk '/^[[:space:]]*stage:/ { sub(/.*stage:[[:space:]]*/, ""); gsub(/[[:space:]"]+/, ""); print; exit }' "$artifact")
+     [[ -n "$stage" ]] && CLAUDE_ARTIFACT_PATH="$artifact" CLAUDE_TASK_METADATA_STAGE="$stage" bash .claude/hooks/state-merge.sh
+   done
+   ```
+4. **F4 recovery** (corrupt state.json): If `jq . .context/state.json` fails, quarantine and rebuild:
+   ```bash
+   mv .context/state.json ".context/state.json.bad.$(date +%s)"
+   # Re-run PL0 initialization to re-seed, then run step 3 above
+   ```
+5. **Validate artifact filenames**: `bash skills/workflow/references/cache-lint.sh --filename-lint .context/` — non-canonical names (e.g. `architecture-0.md` instead of `analyzing-0.md`) prevent the hook from resolving artifacts
+
+**Prevention**: Ensure `commands/workflow.md` Phase 1 step 3b runs at workflow start. The plugin.json hook registration (v3.11.0+) provides automatic Layer 2 coverage without project-local installation.
+
 ## Worktree Troubleshooting
 
 ### Worktree Not Created
