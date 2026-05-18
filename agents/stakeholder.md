@@ -168,7 +168,7 @@ _sf=".context/state.json"
 _tmp="${_sf}.tmp.$$"
 jq --arg code "ST" --arg artifact "retrospective-N.md" --arg verdict "<pass|fail>" \
    --arg prev_code "FN" --arg summary "<≤300-char summary> ref:<artifact>" \
-   '.stages[$code] = {status:"completed", artifact:$artifact, verdict:$verdict} |
+   '.stages[$code] += {status:"completed", artifact:$artifact, verdict:$verdict} |
     .handoffs[($prev_code + "→" + $code)] = $summary' \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
