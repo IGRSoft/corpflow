@@ -261,8 +261,8 @@ Schema is additive to `stage-contracts § DV`; the four base sections remain man
 4. **Plan Implementation**: Design approach before coding
 5. **Search Efficiently**: Use combined git commands and batched grep patterns (see `cost-optimization § 4a/4b`). Never issue sequential git log/show/diff for the same file — combine into one command. After 2 zero-result searches on the same topic, stop and widen the pattern or use Glob first.
 6. **Implement Incrementally**: Make changes in logical steps
-6. **Test Changes**: Verify implementation works correctly
-7. **Document as Needed**: Add comments for complex logic
+7. **Test Changes**: Verify implementation works correctly
+8. **Document as Needed**: Add comments for complex logic
 
 ## Task Delegation Implementation
 
@@ -354,6 +354,6 @@ Before returning, merge into `state.json → facts.files_read` an entry for ever
 ```bash
 # Append files_read entries (example for 3 files; real list comes from § Tool Invocations)
 jq --argjson fr '[{"path":"Sources/Foo.swift","stage":"DV","lines":"all"},{"path":"Sources/Bar.swift","stage":"DV","lines":"1-150"}]' \
-   '.facts.files_read = ((.facts.files_read // []) + $fr | unique_by(.path) | .[-30:])' \
+   '.facts.files_read = (($fr + (.facts.files_read // [])) | unique_by(.path) | .[-30:])' \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
