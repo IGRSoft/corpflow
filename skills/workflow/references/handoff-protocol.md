@@ -199,6 +199,34 @@ properties:
       verdicts:
         type: object
         additionalProperties: { type: string }
+      files_read:
+        type: array
+        maxItems: 30
+        description: |
+          Source files read by prior stages. Populated by DV; consumed by DR/QA
+          to prefer `git diff` over full re-reads. When a file appears here,
+          downstream stages SHOULD use `git diff <base>..HEAD -- <path>` instead
+          of `Read <path>`. Full reads are still permitted when the diff is
+          insufficient (e.g., reviewing surrounding context of a complex change).
+          If absent, downstream stages fall back to normal reads (backward-compat).
+        items:
+          type: object
+          required: [path, stage]
+          properties:
+            path: { type: string }
+            stage: { type: string, enum: [PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET] }
+            lines: { type: string, description: "'all' or '<start>-<end>'" }
+  mcp_session:
+    type: object
+    description: |
+      Cached XcodeBuildMCP session state. Written by orchestrator warmup (step 5c);
+      read by DV/DR/QA to skip redundant session_show_defaults / list_schemes /
+      list_sims calls. If absent or stale (>30min), agents fall back to live calls.
+    properties:
+      xcode_defaults: { type: object, description: "Result of session_show_defaults" }
+      schemes: { type: array, items: { type: string } }
+      simulators: { type: array, items: { type: object } }
+      warmed_at: { type: string, format: date-time }
   handoffs:
     type: object
     additionalProperties:
@@ -214,7 +242,8 @@ When state.json approaches the 500-token cap:
 1. Drop `stages.<CODE>.artifact` paths for stages with `status=completed` once their `handoffs[FROM→TO]` string captures the essentials.
 2. Drop `facts.open_questions` whose status is resolved.
 3. Drop `facts.decisions` older than 2 stages back (keep current + previous stage decisions).
-4. NEVER store diffs, file contents, or test output. Fetch from git/disk on demand.
+4. Drop `facts.files_read` entries whose `stage` is older than 2 stages back.
+5. NEVER store diffs, file contents, or test output. Fetch from git/disk on demand.
 
 ### PL0 seed (initial state)
 
