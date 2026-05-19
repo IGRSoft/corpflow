@@ -110,6 +110,31 @@ The developer MUST implement unit tests alongside production code during the DV 
 | Test data builders/fixtures | Integration and E2E tests |
 | Tests for acceptance criteria | Test quality review and metrics |
 
+### Footer Marker Examples (DV Output)
+
+After implementing tests at D1.5, DV appends footer blocks to modified files. Grammar defined in `skills/shared/test-selection-syntax.md § Footer Markers`.
+
+**Production source file** (`Sources/Services/PaymentService.swift`):
+
+```swift
+// ... existing code ...
+
+// MARK: - Test Info
+// @test-file: Tests/Services/PaymentServiceTests.swift
+// @related-tests: Tests/Integration/PaymentFlowTests.swift, Tests/Services/NetworkClientTests.swift
+// @test-coverage: Unit tests for charge(), refund(), and validateCard(). Integration tests for end-to-end payment flow.
+```
+
+**Test file** (`Tests/UnitTests/Services/PaymentServiceTests.swift`):
+
+```swift
+// ... existing tests ...
+
+// MARK: - Source Info
+// @source-file: Sources/Services/PaymentService.swift
+// @doc-refs: https://developer.apple.com/documentation/storekit
+```
+
 ### Development.md Test Documentation Template
 
 ```markdown

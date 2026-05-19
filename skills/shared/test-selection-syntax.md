@@ -211,3 +211,99 @@ The marker grammar is platform-agnostic (line comments are universally parseable
 | **QA** (`agents/qa-engineer.md` Q1) | Reads `development-N.md § Selected Tests` (full list, not DV's Executed subset); runs the list (build-only/scoped) or full suite (full); reads `.context/logs/test-selection-warnings.md` and copies WARN lines to `testing-N.md § Notes`. |
 | **DR** (`agents/technical-lead.md`) | Reads `.context/logs/test-selection-warnings.md` and `§ Executed at DV`; surfaces non-empty warnings as findings in `developer-review-N.md § Findings`. Does NOT execute tests — see `agents/technical-lead.md § Constraints` for the forbidden-commands list. |
 | **PL** (`agents/product-manager.md`) | Writes `metadata.test_mode`, `metadata.always_required_tests`, `metadata.ui_visual_check`. Does not parse markers. |
+
+## Footer Markers
+
+Structured metadata blocks appended to source and test files that provide bidirectional cross-references between production code and its tests. Footer markers are **advisory** — the test selection algorithm (§ Parser algorithm) ignores them. Their purpose is human and agent traceability: developers see which tests cover a file, reviewers verify coverage intent, and QA discovers cross-dependency tests.
+
+### Source File Footer
+
+Appended to production source files. Provides a forward pointer from source to its covering tests.
+
+| Field | Required | Format | Description |
+|-------|----------|--------|-------------|
+| `@test-file:` | yes | Relative path from project root | Primary test file for this source |
+| `@related-tests:` | no | Comma-separated relative paths | Cross-dependency test files that also exercise this source |
+| `@test-coverage:` | yes | Free text (single line) | Brief description of what the tests verify |
+
+```swift
+// MARK: - Test Info
+// @test-file: Tests/Services/PaymentServiceTests.swift
+// @related-tests: Tests/Integration/PaymentFlowTests.swift, Tests/Services/NetworkClientTests.swift
+// @test-coverage: Unit tests for charge(), refund(), and validateCard(). Integration tests for end-to-end payment flow.
+```
+
+Minimal form (no related tests):
+
+```swift
+// MARK: - Test Info
+// @test-file: Tests/Services/PaymentServiceTests.swift
+// @test-coverage: Unit tests for charge(), refund(), and validateCard().
+```
+
+### Test File Footer
+
+Appended to test files. Provides a back pointer from tests to the source and relevant documentation.
+
+| Field | Required | Format | Description |
+|-------|----------|--------|-------------|
+| `@source-file:` | yes | Relative path from project root | Production source file this test exercises |
+| `@doc-refs:` | no | Comma-separated URLs | Apple docs, framework references, or relevant documentation links |
+
+```swift
+// MARK: - Source Info
+// @source-file: Sources/Services/PaymentService.swift
+// @doc-refs: https://developer.apple.com/documentation/storekit, https://stripe.com/docs/api
+```
+
+Minimal form (no doc refs):
+
+```swift
+// MARK: - Source Info
+// @source-file: Sources/Services/PaymentService.swift
+```
+
+### Platform Variants
+
+The MARK-comment syntax varies by language. Use the platform-native comment style:
+
+| Platform | Source footer sentinel | Test footer sentinel |
+|----------|----------------------|---------------------|
+| Swift | `// MARK: - Test Info` | `// MARK: - Source Info` |
+| Kotlin | `// MARK: - Test Info` | `// MARK: - Source Info` |
+| TypeScript | `// MARK: - Test Info` | `// MARK: - Source Info` |
+| Python | `# MARK: - Test Info` | `# MARK: - Source Info` |
+| Ruby | `# MARK: - Test Info` | `# MARK: - Source Info` |
+| Go | `// MARK: - Test Info` | `// MARK: - Source Info` |
+| Rust | `// MARK: - Test Info` | `// MARK: - Source Info` |
+
+### Position Rules
+
+- Footer MUST be the **last block** in the file (after all code, extensions, and closing braces).
+- A blank line MUST separate the footer from preceding code.
+- Footer lines are contiguous — no blank lines within the block.
+- All paths are relative to project root (the directory containing `.git/` or `Package.swift`), use forward slashes, no leading `./`.
+- Multi-value fields (`@related-tests:`, `@doc-refs:`) use comma-space (`, `) as delimiter. When the line exceeds ~120 characters, overflow to repeated marker lines: `// @related-tests: Tests/A.swift` / `// @related-tests: Tests/B.swift`. Repeated lines are additive (union of all values).
+
+### Marker Namespace
+
+Footer markers coexist with selection markers. The full namespace:
+
+| Marker | Kind | Consumed by |
+|--------|------|-------------|
+| `@test-required` | Selection | Parser algorithm (D2) |
+| `@depends-on:` | Selection | Parser algorithm (D2) |
+| `@test-tag:` | Selection | Parser algorithm (D2) |
+| `@test-file:` | Footer (source) | Human / agent (advisory) |
+| `@related-tests:` | Footer (source) | Human / agent (advisory) |
+| `@test-coverage:` | Footer (source) | Human / agent (advisory) |
+| `@source-file:` | Footer (test) | Human / agent (advisory) |
+| `@doc-refs:` | Footer (test) | Human / agent (advisory) |
+
+### Parser Behavior
+
+Footer markers are **not consumed** by the test selection algorithm. They carry no runtime semantics — `@related-tests:` does NOT cause the listed tests to be selected. Use `@depends-on:` in test files for that purpose. Missing footers produce no error; malformed footers (e.g., `@test-file:` with no path) log a warning to `.context/logs/test-selection-warnings.md` but do not affect test selection.
+
+### Future: test-generator integration
+
+When `apple-developer:test-generator` creates new test files, it SHOULD auto-populate `// MARK: - Source Info` with `@source-file:` pointing to the file under test and `@doc-refs:` with relevant Apple documentation URLs. It SHOULD also emit an update instruction for the source file's `// MARK: - Test Info` footer. Not yet implemented — tracked for a future release.
