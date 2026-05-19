@@ -248,3 +248,7 @@ DV records `test_mode`, `selected_tests_count`, and `ui_visual_check` in `.conte
 ### Marker grammar reference
 
 See `skills/shared/test-selection-syntax.md` for the full marker grammar (`@test-required`, `@depends-on:`, `@test-tag:`), parser pseudocode, and Swift Testing trait equivalents.
+
+### Footer markers (bidirectional traceability)
+
+Source files carry `// MARK: - Test Info` footers with `@test-file:` (primary test path), `@related-tests:` (cross-dependency tests), and `@test-coverage:` (description). Test files carry `// MARK: - Source Info` footers with `@source-file:` (source path) and `@doc-refs:` (documentation links). These are advisory — they do not affect test selection — but enable reviewers and tooling to verify coverage intent bidirectionally. See `test-selection-syntax.md § Footer Markers` for grammar, platform variants, and examples.

@@ -88,6 +88,8 @@ In the 9-stage workflow system, the qa-engineer handles:
 
   **Warnings ingestion**: read `.context/logs/test-selection-warnings.md` after the run. Copy any `WARN:` lines to `testing-N.md § Notes`. If warnings are non-empty, escalate to DR or DV per `agent-coordination § Error Handling`.
 
+  **Footer marker discovery**: read `@test-file:` and `@related-tests:` from `// MARK: - Test Info` footers in modified source files to discover additional test candidates not captured by `@depends-on:` markers. Check bidirectional consistency — a source footer's `@test-file:` path should have a corresponding `@source-file:` entry in that test file. Log inconsistencies in `testing-N.md § Notes`. See `test-selection-syntax.md § Footer Markers`.
+
   **Visual comparison gate**: independent of `test_mode`. Run Design Comparison (see § Design Comparison below) when `metadata.ui_visual_check: true` AND `.context/designs/` has artifacts. Otherwise skip.
 - **Q2**: Handle test failures (retry or escalate to DV)
 - **Q3**: All tests pass, document results and metrics in testing.md

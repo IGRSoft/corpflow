@@ -67,6 +67,7 @@ PL → AR → TL → DV → [DR] → QA → DC → FN → ST
 - **DR3.5 — Warning Escalation**: when `.context/logs/test-selection-warnings.md` is non-empty (any `WARN:` line written by DV's selection parser), do BOTH of the following in addition to surfacing in `§ Findings`:
   1. Append one `## DR[N] Retry [0/0] — <ts>` section to `.context/errors/developer.md` with `**Classification**: ambiguous_requirements` and a `### Resolution Path` listing each warning verbatim (one bullet per `WARN:` line). This converts an advisory drop into a tracked escalation so the orchestrator's retry/escalate matrix can route it (`escalate_to: DV`) instead of relying on DR-finding visibility alone.
   2. Set `verdict: fail` on this DR run when ≥1 warning is of kind `unknown_symbol` or `missing_marker` (silent regression risk). `verdict: pass` is still permitted for `style_only` or `coverage_advisory` warnings — note the reason in `§ Findings`.
+- **Footer marker check**: verify that modified production files contain a `// MARK: - Test Info` footer (`@test-file:`, `@test-coverage:`) and new/modified test files contain a `// MARK: - Source Info` footer (`@source-file:`). Missing footer is a **low-severity suggestion** (not a blocker) — record it in `§ Findings` so DV can address in a follow-up. See `test-selection-syntax.md § Footer Markers`.
 - Produce `.context/developer-review-N.md` with findings summary (N = `task.metadata.run_index`; resolver: metadata → newest glob `developer-review-*.md` → legacy `developer-review.md`)
 - Gate QA — QA stage is blocked until DR completes
 
