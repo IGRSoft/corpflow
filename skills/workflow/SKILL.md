@@ -488,6 +488,20 @@ while (tasks.some(t => t.status !== "completed")) {
         }
       }
       state.xcodeMcpWarmed = warmed;
+
+      // Cache session state in state.json so DV/DR/QA skip redundant queries
+      if (warmed && fs.existsSync(".context/state.json")) {
+        try {
+          const defaults = await mcp__XcodeBuildMCP__session_show_defaults({});
+          atomicMergeStateJson({
+            mcp_session: {
+              xcode_defaults: defaults,
+              warmed_at: new Date().toISOString()
+            }
+          });
+        } catch (_) { /* non-critical — agents fall back to live calls */ }
+      }
+
       if (!warmed) {
         appendAudit({ action: "mcp_warmup_failed",
                       metadata: { server: "XcodeBuildMCP" } });
@@ -579,6 +593,7 @@ while (tasks.some(t => t.status !== "completed")) {
 - NEVER mark a task `completed` without first delegating to an agent and receiving its results — completion without delegation is the most common violation
 - The orchestrator uses ONLY TaskCreate, TaskUpdate, TaskGet, TaskList, and Agent tools. Edit/Write/Bash on source files belong to stage agents, not the orchestrator
 - The orchestrator owns the loop; stage agents own their stage's work
+- Prefer in-memory task tracking over `TaskList()` polling. Call `TaskList()` only on first loop entry, after TL/DV stages (which may create sub-tasks), and every 3rd iteration as a consistency check. For linear pipelines, update the local task array from `TaskUpdate` results instead of re-fetching all tasks
 
 ### Pre-DV MCP warmup
 

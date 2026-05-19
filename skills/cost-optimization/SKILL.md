@@ -96,6 +96,54 @@ Savings: ~80% on overhead tokens
 - Combine related search queries
 - Cache repeated lookups within session
 
+### 4a. Git Search Strategy (MANDATORY)
+
+When investigating code history or changes, use ONE combined command instead of sequential git log, git show, git diff:
+
+```bash
+# History + diff for a symbol (replaces: git log + git show + git diff)
+git log --oneline -10 --all -p -S '<search_term>' -- '*.swift'
+
+# All changes on branch (replaces: git log + git diff + git show --stat)
+git log --oneline --stat <base>..HEAD
+
+# File history with context (replaces: git log <file> + git show <sha>)
+git log --oneline -5 -p -- <file>
+```
+
+**Anti-pattern**: issuing `git log`, then `git show --stat <sha>`, then `git show <sha>`, then `git diff <sha>`. That is 4 commands for 1 answer.
+
+### 4b. Grep Batching (MANDATORY)
+
+Combine related search patterns into a single invocation using `|` alternation:
+
+```
+# WRONG: 3 separate calls
+Grep("dismissCompleted"); Grep("completedScan"); Grep("stopScanning")
+
+# RIGHT: 1 call
+Grep("dismissCompleted|completedScan|stopScanning")
+```
+
+**Zero-result protocol**: after 2 consecutive zero-result searches on the same topic, STOP searching and either (a) ask the user for the correct symbol/path or (b) use Glob to find candidate files first, then grep within those files.
+
+### 4c. Targeted Reads (MANDATORY for large files)
+
+When you know which part of a file you need (error at line N, function at line M), use `offset` and `limit` parameters:
+
+```
+# WRONG: Read entire 700-line file for a 20-line function
+Read(file_path: "path/to/large.swift")
+
+# RIGHT: Read just the relevant section
+Read(file_path: "path/to/large.swift", offset: 340, limit: 40)
+```
+
+**Rules**:
+- Files >200 lines: ALWAYS use offset/limit when target location known (from grep results, error messages, or prior reads)
+- Files ≤200 lines: full read is acceptable
+- After a Grep hit at line N: read with `offset: max(1, N-10), limit: 30`
+
 ### 5. Early Termination
 
 **Strategy**: Exit stages early when completion criteria met.
@@ -306,6 +354,9 @@ After workflow:
 | Separate API calls for each file | Overhead tokens | Batch reads |
 | Retrying without context compression | Compounds cost | Compress first |
 | Full workflow for trivial changes | Unnecessary stages | Use micro/quick |
+| Reading entire large files | Wastes context on irrelevant code | Use offset/limit after Grep (§4c) |
+| Sequential git log/show/diff | 4 commands for 1 answer | Single combined git command (§4a) |
+| Separate greps for related symbols | Multiplies round-trips | Use `\|` alternation (§4b) |
 
 ## Related Skills
 

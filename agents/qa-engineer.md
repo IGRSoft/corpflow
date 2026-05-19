@@ -59,6 +59,15 @@ For long test runs, combine with Monitor tool: start `test_sim` via Bash with `r
 
 For documentation lookup, use Context7 (`resolve-library-id` → `query-docs`) or Ref (`ref_search_documentation`).
 
+### Diff-Only Read Rule (QA)
+
+Before reading any source file, check `state.json → facts.files_read` for that path. If the file was read by DV:
+- Use `git diff <base>..HEAD -- <path>` for changed-file context instead of `Read <path>`.
+- Read the full file ONLY when writing new tests that need the complete type/API surface.
+- For files >200 lines, ALWAYS use `Read` with `offset`/`limit` targeting the relevant section.
+
+If `facts.files_read` is absent (legacy workflow), fall back to normal reads.
+
 ## Workflow Integration
 
 In the 9-stage workflow system, the qa-engineer handles:

@@ -67,7 +67,8 @@ When platform is `apple`, further route based on context:
 
 When building or testing Apple platform code directly (not delegating to apple-developer agents):
 
-1. **Warmup + verify.** Call `mcp__XcodeBuildMCP__session_show_defaults` once to verify project/scheme/simulator. Treat this call as the warmup. The orchestrator should already have warmed XcodeBuildMCP before delegating (see `workflow § Pre-DV MCP warmup`); this call is the second line of defence for older orchestrator versions, `fworkflow:` runs that bypass the loop, or any path where the warmup did not fire.
+1. **Warmup + verify.** Read `state.json → mcp_session.xcode_defaults`. If present AND `mcp_session.warmed_at` is within the last 30 minutes, skip `session_show_defaults` — the orchestrator already warmed and cached the result. Otherwise, call `mcp__XcodeBuildMCP__session_show_defaults` once to verify project/scheme/simulator. The orchestrator should already have warmed XcodeBuildMCP before delegating (see `workflow § Pre-DV MCP warmup`); this call is the second line of defence for older orchestrator versions, `fworkflow:` runs that bypass the loop, or any path where the warmup did not fire.
+   - **Never call `list_sims` or `list_schemes`** unless `session_show_defaults` returns incomplete data (missing scheme or simulator). If you must call them, cache the result in `state.json → mcp_session.schemes` / `mcp_session.simulators` for downstream stages.
    - If the call fails and the error message matches the canonical `MCP_UNAVAILABLE_RE` pattern (see `agent-coordination § MCP Unavailability Detection`), retry up to **2×** with 8-second waits between attempts (covers `npx -y xcodebuildmcp@latest` cold-start; total budget ~16 s). Errors that do NOT match the pattern are real bugs — do not retry, re-raise.
    - After exhausting all 3 attempts (1 + 2 retries), write one `audit.jsonl` line `action: "mcp_unavailable"` with `metadata: {server: "XcodeBuildMCP", reason: <error>}`, switch to the Bash fallback for the rest of the stage, and record the fallback in `.context/development-N.md § Decisions` (one line: `XcodeBuildMCP unreachable; using Bash xcodebuild fallback — <reason>`) so QA/DR see it. Do NOT abort the stage.
 2. **Build.** Use `mcp__XcodeBuildMCP__build_sim` or `build_run_sim`. If warmup failed, substitute `xcodebuild -project … -scheme … -destination …` via Bash and tee output to the same `.context/logs/build-developer-<ts>.log` path so QA/DR are unaffected.
@@ -77,7 +78,12 @@ When building or testing Apple platform code directly (not delegating to apple-d
 
 ### D Stage (Development)
 - **D0**: Analyze requirements, set up development environment, read test specs from `<plan_file>`
-- **D1**: Implement code changes. Every build attempt is captured via tee → `.context/logs/build-developer-<ts>.log` (filename grammar: `logging-conventions`)
+- **D1**: Implement code changes using the **edit-batch-build** pattern:
+  1. **Plan all edits first**: before the first `Edit`/`Write`, list every file that needs changes and what each change is. Write this list to `development-N.md § Approach` BEFORE editing.
+  2. **Apply all edits**: execute all planned edits without building between them. Group related edits (e.g., all project.pbxproj changes — new file refs, build phases, group membership — into ONE edit session).
+  3. **Build once**: run `build_sim` (or Bash fallback) AFTER all planned edits are applied.
+  4. **Fix-up cycle**: if build fails, diagnose ALL errors from the log in one pass, apply ALL fixes, then rebuild. Do not fix one error, build, fix the next, build again.
+  Every build attempt is captured via tee → `.context/logs/build-developer-<ts>.log` (filename grammar: `logging-conventions`)
 - **D1.5**: Write unit tests per `<plan_file> § Test Strategy`. **Annotate new tests** with markers from `skills/shared/test-selection-syntax.md`: add `// @test-required` for smoke tests, `// @depends-on: <Symbol>` for cross-file behavior coverage, and `// @test-tag: <tag>` for categorization. Annotation is the input that makes selective execution work — untagged tests fall back to filename/type-name correlation only.
 - **D2**: Compute the **Selected Tests** list from `<plan_file>` metadata + inline source markers, then run tests per `test_mode`. Tee output → `.context/logs/test-developer-<ts>.log`. See `skills/shared/testing-strategy.md § Test Selection Gate` and `skills/shared/test-selection-syntax.md` for the full protocol.
 
@@ -253,9 +259,10 @@ Schema is additive to `stage-contracts § DV`; the four base sections remain man
 2. **Route Appropriately**: Delegate to specialized agent when available
 3. **Understand Requirements**: Parse task requirements clearly
 4. **Plan Implementation**: Design approach before coding
-5. **Implement Incrementally**: Make changes in logical steps
-6. **Test Changes**: Verify implementation works correctly
-7. **Document as Needed**: Add comments for complex logic
+5. **Search Efficiently**: Use combined git commands and batched grep patterns (see `cost-optimization § 4a/4b`). Never issue sequential git log/show/diff for the same file — combine into one command. After 2 zero-result searches on the same topic, stop and widen the pattern or use Glob first.
+6. **Implement Incrementally**: Make changes in logical steps
+7. **Test Changes**: Verify implementation works correctly
+8. **Document as Needed**: Add comments for complex logic
 
 ## Task Delegation Implementation
 
@@ -339,3 +346,14 @@ jq --arg code "DV" --arg artifact "development-N.md" --arg verdict "<pass|fail>"
 ```
 
 If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+
+### Files Read Registry (token optimization)
+
+Before returning, merge into `state.json → facts.files_read` an entry for every source file Read during this stage: `{path: "<relative>", stage: "DV", lines: "all" | "<start>-<end>"}`. Cap at 30 entries (most recent wins on collision by path). This enables downstream DR/QA stages to use `git diff` instead of full file reads.
+
+```bash
+# Append files_read entries (example for 3 files; real list comes from § Tool Invocations)
+jq --argjson fr '[{"path":"Sources/Foo.swift","stage":"DV","lines":"all"},{"path":"Sources/Bar.swift","stage":"DV","lines":"1-150"}]' \
+   '.facts.files_read = (($fr + (.facts.files_read // [])) | unique_by(.path) | .[-30:])' \
+   "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
+```

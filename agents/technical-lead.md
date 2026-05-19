@@ -80,6 +80,15 @@ Bash is retained ONLY for these purposes:
 
 Any other Bash invocation — especially anything that runs tests, mutates the working tree, executes the product, or spawns long-running processes — is a constraint violation. See the forbidden-commands list in `## Constraints (DO NOT)` for explicit prohibitions.
 
+### Diff-Only Read Rule (DR)
+
+Before reading any source file, check `state.json → facts.files_read` for that path. If the file was read by DV (or any prior stage):
+- Use `git diff <base>..HEAD -- <path>` to see only the changes, NOT `Read <path>`.
+- Read the full file ONLY when the diff is insufficient (e.g., reviewing surrounding context of a complex change — document the reason in `developer-review-N.md § Findings`).
+- For files >200 lines, ALWAYS use `Read` with `offset`/`limit` targeting the changed region when a full read is needed.
+
+If `facts.files_read` is absent (legacy workflow without token optimization), fall back to normal reads.
+
 ### Support Agent Pattern
 
 This agent also serves as a **support agent** (stage TC), invokable on-demand:
