@@ -68,6 +68,7 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 11-stage workflow |
 | `--worktree` | Use git worktrees for issue isolation (requires --milestone). Configure `worktree.sparsePaths` in settings.json for large repos |
+| `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish step. Sets `metadata.no_gh_issue: true` on the PL0 task; `skills/workflow/references/publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues as normal. |
 
 ## Examples
 

@@ -185,7 +185,7 @@ review, the audit tail is the single source of truth for what happened.
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `workflow_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned` |
+| Orchestrator | `workflow_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned`, `github_issue_created` |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation` |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
 | `hook:audit-subagent` (SubagentStop, plugin) **(authoritative)** | `subagent_stopped` (paired with cost-*.jsonl entry) — v3.10.0+ |
@@ -199,6 +199,7 @@ review, the audit tail is the single source of truth for what happened.
 - `tool_invoked`: `"<session_id>:<tool_use_id>"`
 - `subagent_stopped`: `"<session_id>:<agent_id>:<task_id>:stop"` (v3.10.1+; the `<task_id>` segment disambiguates back-to-back DV0/DV1 split-task retries where `agent_id` is constant. Pre-v3.10.1 producers may emit the legacy shape `"<session_id>:<agent_id>:stop"` — readers MUST treat both prefixes as the same key for a single `(session, agent, task)` row to preserve dedupe across the upgrade. Orchestrator populates `task_id` in hook stdin where the runtime exposes it; on older CC builds the hook degrades to legacy shape automatically.)
 - `stage_completion_hook`: `"<session_id>:<agent_id>:stage:<PL|FN|ST>"`
+- `github_issue_created`: `"<workflow_id>:<run_index>:gh_issue"` — collision on resume detects already-published; multi-track safety via `run_index` increment. Writer: orchestrator (via `skills/workflow/references/publish-pl-issue.sh` between PL approval and stage-loop entry).
 
 ### Schema
 
@@ -206,7 +207,7 @@ review, the audit tail is the single source of truth for what happened.
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "workflow_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch",
+  "action": "workflow_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created",
   "subject": "task ID or artifact path",
   "result": "ok|error|deferred|blocked",
   "task_id": "optional — Task System ID",
