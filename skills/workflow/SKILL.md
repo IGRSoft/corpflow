@@ -333,7 +333,7 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
      ```bash
      bash skills/workflow/references/publish-pl-issue.sh; true
      ```
-     The trailing `; true` masks the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error, etc.) MUST NEVER propagate as orchestrator failure. Skip entirely when `--no-gh-issue` was supplied on the CLI (PL0 sets `task.metadata.no_gh_issue: true`; the helper short-circuits internally and audits `deferred`/`opted_out`). For workspace/milestone mode the helper auto-detects `workspace.json:parent_issue_url` and posts a comment on the parent issue instead of creating a new one. See `### PL Issue Publish` below for sanitiser rules and the non-blocking guarantee.
+     The trailing `; true` masks the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error, etc.) MUST NEVER propagate as orchestrator failure. Skip entirely when `--no-gh-issue` was supplied on the CLI (PL0 sets `task.metadata.no_gh_issue: true`; the helper short-circuits internally and audits `deferred`/`opted_out`). Under milestone mode (`--milestone:N`, `state.json:metadata.milestone` set, or `workspace.json` present), the helper exits `0` immediately with `reason: "milestone_mode"` — no `gh` API call of any kind is made. See `### PL Issue Publish` below for sanitiser rules and the non-blocking guarantee.
 
 Unless `--auto-continue` flag was provided — in that case, skip the approval gate and proceed directly.
 

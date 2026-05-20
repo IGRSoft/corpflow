@@ -131,7 +131,7 @@ sanitise_body() {
         }
         # Look ahead for filename token starting at i.
         rest = substr(line, i)
-        if (match(rest, /^[A-Z][A-Za-z0-9_]+\.(md|json|jsonl|swift|ts|py|yml|yaml|sh|bash|go|rs|kt|java|rb|cpp|c|h|hpp|m|mm)\>/)) {
+        if (match(rest, /^[A-Z][A-Za-z0-9_]+\.(md|json|jsonl|swift|ts|py|yml|yaml|sh|bash|go|rs|kt|java|rb|cpp|c|h|hpp|m|mm)/) && substr(rest, RLENGTH + 1, 1) !~ /[A-Za-z0-9_]/) {
           # A5: extension is in deny-list → strip.
           i = i + RLENGTH
           continue
@@ -406,7 +406,12 @@ if [ "$DRY_RUN" = "1" ]; then
   URL="https://github.com/dry/run/issues/0"
   echo "DRY_RUN: $GH_BIN issue create --title \"$TITLE\" --body-file $BODY_TMP --label workflow,planning-approved,complexity:$TIER" >&2
 else
-  GH_OUT=$("$GH_BIN" issue create --title "$TITLE" --body-file "$BODY_TMP" --label "workflow,planning-approved,complexity:$TIER" 2>&1) || GH_RC=$? || GH_RC=0
+  TIMEOUT_BIN="$(command -v gtimeout || command -v timeout || true)"
+  if [ -n "$TIMEOUT_BIN" ]; then
+    GH_OUT=$("$TIMEOUT_BIN" "$GH_TIMEOUT" "$GH_BIN" issue create --title "$TITLE" --body-file "$BODY_TMP" --label "workflow,planning-approved,complexity:$TIER" 2>&1) || true
+  else
+    GH_OUT=$("$GH_BIN" issue create --title "$TITLE" --body-file "$BODY_TMP" --label "workflow,planning-approved,complexity:$TIER" 2>&1) || true
+  fi
   URL=$(printf '%s' "$GH_OUT" | grep -oE 'https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[0-9]+' | head -1)
   if [ -z "$URL" ]; then
     # No URL captured → treat as network/auth-edge failure (non-blocking).
