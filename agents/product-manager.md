@@ -217,6 +217,25 @@ Every stage (AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) writes its artifact
 - Define scope, priorities, and dependencies
 - **Create subsequent stage tasks** based on complexity assessment (see below) — set `metadata.plan_file` on each
 
+#### `--no-gh-issue` opt-out
+
+When the orchestrator's `/workflow` (or `/quick`, `/fworkflow`) invocation carries `--no-gh-issue`, PL0 MUST stamp `metadata.no_gh_issue: true` on its own PL0 task and propagate the field through every downstream task it creates. The orchestrator's Step 6.5 reads the field via `skills/workflow/references/publish-pl-issue.sh`; the helper exits 0 immediately without any `gh` API call, auditing `result: "deferred"`, `reason: "opted_out"`. Workflow execution is unaffected — the stage loop proceeds as normal.
+
+When the flag is **absent** (default), PL0 leaves the field unset and the helper runs the full publish pipeline (sanitise → `gh issue create` → state.json write → audit row). See `commands/workflow.md` for the canonical flag list and `skills/workflow/SKILL.md § PL Issue Publish` for the runtime semantics.
+
+- `--milestone:N` (CLI) implicitly opts out of GH publish — no additional flag needed; the helper detects milestone mode via `state.json:metadata.milestone` or `workspace.json` presence and exits `0` with `reason: "milestone_mode"` before any `gh` call (no create, no comment).
+
+#### Anchor-content hygiene (GitHub publish safety)
+
+The `## requirements`, `## acceptance-criteria`, `## scope`, and `## complexity` anchors of `<plan_file>` are **externally published** to a GitHub issue body by `publish-pl-issue.sh` after the user approves the plan. PL0 authors MUST keep these four sections free of:
+
+- `.context/` paths or numbered artifact filenames (`planning-N.md`, `analyzing-N.md`, `coordination-N.md`, `development-N.md`, `developer-review-N.md`, `testing-N.md`, `documentation-N.md`, `release-N.md`, `complete-summary-N.md`, `retrospective-N.md`, `incident-N.md`, `ethics-review-N.md`)
+- Absolute or relative source paths (`/Users/`, `/home/`, `/tmp/`, `/var/`, `/opt/`, `/etc/`, `/root/`, `~/`, `./`, `../`)
+- Conductor workspace identifiers (`conductor/workspaces/<id>`)
+- The literal tokens `workspace_path`, `plan_file`, `run_index`, `artifact_path`
+
+The two-pass sanitiser in `publish-pl-issue.sh` is a **safety net, not a substitute** for authoring hygiene. When more than 50% of the combined anchor bodies is stripped, the helper aborts with `reason: "sanitiser_aborted"` and the operator must amend the plan — which costs a review round-trip. Keep file references in narrative ("the AuthCoordinator class", "the HTTP client") rather than path form ("`src/Auth/AuthCoordinator.swift`", "`./src/http/Client.swift`"). When a code identifier must appear, wrap it in inline backticks or place it inside a fenced code block — Pass 2's allow-list will preserve it.
+
 ### PL0 Scaffolding (when invoked for workflow planning)
 When invoked as PL0 stage agent:
 1. Compute `<plan_file>` per **Plan File Naming** (glob `.context/planning-*.md`, pick next N) and create `.context/<plan_file>` with the requirements template

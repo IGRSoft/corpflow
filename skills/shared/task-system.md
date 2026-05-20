@@ -173,6 +173,17 @@ function normalizeMetadata(meta) {
 }
 ```
 
+## state.json Top-Level `metadata` Fields
+
+These fields live at `state.json:$.metadata` (workflow-scoped, distinct from `task.metadata` documented above). Canonical schema lives in `skills/workflow/references/handoff-protocol.md#state-json-schema`; the table below is the additive index of fields documented elsewhere in this plugin.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `metadata.embedded_commands` | string (optional) | Comma-separated list of `/plugin:command` slash-command identifiers detected on the workflow trigger (e.g. `skill-creator`). Writer: orchestrator at `/workflow` parse time. Reader: DV agent before stage work begins. See `commands/workflow.md § Embedded Command Detection`. |
+| `metadata.preexisting_plan` | string (optional) | Absolute path to a user-approved plan supplied at workflow init; PL0 adopts it verbatim and reuses anchors. Writer: orchestrator. Reader: PL agent. |
+| `metadata.no_gh_issue` | boolean (optional) | When `true`, suppresses post-PL GitHub issue publishing. Writer: orchestrator at parse time (set by the `--no-gh-issue` CLI flag). Reader: `skills/workflow/references/publish-pl-issue.sh`. |
+| `metadata.github_issue_url` | string (optional) | Canonical GitHub issue URL published by `publish-pl-issue.sh` after PL approval. Pattern: `^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[0-9]+(#issuecomment-[0-9]+)?$`. Once populated the helper short-circuits on workflow resume (idempotency anchor); on a fresh `run_index` increment the field is rewritten. FN stage MAY consume the URL to back-link the PR (future patch). Writer: orchestrator via `publish-pl-issue.sh`. Readers: `publish-pl-issue.sh` (idempotency), FN (future). |
+
 ## Status Values
 
 | Status | Meaning |
