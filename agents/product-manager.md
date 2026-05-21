@@ -546,8 +546,10 @@ _sf=".context/state.json"
 _tmp="${_sf}.tmp.$$"
 jq --arg code "PL" --arg artifact "planning-N.md" --arg verdict "<pass|fail>" \
    --arg prev_code "USER" --arg summary "<≤300-char summary> ref:<artifact>" \
+   --arg goal "<one-line goal: verb + object, ≤120 chars, e.g. 'Add dark mode support to Settings screen'>" \
    '.stages[$code] += {status:"completed", artifact:$artifact, verdict:$verdict} |
-    .handoffs[($prev_code + "→" + $code)] = $summary' \
+    .handoffs[($prev_code + "→" + $code)] = $summary |
+    .facts.goal = $goal' \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 

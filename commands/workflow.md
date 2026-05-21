@@ -150,6 +150,24 @@ See `skills/shared/stage-codes.md` for stage details.
 
 Before proceeding, re-verify: did the HUMAN USER type an approval message? PL0 completing is NOT approval. The product-manager returning results is NOT approval.
 
+**Step A — Publish approved plan to GitHub** (run BEFORE the stage loop, after
+approval is confirmed):
+
+    bash skills/workflow/references/publish-pl-issue.sh; true
+
+- The trailing `; true` is mandatory — the helper is non-blocking by contract.
+  A helper failure (exit 1, deferred exit 0, network error) MUST NEVER fail the
+  workflow.
+- The helper self-skips when it should: `--no-gh-issue` (`metadata.no_gh_issue`
+  set), milestone mode (`metadata.milestone` / `workspace.json`), already
+  published (`metadata.github_issue_url` set), missing `gh`/auth/remote — each
+  exits 0 and audits a `deferred` row.
+- This step is NOT optional. Do not skip it because SKILL.md describes it —
+  the orchestrator MUST run the command above as written.
+
+See `skills/workflow/SKILL.md § Step 6.5` and `§ PL Issue Publish` for the
+sanitiser rules and non-blocking guarantee.
+
 Execute the orchestrator execution loop from `skills/workflow/SKILL.md § Orchestrator Execution Loop`. The loop enforces a second approval gate immediately before any FN-stage task — see `skills/workflow/SKILL.md § FN Gate` for the pre-FN summary template and bypass semantics.
 
 **BINDING: Post-delegation state.json enforcement** — After every `Task()` return and before `TaskUpdate(stage→completed)`, the orchestrator MUST:
