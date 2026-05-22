@@ -158,7 +158,7 @@ When `--worktree` flag is present, add these checks:
 **Root cause**: All three state.json enforcement layers failed — agents skipped self-patching (Layer 1), SubagentStop hook was not installed (Layer 2), and orchestrator Step 6.5 was not executed (Layer 3).
 
 **Runbook**:
-1. **Check hook installation**: `bash skills/workflow/references/hook-install.sh --check`. If missing, install: `bash skills/workflow/references/hook-install.sh`
+1. **Check hook installation**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/workflow/references/hook-install.sh" --check`. If missing, install: `bash "${CLAUDE_PLUGIN_ROOT}/skills/workflow/references/hook-install.sh"`
 2. **Verify settings registration**: Check `.claude-plugin/plugin.json` contains a `SubagentStop` hook entry pointing to `state-merge.sh`
 3. **Manual repair** — run the hook for each stage artifact:
    ```bash
@@ -173,7 +173,7 @@ When `--worktree` flag is present, add these checks:
    mv .context/state.json ".context/state.json.bad.$(date +%s)"
    # Re-run PL0 initialization to re-seed, then run step 3 above
    ```
-5. **Validate artifact filenames**: `bash skills/workflow/references/cache-lint.sh --filename-lint .context/` — non-canonical names (e.g. `architecture-0.md` instead of `analyzing-0.md`) prevent the hook from resolving artifacts
+5. **Validate artifact filenames**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/workflow/references/cache-lint.sh" --filename-lint .context/` — non-canonical names (e.g. `architecture-0.md` instead of `analyzing-0.md`) prevent the hook from resolving artifacts
 
 **Prevention**: Ensure `commands/workflow.md` Phase 1 step 3b runs at workflow start. The plugin.json hook registration (v3.11.0+) provides automatic Layer 2 coverage without project-local installation.
 
