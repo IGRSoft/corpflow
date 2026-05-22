@@ -153,7 +153,17 @@ Before proceeding, re-verify: did the HUMAN USER type an approval message? PL0 c
 **Step A — Publish approved plan to GitHub** (run BEFORE the stage loop, after
 approval is confirmed):
 
-    bash skills/workflow/references/publish-pl-issue.sh; true
+    HELPER="${CLAUDE_PLUGIN_ROOT}/skills/workflow/references/publish-pl-issue.sh"
+    if [ -f "$HELPER" ]; then
+      bash "$HELPER"; true
+    else
+      LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
+      mkdir -p "$LOG_DIR"
+      STATE_FILE="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/state.json"
+      jq -cn --arg ts "$(date -u +%FT%TZ)" --arg dk "$(jq -r '.workflow_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo unknown):$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo 0):gh_issue" \
+        '{ts:$ts, actor:"orchestrator", action:"github_issue_created", subject:"PL0", result:"deferred", task_id:"1", metadata:{via:"publish-pl-issue.sh", reason:"helper_not_found", dedupe_key:$dk}}' \
+        >> "$LOG_DIR/audit.jsonl"; true
+    fi
 
 - The trailing `; true` is mandatory — the helper is non-blocking by contract.
   A helper failure (exit 1, deferred exit 0, network error) MUST NEVER fail the
