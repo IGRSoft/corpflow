@@ -29,6 +29,7 @@ done
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "audit-dedup: jq not found, skipping" >&2
+  echo "base"
   exit 0
 fi
 

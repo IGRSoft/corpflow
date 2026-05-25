@@ -247,7 +247,7 @@ For `subagent_stopped` and `stage_completion_hook` rows written by plugin hooks 
 - `background_tasks_count`: integer ≥ 0
 - `background_task_ids`: string[] — may contain `"unknown"` entries; see `references/hook-monitoring.md § BG-Task ID Schema Watch`
 - `session_crons_count`: integer ≥ 0
-- `session_cron_ids`: string[]
+- `session_cron_ids`: string[] — may contain `"unknown"` entries; see `references/hook-monitoring.md § BG-Task ID Schema Watch`
 - `dedupe_key`: string (BASE shape, always present)
 - `dedupe_key_extended`: string (v3.10.6+; see § Dedupe Key Migration)
 
