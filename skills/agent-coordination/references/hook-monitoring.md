@@ -29,6 +29,29 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 > Subagents that stall fail with a clear error after 10 minutes (v2.1.113). Orchestrators should surface this error and either retry the stage or escalate rather than waiting indefinitely. Crash fix (v2.1.114): permission dialog no longer crashes when an agent teams teammate requests tool permission.
 
+### OTEL Dispatch Tree Parenting (v2.1.145)
+
+`claude_code.tool` OTEL spans now carry `agent_id` and `parent_agent_id` attributes; subagent spans correctly nest under the dispatching `Agent` tool span (prior to v2.1.145, background subagent spans appeared as orphan roots).
+
+**Plugin impact**: when an OTEL collector (Honeycomb/Datadog/Jaeger) is wired via `settings.json` → `otelExporter`, the PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST dispatch becomes a single nested trace tree. Diagnostic value: spot which stage spawned an orphan span (= subagent that escaped the dispatch chain).
+
+**Hook-stdin forward-compat**: `parent_agent_id` is OTEL-side in v2.1.145 and not confirmed in Stop/SubagentStop hook stdin yet, but `audit-subagent.sh` and `agent-stop.sh` defensively capture it with `(.parent_agent_id // "none")` — no-op on current CC, automatically populated the moment CC surfaces it in hook payloads. Paired with the new `dedupe_key_extended` audit field (see `skills/agent-coordination/SKILL.md § Dedupe Key Migration`) the workflow gets parent-aware audit dedup without any future plugin release.
+
+### Background Tasks & Crons Visibility (v2.1.145)
+
+v2.1.145 added `background_tasks` and `session_crons` arrays to Stop/SubagentStop hook stdin payloads. The plugin now captures these into audit rows for `/cost-report` cross-correlation (which cron/bg task was active when a stage spiked).
+
+Captured fields (additive metadata on existing audit rows; written by `hooks/audit-subagent.sh` and `hooks/agent-stop.sh`):
+
+- `background_tasks_count: ((.background_tasks // []) | length)`
+- `background_task_ids: ((.background_tasks // []) | map(.id // .task_id // "unknown"))`
+- `session_crons_count: ((.session_crons // []) | length)`
+- `session_cron_ids: ((.session_crons // []) | map(.id // .cron_id // "unknown"))`
+
+Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved.
+
+**BG-Task ID Schema Watch**: the ID extraction uses a defensive coalesce `(.id // .task_id // "unknown")` / `(.id // .cron_id // "unknown")` because the canonical key name is not yet confirmed in CC docs. Any `"unknown"` value appearing in `background_task_ids` or `session_cron_ids` is a signal that CC has begun populating the arrays with payloads whose ID field name is neither `id` nor `task_id`/`cron_id`. When that happens, the next `/cc-update` should pin the canonical key (remove the coalesce) and update both hook scripts. Until then the coalesce keeps the capture working across whichever name CC chooses.
+
 ### Managed (plugin) vs ad-hoc (user) hooks
 
 **Plugin-managed hooks** ship in `.claude-plugin/plugin.json` and survive `allowManagedHooksOnly: true` enforcement. As of v3.10.0 the igrsoft plugin ships four managed hooks: `audit-tooluse` (PostToolUse), `audit-subagent` (SubagentStop), `precompact-checkpoint` (PreCompact), and a `mcp_tool` PushNotification at PL/FN Stop. The audit trail is a **plugin invariant** — these need to fire deterministically across every install.

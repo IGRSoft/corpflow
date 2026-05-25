@@ -188,10 +188,10 @@ review, the audit tail is the single source of truth for what happened.
 | Orchestrator | `workflow_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned`, `github_issue_created` |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation` |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
-| `hook:audit-subagent` (SubagentStop, plugin) **(authoritative)** | `subagent_stopped` (paired with cost-*.jsonl entry) — v3.10.0+ |
+| `hook:audit-subagent` (SubagentStop, plugin) **(authoritative)** | `subagent_stopped` (paired with cost-*.jsonl entry) — v3.10.0+. v3.10.6+ rows additionally carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`, and `dedupe_key_extended` (see § Dedupe Key Migration below). |
 | `hook:audit-tooluse` (PostToolUse, plugin) **(authoritative)** | `tool_invoked` for `TaskUpdate\|TaskCreate\|Write\|Edit` with `duration_ms` + `effort` — v3.10.0+ |
 | `hook:precompact` (PreCompact, plugin) **(authoritative)** | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` — v3.10.0+ |
-| `hook:agent-stop` (Stop, PL/FN/ST agents) **(authoritative)** | `stage_completion_hook` with `metadata.stage` — v3.10.0+ |
+| `hook:agent-stop` (Stop, PL/FN/ST agents) **(authoritative)** | `stage_completion_hook` with `metadata.stage` — v3.10.0+. v3.10.6+ rows additionally carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`, and `dedupe_key_extended`. |
 | External dispatcher | `external_dispatch` (CI/cron/user-shell invoked a stage via `claude agents run` — see `references/headless-dispatch.md`) |
 
 **Hook authority + dedupe rule (v3.10.0+):** rows emitted by plugin hooks carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action remain forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are downgraded to **advisory**. Readers (`/cost-report`, resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`. Dedupe-key shapes:
@@ -200,6 +200,28 @@ review, the audit tail is the single source of truth for what happened.
 - `subagent_stopped`: `"<session_id>:<agent_id>:<task_id>:stop"` (v3.10.1+; the `<task_id>` segment disambiguates back-to-back DV0/DV1 split-task retries where `agent_id` is constant. Pre-v3.10.1 producers may emit the legacy shape `"<session_id>:<agent_id>:stop"` — readers MUST treat both prefixes as the same key for a single `(session, agent, task)` row to preserve dedupe across the upgrade. Orchestrator populates `task_id` in hook stdin where the runtime exposes it; on older CC builds the hook degrades to legacy shape automatically.)
 - `stage_completion_hook`: `"<session_id>:<agent_id>:stage:<PL|FN|ST>"`
 - `github_issue_created`: `"<workflow_id>:<run_index>:gh_issue"` — collision on resume detects already-published; multi-track safety via `run_index` increment. Writer: orchestrator (via `skills/workflow/references/publish-pl-issue.sh` between PL approval and stage-loop entry).
+
+### Dedupe Key Migration (v3.10.6+, auto-detecting)
+
+v3.10.6 adds a second dedupe key — `metadata.dedupe_key_extended` — to every `subagent_stopped` and `stage_completion_hook` row. Both keys are written simultaneously; readers choose which to use based on a runtime auto-detection rule.
+
+**Key definitions:**
+
+- `dedupe_key` (existing, BASE): `<session_id>:<agent_id>:stop` or `<session_id>:<agent_id>:stage:<stage>`. Compatibility-safe — every audit row carries this, every reader can grep it, every pre-v3.10.6 file is readable.
+- `dedupe_key_extended` (v3.10.6+): prepends `<parent_agent_id>:` to the base key. Today evaluates to `none:…` everywhere (parent_agent_id is `"none"`), so dedupes identically to base. When CC starts populating `parent_agent_id` in hook stdin, gains parent-aware granularity automatically — useful for multi-track parallel runs where the same `agent_id` appears under different dispatch parents.
+
+**Auto-detection rule (full reader cut-over):** readers MUST call the canonical helper `${CLAUDE_PLUGIN_ROOT}/hooks/audit-dedup.sh --check-mode` which scans the tail of `.context/logs/audit.jsonl` and prints one word to stdout:
+
+- `base` — when no rows in the rolling 100-row window have `metadata.parent_agent_id != "none"`. Reader dedups on `metadata.dedupe_key`.
+- `extended` — when ≥1 row in the rolling 100-row window has a non-`"none"` `parent_agent_id`. Reader dedups on `metadata.dedupe_key_extended`.
+
+The helper handles cut-over transparently. On CC versions where parent_agent_id is unpopulated (today), it always returns `base`. The moment CC surfaces the field in hook stdin and a single row carries a real parent, all conforming readers switch to extended without redeploy.
+
+**Reader contract**: anything that dedupes audit rows (`/cost-report`, manual `jq` scripts, future automation) calls the helper exactly once at startup and pins the result for the rest of the run. Mixed-mode dedup within a single run is forbidden.
+
+**Pre-v3.10.6 compat**: pre-v3.10.6 audit.jsonl files lack `dedupe_key_extended` — the helper detects absence on the first row and falls back to `base` even if `parent_agent_id` shows up in later rows. This keeps existing audit files readable without migration.
+
+The hook authority + dedupe rule from the previous paragraph still applies — `hook:*` rows remain authoritative; the only delta is which key (`dedupe_key` vs `dedupe_key_extended`) is used for the collision check.
 
 ### Schema
 
@@ -215,6 +237,19 @@ review, the audit tail is the single source of truth for what happened.
   "metadata": { "...": "action-specific extras" }
 }
 ```
+
+For `subagent_stopped` and `stage_completion_hook` rows written by plugin hooks (v3.10.6+), `metadata` carries these optional fields in addition to action-specific extras:
+
+- `duration_ms` (subagent_stopped only): number
+- `effort`: `"low"|"medium"|"high"|"xhigh"|"max"|"unknown"`
+- `stage` (stage_completion_hook only): `"PL"|"FN"|"ST"`
+- `parent_agent_id`: string — defaults to `"none"` when not in hook stdin
+- `background_tasks_count`: integer ≥ 0
+- `background_task_ids`: string[] — may contain `"unknown"` entries; see `references/hook-monitoring.md § BG-Task ID Schema Watch`
+- `session_crons_count`: integer ≥ 0
+- `session_cron_ids`: string[] — may contain `"unknown"` entries; see `references/hook-monitoring.md § BG-Task ID Schema Watch`
+- `dedupe_key`: string (BASE shape, always present)
+- `dedupe_key_extended`: string (v3.10.6+; see § Dedupe Key Migration)
 
 ### Append Pattern (Bash)
 
