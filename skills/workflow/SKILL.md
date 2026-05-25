@@ -863,9 +863,11 @@ before resuming.
 | PL0 `completed`, all stages `completed` except FN, FN `pending`, audit tail has `fn_gate_waiting` for FN | — | At FN gate. Re-present pre-FN summary; STOP and wait for human approval (unless `PL0.metadata.fn_gate == "bypass"`) |
 | PL0 `completed`, all stages `completed` except FN | — | Near-done. Re-enter loop; FN gate check decides whether to STOP or proceed |
 | Stages `in_progress` with no `metadata.retry_count` | missing audit lines | Stale task state. Re-derive from most recent `.context/logs/` capture |
+| Any stage `in_progress` AND `claude agents --json` shows live `agent_id` matching that stage | — | Subagent still alive (v2.1.145+). `SendMessage` to nudge rather than re-delegating |
 
 ### Resume Procedure
 
+0. (Optional, CC v2.1.145+) `claude agents --json | jq '[.[] | .agent_id]'` — if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` appears in the live list, prefer `SendMessage` reattach over re-delegation. Skip silently on CC < 2.1.145 or when the command is unavailable. Eliminates the "blind respawn of an already-working subagent" token-waste class. See `skills/agent-coordination/references/headless-dispatch.md § Live Session Discovery`.
 1. `tail -n 50 .context/logs/audit.jsonl | jq .` — last 50 audit lines
 2. `TaskList()` — current Task System state
 3. Cross-reference with `stage-contracts.md` — identify first incomplete stage

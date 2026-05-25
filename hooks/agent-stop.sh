@@ -20,7 +20,7 @@ done
 
 read_stdin() {
   if [ "$SELF_TEST" -eq 1 ]; then
-    printf '%s' '{"agent_type":"igrsoft:product-manager","agent_id":"agt_pl","session_id":"sess_test"}'
+    printf '%s' '{"agent_type":"igrsoft:product-manager","agent_id":"agt_pl","session_id":"sess_test","parent_agent_id":"agt_parent","background_tasks":[{"id":"bg1"},{"id":"bg2"}],"session_crons":[{"id":"cr1"}]}'
   else
     cat
   fi
@@ -47,7 +47,13 @@ ROW=$(printf '%s' "$PAYLOAD" | jq -c \
     metadata: {
       stage: $stage,
       effort: (.effort.level // env.CLAUDE_EFFORT // "unknown"),
-      dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":stage:" + $stage)
+      parent_agent_id: (.parent_agent_id // "none"),
+      background_tasks_count: ((.background_tasks // []) | length),
+      background_task_ids: ((.background_tasks // []) | map(.id // .task_id // "unknown")),
+      session_crons_count: ((.session_crons // []) | length),
+      session_cron_ids: ((.session_crons // []) | map(.id // .cron_id // "unknown")),
+      dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":stage:" + $stage),
+      dedupe_key_extended: ((.parent_agent_id // "none") + ":" + (.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":stage:" + $stage)
     }
   }') || {
     echo "agent-stop: jq parse failed" >&2
@@ -55,7 +61,17 @@ ROW=$(printf '%s' "$PAYLOAD" | jq -c \
   }
 
 if [ "$SELF_TEST" -eq 1 ]; then
-  printf '%s\n' "$ROW" | jq -e '.action == "stage_completion_hook" and (.metadata.stage | type) == "string" and (.metadata.dedupe_key | startswith("sess_test:agt_pl:stage:"))' >/dev/null \
+  printf '%s\n' "$ROW" | jq -e '
+    .action == "stage_completion_hook"
+    and (.metadata.stage | type) == "string"
+    and (.metadata.dedupe_key | startswith("sess_test:agt_pl:stage:"))
+    and .metadata.parent_agent_id == "agt_parent"
+    and .metadata.background_tasks_count == 2
+    and .metadata.background_task_ids == ["bg1","bg2"]
+    and .metadata.session_crons_count == 1
+    and .metadata.session_cron_ids == ["cr1"]
+    and (.metadata.dedupe_key_extended | startswith("agt_parent:sess_test:agt_pl:stage:"))
+  ' >/dev/null \
     || { echo "agent-stop: self-test FAIL"; exit 1; }
   echo "agent-stop: self-test OK"
   exit 0

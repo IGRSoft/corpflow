@@ -36,6 +36,48 @@ The minimum recommended flag set per stage when dispatching from a headless runn
 
 The model/effort defaults track `skills/shared/model-selection.md`. Override per task when `metadata.model` / `metadata.effort` are set.
 
+## Live Session Discovery (v2.1.145–146)
+
+`claude agents --json` (CC v2.1.145+, refined in v2.1.146) returns a JSON array of currently-live Claude sessions. The orchestrator and external runners can poll this to discover *what is already running* — complementing the dispatch table above which covers *how to start* something headlessly.
+
+Canonical orchestrator shell-out, scoped to one workflow track:
+
+```bash
+claude agents --json | jq -r --arg track "$TRACK_ID" '
+  .[] | select(.metadata.workflow_track == $track) | .agent_id'
+```
+
+Three usage patterns:
+
+- **Resume pre-check** — before respawning a subagent during workflow resume, query live sessions; if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` still appears, prefer `SendMessage` reattach over re-delegation. Eliminates the "blind respawn of an already-working subagent" token-waste class. See `skills/workflow/SKILL.md § Resume Procedure` step 0.
+- **Parallel track health** — for `--parallel:N` milestone runs, periodic `claude agents --json | jq '[.[] | select(.tag=="igrsoft-track")] | length'` should equal N. Less = stalled track.
+- **Status-line integration** — drives tmux / shell-status-bar widgets showing the active workflow stage without polluting `.context/`.
+
+Caveat: the CLI is stable but the JSON schema is not formally versioned — guard every read with defensive jq (`.parent_agent_id // "none"`). See § Schema Versioning Watch below.
+
+### Schema Versioning Watch (v2.1.150 baseline)
+
+The `claude agents --json` output schema is **not formally versioned** by Claude Code as of v2.1.150. Plugin consumers must defensively guard fields.
+
+**Recorded baseline** (CC 2.1.150) — array of objects with these observed top-level fields:
+
+- Required: `session_id` (string), `agent_type` (string), `agent_id` (string), `started_at` (ISO-8601 string)
+- Optional: `parent_agent_id` (string), `cwd` (string), `tag` (string), `metadata` (object)
+
+**Watch protocol for future `/cc-update` runs**: in any cc-update where the CC version delta touches `claude agents` CLI surface, the prompt-engineer MUST run `claude agents --json | jq 'first | keys'` and diff the key list against this recorded baseline. Surface any drift as a Q for the operator.
+
+**Defensive jq pattern** (canonical for any plugin code reading this output):
+
+```jq
+.[] | {
+  session: (.session_id // "unknown"),
+  parent:  (.parent_agent_id // "none"),
+  tag:     (.tag // "untagged")
+}
+```
+
+**If the baseline shifts** (new required field, renamed field, type change), the next cc-update MUST bump min CC version and add a migration note to the relevant `cc-features-<from>-<to>.md` band file.
+
 ## Permission-Mode Pinning (in-process)
 
 When the orchestrator reads `task.metadata.permission_mode === "default"` for a stage, it MUST NOT propagate `--dangerously-skip-permissions` or any equivalent shorthand into descendant `Task()` calls or nested `Bash` invocations for that stage, and MUST append one `audit.jsonl` line:

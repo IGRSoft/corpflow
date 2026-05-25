@@ -26,7 +26,8 @@ Generate cost analysis for completed or in-progress workflows with token usage b
 - `--budget-alert <percent>` - Set alert threshold (default: 75%)
 - `--export` - Export cost data to CSV
 - `--optimize` - Include optimization recommendations
-- `--detailed` - Show per-operation token breakdown
+- `--detailed` - Show per-operation token breakdown (includes Background Activity)
+- `--bg-activity` - Show Background Activity table only (default off to keep summary compact; v3.10.6+)
 - `--compare <task-id>` - Compare costs with another task
 
 ## Output Format
@@ -100,6 +101,28 @@ Estimated Remaining: ~$0.15
 - Count of `cost-*.jsonl` rows grouped by `(stage, effort)` (effort source: `CLAUDE_EFFORT` env var v2.1.133+ and/or hook stdin `effort.level`).
 - Mismatch with the per-stage `effort:` declared in the agent frontmatter (see `skills/shared/model-selection.md`) — flag as **budget drift**; common cause is operator `/effort` override mid-run or PL0 dispatch metadata writer setting a non-default effort.
 - `unknown` rows mean an older CC runtime that didn't export `CLAUDE_EFFORT`; non-zero `unknown` on every stage suggests upgrading the install.
+
+### Background Activity (v3.10.6+, `--bg-activity` or `--detailed`)
+
+```
+### Background Activity
+| Stage | bg_tasks_active | session_crons | dispatch_depth | notable                  |
+|-------|-----------------|---------------|----------------|--------------------------|
+| PL    |              0  |            0  |       0        | —                        |
+| AR    |              0  |            0  |       1        | —                        |
+| TL    |              0  |            0  |       1        | —                        |
+| DV    |              2  |            1  |       2        | bg_task_ids: [bg1, bg2]  |
+| DR    |              0  |            0  |       2        | —                        |
+| QA    |              0  |            0  |       2        | —                        |
+```
+
+- `bg_tasks_active` = max(`metadata.background_tasks_count`) observed across hook rows for that stage in `audit.jsonl` (writers: `hook:audit-subagent`, `hook:agent-stop`; field added v3.10.6).
+- `session_crons` = same, for `metadata.session_crons_count`.
+- `dispatch_depth` = computed from the `metadata.parent_agent_id` chain — 0 when `"none"`, otherwise `1 + depth(parent)`. Empty until parent_agent_id populates in hook stdin (defaults to 0 today).
+- `notable` = comma-joined `metadata.background_task_ids` and `metadata.session_cron_ids` when count > 0; otherwise `—`. Watch for the literal `"unknown"` string — signals the canonical ID-field name has shifted (see `skills/agent-coordination/references/hook-monitoring.md § BG-Task ID Schema Watch`).
+- Aggregation MUST first call `${CLAUDE_PLUGIN_ROOT}/hooks/audit-dedup.sh --check-mode` to pick the authoritative key (`base` or `extended`), then group rows by stage and compute max/sum/depth. Pinning the mode at startup avoids mixed-mode dedup (forbidden per `skills/agent-coordination/SKILL.md § Dedupe Key Migration`).
+
+Background activity columns require plugin v3.10.6+ audit rows. Earlier `audit.jsonl` rows lack these fields; values default to `0` / `—`. The helper `hooks/audit-dedup.sh --check-mode` decides whether to dedup on `dedupe_key` (base) or `dedupe_key_extended` (parent-aware) for correctness in multi-track parallel runs.
 
 ### Optimization Report (`--optimize`)
 
