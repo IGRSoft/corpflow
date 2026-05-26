@@ -5,7 +5,7 @@ model: sonnet
 color: cyan
 effort: medium
 maxTurns: 40
-tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
+tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 hooks:
   Stop:
     - type: command

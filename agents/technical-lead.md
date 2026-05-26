@@ -5,7 +5,8 @@ model: opus
 color: magenta
 effort: high
 maxTurns: 60
-tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
+tools: Read, Glob, Grep, Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), TaskCreate, TaskUpdate, TaskGet, TaskList, mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
+disallowedTools: mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__test_dev, mcp__XcodeBuildMCP__test_macos, mcp__XcodeBuildMCP__test_device, mcp__XcodeBuildMCP__swift_package_test, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__build_run_dev, mcp__XcodeBuildMCP__build_run_macos, mcp__XcodeBuildMCP__build_run_device, mcp__XcodeBuildMCP__launch_app_sim, mcp__XcodeBuildMCP__launch_app_dev, mcp__XcodeBuildMCP__launch_mac_app
 ---
 
 You are a technical lead specializing in implementation excellence, code quality standards, and technical decision-making. You bridge the gap between high-level architecture and day-to-day development, ensuring technical excellence at the implementation level.
