@@ -105,6 +105,11 @@ sanitise_body() {
       if (line ~ /(^|[[:space:]])(workspace_path|plan_file|run_index|artifact_path)[[:space:]]*[:=]/) next  # L6
       if (line ~ /(planning|analyzing|coordinating|coordination|developing|development|reviewing|review|qa|testing|documenting|documentation|releasing|release|finalizing|finalization|stakeholding|retrospective|incident|ethics-review)-[0-9]+\.md/) next  # L7,L8
       if (line ~ /(^|[[:space:]])(\.\/|\.\.\/)[A-Za-z0-9_.\/-]+/) next   # L9
+      # L10: drop whole line when a plugin-qualified identifier is the leading
+      # non-bullet token (e.g. "* Routed to igrsoft:developer ...",
+      # "Breakdown using igrsoft:estimation-methodology:"). Strict prefix
+      # allow-list keeps this from false-positive on http:// / git:// / etc.
+      if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(igrsoft|apple-developer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next
 
       # ---- Pass 2 token-strip (with allow-list) -------------------------
       # Track fenced code block state (A1).
@@ -143,6 +148,13 @@ sanitise_body() {
         rest = substr(line, i)
         if (match(rest, /^[A-Z][A-Za-z0-9_]+\.(md|json|jsonl|swift|ts|py|yml|yaml|sh|bash|go|rs|kt|java|rb|cpp|c|h|hpp|m|mm)/) && substr(rest, RLENGTH + 1, 1) !~ /[A-Za-z0-9_]/) {
           # A5: extension is in deny-list → strip.
+          i = i + RLENGTH
+          continue
+        }
+        # A6: plugin-qualified identifier token (igrsoft:foo, apple-developer:bar,
+        # etc.). Narrow known-prefix allow-list to avoid false positives on
+        # http:, git:, file:, etc. Backtick spans already passed through above.
+        if (match(rest, /^(igrsoft|apple-developer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/)) {
           i = i + RLENGTH
           continue
         }
@@ -626,6 +638,119 @@ MOCK
   fi
   rm -rf "$t8_dir"
 
+  # ---- Fixture 09: Design Preview render (with Figma URL) ----
+  # Build the rendered body from fixture 09 in the same shape as the live
+  # render block. Asserts the new heading + URL preservation + absence of
+  # the now-removed Planned Stages heading + reviewer instruction line.
+  local f9="$fixtures_dir/09-with-figma-link.md"
+  if [ -f "$f9" ]; then
+    local f9_reqs f9_acs f9_scope f9_complex f9_design f9_body
+    f9_reqs=$(extract_anchor "$f9" "requirements" | sanitise_body)
+    f9_acs=$(extract_anchor "$f9" "acceptance-criteria" | sanitise_body)
+    f9_scope=$(extract_anchor "$f9" "scope" | sanitise_body)
+    f9_complex=$(extract_anchor "$f9" "complexity" | sanitise_body)
+    f9_design=$(extract_anchor "$f9" "design-preview" | sanitise_body)
+    f9_body=$(
+      printf '## Summary\nfixture 09 summary\n\n'
+      printf '## Requirements\n%s\n\n' "$f9_reqs"
+      printf '## Acceptance Criteria\n%s\n\n' "$f9_acs"
+      printf '## Scope\n%s\n\n' "$f9_scope"
+      if [ -n "$(printf '%s' "$f9_design" | tr -d '[:space:]')" ]; then
+        printf '## Design Preview\n%s\n\nCompare implementation (DV) and screenshots (QA) against this design.\n\n' "$f9_design"
+      fi
+      printf '## Complexity\n%s\n\n' "$f9_complex"
+    )
+    local f9_ok=1
+    printf '%s' "$f9_body" | grep -qF '## Design Preview' || f9_ok=0
+    printf '%s' "$f9_body" | grep -qF 'https://www.figma.com/design/AbC123/Example?node-id=1-2' || f9_ok=0
+    printf '%s' "$f9_body" | grep -qF 'Compare implementation (DV) and screenshots (QA)' || f9_ok=0
+    if printf '%s' "$f9_body" | grep -qF '## Planned Stages'; then f9_ok=0; fi
+    if [ "$f9_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 09-with-figma-link PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 09-with-figma-link FAIL"
+      printf '%s\n' "$f9_body" | head -40 >&2
+      fail=$((fail + 1))
+    fi
+
+    # Fixture 09b: Plan WITHOUT design-preview (use fixture 01) — rendered
+    # body must contain neither Design Preview NOR Planned Stages headings.
+    local f1_reqs f1_acs f1_scope f1_complex f1_design f1_body
+    f1_reqs=$(extract_anchor "$fixtures_dir/01-clean-plan.md" "requirements" | sanitise_body)
+    f1_acs=$(extract_anchor "$fixtures_dir/01-clean-plan.md" "acceptance-criteria" | sanitise_body)
+    f1_scope=$(extract_anchor "$fixtures_dir/01-clean-plan.md" "scope" | sanitise_body)
+    f1_complex=$(extract_anchor "$fixtures_dir/01-clean-plan.md" "complexity" | sanitise_body)
+    f1_design=$(extract_anchor "$fixtures_dir/01-clean-plan.md" "design-preview" | sanitise_body)
+    f1_body=$(
+      printf '## Summary\nfixture 01 summary\n\n'
+      printf '## Requirements\n%s\n\n' "$f1_reqs"
+      printf '## Acceptance Criteria\n%s\n\n' "$f1_acs"
+      printf '## Scope\n%s\n\n' "$f1_scope"
+      if [ -n "$(printf '%s' "$f1_design" | tr -d '[:space:]')" ]; then
+        printf '## Design Preview\n%s\n\nCompare implementation (DV) and screenshots (QA) against this design.\n\n' "$f1_design"
+      fi
+      printf '## Complexity\n%s\n\n' "$f1_complex"
+    )
+    local f1_ok=1
+    if printf '%s' "$f1_body" | grep -qF '## Design Preview'; then f1_ok=0; fi
+    if printf '%s' "$f1_body" | grep -qF '## Planned Stages'; then f1_ok=0; fi
+    if [ "$f1_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 09b-no-design-no-stages PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 09b-no-design-no-stages FAIL"
+      fail=$((fail + 1))
+    fi
+
+    # Fixture 09c: sanitiser preserves figma.com URLs (design + proto variants).
+    local urls_in urls_out
+    urls_in=$'Visit https://www.figma.com/design/AbC123/Example?node-id=1-2\nor https://www.figma.com/proto/XYZ789/Flow?page-id=2-3\n'
+    urls_out=$(printf '%s' "$urls_in" | sanitise_body)
+    local f9c_ok=1
+    printf '%s' "$urls_out" | grep -qF 'figma.com/design/AbC123/Example?node-id=1-2' || f9c_ok=0
+    printf '%s' "$urls_out" | grep -qF 'figma.com/proto/XYZ789/Flow?page-id=2-3' || f9c_ok=0
+    if [ "$f9c_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 09c-figma-urls-survive PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 09c-figma-urls-survive FAIL"
+      printf '%s\n' "$urls_out" >&2
+      fail=$((fail + 1))
+    fi
+
+    # Fixture 02b: plugin-qualified identifier tokens must not appear in
+    # sanitised body (Pass-2 A6 rule), outside code spans.
+    local leak_in leak_out
+    leak_in=$'Breakdown using igrsoft:estimation-methodology:\n* Routed to igrsoft:developer (apple-developer:ios-developer).\nNarrative referencing igrsoft:product-manager directly.\nKeep `igrsoft:code-fixer` inside backticks intact.\n'
+    leak_out=$(printf '%s' "$leak_in" | sanitise_body)
+    local f02b_ok=1
+    # The leading-token lines (1 + 2) should be entirely dropped by L10.
+    if printf '%s' "$leak_out" | grep -qF 'Breakdown using'; then f02b_ok=0; fi
+    if printf '%s' "$leak_out" | grep -qF 'Routed to'; then f02b_ok=0; fi
+    # The mid-sentence reference should have the identifier stripped by A6
+    # (narrative remains, token gone).
+    if printf '%s' "$leak_out" | grep -qE '(igrsoft|apple-developer):[a-z]' | grep -v '`'; then
+      # Allow backticked occurrences only (one is intentionally kept).
+      if printf '%s' "$leak_out" | grep -vE '^[^`]*`[^`]*`[^`]*$' | grep -qE '(igrsoft|apple-developer):[a-z]'; then
+        f02b_ok=0
+      fi
+    fi
+    # Backtick passthrough preserves the token.
+    if ! printf '%s' "$leak_out" | grep -qF '`igrsoft:code-fixer`'; then f02b_ok=0; fi
+    if [ "$f02b_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 02b-identifier-leak-strip PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 02b-identifier-leak-strip FAIL"
+      printf '%s\n' "$leak_out" >&2
+      fail=$((fail + 1))
+    fi
+  else
+    echo "publish-pl-issue: self-test 09-with-figma-link SKIP (fixture missing)"
+    fail=$((fail + 1))
+  fi
+
   echo "publish-pl-issue: self-test summary — pass=$pass fail=$fail"
   [ "$fail" -eq 0 ]
 }
@@ -708,18 +833,23 @@ REQS_RAW=$(extract_anchor "$PLAN_FILE" "requirements")
 ACS_RAW=$(extract_anchor "$PLAN_FILE" "acceptance-criteria")
 SCOPE_RAW=$(extract_anchor "$PLAN_FILE" "scope")
 COMPLEXITY_RAW=$(extract_anchor "$PLAN_FILE" "complexity")
-STAGES_RAW=$(extract_anchor "$PLAN_FILE" "stages")
+# Optional: design-preview anchor (Figma URL captured at PL). Excluded from
+# strip-ratio denominator to avoid skewing the guard with short URL bodies.
+DESIGN_RAW=$(extract_anchor "$PLAN_FILE" "design-preview")
 
 SUMMARY_S=$(printf '%s\n' "$SUMMARY_RAW" | sanitise_body)
 REQS_S=$(printf '%s\n' "$REQS_RAW" | sanitise_body)
 ACS_S=$(printf '%s\n' "$ACS_RAW" | sanitise_body)
 SCOPE_S=$(printf '%s\n' "$SCOPE_RAW" | sanitise_body)
 COMPLEXITY_S=$(printf '%s\n' "$COMPLEXITY_RAW" | sanitise_body)
-STAGES_S=$(printf '%s\n' "$STAGES_RAW" | sanitise_body)
+DESIGN_S=$(printf '%s\n' "$DESIGN_RAW" | sanitise_body)
 
-# Strip-ratio check against the combined anchor bodies.
-ORIG_TOTAL=$(printf '%s%s%s%s%s' "$REQS_RAW" "$ACS_RAW" "$SCOPE_RAW" "$COMPLEXITY_RAW" "$STAGES_RAW" | wc -c)
-SAN_TOTAL=$(printf '%s%s%s%s%s' "$REQS_S" "$ACS_S" "$SCOPE_S" "$COMPLEXITY_S" "$STAGES_S" | wc -c)
+# Strip-ratio check against the four required anchor bodies only.
+# (stages anchor is consumed by the orchestrator from the plan file but no
+# longer rendered into the published body; design-preview is optional and a
+# short URL — both excluded from the denominator on purpose.)
+ORIG_TOTAL=$(printf '%s%s%s%s' "$REQS_RAW" "$ACS_RAW" "$SCOPE_RAW" "$COMPLEXITY_RAW" | wc -c)
+SAN_TOTAL=$(printf '%s%s%s%s' "$REQS_S" "$ACS_S" "$SCOPE_S" "$COMPLEXITY_S" | wc -c)
 # Fallback: when the plan has none of the expected anchor headings, anchor-extracted
 # bytes are zero — fall back to whole-file byte length so a near-empty body still
 # trips the strip-ratio guard instead of being silently published. Matches the
@@ -740,8 +870,10 @@ if [ "$STRIP_PCT" -gt 50 ]; then
     printf '## Requirements\n%s\n\n' "$REQS_S"
     printf '## Acceptance Criteria\n%s\n\n' "$ACS_S"
     printf '## Scope\n%s\n\n' "$SCOPE_S"
-    printf '## Complexity\n%s\n\n' "$COMPLEXITY_S"
-    printf '## Planned Stages\n%s\n' "$STAGES_S"
+    if [ -n "$(printf '%s' "$DESIGN_S" | tr -d '[:space:]')" ]; then
+      printf '## Design Preview\n%s\n\nCompare implementation (DV) and screenshots (QA) against this design.\n\n' "$DESIGN_S"
+    fi
+    printf '## Complexity\n%s\n' "$COMPLEXITY_S"
   } > "$ABORT_TMP" 2>/dev/null || true
   audit_row "deferred" "$(jq -cn --arg v "publish-pl-issue.sh" --arg r "sanitiser_aborted" --argjson sp "$STRIP_PCT" --arg dk "$DEDUPE_KEY" --arg path "$ABORT_TMP" '{via:$v, reason:$r, strip_ratio:$sp, aborted_body:$path, dedupe_key:$dk}')" || true
   exit 0
@@ -761,8 +893,10 @@ BODY_TMP="$LOG_DIR/issue-body-${RUN_INDEX}.tmp"
   printf '## Requirements\n%s\n\n' "$REQS_S"
   printf '## Acceptance Criteria\n%s\n\n' "$ACS_S"
   printf '## Scope\n%s\n\n' "$SCOPE_S"
+  if [ -n "$(printf '%s' "$DESIGN_S" | tr -d '[:space:]')" ]; then
+    printf '## Design Preview\n%s\n\nCompare implementation (DV) and screenshots (QA) against this design.\n\n' "$DESIGN_S"
+  fi
   printf '## Complexity\n%s\n\n' "$COMPLEXITY_S"
-  printf '## Planned Stages\n%s\n\n' "$STAGES_S"
   printf -- '---\n*Plan approved on %s. Tracking continues in workflow run #%s.*\n' "$(date -u +%F)" "$RUN_INDEX"
 } > "$BODY_TMP" 2>/dev/null || fatal "audit_dir_unwritable"
 

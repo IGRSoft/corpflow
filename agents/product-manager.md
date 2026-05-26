@@ -237,6 +237,37 @@ The `## requirements`, `## acceptance-criteria`, `## scope`, and `## complexity`
 
 The two-pass sanitiser in `publish-pl-issue.sh` is a **safety net, not a substitute** for authoring hygiene. When more than 50% of the combined anchor bodies is stripped, the helper aborts with `reason: "sanitiser_aborted"` and the operator must amend the plan — which costs a review round-trip. Keep file references in narrative ("the AuthCoordinator class", "the HTTP client") rather than path form ("`src/Auth/AuthCoordinator.swift`", "`./src/http/Client.swift`"). When a code identifier must appear, wrap it in inline backticks or place it inside a fenced code block — Pass 2's allow-list will preserve it.
 
+##### Plan-output hygiene: no raw plugin identifiers
+
+The four published anchors (`## requirements`, `## acceptance-criteria`, `## scope`, `## complexity`) plus `## summary` are user-facing prose. **Never** emit a raw plugin-qualified identifier (token shape `lowercase-prefix:lowercase-name`, e.g. `igrsoft:estimation-methodology`, `igrsoft:developer`, `apple-developer:ios-developer`) into those sections.
+
+Identifiers ARE allowed in two places only:
+1. Inside inline backticks or fenced code blocks (Pass 2 allow-list passes them through).
+2. Inside the `## stages` anchor (consumed by the orchestrator from the plan file — never rendered to the GitHub issue).
+
+For narrative prose in the published anchors, rewrite to human-readable phrasings:
+
+| Before (leaks identifier) | After (human-readable) |
+|---|---|
+| `Breakdown using igrsoft:estimation-methodology:` | `Complexity breakdown:` |
+| `Routed to igrsoft:developer (apple-developer:ios-developer).` | `Implementation handled by the iOS developer.` |
+| `DR uses igrsoft:technical-lead at opus/high effort.` | `The technical-lead reviews the diff and posts the gate decision.` |
+
+The publish helper has a defense-in-depth Pass-2 rule that strips plugin-qualified identifiers outside backticks (allow-list of known prefixes: `igrsoft`, `apple-developer`, `debugging-toolkit`, `security-scanning`, `skill-creator`, `conductor`, `claude-in-chrome`) and a Pass-1 line-drop for lines whose body starts with a phrase like `Routed to <prefix>:...` or `Breakdown using <prefix>:...`. Authoring discipline above is the first defense — the sanitiser is the second.
+
+##### Design Preview anchor (Figma URL capture)
+
+When the user's task description contains a Figma URL — regex `https?://(?:www\.)?figma\.com/(?:file|design|proto)/[A-Za-z0-9]+(?:/[^?\s)]*)?(?:\?[^\s)]*)?` — PL0 MUST:
+
+1. Extract every matching URL.
+2. Author a new `## design-preview` anchor in `<plan_file>` containing the URL(s) on their own line (one URL per line if multiple). Empty/absent anchor when no Figma URL is present — the publish helper omits the rendered section entirely.
+3. Self-patch `state.json:facts.design_url` with the URL (string for one URL, array for multiple).
+4. Note the URL in the `## scope` "In" list for reviewer visibility.
+
+This anchor is **excluded** from the strip-ratio denominator (short URL bodies would skew the guard) and renders, when populated, between `## Scope` and `## Complexity` in the published GitHub issue with a single-sentence reviewer instruction ("Compare implementation (DV) and screenshots (QA) against this design."). DV and QA agents do not yet auto-consume `facts.design_url`; that follow-up is tracked separately.
+
+The existing Figma screenshot capture workflow under `### Figma Design Capture` is unchanged — the new anchor is purely additive (URL surfaced in the published issue body, screenshots still saved to `.context/designs/` and tracked via figma-registry.md).
+
 ### PL0 Scaffolding (when invoked for workflow planning)
 When invoked as PL0 stage agent:
 1. Compute `<plan_file>` per **Plan File Naming** (glob `.context/planning-*.md`, pick next N) and create `.context/<plan_file>` with the requirements template
