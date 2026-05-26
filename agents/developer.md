@@ -147,6 +147,73 @@ Audit triggers — append one JSONL line each to `.context/logs/audit.jsonl` per
 
 Skip audit triggers for ad-hoc tasks with no `metadata.workflow_id` (e.g., direct `/skill` invocations).
 
+## Screenshot Capture (DV completion gate)
+
+Before marking DV complete, DV MUST capture visual evidence of the implemented work and attach it via the `dv-screenshot-capture` skill — unless `metadata.requires_screenshots` is explicitly `false` on the DV task.
+
+### Trigger (DV-final precondition)
+
+Run this immediately after `D3` (tests pass) and before writing the DV Completion Checklist:
+
+```
+if (task.metadata.requires_screenshots ?? true) {
+  Skill("dv-screenshot-capture", {
+    workflow_id: state.workflow_id,
+    platform: state.platform,
+    captures: [
+      { slug: "<kebab-case-purpose>", args: {…} },   // 1..5 entries
+    ]
+  })
+}
+```
+
+The skill returns one `{path, bytes, ok, error}` per requested capture and rewrites `.context/images/<workflow_id>/screenshots.md`.
+
+### Adapter routing
+
+DV does not call platform tools directly. The skill routes by `state.platform`:
+
+| `state.platform` | Adapter | Backing tool |
+|------------------|---------|--------------|
+| `apple` | `apple_adapter` | `mcp__XcodeBuildMCP__screenshot` |
+| `web` | `web_adapter` | Playwright (`npx playwright screenshot`) or Chrome MCP |
+| `android` | `android_adapter` | `adb exec-out screencap -p` |
+| `all` / unknown / meta-work | `cli_fallback_adapter` | `silicon` → ImageMagick → `.txt` placeholder |
+
+Unknown platform → `cli_fallback_adapter` automatically. Audit row `screenshot_platform_fallback` is emitted by the skill, not DV.
+
+### How many screenshots
+
+Minimum 1 per workflow run. Maximum 5 (skill enforces; further calls return `error: "screenshot_count_exceeded"`). Guideline: one per acceptance criterion that has a visual manifestation; for bug fixes, one before + one after; for meta-work (skill/agent edits), one annotated `git diff` is sufficient.
+
+### State.json registration
+
+After captures complete, merge into state.json:
+
+```bash
+jq --argjson sc '<the captures array from skill output>' \
+   '.facts.screenshots = ((.facts.screenshots // []) + $sc)' \
+   "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
+```
+
+Schema: `[{slug, path, bytes, platform, ok}, …]`.
+
+### Failure handling
+
+| Condition | Behavior |
+|-----------|----------|
+| `metadata.requires_screenshots: false` + zero captures | screenshots.md written with skip rationale; DV proceeds. |
+| `metadata.requires_screenshots: true` (default) + zero captures + cli/fallback also failed | DV FAILS with `missing_screenshot_artifact`. Append retry block to `errors/developer.md` (classification: `logic`). One retry permitted (force cli/fallback). |
+| Any non-fatal capture failure | screenshots.md records it; DV continues with remaining captures. |
+| `Skill()` invocation itself errors | Escalate per `commands/workflow.md § Error Handling`. Do NOT mark DV complete. |
+
+### Completion criterion (added to DV Completion Verification)
+
+- [ ] `dv-screenshot-capture` invoked OR `metadata.requires_screenshots == false` documented in `development-N.md § Decisions`
+- [ ] `.context/images/<workflow_id>/screenshots.md` exists (manifest)
+- [ ] If captures > 0, `state.json → facts.screenshots[]` populated
+- [ ] At least one `audit.jsonl` row with `action: "screenshot_captured"` OR `action: "screenshot_skipped"`
+
 ## Capabilities
 
 | Domain | Expertise |
@@ -305,6 +372,10 @@ Before marking DV stage complete, verify:
 - [ ] `.context/logs/build-developer-*.log` and `.context/logs/test-developer-*.log` exist with successful exit
 - [ ] `.context/logs/audit.jsonl` contains `approval_check`, `platform_detected`, and `artifact_created` entries (plus `delegation` if routed; `retry_attempt` per retry)
 - [ ] Append the completed checklist verbatim as `## DV Completion Checklist` in `.context/development-N.md` with `[x]` boxes ticked — orchestrator validation greps for this header
+- [ ] `dv-screenshot-capture` invoked OR `metadata.requires_screenshots == false` documented in `development-N.md § Decisions`
+- [ ] `.context/images/<workflow_id>/screenshots.md` exists (manifest)
+- [ ] If captures > 0, `state.json → facts.screenshots[]` populated
+- [ ] At least one `audit.jsonl` row with `action: "screenshot_captured"` OR `action: "screenshot_skipped"`
 
 
 ## Handoff Protocol

@@ -91,6 +91,7 @@ In the 9-stage workflow system, the qa-engineer handles:
   **Footer marker discovery**: read `@test-file:` and `@related-tests:` from `// MARK: - Test Info` footers in modified source files to discover additional test candidates not captured by `@depends-on:` markers. Check bidirectional consistency — a source footer's `@test-file:` path should have a corresponding `@source-file:` entry in that test file. Log inconsistencies in `testing-N.md § Notes`. See `test-selection-syntax.md § Footer Markers`.
 
   **Visual comparison gate**: independent of `test_mode`. Run Design Comparison (see § Design Comparison below) when `metadata.ui_visual_check: true` AND `.context/designs/` has artifacts. Otherwise skip.
+- **Q1.5 — Visual Evidence ingestion**: read `.context/images/<workflow_id>/screenshots.md` (path resolves from `state.json.workflow_id`). For each row in its manifest table, append one line to `testing-N.md § Visual Evidence` with the filename, captioned purpose, and a verdict (`accepted` | `flagged` | `missing`). Cross-reference each screenshot against the acceptance-criteria list in `<plan_file>`: if an AC names a UI/output behavior and no screenshot captures it, append a finding `AC-<id>: no visual evidence` to `testing-N.md § Notes`. When `metadata.requires_screenshots: false`, treat `screenshots.md` as advisory and skip the AC cross-reference; record `Visual Evidence skipped per plan` in `§ Notes`.
 - **Q2**: Handle test failures (retry or escalate to DV)
 - **Q3**: All tests pass, document results and metrics in testing.md
 
@@ -164,6 +165,20 @@ After the table, include a one-line AC coverage summary:
 
 (`<plan_file>` resolves from `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`.)
 
+### Visual Evidence (artifact section in testing-N.md)
+
+Required section when `.context/images/<workflow_id>/screenshots.md` exists. Schema:
+
+```markdown
+## Visual Evidence
+
+| # | File | Caption | Verdict | AC ref |
+|---|------|---------|---------|--------|
+| 01 | dv-01-<slug>.png | <copied from screenshots.md> | accepted \| flagged \| missing | AC-2, AC-3 |
+```
+
+Empty section is permitted when `screenshots.md` records skip. AC ref column links each screenshot to the acceptance criteria it satisfies (or `—` if purely illustrative).
+
 ## Boundaries
 
 ### Focus Areas
@@ -207,6 +222,9 @@ Before marking QA stage complete, verify:
 - [ ] All edge cases from `<plan_file>` are covered
 - [ ] If design screenshots exist in `.context/designs/`, design comparison performed
 - [ ] Design discrepancies documented in testing-N.md with severity
+- [ ] `.context/images/<workflow_id>/screenshots.md` read (or absent + skip-documented)
+- [ ] `testing-N.md § Visual Evidence` populated (or skip rationale recorded)
+- [ ] Each acceptance criterion with a visual manifestation has at least one screenshot ref OR an explicit `no visual evidence` finding
 
 ## Handoff Protocol
 

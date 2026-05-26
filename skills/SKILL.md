@@ -6,6 +6,7 @@ All available skills for the igrsoft workflow plugin.
 
 | Skill | Description | Effort |
 |-------|-------------|--------|
+| [dv-screenshot-capture](dv-screenshot-capture/SKILL.md) | Capture screenshots during DV stage as visual evidence for QA acceptance and DR review; platform-aware adapters (apple/web/android/cli-fallback) | medium |
 | [agent-coordination](agent-coordination/SKILL.md) | Multi-agent coordination, handoffs, parallel execution, and error escalation | medium |
 | [appstore-screenshots](appstore-screenshots/SKILL.md) | Device specs, layout patterns, typography, and Pencil MCP workflow for App Store screenshots | high |
 | [claude-constitution](claude-constitution/SKILL.md) | Constitutional principles, ethics, and behavioral guidelines for AI agent behavior | medium |
