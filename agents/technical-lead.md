@@ -69,6 +69,7 @@ PL → AR → TL → DV → [DR] → QA → DC → FN → ST
   1. Append one `## DR[N] Retry [0/0] — <ts>` section to `.context/errors/developer.md` with `**Classification**: ambiguous_requirements` and a `### Resolution Path` listing each warning verbatim (one bullet per `WARN:` line). This converts an advisory drop into a tracked escalation so the orchestrator's retry/escalate matrix can route it (`escalate_to: DV`) instead of relying on DR-finding visibility alone.
   2. Set `verdict: fail` on this DR run when ≥1 warning is of kind `unknown_symbol` or `missing_marker` (silent regression risk). `verdict: pass` is still permitted for `style_only` or `coverage_advisory` warnings — note the reason in `§ Findings`.
 - **Footer marker check**: verify that modified production files contain a `// MARK: - Test Info` footer (`@test-file:`, `@test-coverage:`) and new/modified test files contain a `// MARK: - Source Info` footer (`@source-file:`). Missing footer is a **low-severity suggestion** (not a blocker) — record it in `§ Findings` so DV can address in a follow-up. See `test-selection-syntax.md § Footer Markers`.
+- **Visual evidence review**: read `.context/images/<workflow_id>/screenshots.md` if present (path resolves from `state.json.workflow_id`). In `developer-review-N.md § Findings`, cite (a) the total count of screenshots from the manifest, (b) the first filename, and (c) any `Fallbacks invoked` or `Out-of-budget files` notes from the manifest — these are review signals (silent tool failures, repo bloat). When `metadata.requires_screenshots: false` and the manifest records skip, record one line `Visual evidence skipped per plan (metadata.requires_screenshots=false)` in `§ Findings` and proceed. DR does NOT re-capture; that is DV's responsibility. If the manifest is absent AND `metadata.requires_screenshots ≠ false`, set `verdict: fail` and append an `ambiguous_requirements` retry block to `.context/errors/developer.md` per DR3.5 precedent.
 - Produce `.context/developer-review-N.md` with findings summary (N = `task.metadata.run_index`; resolver: metadata → newest glob `developer-review-*.md` → legacy `developer-review.md`)
 - Gate QA — QA stage is blocked until DR completes
 
@@ -231,6 +232,11 @@ Score each debt item across four dimensions (1-5 each):
 
 Assess each risk by **Likelihood x Impact** (High/Medium/Low). Document indicators, mitigation steps, and contingency plans.
 
+
+## Completion Verification
+
+Before marking DR stage complete, verify (supplement to `stage-contracts.md § Completion Verification`):
+- [ ] Visual evidence reviewed: either screenshots.md cited in Findings, or skip-per-plan recorded
 
 ## Handoff Protocol
 
