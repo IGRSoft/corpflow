@@ -192,6 +192,7 @@ Run on every agent regardless of focus area; treat findings here as blocking on 
 | `isolation: worktree` (v2.1.98+) | Present on agents that mutate the working tree across split runs (DV, code-fixer). Flag missing on agents with both `Edit` and `git`-mutating Bash matchers. | P2 |
 | `color` | Cosmetic; no enforcement. |
 | `mcpServers` (v2.1.142) | Optional. If absent, MCP scope must be enforced via inline `mcp__<server>__*` entries in `tools`. Do not flag unless the agent both lists no `mcp__*` tools AND uses `Skill(*)` wildcards — that combination silently broadens scope. | P2 |
+| `name` | Globally unique. Collision risk when generic (`developer`, `qa-engineer`, `incident-responder`, etc.) — CC keys installed agents by frontmatter `name`, so two plugins shipping the same name silently overwrite each other. Flag HIGH if igrsoft agent shares name with a known marketplace plugin (cross-check `apple-developer:`, `security-scanning:`, `debugging-toolkit:` agent stems). For new agents, prefer `<plugin>-<role>` form. Source: ai-research PR #554. | P1 |
 
 Failures here are reported as a `## Frontmatter Findings` table before the existing scoring tables in § Output Format. Each row: `| Field | Observed | Required | Severity | Suggested edit |`. Append a one-line fix for `description` over-limit (with the truncated suggestion at 240 chars to leave headroom).
 
