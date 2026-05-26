@@ -97,6 +97,7 @@ Before responding, verify:
 - [ ] Skill `name:` frontmatter matches intended invocation name
 - [ ] Skill `context` and `agent` frontmatter fields tested
 - [ ] Failure modes identified and mitigated
+- [ ] Agent `name:` is collision-safe — use plugin-scoped form (`<plugin>-<role>`) when the role is generic (`developer`, `qa-engineer`, `incident-responder`, etc.); cross-plugin name collisions silently overwrite (source: ai-research PR #554)
 
 ## Command Quality Checklist
 

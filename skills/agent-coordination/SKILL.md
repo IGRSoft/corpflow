@@ -336,6 +336,14 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 
 > `/agents` displays a tabbed layout (Running/Library tabs) with a `* N running` indicator next to agent types with live instances (v2.1.97/2.1.98).
 
+### Agent Naming & Collision Avoidance
+
+Claude Code keys installed agents by the YAML frontmatter `name`, so two plugins shipping the same agent name silently overwrite each other when installed together. Common collision-prone stems include `developer`, `qa-engineer`, `incident-responder`, `designer`, `technical-writer` — all generic across marketplaces. (Source: ai-research PR #554.)
+
+For new agents, prefer **plugin-scoped names** (`<plugin>-<role>`, e.g. `igrsoft-developer`) when the role is generic. For the 16 existing igrsoft agents, the orchestrator disambiguates today via `igrsoft:<name>` prefixes (see USER `CLAUDE.md § Orchestrator Rules` — bare names prepend `igrsoft:`; qualified names like `apple-developer:ios-developer` are used as-is), so no rename is forced — renaming would cascade into every `Task(subagent_type=…)` reference (high blast radius).
+
+When authoring new agents via `/create-agent` / `/optimize-agent`, audit the `name:` field against known marketplace stems (`apple-developer:`, `security-scanning:`, `debugging-toolkit:`) before merging. `/optimize-agent § Frontmatter Audit` flags this as P1.
+
 ### Monitor Tool for Background Events (v2.1.98+)
 
 The `Monitor` tool streams events (stdout lines) from background scripts started
