@@ -193,6 +193,9 @@ review, the audit tail is the single source of truth for what happened.
 | `hook:precompact` (PreCompact, plugin) **(authoritative)** | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` — v3.10.0+ |
 | `hook:agent-stop` (Stop, PL/FN/ST agents) **(authoritative)** | `stage_completion_hook` with `metadata.stage` — v3.10.0+. v3.10.6+ rows additionally carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`, and `dedupe_key_extended`. |
 | External dispatcher | `external_dispatch` (CI/cron/user-shell invoked a stage via `claude agents run` — see `references/headless-dispatch.md`) |
+| `apple-canvas` adapter (in `dv-screenshot-capture`) | `canvas_render` (one row per phase ∈ scaffold\|complete\|retry — see `skills/dv-screenshot-capture/references/apple-canvas.md § Audit row schema`) |
+| `preview-ensurer` skill | `preview_added` (one row per `#Preview` block written to source by SwiftSyntax driver — `metadata: {file, view_type, mock_strategy, lines_added}`) |
+| QA visual-diff wrapper (`scripts/visual-diff.sh`) | `visual_diff_run` (one row per RMSE diff invocation — `metadata: {reference, candidate, metric:"RMSE", value_percent, threshold_percent, verdict}`) |
 
 **Hook authority + dedupe rule (v3.10.0+):** rows emitted by plugin hooks carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action remain forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are downgraded to **advisory**. Readers (`/cost-report`, resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`. Dedupe-key shapes:
 
@@ -229,7 +232,7 @@ The hook authority + dedupe rule from the previous paragraph still applies — `
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "workflow_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created",
+  "action": "workflow_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run",
   "subject": "task ID or artifact path",
   "result": "ok|error|deferred|blocked",
   "task_id": "optional — Task System ID",
