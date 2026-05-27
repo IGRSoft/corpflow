@@ -295,7 +295,7 @@ After the chronological run, append one final row when test coverage is availabl
 If the platform has no coverage tool wired, emit one row with `result: skipped` + `coverage_pct: n/a (no coverage tool)` so DR/QA can see the absence is deliberate, not a write miss.
 
 ### Selected Tests
-Required when `<plan_file>` declares `metadata.test_mode`. Schema per `skills/shared/testing-strategy.md § Selected Tests`.
+Required when `<plan_file>` declares `metadata.test_mode` (or effective value from legacy `requires_ui_tests` alias — see step 2 above). Schema per `skills/shared/testing-strategy.md § Selected Tests`.
 
 ```markdown
 | Mode | <build-only|scoped|full> |

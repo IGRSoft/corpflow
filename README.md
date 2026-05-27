@@ -280,7 +280,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/harm-assessment` | Harm assessment analysis |
 | `/transparency-check` | Verify output transparency |
 
-### Skills (21 total)
+### Skills (27 total)
 - `dv-screenshot-capture/SKILL.md` - DV stage screenshot capture with platform adapters (apple/web/android/cli-fallback)
 - `workflow.md` - Complete workflow system documentation
 - `task-folder-organization.md` - Task folder structure
