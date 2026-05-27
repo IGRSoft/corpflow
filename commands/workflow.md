@@ -185,7 +185,8 @@ Execute the orchestrator execution loop from `skills/workflow/SKILL.md § Orches
 ```bash
 # Workspace-root cross-check (runs in orchestrator turn, not in subagent)
 _orch_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-_task_root="${task.metadata.workspace_path:-$_orch_root}"
+_task_root=$(jq -r '.metadata.workspace_path // empty' .context/state.json)
+_task_root="${_task_root:-$_orch_root}"
 if [ "$_orch_root" != "$_task_root" ]; then
   echo "⚠ cwd mismatch: orchestrator is at $_orch_root but task.metadata.workspace_path is $_task_root. Aborting delegation until resolved." >&2
   # Write audit row and STOP — do not call Task()
