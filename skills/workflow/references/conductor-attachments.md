@@ -135,12 +135,21 @@ Run `gh pr create --base <BASE_BRANCH>` with:
   ## Notes
   <Risks, follow-ups, deliberate non-goals. Omit section if empty.>
 
-  <CLOSES_LINE>
-  <!-- If issue ref present: "Closes #<ISSUE>" on its own line. -->
+  Closes #<ISSUE>
   ```
+
+  The trailing `Closes #<ISSUE>` line is **REQUIRED** on its own line whenever an issue number is resolvable (see FN validator in `agents/project-manager.md § FN Stage`). Multiple closes lines (`Closes #A`, `Closes #B`) are permitted for PRs that close several issues. Omit ONLY when no issue number can be resolved from any source — in that case the FN audit writes one `pr_issue_link: deferred` row and the PR proceeds without the line.
 
 - Cover **all** commits in the workspace diff vs. `origin/<BASE_BRANCH>`, not just the most recent commit.
 - Keep the body grounded in observable facts from the diff/summary — no speculation, no marketing language.
+
+### PR-body checklist (must hold before `gh pr create`)
+
+- [ ] Title ≤ 72 chars, `<TYPE>[scope]: <Summary>` format
+- [ ] `## Motivation`, `## Changes`, `## Test plan` sections present
+- [ ] **`Closes #<N>` line present on its own line when issue number is resolvable** (regex match: `(?im)^(?:Closes|Fixes|Resolves)\s+#\d+\s*$`)
+- [ ] No `Generated with Claude Code` / `Co-Authored-By: Claude` footers
+- [ ] Body reflects ALL workspace-diff commits, not only HEAD
 
 ## 4. Forbidden footers
 

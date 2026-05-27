@@ -180,6 +180,22 @@ sanitiser rules and non-blocking guarantee.
 
 Execute the orchestrator execution loop from `skills/workflow/SKILL.md § Orchestrator Execution Loop`. The loop enforces a second approval gate immediately before any FN-stage task — see `skills/workflow/SKILL.md § FN Gate` for the pre-FN summary template and bypass semantics.
 
+**BINDING: Workspace-root cross-check before every `Task()` delegation** — Conductor-managed sessions spawn the orchestrator inside a workspace clone whose `pwd` differs from the canonical plugin source repo. Before every `Task()` call in the stage loop, the orchestrator MUST verify that the working tree matches the task's declared workspace, and MUST inject the resolved root into the stage prompt so the subagent targets the right directory:
+
+```bash
+# Workspace-root cross-check (runs in orchestrator turn, not in subagent)
+_orch_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+_task_root=$(jq -r '.metadata.workspace_path // empty' .context/state.json)
+_task_root="${_task_root:-$_orch_root}"
+if [ "$_orch_root" != "$_task_root" ]; then
+  echo "⚠ cwd mismatch: orchestrator is at $_orch_root but task.metadata.workspace_path is $_task_root. Aborting delegation until resolved." >&2
+  # Write audit row and STOP — do not call Task()
+  exit 1
+fi
+```
+
+The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line of every stage prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to target. See `skills/workflow/SKILL.md § Conductor Workspace Topology` for the failure mode this guard prevents.
+
 **BINDING: Post-delegation state.json enforcement** — After every `Task()` return and before `TaskUpdate(stage→completed)`, the orchestrator MUST:
 1. Re-read `.context/state.json` and check `stages.<CODE>.status`.
 2. If status is NOT `completed`, invoke the state-merge hook synchronously:

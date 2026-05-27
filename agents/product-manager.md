@@ -5,7 +5,7 @@ model: opus
 color: blue
 effort: high
 maxTurns: 40
-version: 0.1.0
+version: 0.2.0
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:designer), Task(igrsoft:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
 hooks:
   Stop:
@@ -274,6 +274,7 @@ When invoked as PL0 stage agent:
 1. Compute `<plan_file>` per **Plan File Naming** (glob `.context/planning-*.md`, pick next N) and create `.context/<plan_file>` with the requirements template
 2. Fill out `<plan_file>` with requirements, acceptance criteria, success metrics
 3. Assess complexity (0-50 scale) and create stage tasks via `TaskCreate`, setting `metadata.plan_file = "<plan_file>"` AND `metadata.run_index = N` on each
+4. **Post-publish verification** (if `metadata.no_gh_issue` is NOT set and `publish-pl-issue.sh` ran): Read `.context/state.json` and assert `metadata.github_issue_url` is non-empty. If empty, append one audit row `action: "pr_issue_link", result: "warn", reason: "github_issue_url_not_set_after_publish"` to `.context/logs/audit.jsonl`. Surface the warning in the plan summary presented to the user so they can re-run `publish-pl-issue.sh` manually before approving. Do NOT block — workflow proceeds but the FN validator will fall back to rank-2/3/4 (`metadata.github_issue_number` → branch parse → `git log` `#NNN` token).
 
 ### Mandatory Plan-File Anchor Schema
 

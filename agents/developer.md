@@ -6,7 +6,7 @@ color: magenta
 effort: high
 maxTurns: 80
 isolation: worktree
-version: 0.1.0
+version: 0.2.0
 tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__discover_projs, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__clean, mcp__XcodeBuildMCP__list_sims, mcp__XcodeBuildMCP__boot_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -78,7 +78,13 @@ When building or testing Apple platform code directly (not delegating to apple-d
 ## Workflow Integration
 
 ### D Stage (Development)
-- **D0**: Analyze requirements, set up development environment, read test specs from `<plan_file>`
+- **D0 — Workspace root self-check (MANDATORY first step, before any Read/Edit/Write)**:
+  1. Run `git rev-parse --show-toplevel` → record as `WORKSPACE_ROOT`.
+  2. If the stage prompt contains absolute paths, verify each path shares the same prefix as `WORKSPACE_ROOT`.
+  3. If any path falls outside `WORKSPACE_ROOT`, do NOT edit it. Log a `workspace_path_mismatch` audit row and return `verdict: blocked` to the orchestrator with the mismatched paths listed.
+  4. Document `WORKSPACE_ROOT` in `development-N.md § Approach` (one line).
+  See `skills/workflow/SKILL.md § Conductor Workspace Topology` for rationale and failure mode.
+- **D0.1**: Analyze requirements, set up development environment, read test specs from `<plan_file>`
 - **D1**: Implement code changes using the **edit-batch-build** pattern:
   1. **Plan all edits first**: before the first `Edit`/`Write`, list every file that needs changes and what each change is. Write this list to `development-N.md § Approach` BEFORE editing.
   2. **Apply all edits**: execute all planned edits without building between them. Group related edits (e.g., all project.pbxproj changes — new file refs, build phases, group membership — into ONE edit session).

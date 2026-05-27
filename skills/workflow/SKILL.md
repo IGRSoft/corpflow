@@ -120,6 +120,23 @@ if (isolation === 'worktree') {
 | Workspace (legacy) | `.workspaces/milestone-{N}/{issue#}/.context/` | Shared working directory | Artifacts only |
 | Worktree | `.worktrees/milestone-{N}/{issue#}/.context/` | Dedicated worktree | Full (git + artifacts) |
 
+### Conductor Workspace Topology
+
+When CC spawns a workflow session inside a Conductor-managed workspace clone
+(e.g. `/Users/<user>/conductor/workspaces/<plugin>/<workspace-id>/`), the
+canonical plugin source directory (e.g. `/Users/<user>/Projects/igrsoft/company-workflow/`)
+is a SIBLING repo on a different branch and MUST NOT be edited.
+
+Rule: all `Edit`/`Write` calls MUST target paths under `git rev-parse --show-toplevel`
+of the current session, NOT paths under the canonical plugin source.
+
+Orchestrator enforcement:
+1. Before every `Task()` delegation, resolve `WORKSPACE_ROOT = $(git rev-parse --show-toplevel)`.
+2. Inject `WORKSPACE_ROOT=<path>` as the FIRST LINE of the stage prompt banner (section [7]).
+3. Never allow absolute paths from outside `WORKSPACE_ROOT` in stage prompts — rewrite them as `$WORKSPACE_ROOT/<relative>`.
+
+Failure mode: edits in the sibling repo land on the wrong branch, are not visible to `git diff` in the workspace, require manual `cp` surgery, and corrupt the source repo's working tree.
+
 ### Task ID Namespacing
 
 | Track | Task IDs |

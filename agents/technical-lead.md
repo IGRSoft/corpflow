@@ -73,6 +73,16 @@ PL → AR → TL → DV → [DR] → QA → DC → FN → ST
 - Produce `.context/developer-review-N.md` with findings summary (N = `task.metadata.run_index`; resolver: metadata → newest glob `developer-review-*.md` → legacy `developer-review.md`)
 - Gate QA — QA stage is blocked until DR completes
 
+#### DR Iteration Efficiency Rule
+
+When all open findings are P2 severity (nice-to-have) and zero P0/P1 findings remain,
+the orchestrator MAY defer DR re-verification to inline confirmation:
+  1. Orchestrator reads the diff directly (`Read` + `Grep` on the modified file).
+  2. If each P2 fix is visible in the diff, orchestrator appends a DR addendum row to `state.json`
+     `stages.DR.p2_confirmed: true` and proceeds to QA — no new DR subagent turn required.
+  3. If the diff is ambiguous or spans >3 files, fall back to a scoped DR agent turn.
+P0/P1 findings ALWAYS require a full DR agent re-verification turn.
+
 ### Bash Scope (DR)
 
 Bash is retained ONLY for these purposes:

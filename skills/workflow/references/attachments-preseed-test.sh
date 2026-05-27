@@ -122,7 +122,7 @@ Follow these steps to create the PR:
 - Commit format: \`<TYPE>[scope]: <Summary>\` per \`rules/git-conventions.md\` (Conventional Commits 1.0.0). Suggested type for this workflow: **${commit_type}** (derived from PL planning).
 - Push to origin (set upstream if not yet tracked).
 - Use the \`mcp__conductor__GetWorkspaceDiff\` tool to review the PR diff.
-- Use \`gh pr create --base ${base_branch}\` to open the PR. Keep the title under 72 characters. Body sections: \`## Motivation\`, \`## Changes\`, \`## Notes\`. Describe ALL changes in the workspace diff, not only the most recent commit.
+- Use \`gh pr create --base ${base_branch}\` to open the PR. Keep the title under 72 characters. Body sections: \`## Motivation\`, \`## Changes\`, \`## Notes\`. End body with a \`Closes #999\` line on its own line so the PR closes its linked issue on merge (resolved via the FN PR-issue-link validator). Describe ALL changes in the workspace diff, not only the most recent commit.
 - Do NOT add "Generated with Claude Code" or "Co-Authored-By: Claude" footers.
 
 If any step fails, ask the user for help.

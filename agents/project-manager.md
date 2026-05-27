@@ -46,7 +46,42 @@ In the 9-stage workflow system, the project-manager handles:
 - Create release.md with release notes
 - **Conductor attachments**: Write `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md` BEFORE `gh pr create`. Templates and data sources: `skills/workflow/references/conductor-attachments.md`. These two files prime Conductor's "Create PR" / "Request Review" actions in any later session and serve as the FN agent's own PR-creation script (read-then-execute, single source of truth).
   - **Two-writer idempotent contract**: The orchestrator pre-seeds both files at FN-gate time (before the gate's `return`) so Conductor sees workflow-aware templates even if the user never approves the gate. When the FN agent runs post-approval, it MUST overwrite both files with final data — no skip, no merge, always overwrite from scratch. Re-running the FN agent re-writes files from scratch (idempotent). Pre-existing files at FN-stage start are expected and normal — overwrite anyway; do not assume the pre-seed is current.
-  - **Post-write verify (mirror of orchestrator's gate trip-wire)**: Immediately after both `Write` calls, run `Bash: test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md"`. On success, continue to `gh pr create`. On failure, abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and do NOT proceed to `gh pr create` — opening a PR without the attachments leaves Conductor in the degraded state the gate trip-wire was designed to prevent.
+  - **Post-write verify (mirror of orchestrator's gate trip-wire)**: Immediately after both `Write` calls, run `Bash: test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md"`. On success, continue to the PR-issue-link validator below. On failure, abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and do NOT proceed to `gh pr create` — opening a PR without the attachments leaves Conductor in the degraded state the gate trip-wire was designed to prevent.
+- **PR-issue-link validator (runs immediately BEFORE `gh pr create`)**:
+
+  Resolve issue number from ranked sources (first-match-wins):
+  1. `state.json` → `.metadata.github_issue_url` — extract trailing integer from `/issues/<N>`. (Canonical location; written by `publish-pl-issue.sh`. NOT `facts.github_issue_url`.)
+  2. PL0 task `metadata.github_issue_number` (milestone mode — workflow milestone issue ID).
+  3. Branch parse: `feature/<slug>-<NNN>` last 3-digit token, OR first `#NNN` token in `git log --oneline -n 5`.
+
+  Validate composed PR body via regex `(?im)^(?:Closes|Fixes|Resolves)\s+#\d+\s*$`. Branching:
+
+  - **Issue resolved + body contains keyword** → continue to `gh pr create`.
+  - **Issue resolved + body MISSING keyword** → abort FN with `handoff.verdict: blocked`. Write cause to `.context/errors/project-manager.md` (include resolved issue number, body excerpt, source rank that matched). Do **NOT** run `gh pr create`.
+  - **No issue resolvable from any source** → append one audit row to `.context/logs/audit.jsonl` and proceed to `gh pr create` WITHOUT a closing line:
+
+    ```json
+    {"ts":"<iso8601>","actor":"project-manager","action":"pr_issue_link","subject":"FN0","result":"deferred","task_id":"<id>","metadata":{"reason":"no_issue_resolved","dedupe_key":"<workflow_id>:<run_index>:pr_issue_link"}}
+    ```
+
+  Copy-pasteable bash one-liner (run after composing `$body` and before `gh pr create`):
+
+  ```bash
+  issue_n=$(jq -r '.metadata.github_issue_url // empty' .context/state.json | grep -oE '[0-9]+$') \
+    || issue_n=$(jq -r '.metadata.github_issue_number // empty' .context/state.json) \
+    || issue_n=$(git rev-parse --abbrev-ref HEAD | grep -oE '[0-9]+$') \
+    || issue_n=$(git log --oneline -n 5 | grep -oE '#[0-9]+' | head -1 | tr -d '#')  # first-match among #NNN tokens in last 5 commits
+  if [ -n "$issue_n" ]; then
+    printf '%s\n' "$body" | grep -E -i -q "^(Closes|Fixes|Resolves)[[:space:]]+#${issue_n}[[:space:]]*$" \
+      || { echo "BLOCKED: PR body missing Closes #${issue_n}" >&2; exit 1; }
+  else
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); wid=$(jq -r '.workflow_id' .context/state.json); ri=$(jq -r '.run_index' .context/state.json)
+    tid=$(jq -r '.stages.FN.task_id // "FN0"' .context/state.json 2>/dev/null || echo "FN0")
+    printf '{"ts":"%s","actor":"project-manager","action":"pr_issue_link","subject":"FN0","result":"deferred","task_id":"%s","metadata":{"reason":"no_issue_resolved","dedupe_key":"%s:%s:pr_issue_link"}}\n' \
+      "$ts" "$tid" "$wid" "$ri" >> .context/logs/audit.jsonl
+  fi
+  ```
+
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
 
