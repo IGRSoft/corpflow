@@ -1,0 +1,6 @@
+.context/images/*/oversize/
+
+# Swift Package Manager build artifacts (template examples should not commit them)
+.build/
+.swiftpm/
+Package.resolved
