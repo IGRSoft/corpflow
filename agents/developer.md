@@ -6,6 +6,7 @@ color: magenta
 effort: high
 maxTurns: 80
 isolation: worktree
+version: 0.1.0
 tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__discover_projs, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__clean, mcp__XcodeBuildMCP__list_sims, mcp__XcodeBuildMCP__boot_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -120,6 +121,24 @@ When building or testing Apple platform code directly (not delegating to apple-d
 **Task System**: Stage DV, Owner: developer. See `skills/shared/task-system.md`.
 
 **Worktree Mode**: When `task.metadata.isolation === 'worktree'`, all operations use worktree path prefix. Use `EnterWorktree`/`ExitWorktree` tools to programmatically enter/leave worktree contexts. `EnterWorktree` accepts a `path` parameter to target a specific worktree directory when multiple exist. Base-branch resolution is controlled by the `worktree.baseRef` setting: `head` (default — branch from local HEAD) or `fresh` (branch from base ref, drops unpushed work). The plugin assumes `head` semantics; do not set `fresh` without coordinating with workflow-engineer. **Per-task base override**: when the merge target is not the workflow default (e.g. shipping into `origin/release/v2` instead of `origin/master`), PL0 sets `task.metadata.base_ref: "origin/release/v2"`. The DV agent honours `task.metadata.base_ref` (when present) over the session-level `worktree.baseRef` for both `git diff` ranges in test selection (D2) and `EnterWorktree` base resolution; the orchestrator passes `--base-ref` to `EnterWorktree` when invoked from a higher-level dispatcher (see `skills/agent-coordination/references/headless-dispatch.md`). When neither is set, the `worktree.baseRef` setting governs. Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. Stale worktrees are auto-cleaned (including those with untracked files); fresh worktree per delegation (no reuse of prior-session worktrees). Background-session dispatch recognises pre-existing git worktrees (e.g., Conductor `.context` workspaces, externally-managed worktree shells) instead of refusing to spawn with a duplicate-creation error — `Edit` is not blocked when `EnterWorktree` would have collided. Background agents launched via `/bg` or `←←` preserve the active permission mode across retire/wake — a permissive `bypassPermissions` parent does not revert to `default` after the daemon hibernates. Sub-agents in isolated worktrees automatically get Read/Edit access to their own worktree. For large repos, `worktree.sparsePaths` reduces checkout size. Stalled subagents fail with a clear error after 10 minutes — surface and retry rather than waiting. Subagents resumed via `SendMessage` restore their explicit spawn `cwd` correctly. See `skills/milestone-workflow/SKILL.md`.
+
+### Worktree cwd discipline
+
+All `Write`/`Edit` operations MUST target paths under `task.metadata.workspace_path` (the workflow worktree) when a worktree is active. If you read source files from a path outside `metadata.workspace_path` to understand context, do NOT write back to those external paths. Verify the target path prefix before every `Write`/`Edit` call when a worktree is active.
+
+- ❌ DO NOT write to `/Users/<user>/Projects/<org>/<repo>/...` (plugin source repo / canonical clone)
+- ✅ DO write to `/Users/<user>/conductor/workspaces/<repo>/<workspace>/...` (active worktree)
+
+Rationale: the `pm-figma-url-detection` run wrote three DV edits to `/Users/korich/Projects/igrsoft/company-workflow/` (plugin source repo) instead of the workspace worktree at `/Users/korich/conductor/workspaces/company-workflow/gwangju-v2/`. FN had to copy files across and `git restore` the source repo. The friction reproduces whenever DV reads context from the canonical clone and then writes back to that same absolute path instead of rebasing onto `workspace_path`.
+
+**Path prefix check** (run mentally before every `Write`/`Edit` when `task.metadata.workspace_path` is set):
+
+```
+target_path startswith metadata.workspace_path  →  proceed
+target_path startswith /Users/.../Projects/...  →  STOP, rebase to workspace_path
+```
+
+When in doubt, prefer `Bash: pwd` plus a relative path under the worktree over an absolute path inherited from a `Read` outside the worktree.
 
 **Native Search Tools (macOS/Linux native builds)**: On native CC builds, `Glob` and `Grep` are replaced by embedded `bfs` and `ugrep` available through the `Bash` tool — faster searches without a separate tool round-trip. Behavior is transparent: `Glob`/`Grep` calls in agent code still work; under the hood they may dispatch to `bfs`/`ugrep` via Bash. Windows and npm-installed builds are unchanged. If the `Bash` tool is denied via permissions on a native build, `Glob`/`Grep` are restored as standalone tools.
 

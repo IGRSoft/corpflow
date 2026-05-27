@@ -5,6 +5,7 @@ model: opus
 color: blue
 effort: high
 maxTurns: 40
+version: 0.1.0
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:designer), Task(igrsoft:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
 hooks:
   Stop:
@@ -397,7 +398,22 @@ State is derived **only from explicit user input** — no heuristic sibling scan
 - Valid values: `default | error | empty | loading | hover | disabled | success`
 - Unknown values are preserved as-is (tolerant); QA reports unusual states in `testing.md`
 
+#### Auth Probe
+
+Before running the Capture Workflow, detect Figma URLs in the task description (case-insensitive substring match on `figma.com`) and attempt one MCP call on the first URL via `mcp__plugin_figma_figma__get_screenshot({ fileKey, nodeId })`. Classify the result:
+
+- **Success**: proceed to Capture Workflow as normal.
+- **Auth failure** — error string matches (case-insensitive) any of `authenticate` / `OAuth` / `unauthorized` / `401`:
+  1. Emit exactly one user-facing line: `Figma MCP not authenticated. Authorize at <OAUTH_URL_FROM_ERROR> and paste callback to continue, or reply 'skip' to proceed without screenshot.` (Use the OAuth URL from the error payload when present; otherwise omit the `<…>` placeholder and say `Authorize the Figma MCP server`.)
+  2. Append `q1: Figma MCP auth pending; PM proceeded without screenshot capture (URLs: <comma-separated list>)` to `facts.open_questions[]` in `state.json` and mirror it into the plan's `handoff.open_questions` frontmatter.
+  3. Skip the Capture Workflow entirely; continue writing the plan (requirements, acceptance criteria, scope, stages) as if no Figma URL was present. This is a **soft halt** — the plan ships with the open question recorded; the user decides whether to authorize and re-run or proceed without screenshots.
+- **Non-auth failure** (network, rate limit, bad node id, etc.): do not intercept. Fall through to the existing per-URL failure path documented at the end of `#### Capture Workflow` (continue with remaining URLs, append a failure note to `.context/errors/product-manager.md`).
+
+The probe call is **not** net-new traffic — it reorders the existing `get_screenshot` invocation from step 3 of the Capture Workflow earlier in the pipeline so that the auth-error class can be classified before any plan-file writes commit.
+
 #### Capture Workflow
+
+Run **Auth Probe** first; on success, proceed with the steps below; on auth failure, skip these steps and continue plan authoring with the open question recorded.
 
 1. Parse `fileKey`, `nodeId`, and `state` from each URL (state defaults to `default`)
 2. `mcp__plugin_figma_figma__get_design_context({ fileKey, nodeId })` — code hints + screenshot + component info
