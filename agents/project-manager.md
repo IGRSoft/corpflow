@@ -76,8 +76,9 @@ In the 9-stage workflow system, the project-manager handles:
       || { echo "BLOCKED: PR body missing Closes #${issue_n}" >&2; exit 1; }
   else
     ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); wid=$(jq -r '.workflow_id' .context/state.json); ri=$(jq -r '.run_index' .context/state.json)
-    printf '{"ts":"%s","actor":"project-manager","action":"pr_issue_link","subject":"FN0","result":"deferred","metadata":{"reason":"no_issue_resolved","dedupe_key":"%s:%s:pr_issue_link"}}\n' \
-      "$ts" "$wid" "$ri" >> .context/logs/audit.jsonl
+    tid=$(jq -r '.stages.FN.task_id // "FN0"' .context/state.json 2>/dev/null || echo "FN0")
+    printf '{"ts":"%s","actor":"project-manager","action":"pr_issue_link","subject":"FN0","result":"deferred","task_id":"%s","metadata":{"reason":"no_issue_resolved","dedupe_key":"%s:%s:pr_issue_link"}}\n' \
+      "$ts" "$tid" "$wid" "$ri" >> .context/logs/audit.jsonl
   fi
   ```
 
