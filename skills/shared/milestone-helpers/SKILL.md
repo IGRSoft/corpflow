@@ -48,6 +48,6 @@ See references/ for full implementations with code examples.
 
 ## Related
 
-- `milestone-workflow.md` - Full workflow documentation
+- `../../workflow-milestone/SKILL.md` - Full workflow documentation
 - `workflow.md` - Core workflow system
 - `stage-codes.md` - Stage code reference

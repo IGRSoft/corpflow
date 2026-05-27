@@ -34,7 +34,7 @@ For Swift Testing and XCTest framework syntax, AAA pattern, and DV/QA boundary, 
 ## Handoff to Q Stage
 
 QA stage receives from DV:
-1. **Test scope** from `<plan_file>` (resolved via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`) - WHAT was planned to test
+1. **Test scope** from `<plan_file>` (resolved via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`) - WHAT was planned to test
 2. **Test architecture** from analyzing-N.md - HOW tests are structured
 3. **Implemented unit tests** from development-N.md - WHAT tests DV already wrote
 4. **Existing tests to update** list - WHERE changes were made

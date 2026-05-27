@@ -230,6 +230,6 @@ This command is used:
 - [designer](../agents/designer.md) — Design review and specifications
 - [create-release-notes](./create-release-notes.md) — Generate "What's New" content
 - [appstore-screenshots skill](../skills/appstore-screenshots.md) — Device specs and layout reference
-- [pencil-design-workflow skill](../skills/pencil-design-workflow.md) — Pencil MCP tools reference
+- [pencil-design skill](../skills/pencil-design/SKILL.md) — Pencil MCP tools reference
 
 Target: $ARGUMENTS

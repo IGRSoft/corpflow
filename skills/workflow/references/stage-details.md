@@ -91,5 +91,5 @@ When both `--worktree` and agent teams are enabled, each teammate operates in it
 
 > Project configs and auto-memory are automatically shared across all git worktrees of the same repo. No per-worktree configuration duplication needed.
 
-See `milestone-workflow.md § Agent Teams Mode` for parallel execution patterns.
+See `../../workflow-milestone/SKILL.md § Agent Teams Mode` for parallel execution patterns.
 See `agent-coordination.md § Agent Teams vs Subagents` for comparison.

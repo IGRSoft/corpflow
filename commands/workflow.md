@@ -316,7 +316,7 @@ The runner MUST append one `audit.jsonl` line `action: "external_dispatch"` per 
 ## See Also
 
 - `skills/workflow/SKILL.md` — execution loop, dynamic sizing, workflow modes
-- `skills/milestone-workflow/SKILL.md` — milestone mode, worktree mode
+- `skills/workflow-milestone/SKILL.md` — milestone mode, worktree mode
 - `skills/shared/stage-codes.md` — stage codes and track IDs
 - `skills/agent-coordination/references/headless-dispatch.md` — `task.metadata` → `claude agents` flag bridge
 - `agents/workflow-engineer.md` — troubleshooting

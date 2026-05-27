@@ -68,7 +68,7 @@ On `OK`, run `gh pr create` using the data from `PR instructions.md`. On failure
 | Target / base branch | `workspace.json § git.base_branch` (milestone/worktree mode); else `git symbolic-ref refs/remotes/origin/HEAD` (repo default) |
 | Uncommitted change count | `git status --porcelain \| wc -l` |
 | Upstream tracked? | `git rev-parse --abbrev-ref --symbolic-full-name @{u}` (non-zero exit = no upstream) |
-| Conventional-commit type | Derived from `.context/<plan_file> § Goal` (resolve via `FN0.metadata.plan_file`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`) — feat/fix/refactor/perf/docs/chore/test/ci/build/style; falls back to `feat` |
+| Conventional-commit type | Derived from `.context/<plan_file> § Goal` (resolve via `FN0.metadata.plan_file`; fallback: newest `.context/planning-*.md`) — feat/fix/refactor/perf/docs/chore/test/ci/build/style; falls back to `feat` |
 | Issue ref | `workspace.json § issue_number` (milestone mode) or `metadata.issue_ref` from PL0; else omit |
 | DR verdict | First "Approval Status" line in `.context/developer-review-N.md` (N from `run_index`) |
 | QA verdict | First "GO/NO-GO" line in `.context/testing-N.md` (N from `run_index`) |

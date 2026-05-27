@@ -2,7 +2,7 @@
 
 ## Conventions used in this document
 
-- **`planFile`** — the plan filename PL produced for the current workflow run (`planning-N.md`, e.g. `planning-0.md`, `planning-3.md`). Computed by PL0 per `agents/product-manager.md § Plan File Naming`. Every downstream task carries it as `metadata.plan_file`; the same value is interpolated into `context_files`. Stage agents resolve the plan file from `task.metadata.plan_file` first, then newest `.context/planning-*.md`, then legacy `.context/planning.md`.
+- **`planFile`** — the plan filename PL produced for the current workflow run (`planning-N.md`, e.g. `planning-0.md`, `planning-3.md`). Computed by PL0 per `agents/product-manager.md § Plan File Naming`. Every downstream task carries it as `metadata.plan_file`; the same value is interpolated into `context_files`. Stage agents resolve the plan file from `task.metadata.plan_file` first, then newest `.context/planning-*.md`.
 - **handoff-protocol mode** — the preferred metadata mode (per `skills/workflow/references/handoff-protocol.md`): tasks carry `state_file` + `context_refs` (anchor list); legacy `context_files` is retained for fallback path F1 (state.json absent). Examples below show both forms — use `context_refs` for new code; keep `context_files` as the safety net.
 
 ## PL0 state.json Initialization (Phase 1)

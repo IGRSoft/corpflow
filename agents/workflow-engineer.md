@@ -33,7 +33,7 @@ Expert workflow engineer for Task System orchestration and troubleshooting.
 | Stage Management | Status transitions via `TaskUpdate`, PL0 creates subsequent stages, sub-task splitting |
 | Orchestration | Milestone mode (`--milestone:N`), workspace structure, issue fetching/sorting, orchestrator.json, track monitoring, completion/error handling |
 
-See `skills/milestone-workflow/SKILL.md` for milestone architecture details.
+See `skills/workflow-milestone/SKILL.md` for milestone architecture details.
 
 ## Milestone Workflow Validation
 

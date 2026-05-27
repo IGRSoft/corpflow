@@ -165,7 +165,7 @@ Created when `/workflow --milestone:N` is used. Contains:
 - **execution**: Current issue, completed/pending arrays
 - **summary**: Issue counts and progress
 
-See [Milestone Workflow](milestone-workflow.md) for full schema.
+See [Milestone Workflow](../workflow-milestone/SKILL.md) for full schema.
 
 ## File Organization Guidelines
 

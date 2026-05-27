@@ -86,7 +86,7 @@ The developer MUST implement unit tests alongside production code during the DV 
 
 ### Developer Responsibilities
 
-1. **Read test specs** from `.context/<plan_file> § Test Strategy` (resolve `<plan_file>` via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`)
+1. **Read test specs** from `.context/<plan_file> § Test Strategy` (resolve `<plan_file>` via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`)
 2. **Read test architecture** from `.context/analyzing-N.md § Test Architecture` (if available; N from `task.metadata.run_index`)
 3. **Create test files** using the specified testing framework
 4. **Follow test patterns** defined in the architecture (DI, mocking strategy, etc.)

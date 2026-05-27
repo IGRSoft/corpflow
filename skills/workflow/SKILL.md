@@ -144,7 +144,7 @@ Failure mode: edits in the sibling repo land on the wrong branch, are not visibl
 | Track 1 | `t1-1`, `t1-2`, ... |
 | Track N | `t{N}-1`, `t{N}-2`, ... |
 
-See `milestone-workflow.md` for full workspace documentation.
+See `../workflow-milestone/SKILL.md` for full workspace documentation.
 
 ## Parallel Execution
 
@@ -439,8 +439,7 @@ while (tasks.some(t => t.status !== "completed")) {
       }
       if (gateMode !== "bypass") {
         // (a) Build pre-FN summary from the resolved plan file
-        //     (`task.metadata.plan_file`; fallback: newest `.context/planning-*.md`,
-        //     then legacy `.context/planning.md`),
+        //     (`task.metadata.plan_file`; fallback: newest `.context/planning-*.md`),
         //     .context/developer-review-N.md, .context/testing-N.md.
         // (b) Print summary to user. Do NOT call TaskUpdate.
         //     Do NOT delegate. FN task stays `pending`.
@@ -965,7 +964,7 @@ remain authoritative.
 
 ## Related
 
-- `milestone-workflow.md` - GitHub milestone integration
+- `../workflow-milestone/SKILL.md` - GitHub milestone integration
 - `agent-coordination.md` - Multi-agent coordination
 - `cost-optimization.md` - Budget management
 - `context-compression.md` - Context compression

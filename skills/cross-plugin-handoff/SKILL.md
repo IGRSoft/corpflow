@@ -84,7 +84,7 @@ Provide Swift app architecture for the igrsoft workflow AR stage:
 {task_description}
 
 ## Planning Context (compressed)
-{planning_summary from .context/<plan_file> — resolve via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`}
+{planning_summary from .context/<plan_file> — resolve via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`}
 
 ## System Architecture Constraints
 - API patterns: {REST/GraphQL/gRPC decisions}

@@ -264,4 +264,4 @@ Configure a custom directory for workflow-specific auto-memory:
 
 Allows workflow-specific memory separate from the default `~/.claude/` location.
 
-Teammates share a task list and can self-claim available work. See `milestone-workflow.md § Agent Teams Mode` for milestone patterns.
+Teammates share a task list and can self-claim available work. See `../workflow-milestone/SKILL.md § Agent Teams Mode` for milestone patterns.

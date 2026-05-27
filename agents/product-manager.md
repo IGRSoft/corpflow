@@ -111,16 +111,7 @@ When `true` AND `.context/designs/` has artifacts, QA performs Design Comparison
 
 #### Backward compatibility
 
-Legacy `requires_ui_tests` is auto-mapped (one release cycle):
-
-| Legacy | Mapped to |
-|--------|-----------|
-| `requires_ui_tests: true` | `test_mode: full`, `ui_visual_check: true` |
-| `requires_ui_tests: false` (or absent) | `test_mode: scoped`, `ui_visual_check: false` |
-
-Emit a deprecation note in `planning-N.md § Notes`: `requires_ui_tests is deprecated; use test_mode + ui_visual_check.`
-
-See `skills/shared/testing-strategy.md § Test Selection Gate` for the full protocol and `skills/shared/test-selection-syntax.md` for the marker grammar that DV parses.
+Legacy `requires_ui_tests` was sunset; new plans MUST use `test_mode` + `ui_visual_check`. See `skills/shared/testing-strategy.md § Backward compatibility` for the historical mapping table preserved for one release cycle, and `skills/shared/test-selection-syntax.md` for the marker grammar that DV parses.
 
 4. **Test effort estimate is required** (not optional) — broken down by type, hours, and stage (DV/QA)
 
@@ -149,9 +140,8 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 
 1. Glob `.context/planning-*.md`. Extract the integer suffix from each match.
 2. If matches exist, set `N = max(existing) + 1`. Otherwise `N = 0`.
-3. **Legacy fallback**: if no `planning-*.md` exists but `.context/planning.md` does, treat the legacy file as `planning-0.md` and write the new plan as `planning-1.md`. (Fallback retained for one release cycle, then removed.)
-4. Write `.context/planning-${N}.md`. Do **not** overwrite `planning-0.md`, ..., `planning-(N-1).md` — they remain as historical plans.
-5. **state.json reset** (new run in existing `.context/`): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, and empty `facts.*` (preserves `version`, `workflow_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
+3. Write `.context/planning-${N}.md`. Do **not** overwrite `planning-0.md`, ..., `planning-(N-1).md` — they remain as historical plans.
+4. **state.json reset** (new run in existing `.context/`): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, and empty `facts.*` (preserves `version`, `workflow_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
 
 **Downstream propagation**: when PL creates downstream stage tasks via `TaskCreate`, stamp **all** of the following on each:
 
@@ -162,7 +152,7 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 | `metadata.skip_exploration` | `true` if `.context/exploration.md` exists | Suppress redundant Glob/Grep in AR/TL/DV |
 | `metadata.exploration_anchors` | `["exploration.md#facts", "exploration.md#refs", "planning-${N}.md#requirements"]` (when `skip_exploration: true`) | Authoritative pre-explored set |
 
-Every stage agent uses `run_index` to resolve its artifact path as `<basename>-${N}.md`. Reader resolution order for `plan_file`: `metadata.plan_file` first, then newest `.context/planning-*.md` (highest N) if metadata is absent, then legacy `planning.md` as the final fallback.
+Every stage agent uses `run_index` to resolve its artifact path as `<basename>-${N}.md`. Reader resolution order for `plan_file`: `metadata.plan_file` first, then newest `.context/planning-*.md` (highest N) if metadata is absent.
 
 See `skills/agent-coordination/SKILL.md § metadata.skip_exploration Propagation` for the full propagation contract.
 
@@ -294,7 +284,7 @@ Required anchors (kebab-case, no underscores, no spaces):
 
 PostToolUse anchor-lint (when configured per `handoff-protocol.md § Anchor Pre-Flight`) fires after the write and signals the agent to amend the artifact if any anchor is missing. Without the hook, validation falls through to DR-stage `cache-lint.sh --anchor-lint`; the cost is the same but discovered late — prefer the proactive check.
 
-**Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For milestone mode, read issue from `.context/milestone.json`. See `skills/milestone-workflow/SKILL.md § Workspace-Aware Stages`.
+**Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For milestone mode, read issue from `.context/milestone.json`. See `skills/workflow-milestone/SKILL.md § Workspace-Aware Stages`.
 
 ### Dynamic Workflow Sizing (PL0 Stage)
 
