@@ -76,7 +76,7 @@ In the 9-stage workflow system, the qa-engineer handles:
 - **Q0**: Analyze requirements, review DV's unit tests, identify coverage gaps
 - **Q1**: Add missing edge-case tests, then dispatch test execution per the **Test Selection Gate** (see `skills/shared/testing-strategy.md § Test Selection Gate`).
 
-  **Three-mode dispatcher** — read `metadata.test_mode` from `<plan_file>` (effective default: `scoped`; apply legacy `requires_ui_tests` alias per testing-strategy.md if needed). Read `.context/development-N.md § Selected Tests` (DV's authored list).
+  **Three-mode dispatcher** — read `metadata.test_mode` from `<plan_file>` (effective default: `scoped`; one-cycle legacy alias is documented in `skills/shared/testing-strategy.md § Backward compatibility`). Read `.context/development-N.md § Selected Tests` (DV's authored list).
 
   | `test_mode` (DV's effective mode after auto-promotion, if any) | QA execution |
   |---|---|
@@ -101,7 +101,7 @@ In the 9-stage workflow system, the qa-engineer handles:
 
 **Gate**: only run when `metadata.ui_visual_check: true` in `<plan_file>` **and** design references exist in `.context/designs/`. If the flag is `false` or absent, skip this entire section and record one line in `testing-N.md § Design Comparison`: `Skipped — ui_visual_check=false in plan`. See `skills/shared/testing-strategy.md § Test Selection Gate`.
 
-Legacy: if only `requires_ui_tests: true` is set (no `ui_visual_check`), treat as `ui_visual_check: true` per the backward-compat alias and emit a deprecation note in `testing-N.md § Notes`.
+One-cycle legacy alias mapping is documented in `skills/shared/testing-strategy.md § Backward compatibility`; emit the deprecation note in `testing-N.md § Notes` when it fires.
 
 When the gate is open, perform visual comparison during Q1 (after functional testing).
 
@@ -163,7 +163,7 @@ After the table, include a one-line AC coverage summary:
 
 > AC coverage: N of M acceptance criteria from `<plan_file>` have matching design-verified screens.
 
-(`<plan_file>` resolves from `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`.)
+(`<plan_file>` resolves from `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`.)
 
 ### Visual Evidence (artifact section in testing-N.md)
 

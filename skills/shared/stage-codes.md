@@ -117,7 +117,7 @@ QA0: QA Testing        ← agents can split: QA0, QA1
 | Code | Artifact |
 |------|----------|
 | EX | exploration.md |
-| PL | planning-N.md (numbered per `agents/product-manager.md § Plan File & Run Index Naming`; legacy `planning.md` accepted as fallback) |
+| PL | planning-N.md (numbered per `agents/product-manager.md § Plan File & Run Index Naming`) |
 | AR | analyzing-N.md |
 | TL | coordination-N.md |
 | DV | development-N.md |

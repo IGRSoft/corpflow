@@ -88,7 +88,7 @@ commands/workflow.md
 **Mapping rules (apply first match):** full table in `references/target-mapping.md`.
 
 1. **Direct edit to a prompt file** (`agents/*.md`, `skills/**/SKILL.md`, `commands/*.md`) → target is that file itself (self-edit signal).
-2. **Edit to `.context/<stage-artifact>-N.md`** → target is the agent that produced that artifact (look up via stage-contracts.md: any `planning-N.md` (or legacy `planning.md`) → product-manager, `development-N.md` → developer, etc.).
+2. **Edit to `.context/<stage-artifact>-N.md`** → target is the agent that produced that artifact (look up via stage-contracts.md: any `planning-N.md` → product-manager, `development-N.md` → developer, etc.).
 3. **Edit to source code file** → target is the DV-stage agent for the current workflow (`developer` or whichever platform-specific agent was assigned in `metadata.agent`).
 4. **Edit to docs (`README.md`, `docs/**`)** → target is `technical-writer` (DC stage).
 5. **No match** → discard, logged only.

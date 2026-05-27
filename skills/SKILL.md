@@ -16,11 +16,14 @@ All available skills for the igrsoft workflow plugin.
 | [csv-export-templates](csv-export-templates/SKILL.md) | 13-category CSV export structure for Google Sheets import | low |
 | [estimation](estimation/SKILL.md) | Complexity scoring (0-50 scale) and T-shirt sizing for project estimation | low |
 | [incident-response](incident-response/SKILL.md) | Incident classification, hotfix workflow, rollback procedures, and post-mortem templates | high |
-| [milestone-workflow](milestone-workflow/SKILL.md) | GitHub milestone integration with isolated workspaces for multi-issue tracking | high |
-| [pencil-design-workflow](pencil-design-workflow/SKILL.md) | Design mockup generation workflow using Pencil MCP tools | high |
+| [logging-conventions](logging-conventions/SKILL.md) | Route runtime log capture to `.context/logs/` with filename conventions and cleanup patterns | low |
+| [milestone-workflow](workflow-milestone/SKILL.md) | GitHub milestone integration with isolated workspaces for multi-issue tracking | high |
+| [pencil-design](pencil-design/SKILL.md) | Design mockup generation workflow using Pencil MCP tools | high |
+| [preview-ensurer](preview-ensurer/SKILL.md) | Detect SwiftUI View files without previews and auto-add minimal `#Preview` blocks | medium |
 | [release-engineering](release-engineering/SKILL.md) | Semantic versioning, changelog generation, and deployment readiness patterns | high |
 | [review](review/SKILL.md) | Technical review framework for estimates by platform specialists | low |
 | [security-review-process](security-review-process/SKILL.md) | OWASP Top 10 security review checklist and secure coding patterns | medium |
+| [self-improvement](self-improvement/SKILL.md) | ST-stage retrospective: diff-based learning from user edits; writes `.context/learnings.md` with per-proposal approval checklist | medium |
 | [task-folder-organization](task-folder-organization/SKILL.md) | Context folder structure (.context/) with artifact naming and path resolution | medium |
 | [workflow](workflow/SKILL.md) | Complete staged workflow system with dynamic sizing and stage management | high |
 | [workflow-testing-strategy](workflow-testing-strategy/SKILL.md) | Test strategy planning guidance for PL and AR workflow stages | medium |

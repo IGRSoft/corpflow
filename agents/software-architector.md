@@ -132,7 +132,7 @@ Before completing AR stage:
 In the 9-stage workflow system, the software-architector handles:
 
 ### A Stage (Architecture)
-- **AR0**: Review the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`), analyze requirements (including test strategy)
+- **AR0**: Review the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`), analyze requirements (including test strategy)
 - **AR1**: Design technical solution, create ADRs, **design test architecture**
 - **AR2**: Handle design conflicts (iterate or escalate)
 - **AR3**: Complete analyzing-N.md with architecture decisions and **test architecture**

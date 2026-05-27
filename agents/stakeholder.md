@@ -97,9 +97,9 @@ Budget approval follows the 3-Stage Model — see `skills/shared/three-stage-pla
 ## Acceptance Review Procedure
 
 ### Step 1: Review Artifacts
-Read `.context/complete-summary-N.md` for implementation summary (N from `task.metadata.run_index`; fallback: newest `.context/complete-summary-*.md`, then legacy `.context/complete-summary.md`).
+Read `.context/complete-summary-N.md` for implementation summary (N from `task.metadata.run_index`; fallback: newest `.context/complete-summary-*.md`).
 Read `.context/testing-N.md` for QA results (same resolver).
-Read the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`, then legacy `.context/planning.md`) for original acceptance criteria.
+Read the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`) for original acceptance criteria.
 
 ### Step 2: Verify Acceptance Criteria
 Compare implementation against `<plan_file>` acceptance criteria:

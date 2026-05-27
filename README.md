@@ -280,7 +280,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/harm-assessment` | Harm assessment analysis |
 | `/transparency-check` | Verify output transparency |
 
-### Skills (24 total)
+### Skills (21 total)
 - `dv-screenshot-capture/SKILL.md` - DV stage screenshot capture with platform adapters (apple/web/android/cli-fallback)
 - `workflow.md` - Complete workflow system documentation
 - `task-folder-organization.md` - Task folder structure
@@ -291,7 +291,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 - `cost-optimization.md` - Token and cost management
 - `csv-export-templates.md` - Export format templates
 - `estimation/SKILL.md` - Complexity estimation methods
-- `milestone-workflow.md` - Milestone-based workflow tracking
+- `workflow-milestone/SKILL.md` - Milestone-based workflow tracking
 - `review/SKILL.md` - Senior review guidelines
 - `self-improvement/SKILL.md` - ST-stage retrospective: diff-based learning from user edits; writes `.context/learnings.md` with per-proposal approval checklist, scoped to in-context agents/skills/commands only
 - `workflow-testing-strategy.md` - Workflow-integrated testing planning for PL/AR stages
