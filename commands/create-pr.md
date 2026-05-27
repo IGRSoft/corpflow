@@ -119,7 +119,11 @@ If a PR already exists, print its URL and stop — do not create a duplicate.
 
 ## Notes
 <DR verdict, risks, follow-ups if available; omit section if nothing to add>
+
+Closes #<issue>
 ```
+
+The trailing `Closes #<issue>` line is **mandatory** when the workflow has a linked issue (resolved per `agents/project-manager.md § FN Stage` PR-issue-link validator). Omit only when no issue number is resolvable from any source.
 
 Create PR:
 ```bash
@@ -127,7 +131,19 @@ gh pr create \
   --base "<base-branch>" \
   --title "<title>" \
   --body "$(cat <<'EOF'
-<body>
+## Motivation
+<...>
+
+## Changes
+<...>
+
+## Test plan
+<...>
+
+## Notes
+<...>
+
+Closes #<issue>
 EOF
 )" \
   [--draft if --draft flag passed]
