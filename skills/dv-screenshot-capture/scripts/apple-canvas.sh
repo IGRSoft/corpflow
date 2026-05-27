@@ -187,9 +187,10 @@ if [[ -d "$ENSURER_DIR" ]] && command -v swift >/dev/null 2>&1; then
             file=$(jq -r .file <<<"$view")
             view_type=$(jq -r .type <<<"$view")
             mock_strategy=$(jq -r '.mock_strategy // "unknown"' <<<"$view")
+            lines_added=$(jq -r '.lines_added // 0' <<<"$view")
             audit preview_added ok "$(jq -nc \
                 --arg file "$file" --arg view_type "$view_type" \
-                --arg mock_strategy "$mock_strategy" --argjson lines_added 4 \
+                --arg mock_strategy "$mock_strategy" --argjson lines_added "$lines_added" \
                 '{file:$file, view_type:$view_type, mock_strategy:$mock_strategy, lines_added:$lines_added}')"
         done
     fi

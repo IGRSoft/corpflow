@@ -32,6 +32,7 @@ struct ViewResult: Codable {
     let action: String          // "found" | "added" | "skipped"
     let reason: String?
     let mock_strategy: String?
+    let lines_added: Int?       // populated only when action == "added"
 }
 
 struct EnsureResult: Codable {
@@ -45,7 +46,7 @@ final class ViewDetector: SyntaxVisitor {
 
     struct Detected {
         let typeName: String
-        let parameters: [(label: String, type: String)]
+        let parameters: [(label: String?, type: String)]  // nil label = unlabeled (_) param
     }
 
     private(set) var viewTypes: [Detected] = []
@@ -58,9 +59,11 @@ final class ViewDetector: SyntaxVisitor {
     }
 
     // Pattern 1, 2 — struct/class/actor with View conformance
+    // NOTE: depth is incremented here and decremented in visitPost — NOT via defer.
+    // SyntaxVisitor visits children after visit() returns, so defer would fire
+    // before children are walked, causing all nested types to appear at depth 1.
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
         depth += 1
-        defer { depth -= 1 }
         if depth == 1, declaresView(node.inheritanceClause) {
             viewTypes.append(extractParameters(typeName: node.name.text, members: node.memberBlock.members))
         }
@@ -71,9 +74,12 @@ final class ViewDetector: SyntaxVisitor {
         return .visitChildren
     }
 
+    override func visitPost(_ node: StructDeclSyntax) {
+        depth -= 1
+    }
+
     override func visit(_ node: ClassDeclSyntax) -> SyntaxVisitorContinueKind {
         depth += 1
-        defer { depth -= 1 }
         if depth == 1, declaresView(node.inheritanceClause) {
             viewTypes.append(extractParameters(typeName: node.name.text, members: node.memberBlock.members))
         }
@@ -83,10 +89,13 @@ final class ViewDetector: SyntaxVisitor {
         return .visitChildren
     }
 
+    override func visitPost(_ node: ClassDeclSyntax) {
+        depth -= 1
+    }
+
     // Pattern 3 — extension X: View
     override func visit(_ node: ExtensionDeclSyntax) -> SyntaxVisitorContinueKind {
         depth += 1
-        defer { depth -= 1 }
         if depth == 1, declaresView(node.inheritanceClause) {
             // v1: only register the extension target name; cross-file extension
             // resolution is out of scope.
@@ -94,6 +103,10 @@ final class ViewDetector: SyntaxVisitor {
             viewTypes.append(Detected(typeName: typeName, parameters: []))
         }
         return .visitChildren
+    }
+
+    override func visitPost(_ node: ExtensionDeclSyntax) {
+        depth -= 1
     }
 
     // Pattern 5 — #Preview macro
@@ -135,12 +148,14 @@ final class ViewDetector: SyntaxVisitor {
     ) -> Detected {
         // Walk for explicit init first; fall back to synthesized memberwise init
         // inferred from stored `VariableDeclSyntax` properties.
-        var params: [(String, String)] = []
+        var params: [(String?, String)] = []
 
         for member in members {
             if let initDecl = member.decl.as(InitializerDeclSyntax.self) {
                 for p in initDecl.signature.parameterClause.parameters {
-                    let label = (p.firstName.text == "_" ? p.secondName?.text : p.firstName.text) ?? "_"
+                    // firstName == "_" means the parameter has no external call-site label.
+                    // Use nil so generatePreviewBlock emits a positional argument (no "label:").
+                    let label: String? = (p.firstName.text == "_") ? nil : p.firstName.text
                     let type  = p.type.trimmedDescription
                     params.append((label, type))
                 }
@@ -282,16 +297,22 @@ private func isSimpleIdentifier(_ s: String) -> Bool {
 
 func generatePreviewBlock(
     typeName: String,
-    args: [(label: String, expr: String)]
+    args: [(label: String?, expr: String)]
 ) -> String {
+    // Format a single argument: labeled ("name: value") or positional ("value").
+    func argFragment(_ label: String?, _ expr: String) -> String {
+        guard let l = label else { return expr }
+        return "\(l): \(expr)"
+    }
+
     if args.isEmpty {
         return "\n#Preview {\n    \(typeName)()\n}\n"
     }
     if args.count == 1 {
         let (label, expr) = args[0]
-        return "\n#Preview {\n    \(typeName)(\(label): \(expr))\n}\n"
+        return "\n#Preview {\n    \(typeName)(\(argFragment(label, expr)))\n}\n"
     }
-    let body = args.map { "        \($0.label): \($0.expr)" }.joined(separator: ",\n")
+    let body = args.map { "        \(argFragment($0.label, $0.expr))" }.joined(separator: ",\n")
     return "\n#Preview {\n    \(typeName)(\n\(body)\n    )\n}\n"
 }
 
@@ -306,7 +327,7 @@ func ensureFile(_ path: String, autoAdd: Bool, projectRoot: URL) -> (ViewResult,
     do { source = try String(contentsOf: url, encoding: .utf8) } catch {
         return (ViewResult(file: path, type: typeFallback, has_preview: false,
                            action: "skipped", reason: "read_failed: \(error.localizedDescription)",
-                           mock_strategy: nil), lines: 0)
+                           mock_strategy: nil, lines_added: nil), lines: 0)
     }
 
     let tree = Parser.parse(source: source)
@@ -317,24 +338,24 @@ func ensureFile(_ path: String, autoAdd: Bool, projectRoot: URL) -> (ViewResult,
     if detector.hasPreview || detector.hasPreviewProvider {
         let firstType = detector.viewTypes.first?.typeName ?? typeFallback
         return (ViewResult(file: path, type: firstType, has_preview: true,
-                           action: "found", reason: nil, mock_strategy: nil), lines: 0)
+                           action: "found", reason: nil, mock_strategy: nil, lines_added: nil), lines: 0)
     }
 
     // Ambiguous (3+ top-level Views, no disambiguating --view)
     if detector.viewTypes.count >= 3 {
         return (ViewResult(file: path, type: detector.viewTypes.first?.typeName ?? typeFallback,
                            has_preview: false, action: "skipped",
-                           reason: "ambiguous_view_target", mock_strategy: nil), lines: 0)
+                           reason: "ambiguous_view_target", mock_strategy: nil, lines_added: nil), lines: 0)
     }
 
     guard let target = detector.viewTypes.first else {
         return (ViewResult(file: path, type: typeFallback, has_preview: false,
                            action: "skipped", reason: "no_view_type_detected",
-                           mock_strategy: nil), lines: 0)
+                           mock_strategy: nil, lines_added: nil), lines: 0)
     }
 
     // Derive mock args
-    var generatedArgs: [(String, String)] = []
+    var generatedArgs: [(String?, String)] = []
     var summary: MockStrategy = .concreteInit
     var skipReason: String?
     for (label, type) in target.parameters {
@@ -355,13 +376,13 @@ func ensureFile(_ path: String, autoAdd: Bool, projectRoot: URL) -> (ViewResult,
         return (ViewResult(file: path, type: target.typeName, has_preview: false,
                            action: "skipped",
                            reason: skipReason ?? "unsupported_init_signature",
-                           mock_strategy: MockStrategy.previewTBD.rawValue), lines: 0)
+                           mock_strategy: MockStrategy.previewTBD.rawValue, lines_added: nil), lines: 0)
     }
 
     if !autoAdd {
         return (ViewResult(file: path, type: target.typeName, has_preview: false,
                            action: "skipped", reason: "dry_run",
-                           mock_strategy: summary.rawValue), lines: 0)
+                           mock_strategy: summary.rawValue, lines_added: nil), lines: 0)
     }
 
     // Generate + append + parse-smoke
@@ -372,7 +393,7 @@ func ensureFile(_ path: String, autoAdd: Bool, projectRoot: URL) -> (ViewResult,
         return (ViewResult(file: path, type: target.typeName, has_preview: false,
                            action: "skipped",
                            reason: "write_failed: \(error.localizedDescription)",
-                           mock_strategy: summary.rawValue), lines: 0)
+                           mock_strategy: summary.rawValue, lines_added: nil), lines: 0)
     }
 
     // Smoke test — `swift -frontend -parse`. On failure: rollback.
@@ -382,13 +403,13 @@ func ensureFile(_ path: String, autoAdd: Bool, projectRoot: URL) -> (ViewResult,
         return (ViewResult(file: path, type: target.typeName, has_preview: false,
                            action: "skipped",
                            reason: "parse_failed_after_preview_add",
-                           mock_strategy: summary.rawValue), lines: 0)
+                           mock_strategy: summary.rawValue, lines_added: nil), lines: 0)
     }
 
     let linesAdded = block.filter { $0 == "\n" }.count
     return (ViewResult(file: path, type: target.typeName, has_preview: false,
                        action: "added", reason: nil,
-                       mock_strategy: summary.rawValue), lines: linesAdded)
+                       mock_strategy: summary.rawValue, lines_added: linesAdded), lines: linesAdded)
 }
 
 private func runParseSmoke(path: String) -> Bool {
