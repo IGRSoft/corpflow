@@ -46,7 +46,7 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 
 Support agents don't own worktask stages but can be invoked on-demand via Task tool.
 
-> Model column uses aliases (`opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-7`) are also supported in agent frontmatter. Use aliases for portability across providers. **Opus 4.7** is the latest Claude model (v2.1.111+); Opus 4.6 remains supported. Auto mode is available for Max subscribers on Opus 4.7 and no longer requires `--enable-auto-mode` (v2.1.111).
+> Model column uses aliases (`opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-8`) are also supported in agent frontmatter. Use aliases for portability across providers. **Opus 4.8** is the latest Claude model (v2.1.154+); Opus 4.6 and Opus 4.7 remain supported. Auto mode is available for Max subscribers on Opus 4.8 and no longer requires `--enable-auto-mode` (v2.1.111).
 
 > **Default effort is now `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans (v2.1.94). Only Pro plan retains medium default. Agents with explicit `effort:` frontmatter are unaffected.
 
@@ -66,7 +66,7 @@ Support agents don't own worktask stages but can be invoked on-demand via Task t
 
 ### Skill/Command Frontmatter (v2.1.80+)
 
-Skills and slash commands can declare `effort` in YAML frontmatter to set effort level when invoked.
+Skills and slash commands can declare `effort` in YAML frontmatter to set effort level when invoked. As of **v2.1.152**, skills AND slash commands (not just agents) can also set `disallowed-tools` in frontmatter to restrict tool access within that skill/command's scope.
 
 ### keep-coding-instructions Frontmatter (v2.1.94+)
 

@@ -214,7 +214,7 @@ Document errors in `.context/errors/<agent>.md` (per-agent, append-only; one `##
 - Validate artifacts created
 - `PostCompact` hook fires after auto-compaction — use to re-inject critical worktask state
 
-> On Opus 4.6/4.7 with Max/Team/Enterprise, context window is 1M tokens. Compression still recommended at stage boundaries for cost efficiency even with larger windows.
+> On Opus 4.6/4.7/4.8 with Max/Team/Enterprise, context window is 1M tokens. Compression still recommended at stage boundaries for cost efficiency even with larger windows.
 
 See references/ for initialization code, stage details, and agent teams integration.
 

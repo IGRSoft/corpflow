@@ -14,8 +14,12 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 | `FileChanged` | Monitored file modified | — | File path |
 | `TaskCreated` | TaskCreate tool called | — | Task ID, subject |
 | `WorktreeCreate` | Worktree created | — | Worktree path |
+| `MessageDisplay` | A message is displayed to the user (v2.1.152+) | — | `message`, `role` (`user`/`assistant`), `display_type` |
+| `SessionStart` | Session begins (v2.1.152+) | — | `session_id`, `session_title`, `reloadSkills` (bool) |
 
 > As of CC 2.1.77, the Agent tool `resume` parameter is removed. Use `SendMessage` to communicate with running agents instead.
+
+> **SessionStart `reloadSkills:true`** (v2.1.152+): when a `SessionStart` hook fires with `reloadSkills: true`, all plugin skills are reloaded mid-session (e.g., after a `/reload-skills` command). Hooks listening on `SessionStart` can use this flag to re-apply skill-specific initialization (inject env vars, validate skill state). The `sessionTitle` field (v2.1.77 — allows the agent to set the session title visible in the UI) continues to be available alongside `reloadSkills`.
 
 > Parent agents reliably recover subagent results after context compaction. Background agents that are killed or interrupted preserve partial results in context, preventing total loss of intermediate work. The `PostCompact` hook can re-inject critical state after auto-compaction.
 

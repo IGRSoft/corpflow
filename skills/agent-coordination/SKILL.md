@@ -592,6 +592,27 @@ For complex bugs with multiple potential causes:
 
 See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, PostToolUse format-on-save safety, MCP-tool-typed hooks (v2.1.118), `duration_ms` in PostToolUse payload (v2.1.119), and PostToolUse output replacement via `updatedToolOutput` (v2.1.121)), agent teams comparison, MCP elicitation patterns, and team communication protocols (message types, anti-patterns, deadlock resolution).
 
+## Native Dynamic Workflows vs igrsoft Staged Worktask
+
+As of v2.1.154, Claude Code ships a native `/workflows` command and Workflow tool for **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. This is complementary to (not a replacement for) the igrsoft 11-stage worktask system:
+
+| Dimension | Native dynamic workflows (`/workflows`) | igrsoft staged worktask |
+|---|---|---|
+| **Scale** | Tens–hundreds of parallel agents | 11 governed sequential/parallel stages |
+| **Governance** | Ad-hoc, minimal overhead | Approval gates, stage contracts, artifact audit trail |
+| **Use case** | One-off fan-out (e.g. scan 500 files in parallel) | Full feature development with DR/SR/QA gates |
+| **State management** | Orchestrator-in-context | `.context/state.json`, Task System, audit.jsonl |
+| **Resume / rollback** | Manual | Resume Procedure, state.checkpoint-*.json |
+
+**When to reach for each:**
+
+- Reach for native dynamic workflows when you need quick parallelism without governance overhead (e.g., batch linting, parallel research, one-off data transforms).
+- Reach for the igrsoft worktask when work requires planning approval, security review, QA sign-off, documentation, or any multi-stage handoff contract.
+
+They can compose: a DV agent inside an igrsoft worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
+
+> Claude now reserves multiple-choice / AskUserQuestion prompts for genuine decisions (v2.1.154). This reinforces the existing text-approval-gate design in worktask stages — the orchestrator's approval gate (after PL0) is a real decision checkpoint, not a procedural confirmation.
+
 ## Related
 
 - `worktask.md` - Worktask system

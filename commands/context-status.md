@@ -40,7 +40,7 @@ Check context window utilization, analyze token distribution, and trigger compre
 | Metric | Value |
 |--------|-------|
 | Current Usage | 45,000 tokens |
-| Window Size | 200,000 tokens (or 1,000,000 on Opus 4.6/4.7 Max/Team/Enterprise) |
+| Window Size | 200,000 tokens (or 1,000,000 on Opus 4.6/4.7/4.8 Max/Team/Enterprise) |
 | Utilization | 45% |
 | Status | Normal |
 

@@ -8,7 +8,7 @@ External orchestrators (CI runners, batch schedulers, the user's own shell) that
 
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
-| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-4-7`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6` |
+| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-4-8`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6` |
 | `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN/RE→`medium` |
 | `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` | **Yes — audited** (see § Permission-Mode Pinning below) | SR/FN→`default`; DV under `--auto-continue`→`bypassPermissions` |
 | `workspace_path` | `--cwd <path>` | string | N/A (in-process inherits parent cwd) | milestone tracks → per-issue worktree |
@@ -26,9 +26,9 @@ The minimum recommended flag set per stage when dispatching from a headless runn
 
 | Stage | Canonical headless one-liner |
 |---|---|
-| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-7 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` |
-| **DR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-7 --effort high --permission-mode acceptEdits -- igrsoft:technical-lead < dr-prompt.txt` |
-| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-7 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` |
+| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` |
+| **DR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort high --permission-mode acceptEdits -- igrsoft:technical-lead < dr-prompt.txt` |
+| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` |
 | **QA** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort high --permission-mode acceptEdits -- igrsoft:qa-engineer < qa-prompt.txt` |
 | **FN** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:project-manager < fn-prompt.txt` |
 | **RE** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:release-engineer < re-prompt.txt` |
@@ -123,6 +123,34 @@ Without this line, the post-worktask audit cannot distinguish in-process delegat
 - **Do not** mix `--cwd` and `task.metadata.workspace_path` pointing at different paths. The runner MUST resolve one canonical worktree directory and pass it consistently.
 - **Do not** set `dangerously_skip_permissions: true` on PL/SR/FN tasks — these are gated stages where human review is the entire point. PL0 SHOULD reject such metadata at validation time.
 - **Do not** treat the CLI flags as a replacement for agent-frontmatter `tools:` restrictions. The flags configure the *session*; the frontmatter restricts the *agent*. Both apply.
+
+## Background Shell Dispatch (v2.1.154)
+
+CC v2.1.154 introduces two new ways to spawn background shell work without occupying a foreground agent turn:
+
+### `claude agents` `! <command>` — inline background shell
+
+From inside a running session, prefix any shell command with `!` to dispatch it as a background task:
+
+```bash
+# Inside a claude agents session — runs in background, result delivered as a message
+! git log --oneline -20
+! swift build 2>&1 | tail -20
+```
+
+The `!`-prefixed command runs in a background shell and delivers stdout/stderr back into the session context when complete. Unlike a `Bash` tool call, it does not block the agent's turn — the agent can continue planning while the shell command executes.
+
+### `claude --bg --exec '<command>'`
+
+From outside a session, launch a one-shot background command that auto-exits on completion:
+
+```bash
+claude --bg --exec 'cd "$WORKTREE" && swift build 2>&1 > .context/build.log'
+```
+
+Useful for CI/cron jobs that need Claude's tool environment but don't require an interactive agent. The session is ephemeral — it exits when the command exits. Combine with `--cwd`, `--model`, `--permission-mode` as needed.
+
+Both mechanisms are additive to the existing `claude agents run … < prompt.txt` headless pattern above; choose based on whether you need full agent reasoning (`agents run`) or a shell side-effect (`! <cmd>` / `--bg --exec`).
 
 ## Related
 

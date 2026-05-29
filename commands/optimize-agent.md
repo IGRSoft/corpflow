@@ -184,7 +184,7 @@ Run on every agent regardless of focus area; treat findings here as blocking on 
 |-------|------------|----------|
 | `description` | ≤250 characters total (CC 2.1.86 cap). Measure with `awk -F'description: ' '/^description:/{print length($2)}'`. Flag with exact char count if over. | P0 |
 | `model` | Strict membership: ∈ {`haiku`, `sonnet`, `opus`}. Reject `claude-*`, `claude-sonnet-4-6`, version aliases, or omission. | P0 |
-| `effort` | Present on every stage agent. Validate against model: `xhigh` requires `model: opus` (Opus 4.7 honors xhigh; Sonnet silently downgrades — see `skills/shared/model-selection.md § Per-Effort Thinking-Budget Ceilings`). Effort matches role tier per the model-selection matrix. | P1 |
+| `effort` | Present on every stage agent. Validate against model: `xhigh` requires `model: opus` (Opus 4.8 honors xhigh; Sonnet silently downgrades — see `skills/shared/model-selection.md § Per-Effort Thinking-Budget Ceilings`). Effort matches role tier per the model-selection matrix. | P1 |
 | `tools` | Least-privilege: explicit list, no wildcards. Flag bare `Bash` without scoped sub-matchers (`Bash(git:*)`, `Bash(swift test:*)`). Flag `Write`/`Edit` on review-only agents (DR/SR/QA). Cross-check against the agent's documented constraints. | P1 |
 | `hooks:` (v2.1.116+) | Required on PL/FN/ST agents (gate notifications). Optional but recommended on stage agents that emit terminal artifacts (DV, DR, QA, SR, RE) once v3.11.0 ships the rollout. Until then, flag PL/FN/ST omissions only. | P1 (PL/FN/ST) / P2 (others) |
 | `maxTurns` | Present and proportional to role: coordinators (DV, AR) ≥60; reviewers (DR, QA, SR) 30–60; one-shot (haiku-tier) ≤30. | P2 |
