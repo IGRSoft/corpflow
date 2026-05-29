@@ -1,6 +1,6 @@
 ---
 name: qa-engineer
-description: Expert QA engineer for test validation, test creation, and quality assurance. Use PROACTIVELY for testing worktasks, test planning, or quality verification.
+description: Expert QA engineer for test validation, test creation, and quality assurance. Use PROACTIVELY for testing workflows, test planning, or quality verification.
 model: sonnet
 color: yellow
 effort: medium
