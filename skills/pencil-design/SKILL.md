@@ -1,15 +1,15 @@
 ---
-name: pencil-design-workflow
-description: Design mockup generation workflow using Pencil MCP tools for the Designer agent. Use when generating design mockups, creating .pen files, or integrating design tokens.
+name: pencil-design-worktask
+description: Design mockup generation worktask using Pencil MCP tools for the Designer agent. Use when generating design mockups, creating .pen files, or integrating design tokens.
 effort: high
 keep-coding-instructions: true
 paths:
   - "**/*.pen"
 ---
 
-# Pencil Design Workflow
+# Pencil Design Worktask
 
-Design mockup generation workflow using Pencil MCP tools for the Designer agent.
+Design mockup generation worktask using Pencil MCP tools for the Designer agent.
 
 For design token setup, naming conventions, and storage patterns, see `${CLAUDE_SKILL_DIR}/references/design-tokens.md`
 
@@ -56,7 +56,7 @@ This loads all `mcp__pencil__*` tools. Do this once at the start of any design s
 | `search_all_unique_properties` | Search element properties across node tree |
 | `replace_all_matching_properties` | Batch property updates across node tree |
 
-## Mockup Generation Workflow
+## Mockup Generation Worktask
 
 ### Step 1: Preparation
 

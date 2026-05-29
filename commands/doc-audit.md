@@ -202,7 +202,7 @@ Owner: Technical Writer
 This command works with:
 - `/api-docs` - Generate missing API docs
 - `/readme-update` - Fix README issues
-- `/workflow` DC stage - Documentation phase
+- `/worktask` DC stage - Documentation phase
 
 ## Related
 

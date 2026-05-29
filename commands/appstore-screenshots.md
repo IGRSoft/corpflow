@@ -117,7 +117,7 @@ Based on `--platform` flag, select device sets from the `appstore-screenshots` s
 
 ### Step 6 — Create .pen Files with Pencil MCP
 
-Create `AppStore/screenshots/` directory for output files. Follow the Pencil MCP workflow in `skills/appstore-screenshots/SKILL.md §Building with batch_design`.
+Create `AppStore/screenshots/` directory for output files. Follow the Pencil MCP worktask in `skills/appstore-screenshots/SKILL.md §Building with batch_design`.
 
 Key rules:
 - Max 25 ops per `batch_design` call; batch up to 3 slides per call (~7 ops/slide)

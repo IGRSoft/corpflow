@@ -1,6 +1,6 @@
 ---
 name: incident-response
-description: Incident classification, hotfix workflow, rollback procedures, and post-mortem templates for IR stage. Use when handling production incidents or emergency hotfixes.
+description: Incident classification, hotfix worktask, rollback procedures, and post-mortem templates for IR stage. Use when handling production incidents or emergency hotfixes.
 effort: high
 ---
 
@@ -15,7 +15,7 @@ Guidelines for incident triage, hotfix coordination, and post-mortem facilitatio
 | Priority | Impact | Response Time | Examples |
 |----------|--------|---------------|----------|
 | **P0 - Critical** | Complete outage, data loss | Immediate, all hands | Site down, data breach, security incident |
-| **P1 - High** | Major feature broken | < 1 hour | Login broken, payments failing, core workflow blocked |
+| **P1 - High** | Major feature broken | < 1 hour | Login broken, payments failing, core worktask blocked |
 | **P2 - Medium** | Feature degraded | < 4 hours | Slow performance, secondary feature broken |
 | **P3 - Low** | Minor issue | Next business day | UI glitch, edge case bug, cosmetic issue |
 
@@ -43,7 +43,7 @@ Guidelines for incident triage, hotfix coordination, and post-mortem facilitatio
 ## Otherwise → P3
 ```
 
-## Emergency Workflow
+## Emergency Worktask
 
 ### Flow Diagram
 
@@ -117,7 +117,7 @@ This language is mandatory, not a suggestion — the prompt template in
     ▼                   ▼              │ YES       │ NO
  ROLLBACK        Is hotfix viable      ▼           ▼
                  in < 1 hour?       Normal     HOTFIX
-                      │             workflow
+                      │             worktask
             ┌─────────┴─────────┐
             │ YES               │ NO
             ▼                   ▼

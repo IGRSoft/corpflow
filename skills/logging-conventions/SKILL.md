@@ -6,7 +6,7 @@ effort: low
 
 # Logging Conventions
 
-Runtime log capture routing for the igrsoft workflow. Pairs with `task-folder-organization`.
+Runtime log capture routing for the igrsoft worktask. Pairs with `task-folder-organization`.
 
 ## The Split
 
@@ -66,7 +66,7 @@ When called from Claude Code's `Bash` tool with `run_in_background: true`, use t
 
 ## Cleanup & Retention
 
-- **Per-task hygiene**: `.context/logs/` is cleared together with the rest of `.context/` when the task archives (workflow FN stage or `/workflow` completion).
+- **Per-task hygiene**: `.context/logs/` is cleared together with the rest of `.context/` when the task archives (worktask FN stage or `/worktask` completion).
 - **Size guard**: Each filename has a unique timestamp, so no rotation. Large logs remain readable; agents should stream or truncate on disk if needed.
 - **Secrets**: Do not log secrets, tokens, or keychain data. If a tool prints them, redact before `tee` (e.g., `sed -E 's/(authorization|api[_-]?key|password|token|secret|bearer)[=:]\s*\S+/\1=REDACTED/'`). This pattern is starter-level; review the output to ensure no credentials leaked.
 - **Git**: `.context/` follows the project's existing ignore policy — no special handling.

@@ -1,13 +1,13 @@
-# Milestone Initialization & Workflow Setup
+# Milestone Initialization & Worktask Setup
 
 ## Conventions used in this document
 
-- **`planFile`** — the plan filename PL produced for the current workflow run (`planning-N.md`, e.g. `planning-0.md`, `planning-3.md`). Computed by PL0 per `agents/product-manager.md § Plan File Naming`. Every downstream task carries it as `metadata.plan_file`; the same value is interpolated into `context_files`. Stage agents resolve the plan file from `task.metadata.plan_file` first, then newest `.context/planning-*.md`.
-- **handoff-protocol mode** — the preferred metadata mode (per `skills/workflow/references/handoff-protocol.md`): tasks carry `state_file` + `context_refs` (anchor list); legacy `context_files` is retained for fallback path F1 (state.json absent). Examples below show both forms — use `context_refs` for new code; keep `context_files` as the safety net.
+- **`planFile`** — the plan filename PL produced for the current worktask run (`planning-N.md`, e.g. `planning-0.md`, `planning-3.md`). Computed by PL0 per `agents/product-manager.md § Plan File Naming`. Every downstream task carries it as `metadata.plan_file`; the same value is interpolated into `context_files`. Stage agents resolve the plan file from `task.metadata.plan_file` first, then newest `.context/planning-*.md`.
+- **handoff-protocol mode** — the preferred metadata mode (per `skills/worktask/references/handoff-protocol.md`): tasks carry `state_file` + `context_refs` (anchor list); legacy `context_files` is retained for fallback path F1 (state.json absent). Examples below show both forms — use `context_refs` for new code; keep `context_files` as the safety net.
 
 ## PL0 state.json Initialization (Phase 1)
 
-PL0 (or `commands/workflow.md` Phase 1) creates `.context/state.json` immediately after `mkdir -p .context/`. This seeds the workflow ledger that every subsequent stage reads and patches.
+PL0 (or `commands/worktask.md` Phase 1) creates `.context/state.json` immediately after `mkdir -p .context/`. This seeds the worktask ledger that every subsequent stage reads and patches.
 
 ```bash
 mkdir -p .context/
@@ -17,7 +17,7 @@ tmp=".context/.state.json.$$.${RANDOM}.tmp"
 cat > "$tmp" <<EOF
 {
   "version": 1,
-  "workflow_id": "${WORKFLOW_ID}",
+  "worktask_id": "${WORKTASK_ID}",
   "plan_file": ".context/${PLAN_FILE}",
   "platform": "${PLATFORM:-all}",
   "stages": { "PL": { "status": "in_progress" } },
@@ -39,7 +39,7 @@ Subsequent stage agents read `.context/state.json` first; if absent, they fall b
 
 ## Hook Installation
 
-PL0 (or `commands/workflow.md` Phase 1) MUST verify the `state-merge.sh` SubagentStop hook is installed before proceeding. This hook is the Layer 2 safety net — it patches `state.json` from artifact frontmatter when stage agents forget to self-patch (Layer 1) or when the orchestrator's Step 6.5 check is skipped.
+PL0 (or `commands/worktask.md` Phase 1) MUST verify the `state-merge.sh` SubagentStop hook is installed before proceeding. This hook is the Layer 2 safety net — it patches `state.json` from artifact frontmatter when stage agents forget to self-patch (Layer 1) or when the orchestrator's Step 6.5 check is skipped.
 
 ```bash
 # Idempotent hook installation — run after state.json seed, before PL0 delegation.
@@ -78,10 +78,10 @@ const ar0 = TaskCreate({
       `${planFile}#scope`,
       `${planFile}#acceptance-criteria`
     ]),
-    // Legacy fallback (path F1) — kept so workflow runs even if state.json absent:
+    // Legacy fallback (path F1) — kept so worktask runs even if state.json absent:
     context_files: `${planFile},.context/errors/software-architector.md`,
     plan_file: planFile,
-    workflow_id: workflowId, priority: "medium"
+    worktask_id: worktaskId, priority: "medium"
   }
 });
 ```
@@ -109,7 +109,7 @@ Skip issues that already have linked PRs:
 gh api /repos/:owner/:repo/issues/{issue#}/timeline --jq '[.[] | select(.event == "cross-referenced" and .source.issue.pull_request)] | length'
 ```
 
-If count > 0, mark issue as `skipped_has_pr` and exclude from workflow.
+If count > 0, mark issue as `skipped_has_pr` and exclude from worktask.
 
 ### 3. Sort by Priority
 
@@ -208,9 +208,9 @@ Location: `.worktrees/orchestrator.json`
 }
 ```
 
-### 6. Execute Per-Issue Workflow
+### 6. Execute Per-Issue Worktask
 
-Each issue runs the full staged workflow independently:
+Each issue runs the full staged worktask independently:
 
 ```
 Issue #27 → feature/27-watermark → PL→AR→TL→DV→DR→QA→DC→FN→ST → PR → complete
@@ -219,19 +219,19 @@ Issue #26 → feature/26-font-family → PL→AR→TL→DV→DR→QA→DC→FN�
 
 See `shared/milestone-helpers.md` for helper functions.
 
-## Workflow Initialization
+## Worktask Initialization
 
 Only PL0 is created at startup. PL0 creates all subsequent stage tasks after planning.
 
 ```typescript
-const workflowId = "dark-mode-2025";
+const worktaskId = "dark-mode-2025";
 
 // Create only PL0 — PL agent creates subsequent stages after planning
 TaskCreate({
   subject: "PL0: Planning",
   description: "Define requirements, assess complexity, create stage tasks",
   activeForm: "Planning task requirements",
-  metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", workflow_id: workflowId, priority: "medium" }
+  metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: worktaskId, priority: "medium" }
 });
 
 // Start immediately
@@ -249,7 +249,7 @@ performed codebase exploration. This prevents stage agents from re-reading the s
 - User provided Figma URLs or external context
   - When Figma URLs are provided, PL0 captures screenshots to `.context/designs/figma-*.png` and summarizes design context here
 
-> **Note**: Figma screenshot capture applies to ALL workflow triggers including `micro:`.
+> **Note**: Figma screenshot capture applies to ALL worktask triggers including `micro:`.
 > For `micro:`, create `.context/designs/` and save screenshots even though no `.context/planning-N.md` is generated.
 - Task involves modifying existing code (not greenfield)
 
@@ -319,7 +319,7 @@ After planning completes, PL0 creates stage tasks based on complexity score. Eac
 
 ```typescript
 // Example: PL0 creates stages for a medium-complexity task
-const workflowId = "dark-mode-2025";
+const worktaskId = "dark-mode-2025";
 
 // Capture task IDs returned by TaskCreate.
 // NOTE: context_files includes error_file per task-system § context_files ↔ error_file coupling.
@@ -333,7 +333,7 @@ const ar0 = TaskCreate({
     error_file: ".context/errors/software-architector.md",
     context_files: `exploration.md,${planFile},.context/errors/software-architector.md`,
     plan_file: planFile,  // e.g. "planning-0.md" — propagated so AR resolves the right plan
-    workflow_id: workflowId, priority: "medium"
+    worktask_id: worktaskId, priority: "medium"
   }
 });
 
@@ -346,7 +346,7 @@ const dv0 = TaskCreate({
     error_file: ".context/errors/developer.md",
     context_files: `exploration.md,${planFile},analyzing.md,coordination.md,.context/errors/developer.md`,
     plan_file: planFile,
-    workflow_id: workflowId, priority: "medium"
+    worktask_id: worktaskId, priority: "medium"
   }
 });
 
@@ -359,7 +359,7 @@ const dr0 = TaskCreate({
     error_file: ".context/errors/technical-lead.md",
     context_files: `exploration.md,${planFile},analyzing.md,coordination.md,development.md,.context/errors/technical-lead.md`,
     plan_file: planFile,
-    workflow_id: workflowId, priority: "medium"
+    worktask_id: worktaskId, priority: "medium"
   }
 });
 
@@ -372,7 +372,7 @@ const qa0 = TaskCreate({
     error_file: ".context/errors/qa-engineer.md",
     context_files: `exploration.md,${planFile},developer-review.md,testing.md,.context/errors/qa-engineer.md`,
     plan_file: planFile,
-    workflow_id: workflowId, priority: "medium"
+    worktask_id: worktaskId, priority: "medium"
   }
 });
 
@@ -446,7 +446,7 @@ const dv1 = TaskCreate({
     error_file: ".context/errors/developer.md",
     context_files: `${planFile},analyzing.md,coordination.md,.context/errors/developer.md`,
     plan_file: planFile,
-    workflow_id: workflowId, priority: "medium"
+    worktask_id: worktaskId, priority: "medium"
   }
 });
 
@@ -458,7 +458,7 @@ const dv2 = TaskCreate({
     error_file: ".context/errors/developer.md",
     context_files: `${planFile},analyzing.md,coordination.md,.context/errors/developer.md`,
     plan_file: planFile,
-    workflow_id: workflowId, priority: "medium"
+    worktask_id: worktaskId, priority: "medium"
   }
 });
 
@@ -485,7 +485,7 @@ const dv1 = TaskCreate({
     error_file: ".context/errors/developer.md",
     context_files: `${planFile},analyzing.md,.context/errors/developer.md`,
     plan_file: planFile,
-    workflow_id: workflowId, priority: "medium"
+    worktask_id: worktaskId, priority: "medium"
   }
 });
 
@@ -497,7 +497,7 @@ const dv2 = TaskCreate({
     error_file: ".context/errors/developer.md",
     context_files: `${planFile},analyzing.md,.context/errors/developer.md`,
     plan_file: planFile,
-    workflow_id: workflowId, priority: "medium"
+    worktask_id: worktaskId, priority: "medium"
   }
 });
 

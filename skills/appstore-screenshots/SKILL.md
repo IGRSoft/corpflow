@@ -1,6 +1,6 @@
 ---
 name: appstore-screenshots
-description: Device specs, layout patterns, typography, and Pencil MCP workflow for App Store screenshot generation. Use when creating App Store screenshots or marketing visuals.
+description: Device specs, layout patterns, typography, and Pencil MCP worktask for App Store screenshot generation. Use when creating App Store screenshots or marketing visuals.
 effort: high
 keep-coding-instructions: true
 paths:
@@ -10,7 +10,7 @@ paths:
 
 # App Store Screenshots Reference
 
-Device specifications, layout patterns, typography tables, and Pencil MCP workflow for generating professional App Store screenshots as `.pen` files.
+Device specifications, layout patterns, typography tables, and Pencil MCP worktask for generating professional App Store screenshots as `.pen` files.
 
 For device dimensions and font sizes, see `${CLAUDE_SKILL_DIR}/references/device-specs.md`
 
@@ -38,7 +38,7 @@ App store screenshots are the #1 conversion driver. They must sell the app in 2 
 | Cloud Sync | Your Data, Everywhere |
 | Widget Support | Info at a Glance |
 
-## Pencil MCP Workflow
+## Pencil MCP Worktask
 
 ### Loading Tools
 

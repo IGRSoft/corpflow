@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# PreCompact → state checkpoint (igrsoft workflow plugin, v3.10.0+).
+# PreCompact → state checkpoint (igrsoft worktask plugin, v3.10.0+).
 # Copies .context/state.json to .context/state.checkpoint-<ts>.json before
-# auto-compaction so long workflow runs survive context summarization.
+# auto-compaction so long worktask runs survive context summarization.
 # Pairs with the existing PostCompact recovery prose in
 # skills/context-compression/SKILL.md.
 #
@@ -33,7 +33,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
 fi
 
 if [ ! -f "$STATE_FILE" ]; then
-  # No active workflow state — nothing to checkpoint, but record the event.
+  # No active worktask state — nothing to checkpoint, but record the event.
   if command -v jq >/dev/null 2>&1; then
     jq -cn --arg ts "$(date -u +%FT%TZ)" '{
       ts: $ts,

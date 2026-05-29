@@ -19,7 +19,7 @@ Every classified diff hunk must be mapped to exactly one owning file (the "targe
 | 11 | `.context/complete-summary-*.md` | `agents/project-manager.md` | |
 | 12 | `.context/retrospective-*.md` | `agents/stakeholder.md` | Edits to own artifact — self-improvement for ST itself. |
 | 13 | Source code (`src/**`, `app/**`, `lib/**`, `Sources/**`) | Resolved DV agent (same lookup as row 5) | Default to `agents/developer.md` if DV agent missing. |
-| 14 | `README.md`, `docs/**`, `*.md` at repo root | `agents/technical-writer.md` | Only if DC stage ran in this workflow. |
+| 14 | `README.md`, `docs/**`, `*.md` at repo root | `agents/technical-writer.md` | Only if DC stage ran in this worktask. |
 | 15 | Tests (`tests/**`, `**/*Tests.swift`, `**/*_test.py`, `spec/**`) | `agents/qa-engineer.md` | Only if QA stage ran. |
 | 16 | Config (`*.json`, `*.toml`, `*.yml`, `*.yaml`, `Makefile`, `Package.swift`) | Resolved DV agent (row 5) | Exception: `plugin.json` → `agents/workflow-engineer.md`. |
 | 17 | No rule matched | Discard (logged) | Log under `## Out-of-Context Discards` in the run log. |
@@ -35,7 +35,7 @@ else:
     log under "Out-of-Context Discards"; do NOT include in learnings.md
 ```
 
-**Why:** if the user edited an artifact produced by an agent that did not participate in this workflow (e.g., user tweaked `.context/security-review-N.md` from a previous run while running a non-secure workflow), we must not propose updates to `agents/security-reviewer.md` — SR did not participate, so the edit belongs to a different feedback loop.
+**Why:** if the user edited an artifact produced by an agent that did not participate in this worktask (e.g., user tweaked `.context/security-review-N.md` from a previous run while running a non-secure worktask), we must not propose updates to `agents/security-reviewer.md` — SR did not participate, so the edit belongs to a different feedback loop.
 
 ## Platform-Aware Resolution
 
@@ -44,7 +44,7 @@ When a stage was delegated to a cross-plugin agent (e.g., `apple-developer:ios-d
 - Target path = `plugins/<plugin>/agents/<basename>.md` where plugin comes from the qualified agent name.
 - If the target plugin is outside this repo (external), discard the proposal and log:
   ```
-  Cross-plugin target skipped: <qualified-agent> lives in <plugin>, not editable from this workflow.
+  Cross-plugin target skipped: <qualified-agent> lives in <plugin>, not editable from this worktask.
   ```
 
 ## Edge Cases

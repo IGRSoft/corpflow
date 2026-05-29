@@ -90,7 +90,7 @@ Generate a Product Requirements Document (PRD) from task description or user sto
 This command feeds into:
 - `/arch-decision` - Technical decisions from requirements
 - `/test-plan` - Test cases from acceptance criteria
-- `/workflow` - Requirements for PL stage
+- `/worktask` - Requirements for PL stage
 
 ## Related
 

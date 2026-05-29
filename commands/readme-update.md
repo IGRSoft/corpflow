@@ -199,4 +199,4 @@ This command works with:
 
 - [technical-writer](../agents/technical-writer.md) - Documentation expertise
 - [doc-audit](./doc-audit.md) - Documentation audit
-- [workflow](./workflow.md) - DC stage documentation
+- [worktask](./worktask.md) - DC stage documentation

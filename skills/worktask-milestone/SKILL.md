@@ -1,10 +1,10 @@
 ---
-name: milestone-workflow
-description: GitHub milestone integration with isolated workspaces for multi-issue tracking. Use when running milestone-based workflows with --milestone flag or managing parallel issue tracks.
+name: milestone-worktask
+description: GitHub milestone integration with isolated workspaces for multi-issue tracking. Use when running milestone-based worktasks with --milestone flag or managing parallel issue tracks.
 effort: high
 ---
 
-# Milestone Workflow
+# Milestone Worktask
 
 GitHub milestone integration with isolated workspaces for each ticket.
 
@@ -28,7 +28,7 @@ Each ticket executes in its own isolated workspace.
 ├── orchestrator.json              # Root orchestrator state
 └── milestone-{N}/
     └── {issue#}/
-        ├── .context/              # Standard workflow artifacts
+        ├── .context/              # Standard worktask artifacts
         ├── workspace.json         # Workspace metadata and state
         └── handoff.md             # Compressed context for orchestrator
 ```
@@ -43,7 +43,7 @@ Each issue gets a dedicated git worktree with full source isolation:
 └── milestone-{N}/
     └── {issue#}/                  # Git worktree root (full source copy)
         ├── .git                   # Worktree git link file
-        ├── .context/              # Workflow artifacts (inside worktree)
+        ├── .context/              # Worktask artifacts (inside worktree)
         ├── workspace.json         # Workspace metadata (isolation: "worktree")
         ├── handoff.md             # Compressed context
         ├── src/                   # Full source tree
@@ -74,7 +74,7 @@ This reduces disk usage per worktree and speeds up initialization.
 
 ### FN Gate Bypass in Milestone Mode
 
-Milestone orchestration processes N issues sequentially (or in parallel tracks) without intervening user input. To prevent each per-issue workflow from stalling at the FN approval gate defined in `skills/workflow/SKILL.md § FN Gate`, every per-issue PL0 task is created with `metadata.fn_gate = "bypass"`. The orchestrator's gate check honors this field and proceeds directly to commit/push/PR for each issue. The same bypass applies under `--worktree` (where issue isolation already serves the review purpose) and `--auto-continue`. If you need to review each commit before push, use standard mode (`/workflow "..."`) instead of `--milestone`.
+Milestone orchestration processes N issues sequentially (or in parallel tracks) without intervening user input. To prevent each per-issue worktask from stalling at the FN approval gate defined in `skills/worktask/SKILL.md § FN Gate`, every per-issue PL0 task is created with `metadata.fn_gate = "bypass"`. The orchestrator's gate check honors this field and proceeds directly to commit/push/PR for each issue. The same bypass applies under `--worktree` (where issue isolation already serves the review purpose) and `--auto-continue`. If you need to review each commit before push, use standard mode (`/worktask "..."`) instead of `--milestone`.
 
 > For headless `-p` mode runs, set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait entirely. Combined with `--mcp-config`, server connections are bounded at 5s instead of blocking on the slowest server (v2.1.89+).
 
@@ -90,7 +90,7 @@ pending → in_progress → completed
 1. Set `status: "in_progress"`
 2. Assign `track: N`
 3. Checkout dedicated branch
-4. Begin staged workflow (PL → AR → ... → ST)
+4. Begin staged worktask (PL → AR → ... → ST)
 
 **Completing an issue**:
 1. Push branch to origin
@@ -164,7 +164,7 @@ TaskCreate({
 
 ## Execution Flow
 
-### All Issues: `/workflow --milestone:N`
+### All Issues: `/worktask --milestone:N`
 
 1. Fetch milestone and issues from GitHub
 2. Create orchestrator with sorted issues
@@ -172,11 +172,11 @@ TaskCreate({
 4. Each workspace executes independently
 5. On completion: PR created, track freed, next issue assigned
 
-### Single Issue: `/workflow --milestone:N:ISSUE`
+### Single Issue: `/worktask --milestone:N:ISSUE`
 
 1. Validate issue belongs to milestone
 2. Create single workspace
-3. Execute workflow stages
+3. Execute worktask stages
 4. Create PR with "Closes #ISSUE"
 
 ### Multi-Issue Parallelism
@@ -216,6 +216,6 @@ See references/ for detailed schemas, git integration commands, and agent teams 
 
 ## Related
 
-- `workflow.md` - Core workflow documentation
+- `worktask.md` - Core worktask documentation
 - `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md` - Stage code reference
 - `${CLAUDE_SKILL_DIR}/../shared/task-system.md` - Task System integration

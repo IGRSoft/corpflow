@@ -1,12 +1,12 @@
 ---
 name: milestone-helpers
-description: Reusable helper function patterns for milestone workflow operations. Use when implementing milestone workspace initialization, PR detection, or worktree management.
+description: Reusable helper function patterns for milestone worktask operations. Use when implementing milestone workspace initialization, PR detection, or worktree management.
 effort: low
 ---
 
 # Milestone Helper Functions
 
-Reusable patterns for milestone workflow operations.
+Reusable patterns for milestone worktask operations.
 
 > **Note**: Code examples below are pseudocode for conceptual clarity.
 > In production, use secure command execution (e.g., `execFile` instead of shell).
@@ -29,7 +29,7 @@ Reusable patterns for milestone workflow operations.
 | `createSparseWorktree(milestone, issue, baseBranch, sparsePaths)` | Create worktree with sparse checkout |
 | `listMilestoneWorktrees(milestoneNumber)` | List all worktrees for a milestone |
 | `resolveIssueWorkdir(milestone, issueNumber, options)` | Abstract workdir path for legacy/worktree modes |
-| `completeIssueWorktree(milestone, issueNumber)` | Complete issue workflow in worktree mode |
+| `completeIssueWorktree(milestone, issueNumber)` | Complete issue worktask in worktree mode |
 
 See references/ for full implementations with code examples.
 
@@ -48,6 +48,6 @@ See references/ for full implementations with code examples.
 
 ## Related
 
-- `../../workflow-milestone/SKILL.md` - Full workflow documentation
-- `workflow.md` - Core workflow system
+- `../../worktask-milestone/SKILL.md` - Full worktask documentation
+- `worktask.md` - Core worktask system
 - `stage-codes.md` - Stage code reference

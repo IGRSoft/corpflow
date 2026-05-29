@@ -1,12 +1,12 @@
 ---
 name: cost-optimization
-description: Cost tracking and optimization strategies for AI agent workflows. Apply for budget management, model selection, and efficiency analysis.
+description: Cost tracking and optimization strategies for AI agent worktasks. Apply for budget management, model selection, and efficiency analysis.
 effort: medium
 ---
 
 # Cost Optimization
 
-Comprehensive strategies for managing AI agent costs, tracking token usage, and optimizing workflow efficiency.
+Comprehensive strategies for managing AI agent costs, tracking token usage, and optimizing worktask efficiency.
 
 For per-stage token baselines, context window improvements, and ethics cost budgeting, see `${CLAUDE_SKILL_DIR}/references/token-baselines.md`
 
@@ -152,16 +152,16 @@ Read(file_path: "path/to/large.swift", offset: 340, limit: 40)
 |----------|--------|
 | Simple bug fix | Skip AR stage, minimal TL stage |
 | Documentation-only | Skip DV stage, minimal QA stage |
-| Hotfix | Use `quick:` workflow (PL→DV→DR→QA only) |
+| Hotfix | Use `quick:` worktask (PL→DV→DR→QA only) |
 | Trivial change | Use `micro:` (plan → approve → execute) |
 
-**Workflow Selection Guide**:
+**Worktask Selection Guide**:
 ```
-Complexity → Workflow → Stages → Est. Cost
+Complexity → Worktask → Stages → Est. Cost
 Trivial    → micro:   → 1      → $0.01-0.02
 Simple     → quick:   → 4      → $0.05-0.10
-Standard   → workflow:→ 9      → $0.20-0.40
-Complex    → workflow:→ 9+iter → $0.50-1.00+
+Standard   → worktask:→ 9      → $0.20-0.40
+Complex    → worktask:→ 9+iter → $0.50-1.00+
 ```
 
 ## Per-Stage Tracking
@@ -242,7 +242,7 @@ counts F1 fallback firings from `.context/logs/fallback-*.log`. See
 
 ## Prompt Caching (1h TTL) & Handoff Protocol
 
-The handoff protocol (`skills/workflow/references/handoff-protocol.md`) is built around the Anthropic prompt cache. Two recommendations make the savings real:
+The handoff protocol (`skills/worktask/references/handoff-protocol.md`) is built around the Anthropic prompt cache. Two recommendations make the savings real:
 
 ### Recommended `settings.json` stanza
 
@@ -291,7 +291,7 @@ Per `handoff-protocol.md#cache-prefix`:
 - Stage 2..N, retry within same stage: ≈ 80% (full preamble cached).
 - Cross-stage average: ≈ 60% — meets AC-14 threshold.
 
-CI lint (`skills/workflow/references/cache-lint.sh`) asserts byte-stability of preamble sections [1]+[2]+[4] across consecutive stages of the same `workflow_id`. Drift collapses cache-hit rate.
+CI lint (`skills/worktask/references/cache-lint.sh`) asserts byte-stability of preamble sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`. Drift collapses cache-hit rate.
 
 ## Budget Tracking
 
@@ -314,21 +314,21 @@ Where:
 | **50%** | Warning | Log to console |
 | **75%** | Notify | Alert user, suggest optimizations |
 | **90%** | Critical | Force context compression, recommend model downgrades |
-| **100%** | Pause | Stop workflow, require explicit approval to continue |
+| **100%** | Pause | Stop worktask, require explicit approval to continue |
 
 ## Optimization Checklist
 
-Before starting workflow:
-- [ ] Select appropriate workflow type (micro/quick/standard)
+Before starting worktask:
+- [ ] Select appropriate worktask type (micro/quick/standard)
 - [ ] Set budget limit if applicable
 - [ ] Verify model assignments per stage
 
-During workflow:
+During worktask:
 - [ ] Monitor token usage at stage transitions
 - [ ] Apply context compression at handoffs
 - [ ] Use haiku for sub-tasks where possible
 
-After workflow:
+After worktask:
 - [ ] Review cost breakdown by stage
 - [ ] Identify optimization opportunities
 - [ ] Update baseline estimates if needed
@@ -353,13 +353,13 @@ After workflow:
 | Opus for simple tasks | 50x cost increase | Use haiku/sonnet |
 | Separate API calls for each file | Overhead tokens | Batch reads |
 | Retrying without context compression | Compounds cost | Compress first |
-| Full workflow for trivial changes | Unnecessary stages | Use micro/quick |
+| Full worktask for trivial changes | Unnecessary stages | Use micro/quick |
 | Reading entire large files | Wastes context on irrelevant code | Use offset/limit after Grep (§4c) |
 | Sequential git log/show/diff | 4 commands for 1 answer | Single combined git command (§4a) |
 | Separate greps for related symbols | Multiplies round-trips | Use `\|` alternation (§4b) |
 
 ## Related Skills
 
-- `${CLAUDE_SKILL_DIR}/../workflow/SKILL.md` - Workflow system documentation
+- `${CLAUDE_SKILL_DIR}/../worktask/SKILL.md` - Worktask system documentation
 - `${CLAUDE_SKILL_DIR}/../agent-coordination/SKILL.md` - Multi-agent coordination patterns
 - `${CLAUDE_SKILL_DIR}/../claude-constitution/SKILL.md` - Constitutional principles and ethics framework

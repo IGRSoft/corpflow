@@ -1,21 +1,21 @@
 ---
 name: estimation-methodology
-description: Standardized complexity scoring (0-50 scale) and T-shirt sizing for project estimation. Use when estimating task complexity, effort, or determining workflow tier.
+description: Standardized complexity scoring (0-50 scale) and T-shirt sizing for project estimation. Use when estimating task complexity, effort, or determining worktask tier.
 effort: low
 ---
 
 # Estimation Methodology
 
-Standardized project estimation for Claude Code workflows.
+Standardized project estimation for Claude Code worktasks.
 
 ## T-Shirt Sizing → Story Points (Range)
 
-| Size | SP Min | SP Max | Hours Min | Hours Max | Workflow |
+| Size | SP Min | SP Max | Hours Min | Hours Max | Worktask |
 |------|--------|--------|-----------|-----------|----------|
 | XS | 1 | 1 | 6 | 6 | `micro:` |
 | S | 2 | 3 | 12 | 18 | `quick:` |
-| M | 4 | 5 | 24 | 30 | `workflow:` |
-| L | 6 | 10 | 36 | 60 | `workflow:` |
+| M | 4 | 5 | 24 | 30 | `worktask:` |
+| L | 6 | 10 | 36 | 60 | `worktask:` |
 | XL | 13 | 21 | 78 | 126 | Split first |
 
 ## Story Points to Hours
@@ -96,7 +96,7 @@ Phase Cost Min = Phase Hours Min × Rate  |  Phase Cost Max = Phase Hours Max ×
 Phase % Min = Phase Hours Min / Total Hours Min × 100  |  Phase % Max = Phase Hours Max / Total Hours Max × 100
 ```
 
-## Estimation Workflow
+## Estimation Worktask
 
 1. **Gather inputs**: scope.csv, design/, rate, platform, team size
 2. **T-shirt sizing**: Assign XS-XL to each feature
@@ -108,7 +108,7 @@ Phase % Min = Phase Hours Min / Total Hours Min × 100  |  Phase % Max = Phase H
 8. **Senior review**: Platform-specific adjustments
 9. **Export**: Generate CSVs for Google Sheets
 
-## Workflow Tier Selection
+## Worktask Tier Selection
 
 Canonical tier-selection logic. `commands/estimate.md` cites this section instead of duplicating it.
 
@@ -118,18 +118,18 @@ complexity = sum of 5 factors (0–25)
 security   = true if Risk Level ≥ 4 OR feature touches auth/PII/payments
 
 IF size == XL:
-  → split before workflow tier selection
+  → split before worktask tier selection
 ELSE IF size == XS AND complexity ≤ 5 AND NOT security:
   → micro:
 ELSE IF size == S AND NOT security:
   → quick:
 ELSE IF size ∈ {M, L} OR security:
-  → workflow:
+  → worktask:
 ```
 
 Notes:
 - XL must be split into ≤ L sub-tasks before tier selection runs.
-- Any security-sensitive task (auth, PII, payments, Risk ≥ 4) routes to `workflow:` regardless of size.
+- Any security-sensitive task (auth, PII, payments, Risk ≥ 4) routes to `worktask:` regardless of size.
 - M never routes to `quick:` — the prior overlap with S has been resolved by the SP boundary fix above.
 
 ## Re-estimation Triggers
@@ -151,9 +151,9 @@ Until `/estimate --update` exists, re-running `/estimate --detailed` against the
 |-----------|----------------|-----------|--------------|
 | Trivial (micro:) | 5,000-10,000 | haiku/sonnet | $0.01-0.03 |
 | Simple (quick:) | 15,000-30,000 | sonnet | $0.05-0.10 |
-| Standard (workflow:) | 60,000-120,000 | mixed | $0.20-0.50 |
-| Complex (workflow:) | 150,000-300,000 | mixed | $0.50-1.50 |
-| Large (workflow:) | 300,000+ | mixed | $1.50+ |
+| Standard (worktask:) | 60,000-120,000 | mixed | $0.20-0.50 |
+| Complex (worktask:) | 150,000-300,000 | mixed | $0.50-1.50 |
+| Large (worktask:) | 300,000+ | mixed | $1.50+ |
 
 ### Cost Factors
 
@@ -180,7 +180,7 @@ Where:
 
 ### Combined Estimate Example
 
-For a medium feature (`workflow:`, SP 3-5):
+For a medium feature (`worktask:`, SP 3-5):
 ```
 Human Development: 18-30 hours × $150/hr = $2,700-$4,500
 AI Agent Cost: ~100K tokens × mixed = $0.35
@@ -212,4 +212,4 @@ AI adds: <0.01% to total project cost
 ## Related Skills
 
 - `cost-optimization.md` - Detailed AI cost strategies
-- `workflow.md` - Workflow tier selection by complexity
+- `worktask.md` - Worktask tier selection by complexity

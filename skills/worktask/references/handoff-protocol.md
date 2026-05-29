@@ -1,18 +1,18 @@
 # Handoff Protocol — Inter-Stage Communication Reference
 
-Canonical specification for workflow inter-stage communication. Defines the `state.json` ledger, the YAML `handoff:` frontmatter contract, the cache-friendly preamble layout, and four documented backward-compat fallback paths.
+Canonical specification for worktask inter-stage communication. Defines the `state.json` ledger, the YAML `handoff:` frontmatter contract, the cache-friendly preamble layout, and four documented backward-compat fallback paths.
 
 This file is the single source of truth referenced by:
 
 - `skills/shared/stage-contracts.md` — Required Inputs / Required Outputs vocabulary
 - `skills/shared/task-system.md` — `metadata.context_refs` + `metadata.state_file` semantics
-- `skills/workflow/SKILL.md` — Orchestrator Execution Loop reads ledger + builds preamble
-- `skills/workflow/references/initialization-patterns.md` — PL0 seeds state.json
+- `skills/worktask/SKILL.md` — Orchestrator Execution Loop reads ledger + builds preamble
+- `skills/worktask/references/initialization-patterns.md` — PL0 seeds state.json
 - `skills/context-compression/SKILL.md` — frontmatter as canonical compression form
 - `skills/cross-plugin-handoff/SKILL.md` — cross-plugin agents adopt full schema
 - `skills/cost-optimization/SKILL.md` — `ENABLE_PROMPT_CACHING_1H` + hook
 - `agents/{product-manager,software-architector,team-lead,developer,technical-lead,security-reviewer,qa-engineer,technical-writer,release-engineer,project-manager,stakeholder,incident-responder}.md` — Required Inputs / Completion Verification
-- `commands/workflow.md` — Phase 1 ledger seed
+- `commands/worktask.md` — Phase 1 ledger seed
 
 ---
 
@@ -41,7 +41,7 @@ mv -f "$tmp" .context/state.json
 Failure semantics:
 
 - Crash before step 3 — state.json untouched (last-known-good preserved).
-- Crash between 3 and 5 — temp file orphaned in `.context/`. Cleanup on next workflow start: `rm -f .context/.state.json.*.tmp`. state.json untouched.
+- Crash between 3 and 5 — temp file orphaned in `.context/`. Cleanup on next worktask start: `rm -f .context/.state.json.*.tmp`. state.json untouched.
 - Crash after 5 — state.json contains new value. Idempotent (re-running merge with same patch is a no-op).
 
 Single-writer invariant: at any moment exactly one stage agent is `in_progress`. No `flock` required.
@@ -136,18 +136,18 @@ Frontmatter is the canonical compression form: every downstream stage reads this
 
 ## #state-json-schema
 
-`.context/state.json` is the workflow ledger. Created by PL0; patched by every stage on completion; read by orchestrator before each delegation; embedded in the preamble as section [3]. Token budget ≤500.
+`.context/state.json` is the worktask ledger. Created by PL0; patched by every stage on completion; read by orchestrator before each delegation; embedded in the preamble as section [3]. Token budget ≤500.
 
 JSON-Schema-style spec:
 
 ```yaml
 $schema: https://json-schema.org/draft/2020-12/schema
-title: WorkflowStateLedger
+title: WorktaskStateLedger
 type: object
-required: [version, workflow_id, plan_file, platform, run_index, stages, facts, handoffs]
+required: [version, worktask_id, plan_file, platform, run_index, stages, facts, handoffs]
 properties:
   version: { type: integer, const: 1 }
-  workflow_id: { type: string, pattern: '^[a-z0-9\-]+$' }
+  worktask_id: { type: string, pattern: '^[a-z0-9\-]+$' }
   plan_file: { type: string }
   platform: { type: string, enum: [all, apple, ios, macos, watchos, tvos, visionos, web, server] }
   run_index: { type: integer, minimum: 0, default: 0 }
@@ -171,7 +171,7 @@ properties:
         type: string
         maxLength: 240
         description: |
-          One-sentence statement of the workflow's intent, populated by PL0 from the user-supplied task
+          One-sentence statement of the worktask's intent, populated by PL0 from the user-supplied task
           description (or the issue title in `--milestone:N` mode). Read by stage agents that need the
           original intent without re-reading the plan file (e.g. AR sanity-checking architecture against
           requirements, FN composing the PR title). Supersedes the `/goal` slash directive — the directive
@@ -247,12 +247,12 @@ When state.json approaches the 500-token cap:
 
 ### PL0 seed (initial state)
 
-PL0 (or `commands/workflow.md` Phase 1) writes the initial ledger:
+PL0 (or `commands/worktask.md` Phase 1) writes the initial ledger:
 
 ```json
 {
   "version": 1,
-  "workflow_id": "<from task metadata>",
+  "worktask_id": "<from task metadata>",
   "plan_file": ".context/planning-0.md",
   "platform": "all",
   "run_index": 0,
@@ -277,13 +277,13 @@ PL0 (or `commands/workflow.md` Phase 1) writes the initial ledger:
 
 ## #fallback-paths
 
-Four documented degradation paths. Workflow MUST complete in all four (AC-16, AC-17).
+Four documented degradation paths. Worktask MUST complete in all four (AC-16, AC-17).
 
 | Path | Trigger | Behavior |
 |------|---------|----------|
 | F1 | state.json **absent** | Fall back to legacy `metadata.context_files` mode. Read listed files in full. No cache-friendly preamble. Log INFO `state.json not found, legacy mode`. |
 | F2 | state.json **present**, agent ignores it | No penalty. Agent reads listed files and writes its artifact. Orchestrator's hook patches state.json from frontmatter (or return text on F3). |
-| F3 | Agent writes artifact **without frontmatter** | Orchestrator logs WARN `frontmatter missing in <artifact>`. Derives minimal handoff: `{stage, verdict: ok, summary: <first 200 chars of return>, refs: {artifact: <path>}}`. Workflow proceeds. |
+| F3 | Agent writes artifact **without frontmatter** | Orchestrator logs WARN `frontmatter missing in <artifact>`. Derives minimal handoff: `{stage, verdict: ok, summary: <first 200 chars of return>, refs: {artifact: <path>}}`. Worktask proceeds. |
 | F4 | state.json **corrupt** (invalid JSON or schema mismatch) | Quarantine to `.context/state.json.bad.<unix-ts>`. Regenerate from PL0 + completed-stage frontmatter walk. Audit log to `.context/logs/state-recovery.log`. Continue. |
 
 ### F4 regeneration walk
@@ -319,19 +319,19 @@ All stage artifacts are numbered; N is allocated by PL0 (same value as `planning
 | IR | `incident-N.md` | yes |
 | ET | `ethics-review-N.md` | yes |
 
-The same N is shared across all stages within a workflow run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. See `agents/product-manager.md § Plan File & Run Index Naming` for the full three-step resolver and propagation algorithm.
+The same N is shared across all stages within a worktask run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. See `agents/product-manager.md § Plan File & Run Index Naming` for the full three-step resolver and propagation algorithm.
 
 ---
 
 ## #cache-prefix
 
-Anthropic prompt cache matches by **prefix-prefix equality**, not full-block equality. The orchestrator builds the preamble in this order to maximize the byte-identical prefix shared across consecutive `Task()` calls within the same `workflow_id`.
+Anthropic prompt cache matches by **prefix-prefix equality**, not full-block equality. The orchestrator builds the preamble in this order to maximize the byte-identical prefix shared across consecutive `Task()` calls within the same `worktask_id`.
 
 ### Preamble layout (binding)
 
 ```
 [1] Plugin/agent contract reminder         ← stable across ALL stages
-[2] Workflow header (id, plan, exploration)← stable across ALL stages
+[2] Worktask header (id, plan, exploration)← stable across ALL stages
 [3] state.json blob (inlined JSON)         ← evolves per stage
 [4] Stage contract excerpt (this stage)    ← stable WITHIN stage type
 ─────── (cache prefix boundary for sections 1+2+4 sharing) ───────
@@ -349,12 +349,12 @@ Anything below collapses cache-hit rate:
 - Random IDs (UUIDs, `$RANDOM`, request IDs)
 - Retry counters (move to section [6])
 - File mtimes
-- Agent-specific names beyond `workflow_id` (don't bake `software-architector` into [1] or [2]; that goes in [4])
+- Agent-specific names beyond `worktask_id` (don't bake `software-architector` into [1] or [2]; that goes in [4])
 - Conversation message IDs
 
 ### Required tokens in sections [1], [2], [4]
 
-- `workflow_id` (string literal in [2])
+- `worktask_id` (string literal in [2])
 - `plan_file` path (string literal in [2])
 - Static contract reminder text (section [1])
 - Stage contract excerpt for this stage type (section [4]) — drawn from `skills/shared/stage-contracts.md`, copied verbatim
@@ -376,7 +376,7 @@ Documented in `skills/cost-optimization/SKILL.md`. Without 1h flag, default 5-mi
 
 ### Lint
 
-`skills/workflow/references/cache-lint.sh` asserts byte-identity of sections [1]+[2]+[4] across consecutive stages of the same `workflow_id`. Runs in CI on PRs touching `skills/workflow/`, `skills/shared/`, or `agents/`.
+`skills/worktask/references/cache-lint.sh` asserts byte-identity of sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`. Runs in CI on PRs touching `skills/worktask/`, `skills/shared/`, or `agents/`.
 
 ---
 
@@ -417,7 +417,7 @@ By default, anchor-lint runs at the DR gate. That is post-hoc — a missing anch
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
-        "command": "if [[ \"$CLAUDE_TOOL_INPUT_FILE_PATH\" =~ \\.context/(planning|analyzing|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+\\.md$ ]]; then skills/workflow/references/cache-lint.sh --anchor-lint \"$CLAUDE_TOOL_INPUT_FILE_PATH\"; fi"
+        "command": "if [[ \"$CLAUDE_TOOL_INPUT_FILE_PATH\" =~ \\.context/(planning|analyzing|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+\\.md$ ]]; then skills/worktask/references/cache-lint.sh --anchor-lint \"$CLAUDE_TOOL_INPUT_FILE_PATH\"; fi"
       }
     ]
   }

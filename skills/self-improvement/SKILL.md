@@ -1,19 +1,19 @@
 ---
 name: self-improvement
-description: Capture user post-delivery edits at ST stage, classify them, and propose scoped updates to agents/skills/commands that participated in the workflow. Human-in-the-loop; never auto-applies.
+description: Capture user post-delivery edits at ST stage, classify them, and propose scoped updates to agents/skills/commands that participated in the worktask. Human-in-the-loop; never auto-applies.
 effort: medium
 ---
 
 # Self-Improvement Skill
 
-Retrospective + diff-based learning invoked automatically at the ST (Stakeholder) stage. Detects user modifications made after the last agent commit, maps each diff to the owning agent/skill/command **only if it participated in this workflow's context**, and writes per-item proposals to `.context/learnings.md` for user approval.
+Retrospective + diff-based learning invoked automatically at the ST (Stakeholder) stage. Detects user modifications made after the last agent commit, maps each diff to the owning agent/skill/command **only if it participated in this worktask's context**, and writes per-item proposals to `.context/learnings.md` for user approval.
 
 ## Invocation
 
 Two entry points:
 
 1. **Automatic (production path):** mandatory step in `agents/stakeholder.md § Acceptance Review Procedure` after the Decision step. Runs on every ST completion.
-2. **Manual (tooling/iteration):** via `/improve-yourself` command (see `commands/improve-yourself.md`). Useful between workflows, for dry-runs, or to iterate on proposals with `--since <ref>` and `--target` flags.
+2. **Manual (tooling/iteration):** via `/improve-yourself` command (see `commands/improve-yourself.md`). Useful between worktasks, for dry-runs, or to iterate on proposals with `--since <ref>` and `--target` flags.
 
 Both paths execute the same pipeline and produce the same `.context/learnings.md`.
 
@@ -31,7 +31,7 @@ Execute the five steps in order. Each step has explicit inputs and outputs. If a
 
 ### Step 1 — Build Used-in-Context Set
 
-**Goal:** produce a deduped list of agents/skills/commands that actually participated in this workflow. Proposals will be **filtered** against this list in Step 4.
+**Goal:** produce a deduped list of agents/skills/commands that actually participated in this worktask. Proposals will be **filtered** against this list in Step 4.
 
 **Data sources (precedence order):**
 1. `TaskList` → for each task with `status: completed`, read `metadata.agent` + `metadata.embedded_commands`
@@ -43,9 +43,9 @@ Execute the five steps in order. Each step has explicit inputs and outputs. If a
 agents/product-manager.md
 agents/developer.md
 agents/qa-engineer.md
-skills/workflow/SKILL.md
+skills/worktask/SKILL.md
 skills/logging-conventions/SKILL.md
-commands/workflow.md
+commands/worktask.md
 ```
 
 **Tie-breaker:** deduplicate on file path. Skip any path not present on disk.
@@ -54,7 +54,7 @@ commands/workflow.md
 
 **Goal:** identify diffs introduced **after** the last stage-agent commit.
 
-**Definition of "agent commit":** a commit whose author is an agent or whose message begins with one of the conventional workflow prefixes (`feat`, `fix`, `refactor`, etc.) **and** whose trailer chain includes `Stage:` / `Agent:` metadata, **or** — fallback — the most recent commit on the branch that predates any uncommitted user edits.
+**Definition of "agent commit":** a commit whose author is an agent or whose message begins with one of the conventional worktask prefixes (`feat`, `fix`, `refactor`, etc.) **and** whose trailer chain includes `Stage:` / `Agent:` metadata, **or** — fallback — the most recent commit on the branch that predates any uncommitted user edits.
 
 **Range to diff:**
 - Baseline: SHA of the last agent commit (call it `$AGENT_SHA`)
@@ -89,13 +89,13 @@ commands/workflow.md
 
 1. **Direct edit to a prompt file** (`agents/*.md`, `skills/**/SKILL.md`, `commands/*.md`) → target is that file itself (self-edit signal).
 2. **Edit to `.context/<stage-artifact>-N.md`** → target is the agent that produced that artifact (look up via stage-contracts.md: any `planning-N.md` → product-manager, `development-N.md` → developer, etc.).
-3. **Edit to source code file** → target is the DV-stage agent for the current workflow (`developer` or whichever platform-specific agent was assigned in `metadata.agent`).
+3. **Edit to source code file** → target is the DV-stage agent for the current worktask (`developer` or whichever platform-specific agent was assigned in `metadata.agent`).
 4. **Edit to docs (`README.md`, `docs/**`)** → target is `technical-writer` (DC stage).
 5. **No match** → discard, logged only.
 
 **Filter:** after mapping, **drop** any item whose target path is NOT in the used-in-context set. Log discarded items under `## Out-of-Context Discards` in the log file.
 
-**Rationale:** we only learn from agents that actually worked on this task. A user edit to an unrelated file is noise from this workflow's perspective.
+**Rationale:** we only learn from agents that actually worked on this task. A user edit to an unrelated file is noise from this worktask's perspective.
 
 ### Step 5 — Emit `.context/learnings.md`
 
@@ -104,7 +104,7 @@ commands/workflow.md
 **Template:** `references/retrospective-template.md`. Structure (4 blocks, inspired by 4Ls):
 
 ```markdown
-# Self-Improvement Learnings — <workflow_id>
+# Self-Improvement Learnings — <worktask_id>
 
 ## What Worked
 - <bullet list of agents whose output needed zero user edits>
@@ -122,7 +122,7 @@ commands/workflow.md
   - Confidence: high
   - Target lines: 18–21
 
-- [ ] **#2 — skills/workflow/SKILL.md — `structure`**
+- [ ] **#2 — skills/worktask/SKILL.md — `structure`**
   - ...
 
 ## Deferred (Low Confidence)
@@ -148,7 +148,7 @@ Filename grammar follows `skills/logging-conventions/SKILL.md`.
 
 ## Hand-off to prompt-engineer
 
-After user approval (handled by orchestrator in `commands/workflow.md`), each checked item in `learnings.md` is passed to the `prompt-engineer` agent, which:
+After user approval (handled by orchestrator in `commands/worktask.md`), each checked item in `learnings.md` is passed to the `prompt-engineer` agent, which:
 1. Reads the proposal block
 2. Applies the edit to the target file
 3. Bumps `version:` in frontmatter
@@ -169,7 +169,7 @@ See `agents/prompt-engineer.md § Self-Improvement Patch Application` for the ap
 
 1. **Zero-change:** agent commits, user approves without edits → no `learnings.md` written; log records `Result: no-changes`.
 2. **In-context change:** user edits `.context/development-N.md` wording → proposal targets `agents/developer.md` with `tone` category.
-3. **Out-of-context change:** user edits `agents/security-reviewer.md` (but workflow was not `--secure`, so SR did not run) → discarded, no proposal surfaced. Discard logged.
+3. **Out-of-context change:** user edits `agents/security-reviewer.md` (but worktask was not `--secure`, so SR did not run) → discarded, no proposal surfaced. Discard logged.
 4. **Multi-file change:** user edits both a source file (maps to developer) and `README.md` (maps to technical-writer, if DC ran) → two proposals.
 5. **Low-confidence:** wording change of ≤2 words flagged `tone/low` → placed in Deferred.
 6. **Short-circuit robustness:** skill invoked but `complete.md` missing → log failure, abort, do not create `learnings.md`.
@@ -178,13 +178,13 @@ See `agents/prompt-engineer.md § Self-Improvement Patch Application` for the ap
 
 - `skills/shared/stage-contracts.md` — ST output contract (lists `learnings.md` as optional)
 - `skills/logging-conventions/SKILL.md` — log path rules
-- `skills/shared/five-whys.md` — reuse for Deferred items that recur across workflows
+- `skills/shared/five-whys.md` — reuse for Deferred items that recur across worktasks
 - `commands/optimize-agent.md` — reuse scoring rubric for proposal confidence
 - `commands/prompt-audit.md` — reuse health-score format
 - `commands/improve-yourself.md` — manual entry point with `--since`, `--target`, `--dry-run`, `--apply` flags
 - `agents/stakeholder.md` — invokes this skill (automatic path at ST)
 - `agents/prompt-engineer.md` — applies approved proposals
-- `commands/workflow.md` — orchestrator wires approval loop after ST completes
+- `commands/worktask.md` — orchestrator wires approval loop after ST completes
 
 ## Common Mistakes
 

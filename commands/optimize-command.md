@@ -28,7 +28,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 ## Examples
 
 ```
-/optimize-command commands/workflow.md
+/optimize-command commands/worktask.md
 /optimize-command commands/estimate.md --focus options
 /optimize-command --all --dry-run
 /optimize-command commands/test-plan.md --focus examples --report
@@ -117,7 +117,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 - Related command: `/export-estimate`
 - Related agent: `project-manager`
 
-#### Workflow Integration
+#### Worktask Integration
 **Current**: Not documented
 **Recommended**: Add PL stage usage note
 
@@ -131,7 +131,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 #### Should Apply
 1. Add format and output options
 2. Include confidence level in output
-3. Document workflow integration
+3. Document worktask integration
 
 #### Consider
 1. Add JSON schema for output
@@ -162,7 +162,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 - **options**: Option completeness, types, defaults, documentation
 - **examples**: Coverage, diversity, practical scenarios
 - **output**: Format specification, clarity, completeness
-- **integration**: Related commands, agents, workflow stages
+- **integration**: Related commands, agents, worktask stages
 - **frontmatter**: CC 2.1.86–2.1.142 frontmatter audit (description length, model fit, allowed-tools precision, argument-hint alignment) — see § Frontmatter Audit (CC 2.1.86+)
 
 ## Optimization Criteria
@@ -193,7 +193,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 ### Integration
 - Related commands linked
 - Agent relationships documented
-- Workflow stage usage noted
+- Worktask stage usage noted
 
 ### Frontmatter Audit (CC 2.1.86+)
 
@@ -218,7 +218,7 @@ Failures here are reported as a `## Frontmatter Findings` table before the exist
 This command is used by:
 - prompt-engineer agent for command optimization
 - During command ecosystem maintenance
-- After workflow changes require command updates
+- After worktask changes require command updates
 
 ## Related
 

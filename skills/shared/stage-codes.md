@@ -1,11 +1,11 @@
 ---
 name: stage-codes
-description: Reference table of all workflow stage codes (PL/AR/TL/DV/DR/SR/QA/DC/RE/FN/ST/IR). Use when looking up stage codes, agents, or workflow stage sequences.
+description: Reference table of all worktask stage codes (PL/AR/TL/DV/DR/SR/QA/DC/RE/FN/ST/IR). Use when looking up stage codes, agents, or worktask stage sequences.
 ---
 
 # Stage Codes Reference
 
-Single source of truth for workflow stage codes.
+Single source of truth for worktask stage codes.
 
 ## Primary Stages (11-Stage)
 
@@ -42,9 +42,9 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 | TC | technical-lead | opus | AR, TL, DV, QA |
 | ET | ethics-reviewer | opus | Any stage |
 | PE | prompt-engineer | opus | Agent optimization |
-| WE | workflow-engineer | sonnet | Workflow troubleshooting |
+| WE | workflow-engineer | sonnet | Worktask troubleshooting |
 
-Support agents don't own workflow stages but can be invoked on-demand via Task tool.
+Support agents don't own worktask stages but can be invoked on-demand via Task tool.
 
 > Model column uses aliases (`opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-7`) are also supported in agent frontmatter. Use aliases for portability across providers. **Opus 4.7** is the latest Claude model (v2.1.111+); Opus 4.6 remains supported. Auto mode is available for Max subscribers on Opus 4.7 and no longer requires `--enable-auto-mode` (v2.1.111).
 
@@ -86,7 +86,7 @@ paths:
   - "Tests/**/*.swift"
 ```
 
-## Workflow Pipelines
+## Worktask Pipelines
 
 ```
 9-stage:   PL → AR → TL → DV → DR → QA → DC → FN → ST

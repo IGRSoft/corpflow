@@ -1,14 +1,14 @@
 ---
-name: workflow
-description: Complete staged workflow system with dynamic sizing, task initialization, and stage management. Use when executing multi-stage workflows, initializing tasks, or managing workflow state.
+name: worktask
+description: Complete staged worktask system with dynamic sizing, task initialization, and stage management. Use when executing multi-stage worktasks, initializing tasks, or managing worktask state.
 effort: high
 ---
 
-# Workflow System
+# Worktask System
 
-Single source of truth for task workflow management using the Task System.
+Single source of truth for task worktask management using the Task System.
 
-## Workflow Evolution (v2.0)
+## Worktask Evolution (v2.0)
 
 ```
 9-stage:   PL → AR → TL → DV → DR → QA → DC → FN → ST
@@ -21,7 +21,7 @@ Single source of truth for task workflow management using the Task System.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Initialized: /workflow <task>
+    [*] --> Initialized: /worktask <task>
     Initialized --> Planning: PL0 spawned
     Planning --> ApprovalWaiting: PL0 completed
     Planning --> ErrorRetry: PL0 failed
@@ -51,11 +51,11 @@ stateDiagram-v2
     PostCompactRecovery --> StageActive: was mid-stage
 ```
 
-**Stage codes and triggers**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md` and `${CLAUDE_SKILL_DIR}/../shared/workflow-triggers.md`
+**Stage codes and triggers**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md` and `${CLAUDE_SKILL_DIR}/../shared/worktask-triggers.md`
 
 **Task System integration**: See `${CLAUDE_SKILL_DIR}/../shared/task-system.md`
 
-## Dynamic Workflow Sizing
+## Dynamic Worktask Sizing
 
 PL0 assesses complexity and creates only the stages needed. No pre-creation or deletion — PL builds the task list from scratch.
 
@@ -122,9 +122,9 @@ if (isolation === 'worktree') {
 
 ### Conductor Workspace Topology
 
-When CC spawns a workflow session inside a Conductor-managed workspace clone
+When CC spawns a worktask session inside a Conductor-managed workspace clone
 (e.g. `/Users/<user>/conductor/workspaces/<plugin>/<workspace-id>/`), the
-canonical plugin source directory (e.g. `/Users/<user>/Projects/igrsoft/company-workflow/`)
+canonical plugin source directory (e.g. `/Users/<user>/Projects/igrsoft/company-worktask/`)
 is a SIBLING repo on a different branch and MUST NOT be edited.
 
 Rule: all `Edit`/`Write` calls MUST target paths under `git rev-parse --show-toplevel`
@@ -144,7 +144,7 @@ Failure mode: edits in the sibling repo land on the wrong branch, are not visibl
 | Track 1 | `t1-1`, `t1-2`, ... |
 | Track N | `t{N}-1`, `t{N}-2`, ... |
 
-See `../workflow-milestone/SKILL.md` for full workspace documentation.
+See `../worktask-milestone/SKILL.md` for full workspace documentation.
 
 ## Parallel Execution
 
@@ -161,7 +161,7 @@ Use `--sequential` when DC requires test results.
 
 ### Monitor Tool Integration (v2.1.98+)
 
-Use the `Monitor` tool to stream events from background processes during workflow stages. Replaces polling patterns for build output, test progress, and log streaming. Available to any agent with Bash access. Persist raw stream output to `.context/logs/<kind>-<scope>-<timestamp>.log` per the `logging-conventions` skill.
+Use the `Monitor` tool to stream events from background processes during worktask stages. Replaces polling patterns for build output, test progress, and log streaming. Available to any agent with Bash access. Persist raw stream output to `.context/logs/<kind>-<scope>-<timestamp>.log` per the `logging-conventions` skill.
 
 ### Never Parallelize
 
@@ -212,7 +212,7 @@ Document errors in `.context/errors/<agent>.md` (per-agent, append-only; one `##
 - Compress context for handoff (50-100 tokens)
 - Log token usage in task metadata
 - Validate artifacts created
-- `PostCompact` hook fires after auto-compaction — use to re-inject critical workflow state
+- `PostCompact` hook fires after auto-compaction — use to re-inject critical worktask state
 
 > On Opus 4.6/4.7 with Max/Team/Enterprise, context window is 1M tokens. Compression still recommended at stage boundaries for cost efficiency even with larger windows.
 
@@ -220,9 +220,9 @@ See references/ for initialization code, stage details, and agent teams integrat
 
 ## Pre-Stage Validation
 
-Before executing any workflow stage, the orchestrator MUST validate:
+Before executing any worktask stage, the orchestrator MUST validate:
 
-1. **TaskList check**: Call `TaskList()` and verify at least one task exists with `metadata.workflow_id` matching the current workflow
+1. **TaskList check**: Call `TaskList()` and verify at least one task exists with `metadata.worktask_id` matching the current worktask
 2. **PL0 exists**: Verify a task with subject starting with `PL0:` exists
 3. **Stage tasks exist**: After PL0 completes, verify PL0 created subsequent stage tasks (at minimum DV0, DR0, and QA0 for any complexity level)
 4. **Stage contract check**: Verify upstream outputs match the next stage's Required Inputs per `shared/stage-contracts.md` (file exists + required sections present)
@@ -233,22 +233,22 @@ Before executing any workflow stage, the orchestrator MUST validate:
 9. **Hook installation check** (first stage only): Verify `state-merge.sh` SubagentStop hook is operational. Check: (a) `.claude/hooks/state-merge.sh` exists and is executable, OR (b) the plugin's `plugin.json` registers the SubagentStop hook entry. If neither is true, emit a warning: `"⚠ state-merge.sh hook not installed — run hook-install.sh"`. Do NOT block — the orchestrator's Step 6.5 provides Layer 3 coverage. See `references/initialization-patterns.md#hook-installation`.
 
 If validation fails:
-- No tasks exist → Workflow not initialized. Re-run initialization (TaskCreate PL0)
+- No tasks exist → Worktask not initialized. Re-run initialization (TaskCreate PL0)
 - PL0 exists but no subsequent tasks → PL0 did not complete properly. Re-run PL0
-- Tasks exist but are orphaned (no workflow_id) → Log warning and attempt to match by subject pattern
+- Tasks exist but are orphaned (no worktask_id) → Log warning and attempt to match by subject pattern
 - Contract violation → Do NOT transition. Append `missing_input` entry to next stage's `.context/errors/<agent>.md` and block.
 
 ## Orchestrator Execution Loop
 
 ### Cache-Friendly Prompt Layout & state.json (handoff-protocol)
 
-The orchestrator builds every delegation prompt in a **binding** order so consecutive `Task()` calls within the same `workflow_id` share a byte-identical prefix and benefit from Anthropic's prompt cache. Spec source: `skills/workflow/references/handoff-protocol.md#cache-prefix`.
+The orchestrator builds every delegation prompt in a **binding** order so consecutive `Task()` calls within the same `worktask_id` share a byte-identical prefix and benefit from Anthropic's prompt cache. Spec source: `skills/worktask/references/handoff-protocol.md#cache-prefix`.
 
 **Preamble layout (binding)**:
 
 ```
 [1] Plugin/agent contract reminder         ← stable across ALL stages (cacheable)
-[2] Workflow header (id, plan, exploration)← stable across ALL stages (cacheable)
+[2] Worktask header (id, plan, exploration)← stable across ALL stages (cacheable)
 [3] state.json blob (inlined JSON)         ← evolves per stage
 [4] Stage contract excerpt                 ← stable WITHIN stage type (cacheable)
 ─────── (cache prefix boundary) ───────
@@ -326,7 +326,7 @@ if (statePost.stages?.[code]?.status !== "completed") {
 
 **Banner relocation (R3)**: stage-specific banners (DR Skill, FN Conductor, MCP fallback warning) are appended AFTER `full.description` (suffix), not prepended. Prefixes [1][2][3][4] stay byte-identical across stages so the cache prefix boundary stretches as far as possible.
 
-The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: timestamps, ENV expansions that vary per call, random IDs, retry counters, file mtimes, agent names beyond `workflow_id`. CI lint (`skills/workflow/references/cache-lint.sh`) asserts byte-stability across consecutive stages of the same `workflow_id`.
+The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: timestamps, ENV expansions that vary per call, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. CI lint (`skills/worktask/references/cache-lint.sh`) asserts byte-stability across consecutive stages of the same `worktask_id`.
 
 ### CRITICAL: Delegation-Only Rule
 
@@ -334,7 +334,7 @@ The orchestrator NEVER writes implementation code directly. ALL stage work is de
 
 ### PRECONDITION CHECK
 Before entering this loop, verify BOTH signals:
-- **Signal 1 (TaskList audit)**: Call `TaskList()`, find the PL0 task, verify its status is `completed`. If PL0 does not exist or is not completed, STOP — workflow not initialized or planning incomplete.
+- **Signal 1 (TaskList audit)**: Call `TaskList()`, find the PL0 task, verify its status is `completed`. If PL0 does not exist or is not completed, STOP — worktask not initialized or planning incomplete.
 - **Signal 2 (Human approval)**: The HUMAN USER has sent an explicit approval message ("approve", "proceed", "go", "yes", "continue") AFTER PL0 was marked completed. PL0 completion alone is NOT approval. A subagent returning results is NOT approval. A tool succeeding is NOT approval. Only the human user's explicit text message qualifies.
 If either signal is missing, DO NOT enter this loop.
 
@@ -348,14 +348,14 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 6. **Re-validate before executing**: Call `TaskList()` to get all stage tasks. For each task, verify `metadata.agent` and `metadata.model` are set. This checkpoint prevents drift — the orchestrator re-grounds itself in the delegation rules before touching any stage.
 6.5. **Publish approved plan to GitHub** (after approval, before stage loop). Run:
      ```bash
-     HELPER="${CLAUDE_PLUGIN_ROOT}/skills/workflow/references/publish-pl-issue.sh"
+     HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/references/publish-pl-issue.sh"
      if [ -f "$HELPER" ]; then
        bash "$HELPER"; true
      else
        LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
        mkdir -p "$LOG_DIR"
        STATE_FILE="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/state.json"
-       jq -cn --arg ts "$(date -u +%FT%TZ)" --arg dk "$(jq -r '.workflow_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo unknown):$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo 0):gh_issue" \
+       jq -cn --arg ts "$(date -u +%FT%TZ)" --arg dk "$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo unknown):$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo 0):gh_issue" \
          '{ts:$ts, actor:"orchestrator", action:"github_issue_created", subject:"PL0", result:"deferred", task_id:"1", metadata:{via:"publish-pl-issue.sh", reason:"helper_not_found", dedupe_key:$dk}}' \
          >> "$LOG_DIR/audit.jsonl"; true
      fi
@@ -365,7 +365,7 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 Unless `--auto-continue` flag was provided — in that case, skip the approval gate and proceed directly.
 
 ```typescript
-// 1. Get all tasks for this workflow
+// 1. Get all tasks for this worktask
 let tasks = TaskList();
 
 // 2. Loop until all tasks are completed
@@ -395,7 +395,7 @@ while (tasks.some(t => t.status !== "completed")) {
     const subagentType = colonCount === 1 ? agentType : `igrsoft:${agentType}`;
 
     // 4.5. Soft context_files validation — warn, don't abort
-    //      Low-complexity workflows legitimately skip upstream stages,
+    //      Low-complexity worktasks legitimately skip upstream stages,
     //      so a missing listed file is a warning appended to the prompt.
     //      Exception: error_file absence is expected on first attempt
     //      (retry_count === 0) — suppress that specific warning.
@@ -433,7 +433,7 @@ while (tasks.some(t => t.status !== "completed")) {
           metadata: {
             observed: String(gateModeRaw).slice(0, 64),
             pl0_task_id: pl0?.id ?? null,
-            note: "PL0.metadata.fn_gate must be 'required' or 'bypass' (see commands/workflow.md Phase 1 step 4). Treating as 'required'."
+            note: "PL0.metadata.fn_gate must be 'required' or 'bypass' (see commands/worktask.md Phase 1 step 4). Treating as 'required'."
           }
         });
       }
@@ -461,8 +461,8 @@ while (tasks.some(t => t.status !== "completed")) {
     TaskUpdate({ taskId: task.id, status: "in_progress" });
 
     // 5a. Resolve embedded commands for DV stages
-    //     If workflow has embedded_commands metadata, inject Skill invocation into DV prompt
-    if (full.metadata.stage === "DV" && workflow_embedded_commands) {
+    //     If worktask has embedded_commands metadata, inject Skill invocation into DV prompt
+    if (full.metadata.stage === "DV" && worktask_embedded_commands) {
       const skillInvocation = `IMPORTANT: Before implementing, invoke the embedded command via Skill tool: Skill("${embedded_cmd}", args="${embedded_args}")`;
       full.description = skillInvocation + "\n\n" + full.description;
     }
@@ -484,7 +484,7 @@ while (tasks.some(t => t.status !== "completed")) {
     //     delegate before the parent has issued any XcodeBuildMCP call, the
     //     child (especially in worktree isolation) inherits an unstarted
     //     reference and the first tool call fails with "tool not available".
-    //     Warm the server in the parent ONCE per workflow before the first
+    //     Warm the server in the parent ONCE per worktask before the first
     //     Apple-platform stage that needs it.
     const APPLE_STAGES = new Set(["DV","DR","QA"]);
     const APPLE_AGENTS = /^(developer|technical-lead|qa-engineer)$/;
@@ -553,16 +553,16 @@ while (tasks.some(t => t.status !== "completed")) {
     // 5d. Inject Conductor-attachments requirement for FN stages
     //     Ensures project-manager always creates .context/attachments/ files
     //     regardless of how PL0 described the FN task. Mirrors 5b (DR injection).
-    //     Templates: skills/workflow/references/conductor-attachments.md
+    //     Templates: skills/worktask/references/conductor-attachments.md
     if (full.metadata.stage === "FN") {
       const fnInjection = [
         "IMPORTANT — Conductor attachments (FN-stage requirement, non-optional):",
         "Before running `gh pr create`, write both files per",
-        "`skills/workflow/references/conductor-attachments.md`:",
+        "`skills/worktask/references/conductor-attachments.md`:",
         "  • `.context/attachments/PR instructions.md`",
         "  • `.context/attachments/Review request.md`",
         "Run `mkdir -p .context/attachments` first.",
-        "Also write `.context/complete-summary-N.md` (workflow summary + Stage Timings; N = task.metadata.run_index).",
+        "Also write `.context/complete-summary-N.md` (worktask summary + Stage Timings; N = task.metadata.run_index).",
         "Then read `PR instructions.md` and follow it as the PR-creation script.",
       ].join("\n");
       full.description = full.description + "\n\n" + fnInjection;
@@ -570,7 +570,7 @@ while (tasks.some(t => t.status !== "completed")) {
 
     // 5e. Permission-Mode Pinning (in-process honour of task.metadata.permission_mode)
     //     When PL0 set `permission_mode: "default"` on this task (typically SR/FN under
-    //     --secure/--full/fworkflow), the orchestrator MUST NOT propagate
+    //     --secure/--full/fworktask), the orchestrator MUST NOT propagate
     //     --dangerously-skip-permissions or equivalent shorthand into descendant Task()
     //     calls or nested Bash invocations for this stage, and MUST audit the boundary.
     //     The Task() tool has no permission-mode parameter today — this is a procedural
@@ -628,11 +628,11 @@ while (tasks.some(t => t.status !== "completed")) {
 
 ### PL Issue Publish
 
-Step 6.5 invokes `skills/workflow/references/publish-pl-issue.sh` between the PL approval gate and the stage-loop entry. The helper is **non-blocking by contract** (default): orchestrator wraps it in a `; true` so a non-zero exit is never propagated, and the helper itself returns `0` for every operational outcome (success, deferred, network error, sanitiser abort) — only catastrophic bugs (`jq` missing, `audit_dir_unwritable`, `state_corrupt`, `plan_unreadable`) raise `1`. Each outcome is recorded as one `github_issue_created` row in `.context/logs/audit.jsonl` with `result ∈ {ok, deferred, failed, error}` and `metadata.reason ∈ {gh_not_installed, auth_missing, no_remote, network_error, sanitiser_aborted, already_published, opted_out, milestone_mode, helper_not_found, label_create_failed, gh_api_error, gh_timeout, permission_denied, repo_not_found}` (mode is always implicit `create` on success — comment-mode was removed in favour of milestone-mode skip). The `helper_not_found` reason is not raised by the helper itself — the orchestrator emits this directly when the helper file is unreachable. The `network_error` reason is reserved for genuine transport-failure stderr (`could not resolve host`, `connection refused`, `timeout`); label/auth/api failures are mapped to their specific reason instead of being bucketed as network errors. Dedupe-key shape: `<workflow_id>:<run_index>:gh_issue`.
+Step 6.5 invokes `skills/worktask/references/publish-pl-issue.sh` between the PL approval gate and the stage-loop entry. The helper is **non-blocking by contract** (default): orchestrator wraps it in a `; true` so a non-zero exit is never propagated, and the helper itself returns `0` for every operational outcome (success, deferred, network error, sanitiser abort) — only catastrophic bugs (`jq` missing, `audit_dir_unwritable`, `state_corrupt`, `plan_unreadable`) raise `1`. Each outcome is recorded as one `github_issue_created` row in `.context/logs/audit.jsonl` with `result ∈ {ok, deferred, failed, error}` and `metadata.reason ∈ {gh_not_installed, auth_missing, no_remote, network_error, sanitiser_aborted, already_published, opted_out, milestone_mode, helper_not_found, label_create_failed, gh_api_error, gh_timeout, permission_denied, repo_not_found}` (mode is always implicit `create` on success — comment-mode was removed in favour of milestone-mode skip). The `helper_not_found` reason is not raised by the helper itself — the orchestrator emits this directly when the helper file is unreachable. The `network_error` reason is reserved for genuine transport-failure stderr (`could not resolve host`, `connection refused`, `timeout`); label/auth/api failures are mapped to their specific reason instead of being bucketed as network errors. Dedupe-key shape: `<worktask_id>:<run_index>:gh_issue`.
 
 **Strict mode opt-in.** Passing `--strict` to the helper, or stamping `metadata.gh_issue.strict: true` on the state.json, flips operational failures from non-blocking `result: "deferred"` to blocking `result: "failed"` with `exit 1`. Use when an unpublished issue is unacceptable (e.g., compliance-tracked runs). Default behaviour stays unchanged so the existing fixture corpus and casual runs are unaffected.
 
-**External-ticket extraction.** The helper extracts a `^[A-Z][A-Z0-9]+-[0-9]+` prefix from `facts.goal` (falls back to upper-cased `workflow_id`). On match it (a) ensures the issue title starts with the prefix without double-prefixing, (b) appends a `ticket:<PREFIX>` label (auto-provisioned via the same `ensure_labels()` path as the canonical set), (c) persists the prefix to `state.json:metadata.external_ticket`, (d) includes `external_ticket` in the success audit row. When `ensure_labels()` cannot create one of the canonical or ticket labels, the offending label is dropped from the `--label` argument and recorded in the audit row under `metadata.labels_dropped` (array).
+**External-ticket extraction.** The helper extracts a `^[A-Z][A-Z0-9]+-[0-9]+` prefix from `facts.goal` (falls back to upper-cased `worktask_id`). On match it (a) ensures the issue title starts with the prefix without double-prefixing, (b) appends a `ticket:<PREFIX>` label (auto-provisioned via the same `ensure_labels()` path as the canonical set), (c) persists the prefix to `state.json:metadata.external_ticket`, (d) includes `external_ticket` in the success audit row. When `ensure_labels()` cannot create one of the canonical or ticket labels, the offending label is dropped from the `--label` argument and recorded in the audit row under `metadata.labels_dropped` (array).
 
 **Sanitiser rules summary (two-pass).** Pass 1 drops entire lines matching any of nine rules (L1–L9): `.context/` paths, absolute filesystem paths (`/Users/`, `/home/`, `/tmp/`, `/var/`, `/opt/`, `/etc/`, `/root/`), `~/`-prefixed paths, `conductor/workspaces/<id>` directories, the literal tokens `workspace_path`/`plan_file`/`run_index`/`artifact_path`, every numbered artifact filename (`planning-N.md`, `analyzing-N.md`, `coordination-N.md`, `development-N.md`, `developer-review-N.md`, `testing-N.md`, `documentation-N.md`, `release-N.md`, `complete-summary-N.md`, `retrospective-N.md`, `incident-N.md`, `ethics-review-N.md`), and `./` / `../` relative paths. Pass 2 strips filename-shaped tokens like `MyClass.swift` UNLESS at least one allow-list rule fires (A1: token is inside a fenced code block; A2: token is inside inline-code backticks; A3: token follows a `symbol:` prefix; A4: token sits on a narrative-bullet line labelled `class`/`type`/`protocol`/`struct`/`enum`/`function`/`fn`/`func`/`method`; A5: extension is outside the deny-list `.md/.json/.jsonl/.swift/.ts/.py/.yml/.yaml/.sh/.bash/.go/.rs/.kt/.java/.rb/.cpp/.c/.h/.hpp/.m/.mm`). The full grammar lives in `analyzing-0.md#sanitiser-regex` (per-release plan history).
 
@@ -640,7 +640,7 @@ Step 6.5 invokes `skills/workflow/references/publish-pl-issue.sh` between the PL
 
 **Opt-out: `--no-gh-issue`.** When the CLI invocation carries `--no-gh-issue`, PL0 stamps `metadata.no_gh_issue: true` on its own task and propagates the field through. The helper exits `0` immediately with `result: "deferred"`, `reason: "opted_out"` — no `gh` API call is issued. The state-loop entry proceeds unchanged.
 
-**Milestone-mode skip.** When the workflow runs under `--milestone:N` (state.json `metadata.milestone` set, or a `workspace.json` exists at `$PWD`/`$WORKSPACE_ROOT`), the helper exits `0` immediately with `result: "deferred"`, `reason: "milestone_mode"` — **no `gh issue create`, no `gh issue comment`, no API call of any kind**. Rationale: the parent milestone issue is the canonical record; auto-posting plan-approval comments fragments the review surface. PR linkage (FN stage or manual) ties the implementation back to the milestone. Detection signals (highest priority first): `MILESTONE_MODE=1` env override (tests), `state.json:metadata.milestone` non-empty, `workspace.json` present at either discovery path.
+**Milestone-mode skip.** When the worktask runs under `--milestone:N` (state.json `metadata.milestone` set, or a `workspace.json` exists at `$PWD`/`$WORKSPACE_ROOT`), the helper exits `0` immediately with `result: "deferred"`, `reason: "milestone_mode"` — **no `gh issue create`, no `gh issue comment`, no API call of any kind**. Rationale: the parent milestone issue is the canonical record; auto-posting plan-approval comments fragments the review surface. PR linkage (FN stage or manual) ties the implementation back to the milestone. Detection signals (highest priority first): `MILESTONE_MODE=1` env override (tests), `state.json:metadata.milestone` non-empty, `workspace.json` present at either discovery path.
 
 **HARD GUARANTEE** — the published GitHub issue contains **no local-file paths**, no `.context/` references, no `planning-N.md` or any other artifact filename, no absolute or relative source paths, no Conductor workspace IDs, and no `workspace_path`/`plan_file`/`run_index`/`artifact_path` literals are EVER written to the published GitHub issue body, under any circumstances. The sanitiser is defence-in-depth: PL0 authoring hygiene is the primary defence (see `agents/product-manager.md § Anchor-content hygiene`), the two-pass sanitiser is the runtime safety net, and the >50% strip-ratio abort is the final brake when both fail.
 
@@ -681,7 +681,7 @@ session before the first Apple-platform stage. Contract:
   `.context/development-N.md § Decisions`.
 - **Idempotency**: cache `state.xcodeMcpWarmed = true` after the
   first successful call so the orchestrator does not re-warm on each
-  Apple stage in the same workflow run.
+  Apple stage in the same worktask run.
 
 This pattern generalises to any lazy-spawn `npx`-based MCP. Add a
 new trigger block when introducing one (e.g., Pencil, Sosumi).
@@ -692,8 +692,8 @@ A second human-in-the-loop checkpoint immediately before any FN-stage task. The 
 
 ### Gate semantics
 
-- **Carrier**: `PL0.metadata.fn_gate ∈ {"required", "bypass"}`. PL0 sets the value at workflow init based on invocation flags (see `commands/workflow.md` Phase 1, step 4).
-- **Default**: missing or unrecognized value → treat as `"required"` (`?? "required"`). This makes in-flight workflows safe across the change.
+- **Carrier**: `PL0.metadata.fn_gate ∈ {"required", "bypass"}`. PL0 sets the value at worktask init based on invocation flags (see `commands/worktask.md` Phase 1, step 4).
+- **Default**: missing or unrecognized value → treat as `"required"` (`?? "required"`). This makes in-flight worktasks safe across the change.
 - **Bypass triggers**: `--auto-continue`, `--milestone:N`, `--worktree`. (`/emergency` is a documented TODO — not yet wired.)
 - **Trigger condition**: gate fires when the next ready task has `metadata.stage === "FN"` AND `gateMode !== "bypass"`.
 - **Effect, in order** (6 steps — none skippable, none reorderable):
@@ -706,7 +706,7 @@ A second human-in-the-loop checkpoint immediately before any FN-stage task. The 
 
 ### Pre-gate Conductor-attachments writer
 
-**Why this exists.** The two files this writer produces are how Conductor's *Create PR* / *Request Review* actions inherit workflow context in later sessions — DR/QA verdicts, resolved base branch, conventional-commit type, link to `complete-summary-N.md`. If they are absent, Conductor falls back to generic built-in templates and the FN agent (running post-approval) has no canonical script to follow. **Skipping this writer silently breaks the handoff — there is no recovery once the gate has returned**, because Conductor will cache the absent state for the duration of the next session. That is why the *Effect, in order* list above wraps this writer in three separate `test -f` checks (steps 2, 3, 6).
+**Why this exists.** The two files this writer produces are how Conductor's *Create PR* / *Request Review* actions inherit worktask context in later sessions — DR/QA verdicts, resolved base branch, conventional-commit type, link to `complete-summary-N.md`. If they are absent, Conductor falls back to generic built-in templates and the FN agent (running post-approval) has no canonical script to follow. **Skipping this writer silently breaks the handoff — there is no recovery once the gate has returned**, because Conductor will cache the absent state for the duration of the next session. That is why the *Effect, in order* list above wraps this writer in three separate `test -f` checks (steps 2, 3, 6).
 
 The writer is unconditional on the gated path; bypass path falls through to FN-agent Writer 2 (in `agents/project-manager.md § FN Stage`). It is idempotent: every FN-gate entry overwrites both files from scratch. Run it directly — do not delegate to a subagent.
 
@@ -725,8 +725,8 @@ Steps:
 2. `Read: <plan_file>` (resolve via `FN0.metadata.plan_file`; fallback newest `.context/planning-*.md`) → derive COMMIT_TYPE from first match of `\b(fix|refactor|perf|docs|chore|test|ci|build|style|feat)\b` (default `feat`).
 3. `Read: .context/developer-review-N.md` (N = `FN0.metadata.run_index`) → DR_VERDICT, DR_CONCERNS.
 4. `Read: .context/testing-N.md` → QA_VERDICT, QA_NOTES.
-5. `Write: .context/attachments/PR instructions.md` using template in `skills/workflow/references/conductor-attachments.md § Template — PR instructions.md`.
-6. `Write: .context/attachments/Review request.md` using template in `skills/workflow/references/conductor-attachments.md § Template — Review request.md`.
+5. `Write: .context/attachments/PR instructions.md` using template in `skills/worktask/references/conductor-attachments.md § Template — PR instructions.md`.
+6. `Write: .context/attachments/Review request.md` using template in `skills/worktask/references/conductor-attachments.md § Template — Review request.md`.
 
 Verification is owned by the *Effect, in order* list (step 2 immediately after this writer, step 6 immediately before `return`). Do not skip those — they exist because partial writer completion has happened in practice.
 
@@ -779,7 +779,7 @@ Replace each `- [ ]` with `- [x]` for any Planned FN action whose output already
 ### Planned FN actions
 - [ ] Write `.context/attachments/PR instructions.md` (Conductor attachment)
 - [ ] Write `.context/attachments/Review request.md` (Conductor attachment)
-- [ ] Write `.context/complete-summary-N.md` (workflow summary + stage timings)
+- [ ] Write `.context/complete-summary-N.md` (worktask summary + stage timings)
 - [ ] Create commit(s) with conventional-format messages
 - [ ] Push branch with upstream tracking
 - [ ] Open PR against <base-branch> with Motivation / Changes / Notes
@@ -820,14 +820,14 @@ Bypassed gates write a single line:
 {"actor":"orchestrator","action":"fn_gate_bypass","subject":"FN0","result":"ok","reason":"auto-continue|milestone|worktree"}
 ```
 
-## Post-Workflow Self-Improvement
+## Post-Worktask Self-Improvement
 
 After the execution loop exits (all tasks completed, including ST), the orchestrator runs a final check to handle any learnings captured at ST.
 
 ### Post-ST Procedure
 
 1. **Check for learnings artifact:** `fs.existsSync(".context/learnings.md")`.
-   - Absent → nothing to do. Workflow complete.
+   - Absent → nothing to do. Worktask complete.
    - Present → continue.
 
 2. **Surface to user:** read `.context/learnings.md` and present it to the user. Focus attention on the `## Proposed Updates` checklist.
@@ -852,10 +852,10 @@ After the execution loop exits (all tasks completed, including ST), the orchestr
 
 6. **Audit entry:** append one line to `.context/logs/audit.jsonl`:
    ```json
-   {"actor": "orchestrator", "action": "self_improvement_applied", "subject": "<workflow_id>", "applied_count": N, "skipped_count": M, "result": "ok"}
+   {"actor": "orchestrator", "action": "self_improvement_applied", "subject": "<worktask_id>", "applied_count": N, "skipped_count": M, "result": "ok"}
    ```
 
-7. **Terminate.** Workflow is now fully complete. Do not re-enter the execution loop.
+7. **Terminate.** Worktask is now fully complete. Do not re-enter the execution loop.
 
 ### Safety invariants
 
@@ -874,7 +874,7 @@ before resuming.
 
 | TaskList Shape | Audit Tail | Action |
 |----------------|------------|--------|
-| No tasks | — | Workflow never initialized. Start over with `/workflow <task>` |
+| No tasks | — | Worktask never initialized. Start over with `/worktask <task>` |
 | PL0 only, `pending` | — | PL0 not started. Delegate PL0 and wait for approval |
 | PL0 only, `in_progress` | no `subagent_stopped` for PL0 | PL0 crashed mid-stage. Re-delegate PL0 (idempotent) |
 | PL0 `completed`, no stage tasks | — | PL0 did not create stages. Re-run PL0 |
@@ -894,7 +894,7 @@ before resuming.
 4. Re-read that stage's `.context/*.md` artifact (if partial)
 5. If `metadata.retry_count > 0`, read `.context/errors/<agent>.md` for retry history
 6. Continue from the execution loop's `while (tasks.some(...))` — no need to replay completed stages
-7. Write a `resume` audit entry: `{actor: "orchestrator", action: "resume", subject: "<workflow_id>", result: "ok"}`
+7. Write a `resume` audit entry: `{actor: "orchestrator", action: "resume", subject: "<worktask_id>", result: "ok"}`
 
 See `context-compression.md § PostCompact Recovery` for the compaction-specific flow.
 
@@ -937,12 +937,12 @@ commit/push/PR calls without blocking earlier stages' write/edit activity.
 ### Blocking Rollout (Phase 2, after observation)
 
 Change `mode: "warn"` to `mode: "deny"`. The hook returns `defer` (v2.1.89+)
-with guidance: "Workflow awaiting user approval after PL0. Reply 'approve',
+with guidance: "Worktask awaiting user approval after PL0. Reply 'approve',
 'proceed', 'go', 'yes', or 'continue' to unblock."
 
 ### `--auto-continue` Short-Circuit
 
-When `/workflow --auto-continue` is used, the orchestrator sets
+When `/worktask --auto-continue` is used, the orchestrator sets
 `TaskUpdate({taskId: "PL0", metadata: {approved: "auto", fn_gate: "bypass"}})`
 and writes an `approval_received` audit line with `subject: "PL0"` and
 `result: "auto"`. The PL0 hook's `if` expression evaluates false and execution
@@ -964,7 +964,7 @@ remain authoritative.
 
 ## Related
 
-- `../workflow-milestone/SKILL.md` - GitHub milestone integration
+- `../worktask-milestone/SKILL.md` - GitHub milestone integration
 - `agent-coordination.md` - Multi-agent coordination
 - `cost-optimization.md` - Budget management
 - `context-compression.md` - Context compression

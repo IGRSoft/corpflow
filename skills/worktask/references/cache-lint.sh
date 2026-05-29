@@ -6,13 +6,13 @@
 #   1. Prefix lint (default):
 #        cache-lint.sh <prompt-log.jsonl>
 #      Reads a prompt-log.jsonl (one prompt per line, schema:
-#        {"workflow_id": "...", "stage": "...", "prompt": "..."}
+#        {"worktask_id": "...", "stage": "...", "prompt": "..."}
 #      where `prompt` contains marker tags <<<contract-reminder>>>,
-#      <<<workflow-header>>>, <<<stage-contract>>> as section delimiters).
+#      <<<worktask-header>>>, <<<stage-contract>>> as section delimiters).
 #      Asserts byte-identity of sections [1] contract-reminder + [2]
-#      workflow-header across ALL stages of the same workflow_id, and
+#      worktask-header across ALL stages of the same worktask_id, and
 #      byte-identity of section [4] stage-contract across all calls of
-#      the same (workflow_id, stage) pair. Exits 1 on drift.
+#      the same (worktask_id, stage) pair. Exits 1 on drift.
 #
 #      N (number of lines compared) is computed from the FIRST stage's
 #      sections [1]+[2]+[4] line count — derived dynamically, NOT a magic
@@ -21,7 +21,7 @@
 #   2. Anchor lint:
 #        cache-lint.sh --anchor-lint <artifact.md>
 #      Verifies the artifact's H2 headings match the per-stage allow-list
-#      from skills/workflow/references/handoff-protocol.md#anchor-allow-list.
+#      from skills/worktask/references/handoff-protocol.md#anchor-allow-list.
 #      Stage is read from the artifact's `handoff:` frontmatter (yq if
 #      available; awk subset fallback). Exits 1 on missing/extra anchors.
 #
@@ -50,7 +50,7 @@
 #        cache-lint.sh --self-test
 #      Runs all modes against built-in fixtures (tempdir). Exits 0 on pass.
 #
-# Reference: skills/workflow/references/handoff-protocol.md#cache-prefix
+# Reference: skills/worktask/references/handoff-protocol.md#cache-prefix
 #            skills/shared/stage-contracts.md#per-stage-frontmatter-templates
 # AR decisions implemented: AD-4 (cache-prefix invariants), AD-5 (anchors).
 # AC satisfied: AC-3 (anchor convention), AC-14 (cache stability).
@@ -184,13 +184,13 @@ prefix_lint() {
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     local wid stage prompt
-    wid=$(jq -r '.workflow_id' <<< "$line")
+    wid=$(jq -r '.worktask_id' <<< "$line")
     stage=$(jq -r '.stage' <<< "$line")
     prompt=$(jq -r '.prompt' <<< "$line")
 
     local s1 s2 s4
     s1=$(extract_section "$prompt" "contract-reminder")
-    s2=$(extract_section "$prompt" "workflow-header")
+    s2=$(extract_section "$prompt" "worktask-header")
     s4=$(extract_section "$prompt" "stage-contract")
 
     # Sanitize wid/stage for use in filenames (allow [a-zA-Z0-9._-]).
@@ -207,11 +207,11 @@ prefix_lint() {
       printf '%s' "$s2" > "$f2"
     else
       if [[ "$s1" != "$(cat "$f1")" ]]; then
-        echo "prefix-lint: workflow_id=$wid stage=$stage: section [1] contract-reminder DRIFT" >&2
+        echo "prefix-lint: worktask_id=$wid stage=$stage: section [1] contract-reminder DRIFT" >&2
         rc=1
       fi
       if [[ "$s2" != "$(cat "$f2")" ]]; then
-        echo "prefix-lint: workflow_id=$wid stage=$stage: section [2] workflow-header DRIFT" >&2
+        echo "prefix-lint: worktask_id=$wid stage=$stage: section [2] worktask-header DRIFT" >&2
         rc=1
       fi
     fi
@@ -219,7 +219,7 @@ prefix_lint() {
     if [[ ! -f "$f4" ]]; then
       printf '%s' "$s4" > "$f4"
     elif [[ "$s4" != "$(cat "$f4")" ]]; then
-      echo "prefix-lint: workflow_id=$wid stage=$stage: section [4] stage-contract DRIFT" >&2
+      echo "prefix-lint: worktask_id=$wid stage=$stage: section [4] stage-contract DRIFT" >&2
       rc=1
     fi
   done < "$log"
@@ -468,13 +468,13 @@ EOF
     jq -cn --arg wid wf-self --arg stage "$stg" --arg prompt \
 "<<<contract-reminder>>>
 contract
-<<<workflow-header>>>
-workflow_id=wf-self
+<<<worktask-header>>>
+worktask_id=wf-self
 plan_file=planning-0.md
 <<<stage-contract>>>
 stage=$stg
 <<<task>>>
-desc" '{workflow_id:$wid, stage:$stage, prompt:$prompt}' >> "$log"
+desc" '{worktask_id:$wid, stage:$stage, prompt:$prompt}' >> "$log"
   done
   if "$0" "$log" >/dev/null 2>&1; then
     echo "self-test: prefix-lint pass: ok"
@@ -486,13 +486,13 @@ desc" '{workflow_id:$wid, stage:$stage, prompt:$prompt}' >> "$log"
   jq -cn --arg prompt \
 "<<<contract-reminder>>>
 DIFFERENT contract
-<<<workflow-header>>>
-workflow_id=wf-self
+<<<worktask-header>>>
+worktask_id=wf-self
 plan_file=planning-0.md
 <<<stage-contract>>>
 stage=TL
 <<<task>>>
-desc" '{workflow_id:"wf-self", stage:"TL", prompt:$prompt}' >> "$log"
+desc" '{worktask_id:"wf-self", stage:"TL", prompt:$prompt}' >> "$log"
 
   if "$0" "$log" >/dev/null 2>&1; then
     echo "self-test: prefix-lint drift detect: FAIL (should have caught drift)" >&2; exit 1

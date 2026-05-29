@@ -2,7 +2,7 @@
 
 ## Per-Stage Token Baselines
 
-Typical token usage by workflow stage (sonnet model):
+Typical token usage by worktask stage (sonnet model):
 
 | Stage | Code | Typical Range | Estimated Cost | Notes |
 |-------|------|---------------|----------------|-------|
@@ -15,7 +15,7 @@ Typical token usage by workflow stage (sonnet model):
 | **F** (Finalization) | F | 3,000-5,000 | $0.01-0.015 | Release prep |
 | **S** (Stakeholder) | S | 2,000-3,000 | $0.006-0.01 | Approval review |
 
-**Total Workflow Range**: 58,000-123,000 tokens (~$0.17-0.37 for sonnet)
+**Total Worktask Range**: 58,000-123,000 tokens (~$0.17-0.37 for sonnet)
 
 ## Context Window Efficiency Improvements
 
@@ -76,7 +76,7 @@ Typical token usage by workflow stage (sonnet model):
 | 1M-context autocompact threshold respected (no premature "Prompt is too long") | 2.1.128 | Keeps full context budget usable on Opus 4.7 |
 | 1h prompt cache TTL no longer silently downgrades to 5min | 2.1.129 | Long-running sessions actually realize 1h cache benefit; pairs with `ENABLE_PROMPT_CACHING_1H` (v2.1.108) |
 | `deniedMcpServers` supports `*://host` patterns | 2.1.129 | Tighter MCP egress control without per-scheme duplication |
-| `claude_code.pull_request.count` OTEL counter tallies MCP-tool-initiated PRs/MRs | 2.1.129 | Observability for MCP-driven workflow output |
+| `claude_code.pull_request.count` OTEL counter tallies MCP-tool-initiated PRs/MRs | 2.1.129 | Observability for MCP-driven worktask output |
 | Hook payloads include `effort.level` + `$CLAUDE_EFFORT` env | 2.1.133 | Cost-tracking hooks attribute spend per effort tier |
 | Subagents discover project + user + plugin skills | 2.1.133 | Removes need to inline skill instructions before delegation (token savings on parent prompt) |
 | `/context all` per-skill token estimates use model tokenizer | 2.1.139 | Skill listing token attribution accurate per active model (no more cross-tokenizer drift) |
@@ -87,14 +87,14 @@ Typical token usage by workflow stage (sonnet model):
 | Background sessions survive macOS sleep/wake (daemon clock-jump detection) | 2.1.142 | Long-running `claude agents` dispatch no longer loses state to false-positive idle timeouts |
 | Fast mode (`/fast`) defaults to Opus 4.7 | 2.1.142 | Closes the cost gap where `/fast` would silently use Opus 4.6 without `xhigh` support — set `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE=1` to revert |
 
-These are automatic — no agent or workflow changes needed. They compound across multi-stage workflows.
+These are automatic — no agent or worktask changes needed. They compound across multi-stage worktasks.
 
 ## Calendar Month Billing
 
 Claude Code billing occurs per calendar month. Optimization strategies:
 
 1. **Track month boundaries** via Task System metadata
-2. **Plan large workflows** to complete within single month
+2. **Plan large worktasks** to complete within single month
 3. **Defer non-urgent work** if near month end with budget concerns
 4. **Front-load complex stages** early in billing cycle
 
@@ -113,7 +113,7 @@ Claude Code billing occurs per calendar month. Optimization strategies:
 
 ### Ethics Review Cost Budgeting
 
-When planning workflows with ethics components:
+When planning worktasks with ethics components:
 
 | Ethics Activity | Typical Tokens | Model | Est. Cost |
 |-----------------|----------------|-------|-----------|
@@ -136,7 +136,7 @@ Do not apply cost optimization when:
 
 Recommended budget reserves for ethics:
 
-| Workflow Type | Ethics Reserve | Purpose |
+| Worktask Type | Ethics Reserve | Purpose |
 |---------------|----------------|---------|
 | Standard | 10% | Ad-hoc ethics consultation |
 | High-risk features | 20% | Mandatory ethics review |

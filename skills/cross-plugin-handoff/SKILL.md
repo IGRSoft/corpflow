@@ -1,6 +1,6 @@
 ---
 name: cross-plugin-handoff
-description: Protocol for handoffs between igrsoft workflow and external plugins (apple-developer, security-scanning, etc.). Use when delegating work to external plugins.
+description: Protocol for handoffs between igrsoft worktask and external plugins (apple-developer, security-scanning, etc.). Use when delegating work to external plugins.
 effort: medium
 ---
 
@@ -16,13 +16,13 @@ When the orchestrator receives results from ANY external plugin command (apple-d
 
 # Cross-Plugin Handoff Protocol
 
-Defines the handoff protocol between igrsoft workflow stages and external plugin agents.
+Defines the handoff protocol between igrsoft worktask stages and external plugin agents.
 
 For plugin-specific protocol tables and error handling, see `${CLAUDE_SKILL_DIR}/references/plugin-protocols.md`
 
 ## Frontmatter Schema (BINDING for cross-plugin agents)
 
-The canonical schema lives at `skills/workflow/references/handoff-protocol.md` (frontmatter + state.json + cache layout). Cross-plugin agents (e.g. `apple-developer:ios-developer`, `apple-developer:macos-developer`, `debugging-toolkit:*`, `security-scanning:*`) MUST adopt the **full schema** when they take over a workflow stage:
+The canonical schema lives at `skills/worktask/references/handoff-protocol.md` (frontmatter + state.json + cache layout). Cross-plugin agents (e.g. `apple-developer:ios-developer`, `apple-developer:macos-developer`, `debugging-toolkit:*`, `security-scanning:*`) MUST adopt the **full schema** when they take over a worktask stage:
 
 - Artifact starts with `---\nhandoff:\n` YAML block per `handoff-protocol.md#frontmatter-schema`.
 - Per-stage required fields per `handoff-protocol.md#frontmatter-schema § Per-stage required-field matrix`.
@@ -78,7 +78,7 @@ Unlike DV stage delegation where task ownership transfers, the AR stage uses a *
 ### Delegation Prompt Template
 
 ```
-Provide Swift app architecture for the igrsoft workflow AR stage:
+Provide Swift app architecture for the igrsoft worktask AR stage:
 
 ## Task
 {task_description}
@@ -134,7 +134,7 @@ System constraints override app-level preferences. If apple-architector's patter
 
 ### 1. Context Preparation
 
-Before delegating, prepare context from workflow artifacts:
+Before delegating, prepare context from worktask artifacts:
 
 ```markdown
 ## Compressed Planning Context (from .context/<plan_file>)
@@ -176,7 +176,7 @@ External agents receiving worktree-isolated tasks should:
 ### 3. Delegation Prompt Template
 
 ```
-Implement the following for the igrsoft workflow DV stage:
+Implement the following for the igrsoft worktask DV stage:
 
 ## Task
 {task_description}
@@ -224,7 +224,7 @@ TaskCreate({
     error_file: ".context/errors/ios-developer.md",
     context_files: `${planFile},analyzing-${runIndex}.md,.context/errors/ios-developer.md`,
     plan_file: planFile,  // e.g. "planning-0.md"
-    workflow_id: workflowId
+    worktask_id: worktaskId
   }
 });
 ```

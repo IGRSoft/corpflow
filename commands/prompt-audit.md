@@ -55,7 +55,7 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 ## Critical Issues 🔴
 
 ### 1. Agent: workflow-engineer
-**Issue**: Outdated workflow stage references
+**Issue**: Outdated worktask stage references
 **Location**: `agents/workflow-engineer.md:52`
 **Details**: References removed stage "R" (Review)
 **Fix**: Update to current 9-stage system (PL→AR→TL→DV→DR→QA→DC→FN→ST)
@@ -79,7 +79,7 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 **Details**: Both claim "API documentation" capability
 **Fix**: Clarify boundaries between agents
 
-### 5. Command: workflow
+### 5. Command: worktask
 **Issue**: Inconsistent option format
 **Current**: `--platform [iOS|macOS|All]`
 **Expected**: `--platform <apple|android|web|all>`
@@ -191,7 +191,7 @@ With `--fix` flag, these issues can be automatically resolved:
 2. Model appropriate for task complexity
 3. Clear purpose statement
 4. No capability overlap with other agents
-5. Workflow stage integration documented
+5. Worktask stage integration documented
 6. Example interactions provided
 
 ### Command Rules

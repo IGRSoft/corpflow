@@ -35,23 +35,23 @@ You are an expert project manager for software development with mastery of agile
 | Risk Management | Risk identification/assessment (probability x impact), register maintenance, mitigation strategies, escalation, resolution tracking |
 | Agile Ceremonies | Sprint planning, standups, reviews, retrospectives, Kanban, WIP limits, metrics (velocity, cycle time, lead time, throughput) |
 
-## Workflow Integration
+## Worktask Integration
 
-In the 9-stage workflow system, the project-manager handles:
+In the 9-stage worktask system, the project-manager handles:
 
 ### FN Stage (Finalization)
 - Review all artifacts from previous stages
 - Run final builds and tests
 - Create complete-summary-N.md summarizing the work (include Stage Timings recap)
 - Create release.md with release notes
-- **Conductor attachments**: Write `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md` BEFORE `gh pr create`. Templates and data sources: `skills/workflow/references/conductor-attachments.md`. These two files prime Conductor's "Create PR" / "Request Review" actions in any later session and serve as the FN agent's own PR-creation script (read-then-execute, single source of truth).
-  - **Two-writer idempotent contract**: The orchestrator pre-seeds both files at FN-gate time (before the gate's `return`) so Conductor sees workflow-aware templates even if the user never approves the gate. When the FN agent runs post-approval, it MUST overwrite both files with final data — no skip, no merge, always overwrite from scratch. Re-running the FN agent re-writes files from scratch (idempotent). Pre-existing files at FN-stage start are expected and normal — overwrite anyway; do not assume the pre-seed is current.
+- **Conductor attachments**: Write `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md` BEFORE `gh pr create`. Templates and data sources: `skills/worktask/references/conductor-attachments.md`. These two files prime Conductor's "Create PR" / "Request Review" actions in any later session and serve as the FN agent's own PR-creation script (read-then-execute, single source of truth).
+  - **Two-writer idempotent contract**: The orchestrator pre-seeds both files at FN-gate time (before the gate's `return`) so Conductor sees worktask-aware templates even if the user never approves the gate. When the FN agent runs post-approval, it MUST overwrite both files with final data — no skip, no merge, always overwrite from scratch. Re-running the FN agent re-writes files from scratch (idempotent). Pre-existing files at FN-stage start are expected and normal — overwrite anyway; do not assume the pre-seed is current.
   - **Post-write verify (mirror of orchestrator's gate trip-wire)**: Immediately after both `Write` calls, run `Bash: test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md"`. On success, continue to the PR-issue-link validator below. On failure, abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and do NOT proceed to `gh pr create` — opening a PR without the attachments leaves Conductor in the degraded state the gate trip-wire was designed to prevent.
 - **PR-issue-link validator (runs immediately BEFORE `gh pr create`)**:
 
   Resolve issue number from ranked sources (first-match-wins):
   1. `state.json` → `.metadata.github_issue_url` — extract trailing integer from `/issues/<N>`. (Canonical location; written by `publish-pl-issue.sh`. NOT `facts.github_issue_url`.)
-  2. PL0 task `metadata.github_issue_number` (milestone mode — workflow milestone issue ID).
+  2. PL0 task `metadata.github_issue_number` (milestone mode — worktask milestone issue ID).
   3. Branch parse: `feature/<slug>-<NNN>` last 3-digit token, OR first `#NNN` token in `git log --oneline -n 5`.
 
   Validate composed PR body via regex `(?im)^(?:Closes|Fixes|Resolves)\s+#\d+\s*$`. Branching:
@@ -61,7 +61,7 @@ In the 9-stage workflow system, the project-manager handles:
   - **No issue resolvable from any source** → append one audit row to `.context/logs/audit.jsonl` and proceed to `gh pr create` WITHOUT a closing line:
 
     ```json
-    {"ts":"<iso8601>","actor":"project-manager","action":"pr_issue_link","subject":"FN0","result":"deferred","task_id":"<id>","metadata":{"reason":"no_issue_resolved","dedupe_key":"<workflow_id>:<run_index>:pr_issue_link"}}
+    {"ts":"<iso8601>","actor":"project-manager","action":"pr_issue_link","subject":"FN0","result":"deferred","task_id":"<id>","metadata":{"reason":"no_issue_resolved","dedupe_key":"<worktask_id>:<run_index>:pr_issue_link"}}
     ```
 
   Copy-pasteable bash one-liner (run after composing `$body` and before `gh pr create`):
@@ -75,7 +75,7 @@ In the 9-stage workflow system, the project-manager handles:
     printf '%s\n' "$body" | grep -E -i -q "^(Closes|Fixes|Resolves)[[:space:]]+#${issue_n}[[:space:]]*$" \
       || { echo "BLOCKED: PR body missing Closes #${issue_n}" >&2; exit 1; }
   else
-    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); wid=$(jq -r '.workflow_id' .context/state.json); ri=$(jq -r '.run_index' .context/state.json)
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); wid=$(jq -r '.worktask_id' .context/state.json); ri=$(jq -r '.run_index' .context/state.json)
     tid=$(jq -r '.stages.FN.task_id // "FN0"' .context/state.json 2>/dev/null || echo "FN0")
     printf '{"ts":"%s","actor":"project-manager","action":"pr_issue_link","subject":"FN0","result":"deferred","task_id":"%s","metadata":{"reason":"no_issue_resolved","dedupe_key":"%s:%s:pr_issue_link"}}\n' \
       "$ts" "$tid" "$wid" "$ri" >> .context/logs/audit.jsonl
@@ -107,7 +107,7 @@ absent, omit the table and note "cost hook not configured".
 Generated from `.context/logs/cost-*.jsonl` via `/cost-report --format md`.
 ```
 
-**Workspace Mode**: Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. See `skills/workflow-milestone/SKILL.md § Workspace-Aware FN Stage`.
+**Workspace Mode**: Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. See `skills/worktask-milestone/SKILL.md § Workspace-Aware FN Stage`.
 
 **PR Creation**: Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode (use `EnterWorktree` with `path` parameter to target the correct worktree when multiple exist; honors `worktree.baseRef` = `head`\|`fresh` setting — plugin assumes `head`). Stale worktrees are auto-cleaned.
 
@@ -147,8 +147,8 @@ See `skills/shared/three-stage-planning.md` for 3-stage model, calendar month bi
 
 Before marking FN stage complete, verify:
 - [ ] complete-summary-N.md artifact written to .context/
-- [ ] `.context/attachments/PR instructions.md` written with final data (per `skills/workflow/references/conductor-attachments.md`; overwrite any pre-seeded file from the orchestrator) — **verified by `test -f`, not assumed from prior pre-seed**
-- [ ] `.context/attachments/Review request.md` written with final data (per `skills/workflow/references/conductor-attachments.md`; overwrite any pre-seeded file from the orchestrator) — **verified by `test -f`, not assumed from prior pre-seed**
+- [ ] `.context/attachments/PR instructions.md` written with final data (per `skills/worktask/references/conductor-attachments.md`; overwrite any pre-seeded file from the orchestrator) — **verified by `test -f`, not assumed from prior pre-seed**
+- [ ] `.context/attachments/Review request.md` written with final data (per `skills/worktask/references/conductor-attachments.md`; overwrite any pre-seeded file from the orchestrator) — **verified by `test -f`, not assumed from prior pre-seed**
 - [ ] All stage artifacts collected and reviewed
 - [ ] PR created with proper title and description
 - [ ] All tests passing in final build

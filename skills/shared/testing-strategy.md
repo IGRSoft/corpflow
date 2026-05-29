@@ -119,7 +119,7 @@ DV produces the **build artifact + selected-test list**. QA executes the **selec
 
 ## Test Selection Gate
 
-Tests are slow (especially UI/simulator bundles). The gate decides — per workflow run — **how much of the test pyramid runs and where**. Defaults are tightened so backend, refactor, and doc-only tasks do not pay simulator-startup cost.
+Tests are slow (especially UI/simulator bundles). The gate decides — per worktask run — **how much of the test pyramid runs and where**. Defaults are tightened so backend, refactor, and doc-only tasks do not pay simulator-startup cost.
 
 ### Three test modes
 

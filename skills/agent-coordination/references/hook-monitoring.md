@@ -1,6 +1,6 @@
 # Hook-Based Stage Monitoring
 
-Claude Code hook events enable automated monitoring of agent lifecycle within workflows.
+Claude Code hook events enable automated monitoring of agent lifecycle within worktasks.
 
 ## Subagent Lifecycle Hooks
 
@@ -35,7 +35,7 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 **Plugin impact**: when an OTEL collector (Honeycomb/Datadog/Jaeger) is wired via `settings.json` → `otelExporter`, the PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST dispatch becomes a single nested trace tree. Diagnostic value: spot which stage spawned an orphan span (= subagent that escaped the dispatch chain).
 
-**Hook-stdin forward-compat**: `parent_agent_id` is OTEL-side in v2.1.145 and not confirmed in Stop/SubagentStop hook stdin yet, but `audit-subagent.sh` and `agent-stop.sh` defensively capture it with `(.parent_agent_id // "none")` — no-op on current CC, automatically populated the moment CC surfaces it in hook payloads. Paired with the new `dedupe_key_extended` audit field (see `skills/agent-coordination/SKILL.md § Dedupe Key Migration`) the workflow gets parent-aware audit dedup without any future plugin release.
+**Hook-stdin forward-compat**: `parent_agent_id` is OTEL-side in v2.1.145 and not confirmed in Stop/SubagentStop hook stdin yet, but `audit-subagent.sh` and `agent-stop.sh` defensively capture it with `(.parent_agent_id // "none")` — no-op on current CC, automatically populated the moment CC surfaces it in hook payloads. Paired with the new `dedupe_key_extended` audit field (see `skills/agent-coordination/SKILL.md § Dedupe Key Migration`) the worktask gets parent-aware audit dedup without any future plugin release.
 
 ### Background Tasks & Crons Visibility (v2.1.145)
 
@@ -56,11 +56,11 @@ Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved.
 
 **Plugin-managed hooks** ship in `.claude-plugin/plugin.json` and survive `allowManagedHooksOnly: true` enforcement. As of v3.10.0 the igrsoft plugin ships four managed hooks: `audit-tooluse` (PostToolUse), `audit-subagent` (SubagentStop), `precompact-checkpoint` (PreCompact), and a `mcp_tool` PushNotification at PL/FN Stop. The audit trail is a **plugin invariant** — these need to fire deterministically across every install.
 
-**Ad-hoc user hooks** go in project `settings.json` (or `~/.claude/settings.json`) and are for opt-in workflows like dashboard webhooks or external SIEM forwarding. Examples below remain valid templates for that case.
+**Ad-hoc user hooks** go in project `settings.json` (or `~/.claude/settings.json`) and are for opt-in worktasks like dashboard webhooks or external SIEM forwarding. Examples below remain valid templates for that case.
 
 ### Project-Level Configuration
 
-Add to project `settings.json` for workflow-wide monitoring:
+Add to project `settings.json` for worktask-wide monitoring:
 
 ```json
 {
@@ -121,11 +121,11 @@ Hooks support an `if` field using permission rule syntax to avoid unnecessary pr
 
 ### PreToolUse Hook Automation
 
-PreToolUse hooks can satisfy `AskUserQuestion` by returning `{ "updatedInput": "answer" }`, enabling automated responses in workflow pipelines without user interaction.
+PreToolUse hooks can satisfy `AskUserQuestion` by returning `{ "updatedInput": "answer" }`, enabling automated responses in worktask pipelines without user interaction.
 
 ### PreToolUse Defer Decision (v2.1.89+)
 
-PreToolUse hooks can return `"defer"` as the permission decision. This pauses headless (`-p`) sessions at the tool call, allowing later resumption with `-p --resume` to re-evaluate. Useful for CI/CD pipelines that need human approval at specific workflow gates.
+PreToolUse hooks can return `"defer"` as the permission decision. This pauses headless (`-p`) sessions at the tool call, allowing later resumption with `-p --resume` to re-evaluate. Useful for CI/CD pipelines that need human approval at specific worktask gates.
 
 ### PreToolUse Blocking via Exit Code (v2.1.90+)
 
@@ -133,7 +133,7 @@ PreToolUse hooks emitting JSON to stdout with exit code 2 now correctly block to
 
 ### PermissionDenied Hook (v2.1.89+)
 
-The `PermissionDenied` hook fires after auto-mode classifier denials. Return `{retry: true}` to tell the model it can retry the tool call. This enables workflow agents to recover from permission denials automatically.
+The `PermissionDenied` hook fires after auto-mode classifier denials. Return `{retry: true}` to tell the model it can retry the tool call. This enables worktask agents to recover from permission denials automatically.
 
 ### PostToolUse Format-on-Save (v2.1.90+)
 
@@ -189,11 +189,11 @@ Hooks can invoke MCP tools directly via `type: "mcp_tool"` (previously `command`
 
 ### PostToolUse duration_ms (v2.1.119+)
 
-`PostToolUse` and `PostToolUseFailure` hook inputs now include `duration_ms` — tool execution time excluding permission prompts and `PreToolUse` hooks. Useful for cost/perf telemetry and slow-tool alerting in workflow audit trails. **Plugin v3.10.0:** `${CLAUDE_PLUGIN_ROOT}/hooks/audit-tooluse.sh` consumes `duration_ms` + `effort.level` and writes `metadata` of every `audit.jsonl` `tool_invoked` row.
+`PostToolUse` and `PostToolUseFailure` hook inputs now include `duration_ms` — tool execution time excluding permission prompts and `PreToolUse` hooks. Useful for cost/perf telemetry and slow-tool alerting in worktask audit trails. **Plugin v3.10.0:** `${CLAUDE_PLUGIN_ROOT}/hooks/audit-tooluse.sh` consumes `duration_ms` + `effort.level` and writes `metadata` of every `audit.jsonl` `tool_invoked` row.
 
 ### PostToolUse Output Replacement (v2.1.121+)
 
-`PostToolUse` hooks can now replace tool output for **all tools** (previously MCP-only) by setting `hookSpecificOutput.updatedToolOutput`. Workflow agents can use this to redact secrets, normalize line endings, or inject structured envelopes into tool results before they hit the model's context.
+`PostToolUse` hooks can now replace tool output for **all tools** (previously MCP-only) by setting `hookSpecificOutput.updatedToolOutput`. Worktask agents can use this to redact secrets, normalize line endings, or inject structured envelopes into tool results before they hit the model's context.
 
 ```json
 {
@@ -272,7 +272,7 @@ Use cases: stop teammate when its issue is complete, when milestone budget is ex
 
 ## Agent Teams vs Subagents
 
-### Comparison for igrsoft Workflows
+### Comparison for igrsoft Worktasks
 
 | Aspect | Subagents (Task tool) | Agent Teams (Teammate) |
 |--------|----------------------|------------------------|
@@ -286,7 +286,7 @@ Use cases: stop teammate when its issue is complete, when milestone budget is ex
 
 ### When to Use Each
 
-| Workflow Pattern | Subagents | Agent Teams |
+| Worktask Pattern | Subagents | Agent Teams |
 |-----------------|-----------|-------------|
 | Standard 9/11-stage | Default | Not recommended |
 | Cross-plugin handoff (DV→apple-developer) | Default | Not applicable |
@@ -306,7 +306,7 @@ Use cases: stop teammate when its issue is complete, when milestone budget is ex
 
 ## MCP Elicitation
 
-MCP servers can request structured input from users mid-task via interactive forms or browser URLs. Elicitation hooks enable workflow agents to intercept or customize these interactions.
+MCP servers can request structured input from users mid-task via interactive forms or browser URLs. Elicitation hooks enable worktask agents to intercept or customize these interactions.
 
 ### Hook Events
 
@@ -315,7 +315,7 @@ MCP servers can request structured input from users mid-task via interactive for
 | `Elicitation` | MCP server requests user input | Pre-fill defaults, validate requests, log elicitations |
 | `ElicitationResult` | User responds to elicitation | Audit responses, transform data, route to agents |
 
-### Workflow Integration
+### Worktask Integration
 
 When agents interact with MCP servers (e.g., Xcode build, Figma, Chrome), elicitation requests may pause agent execution. Configure hooks to:
 1. Log elicitation requests for audit trail

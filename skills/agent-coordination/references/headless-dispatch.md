@@ -1,8 +1,8 @@
 # Headless Dispatch — `claude agents` Flag Bridge
 
-External orchestrators (CI runners, batch schedulers, the user's own shell) that want to invoke a workflow stage outside the in-process `Task()` path need a stable contract from `task.metadata` to `claude agents run` CLI flags. This reference is that contract.
+External orchestrators (CI runners, batch schedulers, the user's own shell) that want to invoke a worktask stage outside the in-process `Task()` path need a stable contract from `task.metadata` to `claude agents run` CLI flags. This reference is that contract.
 
-> Today the igrsoft orchestrator dispatches every stage in-process via `Task({ subagent_type, model, prompt })` (see `skills/workflow/SKILL.md` line ~497). The CLI flags listed below are honoured **only** by `claude agents run …` invocations. PL0 populates the fields anyway so any downstream dispatcher — in-process or CLI — reads from the same source of truth.
+> Today the igrsoft orchestrator dispatches every stage in-process via `Task({ subagent_type, model, prompt })` (see `skills/worktask/SKILL.md` line ~497). The CLI flags listed below are honoured **only** by `claude agents run …` invocations. PL0 populates the fields anyway so any downstream dispatcher — in-process or CLI — reads from the same source of truth.
 
 ## Translation Table
 
@@ -40,18 +40,18 @@ The model/effort defaults track `skills/shared/model-selection.md`. Override per
 
 `claude agents --json` (CC v2.1.145+, refined in v2.1.146) returns a JSON array of currently-live Claude sessions. The orchestrator and external runners can poll this to discover *what is already running* — complementing the dispatch table above which covers *how to start* something headlessly.
 
-Canonical orchestrator shell-out, scoped to one workflow track:
+Canonical orchestrator shell-out, scoped to one worktask track:
 
 ```bash
 claude agents --json | jq -r --arg track "$TRACK_ID" '
-  .[] | select(.metadata.workflow_track == $track) | .agent_id'
+  .[] | select(.metadata.worktask_track == $track) | .agent_id'
 ```
 
 Three usage patterns:
 
-- **Resume pre-check** — before respawning a subagent during workflow resume, query live sessions; if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` still appears, prefer `SendMessage` reattach over re-delegation. Eliminates the "blind respawn of an already-working subagent" token-waste class. See `skills/workflow/SKILL.md § Resume Procedure` step 0.
+- **Resume pre-check** — before respawning a subagent during worktask resume, query live sessions; if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` still appears, prefer `SendMessage` reattach over re-delegation. Eliminates the "blind respawn of an already-working subagent" token-waste class. See `skills/worktask/SKILL.md § Resume Procedure` step 0.
 - **Parallel track health** — for `--parallel:N` milestone runs, periodic `claude agents --json | jq '[.[] | select(.tag=="igrsoft-track")] | length'` should equal N. Less = stalled track.
-- **Status-line integration** — drives tmux / shell-status-bar widgets showing the active workflow stage without polluting `.context/`.
+- **Status-line integration** — drives tmux / shell-status-bar widgets showing the active worktask stage without polluting `.context/`.
 
 Caveat: the CLI is stable but the JSON schema is not formally versioned — guard every read with defensive jq (`.parent_agent_id // "none"`). See § Schema Versioning Watch below.
 
@@ -97,7 +97,7 @@ This is the one behaviour change the in-process orchestrator applies based on di
 
 ## External-Dispatch Audit Hook
 
-When a headless runner invokes a stage via `claude agents run …` instead of the in-process orchestrator, the runner MUST append one `audit.jsonl` line at the same workflow's `.context/logs/audit.jsonl`:
+When a headless runner invokes a stage via `claude agents run …` instead of the in-process orchestrator, the runner MUST append one `audit.jsonl` line at the same worktask's `.context/logs/audit.jsonl`:
 
 ```json
 {
@@ -115,7 +115,7 @@ When a headless runner invokes a stage via `claude agents run …` instead of th
 }
 ```
 
-Without this line, the post-workflow audit cannot distinguish in-process delegation from CLI dispatch — which matters for cost attribution, security review, and reproducibility.
+Without this line, the post-worktask audit cannot distinguish in-process delegation from CLI dispatch — which matters for cost attribution, security review, and reproducibility.
 
 ## Anti-Patterns
 
@@ -130,4 +130,4 @@ Without this line, the post-workflow audit cannot distinguish in-process delegat
 - `skills/agent-coordination/SKILL.md § Audit Trail` — schema for `permission_mode_pinned` and `external_dispatch` actions.
 - `skills/shared/model-selection.md` — model/effort tier defaults the table above tracks.
 - `agents/product-manager.md § Optional dispatch metadata` — PL0's writer rules for these fields.
-- `commands/workflow.md § Headless dispatch` — canonical headless one-liner using `jq` to read the metadata.
+- `commands/worktask.md § Headless dispatch` — canonical headless one-liner using `jq` to read the metadata.

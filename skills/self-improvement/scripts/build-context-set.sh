@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-context-set.sh — produce the used-in-context file-path set for this workflow.
+# build-context-set.sh — produce the used-in-context file-path set for this worktask.
 #
 # Inputs (env vars, all optional):
 #   TASK_LIST_JSON   Path to a JSON dump of TaskList (array of tasks with metadata).

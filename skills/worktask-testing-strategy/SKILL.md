@@ -1,14 +1,14 @@
 ---
-name: workflow-testing-strategy
-description: Test strategy planning guidance for PL and AR workflow stages. Use when planning test strategy during Planning or Architecture stages before implementation.
+name: worktask-testing-strategy
+description: Test strategy planning guidance for PL and AR worktask stages. Use when planning test strategy during Planning or Architecture stages before implementation.
 effort: medium
 ---
 
-# Workflow Testing Strategy Skill
+# Worktask Testing Strategy Skill
 
-Guidance for planning tests during P and AR stages of the igrsoft workflow, before implementation begins.
+Guidance for planning tests during P and AR stages of the igrsoft worktask, before implementation begins.
 
-Note: This skill focuses on workflow-integrated testing planning. For platform-specific testing patterns (Swift Testing, XCTest), see `apple-developer:testing-strategy`.
+Note: This skill focuses on worktask-integrated testing planning. For platform-specific testing patterns (Swift Testing, XCTest), see `apple-developer:testing-strategy`.
 
 For per-stage test templates (PL, AR, DV), see `${CLAUDE_SKILL_DIR}/references/stage-templates.md`
 

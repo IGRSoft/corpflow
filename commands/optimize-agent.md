@@ -110,7 +110,7 @@ You are a QA engineer specializing in test strategy, test case design, and quali
 | YAML frontmatter format | ✅ Valid |
 | Section structure | ✅ Standard |
 | Terminology | ⚠️ Inconsistent ("test" vs "testing") |
-| Workflow integration | ✅ Proper Q stage references |
+| Worktask integration | ✅ Proper Q stage references |
 
 ### Recommendations
 
@@ -218,7 +218,7 @@ Before responding, verify:
 This command is used by:
 - prompt-engineer agent for optimization tasks
 - During agent ecosystem maintenance
-- After workflow changes require agent updates
+- After worktask changes require agent updates
 
 ## Related
 

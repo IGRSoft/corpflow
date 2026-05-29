@@ -5,7 +5,7 @@ Canonical shape of `.context/learnings.md`. The self-improvement skill fills in 
 ## Header Block
 
 ```markdown
-# Self-Improvement Learnings — <workflow_id>
+# Self-Improvement Learnings — <worktask_id>
 
 **Generated:** <UTC timestamp>
 **Diff range:** <agent_sha>..HEAD
@@ -55,7 +55,7 @@ Numbered checklist. **Each item is independently approvable.** The orchestrator 
   - **Version bump:** `version:` minor (new constraint)
   - **Rationale:** Swift 6 strict concurrency requires Sendable; repeated correction signals missing domain knowledge.
 
-- [ ] **#2 — skills/workflow/SKILL.md — `structure` — confidence: medium**
+- [ ] **#2 — skills/worktask/SKILL.md — `structure` — confidence: medium**
   - **Observed:** user restructured the Orchestrator Execution Loop header hierarchy
   - **Proposed edit:** (diff block showing new hierarchy)
   - **Target location:** lines 44–72
@@ -72,10 +72,10 @@ Observational only. The user can skim but is not asked to act.
 ```markdown
 ## Deferred (Low Confidence)
 
-- `.context/planning-0.md` L8 — single-word wording tweak (`approach` → `strategy`). Confidence: low. Park until N≥2 similar tweaks accumulate across workflows.
+- `.context/planning-0.md` L8 — single-word wording tweak (`approach` → `strategy`). Confidence: low. Park until N≥2 similar tweaks accumulate across worktasks.
 ```
 
-If cross-workflow accumulation ever ships (v2), items escalate from Deferred into Proposed when pattern count ≥ 2.
+If cross-worktask accumulation ever ships (v2), items escalate from Deferred into Proposed when pattern count ≥ 2.
 
 ## Section 5 — Out-of-Context Discards
 

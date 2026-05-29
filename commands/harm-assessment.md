@@ -221,7 +221,7 @@ These harms are NEVER acceptable regardless of benefits:
 
 ## Integration
 
-### Workflow Integration
+### Worktask Integration
 - **P Stage**: Assess proposed features before design
 - **A Stage**: Evaluate architectural harm implications
 - **D Stage**: Review implementation for unintended harms
@@ -235,7 +235,7 @@ These harms are NEVER acceptable regardless of benefits:
 ### Agent Coordination
 - Uses `ethics-reviewer` agent for analysis
 - Escalates critical harms to stakeholder review
-- Integrates with security and safety workflows
+- Integrates with security and safety worktasks
 
 ## Related
 

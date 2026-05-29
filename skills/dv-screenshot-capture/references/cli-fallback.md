@@ -21,7 +21,7 @@ which silicon 2>/dev/null && echo "available" || echo "absent"
 ```bash
 BASE_REF="${base_ref:-origin/master}"
 SLUG="${slug}"
-OUT=".context/images/${WORKFLOW_ID}/dv-${NN}-${SLUG}.png"
+OUT=".context/images/${WORKTASK_ID}/dv-${NN}-${SLUG}.png"
 
 git diff "${BASE_REF}...HEAD" -- "${selected_files[@]}" \
   | silicon \
@@ -63,7 +63,7 @@ which magick 2>/dev/null || which convert 2>/dev/null && echo "available" || ech
 ```bash
 BASE_REF="${base_ref:-origin/master}"
 DIFF_CONTENT=$(git diff "${BASE_REF}...HEAD" -- "${selected_files[@]}" | head -60)
-OUT=".context/images/${WORKFLOW_ID}/dv-${NN}-${SLUG}.png"
+OUT=".context/images/${WORKTASK_ID}/dv-${NN}-${SLUG}.png"
 
 magick \
   -background white \
@@ -95,7 +95,7 @@ When both `silicon` and `magick` are absent, write a plain-text placeholder. The
 
 ```
 # Screenshot placeholder — <slug>
-# Workflow: <workflow_id>
+# Worktask: <worktask_id>
 # Run index: <N>
 # Captured: <ISO-8601 UTC>
 # Platform: <platform>
@@ -110,10 +110,10 @@ git diff origin/master...HEAD (first 100 lines):
 ### Write command
 
 ```bash
-OUT=".context/images/${WORKFLOW_ID}/dv-${NN}-${SLUG}.txt"
+OUT=".context/images/${WORKTASK_ID}/dv-${NN}-${SLUG}.txt"
 {
   echo "# Screenshot placeholder — ${SLUG}"
-  echo "# Workflow: ${WORKFLOW_ID}"
+  echo "# Worktask: ${WORKTASK_ID}"
   echo "# Run index: ${RUN_INDEX}"
   echo "# Captured: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "# Platform: ${PLATFORM}"

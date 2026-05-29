@@ -1,12 +1,12 @@
 ---
 name: agent-coordination
-description: Patterns for multi-agent coordination, handoffs, parallel execution, and error escalation. Use when coordinating agent handoffs, debugging multi-stage execution, or managing parallel agent workflows.
+description: Patterns for multi-agent coordination, handoffs, parallel execution, and error escalation. Use when coordinating agent handoffs, debugging multi-stage execution, or managing parallel agent worktasks.
 effort: medium
 ---
 
 # Agent Coordination
 
-Patterns for coordinating agents across workflow stages, managing handoffs, and handling errors.
+Patterns for coordinating agents across worktask stages, managing handoffs, and handling errors.
 
 **Stage codes and agents**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md`
 **Task System tools**: See `${CLAUDE_SKILL_DIR}/../shared/task-system.md`
@@ -176,7 +176,7 @@ Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool ca
 
 ## Audit Trail
 
-Every material workflow action writes one JSONL line to `.context/logs/audit.jsonl`
+Every material worktask action writes one JSONL line to `.context/logs/audit.jsonl`
 (routed under the `logs/` folder per `logging-conventions` skill). The file is
 append-only and outlives individual stage artifacts — on resume or incident
 review, the audit tail is the single source of truth for what happened.
@@ -185,7 +185,7 @@ review, the audit tail is the single source of truth for what happened.
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `workflow_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned`, `github_issue_created` |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned`, `github_issue_created` |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation` |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
 | `hook:audit-subagent` (SubagentStop, plugin) **(authoritative)** | `subagent_stopped` (paired with cost-*.jsonl entry) — v3.10.0+. v3.10.6+ rows additionally carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`, and `dedupe_key_extended` (see § Dedupe Key Migration below). |
@@ -202,7 +202,7 @@ review, the audit tail is the single source of truth for what happened.
 - `tool_invoked`: `"<session_id>:<tool_use_id>"`
 - `subagent_stopped`: `"<session_id>:<agent_id>:<task_id>:stop"` (v3.10.1+; the `<task_id>` segment disambiguates back-to-back DV0/DV1 split-task retries where `agent_id` is constant. Pre-v3.10.1 producers may emit the legacy shape `"<session_id>:<agent_id>:stop"` — readers MUST treat both prefixes as the same key for a single `(session, agent, task)` row to preserve dedupe across the upgrade. Orchestrator populates `task_id` in hook stdin where the runtime exposes it; on older CC builds the hook degrades to legacy shape automatically.)
 - `stage_completion_hook`: `"<session_id>:<agent_id>:stage:<PL|FN|ST>"`
-- `github_issue_created`: `"<workflow_id>:<run_index>:gh_issue"` — collision on resume detects already-published; multi-track safety via `run_index` increment. Writer: orchestrator (via `skills/workflow/references/publish-pl-issue.sh` between PL approval and stage-loop entry).
+- `github_issue_created`: `"<worktask_id>:<run_index>:gh_issue"` — collision on resume detects already-published; multi-track safety via `run_index` increment. Writer: orchestrator (via `skills/worktask/references/publish-pl-issue.sh` between PL approval and stage-loop entry).
 
 ### Dedupe Key Migration (v3.10.6+, auto-detecting)
 
@@ -232,7 +232,7 @@ The hook authority + dedupe rule from the previous paragraph still applies — `
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "workflow_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run",
+  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run",
   "subject": "task ID or artifact path",
   "result": "ok|error|deferred|blocked",
   "task_id": "optional — Task System ID",
@@ -265,7 +265,7 @@ jq -c --arg ts "$(date -u +%FT%TZ)" \
 
 ### Retention
 
-Follows `.context/` hygiene — cleared on task archival (FN stage or `/workflow`
+Follows `.context/` hygiene — cleared on task archival (FN stage or `/worktask`
 completion). Do NOT rotate within a task; the full trail is required for
 PostCompact recovery and incident post-mortems.
 
@@ -284,7 +284,7 @@ the split and *what* the dependency shape is. Pick one pattern — do not mix.
 | Cross-cutting refactor spanning many modules | **TL-initiated (parallel)** with `track` metadata | Each stream gets own worktree (if `--worktree`) | `rename User → Account across auth/api/db` |
 | Stage already failed and retry needs narrower scope | **DV-initiated (sequential)** | DV1 creates focused retry; retry_count resets | DV0 failed on full feature → DV1 focused on auth module only |
 
-See `workflow/references/initialization-patterns.md § Stage Sub-Task Splitting`
+See `worktask/references/initialization-patterns.md § Stage Sub-Task Splitting`
 for full code patterns.
 
 ### When NOT to Split
@@ -335,7 +335,7 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 
 > `subagent_type` matching is case- and separator-insensitive (v2.1.140). `Task({ subagent_type: "IGRSoft:Developer" })` resolves to the same agent as `igrsoft:developer`. Bare-name → `igrsoft:` prefix convention still applies for resolution priority, but typos in case/separator no longer fail-stop the call.
 
-> `claude agents` dispatch flags (v2.1.141 `--cwd`; v2.1.142 `--add-dir`, `--settings`, `--mcp-config`, `--plugin-dir`, `--permission-mode`, `--model`, `--effort`, `--dangerously-skip-permissions`) are mapped to `task.metadata` fields per the **`references/headless-dispatch.md`** translation table. PL0 populates the optional fields per `agents/product-manager.md § Optional dispatch metadata`; external runners consume them via the canonical one-liner in `commands/workflow.md § Headless dispatch`.
+> `claude agents` dispatch flags (v2.1.141 `--cwd`; v2.1.142 `--add-dir`, `--settings`, `--mcp-config`, `--plugin-dir`, `--permission-mode`, `--model`, `--effort`, `--dangerously-skip-permissions`) are mapped to `task.metadata` fields per the **`references/headless-dispatch.md`** translation table. PL0 populates the optional fields per `agents/product-manager.md § Optional dispatch metadata`; external runners consume them via the canonical one-liner in `commands/worktask.md § Headless dispatch`.
 
 > `/agents` displays a tabbed layout (Running/Library tabs) with a `* N running` indicator next to agent types with live instances (v2.1.97/2.1.98).
 
@@ -388,11 +388,11 @@ Subagents inherit MCP tools from MCP servers that are **already running** in the
 
 For lazy-spawned servers — anything registered as `npx -y …` over stdio (XcodeBuildMCP, Pencil, etc.) — Claude Code starts the process only on the first tool call in a given session. Subagents inherit the server reference but inheritance does NOT trigger a spawn. If the orchestrator delegates before any tool call, the child (especially under `isolation: worktree`) inherits an unstarted reference and the first `mcp__<server>__*` call fails with "tool not available".
 
-The orchestrator MUST issue one warmup call before delegating to a child that needs a lazy-spawned server. See `workflow § Pre-DV MCP warmup` for the canonical pattern (trigger conditions, retry budget, audit lines, fallback banner). The pattern generalises to any new lazy-spawn MCP — add a new trigger block when introducing one.
+The orchestrator MUST issue one warmup call before delegating to a child that needs a lazy-spawned server. See `worktask § Pre-DV MCP warmup` for the canonical pattern (trigger conditions, retry budget, audit lines, fallback banner). The pattern generalises to any new lazy-spawn MCP — add a new trigger block when introducing one.
 
 ### MCP Unavailability Detection
 
-Both warmup sites (`workflow § Pre-DV MCP warmup`, `developer § MCP Build Verification`) classify warmup failures with one canonical regex. Match against the normalised error message — `String(err.message ?? err).slice(0, 500)`, case-insensitive:
+Both warmup sites (`worktask § Pre-DV MCP warmup`, `developer § MCP Build Verification`) classify warmup failures with one canonical regex. Match against the normalised error message — `String(err.message ?? err).slice(0, 500)`, case-insensitive:
 
 ```
 MCP_UNAVAILABLE_RE = /(tool not available|server (not reachable|unavailable)|connection refused|ECONNREFUSED|EPIPE|ETIMEDOUT|timed? ?out|spawn ENOENT|command not found|InputValidationError)/i
@@ -438,7 +438,7 @@ DR →──┤       ├→ FN
        └→ QA ─┘
 ```
 
-### Quick Workflow
+### Quick Worktask
 ```
 PL → DV → DR → QA
 ```
@@ -594,7 +594,7 @@ See references/ for hook-based monitoring (including PermissionDenied, StopFailu
 
 ## Related
 
-- `workflow.md` - Workflow system
+- `worktask.md` - Worktask system
 - `claude-constitution.md` - Constitutional principles
 - `security-review-process.md` - Security checklists
 - `release-engineering.md` - Versioning

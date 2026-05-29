@@ -1,14 +1,14 @@
 ---
 name: cost-report
-description: Generate cost analysis for workflows with token usage breakdown and optimization recommendations
-argument-hint: '[--workflow-id ID] [--format table|csv]'
+description: Generate cost analysis for worktasks with token usage breakdown and optimization recommendations
+argument-hint: '[--worktask-id ID] [--format table|csv]'
 allowed-tools: Read, TaskList
 model: sonnet
 ---
 
 # Cost Report
 
-Generate cost analysis for completed or in-progress workflows with token usage breakdown and optimization recommendations.
+Generate cost analysis for completed or in-progress worktasks with token usage breakdown and optimization recommendations.
 
 ## Usage
 
@@ -43,7 +43,7 @@ Generate cost analysis for completed or in-progress workflows with token usage b
 | Total Tokens | 45,000 |
 | Estimated Cost | $0.28 |
 | Budget Used | 56% |
-| Workflow Type | standard |
+| Worktask Type | standard |
 
 ### By Stage
 | Stage | Tokens | Model | Cost | % of Total |
@@ -220,7 +220,7 @@ Model Rates (per 1M tokens):
 | 50-74% | Warning logged | Yellow |
 | 75-89% | User notified | Orange |
 | 90-99% | Compression suggested | Red |
-| 100% | Workflow paused | Critical |
+| 100% | Worktask paused | Critical |
 
 ## Examples
 
@@ -228,7 +228,7 @@ Model Rates (per 1M tokens):
 ```
 /cost-report
 ```
-Shows summary for current workflow.
+Shows summary for current worktask.
 
 ### Stage-Specific Analysis
 ```
@@ -258,7 +258,7 @@ Generates `cost-report.csv` in `.context/`.
 ```
 /cost-report --compare previous-task-id
 ```
-Side-by-side comparison with another workflow.
+Side-by-side comparison with another worktask.
 
 ## Data Source
 
@@ -302,14 +302,14 @@ and prints a note pointing at the Capture Script update.
 ## Integration
 
 This command is used:
-- Throughout workflow for cost monitoring
+- Throughout worktask for cost monitoring
 - At stage transitions for optimization checks
-- At workflow completion for final analysis
+- At worktask completion for final analysis
 - By project-manager (FN stage) for budget reporting and timing recap
 
 ## Related
 
 - `skills/cost-optimization.md` - Cost optimization strategies
 - `skills/context-compression.md` - Context compression techniques
-- `/estimate` - Pre-workflow cost estimation
+- `/estimate` - Pre-worktask cost estimation
 - `/context-status` - Context window analysis

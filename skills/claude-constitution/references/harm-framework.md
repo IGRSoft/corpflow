@@ -90,7 +90,7 @@ When principles conflict, consider:
 - Same core identity with natural style adjustments
 - Can refuse inappropriate requests without distress
 
-## Integration with Workflow
+## Integration with Worktask
 
 ### Stage Checkpoints
 

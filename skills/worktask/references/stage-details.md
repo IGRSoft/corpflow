@@ -49,7 +49,7 @@ See `claude-constitution.md` for full principles.
 
 ## Agent Teams Integration (Experimental)
 
-When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, the workflow system can leverage agent teams for milestone mode parallel execution.
+When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, the worktask system can leverage agent teams for milestone mode parallel execution.
 
 ### Enabling
 
@@ -63,7 +63,7 @@ Add to project `settings.json`:
 }
 ```
 
-### Hook Events for Workflow Monitoring
+### Hook Events for Worktask Monitoring
 
 | Hook Event | Use Case | Payload |
 |------------|----------|---------|
@@ -74,7 +74,7 @@ Add to project `settings.json`:
 
 `TeammateIdle`/`TaskCompleted` handlers can return `{"continue": false, "stopReason": "..."}` to stop a teammate. Hooks also support `"type": "http"` for external monitoring.
 
-> `SessionEnd` hook timeout is configurable via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS`. Useful for workflows requiring cleanup time (e.g., worktree pruning).
+> `SessionEnd` hook timeout is configurable via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS`. Useful for worktasks requiring cleanup time (e.g., worktree pruning).
 
 See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration patterns.
 
@@ -91,5 +91,5 @@ When both `--worktree` and agent teams are enabled, each teammate operates in it
 
 > Project configs and auto-memory are automatically shared across all git worktrees of the same repo. No per-worktree configuration duplication needed.
 
-See `../../workflow-milestone/SKILL.md § Agent Teams Mode` for parallel execution patterns.
+See `../../worktask-milestone/SKILL.md § Agent Teams Mode` for parallel execution patterns.
 See `agent-coordination.md § Agent Teams vs Subagents` for comparison.

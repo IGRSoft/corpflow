@@ -1,6 +1,6 @@
 # Skills Index
 
-All available skills for the igrsoft workflow plugin.
+All available skills for the igrsoft worktask plugin.
 
 ## Skills
 
@@ -8,25 +8,25 @@ All available skills for the igrsoft workflow plugin.
 |-------|-------------|--------|
 | [dv-screenshot-capture](dv-screenshot-capture/SKILL.md) | Capture screenshots during DV stage as visual evidence for QA acceptance and DR review; platform-aware adapters (apple/web/android/cli-fallback) | medium |
 | [agent-coordination](agent-coordination/SKILL.md) | Multi-agent coordination, handoffs, parallel execution, and error escalation | medium |
-| [appstore-screenshots](appstore-screenshots/SKILL.md) | Device specs, layout patterns, typography, and Pencil MCP workflow for App Store screenshots | high |
+| [appstore-screenshots](appstore-screenshots/SKILL.md) | Device specs, layout patterns, typography, and Pencil MCP worktask for App Store screenshots | high |
 | [claude-constitution](claude-constitution/SKILL.md) | Constitutional principles, ethics, and behavioral guidelines for AI agent behavior | medium |
 | [context-compression](context-compression/SKILL.md) | Context compression between agent handoffs preserving critical information | medium |
-| [cost-optimization](cost-optimization/SKILL.md) | Cost tracking and optimization strategies for AI agent workflows | medium |
-| [cross-plugin-handoff](cross-plugin-handoff/SKILL.md) | Protocol for handoffs between igrsoft workflow and external plugins | medium |
+| [cost-optimization](cost-optimization/SKILL.md) | Cost tracking and optimization strategies for AI agent worktasks | medium |
+| [cross-plugin-handoff](cross-plugin-handoff/SKILL.md) | Protocol for handoffs between igrsoft worktask and external plugins | medium |
 | [csv-export-templates](csv-export-templates/SKILL.md) | 13-category CSV export structure for Google Sheets import | low |
 | [estimation](estimation/SKILL.md) | Complexity scoring (0-50 scale) and T-shirt sizing for project estimation | low |
-| [incident-response](incident-response/SKILL.md) | Incident classification, hotfix workflow, rollback procedures, and post-mortem templates | high |
+| [incident-response](incident-response/SKILL.md) | Incident classification, hotfix worktask, rollback procedures, and post-mortem templates | high |
 | [logging-conventions](logging-conventions/SKILL.md) | Route runtime log capture to `.context/logs/` with filename conventions and cleanup patterns | low |
-| [milestone-workflow](workflow-milestone/SKILL.md) | GitHub milestone integration with isolated workspaces for multi-issue tracking | high |
-| [pencil-design](pencil-design/SKILL.md) | Design mockup generation workflow using Pencil MCP tools | high |
+| [milestone-worktask](worktask-milestone/SKILL.md) | GitHub milestone integration with isolated workspaces for multi-issue tracking | high |
+| [pencil-design](pencil-design/SKILL.md) | Design mockup generation worktask using Pencil MCP tools | high |
 | [preview-ensurer](preview-ensurer/SKILL.md) | Detect SwiftUI View files without previews and auto-add minimal `#Preview` blocks | medium |
 | [release-engineering](release-engineering/SKILL.md) | Semantic versioning, changelog generation, and deployment readiness patterns | high |
 | [review](review/SKILL.md) | Technical review framework for estimates by platform specialists | low |
 | [security-review-process](security-review-process/SKILL.md) | OWASP Top 10 security review checklist and secure coding patterns | medium |
 | [self-improvement](self-improvement/SKILL.md) | ST-stage retrospective: diff-based learning from user edits; writes `.context/learnings.md` with per-proposal approval checklist | medium |
 | [task-folder-organization](task-folder-organization/SKILL.md) | Context folder structure (.context/) with artifact naming and path resolution | medium |
-| [workflow](workflow/SKILL.md) | Complete staged workflow system with dynamic sizing and stage management | high |
-| [workflow-testing-strategy](workflow-testing-strategy/SKILL.md) | Test strategy planning guidance for PL and AR workflow stages | medium |
+| [worktask](worktask/SKILL.md) | Complete staged worktask system with dynamic sizing and stage management | high |
+| [worktask-testing-strategy](worktask-testing-strategy/SKILL.md) | Test strategy planning guidance for PL and AR worktask stages | medium |
 
 ## Shared Utilities
 
@@ -37,7 +37,7 @@ Files in `shared/` are referenced by skills and agents, not loaded independently
 | [constitutional-base.md](shared/constitutional-base.md) | Base constitutional principles |
 | [five-whys.md](shared/five-whys.md) | Five Whys root cause analysis technique |
 | [git-conventions.md](shared/git-conventions.md) | Conventional Commits format, PR template, git safety rules |
-| [stage-codes.md](shared/stage-codes.md) | Workflow stage code definitions |
+| [stage-codes.md](shared/stage-codes.md) | Worktask stage code definitions |
 | [task-system.md](shared/task-system.md) | Task System integration patterns |
-| [workflow-triggers.md](shared/workflow-triggers.md) | Workflow trigger patterns |
-| [milestone-helpers/](shared/milestone-helpers/) | Milestone workflow helper utilities |
+| [worktask-triggers.md](shared/worktask-triggers.md) | Worktask trigger patterns |
+| [milestone-helpers/](shared/milestone-helpers/) | Milestone worktask helper utilities |

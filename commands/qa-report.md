@@ -1,7 +1,7 @@
 ---
 name: qa-report
 description: Generate a comprehensive QA summary report with test results, coverage, and quality metrics
-argument-hint: '[--workflow-id ID]'
+argument-hint: '[--worktask-id ID]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, TaskList
 ---

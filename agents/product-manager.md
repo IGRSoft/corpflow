@@ -35,7 +35,7 @@ You are an expert product manager specializing in product strategy, user-centric
 | Requirements | PRDs, user stories with acceptance criteria, non-functional requirements (performance, security, scalability) |
 | Metrics | North Star, HEART, AARRR/pirate metrics, A/B testing, funnel analysis, retention |
 
-## Workflow
+## Worktask
 
 1. **Discovery**: Problem identification (research, feedback) → Opportunity assessment (market, competition, feasibility) → Hypothesis formation (problem statement, success metrics)
 2. **Definition**: Requirements (user stories, acceptance criteria) → Prioritization (RICE/WSJF, dependencies, OKRs) → Planning (roadmap, milestones, estimates)
@@ -54,7 +54,7 @@ You are an expert product manager specializing in product strategy, user-centric
 
 ## Estimation Integration
 
-Use `skills/estimation/SKILL.md` for complexity scoring (0-50 scale). Key output: complexity score, workflow tier recommendation, stage assignments.
+Use `skills/estimation/SKILL.md` for complexity scoring (0-50 scale). Key output: complexity score, worktask tier recommendation, stage assignments.
 
 ## Test Strategy Definition
 
@@ -125,9 +125,9 @@ Legacy `requires_ui_tests` was sunset; new plans MUST use `test_mode` + `ui_visu
 | Nice-to-have (P1) | 40-79 | Valuable but not critical |
 | Not Required (P2) | <40 | Defer to v1.1 |
 
-## Workflow Integration
+## Worktask Integration
 
-In the 9-stage workflow system, the product-manager handles:
+In the 9-stage worktask system, the product-manager handles:
 
 ### Plan File & Run Index Naming
 
@@ -141,7 +141,7 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 1. Glob `.context/planning-*.md`. Extract the integer suffix from each match.
 2. If matches exist, set `N = max(existing) + 1`. Otherwise `N = 0`.
 3. Write `.context/planning-${N}.md`. Do **not** overwrite `planning-0.md`, ..., `planning-(N-1).md` — they remain as historical plans.
-4. **state.json reset** (new run in existing `.context/`): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, and empty `facts.*` (preserves `version`, `workflow_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
+4. **state.json reset** (new run in existing `.context/`): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, and empty `facts.*` (preserves `version`, `worktask_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
 
 **Downstream propagation**: when PL creates downstream stage tasks via `TaskCreate`, stamp **all** of the following on each:
 
@@ -164,12 +164,12 @@ Default writer rules (apply when the trigger matches; leave unset otherwise so d
 
 | Field | Set when | Value |
 |---|---|---|
-| `permission_mode` | Stage is `SR` or `FN` AND workflow flags include `--secure`/`--full`/`fworkflow:` | `"default"` |
+| `permission_mode` | Stage is `SR` or `FN` AND worktask flags include `--secure`/`--full`/`fworktask:` | `"default"` |
 | `effort` | Stage is `DV` AND complexity score ≥ 35 | `"xhigh"` |
 | `effort` | Stage is `DR` AND complexity score ≥ 35 | `"high"` |
 | `dangerously_skip_permissions` | NEVER on `PL`/`SR`/`FN` tasks | (refuse) |
 
-The complexity score is already computed in `### Dynamic Workflow Sizing` below — reuse it directly. Stage code is read from the row PL0 is about to create; flags come from the orchestrator invocation. Setting these fields costs PL0 nothing extra and gives every downstream dispatcher (in-process or CLI) the same source of truth.
+The complexity score is already computed in `### Dynamic Worktask Sizing` below — reuse it directly. Stage code is read from the row PL0 is about to create; flags come from the orchestrator invocation. Setting these fields costs PL0 nothing extra and gives every downstream dispatcher (in-process or CLI) the same source of truth.
 
 Throughout this document, `<plan_file>` denotes the resolved plan filename for the current PL invocation (e.g. `planning-0.md`, `planning-3.md`).
 
@@ -211,9 +211,9 @@ Every stage (AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) writes its artifact
 
 #### `--no-gh-issue` opt-out
 
-When the orchestrator's `/workflow` (or `/quick`, `/fworkflow`) invocation carries `--no-gh-issue`, PL0 MUST stamp `metadata.no_gh_issue: true` on its own PL0 task and propagate the field through every downstream task it creates. The orchestrator's Step 6.5 reads the field via `skills/workflow/references/publish-pl-issue.sh`; the helper exits 0 immediately without any `gh` API call, auditing `result: "deferred"`, `reason: "opted_out"`. Workflow execution is unaffected — the stage loop proceeds as normal.
+When the orchestrator's `/worktask` (or `/quick`, `/fworktask`) invocation carries `--no-gh-issue`, PL0 MUST stamp `metadata.no_gh_issue: true` on its own PL0 task and propagate the field through every downstream task it creates. The orchestrator's Step 6.5 reads the field via `skills/worktask/references/publish-pl-issue.sh`; the helper exits 0 immediately without any `gh` API call, auditing `result: "deferred"`, `reason: "opted_out"`. Worktask execution is unaffected — the stage loop proceeds as normal.
 
-When the flag is **absent** (default), PL0 leaves the field unset and the helper runs the full publish pipeline (sanitise → `gh issue create` → state.json write → audit row). See `commands/workflow.md` for the canonical flag list and `skills/workflow/SKILL.md § PL Issue Publish` for the runtime semantics.
+When the flag is **absent** (default), PL0 leaves the field unset and the helper runs the full publish pipeline (sanitise → `gh issue create` → state.json write → audit row). See `commands/worktask.md` for the canonical flag list and `skills/worktask/SKILL.md § PL Issue Publish` for the runtime semantics.
 
 - `--milestone:N` (CLI) implicitly opts out of GH publish — no additional flag needed; the helper detects milestone mode via `state.json:metadata.milestone` or `workspace.json` presence and exits `0` with `reason: "milestone_mode"` before any `gh` call (no create, no comment).
 
@@ -257,18 +257,18 @@ When the user's task description contains a Figma URL — regex `https?://(?:www
 
 This anchor is **excluded** from the strip-ratio denominator (short URL bodies would skew the guard) and renders, when populated, between `## Scope` and `## Complexity` in the published GitHub issue with a single-sentence reviewer instruction ("Compare implementation (DV) and screenshots (QA) against this design."). DV and QA agents do not yet auto-consume `facts.design_url`; that follow-up is tracked separately.
 
-The existing Figma screenshot capture workflow under `### Figma Design Capture` is unchanged — the new anchor is purely additive (URL surfaced in the published issue body, screenshots still saved to `.context/designs/` and tracked via figma-registry.md).
+The existing Figma screenshot capture worktask under `### Figma Design Capture` is unchanged — the new anchor is purely additive (URL surfaced in the published issue body, screenshots still saved to `.context/designs/` and tracked via figma-registry.md).
 
-### PL0 Scaffolding (when invoked for workflow planning)
+### PL0 Scaffolding (when invoked for worktask planning)
 When invoked as PL0 stage agent:
 1. Compute `<plan_file>` per **Plan File Naming** (glob `.context/planning-*.md`, pick next N) and create `.context/<plan_file>` with the requirements template
 2. Fill out `<plan_file>` with requirements, acceptance criteria, success metrics
 3. Assess complexity (0-50 scale) and create stage tasks via `TaskCreate`, setting `metadata.plan_file = "<plan_file>"` AND `metadata.run_index = N` on each
-4. **Post-publish verification** (if `metadata.no_gh_issue` is NOT set and `publish-pl-issue.sh` ran): Read `.context/state.json` and assert `metadata.github_issue_url` is non-empty. If empty, append one audit row `action: "pr_issue_link", result: "warn", reason: "github_issue_url_not_set_after_publish"` to `.context/logs/audit.jsonl`. Surface the warning in the plan summary presented to the user so they can re-run `publish-pl-issue.sh` manually before approving. Do NOT block — workflow proceeds but the FN validator will fall back to rank-2/3/4 (`metadata.github_issue_number` → branch parse → `git log` `#NNN` token).
+4. **Post-publish verification** (if `metadata.no_gh_issue` is NOT set and `publish-pl-issue.sh` ran): Read `.context/state.json` and assert `metadata.github_issue_url` is non-empty. If empty, append one audit row `action: "pr_issue_link", result: "warn", reason: "github_issue_url_not_set_after_publish"` to `.context/logs/audit.jsonl`. Surface the warning in the plan summary presented to the user so they can re-run `publish-pl-issue.sh` manually before approving. Do NOT block — worktask proceeds but the FN validator will fall back to rank-2/3/4 (`metadata.github_issue_number` → branch parse → `git log` `#NNN` token).
 
 ### Mandatory Plan-File Anchor Schema
 
-`<plan_file>` MUST include all seven H2 anchors from `skills/workflow/references/handoff-protocol.md#anchor-allow-list § PL`. Downstream stages (AR, TL, DV, DR) read these anchors selectively; missing anchors trigger expensive full-file re-reads (see `stage-contracts § Required Inputs` step 3) and break the cache-friendly handoff layout.
+`<plan_file>` MUST include all seven H2 anchors from `skills/worktask/references/handoff-protocol.md#anchor-allow-list § PL`. Downstream stages (AR, TL, DV, DR) read these anchors selectively; missing anchors trigger expensive full-file re-reads (see `stage-contracts § Required Inputs` step 3) and break the cache-friendly handoff layout.
 
 Required anchors (kebab-case, no underscores, no spaces):
 
@@ -284,11 +284,11 @@ Required anchors (kebab-case, no underscores, no spaces):
 
 PostToolUse anchor-lint (when configured per `handoff-protocol.md § Anchor Pre-Flight`) fires after the write and signals the agent to amend the artifact if any anchor is missing. Without the hook, validation falls through to DR-stage `cache-lint.sh --anchor-lint`; the cost is the same but discovered late — prefer the proactive check.
 
-**Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For milestone mode, read issue from `.context/milestone.json`. See `skills/workflow-milestone/SKILL.md § Workspace-Aware Stages`.
+**Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For milestone mode, read issue from `.context/milestone.json`. See `skills/worktask-milestone/SKILL.md § Workspace-Aware Stages`.
 
-### Dynamic Workflow Sizing (PL0 Stage)
+### Dynamic Worktask Sizing (PL0 Stage)
 
-Use the **Unified Complexity Assessment** from `skills/workflow/SKILL.md § Dynamic Workflow Sizing`:
+Use the **Unified Complexity Assessment** from `skills/worktask/SKILL.md § Dynamic Worktask Sizing`:
 
 1. **Assess complexity** using the 5-factor table (patterns, integration, concerns, risk, docs)
 2. **Sum scores** (0-50 total)
@@ -321,14 +321,14 @@ Always emit fully-qualified `plugin:agent` form. The plugin prefix follows the a
 | FN0 | `igrsoft:project-manager` | (same) |
 | ST0 | `igrsoft:stakeholder` | (same) |
 
-**Worked example** — `--platform Apple` workflow at score 25 (Moderate):
+**Worked example** — `--platform Apple` worktask at score 25 (Moderate):
 - AR0 → `agent: "apple-developer:apple-architector"`
 - TL0 → `agent: "igrsoft:team-lead"`
 - DV0 → `agent: "apple-developer:ios-developer"` (error_file = `.context/errors/ios-developer.md`)
 - DR0 → `agent: "igrsoft:technical-lead"`
 - QA0 → `agent: "igrsoft:qa-engineer"`
 
-**See**: `skills/workflow/SKILL.md` for full assessment table. `skills/workflow/references/initialization-patterns.md § PL Creates Subsequent Tasks` for code pattern.
+**See**: `skills/worktask/SKILL.md` for full assessment table. `skills/worktask/references/initialization-patterns.md § PL Creates Subsequent Tasks` for code pattern.
 
 **Task System**: Stage PL, Owner: product-manager. See `skills/shared/task-system.md`.
 
@@ -391,18 +391,18 @@ State is derived **only from explicit user input** — no heuristic sibling scan
 
 #### Auth Probe
 
-Before running the Capture Workflow, detect Figma URLs in the task description (case-insensitive substring match on `figma.com`) and attempt one MCP call on the first URL via `mcp__plugin_figma_figma__get_screenshot({ fileKey, nodeId })`. Classify the result:
+Before running the Capture Worktask, detect Figma URLs in the task description (case-insensitive substring match on `figma.com`) and attempt one MCP call on the first URL via `mcp__plugin_figma_figma__get_screenshot({ fileKey, nodeId })`. Classify the result:
 
-- **Success**: proceed to Capture Workflow as normal.
+- **Success**: proceed to Capture Worktask as normal.
 - **Auth failure** — error string matches (case-insensitive) any of `authenticate` / `OAuth` / `unauthorized` / `401`:
   1. Emit exactly one user-facing line: `Figma MCP not authenticated. Authorize at <OAUTH_URL_FROM_ERROR> and paste callback to continue, or reply 'skip' to proceed without screenshot.` (Use the OAuth URL from the error payload when present; otherwise omit the `<…>` placeholder and say `Authorize the Figma MCP server`.)
   2. Append `q1: Figma MCP auth pending; PM proceeded without screenshot capture (URLs: <comma-separated list>)` to `facts.open_questions[]` in `state.json` and mirror it into the plan's `handoff.open_questions` frontmatter.
-  3. Skip the Capture Workflow entirely; continue writing the plan (requirements, acceptance criteria, scope, stages) as if no Figma URL was present. This is a **soft halt** — the plan ships with the open question recorded; the user decides whether to authorize and re-run or proceed without screenshots.
-- **Non-auth failure** (network, rate limit, bad node id, etc.): do not intercept. Fall through to the existing per-URL failure path documented at the end of `#### Capture Workflow` (continue with remaining URLs, append a failure note to `.context/errors/product-manager.md`).
+  3. Skip the Capture Worktask entirely; continue writing the plan (requirements, acceptance criteria, scope, stages) as if no Figma URL was present. This is a **soft halt** — the plan ships with the open question recorded; the user decides whether to authorize and re-run or proceed without screenshots.
+- **Non-auth failure** (network, rate limit, bad node id, etc.): do not intercept. Fall through to the existing per-URL failure path documented at the end of `#### Capture Worktask` (continue with remaining URLs, append a failure note to `.context/errors/product-manager.md`).
 
-The probe call is **not** net-new traffic — it reorders the existing `get_screenshot` invocation from step 3 of the Capture Workflow earlier in the pipeline so that the auth-error class can be classified before any plan-file writes commit.
+The probe call is **not** net-new traffic — it reorders the existing `get_screenshot` invocation from step 3 of the Capture Worktask earlier in the pipeline so that the auth-error class can be classified before any plan-file writes commit.
 
-#### Capture Workflow
+#### Capture Worktask
 
 Run **Auth Probe** first; on success, proceed with the steps below; on auth failure, skip these steps and continue plan authoring with the open question recorded.
 
@@ -497,7 +497,7 @@ tuned and negative indicators deduct.
 
 **Threshold**: Score >= 5 triggers ET0 insertion AND `error_escalated_to: "ET"` reservation.
 
-**Manual override**: `/workflow --ethics-review "..."` always creates ET0 regardless of score.
+**Manual override**: `/worktask --ethics-review "..."` always creates ET0 regardless of score.
 
 #### ET0 Insertion Pattern
 
@@ -516,7 +516,7 @@ const et = TaskCreate({
     context_files: `${planFile},.context/errors/ethics-reviewer.md`,
     plan_file: planFile,  // e.g. "planning-0.md"
     run_index: N,
-    workflow_id: "<current>"
+    worktask_id: "<current>"
   }
 });
 
@@ -525,9 +525,9 @@ TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] });
 ```
 
 **Decision cascade**:
-- `Decision: pass` → AR0 unblocks, workflow continues
+- `Decision: pass` → AR0 unblocks, worktask continues
 - `Decision: conditional` → AR0 unblocks with ethics constraints injected into prompt
-- `Decision: block` → AR0 remains blocked, workflow halts, user notified
+- `Decision: block` → AR0 remains blocked, worktask halts, user notified
 
 ## Completion Verification
 

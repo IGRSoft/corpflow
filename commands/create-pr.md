@@ -1,10 +1,10 @@
 ---
 name: create-pr
 description: >
-  Generate a conventional commit message from staged changes and workflow
+  Generate a conventional commit message from staged changes and worktask
   artifacts, commit the changes, and open a pull request to the parent branch.
   Use this skill whenever the user wants to commit and submit a PR — especially
-  after finishing a workflow stage or feature. Trigger on: "create a PR",
+  after finishing a worktask stage or feature. Trigger on: "create a PR",
   "commit and PR", "push and open PR", "submit my changes", "finish and create PR".
 argument-hint: '[--draft] [--base <branch>]'
 allowed-tools: Read, Glob, Grep, Bash(git *), Bash(gh *)
@@ -19,7 +19,7 @@ Generate a commit message, commit staged changes, and open a PR to the parent br
 
 ### 1. Gather Context
 
-**Workflow artifacts** (read if present, skip gracefully if not):
+**Worktask artifacts** (read if present, skip gracefully if not):
 - Find the latest planning file via Glob (`planning-*.md`)
 - Find the latest developer-review file via Glob (`developer-review-*.md`)
 - Find the latest testing file via Glob (`testing-*.md`)
@@ -44,7 +44,7 @@ Follow `skills/shared/git-conventions.md` (Conventional Commits 1.0.0):
 [Optional footer: issue refs, breaking changes]
 ```
 
-**Determine type** from workflow context or git diff:
+**Determine type** from worktask context or git diff:
 - Planning goal mentions new feature → `feat`
 - Planning goal mentions bug/crash → `fix`
 - Only tests changed → `test`
@@ -123,7 +123,7 @@ If a PR already exists, print its URL and stop — do not create a duplicate.
 Closes #<issue>
 ```
 
-The trailing `Closes #<issue>` line is **mandatory** when the workflow has a linked issue (resolved per `agents/project-manager.md § FN Stage` PR-issue-link validator). Omit only when no issue number is resolvable from any source.
+The trailing `Closes #<issue>` line is **mandatory** when the worktask has a linked issue (resolved per `agents/project-manager.md § FN Stage` PR-issue-link validator). Omit only when no issue number is resolvable from any source.
 
 Create PR:
 ```bash
@@ -168,5 +168,5 @@ Print the resulting PR URL.
 ## Related
 
 - `skills/shared/git-conventions.md` — Commit format reference
-- `agents/project-manager.md` — FN stage PR creation (full workflow)
+- `agents/project-manager.md` — FN stage PR creation (full worktask)
 - `create-release-notes.md` — Post-PR release notes

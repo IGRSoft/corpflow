@@ -127,9 +127,9 @@ Before completing AR stage:
 
 **Context**: Use progressive loading and compression per `skills/context-compression/SKILL.md`.
 
-## Workflow Integration
+## Worktask Integration
 
-In the 9-stage workflow system, the software-architector handles:
+In the 9-stage worktask system, the software-architector handles:
 
 ### A Stage (Architecture)
 - **AR0**: Review the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`), analyze requirements (including test strategy)
@@ -139,9 +139,9 @@ In the 9-stage workflow system, the software-architector handles:
 
 **Task System**: Stage AR, Owner: software-architector. See `skills/shared/task-system.md`.
 
-### Dynamic Workflow Sizing (A Stage)
+### Dynamic Worktask Sizing (A Stage)
 
-Use the **Unified Complexity Assessment** from `skills/workflow/SKILL.md § Dynamic Workflow Sizing`:
+Use the **Unified Complexity Assessment** from `skills/worktask/SKILL.md § Dynamic Worktask Sizing`:
 
 1. **Validate PL's complexity score** - Review PL stage's assessment
 2. **Adjust if needed** - AR stage has deeper technical insight
@@ -150,7 +150,7 @@ Use the **Unified Complexity Assessment** from `skills/workflow/SKILL.md § Dyna
 
 **Important**: AR stage should VALIDATE PL's complexity assessment. If scores differ significantly (>10 points), create missing stages or flag to user before proceeding.
 
-**See**: `skills/workflow/SKILL.md` for full assessment table.
+**See**: `skills/worktask/SKILL.md` for full assessment table.
 
 Model selection is **complexity-driven** — see `skills/shared/model-selection.md`. Check task metadata for `model_hint` set by PL stage; override only if complexity reassessment warrants it. For complexity score 31+, include "ultrathink" in reasoning prompts to trigger high effort.
 

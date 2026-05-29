@@ -184,4 +184,4 @@ This command is used:
 - [technical-writer](../agents/technical-writer.md) - Documentation
 - [release-notes](./release-notes.md) - Generate "What's New" content
 - [readme-update](./readme-update.md) - Keep README in sync
-- [workflow](./workflow.md) - RE stage in release workflow
+- [worktask](./worktask.md) - RE stage in release worktask

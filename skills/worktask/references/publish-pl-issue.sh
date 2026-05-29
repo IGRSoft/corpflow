@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # publish-pl-issue.sh — auto-publish a sanitised GitHub issue after PL approval.
 #
-# Invoked by the orchestrator at Step 6.5 of skills/workflow/SKILL.md between
-# `approval_received` audit-write and stage-loop entry. NEVER blocks the workflow:
+# Invoked by the orchestrator at Step 6.5 of skills/worktask/SKILL.md between
+# `approval_received` audit-write and stage-loop entry. NEVER blocks the worktask:
 # operational outcomes are encoded in audit.jsonl rows (result + reason), helper
 # exits 0 unless catastrophic (jq missing, audit dir unwritable, state corrupt).
 #
@@ -17,7 +17,7 @@
 #     (no create, no comment). The parent milestone issue is the canonical record.
 #   - Atomic state.json write: tmp.$$ → fsync → mv -f.
 #   - Audit row: actor=orchestrator, action=github_issue_created, via=publish-pl-issue.sh,
-#     dedupe_key=<workflow_id>:<run_index>:gh_issue.
+#     dedupe_key=<worktask_id>:<run_index>:gh_issue.
 #   - Exit codes: 0 all operational paths, 1 catastrophic, 2 --self-test failure.
 #
 # Env vars for injection (test/dev): STATE_FILE, WORKSPACE_ROOT, GH_BIN, DRY_RUN,
@@ -68,7 +68,7 @@ defer() {
   # $1=reason; appends audit row with result=deferred, exits 0.
   local reason="$1"
   local wid run_index dk
-  wid=$(jq -r '.workflow_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo "unknown")
+  wid=$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo "unknown")
   run_index=$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo "0")
   dk="$wid:$run_index:gh_issue"
   audit_row "deferred" "$(jq -cn --arg v "publish-pl-issue.sh" --arg r "$reason" --arg dk "$dk" '{via:$v, reason:$r, dedupe_key:$dk}')" || true
@@ -79,7 +79,7 @@ fatal() {
   # $1=reason; appends audit row with result=error, exits 1.
   local reason="$1"
   local wid run_index dk
-  wid=$(jq -r '.workflow_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo "unknown")
+  wid=$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo "unknown")
   run_index=$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo "0")
   dk="$wid:$run_index:gh_issue"
   audit_row "error" "$(jq -cn --arg v "publish-pl-issue.sh" --arg r "$reason" --arg dk "$dk" '{via:$v, reason:$r, dedupe_key:$dk}')" 2>/dev/null || true
@@ -192,8 +192,8 @@ find_workspace_json() {
 }
 
 # ---------- milestone-mode detector -----------------------------------------
-# Returns 0 (true) if the workflow is running under --milestone:N or inside a
-# milestone-workflow workspace. Detection signals (highest priority first):
+# Returns 0 (true) if the worktask is running under --milestone:N or inside a
+# milestone-worktask workspace. Detection signals (highest priority first):
 #   1. MILESTONE_MODE=1 env override (used by tests).
 #   2. state.json:metadata.milestone non-empty.
 #   3. workspace.json present at $WORKSPACE_ROOT or $PWD.
@@ -219,13 +219,13 @@ write_state_url() {
 }
 
 # ---------- label auto-provisioning -----------------------------------------
-# Color/description registry for canonical workflow labels (AC-1).
-# Per spec §4.1: workflow (blue), planning-approved (green), complexity:<tier>
+# Color/description registry for canonical worktask labels (AC-1).
+# Per spec §4.1: worktask (blue), planning-approved (green), complexity:<tier>
 # (severity gradient), ticket:<prefix> (purple). Unknown labels fall back to
 # a neutral grey + generic description.
 label_color() {
   case "$1" in
-    workflow)             printf '0366d6' ;;  # blue
+    worktask)             printf '0366d6' ;;  # blue
     planning-approved)    printf '0e8a16' ;;  # green
     complexity:low)       printf 'c2e0c6' ;;  # pale green
     complexity:moderate)  printf 'fbca04' ;;  # amber
@@ -239,7 +239,7 @@ label_color() {
 
 label_description() {
   case "$1" in
-    workflow)             printf 'igrsoft workflow run' ;;
+    worktask)             printf 'igrsoft worktask run' ;;
     planning-approved)    printf 'PL stage plan approved by human' ;;
     complexity:*)         printf 'PL complexity tier' ;;
     ticket:*)             printf 'External tracker reference' ;;
@@ -427,7 +427,7 @@ run_self_tests() {
   t6_state="$t6_dir/.context/state.json"
   t6_plan="$t6_dir/planning-0.md"
   cat > "$t6_state" <<'JSON'
-{"version":1,"workflow_id":"strict-mode-test","run_index":0,"plan_file":"PLAN_PLACEHOLDER","facts":{"goal":"OV-999 Strict mode regression"},"metadata":{}}
+{"version":1,"worktask_id":"strict-mode-test","run_index":0,"plan_file":"PLAN_PLACEHOLDER","facts":{"goal":"OV-999 Strict mode regression"},"metadata":{}}
 JSON
   # Patch plan_file path in state.json.
   jq --arg p "$t6_plan" '.plan_file = $p' "$t6_state" > "$t6_state.tmp" && mv -f "$t6_state.tmp" "$t6_state"
@@ -455,7 +455,7 @@ case "$1" in
       create) echo "could not create label: validation failed" >&2 ; exit 1 ;;
     esac ;;
   issue)
-    echo "could not add label: 'workflow' not found in repository" >&2
+    echo "could not add label: 'worktask' not found in repository" >&2
     exit 1 ;;
 esac
 exit 0
@@ -526,7 +526,7 @@ MOCK
 
   # ---- Fixture classify_gh_failure: canned stderr blobs ----
   local cl
-  cl=$(classify_gh_failure "could not add label: 'workflow' not found in repository")
+  cl=$(classify_gh_failure "could not add label: 'worktask' not found in repository")
   if [ "$cl" = "label_create_failed" ]; then
     pass=$((pass + 1)); echo "publish-pl-issue: self-test classify(label) PASS ($cl)"
   else
@@ -595,7 +595,7 @@ MOCK
     '"$(declare -f label_color)"'
     '"$(declare -f label_description)"'
     '"$(declare -f ensure_labels)"'
-    ensure_labels workflow planning-approved complexity:low ticket:OV-113
+    ensure_labels worktask planning-approved complexity:low ticket:OV-113
     printf "%s" "$DROPPED_LABELS"
   ' )
   if [ -z "$t8_dropped" ]; then
@@ -613,7 +613,7 @@ case "$1" in
   label)
     case "$2" in
       list)
-        printf 'workflow\nplanning-approved\ncomplexity:low\nticket:OV-113\n'
+        printf 'worktask\nplanning-approved\ncomplexity:low\nticket:OV-113\n'
         exit 0 ;;
       create) echo "label already exists" >&2; exit 1 ;;  # would fail if called
     esac ;;
@@ -626,7 +626,7 @@ MOCK
     '"$(declare -f label_color)"'
     '"$(declare -f label_description)"'
     '"$(declare -f ensure_labels)"'
-    ensure_labels workflow planning-approved complexity:low ticket:OV-113
+    ensure_labels worktask planning-approved complexity:low ticket:OV-113
     printf "%s" "$DROPPED_LABELS"
   ' )
   if [ -z "$t8_dropped" ]; then
@@ -767,11 +767,11 @@ mkdir -p "$LOG_DIR" 2>/dev/null || fatal "audit_dir_unwritable"
 [ -r "$STATE_FILE" ] || fatal "state_corrupt"
 jq -e . "$STATE_FILE" >/dev/null 2>&1 || fatal "state_corrupt"
 
-# Pull workflow context.
-WORKFLOW_ID=$(jq -r '.workflow_id // "unknown"' "$STATE_FILE")
+# Pull worktask context.
+WORKTASK_ID=$(jq -r '.worktask_id // "unknown"' "$STATE_FILE")
 RUN_INDEX=$(jq -r '.run_index // 0' "$STATE_FILE")
 PLAN_FILE=$(jq -r '.plan_file // ""' "$STATE_FILE")
-DEDUPE_KEY="$WORKFLOW_ID:$RUN_INDEX:gh_issue"
+DEDUPE_KEY="$WORKTASK_ID:$RUN_INDEX:gh_issue"
 
 # Strict mode: CLI --strict wins; else read metadata.gh_issue.strict from state.
 # Default unchanged: STRICT=0 (non-blocking, preserves fixtures 01-05 behaviour).
@@ -820,11 +820,11 @@ fi
 SUMMARY_RAW=$(jq -r '.facts.goal // ""' "$STATE_FILE")
 
 # AC-2: external-ticket extraction. Match ^[A-Z][A-Z0-9]+-[0-9]+ in SUMMARY_RAW
-# first; fall back to upper-cased WORKFLOW_ID extraction. Already-prefixed
+# first; fall back to upper-cased WORKTASK_ID extraction. Already-prefixed
 # titles are left as-is in the render block below (no double-prefix).
 EXTERNAL_TICKET=$(extract_external_ticket "$SUMMARY_RAW")
 if [ -z "$EXTERNAL_TICKET" ]; then
-  EXTERNAL_TICKET=$(extract_external_ticket "$(printf '%s' "$WORKFLOW_ID" | tr '[:lower:]' '[:upper:]')")
+  EXTERNAL_TICKET=$(extract_external_ticket "$(printf '%s' "$WORKTASK_ID" | tr '[:lower:]' '[:upper:]')")
 fi
 if [ -n "$EXTERNAL_TICKET" ]; then
   write_state_external_ticket "$EXTERNAL_TICKET" || true
@@ -897,13 +897,13 @@ BODY_TMP="$LOG_DIR/issue-body-${RUN_INDEX}.tmp"
     printf '## Design Preview\n%s\n\nCompare implementation (DV) and screenshots (QA) against this design.\n\n' "$DESIGN_S"
   fi
   printf '## Complexity\n%s\n\n' "$COMPLEXITY_S"
-  printf -- '---\n*Plan approved on %s. Tracking continues in workflow run #%s.*\n' "$(date -u +%F)" "$RUN_INDEX"
+  printf -- '---\n*Plan approved on %s. Tracking continues in worktask run #%s.*\n' "$(date -u +%F)" "$RUN_INDEX"
 } > "$BODY_TMP" 2>/dev/null || fatal "audit_dir_unwritable"
 
-# Title (sanitised — pulled from facts.goal or workflow_id).
-TITLE_RAW="${SUMMARY_RAW:-$WORKFLOW_ID}"
+# Title (sanitised — pulled from facts.goal or worktask_id).
+TITLE_RAW="${SUMMARY_RAW:-$WORKTASK_ID}"
 TITLE=$(printf '%s' "$TITLE_RAW" | head -1 | cut -c1-100 | sanitise_body | tr -d '\n')
-[ -z "$TITLE" ] && TITLE="Plan approved: $WORKFLOW_ID"
+[ -z "$TITLE" ] && TITLE="Plan approved: $WORKTASK_ID"
 
 # AC-2: ensure title starts with EXTERNAL_TICKET prefix. Skip if already prefixed
 # (avoid double-prefix like "OV-113 OV-113 …").
@@ -918,7 +918,7 @@ if [ -n "$EXTERNAL_TICKET" ]; then
 fi
 
 # AC-1 + AC-2: build the canonical label list and auto-provision missing ones.
-CANONICAL_LABELS="workflow planning-approved complexity:$TIER"
+CANONICAL_LABELS="worktask planning-approved complexity:$TIER"
 if [ -n "$EXTERNAL_TICKET" ]; then
   CANONICAL_LABELS="$CANONICAL_LABELS ticket:$EXTERNAL_TICKET"
 fi
@@ -967,7 +967,7 @@ else
       '{via:$v, reason:$r, dedupe_key:$dk}
        + (if $tkt == "" then {} else {external_ticket:$tkt} end)
        + (if $dropped == "" then {} else {labels_dropped:($dropped|split(" "))} end)')
-    # AC-4: strict mode blocks the workflow on operational failure.
+    # AC-4: strict mode blocks the worktask on operational failure.
     if [ "$STRICT" = "1" ] || [ "$STRICT" = "true" ]; then
       audit_row "failed" "$FAIL_META" || true
       exit 1

@@ -12,7 +12,7 @@ Contains user-attached screenshots, diagrams, and other visual references.
 
 The Designer agent generates .pen design mockups for UI-related tasks using the Pencil MCP server and saves them to `.context/designs/`.
 
-**Workflow:**
+**Worktask:**
 1. Product Manager detects UI work (design score >= 5)
 2. Product Manager invokes Designer with mockup request
 3. Designer loads Pencil tools via `ToolSearch({ query: "+pencil" })`
@@ -55,7 +55,7 @@ The Designer agent generates .pen design mockups for UI-related tasks using the 
 
 ## User-Attached Images
 
-When a user attaches images during a workflow task, copy them to `.context/images/`.
+When a user attaches images during a worktask task, copy them to `.context/images/`.
 
 ### Image Handling Process
 
@@ -76,7 +76,7 @@ When a user attaches images during a workflow task, copy them to `.context/image
 
 ## Folder Structure Examples
 
-> **Note on `planning-N.md`**: each example below shows a single-plan workspace (run 0), so the plan file is `planning-0.md` and all stage artifacts use suffix `-0`. If PL reruns (e.g. mid-workflow re-plan), N increments and all downstream artifacts for that run use the new suffix. Earlier runs are preserved. See `agents/product-manager.md § Plan File & Run Index Naming`.
+> **Note on `planning-N.md`**: each example below shows a single-plan workspace (run 0), so the plan file is `planning-0.md` and all stage artifacts use suffix `-0`. If PL reruns (e.g. mid-worktask re-plan), N increments and all downstream artifacts for that run use the new suffix. Earlier runs are preserved. See `agents/product-manager.md § Plan File & Run Index Naming`.
 
 ### Example 1: Simple Bug Fix (9-stage, low complexity)
 
@@ -179,7 +179,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
     └── security-diagram.png
 ```
 
-### Example 4: Emergency Hotfix (emergency workflow)
+### Example 4: Emergency Hotfix (emergency worktask)
 
 ```
 .context/
@@ -205,7 +205,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 └── images/
 ```
 
-### Example 6: Milestone-Based Workflow
+### Example 6: Milestone-Based Worktask
 
 ```
 .context/
@@ -217,13 +217,13 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 └── images/
 ```
 
-### Example 7: Worktree-Based Milestone Workflow
+### Example 7: Worktree-Based Milestone Worktask
 
 When using `--worktree` with milestones, `.context/` lives inside each worktree:
 
 ```
 .worktrees/milestone-1/42/              # Git worktree root (full source copy)
-├── .context/                            # Workflow artifacts
+├── .context/                            # Worktask artifacts
 │   ├── planning-0.md
 │   ├── analyzing-0.md
 │   ├── development-0.md

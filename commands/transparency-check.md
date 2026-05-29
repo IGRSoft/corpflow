@@ -261,7 +261,7 @@ Protects the epistemic autonomy and rational agency of users.
 
 ## Integration
 
-### Workflow Integration
+### Worktask Integration
 - **P Stage**: Check requirements for honesty
 - **D Stage**: Review implementation transparency
 - **W Stage**: Verify documentation honesty

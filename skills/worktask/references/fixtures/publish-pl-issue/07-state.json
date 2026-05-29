@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "workflow_id": "ov-113-fixture",
-  "plan_file": "skills/workflow/references/fixtures/publish-pl-issue/07-with-ticket-prefix.md",
+  "worktask_id": "ov-113-fixture",
+  "plan_file": "skills/worktask/references/fixtures/publish-pl-issue/07-with-ticket-prefix.md",
   "run_index": 0,
   "stages": {
     "PL": { "status": "completed", "artifact": "07-with-ticket-prefix.md", "verdict": "ok" }

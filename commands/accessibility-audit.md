@@ -187,7 +187,7 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 - Layout adapts gracefully
 - No truncation of critical content
 
-## Workflow Integration
+## Worktask Integration
 
 Use this command:
 - During PL stage for accessibility requirements

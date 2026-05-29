@@ -7,7 +7,7 @@ This fixture documents the contract exercised by the `07-ticket-extract`,
 
 ## Summary
 
-When `facts.goal` (or `workflow_id` as fallback) starts with the canonical
+When `facts.goal` (or `worktask_id` as fallback) starts with the canonical
 external-ticket pattern `^[A-Z][A-Z0-9]+-[0-9]+`, the helper extracts the
 prefix and threads it through the published issue: title, label, and
 state.json metadata.
