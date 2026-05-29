@@ -61,7 +61,7 @@ Add to your Claude Code configuration:
 
 ```bash
 # Clone the repository
-git clone https://github.com/igrsoft/company-worktask.git
+git clone https://github.com/igrsoft/company-workflow.git
 
 # Or add as a plugin
 claude plugins add /path/to/company-worktask

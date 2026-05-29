@@ -135,7 +135,7 @@ All `Write`/`Edit` operations MUST target paths under `task.metadata.workspace_p
 - ❌ DO NOT write to `/Users/<user>/Projects/<org>/<repo>/...` (plugin source repo / canonical clone)
 - ✅ DO write to `/Users/<user>/conductor/workspaces/<repo>/<workspace>/...` (active worktree)
 
-Rationale: the `pm-figma-url-detection` run wrote three DV edits to `/Users/korich/Projects/igrsoft/company-worktask/` (plugin source repo) instead of the workspace worktree at `/Users/korich/conductor/workspaces/company-worktask/gwangju-v2/`. FN had to copy files across and `git restore` the source repo. The friction reproduces whenever DV reads context from the canonical clone and then writes back to that same absolute path instead of rebasing onto `workspace_path`.
+Rationale: the `pm-figma-url-detection` run wrote three DV edits to `/Users/korich/Projects/igrsoft/company-workflow/` (plugin source repo) instead of the workspace worktree at `/Users/korich/conductor/workspaces/company-workflow/gwangju-v2/`. FN had to copy files across and `git restore` the source repo. The friction reproduces whenever DV reads context from the canonical clone and then writes back to that same absolute path instead of rebasing onto `workspace_path`.
 
 **Path prefix check** (run mentally before every `Write`/`Edit` when `task.metadata.workspace_path` is set):
 
