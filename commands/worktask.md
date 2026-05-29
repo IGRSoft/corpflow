@@ -62,6 +62,7 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--milestone:N:ISSUE` | Execute specific issue |
 | `--parallel:N` | N concurrent tracks (max 5) |
 | `--auto-continue` | Skip approval gates |
+| `--dynamic` | Run the autonomous span (AR→…→QA/DC/RE, between the PL0 and FN human gates) on Claude Code's native Workflow engine (`Workflow` tool, v2.1.154+) instead of the manual stage loop. Opt-in and additive; both human gates and the no-self-commit rule stay orchestrator-owned. Degrades to the manual loop when the `Workflow` tool is absent (older CC, headless, `--print`). See `skills/worktask/references/dynamic-workflow.md`. |
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
@@ -131,7 +132,7 @@ See `skills/shared/stage-codes.md` for stage details.
    fi
    ```
    **Regression guard**: If neither the plugin-registered hook NOR the project-local copy exist, emit a warning: `"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge (Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."` Do NOT block the worktask.
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", fn_gate: "<required|bypass>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). Set `fn_gate: "bypass"` when invoked with `--auto-continue`, `--milestone:N`, or `--worktree`; otherwise `"required"`.
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", fn_gate: "<required|bypass>", execution_mode: "<manual|dynamic>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). Set `fn_gate: "bypass"` when invoked with `--auto-continue`, `--milestone:N`, or `--worktree`; otherwise `"required"`. Set `execution_mode: "dynamic"` when invoked with `--dynamic`; otherwise `"manual"` (the default). `execution_mode` only selects HOW the autonomous span runs (native Workflow engine vs the manual stage loop) — it does NOT change either approval gate.
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next plan filename per `agents/product-manager.md § Plan File Naming` (first run: `.context/planning-0.md`; subsequent runs: `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`
 7. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
@@ -177,6 +178,27 @@ approval is confirmed):
 
 See `skills/worktask/SKILL.md § Step 6.5` and `§ PL Issue Publish` for the
 sanitiser rules and non-blocking guarantee.
+
+**Step B — Select execution mode** (after Step A, before/around the stage loop):
+
+Read `PL0.metadata.execution_mode` (default `"manual"` when absent — in-flight worktasks stay manual).
+
+- **If `execution_mode == "dynamic"` AND the `Workflow` tool is present** in the orchestrator's tool list:
+  dispatch the autonomous span (AR → … → QA/DC/RE, stopping before FN) on the native Workflow engine per
+  `skills/worktask/references/dynamic-workflow.md` (`#script-template` single-issue; `#milestone-template`
+  for `--milestone:N` — which requires the R1 one-confirmation multi-PR guard BEFORE any lane runs). Write a
+  `workflow_launched` audit row, then on workflow return run the boundary reconciliation
+  (`dynamic-workflow.md#boundary-reconciliation`) and a `workflow_returned` audit row. **Then evaluate the
+  FN gate exactly as in the manual loop** (`skills/worktask/SKILL.md § FN Gate`) — the workflow span never
+  crosses FN; commit/push/PR remains the human-gated FN stage.
+- **Otherwise** (`execution_mode == "manual"`, OR `--dynamic` was set but the `Workflow` tool is absent —
+  older CC, headless `claude agents run`, SDK/`--print`): when `--dynamic` was requested but unavailable,
+  write a `dynamic_fallback` audit row first, then run the manual loop below unchanged. A crashed dynamic
+  run also resumes in manual mode (`dynamic-workflow.md#resume`).
+
+The PL0 gate above and the FN gate below are **orchestrator-owned in both modes** — the dynamic branch only
+changes how the gate-free AR→…→QA span executes. The two APPROVAL PROTOCOL blocks at the top of this file
+are unaffected.
 
 Execute the orchestrator execution loop from `skills/worktask/SKILL.md § Orchestrator Execution Loop`. The loop enforces a second approval gate immediately before any FN-stage task — see `skills/worktask/SKILL.md § FN Gate` for the pre-FN summary template and bypass semantics.
 
@@ -316,6 +338,7 @@ The runner MUST append one `audit.jsonl` line `action: "external_dispatch"` per 
 ## See Also
 
 - `skills/worktask/SKILL.md` — execution loop, dynamic sizing, worktask modes
+- `skills/worktask/references/dynamic-workflow.md` — `--dynamic` native Workflow-engine execution mode
 - `skills/worktask-milestone/SKILL.md` — milestone mode, worktree mode
 - `skills/shared/stage-codes.md` — stage codes and track IDs
 - `skills/agent-coordination/references/headless-dispatch.md` — `task.metadata` → `claude agents` flag bridge
