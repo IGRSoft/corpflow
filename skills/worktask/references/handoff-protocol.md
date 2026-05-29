@@ -233,6 +233,26 @@ properties:
       type: string
       maxLength: 300
       pattern: '.*ref:.*'
+  workflow:
+    type: object
+    description: |
+      OPTIONAL. Present only in `--dynamic` execution mode (CC native Workflow engine, v2.1.154+).
+      Additive and version-1-compatible: absent in manual mode and ignored by readers that predate it,
+      so adding it never breaks an existing reader. The native `run_id` is a RESUME POINTER only —
+      `state.json` + the Task System remain the source of truth. Written by the orchestrator at launch
+      and on return; mutated mid-span only by the workflow script (single writer at phase boundaries).
+      Full semantics: `skills/worktask/references/dynamic-workflow.md#state-workflow-block`.
+    properties:
+      run_id: { type: string, description: "Native Workflow runId; maps to resumeFromRunId on resume" }
+      mode: { type: string, enum: [dynamic] }
+      launched_at_stage: { type: string, enum: [PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET] }
+      stops_before: { type: string, enum: [FN, ST], description: "FN in interactive mode; ST in bypass modes" }
+      budget:
+        type: object
+        properties:
+          estimate_usd: { type: number, minimum: 0, description: "PL0-emitted span estimate" }
+          ceiling_usd: { type: number, minimum: 0, description: "operator-tunable headroom ceiling passed to the engine" }
+      status: { type: string, enum: [running, returned] }
 ```
 
 ### Eviction order on overflow
@@ -277,7 +297,7 @@ PL0 (or `commands/worktask.md` Phase 1) writes the initial ledger:
 
 ## #fallback-paths
 
-Four documented degradation paths. Worktask MUST complete in all four (AC-16, AC-17).
+Five documented degradation paths. Worktask MUST complete in all five (AC-16, AC-17).
 
 | Path | Trigger | Behavior |
 |------|---------|----------|
@@ -285,6 +305,7 @@ Four documented degradation paths. Worktask MUST complete in all four (AC-16, AC
 | F2 | state.json **present**, agent ignores it | No penalty. Agent reads listed files and writes its artifact. Orchestrator's hook patches state.json from frontmatter (or return text on F3). |
 | F3 | Agent writes artifact **without frontmatter** | Orchestrator logs WARN `frontmatter missing in <artifact>`. Derives minimal handoff: `{stage, verdict: ok, summary: <first 200 chars of return>, refs: {artifact: <path>}}`. Worktask proceeds. |
 | F4 | state.json **corrupt** (invalid JSON or schema mismatch) | Quarantine to `.context/state.json.bad.<unix-ts>`. Regenerate from PL0 + completed-stage frontmatter walk. Audit log to `.context/logs/state-recovery.log`. Continue. |
+| F5 | **Dynamic mode**: the workflow script cannot patch state.json mid-span (e.g. the script crashed before merging a stage return, or `SubagentStop` did not fire for an `agent()` child and no script merge ran) | On workflow **return**, the orchestrator reconciles from the typed `schema` returns the script *did* produce; for any stage still missing from the ledger, fall through to the **F4 frontmatter walk** over `.context/<stage>-N.md`. Reconciliation is idempotent (re-applying an identical patch is a no-op). Manual-mode resume is always available if the run crashed entirely. See `dynamic-workflow.md#boundary-reconciliation` and `#fallback`. |
 
 ### F4 regeneration walk
 

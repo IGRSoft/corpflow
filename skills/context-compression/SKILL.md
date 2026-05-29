@@ -232,7 +232,7 @@ Maximum tokens to pass between stages:
 
 ### Extended Context Budget (1M Window)
 
-When running on Opus 4.6/4.7 with Max/Team/Enterprise plans, the context window is 1M tokens. Handoff budgets scale proportionally:
+When running on Opus 4.6/4.7/4.8 with Max/Team/Enterprise plans, the context window is 1M tokens. Handoff budgets scale proportionally:
 
 | Handoff | Standard Budget | Extended Budget (1M) |
 |---------|----------------|---------------------|

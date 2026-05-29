@@ -164,6 +164,27 @@ With `--worktree` mode, additional parallelism becomes safe because each issue h
 
 > When two agents need to modify source files simultaneously (e.g., parallel DV stages for different milestone issues), worktree mode prevents conflicts by giving each a separate working directory and branch.
 
+### Native Workflow Fan-Out (`--dynamic` mode)
+
+In the opt-in `--dynamic` execution mode the autonomous span runs on Claude Code's native Workflow engine
+(`Workflow` tool, v2.1.154+), which provides **engine-managed parallelism** instead of the manual
+worktree-split above. The two are distinct mechanisms with the same isolation guarantee:
+
+| | Manual worktree-split (default) | Native Workflow fan-out (`--dynamic`) |
+|---|---|---|
+| Trigger | `--worktree` / `--milestone` | `--dynamic` (+ optional `--worktree`/`--milestone`) |
+| Parallelism | Orchestrator delegates one `Task()` per worktree, in-context | Engine spawns children via `parallel()` / `pipeline()` |
+| Isolation | Orchestrator creates `.worktrees/…` per issue | `agent(prompt, { …, isolation: 'worktree' })` — engine provisions the worktree |
+| Decision point | Orchestrator loop (blockedBy resolution) | TL stage output drives DV `parallel()` fan-out (`dynamic-workflow.md#script-template`) |
+| Scale | Bounded by `--parallel:N` (max 5) | Tens–hundreds of children (engine ~1000-agent cap; shard >~200-issue milestones) |
+| Gates | PL0 + FN orchestrator-owned | **PL0 + FN STILL orchestrator-owned** — the span runs strictly between them |
+
+The `isolation: 'worktree'` setting maps onto the same `.worktrees/milestone-{N}/{issue#}/` topology as
+manual mode (see `skills/worktask/SKILL.md § Path Resolution`). Full mechanics, the script/pipeline
+templates, the R1 multi-PR confirmation guard, and the fallback-to-manual path are in
+`skills/worktask/references/dynamic-workflow.md`. The orchestrator NEVER launches the workflow before the
+PL0 human gate and ALWAYS returns to the FN human gate after it.
+
 ### Parallel Tool Call Safety
 
 Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool calls. As of **v2.1.128**, failing read-only `Bash` calls (`grep`, `git diff`, `ls`, etc.) also no longer cancel siblings — only mutating `Bash` errors cascade. This makes parallel reads, searches, and shell probes more reliable within agents.
@@ -185,8 +206,9 @@ review, the audit tail is the single source of truth for what happened.
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned`, `github_issue_created` |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned`, `github_issue_created`, `workflow_launched`, `workflow_returned`, `dynamic_fallback` (the last three only in `--dynamic` mode — see `skills/worktask/references/dynamic-workflow.md#audit-vocabulary`) |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation` |
+| `workflow-script` (`--dynamic` mode, **advisory**) | `workflow_agent_stopped` — one row per native `agent()` child completion. Mirrors `subagent_stopped`; deduped against the `hook:audit-subagent` row when `SubagentStop` also fires (pessimistic design — correct whether or not the hook fires for workflow-spawned children, see `dynamic-workflow.md#risk-register` R2). Authority: orchestrator reconciliation rows outrank these advisory rows. |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
 | `hook:audit-subagent` (SubagentStop, plugin) **(authoritative)** | `subagent_stopped` (paired with cost-*.jsonl entry) — v3.10.0+. v3.10.6+ rows additionally carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`, and `dedupe_key_extended` (see § Dedupe Key Migration below). |
 | `hook:audit-tooluse` (PostToolUse, plugin) **(authoritative)** | `tool_invoked` for `TaskUpdate\|TaskCreate\|Write\|Edit` with `duration_ms` + `effort` — v3.10.0+ |
@@ -591,6 +613,27 @@ For complex bugs with multiple potential causes:
 4. Arbitrate across findings, rank by confidence and evidence strength
 
 See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, PostToolUse format-on-save safety, MCP-tool-typed hooks (v2.1.118), `duration_ms` in PostToolUse payload (v2.1.119), and PostToolUse output replacement via `updatedToolOutput` (v2.1.121)), agent teams comparison, MCP elicitation patterns, and team communication protocols (message types, anti-patterns, deadlock resolution).
+
+## Native Dynamic Workflows vs igrsoft Staged Worktask
+
+As of v2.1.154, Claude Code ships a native `/workflows` command and Workflow tool for **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. This is complementary to (not a replacement for) the igrsoft 11-stage worktask system:
+
+| Dimension | Native dynamic workflows (`/workflows`) | igrsoft staged worktask |
+|---|---|---|
+| **Scale** | Tens–hundreds of parallel agents | 11 governed sequential/parallel stages |
+| **Governance** | Ad-hoc, minimal overhead | Approval gates, stage contracts, artifact audit trail |
+| **Use case** | One-off fan-out (e.g. scan 500 files in parallel) | Full feature development with DR/SR/QA gates |
+| **State management** | Orchestrator-in-context | `.context/state.json`, Task System, audit.jsonl |
+| **Resume / rollback** | Manual | Resume Procedure, state.checkpoint-*.json |
+
+**When to reach for each:**
+
+- Reach for native dynamic workflows when you need quick parallelism without governance overhead (e.g., batch linting, parallel research, one-off data transforms).
+- Reach for the igrsoft worktask when work requires planning approval, security review, QA sign-off, documentation, or any multi-stage handoff contract.
+
+They can compose: a DV agent inside an igrsoft worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
+
+> Claude now reserves multiple-choice / AskUserQuestion prompts for genuine decisions (v2.1.154). This reinforces the existing text-approval-gate design in worktask stages — the orchestrator's approval gate (after PL0) is a real decision checkpoint, not a procedural confirmation.
 
 ## Related
 

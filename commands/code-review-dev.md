@@ -12,6 +12,8 @@ Perform platform-aware code review using specialized developer expertise. Review
 
 > **See also**: For deep technical analysis including complexity metrics, tech debt assessment, and performance profiling, use `/tech-review`. For estimation accuracy reviews, use `/senior-review`.
 
+> **Disambiguation**: This plugin command (`/code-review-dev`) is the **DR stage** review — read-only analysis; DV applies the fixes. It is distinct from two CC-native commands: `/code-review --fix` (applies findings directly to the working tree) and `/simplify` (cleanup-only structural review). Use `/code-review-dev` when you want the igrsoft governed review gate with stage contracts and audit trail; use the CC-native commands for quick ad-hoc fixes outside the worktask pipeline.
+
 ## Usage
 
 ```

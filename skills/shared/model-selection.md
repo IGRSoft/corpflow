@@ -14,13 +14,15 @@ effort: low
 | **sonnet** | ~10x haiku | ~$3.00 | Implementation, analysis, code review, coordination |
 | **opus** | ~50x haiku | ~$15.00 | Architecture decisions, complex reasoning, meta-optimization |
 
-> **Opus 4.7 Effort Levels**: `low` ○, `medium` ◐, `high` ●, `xhigh` ⬣ (v2.1.111+), `max` ⬛. **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans (v2.1.94). Pro/Max subscribers also get `high` default on **Opus 4.6 and Sonnet 4.6** (v2.1.117+ — was `medium`). Pro plan continues to retain medium default on older models. The keyword "ultrathink" still triggers high effort. Use `/effort auto` to reset; `/effort` opens an interactive slider with arrow-key navigation (v2.1.111). Opus 4.6 remains supported.
+> **Opus 4.8 Effort Levels** (latest, v2.1.154+): `low` ○, `medium` ◐, `high` ●, `xhigh` ⬣ (v2.1.111+), `max` ⬛. **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans (v2.1.94). Pro/Max subscribers also get `high` default on **Opus 4.6 and Sonnet 4.6** (v2.1.117+ — was `medium`). Pro plan continues to retain medium default on older models. The keyword "ultrathink" still triggers high effort. Use `/effort auto` to reset; `/effort` opens an interactive slider with **Faster/Smarter** labels (v2.1.154; was arrow-key navigation in v2.1.111). Opus 4.6 and Opus 4.7 remain supported. Use `/effort xhigh` for hardest tasks requiring maximum reasoning.
 
-> **Opus 4.7 context window** (v2.1.117 fix): Claude Code now correctly computes `/context` percentages against Opus 4.7's native **1M context window** rather than 200K — eliminates premature autocompacting on long Opus 4.7 sessions.
+> **Opus 4.8 context window** (v2.1.154+): Opus 4.8 has a native **1M context window** (same as Opus 4.7 — v2.1.117 fix originally applied to 4.7). Claude Code correctly computes `/context` percentages against the full 1M window — eliminates premature autocompacting on long Opus 4.8 sessions.
 
 > **Hook Effort Visibility** (v2.1.133+): hooks observe the active effort tier via `effort.level` (JSON payload) and the `$CLAUDE_EFFORT` env var. Cost/audit hooks can attribute spend per tier without parsing model metadata. See `skills/agent-coordination/references/hook-monitoring.md § Hook Effort Visibility`.
 
-> **Fast Mode Default → Opus 4.7** (v2.1.142): `/fast` now uses Opus 4.7 by default (was Opus 4.6). Set `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE=1` to pin fast mode back to Opus 4.6. Plugin agents that rely on `xhigh` effort already require Opus 4.7 (v2.1.111+) — this default closes the last gap where a `/fast` session would silently downgrade to 4.6.
+> **Fast Mode on Opus 4.8** (v2.1.154): fast mode on Opus 4.8 delivers **2x rate for 2.5x speed**. `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE` is **deprecated and removed 2026-06-01** — pin fast mode via `/model` selection instead. Plugin agents that rely on `xhigh` effort now require Opus 4.8 (was Opus 4.7 in v2.1.111+).
+
+> **Lean system prompt default** (v2.1.154): Opus 4.8 uses a lean (shorter) system prompt by default. Haiku, Sonnet, and Opus ≤4.7 continue to use the standard system prompt.
 
 ## Selection Criteria
 

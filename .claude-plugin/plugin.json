@@ -1,7 +1,7 @@
 {
   "name": "igrsoft",
   "description": "Comprehensive 11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with Task System integration, developer review, security review, release engineering, incident response, and ST-stage self-improvement retrospectives.",
-  "version": "3.10.12",
+  "version": "3.11.0",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
@@ -47,7 +47,11 @@
     "skill-frontmatter-name",
     "mcp-dynamic-inherit",
     "settings-resilience",
-    "opus-4-7",
+    "opus-4-8",
+    "dynamic-workflows",
+    "dynamic-workflow",
+    "workflow-tool",
+    "lean-system-prompt",
     "xhigh-effort",
     "pre-compact-hook",
     "enter-worktree-path",

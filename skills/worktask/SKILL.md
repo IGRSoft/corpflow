@@ -87,6 +87,10 @@ PL0 assesses complexity and creates only the stages needed. No pre-creation or d
 
 Each task includes `metadata.agent` for executor resolution. See `initialization-patterns.md § PL Creates Subsequent Tasks`.
 
+### Budget estimate (dynamic mode)
+
+When the worktask runs with `--dynamic` (`PL0.metadata.execution_mode == "dynamic"`), PL0 additionally emits a **budget estimate** for the autonomous span: a per-stage token/cost estimate summed across AR→…→QA/DC/RE, recorded at `state.json.workflow.budget.estimate_usd`. The orchestrator derives a headroom `ceiling_usd` from it and passes the ceiling to the native Workflow engine; when the engine reaches the ceiling it pauses (not kills) the run and surfaces the pause to the operator. Budget is best-effort — it bounds spend, it does not guarantee completion. See `references/dynamic-workflow.md#budget`. In manual mode this estimate is unused.
+
 ## Workspace Mode
 
 When using `--milestone:N`, each ticket executes in an isolated workspace.
@@ -214,7 +218,7 @@ Document errors in `.context/errors/<agent>.md` (per-agent, append-only; one `##
 - Validate artifacts created
 - `PostCompact` hook fires after auto-compaction — use to re-inject critical worktask state
 
-> On Opus 4.6/4.7 with Max/Team/Enterprise, context window is 1M tokens. Compression still recommended at stage boundaries for cost efficiency even with larger windows.
+> On Opus 4.6/4.7/4.8 with Max/Team/Enterprise, context window is 1M tokens. Compression still recommended at stage boundaries for cost efficiency even with larger windows.
 
 See references/ for initialization code, stage details, and agent teams integration.
 
@@ -239,6 +243,15 @@ If validation fails:
 - Contract violation → Do NOT transition. Append `missing_input` entry to next stage's `.context/errors/<agent>.md` and block.
 
 ## Orchestrator Execution Loop
+
+> **This loop is the MANUAL execution mode** — the default. It dispatches one `Task()` per ready stage
+> in-process. When the worktask was started with `--dynamic` AND the native `Workflow` tool is present
+> (`PL0.metadata.execution_mode == "dynamic"`), the autonomous span (AR→…→QA/DC/RE) runs on the native
+> Workflow engine instead — see `skills/worktask/references/dynamic-workflow.md`. In dynamic mode the
+> AR→DC/RE stage execution is delegated to that reference, but the **PL0 precondition (below), the FN gate
+> (§ FN Gate), and the on-return boundary reconciliation stay orchestrator-owned**. If `--dynamic` was
+> requested but the `Workflow` tool is absent, the orchestrator writes a `dynamic_fallback` audit row and
+> runs this manual loop unchanged. Everything else in this section is mode-agnostic.
 
 ### Cache-Friendly Prompt Layout & state.json (handoff-protocol)
 
@@ -690,6 +703,8 @@ new trigger block when introducing one (e.g., Pencil, Sosumi).
 
 A second human-in-the-loop checkpoint immediately before any FN-stage task. The orchestrator MUST present a pre-FN summary and STOP unless the PL0 task carries `metadata.fn_gate = "bypass"`.
 
+> **Dynamic mode**: when `PL0.metadata.execution_mode == "dynamic"`, this gate fires on **workflow return** (the native Workflow span stops before FN). The pre-FN summary is built from the **reconciled `state.json`** (`dynamic-workflow.md#boundary-reconciliation`) exactly as in manual mode — the gate's ownership, bypass semantics, and template are identical. The workflow never commits, pushes, or opens a PR; FN remains orchestrator-owned and human-gated.
+
 ### Gate semantics
 
 - **Carrier**: `PL0.metadata.fn_gate ∈ {"required", "bypass"}`. PL0 sets the value at worktask init based on invocation flags (see `commands/worktask.md` Phase 1, step 4).
@@ -884,6 +899,9 @@ before resuming.
 | PL0 `completed`, all stages `completed` except FN | — | Near-done. Re-enter loop; FN gate check decides whether to STOP or proceed |
 | Stages `in_progress` with no `metadata.retry_count` | missing audit lines | Stale task state. Re-derive from most recent `.context/logs/` capture |
 | Any stage `in_progress` AND `claude agents --json` shows live `agent_id` matching that stage | — | Subagent still alive (v2.1.145+). `SendMessage` to nudge rather than re-delegating |
+| `state.json.workflow.run_id` present, `workflow.status:"running"`, `Workflow` tool available | audit tail has `workflow_launched`, no `workflow_returned` | Dynamic span still in flight. `resumeFromRunId = workflow.run_id` — the engine replays the cached prefix and continues from the first incomplete stage (`dynamic-workflow.md#resume`). |
+| `state.json.workflow.run_id` present, `Workflow` tool **absent** (cold resume on older CC / headless / `--print`) | `workflow_launched` present, no live engine run | Degrade to manual mode: write `dynamic_fallback`, rebuild the ledger via F4 frontmatter walk if needed, continue the manual loop from the first incomplete stage. Resume is replay-or-degrade, never rejoin. |
+| `state.json.workflow.run_id` present, `workflow.status:"returned"` | audit tail has `workflow_returned` | Span complete — re-enter at the FN gate (orchestrator-owned). Build the pre-FN summary from reconciled `state.json`. |
 
 ### Resume Procedure
 
