@@ -17,9 +17,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
-WORKFLOW_ID="canvas-fixture-smoke"
+WORKTASK_ID="canvas-fixture-smoke"
 SLUG="canvas-fixture"
-IMAGES_DIR=".context/images/${WORKFLOW_ID}"
+IMAGES_DIR=".context/images/${WORKTASK_ID}"
 LOGS_DIR=".context/logs"
 AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
 
@@ -46,7 +46,7 @@ echo "[run-e2e] swift=${HAS_SWIFT} magick=${HAS_MAGICK}"
 # many graceful-degrade scenarios).
 set +e
 "${REPO_ROOT}/skills/dv-screenshot-capture/scripts/apple-canvas.sh" \
-    --workflow-id "$WORKFLOW_ID" \
+    --worktask-id "$WORKTASK_ID" \
     --modified-files "$MOD_FILE" \
     --view "FixtureApp.SimpleView" \
     --destination "macos-host" \
@@ -61,7 +61,7 @@ echo "[run-e2e] apple-canvas.sh exit=$ADAPTER_EXIT"
 # Optional: if a design-ref.png exists, run the visual-diff
 DESIGN_REF="${IMAGES_DIR}/design-ref.png"
 if [[ -f "$DESIGN_REF" ]]; then
-    # Find the most recent canvas PNG produced for this workflow
+    # Find the most recent canvas PNG produced for this worktask
     CANDIDATE=$(find "$IMAGES_DIR" -maxdepth 1 -name 'dv-*-canvas-*.png' -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -n1 || true)
     if [[ -n "$CANDIDATE" ]]; then
         echo "[run-e2e] invoking visual-diff against $DESIGN_REF"
@@ -69,7 +69,7 @@ if [[ -f "$DESIGN_REF" ]]; then
             --reference "$DESIGN_REF" \
             --candidate "$CANDIDATE" \
             --threshold "8" \
-            --workflow-id "$WORKFLOW_ID" \
+            --worktask-id "$WORKTASK_ID" \
             --slug "$SLUG" || true
     fi
 fi

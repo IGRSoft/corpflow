@@ -1,6 +1,6 @@
 ---
 name: estimate
-description: Estimate task complexity, effort, and resources to determine appropriate workflow tier
+description: Estimate task complexity, effort, and resources to determine appropriate worktask tier
 argument-hint: '<task description> [--quick|--detailed]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
@@ -8,7 +8,7 @@ allowed-tools: Read, Glob, Grep, Write
 
 # Estimate Command
 
-Estimate task complexity, effort, and resources before starting a workflow. Helps determine the appropriate workflow tier and provides sizing guidance.
+Estimate task complexity, effort, and resources before starting a worktask. Helps determine the appropriate worktask tier and provides sizing guidance.
 
 ## Usage
 
@@ -24,7 +24,7 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 - `--detailed` - Detailed estimation with full breakdown
 - `--stages` - Emits the 3-stage breakdown (Required, Nice-to-have, v1.1) using the template in `skills/shared/three-stage-planning.md § Stage Budget Template`. See Output Format below.
 - `--sequential` - Flag-only; documents that stages cannot run in parallel. See `skills/shared/three-stage-planning.md` for the sequential-only rules.
-- `--compare` - Accepts `"opt1 | opt2 | opt3"`; emits a comparison table with size, SP range, hours range, complexity score, and recommended workflow per option. See Output Format below.
+- `--compare` - Accepts `"opt1 | opt2 | opt3"`; emits a comparison table with size, SP range, hours range, complexity score, and recommended worktask per option. See Output Format below.
 - `--export` - Runs the estimation, then invokes `/export-estimate` with the same `--platform`/`--dir` args to produce 13 CSV files defined in `skills/csv-export-templates/SKILL.md`. Requires `--detailed` (quick estimates have no breakdown to export).
 - `--platform <apple|android|web|all>` - Platform-specific templates (default: all)
 - `--multiplier <hours>` - Override SP multiplier (default: 6)
@@ -46,7 +46,7 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 ## Quick Estimate: Add dark mode support
 
 **Size**: M (Medium)
-**Recommended Workflow**: `workflow:` (Standard)
+**Recommended Worktask**: `worktask:` (Standard)
 **Estimated Effort**: 2-3 days
 ```
 
@@ -71,8 +71,8 @@ Estimate task complexity, effort, and resources before starting a workflow. Help
 | Risk Level | 3 | Security-sensitive feature |
 | Unknowns | 2 | Well-documented OAuth providers |
 
-### Recommended Workflow
-**Tier**: `workflow:` (Full 9-stage)
+### Recommended Worktask
+**Tier**: `worktask:` (Full 9-stage)
 **Rationale**: Security-sensitive, multiple files, requires architecture review
 
 ### Resource Requirements
@@ -122,11 +122,11 @@ See `skills/estimation/SKILL.md § AI Agent Cost Estimation` for the formula and
 ```markdown
 ## Comparison: Auth implementation options
 
-| Option | Size | SP Range | Hours Range | Complexity | Workflow |
+| Option | Size | SP Range | Hours Range | Complexity | Worktask |
 |--------|------|----------|-------------|------------|----------|
-| OAuth2 | L    | 6–10     | 36–60       | 14         | `workflow:` |
-| Magic-link | M | 4–5    | 24–30       | 9          | `workflow:` |
-| Password+TOTP | M | 4–5 | 24–30       | 11         | `workflow:` |
+| OAuth2 | L    | 6–10     | 36–60       | 14         | `worktask:` |
+| Magic-link | M | 4–5    | 24–30       | 9          | `worktask:` |
+| Password+TOTP | M | 4–5 | 24–30       | 11         | `worktask:` |
 ```
 
 ### Stages Output (`--stages`)
@@ -151,12 +151,12 @@ See `skills/estimation/SKILL.md § T-Shirt Sizing → Story Points (Range) and �
 
 Worked-example header (canonical values live in the skill):
 
-| Size | SP Min | SP Max | Hours Min | Hours Max | Workflow |
+| Size | SP Min | SP Max | Hours Min | Hours Max | Worktask |
 |------|--------|--------|-----------|-----------|----------|
 | XS | 1 | 1 | 6 | 6 | `micro:` |
 | S | 2 | 3 | 12 | 18 | `quick:` |
-| M | 4 | 5 | 24 | 30 | `workflow:` |
-| L | 6 | 10 | 36 | 60 | `workflow:` |
+| M | 4 | 5 | 24 | 30 | `worktask:` |
+| L | 6 | 10 | 36 | 60 | `worktask:` |
 | XL | 13 | 21 | 78 | 126 | split first |
 
 ### Complexity Factors
@@ -200,7 +200,7 @@ See `skills/shared/three-stage-planning.md` for stage definitions, sequential ru
 `skills/csv-export-templates/SKILL.md`. See that skill for the full file list,
 delimiter, and validation rules. Do not redefine the export shape here.
 
-## Workflow Recommendation Logic
+## Worktask Recommendation Logic
 
 ```
 size       = T-shirt size from sizing table
@@ -208,21 +208,21 @@ complexity = sum of 5 factors (0–25)
 security   = true if Risk Level ≥ 4 OR feature touches auth/PII/payments
 
 IF size == XL:
-  → split before workflow tier selection
+  → split before worktask tier selection
 ELSE IF size == XS AND complexity ≤ 5 AND NOT security:
   → micro:
 ELSE IF size == S AND NOT security:
   → quick:
 ELSE IF size ∈ {M, L} OR security:
-  → workflow:
+  → worktask:
 ```
 
-See `skills/estimation/SKILL.md § Workflow Tier Selection` for the canonical definition.
+See `skills/estimation/SKILL.md § Worktask Tier Selection` for the canonical definition.
 
 ## Integration
 
 This command works well with:
-- `/workflow` - Use estimate to choose correct workflow tier
+- `/worktask` - Use estimate to choose correct worktask tier
 - `/pm-prioritize` - Estimation feeds into RICE calculations
 - `/sprint-plan` - Story points for capacity planning
 - `/export-estimate` - Generate CSVs from estimation
@@ -230,6 +230,6 @@ This command works well with:
 
 ## Related
 
-- [Workflow System](../skills/workflow.md) - Workflow tier selection
+- [Worktask System](../skills/worktask.md) - Worktask tier selection
 - [product-manager](../agents/product-manager.md) - RICE prioritization
 - [project-manager](../agents/project-manager.md) - Sprint planning

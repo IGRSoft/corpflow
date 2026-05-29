@@ -168,7 +168,7 @@ Then [expected result]
 - Estimated stages: {e.g., PL → DV → DR → QA → FN}
 ```
 
-The `Agent Assignments` table uses pipe-delimited markdown — parseable by `milestone-workflow` skill with regex `/\| Implementation \| `(.+?)` \|/`.
+The `Agent Assignments` table uses pipe-delimited markdown — parseable by `milestone-worktask` skill with regex `/\| Implementation \| `(.+?)` \|/`.
 
 The `Metadata` section uses `key: value` format consistent with existing `base_branch: <branch>` parsing.
 
@@ -211,7 +211,7 @@ Milestone: #{N} "{title}"
 
 Dependencies: #43 → #42
 
-Next: `/workflow --milestone:{N}` to execute all tickets
+Next: `/worktask --milestone:{N}` to execute all tickets
 ```
 
 ## Examples
@@ -243,9 +243,9 @@ Next: `/workflow --milestone:{N}` to execute all tickets
 
 ### Downstream (pm-milestone feeds into)
 
-- `/workflow --milestone:N` — executes created tickets
-- `skills/milestone-workflow` — reads ticket body for agent assignments and metadata
-- Priority labels (`P0`–`P3`) parsed by milestone-workflow priority sorting
+- `/worktask --milestone:N` — executes created tickets
+- `skills/milestone-worktask` — reads ticket body for agent assignments and metadata
+- Priority labels (`P0`–`P3`) parsed by milestone-worktask priority sorting
 
 ## Related
 
@@ -253,4 +253,4 @@ Next: `/workflow --milestone:{N}` to execute all tickets
 - [pm-requirements](./pm-requirements.md) — Generate PRDs
 - [pm-prioritize](./pm-prioritize.md) — Feature prioritization
 - [pm-roadmap](./pm-roadmap.md) — Roadmap planning
-- [workflow](./workflow.md) — Execute milestone workflows
+- [worktask](./worktask.md) — Execute milestone worktasks

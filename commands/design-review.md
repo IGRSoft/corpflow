@@ -111,7 +111,7 @@ Conduct a comprehensive design review for screens, components, or features using
 - [Follow-up reviews needed]
 ```
 
-## Workflow Integration
+## Worktask Integration
 
 This command can be used:
 - During PL stage for existing UI assessment

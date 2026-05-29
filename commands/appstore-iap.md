@@ -323,4 +323,4 @@ Used by:
 - [appstore-info](./appstore-info.md) — Generate App Store listing metadata
 - [release-notes](./release-notes.md) — Generate "What's New" content
 - [release-engineer](../agents/release-engineer.md) — Release Engineering agent
-- [workflow](./workflow.md) — RE stage in the release workflow
+- [worktask](./worktask.md) — RE stage in the release worktask

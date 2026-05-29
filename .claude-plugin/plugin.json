@@ -1,13 +1,13 @@
 {
   "name": "igrsoft",
-  "description": "Comprehensive 11-stage workflow system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with Task System integration, developer review, security review, release engineering, incident response, and ST-stage self-improvement retrospectives.",
+  "description": "Comprehensive 11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with Task System integration, developer review, security review, release engineering, incident response, and ST-stage self-improvement retrospectives.",
   "version": "3.10.12",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
   },
   "keywords": [
-    "workflow",
+    "worktask",
     "task-management",
     "task-system",
     "project-management",
@@ -136,7 +136,7 @@
             "server": "conductor",
             "tool": "PushNotification",
             "args": {
-              "title": "igrsoft workflow",
+              "title": "igrsoft worktask",
               "message": "Approval gate ready for review"
             }
           }

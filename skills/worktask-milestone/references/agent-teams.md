@@ -1,6 +1,6 @@
 # Agent Teams Mode (Experimental)
 
-When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, milestone workflows can use agent teams for true parallel issue execution instead of sequential Task-based orchestration.
+When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, milestone worktasks can use agent teams for true parallel issue execution instead of sequential Task-based orchestration.
 
 ## Architecture Comparison
 
@@ -50,7 +50,7 @@ Workspace: .workspaces/milestone-{N}/{issue_number}
 Branch: feature/{issue_number}-{slug}
 Base: {base_branch}
 
-Execute the workflow for this issue:
+Execute the worktask for this issue:
 1. Create .context/ directory in your workspace
 2. PL: Plan requirements from the issue body
 3. DV: Implement the solution
@@ -76,7 +76,7 @@ IMPORTANT: All file operations must happen inside the worktree directory.
 The worktree has its own copy of the source tree with the correct branch.
 Use `git -C .worktrees/milestone-{N}/{issue_number}` for all git commands.
 
-Execute the workflow for this issue:
+Execute the worktask for this issue:
 1. All artifacts go to .worktrees/milestone-{N}/{issue_number}/.context/
 2. PL: Plan requirements from the issue body
 3. DV: Implement the solution (source files are in the worktree)

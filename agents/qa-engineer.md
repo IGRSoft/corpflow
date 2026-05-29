@@ -66,11 +66,11 @@ Before reading any source file, check `state.json → facts.files_read` for that
 - Read the full file ONLY when writing new tests that need the complete type/API surface.
 - For files >200 lines, ALWAYS use `Read` with `offset`/`limit` targeting the relevant section.
 
-If `facts.files_read` is absent (legacy workflow), fall back to normal reads.
+If `facts.files_read` is absent (legacy worktask), fall back to normal reads.
 
-## Workflow Integration
+## Worktask Integration
 
-In the 9-stage workflow system, the qa-engineer handles:
+In the 9-stage worktask system, the qa-engineer handles:
 
 ### Q Stage (QA Testing)
 - **Q0**: Analyze requirements, review DV's unit tests, identify coverage gaps
@@ -91,7 +91,7 @@ In the 9-stage workflow system, the qa-engineer handles:
   **Footer marker discovery**: read `@test-file:` and `@related-tests:` from `// MARK: - Test Info` footers in modified source files to discover additional test candidates not captured by `@depends-on:` markers. Check bidirectional consistency — a source footer's `@test-file:` path should have a corresponding `@source-file:` entry in that test file. Log inconsistencies in `testing-N.md § Notes`. See `test-selection-syntax.md § Footer Markers`.
 
   **Visual comparison gate**: independent of `test_mode`. Run Design Comparison (see § Design Comparison below) when `metadata.ui_visual_check: true` AND `.context/designs/` has artifacts. Otherwise skip.
-- **Q1.5 — Visual Evidence ingestion**: read `.context/images/<workflow_id>/screenshots.md` (path resolves from `state.json.workflow_id`). For each row in its manifest table, append one line to `testing-N.md § Visual Evidence` with the filename, captioned purpose, and a verdict (`accepted` | `flagged` | `missing`). Cross-reference each screenshot against the acceptance-criteria list in `<plan_file>`: if an AC names a UI/output behavior and no screenshot captures it, append a finding `AC-<id>: no visual evidence` to `testing-N.md § Notes`. When `metadata.requires_screenshots: false`, treat `screenshots.md` as advisory and skip the AC cross-reference; record `Visual Evidence skipped per plan` in `§ Notes`.
+- **Q1.5 — Visual Evidence ingestion**: read `.context/images/<worktask_id>/screenshots.md` (path resolves from `state.json.worktask_id`). For each row in its manifest table, append one line to `testing-N.md § Visual Evidence` with the filename, captioned purpose, and a verdict (`accepted` | `flagged` | `missing`). Cross-reference each screenshot against the acceptance-criteria list in `<plan_file>`: if an AC names a UI/output behavior and no screenshot captures it, append a finding `AC-<id>: no visual evidence` to `testing-N.md § Notes`. When `metadata.requires_screenshots: false`, treat `screenshots.md` as advisory and skip the AC cross-reference; record `Visual Evidence skipped per plan` in `§ Notes`.
 - **Q2**: Handle test failures (retry or escalate to DV)
 - **Q3**: All tests pass, document results and metrics in testing.md
 
@@ -110,7 +110,7 @@ When the gate is open, perform visual comparison during Q1 (after functional tes
 If `.context/designs/figma-registry.md` exists, it is the authoritative source — parse its Entries table and run comparison row-by-row:
 
 1. For each row, load the Figma screenshot at `.context/designs/<Screenshot>` with `Read`.
-2. Navigate the implementation to the screen named in `Target File(s)` (platform workflow below).
+2. Navigate the implementation to the screen named in `Target File(s)` (platform worktask below).
 3. Capture an implementation screenshot.
 4. Compare both via Claude multimodal vision (see Visual Comparison below).
 5. Append one row to `testing.md § Design Comparison` using the canonical template (below).
@@ -127,7 +127,7 @@ Pencil `.pen` mockups (`.context/designs/mockup-*.pen`) are compared independent
 
 #### Implementation Screenshot Capture
 
-| Platform | Workflow |
+| Platform | Worktask |
 |----------|----------|
 | iOS | `mcp__XcodeBuildMCP__build_run_sim` → navigate to target screen → `mcp__XcodeBuildMCP__screenshot` |
 | Web | Load chrome tools via `ToolSearch({ query: "select:mcp__claude-in-chrome__computer" })` → screenshot |
@@ -167,7 +167,7 @@ After the table, include a one-line AC coverage summary:
 
 ### Visual Evidence (artifact section in testing-N.md)
 
-Required section when `.context/images/<workflow_id>/screenshots.md` exists. Schema:
+Required section when `.context/images/<worktask_id>/screenshots.md` exists. Schema:
 
 ```markdown
 ## Visual Evidence
@@ -222,7 +222,7 @@ Before marking QA stage complete, verify:
 - [ ] All edge cases from `<plan_file>` are covered
 - [ ] If design screenshots exist in `.context/designs/`, design comparison performed
 - [ ] Design discrepancies documented in testing-N.md with severity
-- [ ] `.context/images/<workflow_id>/screenshots.md` read (or absent + skip-documented)
+- [ ] `.context/images/<worktask_id>/screenshots.md` read (or absent + skip-documented)
 - [ ] `testing-N.md § Visual Evidence` populated (or skip rationale recorded)
 - [ ] Each acceptance criterion with a visual manifestation has at least one screenshot ref OR an explicit `no visual evidence` finding
 

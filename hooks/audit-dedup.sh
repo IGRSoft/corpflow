@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Read-helper for audit.jsonl dedupe-key mode selection (igrsoft workflow plugin, v3.10.6+).
+# Read-helper for audit.jsonl dedupe-key mode selection (igrsoft worktask plugin, v3.10.6+).
 # NOT wired in plugin.json hooks block — invoked manually by audit consumers
 # (e.g. /cost-report aggregation) per agent-coordination/SKILL.md § Dedupe Key Migration.
 #

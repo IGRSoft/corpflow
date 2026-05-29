@@ -156,7 +156,7 @@ function initializeWorkspace(
     version: '1.0',
     issue: { number: issue.number, title: issue.title, labels: issue.labels },
     git: { branch_name: branchName, base_branch: baseBranch.branch },
-    workflow: { track: null, task_prefix: null },
+    worktask: { track: null, task_prefix: null },
     execution: { current_stage: null, retry_count: 0 }
   };
 
@@ -198,7 +198,7 @@ function completeIssue(
 
 ## Worktree Operations
 
-Git worktree isolation for milestone workflows. Requires Claude Code 2.1.51+ and `--worktree` flag.
+Git worktree isolation for milestone worktasks. Requires Claude Code 2.1.51+ and `--worktree` flag.
 
 > **When to use**: `--worktree` enables true parallel issue execution by giving each issue its own working directory and branch. Without it, issues share a single worktree and must be processed sequentially via `git checkout`.
 
@@ -207,7 +207,7 @@ Git worktree isolation for milestone workflows. Requires Claude Code 2.1.51+ and
 ### isWorktreeEnabled
 
 ```typescript
-function isWorktreeEnabled(options: WorkflowOptions): boolean {
+function isWorktreeEnabled(options: WorktaskOptions): boolean {
   if (!options.worktree) return false;
 
   // Verify git supports worktrees (git 2.5+)
@@ -247,7 +247,7 @@ function createIssueWorktree(
       base_branch: baseBranch,
       worktree_path: worktreePath
     },
-    workflow: { track: null, task_prefix: null },
+    worktask: { track: null, task_prefix: null },
     execution: { current_stage: null, retry_count: 0 }
   };
 
@@ -324,7 +324,7 @@ function createSparseWorktree(
     sparse_paths: sparsePaths,
     issue: { number: issue.number, title: issue.title, labels: issue.labels },
     git: { branch_name: branchName, base_branch: baseBranch, worktree_path: worktreePath },
-    workflow: { track: null, task_prefix: null },
+    worktask: { track: null, task_prefix: null },
     execution: { current_stage: null, retry_count: 0 }
   };
 
@@ -352,7 +352,7 @@ Key abstraction that allows all code to work transparently in both modes.
 function resolveIssueWorkdir(
   milestoneNumber: number,
   issueNumber: number,
-  options: WorkflowOptions
+  options: WorktaskOptions
 ): { workdir: string; contextPath: string; isWorktree: boolean } {
   if (options.worktree) {
     const workdir = `.worktrees/milestone-${milestoneNumber}/${issueNumber}`;

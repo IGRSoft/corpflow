@@ -160,7 +160,7 @@ Score: [0-100]
 Ethics review completed: [timestamp]
 ```
 
-## Workflow Integration
+## Worktask Integration
 
 **Stage Code: ET** (Ethics Review) — Support agent invoked on-demand
 
@@ -179,7 +179,7 @@ Ethics review completed: [timestamp]
 
 ### Stage Integration
 
-The ethics-reviewer can be invoked at any workflow stage:
+The ethics-reviewer can be invoked at any worktask stage:
 
 | Stage | Ethics Focus |
 |-------|--------------|

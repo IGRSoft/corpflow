@@ -37,12 +37,12 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 | `model` | Model alias for this stage (opus, sonnet, haiku). Always pass explicitly to `Task()` — do not rely on frontmatter inheritance |
 | `run_index` | Integer ≥ 0; PL0 stamps this on every downstream task (same N as `planning-N.md`). Default 0. Orchestrator uses it to resolve `<stage>-N.md` paths. See `agents/product-manager.md § Stage Artifact Naming`. |
 | `context_refs` | JSON-encoded array of anchor refs (e.g. `["analyzing-N.md#decisions","planning-N.md#requirements"]`) the stage agent should grep instead of reading whole files. Preferred over `context_files` (handoff-protocol mode). When present, agent reads `state.json` + only these anchors |
-| `state_file` | Path to the workflow state ledger. Default `.context/state.json`. Read by the stage agent before delegation (per `skills/workflow/references/handoff-protocol.md#state-json-schema`). Absent state.json triggers fallback path F1 (legacy `context_files` mode) |
+| `state_file` | Path to the worktask state ledger. Default `.context/state.json`. Read by the stage agent before delegation (per `skills/worktask/references/handoff-protocol.md#state-json-schema`). Absent state.json triggers fallback path F1 (legacy `context_files` mode) |
 | `context_files` | (Legacy fallback.) Comma-separated list of `.context/` artifacts this stage should read in full when `state.json` is absent or `context_refs` is missing. MUST include `error_file` — orchestrator appends automatically on `TaskCreate`/`TaskUpdate` if omitted. Retained for AC-16/AC-17 backward-compat |
 | `error_file` | Path `.context/errors/<agent-basename>.md`. Auto-derived from `agent` if absent. Basename = last `:`-separated segment; collisions joined with `-`. Auto-appended to `context_files` so the stage agent reads its own prior retry narrative |
 | `retry_count` | Integer 0–3. Incremented on retry; resets on escalation or success |
 | `error_escalated_to` | Stage code the failure escalated to when `retry_count` reached 3 |
-| `workflow_id` | Links task to workflow instance |
+| `worktask_id` | Links task to worktask instance |
 | `priority` | high, medium, low |
 | `milestone_number` | GitHub milestone (--milestone mode) |
 | `issue_number` | GitHub issue being worked |
@@ -54,7 +54,7 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 
 ### Dispatch metadata (optional)
 
-These fields map to `claude agents run` CLI flags per `skills/agent-coordination/references/headless-dispatch.md`. All are optional and additive — the in-process orchestrator honours `model` (always) and `permission_mode` (audits per `skills/workflow/SKILL.md § Permission-Mode Pinning`); the rest are advisory in-process and consumed only by external CLI dispatchers.
+These fields map to `claude agents run` CLI flags per `skills/agent-coordination/references/headless-dispatch.md`. All are optional and additive — the in-process orchestrator honours `model` (always) and `permission_mode` (audits per `skills/worktask/SKILL.md § Permission-Mode Pinning`); the rest are advisory in-process and consumed only by external CLI dispatchers.
 
 | Field | Purpose | Honoured in-process? |
 |-------|---------|----------------------|
@@ -159,7 +159,7 @@ the orchestrator ensures `metadata.error_file` appears in `metadata.context_file
 agent receives its own error history in its reading scope — on retry, it can
 see what it tried before and why it failed.
 
-**context_refs vs context_files (handoff-protocol mode)**: When `metadata.context_refs` is set, the stage agent reads `state_file` + only the listed anchors (preferred mode, ≥30% input-token reduction). When absent or `state_file` does not exist on disk, the agent falls back to reading every path in `context_files` in full (legacy mode, fallback path F1). Both fields MAY be set simultaneously — `context_refs` wins when state.json is present; `context_files` is the safety net. See `skills/workflow/references/handoff-protocol.md#fallback-paths`.
+**context_refs vs context_files (handoff-protocol mode)**: When `metadata.context_refs` is set, the stage agent reads `state_file` + only the listed anchors (preferred mode, ≥30% input-token reduction). When absent or `state_file` does not exist on disk, the agent falls back to reading every path in `context_files` in full (legacy mode, fallback path F1). Both fields MAY be set simultaneously — `context_refs` wins when state.json is present; `context_files` is the safety net. See `skills/worktask/references/handoff-protocol.md#fallback-paths`.
 
 ```typescript
 // Orchestrator normalization (runs before Task() delegation)
@@ -175,14 +175,14 @@ function normalizeMetadata(meta) {
 
 ## state.json Top-Level `metadata` Fields
 
-These fields live at `state.json:$.metadata` (workflow-scoped, distinct from `task.metadata` documented above). Canonical schema lives in `skills/workflow/references/handoff-protocol.md#state-json-schema`; the table below is the additive index of fields documented elsewhere in this plugin.
+These fields live at `state.json:$.metadata` (worktask-scoped, distinct from `task.metadata` documented above). Canonical schema lives in `skills/worktask/references/handoff-protocol.md#state-json-schema`; the table below is the additive index of fields documented elsewhere in this plugin.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `metadata.embedded_commands` | string (optional) | Comma-separated list of `/plugin:command` slash-command identifiers detected on the workflow trigger (e.g. `skill-creator`). Writer: orchestrator at `/workflow` parse time. Reader: DV agent before stage work begins. See `commands/workflow.md § Embedded Command Detection`. |
-| `metadata.preexisting_plan` | string (optional) | Absolute path to a user-approved plan supplied at workflow init; PL0 adopts it verbatim and reuses anchors. Writer: orchestrator. Reader: PL agent. |
-| `metadata.no_gh_issue` | boolean (optional) | When `true`, suppresses post-PL GitHub issue publishing. Writer: orchestrator at parse time (set by the `--no-gh-issue` CLI flag). Reader: `skills/workflow/references/publish-pl-issue.sh`. |
-| `metadata.github_issue_url` | string (optional) | Canonical GitHub issue URL published by `publish-pl-issue.sh` after PL approval. Pattern: `^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[0-9]+(#issuecomment-[0-9]+)?$`. Once populated the helper short-circuits on workflow resume (idempotency anchor); on a fresh `run_index` increment the field is rewritten. FN stage MAY consume the URL to back-link the PR (future patch). Writer: orchestrator via `publish-pl-issue.sh`. Readers: `publish-pl-issue.sh` (idempotency), FN (future). |
+| `metadata.embedded_commands` | string (optional) | Comma-separated list of `/plugin:command` slash-command identifiers detected on the worktask trigger (e.g. `skill-creator`). Writer: orchestrator at `/worktask` parse time. Reader: DV agent before stage work begins. See `commands/worktask.md § Embedded Command Detection`. |
+| `metadata.preexisting_plan` | string (optional) | Absolute path to a user-approved plan supplied at worktask init; PL0 adopts it verbatim and reuses anchors. Writer: orchestrator. Reader: PL agent. |
+| `metadata.no_gh_issue` | boolean (optional) | When `true`, suppresses post-PL GitHub issue publishing. Writer: orchestrator at parse time (set by the `--no-gh-issue` CLI flag). Reader: `skills/worktask/references/publish-pl-issue.sh`. |
+| `metadata.github_issue_url` | string (optional) | Canonical GitHub issue URL published by `publish-pl-issue.sh` after PL approval. Pattern: `^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[0-9]+(#issuecomment-[0-9]+)?$`. Once populated the helper short-circuits on worktask resume (idempotency anchor); on a fresh `run_index` increment the field is rewritten. FN stage MAY consume the URL to back-link the PR (future patch). Writer: orchestrator via `publish-pl-issue.sh`. Readers: `publish-pl-issue.sh` (idempotency), FN (future). |
 
 ## Status Values
 
@@ -198,7 +198,7 @@ These fields live at `state.json:$.metadata` (workflow-scoped, distinct from `ta
 TaskUpdate({ taskId: "6", status: "deleted" });
 ```
 
-Use for dynamic workflow sizing during PL/AR stages.
+Use for dynamic worktask sizing during PL/AR stages.
 
 ## Cross-Session Persistence
 
@@ -234,7 +234,7 @@ Configure in project `settings.json` or agent frontmatter `hooks` field:
 
 > Hooks support a conditional `if` field (v2.1.85+) using permission rule syntax to reduce process spawning overhead.
 
-> `SessionEnd` hook timeout is configurable via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` for workflows requiring cleanup time (e.g., worktree pruning, orchestrator state finalization).
+> `SessionEnd` hook timeout is configurable via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` for worktasks requiring cleanup time (e.g., worktree pruning, orchestrator state finalization).
 
 See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration examples.
 
@@ -254,14 +254,14 @@ Task storage: `~/.claude/tasks/{team-name}/`
 
 ### Custom Auto-Memory Directory
 
-Configure a custom directory for workflow-specific auto-memory:
+Configure a custom directory for worktask-specific auto-memory:
 
 ```json
 {
-  "autoMemoryDirectory": ".workflow-memory/"
+  "autoMemoryDirectory": ".worktask-memory/"
 }
 ```
 
-Allows workflow-specific memory separate from the default `~/.claude/` location.
+Allows worktask-specific memory separate from the default `~/.claude/` location.
 
-Teammates share a task list and can self-claim available work. See `../workflow-milestone/SKILL.md § Agent Teams Mode` for milestone patterns.
+Teammates share a task list and can self-claim available work. See `../worktask-milestone/SKILL.md § Agent Teams Mode` for milestone patterns.

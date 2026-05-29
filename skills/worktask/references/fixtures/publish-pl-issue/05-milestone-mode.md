@@ -6,7 +6,7 @@ state-json mock `05-state.json` carries `metadata.milestone: 7`.
 
 ## Summary
 
-When the workflow runs under `--milestone:N`, the helper exits 0 immediately
+When the worktask runs under `--milestone:N`, the helper exits 0 immediately
 with `result: "deferred"`, `reason: "milestone_mode"` — no `gh issue create`,
 no `gh issue comment`, no API call of any kind.
 

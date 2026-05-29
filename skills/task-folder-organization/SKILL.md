@@ -1,6 +1,6 @@
 ---
 name: task-folder-organization
-description: Context folder structure (.context/) with artifact naming and path resolution. Use when setting up task folders, organizing workflow artifacts, or resolving artifact paths.
+description: Context folder structure (.context/) with artifact naming and path resolution. Use when setting up task folders, organizing worktask artifacts, or resolving artifact paths.
 effort: medium
 ---
 
@@ -16,11 +16,11 @@ This rule establishes the required organizational structure for tasks, ensuring 
 
 ## The Rule
 
-**Every project MUST have a `.context/` folder** for workflow artifacts with a standardized structure.
+**Every project MUST have a `.context/` folder** for worktask artifacts with a standardized structure.
 
 ### Why `.context/` Folder?
 
-1. **Simplicity**: Single location for all workflow artifacts
+1. **Simplicity**: Single location for all worktask artifacts
 2. **Traceability**: Complete audit trail from planning through deployment
 3. **Context Preservation**: Future developers can understand decision-making process
 4. **State Management**: Clear tracking of progress and completion status
@@ -32,7 +32,7 @@ The `.context/` folder is located at the project root:
 
 ```
 project-root/
-├── .context/           # Workflow artifacts
+├── .context/           # Worktask artifacts
 │   ├── planning-0.md   # First plan; subsequent runs add planning-1.md, planning-2.md, ...
 │   ├── designs/        # Designer-generated .pen mockups
 │   ├── images/         # User-attached screenshots, diagrams
@@ -66,7 +66,7 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 ├── ethics-review-0.md       # Ethics compliance review (ET stage, run 0)
 ├── milestone.json           # GitHub milestone context (when --milestone used)
 ├── deployment.md            # Deployment plan (if applicable)
-├── state.json               # Workflow ledger (shared across runs)
+├── state.json               # Worktask ledger (shared across runs)
 ├── designs/                 # Design assets: Figma screenshots (.png) and Pencil mockups (.pen)
 ├── images/                  # User-attached screenshots, diagrams
 ├── errors/                  # Per-agent escalation narratives (see Per-Agent Error Files)
@@ -105,9 +105,9 @@ Product Manager's planning document containing:
 - Success metrics
 - Constraints and dependencies
 
-### Optional Files (by Workflow Variant)
+### Optional Files (by Worktask Variant)
 
-**8-Stage Workflow (standard):**
+**8-Stage Worktask (standard):**
 - **analyzing-N.md**: Architecture decisions (AR stage)
 - **coordination-N.md**: Team coordination (TL stage)
 - **development-N.md**: Implementation notes (DV stage)
@@ -117,12 +117,12 @@ Product Manager's planning document containing:
 - **complete-summary-N.md**: Final validation (FN stage)
 - **retrospective-N.md**: Stakeholder sign-off (ST stage)
 
-**10-Stage Workflow (secure/full):**
+**10-Stage Worktask (secure/full):**
 - All of the above, plus:
 - **security-review-N.md**: OWASP audit, security findings (SR stage)
 - **release-N.md**: Version, changelog, deployment readiness (RE stage)
 
-**Emergency Workflow:**
+**Emergency Worktask:**
 - **incident-N.md**: Incident triage, RCA (IR stage)
 - **development-N.md**: Hotfix implementation (DV stage)
 - **testing-N.md**: Regression tests (QA stage)
@@ -158,20 +158,20 @@ Filename grammar: `<kind>-<scope>-<timestamp>.log` where `<kind>` ∈ {build, te
 
 ### Milestone Context File (`milestone.json`)
 
-Created when `/workflow --milestone:N` is used. Contains:
+Created when `/worktask --milestone:N` is used. Contains:
 
 - **milestone**: GitHub milestone metadata (number, title, due date)
 - **issues**: Array of issues sorted by priority with branch names
 - **execution**: Current issue, completed/pending arrays
 - **summary**: Issue counts and progress
 
-See [Milestone Workflow](../workflow-milestone/SKILL.md) for full schema.
+See [Milestone Worktask](../worktask-milestone/SKILL.md) for full schema.
 
 ## File Organization Guidelines
 
 ### Flat Structure by Stage
 
-Files are named by **workflow stage** and stored in `.context/`:
+Files are named by **worktask stage** and stored in `.context/`:
 
 | File | Stage | Owner |
 |------|-------|-------|
@@ -203,7 +203,7 @@ All markdown files should include:
 4. **Next Steps**: What comes next
 5. **References**: Links to related documents
 
-See references/ for detailed examples of folder structures across workflow variants.
+See references/ for detailed examples of folder structures across worktask variants.
 
 ## Common Pitfalls
 

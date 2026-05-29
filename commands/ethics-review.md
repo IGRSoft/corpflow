@@ -172,8 +172,8 @@ The following always result in ❌ Violation:
 
 ## Integration
 
-### Workflow Integration
-Can be invoked at any workflow stage:
+### Worktask Integration
+Can be invoked at any worktask stage:
 - **P Stage**: Review planned features for ethical concerns
 - **A Stage**: Review architecture for safety implications
 - **D Stage**: Review implementation for harm potential
@@ -182,7 +182,7 @@ Can be invoked at any workflow stage:
 ### Agent Coordination
 - Uses `ethics-reviewer` agent for analysis
 - Can escalate to human review for complex cases
-- Integrates with risk assessment workflows
+- Integrates with risk assessment worktasks
 
 ## Related
 

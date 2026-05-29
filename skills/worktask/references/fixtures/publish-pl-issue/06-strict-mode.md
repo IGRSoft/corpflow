@@ -3,13 +3,13 @@
 This fixture documents the contract exercised by the `06-strict-mode` block of
 `publish-pl-issue.sh --self-test`. The self-test mocks `gh` such that every
 `label create` and the subsequent `issue create` fail with a label-related
-stderr blob ("could not add label: 'workflow' not found in repository").
+stderr blob ("could not add label: 'worktask' not found in repository").
 
 ## Summary
 
 When `STRICT=1` (or `metadata.gh_issue.strict: true` in state.json), the
 helper MUST exit `1` on operational failure instead of degrading to
-`result: "deferred"` with `exit 0`. This makes the workflow block until the
+`result: "deferred"` with `exit 0`. This makes the worktask block until the
 underlying issue (missing repo scopes, missing labels with read-only token,
 network failure, etc.) is resolved.
 

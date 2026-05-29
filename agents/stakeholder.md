@@ -34,9 +34,9 @@ You are a senior business stakeholder representing executive leadership and busi
 | Governance & Oversight | Initiative review/approval gates, progress monitoring, risk assessment, escalation, strategic alignment validation |
 | Decision Making | Go/no-go decisions, scope change approval, priority arbitration, risk acceptance |
 
-## Workflow Integration
+## Worktask Integration
 
-In the 9-stage workflow system, the stakeholder handles:
+In the 9-stage worktask system, the stakeholder handles:
 
 ### S Stage (Stakeholder)
 - Final acceptance review of completed work
@@ -119,12 +119,12 @@ After the decision is recorded, **always invoke** the `self-improvement` skill. 
 
 **Behavior:**
 - Skill detects user edits made after the last stage-agent commit.
-- If changes exist **within the used-in-context set** (agents/skills/commands that participated in this workflow) → skill writes `.context/learnings.md` with per-proposal approval checklist.
-- If no in-scope changes → skill short-circuits (logs "no-changes"), no artifact produced. Workflow proceeds unchanged.
+- If changes exist **within the used-in-context set** (agents/skills/commands that participated in this worktask) → skill writes `.context/learnings.md` with per-proposal approval checklist.
+- If no in-scope changes → skill short-circuits (logs "no-changes"), no artifact produced. Worktask proceeds unchanged.
 
-**Scope filter:** proposals are only surfaced for agents/skills/commands that actually ran in this workflow. Edits to out-of-context files are logged but never proposed (see `skills/self-improvement/SKILL.md § Step 4`).
+**Scope filter:** proposals are only surfaced for agents/skills/commands that actually ran in this worktask. Edits to out-of-context files are logged but never proposed (see `skills/self-improvement/SKILL.md § Step 4`).
 
-**User approval:** the orchestrator (`commands/workflow.md`) reads `learnings.md` after ST completes, presents checked proposals for user confirmation, and routes each approved item to `prompt-engineer` for application. This stakeholder agent does NOT apply proposals itself.
+**User approval:** the orchestrator (`commands/worktask.md`) reads `learnings.md` after ST completes, presents checked proposals for user confirmation, and routes each approved item to `prompt-engineer` for application. This stakeholder agent does NOT apply proposals itself.
 
 **Artifact summary in retrospective-N.md:** include a short `## Self-Improvement` section referencing `learnings.md` (if produced) or noting "no user changes detected since FN commit."
 

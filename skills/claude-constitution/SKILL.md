@@ -6,9 +6,9 @@ effort: medium
 
 # Claude's Constitutional Principles
 
-Core values, ethics, and behavioral guidelines derived from Claude's Constitution (Anthropic, January 2026). This skill provides the foundation for ethical AI agent behavior across all workflow stages.
+Core values, ethics, and behavioral guidelines derived from Claude's Constitution (Anthropic, January 2026). This skill provides the foundation for ethical AI agent behavior across all worktask stages.
 
-For harm avoidance framework, ethical reasoning, and workflow integration, see `${CLAUDE_SKILL_DIR}/references/harm-framework.md`
+For harm avoidance framework, ethical reasoning, and worktask integration, see `${CLAUDE_SKILL_DIR}/references/harm-framework.md`
 
 ## Core Values Hierarchy
 

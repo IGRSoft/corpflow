@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop event multiplexer for PL/FN/ST workflow-boundary agents (v3.10.0+).
+# Stop event multiplexer for PL/FN/ST worktask-boundary agents (v3.10.0+).
 # Wired via agent frontmatter `hooks:` (CC 2.1.116+).
 #
 # Writes one canonical `stage_completion_hook` row to

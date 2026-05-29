@@ -7,8 +7,8 @@ labels) and `gh label create` to succeed.
 
 ## Summary
 
-On the first run against a pristine repo (no workflow labels exist), the
-helper MUST auto-create each canonical label (`workflow`,
+On the first run against a pristine repo (no worktask labels exist), the
+helper MUST auto-create each canonical label (`worktask`,
 `planning-approved`, `complexity:<tier>`, optionally `ticket:<PREFIX>`)
 before invoking `gh issue create`. A second run must no-op cleanly
 (idempotency) because all labels now exist.
@@ -18,7 +18,7 @@ before invoking `gh issue create`. A second run must no-op cleanly
 - REQ-L1: `ensure_labels()` queries `gh label list --json name --jq '.[].name'`
   once per invocation; for each requested label not in the existing set, it
   calls `gh label create <name> --color <hex> --description <text>`.
-- REQ-L2: Colour and description per spec §4.1: `workflow` blue (`0366d6`),
+- REQ-L2: Colour and description per spec §4.1: `worktask` blue (`0366d6`),
   `planning-approved` green (`0e8a16`), `complexity:low/moderate/medium`
   amber/pale-green, `complexity:high` deep-orange, `complexity:critical`
   red, `ticket:*` purple (`5319e7`).

@@ -124,7 +124,7 @@ When a view is skipped: `action: "skipped"`, `reason: "no_mock_for_<P>"` or `"un
 }
 ```
 
-Array max bounded by `modified_files.length`. Eviction at workflow archival.
+Array max bounded by `modified_files.length`. Eviction at worktask archival.
 
 ## Audit row
 

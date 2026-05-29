@@ -159,7 +159,7 @@ validate_state() {
   local v
   v=$(jq -r '.version' "$f")
   [[ "$v" == "1" ]] || { echo "fail: version != 1 (got '$v')" >&2; return 1; }
-  jq -e 'has("workflow_id") and has("plan_file") and has("platform") and has("stages") and has("facts") and has("handoffs")' "$f" >/dev/null \
+  jq -e 'has("worktask_id") and has("plan_file") and has("platform") and has("stages") and has("facts") and has("handoffs")' "$f" >/dev/null \
     || { echo "fail: missing required keys" >&2; return 1; }
 
   local tcount
@@ -192,7 +192,7 @@ make_fixtures() {
   cat > "$d/.context/state.json" <<'EOF'
 {
   "version": 1,
-  "workflow_id": "harness-demo",
+  "worktask_id": "harness-demo",
   "plan_file": ".context/planning-0.md",
   "platform": "all",
   "stages": {
@@ -204,7 +204,7 @@ make_fixtures() {
     "files_modified": [],
     "tests_added": [],
     "decisions": [
-      {"id":"pd1","summary":"9-stage workflow","ref":"planning-0.md#stages"},
+      {"id":"pd1","summary":"9-stage worktask","ref":"planning-0.md#stages"},
       {"id":"ad1","summary":"Atomic write agent-primary + hook idempotent","ref":"analyzing.md#decisions"}
     ],
     "open_questions": [],

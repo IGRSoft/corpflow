@@ -164,10 +164,10 @@ The output table for each test case (below) gains two columns: `Required?` and `
 
 This command is typically used:
 - After `/pm-requirements` - Generate tests from requirements
-- Before `/workflow` Q stage - Prepare test strategy
+- Before `/worktask` Q stage - Prepare test strategy
 - With `/test-coverage` - Identify gaps
 
 ## Related
 
 - [qa-engineer](../agents/qa-engineer.md) - QA expertise
-- [Workflow System](../skills/workflow.md) - Q stage details
+- [Worktask System](../skills/worktask.md) - Q stage details

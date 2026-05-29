@@ -159,7 +159,7 @@ Generate developer-ready design specifications for components, screens, or featu
 - Breakpoint values
 - Browser support notes
 
-## Workflow Integration
+## Worktask Integration
 
 Use this command:
 - After design approval in PL stage

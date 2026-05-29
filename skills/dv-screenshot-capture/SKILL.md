@@ -7,10 +7,10 @@ description: |
   for bug fixes, or annotated diff renders when no UI surface exists. ALWAYS use this skill when DV
   is about to complete and `metadata.requires_screenshots` is true (default), even if the user did not
   explicitly ask for screenshots; the completion gate fails otherwise. Also use it when QA or DR ask
-  for visual evidence retroactively, or when a previous workflow run's screenshots need refreshing.
+  for visual evidence retroactively, or when a previous worktask run's screenshots need refreshing.
 version: 1.0.0
 effort: medium
-argument-hint: "<workflow_id> <platform> <slug> [args-json]"
+argument-hint: "<worktask_id> <platform> <slug> [args-json]"
 keep-coding-instructions: true
 ---
 
@@ -30,7 +30,7 @@ Run this skill under any of the following conditions:
 ## Storage layout
 
 ```
-.context/images/<workflow_id>/
+.context/images/<worktask_id>/
 ├── dv-01-<slug>.png        # first capture (or .txt placeholder)
 ├── dv-02-<slug>.png        # second capture
 ├── …
@@ -40,11 +40,11 @@ Run this skill under any of the following conditions:
 ```
 
 **Path scheme rules**:
-- `<workflow_id>` from `state.json.workflow_id`.
-- `NN` is **two-digit zero-padded**, monotonically increasing within a workflow. First capture = `01`.
+- `<worktask_id>` from `state.json.worktask_id`.
+- `NN` is **two-digit zero-padded**, monotonically increasing within a worktask. First capture = `01`.
 - `<slug>` is kebab-case, ≤40 chars, derived from purpose.
 - Numbering: scan existing `dv-*.png` in folder; `NN = max_existing + 1`.
-- Across reruns (`run_index > 0`): do NOT reset counter. New captures append (`dv-06-…`). Archival cleanup at FN/ST or via `/workflow archive`.
+- Across reruns (`run_index > 0`): do NOT reset counter. New captures append (`dv-06-…`). Archival cleanup at FN/ST or via `/worktask archive`.
 - `oversize/` subdirectory must be excluded from git. Before the first move to `oversize/`, append `.context/images/*/oversize/` to `.gitignore` if not already present:
   ```bash
   grep -qxF '.context/images/*/oversize/' .gitignore 2>/dev/null || echo '.context/images/*/oversize/' >> .gitignore
@@ -61,7 +61,7 @@ Run this skill under any of the following conditions:
 | Multiple ACs with visual manifestations | One screenshot per AC (up to 5 total per run) |
 | Bug fix | Before (reproduce) + after (fixed) pair; counts as 2 |
 
-Minimum: **1 screenshot** per workflow run (when `metadata.requires_screenshots: true`).
+Minimum: **1 screenshot** per worktask run (when `metadata.requires_screenshots: true`).
 Maximum: **5 screenshots** per run (skill enforces; 6th call returns `error: "screenshot_count_exceeded"`).
 
 ## Adapters
@@ -70,7 +70,7 @@ Uniform contract — all adapters implement the same return shape:
 
 ```
 capture(slug: string, platform: string, args: object) → {
-  path:  string,     # .context/images/<workflow_id>/dv-NN-<slug>.png (or .txt)
+  path:  string,     # .context/images/<worktask_id>/dv-NN-<slug>.png (or .txt)
   bytes: integer,    # filesystem size of produced file (0 if .txt placeholder)
   ok:    boolean,
   error: string | null   # null on success; values below
@@ -136,7 +136,7 @@ See `references/cli-fallback.md` for silicon command examples, magick template, 
 The manifest is the authoritative index. It is rewritten atomically on every skill invocation — never edited piecemeal.
 
 ```markdown
-# Screenshots — <workflow_id>
+# Screenshots — <worktask_id>
 
 > Authored by DV stage via `dv-screenshot-capture` skill. Run index: <N>.
 
@@ -157,7 +157,7 @@ The manifest is the authoritative index. It is rewritten atomically on every ski
 When `metadata.requires_screenshots: false` and DV captures nothing:
 
 ```markdown
-# Screenshots — <workflow_id>
+# Screenshots — <worktask_id>
 
 > Skipped: `metadata.requires_screenshots = false`. Rationale: <one line from PL0 or DV>.
 ```
@@ -169,10 +169,10 @@ DV's FN-pre handoff (or FN agent) inserts into the PR body:
 ```markdown
 ## Visual evidence
 
-See [screenshots.md](.context/images/<workflow_id>/screenshots.md) for the full manifest.
+See [screenshots.md](.context/images/<worktask_id>/screenshots.md) for the full manifest.
 
-![dv-01 <caption>](.context/images/<workflow_id>/dv-01-<slug>.png)
-![dv-02 <caption>](.context/images/<workflow_id>/dv-02-<slug>.png)
+![dv-01 <caption>](.context/images/<worktask_id>/dv-01-<slug>.png)
+![dv-02 <caption>](.context/images/<worktask_id>/dv-02-<slug>.png)
 ```
 
 GitHub renders inline `![…]` refs on public repos and same-org private repos. The manifest link works on any forge (portability floor). Non-GitHub forge URL forms are deferred (out of scope this version).
@@ -183,7 +183,7 @@ Enforced after every `capture()` call:
 
 1. Read `result.bytes`.
 2. If `bytes ≥ 500_000`: run `pngquant --quality=65-80 --force --output <path> <path>` (Bash). Re-stat.
-3. If still `≥ 500_000`: move to `.context/images/<workflow_id>/oversize/` (not committed). Record link-only in `screenshots.md § Out-of-budget files`. `ok: false`, `error: "oversize_unquantizable"`. DV does NOT abort — proceeds with remaining captures.
+3. If still `≥ 500_000`: move to `.context/images/<worktask_id>/oversize/` (not committed). Record link-only in `screenshots.md § Out-of-budget files`. `ok: false`, `error: "oversize_unquantizable"`. DV does NOT abort — proceeds with remaining captures.
 4. If `200_000 ≤ bytes < 500_000`: emit audit row `screenshot_size_warn` with `metadata: {path, bytes}`. Keep file.
 5. If `count > 5`: refuse further captures. Emit audit row `screenshot_count_exceeded`. DV stops at 5.
 
@@ -199,7 +199,7 @@ Budget constants: **warn ≥200 KB**, **hard fail ≥500 KB**, **cap 5 files/run
 | All adapters fail including `cli_fallback` (no silicon, no magick) | `cli_fallback` returns `ok: false, error: "tool_missing"` | Write `.txt` placeholder. Audit `screenshot_tool_missing`. screenshots.md records it. DV completion counts this as evidence-of-attempt — the gate measures evidence, not visual fidelity. |
 | Size budget exceeded after pngquant | `oversize_unquantizable` | Move to `oversize/`, link-only in screenshots.md. Continue. |
 | 5-cap reached | `screenshot_count_exceeded` | Stop further captures. Audit row. Continue. |
-| `Skill()` invocation itself fails | DV catches exception | Escalate per `commands/workflow.md § Error Handling`. Append to `.context/errors/developer.md` (classification: `transient` for retry; `logic` for escalate to AR). Do NOT silently treat as success. |
+| `Skill()` invocation itself fails | DV catches exception | Escalate per `commands/worktask.md § Error Handling`. Append to `.context/errors/developer.md` (classification: `transient` for retry; `logic` for escalate to AR). Do NOT silently treat as success. |
 
 ## Redaction
 
@@ -231,7 +231,7 @@ When using the `cli/fallback` adapter, the `git diff` pipe may expose env files,
 }
 ```
 
-Array max 5 items. Eviction: cleared on workflow archival (FN/ST), not within a run. Follows `facts.files_read` precedent.
+Array max 5 items. Eviction: cleared on worktask archival (FN/ST), not within a run. Follows `facts.files_read` precedent.
 
 ### Audit actions emitted by this skill
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SubagentStop → audit.jsonl writer (igrsoft workflow plugin, v3.10.0+).
+# SubagentStop → audit.jsonl writer (igrsoft worktask plugin, v3.10.0+).
 # Replaces prose-instructed `subagent_stopped` row emission. Pairs with
 # cost-log.sh; both fire on SubagentStop, both target .context/logs/.
 #

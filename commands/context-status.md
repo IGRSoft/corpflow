@@ -144,7 +144,7 @@ Estimated new utilization: 38% (down from 65%)
 | Tool definitions | 3,000 | No |
 | Rules/Skills | 5,000 | No |
 
-### Workflow Components
+### Worktask Components
 | Component | Tokens | Compressible |
 |-----------|--------|--------------|
 | planning-N.md (each plan) | 3,500 | Yes (to 500) |

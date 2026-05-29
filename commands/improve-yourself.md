@@ -14,7 +14,7 @@ estimated-cost:
 
 # Improve Yourself Command
 
-Manual entry point for the `self-improvement` skill. Use when you want to run the retrospective **outside** of a full workflow — e.g., after ad-hoc edits, between workflows, or to iterate on proposals.
+Manual entry point for the `self-improvement` skill. Use when you want to run the retrospective **outside** of a full worktask — e.g., after ad-hoc edits, between worktasks, or to iterate on proposals.
 
 Invokes `skills/self-improvement/SKILL.md`. The skill handles the heavy lifting; this command provides the CLI surface and wires user approval through to `prompt-engineer` for application.
 
@@ -36,7 +36,7 @@ Invokes `skills/self-improvement/SKILL.md`. The skill handles the heavy lifting;
 | `--since <ref>` | Git ref used as diff baseline (`HEAD~N`, SHA, tag, branch) | Last commit with `Agent:` trailer; fallback HEAD |
 | `--target <kind>` | `agents`, `skills`, `commands`, or `all` — filters proposals to the listed target type(s). Comma-separated for multiple. | `all` |
 | `--dry-run` | Write `.context/learnings.md` but do not enter apply phase, even if user checks boxes. Useful for review only. | off |
-| `--no-scope-filter` | Skip the used-in-context filter (Step 4 of the skill). All mapped proposals are surfaced regardless of whether the target participated in any workflow. **Advanced — use with caution** (higher noise). | off |
+| `--no-scope-filter` | Skip the used-in-context filter (Step 4 of the skill). All mapped proposals are surfaced regardless of whether the target participated in any worktask. **Advanced — use with caution** (higher noise). | off |
 | `--apply` | After presenting `learnings.md`, block until the user checks boxes and explicitly approves, then delegate checked items to `igrsoft:prompt-engineer`. | off |
 
 ## Examples
@@ -113,7 +113,7 @@ Read `.context/learnings.md` back to the user, highlighting:
 
 This command and the ST-stage automatic invocation share the same skill and write the same `.context/learnings.md`. Use the manual command when:
 
-- You are **not** running a full `/workflow` — e.g., touching up prompts after ad-hoc edits.
+- You are **not** running a full `/worktask` — e.g., touching up prompts after ad-hoc edits.
 - You want to **iterate** on the proposals (re-run with `--since` or `--target` to narrow).
 - You want to **dry-run** to inspect the proposal set before committing to apply.
 
@@ -122,8 +122,8 @@ The ST-stage invocation is the production path — this command is for tooling a
 ## Constraints (DO NOT)
 
 - DO NOT apply proposals without `--apply` and explicit user box-checking + approval message.
-- DO NOT use `--no-scope-filter` in production workflows; it exists for diagnostics and edge cases.
-- DO NOT run this command if a workflow is active (ST has not yet completed). Wait for the workflow's own ST-triggered retrospective instead.
+- DO NOT use `--no-scope-filter` in production worktasks; it exists for diagnostics and edge cases.
+- DO NOT run this command if a worktask is active (ST has not yet completed). Wait for the worktask's own ST-triggered retrospective instead.
 - DO NOT write to `learnings.md` with the same timestamp if a prior run exists in the same second — the skill handles this by overwriting; callers must understand the file is single-slot per workspace.
 
 ## Related
@@ -140,7 +140,7 @@ The ST-stage invocation is the production path — this command is for tooling a
 | Situation | Command behavior |
 |-----------|------------------|
 | `--since <ref>` is invalid | Abort with clear message; do NOT fall back to HEAD silently. |
-| No `.context/` directory present AND no `--since` given | Abort; ask user to run from a workflow workspace or pass `--since`. |
+| No `.context/` directory present AND no `--since` given | Abort; ask user to run from a worktask workspace or pass `--since`. |
 | Skill writes no `learnings.md` (no changes detected) | Print summary from log file; exit 0. |
 | `--apply` given but user never checks any boxes | Log `applied_count: 0, skipped_count: <total>`; exit 0 without calling prompt-engineer. |
 | prompt-engineer fails mid-apply | Commit any successfully applied proposals; surface the failure for the remaining items; do NOT revert partial work. |

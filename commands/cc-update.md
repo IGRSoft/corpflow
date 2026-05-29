@@ -37,7 +37,7 @@ At the end of the update, bump this value in `README.md` to the new version when
 - `--memory-only` - Skip file updates; update only MEMORY.md version tracking
 - `--bump-min` - Force bump `README.md` min version even without breaking changes
 - `--agent <name>` - Restrict update to a specific agent file (e.g., developer)
-- `--command <name>` - Restrict update to a specific command file (e.g., workflow)
+- `--command <name>` - Restrict update to a specific command file (e.g., worktask)
 - `--force` - Proceed even if version is older than current min version
 
 ## Examples
@@ -62,7 +62,7 @@ At the end of the update, bump this value in `README.md` to the new version when
 /cc-update 2.1.77 --bump-min
 ```
 
-## Batch Workflow
+## Batch Worktask
 
 For multi-version updates (e.g., 2.1.77 through 2.1.86):
 1. Run `/cc-update <version> --dry-run` per version to preview cumulative impact
@@ -158,7 +158,7 @@ Bump when updated files depend on new CC capabilities. Use `--bump-min` to force
 1. Review changes: `git diff agents/ skills/ README.md`
 2. Run `/prompt-audit --agents` to verify consistency
 3. Commit: `#N chore: update plugin for Claude Code v2.1.77 features`
-4. **If invoked under `/workflow`**: hand control back to the orchestrator. DR (technical-lead) reviews the diff; QA validates frontmatter integrity. Do NOT self-commit when running inside a workflow — FN (or the user, in compressed workflows) owns the commit.
+4. **If invoked under `/worktask`**: hand control back to the orchestrator. DR (technical-lead) reviews the diff; QA validates frontmatter integrity. Do NOT self-commit when running inside a worktask — FN (or the user, in compressed worktasks) owns the commit.
 ```
 
 ## Feature Category Mapping
@@ -175,7 +175,7 @@ How changelog entries are categorized and routed to affected files:
 | **MCP** | MCP, elicitation, server deduplication, deferred tools, description cap | agent-coordination skill, cross-plugin-handoff skill |
 | **Cost** | token, cache, prompt cache, cost reduction | cost-optimization skill |
 | **Frontmatter** | effort, maxTurns, disallowedTools, initialPrompt, paths YAML, description cap | stage-codes skill, prompt-engineer agent |
-| **Commands** | slash command, /clear, /reload-plugins | workflow command, relevant command files |
+| **Commands** | slash command, /clear, /reload-plugins | worktask command, relevant command files |
 
 ## Integration
 
@@ -184,13 +184,13 @@ This command is used by:
 - Manually, when a new Claude Code version adds features the plugin should leverage
 - As a prerequisite before running `/prompt-audit`
 
-Not part of the 9/11-stage workflow — standalone maintenance command with stage code **PE**. Recommended cadence: run within one week of each Claude Code release. Use `--dry-run` first to review impact scope, then apply.
+Not part of the 9/11-stage worktask — standalone maintenance command with stage code **PE**. Recommended cadence: run within one week of each Claude Code release. Use `--dry-run` first to review impact scope, then apply.
 
-## Workflow Routing (BINDING)
+## Worktask Routing (BINDING)
 
-When this command is embedded in a `/workflow` invocation (e.g., `/workflow /cc-update X.Y.Z`), the orchestrator MUST route the implementation stage to `igrsoft:prompt-engineer`. Do NOT default to `igrsoft:developer`. Rationale: cc-update is metadata/prompt engineering, not platform code.
+When this command is embedded in a `/worktask` invocation (e.g., `/worktask /cc-update X.Y.Z`), the orchestrator MUST route the implementation stage to `igrsoft:prompt-engineer`. Do NOT default to `igrsoft:developer`. Rationale: cc-update is metadata/prompt engineering, not platform code.
 
-PL0 must set `metadata.agent: "igrsoft:prompt-engineer"` on the implementation task even when the workflow framework labels the stage slot as DV. This binding overrides the default DV → developer mapping for any workflow whose `metadata.embedded_commands` includes `cc-update`.
+PL0 must set `metadata.agent: "igrsoft:prompt-engineer"` on the implementation task even when the worktask framework labels the stage slot as DV. This binding overrides the default DV → developer mapping for any worktask whose `metadata.embedded_commands` includes `cc-update`.
 
 ## Edge Cases
 

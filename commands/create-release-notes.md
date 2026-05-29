@@ -1,6 +1,6 @@
 ---
 name: create-release-notes
-description: Generate release notes from completed work, git history, or workflow artifacts
+description: Generate release notes from completed work, git history, or worktask artifacts
 argument-hint: '[--from tag] [--to tag|HEAD]'
 allowed-tools: Read, Glob, Grep, Bash(git log:*)
 model: haiku
@@ -8,7 +8,7 @@ model: haiku
 
 # Release Notes Command
 
-Generate release notes from completed work, git history, or workflow artifacts.
+Generate release notes from completed work, git history, or worktask artifacts.
 
 ## Usage
 
@@ -23,7 +23,7 @@ Generate release notes from completed work, git history, or workflow artifacts.
 
 - `--version <v>` - Specify version number
 - `--from-commits` - Generate from git commit history
-- `--from-workflow` - Generate from workflow artifacts
+- `--from-worktask` - Generate from worktask artifacts
 - `--format <type>` - Output format (default: markdown)
 - `--audience [internal|external|all]` - Target audience
 - `--platform <apple|android|web|all>` - Target platform context (default: all)

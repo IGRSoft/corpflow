@@ -24,7 +24,7 @@
 | igrsoft Stage | debugging-toolkit Agent | Handoff Data |
 |---------------|------------------------|--------------|
 | DV (Development) | debugger | error logs, stack traces |
-| DV (Development) | dx-optimizer | workflow friction points |
+| DV (Development) | dx-optimizer | worktask friction points |
 | IR (Incident) | debugger | production logs, RCA context |
 
 ## Future Plugin Integration (Not Yet Installed)

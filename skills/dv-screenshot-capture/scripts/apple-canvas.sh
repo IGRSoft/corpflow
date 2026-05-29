@@ -16,7 +16,7 @@
 # § Failure cascade ladder.
 #
 # Usage:
-#   apple-canvas.sh --workflow-id <id> --modified-files <file-with-paths> \
+#   apple-canvas.sh --worktask-id <id> --modified-files <file-with-paths> \
 #                   [--view <ModuleName.TypeName>] \
 #                   [--destination macos-host|ios-sim] \
 #                   [--size 393x852] [--scheme light|dark]
@@ -33,7 +33,7 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 # Argument parsing
 # -----------------------------------------------------------------------------
-WORKFLOW_ID=""
+WORKTASK_ID=""
 MODIFIED_FILES_PATH=""
 VIEW_ARG=""
 DESTINATION="macos-host"
@@ -47,7 +47,7 @@ PROJECT_ROOT="$(pwd)"
 usage() {
     cat >&2 <<EOF
 usage: apple-canvas.sh
-  --workflow-id <id>             state.json.workflow_id (required)
+  --worktask-id <id>             state.json.worktask_id (required)
   --modified-files <path>        newline-separated file list, OR newline content (required)
   [--view <ModuleName.TypeName>] target view key
   [--destination macos-host|ios-sim]   default macos-host
@@ -60,7 +60,7 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --workflow-id)     WORKFLOW_ID="${2:-}"; shift 2 ;;
+        --worktask-id)     WORKTASK_ID="${2:-}"; shift 2 ;;
         --modified-files)  MODIFIED_FILES_PATH="${2:-}"; shift 2 ;;
         --view)            VIEW_ARG="${2:-}"; shift 2 ;;
         --destination)     DESTINATION="${2:-}"; shift 2 ;;
@@ -72,13 +72,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ -z "$WORKFLOW_ID" ]] && { echo "error: --workflow-id required" >&2; exit 5; }
+[[ -z "$WORKTASK_ID" ]] && { echo "error: --worktask-id required" >&2; exit 5; }
 [[ -z "$MODIFIED_FILES_PATH" ]] && { echo "error: --modified-files required" >&2; exit 5; }
 
 # -----------------------------------------------------------------------------
 # Path setup
 # -----------------------------------------------------------------------------
-IMAGES_DIR=".context/images/${WORKFLOW_ID}"
+IMAGES_DIR=".context/images/${WORKTASK_ID}"
 LOGS_DIR=".context/logs"
 ERRORS_DIR=".context/errors"
 AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
@@ -107,7 +107,7 @@ audit() {
         --arg ts "$ts" \
         --arg actor "apple-canvas-adapter" \
         --arg action "$action" \
-        --arg subject "$WORKFLOW_ID/${SLUG}" \
+        --arg subject "$WORKTASK_ID/${SLUG}" \
         --arg result "$result" \
         --argjson metadata "$metadata" \
         '{ts: $ts, actor: $actor, action: $action, subject: $subject, result: $result, metadata: $metadata}' \

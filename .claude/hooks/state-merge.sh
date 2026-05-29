@@ -16,7 +16,7 @@
 #
 # Env vars (provided by Claude Code on SubagentStop):
 #   CLAUDE_TASK_ID, CLAUDE_AGENT_NAME, CLAUDE_ARTIFACT_PATH,
-#   CLAUDE_WORKFLOW_ID, CLAUDE_DURATION_MS, CLAUDE_TASK_METADATA_STAGE
+#   CLAUDE_WORKTASK_ID, CLAUDE_DURATION_MS, CLAUDE_TASK_METADATA_STAGE
 #
 # Usage (manual self-test):
 #   state-merge.sh --self-test
@@ -47,7 +47,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
   cd "$td"
   mkdir -p .context/logs
   cat > .context/state.json <<'EOF'
-{"version":1,"workflow_id":"selftest","plan_file":".context/planning-0.md","platform":"all","stages":{"PL":{"status":"completed","verdict":"ok"}},"facts":{"files_modified":[],"tests_added":[],"decisions":[],"open_questions":[],"verdicts":{"PL":"ok"}},"handoffs":{}}
+{"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","stages":{"PL":{"status":"completed","verdict":"ok"}},"facts":{"files_modified":[],"tests_added":[],"decisions":[],"open_questions":[],"verdicts":{"PL":"ok"}},"handoffs":{}}
 EOF
   cat > .context/development.md <<'EOF'
 ---

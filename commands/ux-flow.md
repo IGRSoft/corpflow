@@ -139,7 +139,7 @@ Create or analyze user experience flows for features, tasks, or user journeys.
 [[ Error ]]    - Error state
 ```
 
-## Workflow Integration
+## Worktask Integration
 
 Use this command:
 - During PL stage for feature planning

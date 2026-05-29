@@ -12,7 +12,7 @@ Trigger inputs:
 
 | Source | Field | Effect |
 |---|---|---|
-| Plan metadata | `metadata.requires_canvas_screenshot: true` | Force canvas for the whole workflow |
+| Plan metadata | `metadata.requires_canvas_screenshot: true` | Force canvas for the whole worktask |
 | Skill call args | `args.force_canvas: true` | Force canvas for this specific invocation |
 | State inference | `sim_unavailable(state) == True` | Auto-route to canvas (xcframework-without-sim-slice, etc.) |
 | Plan metadata | `metadata.canvas_destination ∈ {"macos-host","ios-sim"}` | Pick render destination (default `macos-host`, ad5) |
@@ -93,7 +93,7 @@ Returns the standard `dv-screenshot-capture` adapter shape:
 
 ```
 {
-  path:  ".context/images/<workflow_id>/dv-NN-<slug>.png",
+  path:  ".context/images/<worktask_id>/dv-NN-<slug>.png",
   bytes: <integer>,
   ok:    Bool,
   error: null | "capture_failed" | "tool_missing" | "oversize_unquantizable"
@@ -206,7 +206,7 @@ Exit codes:
 `scripts/apple-canvas.sh` is the bash driver. Inputs:
 
 ```
---workflow-id <id>            # state.json.workflow_id
+--worktask-id <id>            # state.json.worktask_id
 --modified-files <path>       # newline-separated file paths (typically from git diff)
 --view <ModuleType>           # optional; if omitted, derived from modified_files
 --destination <macos-host|ios-sim>   # optional; default macos-host
@@ -216,7 +216,7 @@ Exit codes:
 
 Steps (matches the failure cascade above):
 
-1. Resolve outputs path: `.context/images/<workflow_id>/dv-NN-canvas-<slug>.png` (NN per existing storage layout rules).
+1. Resolve outputs path: `.context/images/<worktask_id>/dv-NN-canvas-<slug>.png` (NN per existing storage layout rules).
 2. Scaffold-if-missing: copy `examples/SnapshotHost-template/` if `tools/SnapshotHost/Package.swift` absent.
 3. Invoke preview-ensurer; abort on errors with `missing_input`.
 4. Update `PreviewBridge.swift` viewRegistry (idempotent).

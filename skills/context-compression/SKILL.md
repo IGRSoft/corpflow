@@ -10,11 +10,11 @@ Systematic approaches for managing context across agent handoffs, optimizing tok
 
 ## State Ledger as Compression Primitive
 
-The single most effective compression technique is the workflow state ledger (`.context/state.json`, ≤500 tokens). It supersedes most ad-hoc summary patterns: every stage reads the ledger as the canonical compressed view of all upstream stages.
+The single most effective compression technique is the worktask state ledger (`.context/state.json`, ≤500 tokens). It supersedes most ad-hoc summary patterns: every stage reads the ledger as the canonical compressed view of all upstream stages.
 
 - **What lives in the ledger**: stage status, verdict, retry_count, top decisions, open questions, handoff one-liners. NEVER diffs, file contents, or test output (fetch from disk).
 - **What stays in artifacts**: full reasoning, tables, code snippets, evidence. The ledger points; the artifact carries.
-- **Eviction order on overflow** (defined in `skills/workflow/references/handoff-protocol.md#state-json-schema`): drop completed-stage artifact paths once handoff strings capture essentials → drop resolved open questions → drop decisions older than 2 stages back.
+- **Eviction order on overflow** (defined in `skills/worktask/references/handoff-protocol.md#state-json-schema`): drop completed-stage artifact paths once handoff strings capture essentials → drop resolved open questions → drop decisions older than 2 stages back.
 
 The ledger is created by PL0 and patched atomically (`#atomic-write`) by every stage on completion. Downstream stages read it FIRST, before any artifact, and use it to decide which anchors to grep.
 
@@ -26,7 +26,7 @@ Binding order (per `handoff-protocol.md#cache-prefix`):
 
 ```
 [1] Plugin/agent contract reminder         ← stable across ALL stages
-[2] Workflow header (id, plan, exploration)← stable across ALL stages
+[2] Worktask header (id, plan, exploration)← stable across ALL stages
 [3] state.json blob (inlined JSON)         ← evolves per stage
 [4] Stage contract excerpt                 ← stable WITHIN stage type
 ─────── (cache prefix boundary) ───────
@@ -35,7 +35,7 @@ Binding order (per `handoff-protocol.md#cache-prefix`):
 [7] Stage-specific banners (DR/FN/MCP)     ← suffix, dynamic
 ```
 
-Forbidden in [1][2][4]: timestamps, ENV expansions, random IDs, retry counters, file mtimes, agent-specific names beyond `workflow_id`. CI lint (`skills/workflow/references/cache-lint.sh`) asserts byte-stability.
+Forbidden in [1][2][4]: timestamps, ENV expansions, random IDs, retry counters, file mtimes, agent-specific names beyond `worktask_id`. CI lint (`skills/worktask/references/cache-lint.sh`) asserts byte-stability.
 
 Expected `cache_read_input_tokens`: ≈20% on cross-stage transitions, ≈80% on retries within a stage, ≈60% on cross-stage average — meets AC-14 threshold of `≥60%` for stages 2–N.
 
@@ -326,7 +326,7 @@ The `PreCompact` hook (v2.1.105+) fires **before** automatic context compaction 
 }
 ```
 
-Use cases: gate compaction during critical multi-stage handoffs (PreCompact), re-inject critical task state, log compression metrics, recover workflow context in long multi-stage sessions (PostCompact).
+Use cases: gate compaction during critical multi-stage handoffs (PreCompact), re-inject critical task state, log compression metrics, recover worktask context in long multi-stage sessions (PostCompact).
 
 #### Example: `tools/post-compact-recovery.sh`
 
@@ -360,7 +360,7 @@ jq -n \
   --argjson audit "$AUDIT_TAIL" \
   --arg active_error "$IN_PROGRESS" \
   --arg contracts "skills/shared/stage-contracts.md" \
-  --arg resume_guide "skills/workflow/SKILL.md#resume-after-interruption" \
+  --arg resume_guide "skills/worktask/SKILL.md#resume-after-interruption" \
   '{
     recovery: {
       audit_tail: $audit,
@@ -378,12 +378,12 @@ After compaction, the orchestrator's next turn reads the most recent
 `post-compact-*.json`, follows the `resume_guide_ref`, and continues the
 execution loop from the first incomplete stage.
 
-See `skills/workflow/SKILL.md § Resume After Interruption` for the full state
+See `skills/worktask/SKILL.md § Resume After Interruption` for the full state
 table and procedure.
 
 ### Session Recap (v2.1.108+)
 
-Claude Code auto-generates a session recap at key moments (also available via `/recap` or `--recap` on resume). Recaps are self-contained summaries that survive compaction and can be used as handoff context between workflow sessions. Telemetry-disabled users also receive recaps (fixed v2.1.110).
+Claude Code auto-generates a session recap at key moments (also available via `/recap` or `--recap` on resume). Recaps are self-contained summaries that survive compaction and can be used as handoff context between worktask sessions. Telemetry-disabled users also receive recaps (fixed v2.1.110).
 
 ### Context Size Estimation
 

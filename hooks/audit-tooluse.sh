@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostToolUse → audit.jsonl writer (igrsoft workflow plugin, v3.10.0+).
+# PostToolUse → audit.jsonl writer (igrsoft worktask plugin, v3.10.0+).
 # Reads CC hook stdin JSON (tool_name, tool_input, tool_use_id, duration_ms,
 # effort.level, session_id) and appends one canonical row to
 # .context/logs/audit.jsonl with actor "hook:audit-tooluse".

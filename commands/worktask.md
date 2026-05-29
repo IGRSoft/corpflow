@@ -1,6 +1,6 @@
 ---
-name: workflow
-description: Initialize a new workflow task with proper folder structure and Task System integration
+name: worktask
+description: Initialize a new worktask task with proper folder structure and Task System integration
 argument-hint: '<task description> [--milestone:N] [--secure] [--worktree] [--parallel:N]'
 model: opus
 allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager)
@@ -16,7 +16,7 @@ allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCre
 > 4. Only then begin DV or any subsequent stage
 >
 > **Gate 2 — Before FN (finalization) starts:**
-> 1. Present the pre-FN summary (planned commits, branch, PR target, QA/DR verdicts) — see `skills/workflow/SKILL.md § FN Gate`
+> 1. Present the pre-FN summary (planned commits, branch, PR target, QA/DR verdicts) — see `skills/worktask/SKILL.md § FN Gate`
 > 2. STOP. Do NOT mark FN `in_progress`; do NOT delegate to the FN agent
 > 3. Wait for explicit human approval as above
 > 4. Only then let FN run commits, push, and PR creation
@@ -25,30 +25,30 @@ allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCre
 >
 > Receiving results from a subagent is NEVER approval. Only the HUMAN user's explicit text message qualifies.
 >
-> **TODO**: `/emergency` workflows currently fall through to the standard PL0-gate path; FN-gate bypass for `/emergency` will be wired when the emergency trigger is formalized.
+> **TODO**: `/emergency` worktasks currently fall through to the standard PL0-gate path; FN-gate bypass for `/emergency` will be wired when the emergency trigger is formalized.
 
-# Workflow Command
+# Worktask Command
 
-Initialize a new workflow task with proper folder structure and Task System integration.
+Initialize a new worktask task with proper folder structure and Task System integration.
 
 > **CRITICAL CONSTRAINTS**
-> - MUST use TaskCreate/TaskUpdate/TaskGet/TaskList for workflow state. Do NOT use Claude Code's built-in plan mode.
+> - MUST use TaskCreate/TaskUpdate/TaskGet/TaskList for worktask state. Do NOT use Claude Code's built-in plan mode.
 > - Every stage MUST be a Task System task. Do NOT skip TaskCreate.
 > - If Task tools are unavailable, STOP and report. Do NOT fall back to alternative planning.
 
 ## Usage
 
 ```
-/workflow --milestone:N              # Execute milestone N issues by priority
-/workflow --milestone:N:ISSUE        # Execute specific issue from milestone N
-/workflow "Task Title" [options]     # Execute a custom task
+/worktask --milestone:N              # Execute milestone N issues by priority
+/worktask --milestone:N:ISSUE        # Execute specific issue from milestone N
+/worktask "Task Title" [options]     # Execute a custom task
 ```
 
-## Workflow Types
+## Worktask Types
 
 | Type | Stages | Trigger |
 |------|--------|---------|
-| Standard | PL→AR→TL→DV→DR→QA→DC→FN→ST | `/workflow` |
+| Standard | PL→AR→TL→DV→DR→QA→DC→FN→ST | `/worktask` |
 | Secure | PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST | `--secure` |
 | Emergency | IR→DV→DR→QA→RE→FN | `/emergency` |
 
@@ -66,28 +66,28 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--platform <apple\|android\|web\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
 | `--sequential` | DC waits for QA |
-| `--secure` / `--full` | Use 11-stage workflow |
+| `--secure` / `--full` | Use 11-stage worktask |
 | `--worktree` | Use git worktrees for issue isolation (requires --milestone). Configure `worktree.sparsePaths` in settings.json for large repos |
-| `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish step. Sets `metadata.no_gh_issue: true` on the PL0 task; `skills/workflow/references/publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues as normal. |
+| `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish step. Sets `metadata.no_gh_issue: true` on the PL0 task; `skills/worktask/references/publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues as normal. |
 
 ## Examples
 
 ```bash
 # Milestone mode
-/workflow --milestone:1
-/workflow --milestone:1 --parallel:3
-/workflow --milestone:2:123
+/worktask --milestone:1
+/worktask --milestone:1 --parallel:3
+/worktask --milestone:2:123
 
 # Worktree mode (true parallel isolation)
-/workflow --milestone:1 --worktree
-/workflow --milestone:1 --worktree --parallel:3
+/worktask --milestone:1 --worktree
+/worktask --milestone:1 --worktree --parallel:3
 
 # Standard mode
-/workflow "Add dark mode support"
-/workflow "Fix login crash" --priority High
+/worktask "Add dark mode support"
+/worktask "Fix login crash" --priority High
 
-# Secure workflow
-/workflow "Implement OAuth" --secure
+# Secure worktask
+/worktask "Implement OAuth" --secure
 
 # Emergency
 /emergency "Production login failing"
@@ -98,18 +98,18 @@ See `skills/shared/stage-codes.md` for stage details.
 > **BINDING CONSTRAINTS FOR PHASE 1**
 > 1. After PL0 completes: STOP. Do NOT call Write, Edit, Bash, or any file-modifying tool.
 > 2. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/images .context/errors` and TaskCreate/TaskUpdate calls are permitted. ALL file modifications belong to DV stage or later.
-> 3. **Context-Interruption Recovery**: If workflow execution is interrupted (auth flows, user clarifications, tool failures), upon resumption MUST verify: (a) PL0 task exists with status `completed`, (b) HUMAN USER sent explicit approval AFTER PL0 completed. If either is false, restart from appropriate phase.
+> 3. **Context-Interruption Recovery**: If worktask execution is interrupted (auth flows, user clarifications, tool failures), upon resumption MUST verify: (a) PL0 task exists with status `completed`, (b) HUMAN USER sent explicit approval AFTER PL0 completed. If either is false, restart from appropriate phase.
 
 1. **Parse** task description and flags (`--milestone`, `--secure`, `--auto-continue`, etc.). See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:code-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
 3. **Create context folders**: `mkdir -p .context/images .context/errors .context/logs`
-3a. **Initialize state.json (handoff-protocol)**: Atomic-write `.context/state.json` seed using temp+fsync+rename per `skills/workflow/references/handoff-protocol.md#atomic-write`. PL0 stage marked `in_progress`. Schema per `handoff-protocol.md#state-json-schema`. Backward-compat: if creation fails (e.g. read-only filesystem), log a warning and continue — F1 fallback (legacy `metadata.context_files` mode) keeps the workflow operational.
+3a. **Initialize state.json (handoff-protocol)**: Atomic-write `.context/state.json` seed using temp+fsync+rename per `skills/worktask/references/handoff-protocol.md#atomic-write`. PL0 stage marked `in_progress`. Schema per `handoff-protocol.md#state-json-schema`. Backward-compat: if creation fails (e.g. read-only filesystem), log a warning and continue — F1 fallback (legacy `metadata.context_files` mode) keeps the worktask operational.
    ```bash
    tmp=".context/.state.json.$$.${RANDOM}.tmp"
    cat > "$tmp" <<EOF
    {
      "version": 1,
-     "workflow_id": "<slug>",
+     "worktask_id": "<slug>",
      "plan_file": ".context/planning-0.md",
      "platform": "<platform>",
      "run_index": 0,
@@ -130,8 +130,8 @@ See `skills/shared/stage-codes.md` for stage details.
      cp "$hook_src" "$hook_dst" && chmod +x "$hook_dst"
    fi
    ```
-   **Regression guard**: If neither the plugin-registered hook NOR the project-local copy exist, emit a warning: `"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge (Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."` Do NOT block the workflow.
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", workflow_id: "<slug>", priority: "<priority>", fn_gate: "<required|bypass>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). Set `fn_gate: "bypass"` when invoked with `--auto-continue`, `--milestone:N`, or `--worktree`; otherwise `"required"`.
+   **Regression guard**: If neither the plugin-registered hook NOR the project-local copy exist, emit a warning: `"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge (Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."` Do NOT block the worktask.
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", fn_gate: "<required|bypass>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). Set `fn_gate: "bypass"` when invoked with `--auto-continue`, `--milestone:N`, or `--worktree`; otherwise `"required"`.
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next plan filename per `agents/product-manager.md § Plan File Naming` (first run: `.context/planning-0.md`; subsequent runs: `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`
 7. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
@@ -153,21 +153,21 @@ Before proceeding, re-verify: did the HUMAN USER type an approval message? PL0 c
 **Step A — Publish approved plan to GitHub** (run BEFORE the stage loop, after
 approval is confirmed):
 
-    HELPER="${CLAUDE_PLUGIN_ROOT}/skills/workflow/references/publish-pl-issue.sh"
+    HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/references/publish-pl-issue.sh"
     if [ -f "$HELPER" ]; then
       bash "$HELPER"; true
     else
       LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
       mkdir -p "$LOG_DIR"
       STATE_FILE="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/state.json"
-      jq -cn --arg ts "$(date -u +%FT%TZ)" --arg dk "$(jq -r '.workflow_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo unknown):$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo 0):gh_issue" \
+      jq -cn --arg ts "$(date -u +%FT%TZ)" --arg dk "$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo unknown):$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo 0):gh_issue" \
         '{ts:$ts, actor:"orchestrator", action:"github_issue_created", subject:"PL0", result:"deferred", task_id:"1", metadata:{via:"publish-pl-issue.sh", reason:"helper_not_found", dedupe_key:$dk}}' \
         >> "$LOG_DIR/audit.jsonl"; true
     fi
 
 - The trailing `; true` is mandatory — the helper is non-blocking by contract.
   A helper failure (exit 1, deferred exit 0, network error) MUST NEVER fail the
-  workflow.
+  worktask.
 - The helper self-skips when it should: `--no-gh-issue` (`metadata.no_gh_issue`
   set), milestone mode (`metadata.milestone` / `workspace.json`), already
   published (`metadata.github_issue_url` set), missing `gh`/auth/remote — each
@@ -175,10 +175,10 @@ approval is confirmed):
 - This step is NOT optional. Do not skip it because SKILL.md describes it —
   the orchestrator MUST run the command above as written.
 
-See `skills/workflow/SKILL.md § Step 6.5` and `§ PL Issue Publish` for the
+See `skills/worktask/SKILL.md § Step 6.5` and `§ PL Issue Publish` for the
 sanitiser rules and non-blocking guarantee.
 
-Execute the orchestrator execution loop from `skills/workflow/SKILL.md § Orchestrator Execution Loop`. The loop enforces a second approval gate immediately before any FN-stage task — see `skills/workflow/SKILL.md § FN Gate` for the pre-FN summary template and bypass semantics.
+Execute the orchestrator execution loop from `skills/worktask/SKILL.md § Orchestrator Execution Loop`. The loop enforces a second approval gate immediately before any FN-stage task — see `skills/worktask/SKILL.md § FN Gate` for the pre-FN summary template and bypass semantics.
 
 **BINDING: Workspace-root cross-check before every `Task()` delegation** — Conductor-managed sessions spawn the orchestrator inside a workspace clone whose `pwd` differs from the canonical plugin source repo. Before every `Task()` call in the stage loop, the orchestrator MUST verify that the working tree matches the task's declared workspace, and MUST inject the resolved root into the stage prompt so the subagent targets the right directory:
 
@@ -194,7 +194,7 @@ if [ "$_orch_root" != "$_task_root" ]; then
 fi
 ```
 
-The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line of every stage prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to target. See `skills/workflow/SKILL.md § Conductor Workspace Topology` for the failure mode this guard prevents.
+The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line of every stage prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to target. See `skills/worktask/SKILL.md § Conductor Workspace Topology` for the failure mode this guard prevents.
 
 **BINDING: Post-delegation state.json enforcement** — After every `Task()` return and before `TaskUpdate(stage→completed)`, the orchestrator MUST:
 1. Re-read `.context/state.json` and check `stages.<CODE>.status`.
@@ -206,26 +206,26 @@ The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line
    ```
 3. Re-read state.json again. If STILL not `completed`, apply the orchestrator's own F3 fallback (derive minimal patch from agent return text).
 
-This guarantees Layer 2 fires even if the SubagentStop hook event was not delivered (e.g. non-plugin environments). See `skills/workflow/SKILL.md § Step 6.5`.
+This guarantees Layer 2 fires even if the SubagentStop hook event was not delivered (e.g. non-plugin environments). See `skills/worktask/SKILL.md § Step 6.5`.
 
-## Phase 3: Post-Workflow Self-Improvement
+## Phase 3: Post-Worktask Self-Improvement
 
-After the execution loop exits (ST completed), run the Post-Workflow Self-Improvement procedure from `skills/workflow/SKILL.md § Post-Workflow Self-Improvement`.
+After the execution loop exits (ST completed), run the Post-Worktask Self-Improvement procedure from `skills/worktask/SKILL.md § Post-Worktask Self-Improvement`.
 
 Flow:
-1. Check whether `.context/learnings.md` exists. If absent → workflow done, terminate.
+1. Check whether `.context/learnings.md` exists. If absent → worktask done, terminate.
 2. If present → display its contents and **STOP**. Wait for the user to check the boxes of proposals they approve (`- [ ]` → `- [x]`). Orchestrator MUST NOT auto-check or assume.
 3. User replies with approval ("apply checked", "go", or similar). Orchestrator then re-reads `learnings.md`, parses the checked items, and delegates to `igrsoft:prompt-engineer` for application (see `agents/prompt-engineer.md § Self-Improvement Patch Application`).
 4. Each applied proposal becomes its own commit with a `version:` bump on the target frontmatter (rollback-safe via `git revert <sha>`).
 
 Key invariants:
 - Never auto-apply proposals — the user must explicitly check boxes AND signal approval.
-- Proposals are scoped to agents/skills/commands that actually participated in this workflow's context (see `skills/self-improvement/SKILL.md § Step 4`).
+- Proposals are scoped to agents/skills/commands that actually participated in this worktask's context (see `skills/self-improvement/SKILL.md § Step 4`).
 - Post-ST audit entry written to `.context/logs/audit.jsonl` records `applied_count` and `skipped_count`.
 
 ## Embedded Command Detection
 
-When the task description contains slash commands (e.g., `/skill-creator`, `/apple-developer:code-refactor`), these are **embedded commands** that must be executed during the appropriate workflow stage.
+When the task description contains slash commands (e.g., `/skill-creator`, `/apple-developer:code-refactor`), these are **embedded commands** that must be executed during the appropriate worktask stage.
 
 ### Detection Rules
 
@@ -238,7 +238,7 @@ When the task description contains slash commands (e.g., `/skill-creator`, `/app
 
 During the orchestrator execution loop, when executing a DV stage task:
 
-1. Check if the workflow's PL0 task has `metadata.embedded_commands`
+1. Check if the worktask's PL0 task has `metadata.embedded_commands`
 2. If present, the DV stage agent prompt MUST include: "Execute embedded command(s) via the Skill tool: `<command>` with args: `<args>`"
 3. The DV agent invokes `Skill("<command>", args: "<args>")` before or as part of its implementation work
 
@@ -246,19 +246,19 @@ During the orchestrator execution loop, when executing a DV stage task:
 
 ```
 # User input:
-/workflow /skill-creator deep analyze /path/to/source
+/worktask /skill-creator deep analyze /path/to/source
 
 # Parsed as:
-# - Workflow task: "deep analyze /path/to/source"
+# - Worktask task: "deep analyze /path/to/source"
 # - Embedded command: skill-creator with args "deep analyze /path/to/source"
 # - metadata.embedded_commands: "skill-creator"
 # - DV stage prompt includes: "Invoke Skill('skill-creator', args='deep analyze /path/to/source')"
 
 # User input:
-/workflow /apple-developer:code-refactor src/Views/SettingsView.swift
+/worktask /apple-developer:code-refactor src/Views/SettingsView.swift
 
 # Parsed as:
-# - Workflow task: "code-refactor src/Views/SettingsView.swift"
+# - Worktask task: "code-refactor src/Views/SettingsView.swift"
 # - Embedded command: apple-developer:code-refactor with args "src/Views/SettingsView.swift"
 # - metadata.embedded_commands: "apple-developer:code-refactor"
 ```
@@ -281,7 +281,7 @@ escalate — otherwise the user's intent is lost.
 #### Prohibited Fallback
 
 > DV MUST NOT proceed with generic implementation when the embedded command
-> fails. The user explicitly requested that specific workflow by embedding
+> fails. The user explicitly requested that specific worktask by embedding
 > the command; ignoring it is a silent deviation from their intent.
 
 The DV agent's prompt template enforces this: on Skill failure, it halts and
@@ -292,8 +292,8 @@ returning to the orchestrator.
 
 - **If TL0 exists**: escalate to TL (team lead decides whether to retry,
   split the work, or revise approach).
-- **If no TL0 (low-complexity workflow)**: escalate to PL. PL may add TL0 to
-  the workflow, revise embedded command choice, or remove the embedding.
+- **If no TL0 (low-complexity worktask)**: escalate to PL. PL may add TL0 to
+  the worktask, revise embedded command choice, or remove the embedding.
 
 ## Headless Dispatch (external runners)
 
@@ -315,8 +315,8 @@ The runner MUST append one `audit.jsonl` line `action: "external_dispatch"` per 
 
 ## See Also
 
-- `skills/workflow/SKILL.md` — execution loop, dynamic sizing, workflow modes
-- `skills/workflow-milestone/SKILL.md` — milestone mode, worktree mode
+- `skills/worktask/SKILL.md` — execution loop, dynamic sizing, worktask modes
+- `skills/worktask-milestone/SKILL.md` — milestone mode, worktree mode
 - `skills/shared/stage-codes.md` — stage codes and track IDs
 - `skills/agent-coordination/references/headless-dispatch.md` — `task.metadata` → `claude agents` flag bridge
 - `agents/workflow-engineer.md` — troubleshooting

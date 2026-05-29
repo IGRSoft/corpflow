@@ -1,25 +1,25 @@
-# Company Workflow Plugin
+# Company Worktask Plugin
 
-A comprehensive 9-stage workflow system for Claude Code with Task System integration, stage transitions, approval gates, and structured task management.
+A comprehensive 9-stage worktask system for Claude Code with Task System integration, stage transitions, approval gates, and structured task management.
 
 claude-code min version: "2.1.114"
 
 ## Features
 
-- **9-Stage Workflow**: Planning → Architecture → Team Lead → Development → Developer Review → QA → Documentation → Finalization → Stakeholder
+- **9-Stage Worktask**: Planning → Architecture → Team Lead → Development → Developer Review → QA → Documentation → Finalization → Stakeholder
 - **Task System Integration**: Native `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` tools
 - **Native Dependencies**: `blockedBy` arrays for explicit dependency management
 - **Cross-Session Persistence**: Tasks persist across sessions
 - **Dynamic Task Creation**: PL0 creates subsequent stage tasks based on complexity assessment
 - **Error Handling**: Retry logic (max 3 per stage) and escalation chains
-- **Workflow State Management**: Task System handles all state persistence
+- **Worktask State Management**: Task System handles all state persistence
 - **Sub-agent Visibility**: All agents can view tasks with `TaskGet`
-- **Agent-Specific Commands**: Specialized commands for each workflow role
+- **Agent-Specific Commands**: Specialized commands for each worktask role
 - **Ethics Review**: Optional constitutional compliance checkpoint for high-risk features
 
 ## Task System
 
-The workflow uses Claude Code's Task System for persistent task management:
+The worktask uses Claude Code's Task System for persistent task management:
 
 | Tool | Purpose |
 |------|---------|
@@ -34,7 +34,7 @@ The workflow uses Claude Code's Task System for persistent task management:
 - **Native dependencies**: `blockedBy` arrays handled by the system
 - **Sub-agent visibility**: Any agent can query task state
 - **Task ownership**: Explicit `owner` field tracks responsible agent
-- **Metadata support**: Store priority, stage, workflow_id per task
+- **Metadata support**: Store priority, stage, worktask_id per task
 - **UI integration**: `Ctrl+T` task view in Claude Code
 
 ### Cross-Session Persistence
@@ -48,7 +48,7 @@ CLAUDE_CODE_TASK_LIST_ID="my-project" claude
 # Permanent (add to .claude/settings.json)
 {
   "env": {
-    "CLAUDE_CODE_TASK_LIST_ID": "project-workflow"
+    "CLAUDE_CODE_TASK_LIST_ID": "project-worktask"
   }
 }
 ```
@@ -64,36 +64,36 @@ Add to your Claude Code configuration:
 git clone https://github.com/igrsoft/company-workflow.git
 
 # Or add as a plugin
-claude plugins add /path/to/company-workflow
+claude plugins add /path/to/company-worktask
 ```
 
 ## Quick Start
 
-### Workflow Triggers
+### Worktask Triggers
 
 Simply prefix your task with one of these triggers:
 
 ```
-workflow: [task description]   # Standard - PL0 creates stages after planning
-fworkflow: [task description]  # Fast - auto-continues through all stages
-quick: [task description]      # 4-stage workflow: PL → DV → DR → QA
+worktask: [task description]   # Standard - PL0 creates stages after planning
+fworktask: [task description]  # Fast - auto-continues through all stages
+quick: [task description]      # 4-stage worktask: PL → DV → DR → QA
 micro: [task description]      # Lightweight: plan → approve → execute
 ```
 
-When Claude detects these prefixes, it automatically invokes `/workflow` to set up the workflow context, Task System integration, and stage management.
+When Claude detects these prefixes, it automatically invokes `/worktask` to set up the worktask context, Task System integration, and stage management.
 
 ### Examples
 
 ```
-workflow: Add dark mode to settings
-fworkflow: Fix login button typo
-workflow: /apple-developer:code-legacy-modernize migrate @StateObject to @Environment
+worktask: Add dark mode to settings
+fworktask: Fix login button typo
+worktask: /apple-developer:code-legacy-modernize migrate @StateObject to @Environment
 quick: Add validation to login form
 ```
 
 ### Combining with Other Commands
 
-You can embed slash commands within workflow triggers. The orchestrator will:
+You can embed slash commands within worktask triggers. The orchestrator will:
 1. Set up the context and planning
 2. Detect the embedded `/command` pattern and store it in `metadata.embedded_commands`
 3. Pass the command to the DV stage agent, which invokes it via the `Skill` tool
@@ -102,20 +102,20 @@ You can embed slash commands within workflow triggers. The orchestrator will:
 Embedded commands are detected by matching `/<name>` or `/<plugin:name>` patterns against available skills. The command arguments are preserved and passed through.
 
 ```
-workflow: /apple-developer:code-refactor src/Views/SettingsView.swift
-fworkflow: /code-review PR #123
+worktask: /apple-developer:code-refactor src/Views/SettingsView.swift
+fworktask: /code-review PR #123
 ```
 
-## Workflow Tiers
+## Worktask Tiers
 
 | Trigger | Stages | Use For |
 |---------|--------|---------|
 | `micro: [task]` | Plan → approve → edit | Single-file fixes, typos |
 | `quick: [task]` | PL → DV → DR → QA | Small features, bug fixes |
-| `workflow: [task]` | Full 9 stages | Multi-file features, architectural changes |
-| `fworkflow: [task]` | Full 9 stages (auto-continue) | Trusted full workflows |
+| `worktask: [task]` | Full 9 stages | Multi-file features, architectural changes |
+| `fworktask: [task]` | Full 9 stages (auto-continue) | Trusted full worktasks |
 
-## 9-Stage Workflow
+## 9-Stage Worktask
 
 | Code | Stage | Agent | Purpose |
 |------|-------|-------|---------|
@@ -139,7 +139,7 @@ TaskCreate({
   subject: "PL0: Planning",
   description: "Define requirements, assess complexity, create stage tasks",
   activeForm: "Planning...",
-  metadata: { stage: "PL", agent: "igrsoft:product-manager", workflow_id: "dark-mode", priority: "medium" }
+  metadata: { stage: "PL", agent: "igrsoft:product-manager", worktask_id: "dark-mode", priority: "medium" }
 });
 
 // Start PL0
@@ -165,7 +165,7 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ├── release-0.md             # RE stage (run 0, secure/full variant)
 ├── complete-summary-0.md    # FN stage (run 0)
 ├── retrospective-0.md       # ST stage (run 0)
-├── state.json               # Workflow ledger (shared across runs)
+├── state.json               # Worktask ledger (shared across runs)
 ├── errors/                  # Per-agent error narratives (if needed)
 │   ├── developer.md         # DV retries
 │   └── qa-engineer.md       # QA retries
@@ -180,7 +180,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 
 ### Agents
 
-| Agent | Description | Workflow Stage |
+| Agent | Description | Worktask Stage |
 |-------|-------------|----------------|
 | `product-manager` | Product strategy, requirements | PL (Planning) |
 | `software-architector` | Architecture, design patterns | AR (Architecture) |
@@ -193,17 +193,17 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `designer` | UI/UX strategy, design systems | PL (Planning) |
 | `ethics-reviewer` | Constitutional compliance, harm assessment | Support |
 | `prompt-engineer` | Agent/command optimization | Support |
-| `workflow-engineer` | Workflow troubleshooting | Support |
+| `workflow-engineer` | Worktask troubleshooting | Support |
 
 ### Commands
 
-#### Core Workflow
+#### Core Worktask
 | Command | Description |
 |---------|-------------|
-| `/workflow` | Initialize a new workflow task |
+| `/worktask` | Initialize a new worktask task |
 | `/estimate` | Estimate task complexity and effort |
 | `/export-estimate` | Export estimates to CSV |
-| `/context-status` | Check context and workflow state |
+| `/context-status` | Check context and worktask state |
 
 #### Designer
 | Command | Description |
@@ -282,7 +282,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 
 ### Skills (27 total)
 - `dv-screenshot-capture/SKILL.md` - DV stage screenshot capture with platform adapters (apple/web/android/cli-fallback)
-- `workflow.md` - Complete workflow system documentation
+- `worktask.md` - Complete worktask system documentation
 - `task-folder-organization.md` - Task folder structure
 - `shared/five-whys.md` - Root cause analysis technique
 - `claude-constitution.md` - Constitutional principles and ethics framework
@@ -291,11 +291,11 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 - `cost-optimization.md` - Token and cost management
 - `csv-export-templates.md` - Export format templates
 - `estimation/SKILL.md` - Complexity estimation methods
-- `workflow-milestone/SKILL.md` - Milestone-based workflow tracking
+- `worktask-milestone/SKILL.md` - Milestone-based worktask tracking
 - `review/SKILL.md` - Senior review guidelines
 - `self-improvement/SKILL.md` - ST-stage retrospective: diff-based learning from user edits; writes `.context/learnings.md` with per-proposal approval checklist, scoped to in-context agents/skills/commands only
-- `workflow-testing-strategy.md` - Workflow-integrated testing planning for PL/AR stages
-- `workflow/references/handoff-protocol.md` - Inter-stage handoff schema: state.json ledger, frontmatter contract, cache-friendly prompt layout
+- `worktask-testing-strategy.md` - Worktask-integrated testing planning for PL/AR stages
+- `worktask/references/handoff-protocol.md` - Inter-stage handoff schema: state.json ledger, frontmatter contract, cache-friendly prompt layout
 
 ### Tools
 
@@ -333,7 +333,7 @@ ST → FN → QA → DV → TL → AR → PL → USER
 
 ### During Development
 ```
-/workflow "Task"                    # Start workflow
+/worktask "Task"                    # Start worktask
 /arch-review                        # Review architecture
 /tech-debt --path src/              # Check tech debt
 ```
@@ -365,7 +365,7 @@ ST → FN → QA → DV → TL → AR → PL → USER
 /context-status                     # Context analysis
 ```
 
-### Post-Workflow Learning
+### Post-Worktask Learning
 ```
 /improve-yourself                   # Retrospective: propose agent/skill/command updates from user edits
 /improve-yourself --since <ref>     # Explicit baseline (default: last agent commit)

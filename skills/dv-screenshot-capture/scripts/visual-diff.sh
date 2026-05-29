@@ -7,7 +7,7 @@
 #
 # Graceful-degrade: if `magick` is not on PATH, emits an audit row with
 # `imagemagick_not_found` and exits 0 (non-blocking — DV/QA must NOT fail
-# the workflow on missing imagemagick per coordination-0.md §risk-watch).
+# the worktask on missing imagemagick per coordination-0.md §risk-watch).
 #
 # Per PL pd2 (and coordination-0.md): the diff PNG is saved ONLY on a fail
 # verdict (5-screenshot budget hygiene). Pass verdicts emit no diff artifact.
@@ -17,7 +17,7 @@
 #     --reference <design-ref.png>      reference image (required)
 #     --candidate <dv-NN-*.png>         candidate to compare (required)
 #     [--threshold 8]                   RMSE percent threshold (default 8.0)
-#     [--workflow-id <id>]              workflow_id (for audit subject + diff path)
+#     [--worktask-id <id>]              worktask_id (for audit subject + diff path)
 #     [--slug <kebab>]                  slug used in diff filename if saved
 #
 # Exit codes:
@@ -30,7 +30,7 @@ set -euo pipefail
 REFERENCE=""
 CANDIDATE=""
 THRESHOLD="8.0"
-WORKFLOW_ID="default"
+WORKTASK_ID="default"
 SLUG="diff"
 
 usage() {
@@ -39,7 +39,7 @@ usage: visual-diff.sh
   --reference <png>     reference image (required)
   --candidate <png>     candidate image (required)
   [--threshold N]       RMSE percent (default 8.0)
-  [--workflow-id <id>]  for audit subject + diff path
+  [--worktask-id <id>]  for audit subject + diff path
   [--slug <kebab>]      for diff filename
 EOF
     exit 2
@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
         --reference)    REFERENCE="${2:-}";    shift 2 ;;
         --candidate)    CANDIDATE="${2:-}";    shift 2 ;;
         --threshold)    THRESHOLD="${2:-}";    shift 2 ;;
-        --workflow-id)  WORKFLOW_ID="${2:-}";  shift 2 ;;
+        --worktask-id)  WORKTASK_ID="${2:-}";  shift 2 ;;
         --slug)         SLUG="${2:-}";         shift 2 ;;
         -h|--help)      usage ;;
         *)              echo "error: unknown flag $1" >&2; usage ;;
@@ -60,7 +60,7 @@ done
 [[ -z "$REFERENCE" || -z "$CANDIDATE" ]] && usage
 
 LOGS_DIR=".context/logs"
-IMAGES_DIR=".context/images/${WORKFLOW_ID}"
+IMAGES_DIR=".context/images/${WORKTASK_ID}"
 AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
 mkdir -p "$LOGS_DIR" "$IMAGES_DIR"
 
@@ -74,7 +74,7 @@ audit() {
         --arg ts "$ts" \
         --arg actor "qa-visual-diff" \
         --arg action "$action" \
-        --arg subject "${WORKFLOW_ID}/${SLUG}" \
+        --arg subject "${WORKTASK_ID}/${SLUG}" \
         --arg result "$result" \
         --argjson metadata "$metadata" \
         '{ts: $ts, actor: $actor, action: $action, subject: $subject, result: $result, metadata: $metadata}' \

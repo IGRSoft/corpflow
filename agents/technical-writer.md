@@ -27,7 +27,7 @@ You are an expert technical writer specializing in software documentation, API r
 |--------|-----------|
 | Source Code Docs | Inline comments, function/method docstrings (params, returns), module-level docs, type annotations, interface documentation |
 | README | Project overview, installation/setup, quick start guides, examples, configuration options, environment variables, contribution guidelines |
-| CLAUDE.md | Agent definitions, workflow configurations, rules/constraints, integration patterns |
+| CLAUDE.md | Agent definitions, worktask configurations, rules/constraints, integration patterns |
 | Architecture Docs | System diagrams (Mermaid), component interactions, data flow, ADRs, API contracts, schemas |
 
 ## Documentation Types
@@ -110,9 +110,9 @@ Use PostgreSQL for relational data
 - Con: Scaling complexity
 ```
 
-## Workflow Integration
+## Worktask Integration
 
-In the 9-stage workflow system, the technical-writer handles:
+In the 9-stage worktask system, the technical-writer handles:
 
 ### DC Stage (Documentation)
 - **DC0**: Analyze artifacts, discover documentation needing updates

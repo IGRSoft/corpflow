@@ -24,7 +24,7 @@ Create new agent definitions with proper structure, model selection, and best pr
 - `--model <haiku|sonnet|opus>` - Model selection (default: auto-select)
 - `--template <minimal|standard|comprehensive>` - Template style (default: standard)
 - `--tools <preset|list>` - Tool access preset or comma-separated list (see Tool Presets)
-- `--stage <code>` - Workflow stage integration: PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR
+- `--stage <code>` - Worktask stage integration: PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR
 - `--output <path>` - Output path (default: agents/<name>.md)
 
 ## Examples
@@ -52,7 +52,7 @@ Balanced structure for most agents:
 - Constraints (DO NOT) section (3-5 items)
 - Purpose section
 - Capabilities (organized by category)
-- Workflow integration
+- Worktask integration
 - Task System integration
 - Model Usage Note
 - Constitutional Alignment (reference `skills/shared/constitutional-base.md`)
@@ -67,7 +67,7 @@ Full structure for complex agents:
 - Detailed capabilities (multiple subsections)
 - Behavioral traits
 - Knowledge base
-- Workflow integration with Task System format
+- Worktask integration with Task System format
 - Model Usage Note with rationale
 - Constitutional Alignment with agent-specific focus
 - Response approach (numbered steps)
@@ -178,7 +178,7 @@ tools: Read, Glob, Grep, Write, Edit, TaskUpdate, TaskGet, TaskList
 - Actionable, specific items
 - No overlap with other agents
 
-### Workflow Integration
+### Worktask Integration
 - Stage codes (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR)
 - Task System integration
 - Handoff protocols
