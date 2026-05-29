@@ -59,11 +59,12 @@ PL0 (plan) -> PL0 GATE (HUMAN) -> publish-pl-issue.sh
 
 ## #script-template — single-issue
 
-The script is a pure JS module: a literal `meta` export plus a default async function receiving the engine
-helpers (`phase`, `agent`, `parallel`). **Cache-prefix discipline (binding):** the script body MUST be
-deterministic — no `Date.now()`, no `Math.random()`, no per-run counters or timestamps baked into prompts
-or `meta`. All run-varying values (`run_index`, `worktask_id`, model aliases) are passed in as `input`,
-not generated inside the body. This keeps the cached prefix stable so `resumeFromRunId` replay hits cache.
+The script is a pure JS module: a literal `meta` export followed by a top-level body. Helpers (`phase`,
+`agent`, `parallel`) are runtime globals provided by the Workflow engine. **Cache-prefix discipline
+(binding):** the script body MUST be deterministic — no `Date.now()`, no `Math.random()`, no per-run
+counters or timestamps baked into prompts or `meta`. All run-varying values (`run_index`, `worktask_id`,
+model aliases) are passed in as `args` (the global provided by the Workflow engine), not generated inside
+the body. This keeps the cached prefix stable so `resumeFromRunId` replay hits cache.
 
 ```js
 // .context/workflow/single-issue.workflow.js  (authored per-run by the orchestrator from the template)
@@ -73,52 +74,50 @@ export const meta = {
   version: 1,
 };
 
-export default async function ({ phase, agent, parallel, input }) {
-  // `input` carries non-deterministic values from the orchestrator (NOT generated here):
-  //   { worktask_id, run_index, plan_file, platform, models, stages, complexity, secure }
-  const { models, stages, complexity, secure } = input;
+// `args` carries non-deterministic values from the orchestrator (NOT generated here):
+//   { worktask_id, run_index, plan_file, platform, models, stages, complexity, secure }
+const { models, stages, complexity, secure } = args;
 
-  const ar = await phase("AR", () =>
-    agent(stagePrompt("AR", input), { agentType: "igrsoft:software-architector", model: models.AR, schema: SCHEMA.AR }));
+phase("AR");
+const ar = await agent(stagePrompt("AR", args), { agentType: "igrsoft:software-architector", model: models.AR, schema: SCHEMA.AR });
 
-  const tl = await phase("TL", () =>
-    agent(stagePrompt("TL", input), { agentType: "igrsoft:team-lead", model: models.TL, schema: SCHEMA.TL }));
+phase("TL");
+const tl = await agent(stagePrompt("TL", args), { agentType: "igrsoft:team-lead", model: models.TL, schema: SCHEMA.TL });
 
-  // DV fan-out is decided by TL output (tl.fanout is an array of sub-task prompts, length 1 = no fan-out).
-  const dv = await phase("DV", () =>
-    parallel(tl.fanout.map((p) =>
-      agent(p, { agentType: "igrsoft:developer", model: models.DV, schema: SCHEMA.DV, isolation: "worktree" }))));
+// DV fan-out is decided by TL output (tl.fanout is an array of sub-task prompts, length 1 = no fan-out).
+phase("DV");
+const dv = await parallel(tl.fanout.map((p) =>
+  agent(p, { agentType: "igrsoft:developer", model: models.DV, schema: SCHEMA.DV, isolation: "worktree" })));
 
-  const dr = await phase("DR", () =>
-    agent(stagePrompt("DR", input), { agentType: "igrsoft:technical-lead", model: models.DR, schema: SCHEMA.DR }));
+phase("DR");
+const dr = await agent(stagePrompt("DR", args), { agentType: "igrsoft:technical-lead", model: models.DR, schema: SCHEMA.DR });
 
-  // Adversarial multi-dimension verifier fan-out when complexity >= 25 (correctness/performance/maintainability).
-  if (complexity >= 25) {
-    await phase("DR-verify", () =>
-      parallel(["correctness", "performance", "maintainability"].map((dim) =>
-        agent(verifierPrompt(dim, input), { agentType: "igrsoft:technical-lead", model: models.DR, schema: SCHEMA.DR }))));
-  }
-
-  if (secure) {
-    await phase("SR", () =>
-      agent(stagePrompt("SR", input), { agentType: "igrsoft:security-reviewer", model: models.SR, schema: SCHEMA.SR }));
-  }
-
-  const qa = await phase("QA", () =>
-    agent(stagePrompt("QA", input), { agentType: "igrsoft:qa-engineer", model: models.QA, schema: SCHEMA.QA }));
-
-  if (stages.includes("DC")) {
-    await phase("DC", () =>
-      agent(stagePrompt("DC", input), { agentType: "igrsoft:technical-writer", model: models.DC, schema: SCHEMA.DC }));
-  }
-  if (stages.includes("RE")) {
-    await phase("RE", () =>
-      agent(stagePrompt("RE", input), { agentType: "igrsoft:release-engineer", model: models.RE, schema: SCHEMA.RE }));
-  }
-
-  // Aggregated result; orchestrator reconciles into state.json on return, then evaluates the FN gate.
-  return { ar, tl, dv, dr, qa };
+// Adversarial multi-dimension verifier fan-out when complexity >= 25 (correctness/performance/maintainability).
+if (complexity >= 25) {
+  phase("DR-verify");
+  await parallel(["correctness", "performance", "maintainability"].map((dim) =>
+    agent(verifierPrompt(dim, args), { agentType: "igrsoft:technical-lead", model: models.DR, schema: SCHEMA.DR })));
 }
+
+if (secure) {
+  phase("SR");
+  await agent(stagePrompt("SR", args), { agentType: "igrsoft:security-reviewer", model: models.SR, schema: SCHEMA.SR });
+}
+
+phase("QA");
+const qa = await agent(stagePrompt("QA", args), { agentType: "igrsoft:qa-engineer", model: models.QA, schema: SCHEMA.QA });
+
+if (stages.includes("DC")) {
+  phase("DC");
+  await agent(stagePrompt("DC", args), { agentType: "igrsoft:technical-writer", model: models.DC, schema: SCHEMA.DC });
+}
+if (stages.includes("RE")) {
+  phase("RE");
+  await agent(stagePrompt("RE", args), { agentType: "igrsoft:release-engineer", model: models.RE, schema: SCHEMA.RE });
+}
+
+// Aggregated result; orchestrator reconciles into state.json on return, then evaluates the FN gate.
+return { ar, tl, dv, dr, qa };
 ```
 
 `stagePrompt()`, `verifierPrompt()`, and `SCHEMA` are pure functions/literals defined alongside the
@@ -133,17 +132,16 @@ Milestone mode maps N issues onto lanes; each lane runs in its own worktree
 ```js
 export const meta = { name: "igrsoft-milestone-span", description: "per-issue worktree lanes", version: 1 };
 
-export default async function ({ pipeline, agent, input }) {
-  const { issues, models, milestone } = input;  // issues: [{ number, prompt, plan_file, run_index }]
-  // R1 GUARD: the orchestrator has ALREADY obtained one explicit operator confirmation that states
-  // exactly issues.length PRs will be opened. This script assumes that confirmation happened upstream.
-  return pipeline(issues, {
-    planLane:   (issue) => agent(issue.prompt, { agentType: "igrsoft:software-architector", model: models.AR, schema: SCHEMA.AR, isolation: "worktree" }),
-    devLane:    (issue) => agent(issue.prompt, { agentType: "igrsoft:developer",            model: models.DV, schema: SCHEMA.DV, isolation: "worktree" }),
-    reviewLane: (issue) => agent(issue.prompt, { agentType: "igrsoft:technical-lead",       model: models.DR, schema: SCHEMA.DR, isolation: "worktree" }),
-    qaLane:     (issue) => agent(issue.prompt, { agentType: "igrsoft:qa-engineer",          model: models.QA, schema: SCHEMA.QA, isolation: "worktree" }),
-  });
-}
+const { issues, models, milestone } = args;  // issues: [{ number, prompt, plan_file, run_index }]
+// R1 GUARD: the orchestrator has ALREADY obtained one explicit operator confirmation that states
+// exactly issues.length PRs will be opened. This script assumes that confirmation happened upstream.
+return pipeline(
+  issues,
+  (issue)    => agent(issue.prompt, { agentType: "igrsoft:software-architector", model: models.AR, schema: SCHEMA.AR, isolation: "worktree" }),
+  (_, issue) => agent(issue.prompt, { agentType: "igrsoft:developer",            model: models.DV, schema: SCHEMA.DV, isolation: "worktree" }),
+  (_, issue) => agent(issue.prompt, { agentType: "igrsoft:technical-lead",       model: models.DR, schema: SCHEMA.DR, isolation: "worktree" }),
+  (_, issue) => agent(issue.prompt, { agentType: "igrsoft:qa-engineer",          model: models.QA, schema: SCHEMA.QA, isolation: "worktree" }),
+);
 ```
 
 Each lane writes `.worktrees/milestone-{N}/{issue#}/.context/<stage>-N.md` and merges into that worktree's
