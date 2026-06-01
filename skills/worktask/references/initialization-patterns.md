@@ -299,7 +299,7 @@ enum FullScreenRoute: Hashable, Identifiable {
 - **Figma URL**: [original URL]
 - **File Key**: [fileKey] | **Node ID**: [nodeId]
 - **Screenshots captured**:
-  - `.context/designs/figma-[screen]-[node-id].png` — [description]
+  - `.context/designs/figma-[screen]-[state]-[node-id].png` — [description]
 - **Design context summary**: [colors, layout, components from get_design_context]
 
 ## User Decisions

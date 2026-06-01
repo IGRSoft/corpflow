@@ -2,6 +2,7 @@
 name: task-folder-organization
 description: Context folder structure (.context/) with artifact naming and path resolution. Use when setting up task folders, organizing worktask artifacts, or resolving artifact paths.
 effort: medium
+version: 0.1.0
 ---
 
 # Task Folder Organization
@@ -34,8 +35,8 @@ The `.context/` folder is located at the project root:
 project-root/
 ├── .context/           # Worktask artifacts
 │   ├── planning-0.md   # First plan; subsequent runs add planning-1.md, planning-2.md, ...
-│   ├── designs/        # Designer-generated .pen mockups
-│   ├── images/         # User-attached screenshots, diagrams
+│   ├── designs/        # CANONICAL Figma asset dir: figma-*.png + figma-registry.md + Pencil .pen mockups
+│   ├── images/         # User-attached screenshots + DV implementation screenshots (NOT Figma)
 │   ├── errors/         # Per-agent escalation narratives (developer.md, qa-engineer.md, ...)
 │   └── logs/           # Runtime capture logs (build, test, monitor, sim, incident)
 ├── src/
@@ -67,8 +68,8 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 ├── milestone.json           # GitHub milestone context (when --milestone used)
 ├── deployment.md            # Deployment plan (if applicable)
 ├── state.json               # Worktask ledger (shared across runs)
-├── designs/                 # Design assets: Figma screenshots (.png) and Pencil mockups (.pen)
-├── images/                  # User-attached screenshots, diagrams
+├── designs/                 # CANONICAL Figma asset dir: figma-*.png + figma-registry.md + Pencil .pen mockups
+├── images/                  # User-attached screenshots + DV implementation screenshots (distinct from designs/)
 ├── errors/                  # Per-agent escalation narratives (see Per-Agent Error Files)
 └── logs/                    # Runtime capture logs: build/test/monitor/sim/incident/hotfix
 ```
@@ -93,6 +94,16 @@ When PL0 reruns (e.g. scope change, re-plan), it increments the run index and wr
 ├── errors/             # Shared (cumulative across runs)
 └── logs/               # Shared (cumulative across runs)
 ```
+
+### Canonical Figma Asset Directory
+
+**`.context/designs/` is the single canonical directory for all Figma assets** — per-frame screenshots (`figma-*.png`), the design registry (`figma-registry.md`), and Pencil `.pen` mockups all live here. This is the one authoritative location; PM (PL stage), the orchestrator, and QA all reference `.context/designs/` and never disagree.
+
+- **Writer**: `product-manager` (PL stage) persists Figma PNGs here in-turn via `Bash(curl:*)` and writes `figma-registry.md` (see `agents/product-manager.md § Figma Design Capture`).
+- **Reader**: `qa-engineer` (QA stage) reads `figma-registry.md` and compares against each persisted frame file (see `agents/qa-engineer.md § Design Comparison`).
+- **`.context/images/` is a distinct directory** — it holds user-attached screenshots/diagrams and DV implementation screenshots (`screenshots.md` manifest), NOT Figma assets. There is no shared-location conflict between the two; do not write Figma screenshots to `images/`.
+
+Filename grammar for Figma assets: `figma-[screen]-[state]-[node-id].png` (per-frame children use the child name/id; the container overview uses the container name/id). See `agents/product-manager.md § Capture Workflow`.
 
 ### Required Files
 

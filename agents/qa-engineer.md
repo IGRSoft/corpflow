@@ -5,6 +5,7 @@ model: sonnet
 color: yellow
 effort: medium
 maxTurns: 40
+version: 0.2.0
 tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__get_coverage_report, mcp__XcodeBuildMCP__get_file_coverage, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -105,6 +106,8 @@ One-cycle legacy alias mapping is documented in `skills/shared/testing-strategy.
 
 When the gate is open, perform visual comparison during Q1 (after functional testing).
 
+> Note: the GitHub-hosted image embeds that `publish-pl-issue.sh` renders into the published PL issue's **Design Preview** section are the **reviewer-facing** surface only. QA's authoritative comparison source is always the on-disk `.context/designs/figma-registry.md` + the persisted per-frame PNGs — never the hosted issue images.
+
 #### Registry-Driven Comparison (Primary Path)
 
 If `.context/designs/figma-registry.md` exists, it is the authoritative source — parse its Entries table and run comparison row-by-row:
@@ -116,6 +119,16 @@ If `.context/designs/figma-registry.md` exists, it is the authoritative source �
 5. Append one row to `testing.md § Design Comparison` using the canonical template (below).
 
 Parser tolerance: unknown columns are ignored; rows missing required columns (`ID`, `Screenshot`, `Target File(s)`) are skipped and logged as `missing_input` in `.context/errors/qa-engineer.md`.
+
+#### Per-Frame Comparison
+
+When the registry contains **per-frame rows** — a container produces one `State: overview` row plus one row per child frame, each keyed on its own `Figma Node` id (see `agents/product-manager.md § Registry Generation`) — compare against **each persisted frame file individually**, state by state, NOT against a single combined screenshot:
+
+1. Treat the `overview` row as the container reference. It is verified for layout completeness (all frames present) but is not a per-state target.
+2. For each child-frame row, navigate the implementation to that frame's specific state (default/error/empty/loading/success/…) and compare against that row's `.context/designs/<Screenshot>` file only.
+3. Emit one Design Comparison table row per registry row (overview + each frame), so an N-frame container yields N+1 comparison rows. A mismatch on one frame does not mask matches on the others.
+
+A leaf (single-screen) registry has no overview row and collapses to the normal one-row comparison — no regression.
 
 #### Fallback: Glob Discovery (Legacy Tasks)
 
