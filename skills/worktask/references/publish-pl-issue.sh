@@ -20,8 +20,44 @@
 #     dedupe_key=<worktask_id>:<run_index>:gh_issue.
 #   - Exit codes: 0 all operational paths, 1 catastrophic, 2 --self-test failure.
 #
+# Asset host-and-rewrite contract (Figma image embed — REQ-1..REQ-5):
+#   The PM authors the `## design-preview` anchor with placeholder tokens of the
+#   shape `{{asset:<basename>}}` on their own line (basename only — NO `.context/`
+#   path), each followed by a `- <description>` bullet, with the Figma source URL
+#   preserved above (see agents/product-manager.md § Asset-placeholder grammar).
+#   Because the tokens carry no `.context/` token, they survive sanitise_body
+#   Pass-1 L1. AFTER sanitisation, resolve_design_assets() rewrites each token to
+#   a hosted markdown image line `![<basename>](<url>)` — so the image line never
+#   faces L1 and no local path ever reaches the issue body.
+#
+#   Hosting (q1/q2 resolved here):
+#     - Disk lookup: <basename> resolves to .context/designs/<basename> (canonical
+#       per skills/task-folder-organization/SKILL.md); .context/images/<basename>
+#       accepted as a legacy fallback location.
+#     - assets path (q1): the PNG is copied to ASSET_DIR_REL =
+#       ".worktask-assets/<worktask_id>/<basename>" on the worktask branch, and
+#       referenced via https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>.
+#       <owner>/<repo> parsed from `git remote get-url origin` (git@ + https forms);
+#       <ref> from `git rev-parse --abbrev-ref HEAD`.
+#     - push contract (q2): the helper does NOT push or commit (no surprising git
+#       side effects at Step 6.5). It copies the file into the worktree path so a
+#       later human-gated commit (FN) picks it up, and it verifies the ref is
+#       reachable on the remote with `git ls-remote --exit-code origin <ref>`
+#       before emitting raw URLs. If the branch/asset is not yet pushed, it
+#       degrades down the fallback chain — non-blocking, exit 0.
+#     - Fallback chain (REQ-5): tier-1 raw URL (ref reachable) → tier-2 gist
+#       (`gh gist create`) → tier-3 URL-only note (Figma URL + exactly one note
+#       line "Screenshots persisted on disk; inline hosting unavailable — see
+#       designs registry."). No broken `![]()` at any tier. A degradation appends
+#       an audit row with reason=image_hosting_unavailable using a distinct
+#       dedupe key suffix (`:asset_hosting`) so it cannot mask the final
+#       github_issue_created result row in audit dedupe consumers.
+#
 # Env vars for injection (test/dev): STATE_FILE, WORKSPACE_ROOT, GH_BIN, DRY_RUN,
-# GH_TIMEOUT (default 30).
+# GH_TIMEOUT (default 30). Asset-hosting test hooks: ASSET_HOST_MODE
+# (raw|gist|none — forces a tier for self-tests, bypassing live git/gh probes),
+# ASSET_OWNER_REPO (mock "owner/repo"), ASSET_REF (mock ref), GIST_RAW_URL_BASE
+# (mock gist raw base). When unset, real git/gh probes drive tier selection.
 
 set -u
 
@@ -34,6 +70,26 @@ GH_TIMEOUT="${GH_TIMEOUT:-30}"
 STRICT="${STRICT:-0}"
 LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
 AUDIT_FILE="$LOG_DIR/audit.jsonl"
+
+# ---------- asset-hosting env hooks (Figma image embed) ---------------------
+# Roots used to resolve {{asset:<basename>}} tokens and to stage hosted copies.
+# Derived from WORKSPACE_ROOT (falls back to CLAUDE_PROJECT_DIR / cwd) so the
+# helper works both in-worktree and in self-test sandboxes.
+ASSET_ROOT="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}"
+ASSET_DESIGNS_DIR="$ASSET_ROOT/.context/designs"     # canonical Figma dir
+ASSET_IMAGES_DIR="$ASSET_ROOT/.context/images"        # legacy fallback location
+# Test hooks (unset in production → real git/gh probes drive tier selection):
+ASSET_HOST_MODE="${ASSET_HOST_MODE:-}"                # raw|gist|none force
+ASSET_OWNER_REPO="${ASSET_OWNER_REPO:-}"              # mock "owner/repo"
+ASSET_REF="${ASSET_REF:-}"                            # mock <ref>
+GIST_RAW_URL_BASE="${GIST_RAW_URL_BASE:-}"            # mock gist raw base
+# Reason recorded by resolve_design_assets() when it degrades below tier-1.
+# resolve_design_assets runs in a command substitution (subshell), so it cannot
+# set a parent variable — it writes the reason to ASSET_DEGRADED_FILE instead,
+# which the parent reads after the substitution returns. Empty file / absent →
+# no degradation.
+ASSET_DEGRADED_REASON=""
+ASSET_DEGRADED_FILE=""
 
 # ---------- CLI flag parsing ------------------------------------------------
 # Accept --strict (sets STRICT=1). --self-test handled in entrypoint below.
@@ -178,6 +234,207 @@ extract_anchor() {
     }
     { if (in_block == 1) print }
   ' "$plan"
+}
+
+# ---------- asset host-and-rewrite (Figma image embed) ----------------------
+# Parse "owner/repo" from a git remote URL. Handles both forms:
+#   git@github.com:IGRSoft/company-workflow.git
+#   https://github.com/IGRSoft/company-workflow.git   (and without .git)
+# Echoes "owner/repo" on success; empty on no match.
+parse_owner_repo() {
+  local url="$1" path
+  case "$url" in
+    git@*:*)        path="${url#*:}" ;;                 # scp-like: host:owner/repo
+    ssh://*|https://*|http://*|git://*)
+                    path="${url#*://}"                  # strip scheme
+                    path="${path#*/}" ;;                # strip host[:port]/
+    *)              path="$url" ;;
+  esac
+  path="${path%.git}"                                   # drop trailing .git
+  path="${path%/}"
+  # Keep only the last two segments (owner/repo) — tolerates extra path depth.
+  printf '%s' "$path" | awk -F'/' 'NF>=2 { printf "%s/%s", $(NF-1), $NF }'
+}
+
+# Resolve a {{asset:<basename>}} basename to an on-disk path. Echoes the path
+# (canonical designs dir first, then legacy images dir) or empty if not found.
+resolve_asset_path() {
+  local base="$1"
+  if [ -f "$ASSET_DESIGNS_DIR/$base" ]; then
+    printf '%s' "$ASSET_DESIGNS_DIR/$base"; return 0
+  fi
+  if [ -f "$ASSET_IMAGES_DIR/$base" ]; then
+    printf '%s' "$ASSET_IMAGES_DIR/$base"; return 0
+  fi
+  return 1
+}
+
+# Decide the hosting tier + compute owner/repo + ref. Sets globals:
+#   HOST_TIER  ∈ {raw, gist, none}
+#   HOST_OWNER_REPO, HOST_REF   (for raw tier)
+# Honors ASSET_HOST_MODE override (self-tests); otherwise probes git/gh.
+# NON-BLOCKING: any probe failure degrades the tier, never errors.
+HOST_TIER=""
+HOST_OWNER_REPO=""
+HOST_REF=""
+select_host_tier() {
+  HOST_TIER="none"; HOST_OWNER_REPO=""; HOST_REF=""
+  # Forced mode (self-tests bypass live probes).
+  case "$ASSET_HOST_MODE" in
+    raw)
+      HOST_TIER="raw"
+      HOST_OWNER_REPO="${ASSET_OWNER_REPO:-owner/repo}"
+      HOST_REF="${ASSET_REF:-main}"
+      return 0 ;;
+    gist) HOST_TIER="gist"; return 0 ;;
+    none) HOST_TIER="none"; return 0 ;;
+    *) ;;  # fall through to live probes
+  esac
+
+  # Tier-1 (raw.githubusercontent.com) preconditions: remote parseable AND ref
+  # reachable on origin. The helper does NOT push (q2) — it only checks.
+  local remote owner_repo ref
+  remote=$(git remote get-url origin 2>/dev/null || true)
+  owner_repo=$(parse_owner_repo "$remote")
+  ref=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+  if [ -n "$owner_repo" ] && [ -n "$ref" ] && [ "$ref" != "HEAD" ]; then
+    if git ls-remote --exit-code origin "$ref" >/dev/null 2>&1; then
+      HOST_TIER="raw"; HOST_OWNER_REPO="$owner_repo"; HOST_REF="$ref"
+      return 0
+    fi
+  fi
+  # Tier-2 (gist): available iff gh is present + authed.
+  if command -v "$GH_BIN" >/dev/null 2>&1 && \
+     "$GH_BIN" auth status >/dev/null 2>&1; then
+    HOST_TIER="gist"; return 0
+  fi
+  # Tier-3: URL-only note.
+  HOST_TIER="none"
+  return 0
+}
+
+# Return success only when a constructed raw.githubusercontent.com URL is
+# verifiably reachable at the target ref/path.
+#
+# Private repos: prefer authenticated `gh api repos/<owner>/<repo>/contents/...`
+# existence checks (works for private content where anonymous raw HEAD returns
+# 404). Public repos (or environments without gh auth): fall back to a raw URL
+# HEAD probe via curl. Any uncertainty degrades away from tier-1 (non-blocking).
+raw_asset_url_reachable() {
+  # $1=owner/repo $2=ref $3=rel-path $4=raw-url
+  local owner_repo="$1" ref="$2" rel="$3" raw_url="$4"
+  if command -v "$GH_BIN" >/dev/null 2>&1 && "$GH_BIN" auth status >/dev/null 2>&1; then
+    "$GH_BIN" api --silent -X GET "repos/$owner_repo/contents/$rel" -f ref="$ref" >/dev/null 2>&1 && return 0
+  fi
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsIL --max-time 10 "$raw_url" >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+
+# Host a single PNG and echo its public https URL (or empty on failure).
+#   $1 = basename, $2 = on-disk source path
+# Uses HOST_TIER/HOST_OWNER_REPO/HOST_REF set by select_host_tier().
+host_one_asset() {
+  local base="$1" src="$2"
+  case "$HOST_TIER" in
+    raw)
+      # Copy the PNG into the tracked assets path on the worktask branch so a
+      # later (human-gated) commit ships it. We do NOT git-add/commit/push here.
+      local rel=".worktask-assets/${WORKTASK_ID:-task}/$base"
+      local dest="$ASSET_ROOT/$rel"
+      if [ "$DRY_RUN" != "1" ]; then
+        mkdir -p "$(dirname "$dest")" 2>/dev/null || return 1
+        cp -f "$src" "$dest" 2>/dev/null || return 1
+      fi
+      local raw_url
+      raw_url=$(printf 'https://raw.githubusercontent.com/%s/%s/%s' \
+        "$HOST_OWNER_REPO" "$HOST_REF" "$rel")
+      # Prevent broken image markdown: only emit tier-1 URLs when the asset is
+      # reachable at that ref. Otherwise signal failure so caller degrades.
+      if [ "$DRY_RUN" != "1" ] && ! raw_asset_url_reachable "$HOST_OWNER_REPO" "$HOST_REF" "$rel" "$raw_url"; then
+        return 1
+      fi
+      printf '%s' "$raw_url"
+      return 0 ;;
+    gist)
+      # Mock-friendly: if GIST_RAW_URL_BASE is set (self-tests), synthesise the
+      # raw URL without touching the network. Otherwise upload via gh.
+      if [ -n "$GIST_RAW_URL_BASE" ]; then
+        printf '%s/%s' "${GIST_RAW_URL_BASE%/}" "$base"; return 0
+      fi
+      if [ "$DRY_RUN" = "1" ]; then
+        printf 'https://gist.githubusercontent.com/dry/run/raw/%s' "$base"; return 0
+      fi
+      local gout raw
+      gout=$("$GH_BIN" gist create "$src" 2>/dev/null) || return 1
+      # gh prints the gist web URL; the raw asset URL is web/raw/<base>.
+      raw=$(printf '%s' "$gout" | grep -oE 'https://gist\.github\.com/[A-Za-z0-9._/-]+' | head -1)
+      [ -z "$raw" ] && return 1
+      printf '%s/raw/%s' "$raw" "$base"
+      return 0 ;;
+    *)
+      return 1 ;;
+  esac
+}
+
+# Rewrite {{asset:<basename>}} tokens in the (already-sanitised) design-preview
+# body to hosted `![<basename>](<url>)` lines. Reads body on stdin, writes the
+# rewritten body to stdout. Because this runs in a command substitution, it
+# records degradation by writing the reason to $ASSET_DEGRADED_FILE (when set)
+# rather than to a parent variable — the parent reads the file afterwards. A
+# tier-1/tier-2 hosting miss injects exactly one tier-3 note line. NON-BLOCKING.
+_flag_degraded() {
+  # $1 = reason. Record both in-subshell (for self-test direct calls) and via
+  # the file side channel (for the live command-substitution call site).
+  ASSET_DEGRADED_REASON="$1"
+  [ -n "$ASSET_DEGRADED_FILE" ] && printf '%s' "$1" > "$ASSET_DEGRADED_FILE" 2>/dev/null || true
+}
+resolve_design_assets() {
+  local body; body=$(cat)
+  # Fast path: no tokens → return body unchanged (URL-only design-preview).
+  if ! printf '%s\n' "$body" | grep -q '{{asset:'; then
+    printf '%s' "$body"
+    return 0
+  fi
+  select_host_tier
+  # Tier-3 (no hosting): strip every {{asset:...}} token line, append exactly one
+  # note line. Preserve all non-token lines (Figma URL + description bullets).
+  if [ "$HOST_TIER" = "none" ]; then
+    _flag_degraded "image_hosting_unavailable"
+    printf '%s\n' "$body" \
+      | LC_ALL=C awk '/^[[:space:]]*\{\{asset:[^}]+\}\}[[:space:]]*$/ { next } { print }'
+    printf 'Screenshots persisted on disk; inline hosting unavailable — see designs registry.\n'
+    return 0
+  fi
+  # Tier-1/Tier-2: substitute each token with a hosted image line. If a single
+  # asset cannot be hosted (missing on disk, host_one_asset fails), drop its
+  # token line and flag degradation, but keep going for the rest (best effort).
+  local degraded=0 line base src url
+  while IFS= read -r line; do
+    case "$line" in
+      *'{{asset:'*'}}'*)
+        # Extract basename between {{asset: and }}.
+        base=$(printf '%s' "$line" | sed -n 's/.*{{asset:\([^}]*\)}}.*/\1/p')
+        if [ -z "$base" ]; then printf '%s\n' "$line"; continue; fi
+        src=$(resolve_asset_path "$base" || true)
+        if [ -z "$src" ]; then degraded=1; continue; fi   # no file → drop token
+        url=$(host_one_asset "$base" "$src" || true)
+        if [ -z "$url" ]; then degraded=1; continue; fi    # host failed → drop
+        printf '![%s](%s)\n' "$base" "$url"
+        ;;
+      *)
+        printf '%s\n' "$line"
+        ;;
+    esac
+  done <<EOF
+$body
+EOF
+  if [ "$degraded" = "1" ]; then
+    _flag_degraded "image_hosting_unavailable"
+    printf 'Screenshots persisted on disk; inline hosting unavailable — see designs registry.\n'
+  fi
+  return 0
 }
 
 # ---------- workspace.json discovery ----------------------------------------
@@ -751,6 +1008,154 @@ MOCK
     fail=$((fail + 1))
   fi
 
+  # ---- Fixture 10: Figma image-embed (placeholder → ![alt](url)) ----
+  # Happy path (AC-1, AC-7, AC-3, AC-4) + fallback render (AC-5). Mocks the host
+  # (ASSET_HOST_MODE) and stubs the two PNGs on disk — never hits the network.
+  local f10="$fixtures_dir/10-figma-image-embed.md"
+  if [ -f "$f10" ]; then
+    # Sandbox: stub the two persisted PNGs in a temp canonical designs dir.
+    local t10_dir
+    t10_dir=$(mktemp -d 2>/dev/null || echo "/tmp/publish-pl-self-test-10.$$")
+    mkdir -p "$t10_dir/.context/designs"
+    # 8-byte PNG signature stubs (resolve_asset_path only checks existence).
+    printf '\211PNG\r\n\032\n' > "$t10_dir/.context/designs/figma-scan-25-default-255-2264.png"
+    printf '\211PNG\r\n\032\n' > "$t10_dir/.context/designs/figma-analyzing-default-255-2267.png"
+
+    # Extract + sanitise the design-preview anchor exactly as the live path does.
+    local f10_design f10_embed
+    f10_design=$(extract_anchor "$f10" "design-preview" | sanitise_body)
+
+    # --- 10a: happy path (raw host, both assets present) ---
+    # Override hosting globals locally; DRY_RUN=1 skips the cp side-effect.
+    local _save_root="$ASSET_ROOT" _save_designs="$ASSET_DESIGNS_DIR" _save_images="$ASSET_IMAGES_DIR"
+    local _save_mode="$ASSET_HOST_MODE" _save_or="$ASSET_OWNER_REPO" _save_ref="$ASSET_REF"
+    local _save_dry="$DRY_RUN" _save_wid="${WORKTASK_ID:-}"
+    ASSET_ROOT="$t10_dir"
+    ASSET_DESIGNS_DIR="$t10_dir/.context/designs"
+    ASSET_IMAGES_DIR="$t10_dir/.context/images"
+    ASSET_HOST_MODE="raw"
+    ASSET_OWNER_REPO="IGRSoft/company-workflow"
+    ASSET_REF="feature/figma-screenshot-markdown"
+    DRY_RUN=1
+    WORKTASK_ID="fixture-10"
+    # File side channel: resolve_design_assets runs in a subshell, so it reports
+    # degradation via ASSET_DEGRADED_FILE (matching the live call site).
+    local _save_degfile="$ASSET_DEGRADED_FILE"
+    ASSET_DEGRADED_FILE="$t10_dir/.degraded"
+    : > "$ASSET_DEGRADED_FILE"
+    f10_embed=$(printf '%s' "$f10_design" | resolve_design_assets)
+    ASSET_DEGRADED_REASON=$(cat "$ASSET_DEGRADED_FILE" 2>/dev/null || echo "")
+
+    local f10a_ok=1
+    # AC-1/AC-7: two ![alt](url) lines, each using the basename as alt text, in
+    # document order, with the Figma URL preserved above.
+    printf '%s\n' "$f10_embed" | grep -qF '![figma-scan-25-default-255-2264.png](https://raw.githubusercontent.com/IGRSoft/company-workflow/feature/figma-screenshot-markdown/.worktask-assets/fixture-10/figma-scan-25-default-255-2264.png)' || f10a_ok=0
+    printf '%s\n' "$f10_embed" | grep -qF '![figma-analyzing-default-255-2267.png](https://raw.githubusercontent.com/IGRSoft/company-workflow/feature/figma-screenshot-markdown/.worktask-assets/fixture-10/figma-analyzing-default-255-2267.png)' || f10a_ok=0
+    printf '%s\n' "$f10_embed" | grep -qF 'https://www.figma.com/design/FOO/FaceScan?node-id=255-2263' || f10a_ok=0
+    # AC-7 ordering: scan-25 image line precedes analyzing image line.
+    local _l25 _lan
+    _l25=$(printf '%s\n' "$f10_embed" | grep -nF '![figma-scan-25-default' | head -1 | cut -d: -f1)
+    _lan=$(printf '%s\n' "$f10_embed" | grep -nF '![figma-analyzing-default' | head -1 | cut -d: -f1)
+    if [ -z "$_l25" ] || [ -z "$_lan" ] || [ "$_l25" -ge "$_lan" ]; then f10a_ok=0; fi
+    # AC-7 interleave: each image line is immediately followed by its bullet.
+    # (-e guards the leading-dash bullet pattern from being read as a flag.)
+    printf '%s\n' "$f10_embed" | grep -A1 -F -e '![figma-scan-25-default' | grep -qF -e '- state `default` — 25% progress ring' || f10a_ok=0
+    # No leftover placeholder tokens.
+    if printf '%s\n' "$f10_embed" | grep -qF '{{asset:'; then f10a_ok=0; fi
+    # No degradation flagged on the happy path.
+    [ -z "$ASSET_DEGRADED_REASON" ] || f10a_ok=0
+    if [ "$f10a_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 10-image-embed PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 10-image-embed FAIL"
+      printf '%s\n' "$f10_embed" | head -20 >&2
+      fail=$((fail + 1))
+    fi
+
+    # --- 10-no-leak: AC-3/AC-4 — full body grep finds no local path tokens ---
+    # Build a full issue body with the embedded design-preview, then grep.
+    local f10_reqs f10_acs f10_scope f10_complex f10_body
+    f10_reqs=$(extract_anchor "$f10" "requirements" | sanitise_body)
+    f10_acs=$(extract_anchor "$f10" "acceptance-criteria" | sanitise_body)
+    f10_scope=$(extract_anchor "$f10" "scope" | sanitise_body)
+    f10_complex=$(extract_anchor "$f10" "complexity" | sanitise_body)
+    f10_body=$(
+      printf '## Summary\nfixture 10 summary\n\n'
+      printf '## Requirements\n%s\n\n' "$f10_reqs"
+      printf '## Acceptance Criteria\n%s\n\n' "$f10_acs"
+      printf '## Scope\n%s\n\n' "$f10_scope"
+      printf '## Design Preview\n%s\n\nCompare implementation (DV) and screenshots (QA) against this design.\n\n' "$f10_embed"
+      printf '## Complexity\n%s\n\n' "$f10_complex"
+    )
+    local f10nl_ok=1
+    if printf '%s' "$f10_body" | grep -qE '\.context/|/Users/|conductor/workspaces/|planning-[0-9]+\.md'; then
+      f10nl_ok=0
+      printf '%s\n' "$f10_body" | grep -nE '\.context/|/Users/|conductor/workspaces/|planning-[0-9]+\.md' | head -3 >&2
+    fi
+    # The image lines must have survived (AC-3: not dropped by Pass-1 L1).
+    printf '%s' "$f10_body" | grep -qF '![figma-scan-25-default-255-2264.png]' || f10nl_ok=0
+    if [ "$f10nl_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 10-no-leak PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 10-no-leak FAIL"
+      fail=$((fail + 1))
+    fi
+
+    # --- 10b: fallback render (AC-5) — hosting unavailable → URL-only + note ---
+    ASSET_HOST_MODE="none"
+    : > "$ASSET_DEGRADED_FILE"
+    local f10b_embed
+    f10b_embed=$(printf '%s' "$f10_design" | resolve_design_assets)
+    ASSET_DEGRADED_REASON=$(cat "$ASSET_DEGRADED_FILE" 2>/dev/null || echo "")
+    local f10b_ok=1
+    # Figma URL preserved.
+    printf '%s\n' "$f10b_embed" | grep -qF 'https://www.figma.com/design/FOO/FaceScan?node-id=255-2263' || f10b_ok=0
+    # Exactly one note line, exact text.
+    local _notes
+    _notes=$(printf '%s\n' "$f10b_embed" | grep -cF 'Screenshots persisted on disk; inline hosting unavailable — see designs registry.')
+    [ "$_notes" = "1" ] || f10b_ok=0
+    # No broken image markdown, no image lines, no leftover tokens.
+    if printf '%s\n' "$f10b_embed" | grep -qF '!['; then f10b_ok=0; fi
+    if printf '%s\n' "$f10b_embed" | grep -qF '{{asset:'; then f10b_ok=0; fi
+    # Audit reason set.
+    [ "$ASSET_DEGRADED_REASON" = "image_hosting_unavailable" ] || f10b_ok=0
+    if [ "$f10b_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 10b-fallback PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 10b-fallback FAIL"
+      printf '%s\n' "$f10b_embed" | head -20 >&2
+      fail=$((fail + 1))
+    fi
+
+    # Restore globals + clean up the sandbox.
+    ASSET_ROOT="$_save_root"; ASSET_DESIGNS_DIR="$_save_designs"; ASSET_IMAGES_DIR="$_save_images"
+    ASSET_HOST_MODE="$_save_mode"; ASSET_OWNER_REPO="$_save_or"; ASSET_REF="$_save_ref"
+    DRY_RUN="$_save_dry"; WORKTASK_ID="$_save_wid"; ASSET_DEGRADED_REASON=""
+    ASSET_DEGRADED_FILE="$_save_degfile"
+    rm -rf "$t10_dir"
+  else
+    echo "publish-pl-issue: self-test 10-image-embed SKIP (fixture missing)"
+    fail=$((fail + 1))
+  fi
+
+  # ---- parse_owner_repo: both remote URL forms ----
+  local _por
+  _por=$(parse_owner_repo "git@github.com:IGRSoft/company-workflow.git")
+  if [ "$_por" = "IGRSoft/company-workflow" ]; then
+    echo "publish-pl-issue: self-test parse_owner_repo(ssh) PASS"; pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test parse_owner_repo(ssh) FAIL (got '$_por')"; fail=$((fail + 1))
+  fi
+  _por=$(parse_owner_repo "https://github.com/IGRSoft/company-workflow.git")
+  if [ "$_por" = "IGRSoft/company-workflow" ]; then
+    echo "publish-pl-issue: self-test parse_owner_repo(https) PASS"; pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test parse_owner_repo(https) FAIL (got '$_por')"; fail=$((fail + 1))
+  fi
+
   echo "publish-pl-issue: self-test summary — pass=$pass fail=$fail"
   [ "$fail" -eq 0 ]
 }
@@ -844,6 +1249,23 @@ SCOPE_S=$(printf '%s\n' "$SCOPE_RAW" | sanitise_body)
 COMPLEXITY_S=$(printf '%s\n' "$COMPLEXITY_RAW" | sanitise_body)
 DESIGN_S=$(printf '%s\n' "$DESIGN_RAW" | sanitise_body)
 
+# Host-and-rewrite (Figma image embed): resolve {{asset:<basename>}} placeholder
+# tokens in the already-sanitised design-preview body to hosted ![alt](url) image
+# lines. This runs AFTER sanitise_body (so the image lines never face Pass-1 L1)
+# and is fully non-blocking — any hosting failure degrades to a URL-only note.
+# When the anchor carries no tokens (URL-only design-preview, e.g. fixture 09),
+# resolve_design_assets returns the body unchanged. design-preview is excluded
+# from the strip-ratio denominator below (R5), so the rewrite cannot perturb it.
+# resolve_design_assets runs in a subshell (command substitution), so it reports
+# degradation through ASSET_DEGRADED_FILE rather than a parent variable.
+ASSET_DEGRADED_FILE="$LOG_DIR/.asset-degraded.$$"
+: > "$ASSET_DEGRADED_FILE" 2>/dev/null || ASSET_DEGRADED_FILE=""
+DESIGN_EMBED=$(printf '%s' "$DESIGN_S" | resolve_design_assets)
+if [ -n "$ASSET_DEGRADED_FILE" ] && [ -s "$ASSET_DEGRADED_FILE" ]; then
+  ASSET_DEGRADED_REASON=$(cat "$ASSET_DEGRADED_FILE" 2>/dev/null || echo "")
+fi
+[ -n "$ASSET_DEGRADED_FILE" ] && rm -f "$ASSET_DEGRADED_FILE" 2>/dev/null || true
+
 # Strip-ratio check against the four required anchor bodies only.
 # (stages anchor is consumed by the orchestrator from the plan file but no
 # longer rendered into the published body; design-preview is optional and a
@@ -870,8 +1292,8 @@ if [ "$STRIP_PCT" -gt 50 ]; then
     printf '## Requirements\n%s\n\n' "$REQS_S"
     printf '## Acceptance Criteria\n%s\n\n' "$ACS_S"
     printf '## Scope\n%s\n\n' "$SCOPE_S"
-    if [ -n "$(printf '%s' "$DESIGN_S" | tr -d '[:space:]')" ]; then
-      printf '## Design Preview\n%s\n\nCompare implementation (DV) and screenshots (QA) against this design.\n\n' "$DESIGN_S"
+    if [ -n "$(printf '%s' "$DESIGN_EMBED" | tr -d '[:space:]')" ]; then
+      printf '## Design Preview\n%s\n\nCompare implementation (DV) and screenshots (QA) against this design.\n\n' "$DESIGN_EMBED"
     fi
     printf '## Complexity\n%s\n' "$COMPLEXITY_S"
   } > "$ABORT_TMP" 2>/dev/null || true
@@ -893,12 +1315,20 @@ BODY_TMP="$LOG_DIR/issue-body-${RUN_INDEX}.tmp"
   printf '## Requirements\n%s\n\n' "$REQS_S"
   printf '## Acceptance Criteria\n%s\n\n' "$ACS_S"
   printf '## Scope\n%s\n\n' "$SCOPE_S"
-  if [ -n "$(printf '%s' "$DESIGN_S" | tr -d '[:space:]')" ]; then
-    printf '## Design Preview\n%s\n\nCompare implementation (DV) and screenshots (QA) against this design.\n\n' "$DESIGN_S"
+  if [ -n "$(printf '%s' "$DESIGN_EMBED" | tr -d '[:space:]')" ]; then
+    printf '## Design Preview\n%s\n\nCompare implementation (DV) and screenshots (QA) against this design.\n\n' "$DESIGN_EMBED"
   fi
   printf '## Complexity\n%s\n\n' "$COMPLEXITY_S"
   printf -- '---\n*Plan approved on %s. Tracking continues in worktask run #%s.*\n' "$(date -u +%F)" "$RUN_INDEX"
 } > "$BODY_TMP" 2>/dev/null || fatal "audit_dir_unwritable"
+
+# REQ-5: if asset hosting degraded below tier-1, append a non-blocking audit row
+# recording the reason. Use a distinct dedupe key suffix so this advisory row
+# never masks the canonical github_issue_created outcome during audit dedupe.
+# The body already carries the URL-only note; publish is never blocked.
+if [ -n "$ASSET_DEGRADED_REASON" ]; then
+  audit_row "deferred" "$(jq -cn --arg v "publish-pl-issue.sh" --arg r "$ASSET_DEGRADED_REASON" --arg dk "${DEDUPE_KEY}:asset_hosting" '{via:$v, reason:$r, dedupe_key:$dk}')" || true
+fi
 
 # Title (sanitised — pulled from facts.goal or worktask_id).
 TITLE_RAW="${SUMMARY_RAW:-$WORKTASK_ID}"

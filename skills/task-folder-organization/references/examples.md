@@ -38,7 +38,7 @@ The Designer agent generates .pen design mockups for UI-related tasks using the 
 
 **Naming**:
 - Pencil: `mockup-[feature]-[screen]-[variant].pen`
-- Figma: `figma-[screen]-[node-id].png`
+- Figma: `figma-[screen]-[state]-[node-id].png`
 
 ```
 .context/

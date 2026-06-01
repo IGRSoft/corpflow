@@ -2,6 +2,7 @@
 name: worktask
 description: Complete staged worktask system with dynamic sizing, task initialization, and stage management. Use when executing multi-stage worktasks, initializing tasks, or managing worktask state.
 effort: high
+version: 0.1.0
 ---
 
 # Worktask System
@@ -252,6 +253,13 @@ If validation fails:
 > (§ FN Gate), and the on-return boundary reconciliation stay orchestrator-owned**. If `--dynamic` was
 > requested but the `Workflow` tool is absent, the orchestrator writes a `dynamic_fallback` audit row and
 > runs this manual loop unchanged. Everything else in this section is mode-agnostic.
+
+> **Figma asset persistence is NOT an orchestrator step.** Figma screenshots are captured AND persisted to
+> the canonical `.context/designs/` directory entirely within the PL turn (Phase 1) by the product-manager
+> via its narrowly-scoped `Bash(curl:*)` tool — `get_screenshot` returns a short-lived URL that must be
+> fetched while still valid, before the post-approval Bash window opens. The orchestrator MUST NOT add a
+> post-PL0/pre-approval download step (it would collide with the Phase-1 Bash prohibition in
+> `commands/worktask.md` and race the expiring URL). See `agents/product-manager.md § Capture Workflow`.
 
 ### Cache-Friendly Prompt Layout & state.json (handoff-protocol)
 
