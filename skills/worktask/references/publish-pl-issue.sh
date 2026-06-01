@@ -49,7 +49,9 @@
 #       (`gh gist create`) → tier-3 URL-only note (Figma URL + exactly one note
 #       line "Screenshots persisted on disk; inline hosting unavailable — see
 #       designs registry."). No broken `![]()` at any tier. A degradation appends
-#       an audit row with reason=image_hosting_unavailable.
+#       an audit row with reason=image_hosting_unavailable using a distinct
+#       dedupe key suffix (`:asset_hosting`) so it cannot mask the final
+#       github_issue_created result row in audit dedupe consumers.
 #
 # Env vars for injection (test/dev): STATE_FILE, WORKSPACE_ROOT, GH_BIN, DRY_RUN,
 # GH_TIMEOUT (default 30). Asset-hosting test hooks: ASSET_HOST_MODE
@@ -311,6 +313,25 @@ select_host_tier() {
   return 0
 }
 
+# Return success only when a constructed raw.githubusercontent.com URL is
+# verifiably reachable at the target ref/path.
+#
+# Private repos: prefer authenticated `gh api repos/<owner>/<repo>/contents/...`
+# existence checks (works for private content where anonymous raw HEAD returns
+# 404). Public repos (or environments without gh auth): fall back to a raw URL
+# HEAD probe via curl. Any uncertainty degrades away from tier-1 (non-blocking).
+raw_asset_url_reachable() {
+  # $1=owner/repo $2=ref $3=rel-path $4=raw-url
+  local owner_repo="$1" ref="$2" rel="$3" raw_url="$4"
+  if command -v "$GH_BIN" >/dev/null 2>&1 && "$GH_BIN" auth status >/dev/null 2>&1; then
+    "$GH_BIN" api --silent -X GET "repos/$owner_repo/contents/$rel" -f ref="$ref" >/dev/null 2>&1 && return 0
+  fi
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsIL --max-time 10 "$raw_url" >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+
 # Host a single PNG and echo its public https URL (or empty on failure).
 #   $1 = basename, $2 = on-disk source path
 # Uses HOST_TIER/HOST_OWNER_REPO/HOST_REF set by select_host_tier().
@@ -326,8 +347,15 @@ host_one_asset() {
         mkdir -p "$(dirname "$dest")" 2>/dev/null || return 1
         cp -f "$src" "$dest" 2>/dev/null || return 1
       fi
-      printf 'https://raw.githubusercontent.com/%s/%s/%s' \
-        "$HOST_OWNER_REPO" "$HOST_REF" "$rel"
+      local raw_url
+      raw_url=$(printf 'https://raw.githubusercontent.com/%s/%s/%s' \
+        "$HOST_OWNER_REPO" "$HOST_REF" "$rel")
+      # Prevent broken image markdown: only emit tier-1 URLs when the asset is
+      # reachable at that ref. Otherwise signal failure so caller degrades.
+      if [ "$DRY_RUN" != "1" ] && ! raw_asset_url_reachable "$HOST_OWNER_REPO" "$HOST_REF" "$rel" "$raw_url"; then
+        return 1
+      fi
+      printf '%s' "$raw_url"
       return 0 ;;
     gist)
       # Mock-friendly: if GIST_RAW_URL_BASE is set (self-tests), synthesise the
@@ -1295,10 +1323,11 @@ BODY_TMP="$LOG_DIR/issue-body-${RUN_INDEX}.tmp"
 } > "$BODY_TMP" 2>/dev/null || fatal "audit_dir_unwritable"
 
 # REQ-5: if asset hosting degraded below tier-1, append a non-blocking audit row
-# recording the reason. The body already carries the URL-only note; publish is
-# never blocked by a hosting failure.
+# recording the reason. Use a distinct dedupe key suffix so this advisory row
+# never masks the canonical github_issue_created outcome during audit dedupe.
+# The body already carries the URL-only note; publish is never blocked.
 if [ -n "$ASSET_DEGRADED_REASON" ]; then
-  audit_row "deferred" "$(jq -cn --arg v "publish-pl-issue.sh" --arg r "$ASSET_DEGRADED_REASON" --arg dk "$DEDUPE_KEY" '{via:$v, reason:$r, dedupe_key:$dk}')" || true
+  audit_row "deferred" "$(jq -cn --arg v "publish-pl-issue.sh" --arg r "$ASSET_DEGRADED_REASON" --arg dk "${DEDUPE_KEY}:asset_hosting" '{via:$v, reason:$r, dedupe_key:$dk}')" || true
 fi
 
 # Title (sanitised — pulled from facts.goal or worktask_id).
