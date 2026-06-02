@@ -170,13 +170,9 @@ Until `/estimate --update` exists, re-running `/estimate --detailed` against the
 
 ```
 AI Cost = Base Tokens × Model Rate × (1 + Retry Factor) × Complexity Multiplier
-
-Where:
-- Base Tokens: From task type baseline
-- Model Rate: haiku ($0.25/1M), sonnet ($3/1M), opus ($15/1M)
-- Retry Factor: 0.1 (low), 0.2 (medium), 0.5 (high complexity)
-- Complexity Multiplier: 1.0 (standard), 1.5 (large codebase), 2.0 (novel domain)
 ```
+
+The factor values (Model Rate, Retry Factor, Complexity Multiplier) are defined canonically in the **cost-optimization** skill (§Cost Estimation Formula). Reference them there rather than restating — single source of truth, avoids drift.
 
 ### Combined Estimate Example
 

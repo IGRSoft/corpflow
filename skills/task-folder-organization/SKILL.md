@@ -158,14 +158,9 @@ Product Manager's planning document containing:
 
 ### Runtime Logs (`logs/`)
 
-`logs/` holds **raw runtime capture** — background `Bash` stdout, `Monitor`-tool streams, simulator log captures, and incident-investigation tails. It is **distinct from `errors/`**:
+`logs/` holds **raw runtime capture** — background `Bash` stdout, `Monitor`-tool streams, simulator log captures, and incident-investigation tails — and is **distinct from `errors/`** (narrative escalation per agent).
 
-| Artifact | Lives At | Contains |
-|----------|----------|----------|
-| `<agent>.md` | `.context/errors/<agent>.md` | Human/agent-authored escalation narrative (per agent) |
-| `*.log`      | `.context/logs/`             | Machine-written raw runtime output |
-
-Filename grammar: `<kind>-<scope>-<timestamp>.log` where `<kind>` ∈ {build, test, monitor, sim, incident, hotfix}. See the `logging-conventions` skill for patterns, examples, and cleanup policy.
+The canonical `errors/<agent>.md` vs `logs/*.log` split table, filename grammar (`<kind>-<scope>-<timestamp>.log`), examples, and cleanup policy live in the **`logging-conventions`** skill (§The Split). Reference it there rather than restating — avoids drift.
 
 ### Milestone Context File (`milestone.json`)
 
