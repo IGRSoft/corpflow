@@ -20,7 +20,9 @@ effort: low
 
 > **Hook Effort Visibility** (v2.1.133+): hooks observe the active effort tier via `effort.level` (JSON payload) and the `$CLAUDE_EFFORT` env var. Cost/audit hooks can attribute spend per tier without parsing model metadata. See `skills/agent-coordination/references/hook-monitoring.md § Hook Effort Visibility`.
 
-> **Fast Mode on Opus 4.8** (v2.1.154): fast mode on Opus 4.8 delivers **2x rate for 2.5x speed**. `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE` is **deprecated and removed 2026-06-01** — pin fast mode via `/model` selection instead. Plugin agents that rely on `xhigh` effort now require Opus 4.8 (was Opus 4.7 in v2.1.111+).
+> **Fast Mode on Opus 4.8** (v2.1.154): fast mode on Opus 4.8 delivers **2x rate for 2.5x speed**. `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE` was **removed in v2.1.160** (deprecated 2026-06-01) — pin fast mode via `/model` selection instead. Plugin agents that rely on `xhigh` effort now require Opus 4.8 (was Opus 4.7 in v2.1.111+).
+
+> **Auto mode on Bedrock/Vertex/Foundry** (v2.1.158): `CLAUDE_CODE_ENABLE_AUTO_MODE=1` enables auto model/effort selection for Opus 4.7/4.8 on Bedrock, Vertex, and Foundry providers (previously first-party only). Opt-in; leaves explicit `--model`/`--effort` (and `metadata.model`) overrides authoritative when set.
 
 > **Lean system prompt default** (v2.1.154): Opus 4.8 uses a lean (shorter) system prompt by default. Haiku, Sonnet, and Opus ≤4.7 continue to use the standard system prompt.
 

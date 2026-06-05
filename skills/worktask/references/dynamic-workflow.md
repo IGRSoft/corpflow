@@ -5,6 +5,12 @@ autonomous, gate-free span on Claude Code's native dynamic-workflow engine (`Wor
 v2.1.154). This is **additive**: nothing changes unless `--dynamic` is set. When the `Workflow` tool is
 absent the orchestrator falls back to the manual loop unchanged.
 
+> **CC keyword rename (v2.1.160).** Claude Code renamed the *native* dynamic-workflow trigger keyword
+> `workflow` → **`ultracode`**, and `/effort ultracode` now enables the engine. The plugin's own opt-in
+> flag stays **`--dynamic`** (unchanged) — only the underlying CC keyword moved. Anywhere this doc or a
+> user reaches for the native trigger, it is `ultracode` (not `workflow`); the `--dynamic` flag, the
+> `metadata.execution_mode == "dynamic"` value, and the `Workflow` tool name are all unchanged.
+
 This file is referenced by:
 
 - `commands/worktask.md` — Phase 1 writes `metadata.execution_mode`; Phase 2 post-PL0-gate dispatch branch.
@@ -378,3 +384,4 @@ silent kill). Budget is **best-effort** — it bounds spend, it does not guarant
 | **R4** | Budget ceiling is best-effort, not a hard cap. | `ceiling_usd` bounds spend and pauses (not kills) the run; operator is surfaced the pause. Budget never guarantees completion. |
 | **R5** | Lost live-reattach + DR-iteration efficiency: a resumed dynamic run degrades to manual rather than rejoining the live engine run; DR fix/re-review iterations inside the span re-run full stages rather than incremental. | Resume is "replay-or-degrade", never "rejoin" (#resume). DR adversarial fan-out is bounded to complexity ≥ 25 (#script-template) to limit iteration cost. |
 | **R6** | The engine's ~1000-agent cap can be exceeded by very large milestones (each issue spends multiple lanes). | **Shard milestones larger than ~200 issues** into multiple dynamic runs (4-5 lanes/issue × 200 ≈ the cap). The orchestrator computes `lanes × issues` before launch and refuses a single run that would exceed the cap, prompting the operator to shard. |
+| ~~**R7**~~ | ~~Workflow `agent()` calls with `isolation:'worktree'` were silently blocked from editing their own worktree.~~ | **RESOLVED upstream (v2.1.161).** The CC fix lets `isolation:'worktree'` `agent()` children edit their worktree reliably; the prior silent edit-block is gone. The plugin's `parallel()` + `isolation:'worktree'` fan-out (#stage-agent-map, #script-template) now executes as documented — no workaround needed. Retained as a struck-through row so future reconciles do not re-chase it. |
