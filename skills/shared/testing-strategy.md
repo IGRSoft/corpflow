@@ -227,6 +227,34 @@ PL/DV/QA emit one deprecation note in their artifact's `§ Notes`:
 
 > `requires_ui_tests` is deprecated; use `test_mode` + `ui_visual_check`. See `skills/shared/testing-strategy.md § Test Selection Gate`. Removed next minor release.
 
+### Design↔result image comparison (wired flow)
+
+When the Design Comparison gate is open (`ui_visual_check: true` AND `.context/designs/`
+artifacts present), QA's **primary** comparison reuses the DV-captured result images and
+runs an objective RMSE pixel-diff pre-pass before multimodal vision — it no longer always
+re-captures a fresh live screenshot. The canonical per-row algorithm, the verdict
+reconciliation matrix, and the reporting `RMSE` column all live in
+`agents/qa-engineer.md § Design Comparison` (not duplicated here).
+
+**Join key (Option A)**: DV's `.context/images/<worktask_id>/screenshots.md` manifest
+carries an optional trailing `Design Ref` column populated with the matching
+`figma-registry.md` row `ID` (see `skills/dv-screenshot-capture/SKILL.md § Registry
+tagging`). QA joins `screenshots.md.Design Ref → figma-registry.md.ID` by ID equality;
+the mapped DV image is both the RMSE `--candidate` (`scripts/visual-diff.sh`) and the
+vision input. Live re-capture is the fallback only — used when no DV image maps.
+
+**Verdict reconciliation (by reference)**: RMSE is a **one-way escalator** — it may raise
+severity, never lower it (RMSE is blind to copy/semantic errors). The full 6-row matrix is
+in `agents/qa-engineer.md § Verdict reconciliation`.
+
+**Backward-compat guarantees** (the change is strictly additive):
+- Top-level gate unchanged (`ui_visual_check: true` AND `.context/designs/` artifacts).
+- `requires_screenshots: false` → no DV images → 100% live-capture fallback = today's output.
+- `magick` absent → `visual-diff.sh` self-degrades (`skipped`/`imagemagick_not_found`, exit 0)
+  → QA proceeds vision-only, non-blocking.
+- No registry → existing Glob Discovery fallback untouched, vision-only.
+- Old manifest lacking the `Design Ref` column parses fine (missing ≡ `—` → live-capture).
+
 ### Skip mechanics — Apple platforms
 
 When DV/QA runs Selected Tests via XcodeBuildMCP, the list is translated to positive `-only-testing:` arguments (one per test ID), not negative `-skip-testing:`:

@@ -221,7 +221,14 @@ jq --argjson sc '<the captures array from skill output>' \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-Schema: `[{slug, path, bytes, platform, ok}, …]`.
+Schema: `[{slug, path, bytes, platform, ok, design_ref?}, …]`.
+
+`design_ref` is **optional** (auditability only): the `figma-registry.md` row `ID`
+this capture maps to (e.g. `design-002`), or `—` when no registry / no unique
+Screen+State match. It mirrors the `Design Ref` column the skill writes into
+`screenshots.md` (see `skills/dv-screenshot-capture/SKILL.md § Registry tagging`).
+QA reads the **manifest** (`screenshots.md`) for the join, not `facts` — this field
+is cosmetic/audit-only and does NOT change DV's capture trigger.
 
 ### Failure handling
 
@@ -232,10 +239,28 @@ Schema: `[{slug, path, bytes, platform, ok}, …]`.
 | Any non-fatal capture failure | screenshots.md records it; DV continues with remaining captures. |
 | `Skill()` invocation itself errors | Escalate per `commands/worktask.md § Error Handling`. Do NOT mark DV complete. |
 
+### Anti-pattern — "skip on headless" is NOT a skip reason (hook-enforced)
+
+A headless run, an unavailable/unbooted simulator, or a design language that
+does not render in the simulator (e.g. Liquid Glass) are **NOT** reasons to skip
+capture. The `dv-screenshot-capture` adapter chain handles exactly those
+conditions without booting a sim or rendering glass: `apple-canvas` (host-side
+ImageRenderer/SnapshotHost) → `cli/fallback` (`git diff … | silicon`) → `.txt`
+floor. The skill **always yields ≥1 artifact and rewrites `screenshots.md`**.
+Only `metadata.requires_screenshots == false` permits zero captures.
+
+Marking the checklist `[x]` with prose such as *"Screenshot capture not run (no
+MCP sim UI session); flagged for QA"* is **invalid** — a checkbox plus a
+deferral sentence does not satisfy the gate. This is now machine-enforced by the
+`hooks/dv-screenshot-gate.sh` SubagentStop hook: if `requires_screenshots ≠
+false` and `.context/images/<worktask_id>/screenshots.md` is absent on disk, the
+hook emits a `block` decision and the DV agent cannot report complete. (Precedent
+this closes: OV-56 — DV deferred to QA in prose, DR waived it, the bypass merged.)
+
 ### Completion criterion (added to DV Completion Verification)
 
 - [ ] `dv-screenshot-capture` invoked OR `metadata.requires_screenshots == false` documented in `development-N.md § Decisions`
-- [ ] `.context/images/<worktask_id>/screenshots.md` exists (manifest)
+- [ ] `.context/images/<worktask_id>/screenshots.md` **exists on disk** (manifest) — a `[x]` here REQUIRES the file present; a checkbox + deferral sentence is invalid and is rejected by the `hooks/dv-screenshot-gate.sh` SubagentStop block
 - [ ] If captures > 0, `state.json → facts.screenshots[]` populated
 - [ ] At least one `audit.jsonl` row with `action: "screenshot_captured"` OR `action: "screenshot_skipped"`
 
@@ -398,7 +423,7 @@ Before marking DV stage complete, verify:
 - [ ] `.context/logs/audit.jsonl` contains `approval_check`, `platform_detected`, and `artifact_created` entries (plus `delegation` if routed; `retry_attempt` per retry)
 - [ ] Append the completed checklist verbatim as `## DV Completion Checklist` in `.context/development-N.md` with `[x]` boxes ticked — orchestrator validation greps for this header
 - [ ] `dv-screenshot-capture` invoked OR `metadata.requires_screenshots == false` documented in `development-N.md § Decisions`
-- [ ] `.context/images/<worktask_id>/screenshots.md` exists (manifest)
+- [ ] `.context/images/<worktask_id>/screenshots.md` **exists on disk** (manifest) — hook-enforced by `hooks/dv-screenshot-gate.sh`; a `[x]` paired with a "deferred to QA" sentence is invalid and blocked at SubagentStop
 - [ ] If captures > 0, `state.json → facts.screenshots[]` populated
 - [ ] At least one `audit.jsonl` row with `action: "screenshot_captured"` OR `action: "screenshot_skipped"`
 

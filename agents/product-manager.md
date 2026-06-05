@@ -416,6 +416,8 @@ When design detection threshold is met, invoke Designer via `Task(subagent_type:
 
 **Combined Output**: `<plan_file>` includes Design Requirements section with subsections for Figma Design References (screenshots from Figma with URLs and node descriptions, referencing `.context/designs/figma-*.png`), Visual Mockups (Pencil .pen files referencing `.context/designs/mockup-*.pen`), User Experience, UI Components, and Accessibility.
 
+> **Placement guard (non-negotiable):** Figma frames are persisted ONLY to `.context/designs/` with a `figma-registry.md` — that is the artifact QA's design-comparison gate consumes (`agents/qa-engineer.md § Design Comparison`). NEVER write Figma frames to `.context/images/`; that directory is reserved for DV implementation screenshots + user attachments, and a Figma PNG landing there both disables the QA design gate (no `.context/designs/`) and masks an absent DV `screenshots.md`. See `skills/task-folder-organization/SKILL.md:104`. (Precedent: OV-56 misfiled 4 Figma frames in `images/`, silently skipping the QA design gate.)
+
 ### Figma Design Capture
 
 When a Figma URL is provided in the task description or user input, capture design screenshots regardless of the keyword-based design detection score.

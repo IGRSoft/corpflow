@@ -1,7 +1,7 @@
 {
   "name": "igrsoft",
   "description": "Comprehensive 11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with Task System integration, developer review, security review, release engineering, incident response, and ST-stage self-improvement retrospectives.",
-  "version": "3.11.2",
+  "version": "3.11.4",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
@@ -91,7 +91,9 @@
     "read-once-protocol",
     "edit-batch-build",
     "mcp-session-cache",
-    "figma-image-embed"
+    "figma-image-embed",
+    "screenshot-gate-hook",
+    "design-result-diff-join"
   ],
   "hooks": {
     "PostToolUse": [
@@ -113,6 +115,10 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/audit-subagent.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/dv-screenshot-gate.sh"
           },
           {
             "type": "command",
