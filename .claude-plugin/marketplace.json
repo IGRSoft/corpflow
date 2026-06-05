@@ -87,7 +87,6 @@
         "./commands/test-coverage.md",
         "./commands/test-plan.md",
         "./commands/transparency-check.md",
-        "./commands/ux-flow.md",
         "./commands/worktask.md"
       ],
       "agents": [
