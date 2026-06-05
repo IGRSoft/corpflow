@@ -72,7 +72,7 @@ TL can split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async 
 
 #### Procedure
 
-1. **Primary inputs**: Read `state.json` facts first, then anchor-read `analyzing-N.md#decisions` (N = `task.metadata.run_index`; resolver: metadata → newest glob `analyzing-*.md`) to identify work streams from AR's architecture decisions. **Conditional**: only when AR's `next_stage_focus` does NOT already enumerate the work streams, anchor-read `planning-N.md#requirements` + `planning-N.md#acceptance-criteria` (plan path: `.context/${task.metadata.plan_file}`, fallback: newest `.context/planning-*.md`). Full-read either file only if an anchor is absent or `retry_count > 0`.
+1. **Primary inputs**: Read `state.json` facts first, then read the `handoff:` frontmatter of `analyzing-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `analyzing-*.md`) and anchor-read `analyzing-N.md#decisions` to identify work streams from AR's architecture decisions. **Conditional**: only when AR's `next_stage_focus` does NOT already enumerate the work streams, anchor-read `planning-N.md#requirements` + `planning-N.md#acceptance-criteria` (plan path: `.context/${task.metadata.plan_file}`, fallback: newest `.context/planning-*.md`). Full-read either file only if an anchor is absent or `retry_count > 0`.
 2. For each stream, define: exclusive file ownership list, interface contracts, acceptance criteria
 3. Use `TaskGet` to find DV0 and DR0 task IDs from the current worktask
 4. Use `TaskUpdate` on DV0 to narrow its description to the primary stream's scope
