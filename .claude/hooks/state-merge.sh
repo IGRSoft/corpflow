@@ -84,6 +84,92 @@ EOF
     echo "self-test: idempotent re-run: FAIL (state changed)" >&2
     exit 1
   fi
+
+  # --- (a) NUMBERED artifact resolution via stage map (no CLAUDE_ARTIFACT_PATH) ---
+  # state.json has run_index=0; write analyzing-0.md and analyzing-1.md (higher N)
+  # to prove highest-N wins, then assert exact run_index match is preferred.
+  cat > .context/state.json <<'EOF'
+{"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"stages":{"PL":{"status":"completed","verdict":"ok"}},"facts":{"verdicts":{"PL":"ok"}},"handoffs":{}}
+EOF
+  cat > .context/analyzing-0.md <<'EOF'
+---
+handoff:
+  stage: AR
+  verdict: ok
+  summary: "numbered artifact run 0"
+---
+# Architecture
+EOF
+  cat > .context/analyzing-1.md <<'EOF'
+---
+handoff:
+  stage: AR
+  verdict: blocked
+  summary: "numbered artifact run 1"
+---
+# Architecture
+EOF
+  # No CLAUDE_ARTIFACT_PATH — force stage-map resolution. run_index=0 → analyzing-0.md.
+  CLAUDE_TASK_METADATA_STAGE="AR" bash "$SELF" \
+    || { echo "self-test: numbered hook returned non-zero" >&2; exit 1; }
+  if jq -e '.stages.AR.status == "completed" and .stages.AR.verdict == "ok" and (.stages.AR.artifact | endswith("analyzing-0.md"))' .context/state.json >/dev/null; then
+    echo "self-test: numbered artifact resolves to run_index match (analyzing-0.md): ok"
+  else
+    echo "self-test: numbered artifact resolution: FAIL (expected analyzing-0.md verdict=ok)" >&2
+    jq '.stages.AR' .context/state.json >&2
+    exit 1
+  fi
+
+  # --- (a') highest-N fallback when run_index absent ---
+  cat > .context/state.json <<'EOF'
+{"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","stages":{"PL":{"status":"completed","verdict":"ok"}},"facts":{"verdicts":{"PL":"ok"}},"handoffs":{}}
+EOF
+  CLAUDE_TASK_METADATA_STAGE="AR" bash "$SELF" \
+    || { echo "self-test: highest-N hook returned non-zero" >&2; exit 1; }
+  if jq -e '.stages.AR.verdict == "blocked" and (.stages.AR.artifact | endswith("analyzing-1.md"))' .context/state.json >/dev/null; then
+    echo "self-test: no run_index → highest-N wins (analyzing-1.md): ok"
+  else
+    echo "self-test: highest-N resolution: FAIL (expected analyzing-1.md verdict=blocked)" >&2
+    jq '.stages.AR' .context/state.json >&2
+    exit 1
+  fi
+
+  # --- (b) BARE legacy fallback still works ---
+  rm -f .context/analyzing-0.md .context/analyzing-1.md
+  cat > .context/state.json <<'EOF'
+{"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","stages":{"PL":{"status":"completed","verdict":"ok"}},"facts":{"verdicts":{"PL":"ok"}},"handoffs":{}}
+EOF
+  cat > .context/coordination.md <<'EOF'
+---
+handoff:
+  stage: TL
+  verdict: ok
+  summary: "legacy bare artifact"
+---
+# Coordination
+EOF
+  CLAUDE_TASK_METADATA_STAGE="TL" bash "$SELF" \
+    || { echo "self-test: bare-fallback hook returned non-zero" >&2; exit 1; }
+  if jq -e '.stages.TL.status == "completed" and (.stages.TL.artifact | endswith("coordination.md"))' .context/state.json >/dev/null; then
+    echo "self-test: bare legacy artifact fallback (coordination.md): ok"
+  else
+    echo "self-test: bare fallback: FAIL (expected coordination.md)" >&2
+    jq '.stages.TL' .context/state.json >&2
+    exit 1
+  fi
+
+  # --- (c) ABSENT artifact → empty/no-op (no literal '*', state unchanged) ---
+  cp .context/state.json .context/state.json.snap2
+  CLAUDE_TASK_METADATA_STAGE="QA" bash "$SELF" \
+    || { echo "self-test: absent-artifact hook returned non-zero" >&2; exit 1; }
+  if diff -q .context/state.json .context/state.json.snap2 >/dev/null \
+     && ! jq -e 'has("stages") and (.stages | has("QA"))' .context/state.json >/dev/null; then
+    echo "self-test: absent artifact → no-op (no QA stage, state unchanged): ok"
+  else
+    echo "self-test: absent artifact no-op: FAIL (state changed or QA appeared)" >&2
+    exit 1
+  fi
+
   echo "self-test: ALL PASS"
   exit 0
 fi
@@ -98,33 +184,75 @@ ART="${CLAUDE_ARTIFACT_PATH:-}"
 STAGE="${CLAUDE_TASK_METADATA_STAGE:-}"
 AGENT="${CLAUDE_AGENT_NAME:-}"
 
-# Stage-code → artifact-name map (RK-9 mitigation: glob fallback).
-# POSIX-compatible lookup (bash 3.2 has no associative arrays).
-artifact_for_stage() {
+# Stage-code → artifact BASENAME map (per handoff-protocol.md#stage-artifact-map).
+# Artifacts are canonically NUMBERED (<basename>-N.md, N = run_index); the bare
+# <basename>.md is a one-release-cycle legacy fallback. POSIX-compatible lookup
+# (bash 3.2 has no associative arrays).
+basename_for_stage() {
   case "$1" in
-    PL) echo ".context/planning-0.md" ;;
-    AR) echo ".context/analyzing.md" ;;
-    TL) echo ".context/coordination.md" ;;
-    DV) echo ".context/development.md" ;;
-    DR) echo ".context/developer-review.md" ;;
-    SR) echo ".context/security-review.md" ;;
-    QA) echo ".context/testing.md" ;;
-    DC) echo ".context/documentation.md" ;;
-    RE) echo ".context/release.md" ;;
-    FN) echo ".context/complete-summary.md" ;;
-    ST) echo ".context/retrospective.md" ;;
-    IR) echo ".context/incident.md" ;;
-    ET) echo ".context/ethics-review.md" ;;
+    PL) echo "planning" ;;
+    AR) echo "analyzing" ;;
+    TL) echo "coordination" ;;
+    DV) echo "development" ;;
+    DR) echo "developer-review" ;;
+    SR) echo "security-review" ;;
+    QA) echo "testing" ;;
+    DC) echo "documentation" ;;
+    RE) echo "release" ;;
+    FN) echo "complete-summary" ;;
+    ST) echo "retrospective" ;;
+    IR) echo "incident" ;;
+    ET) echo "ethics-review" ;;
     *) echo "" ;;
   esac
 }
 
-if [[ -z "$ART" && -n "$STAGE" ]]; then
-  ART=$(artifact_for_stage "$STAGE")
-  if [[ "$STAGE" == "PL" ]]; then
-    # Pick newest planning-N.md
-    ART=$(ls -1t .context/planning-*.md 2>/dev/null | head -1 || echo ".context/planning-0.md")
+# Resolve the on-disk artifact for a stage basename, preferring the NUMBERED form.
+# Resolution order (per handoff-protocol.md#stage-artifact-map):
+#   1. Exact <basename>-<RUN_INDEX>.md when run_index is known.
+#   2. Highest-N match of <basename>-*.md (newest run_index).
+#   3. Legacy bare <basename>.md (backward-compat, one release cycle).
+#   4. Empty (no match) — guarded so an absent artifact never yields a literal '*'.
+resolve_artifact() {
+  local base="$1" exact="" newest=""
+  [[ -z "$base" ]] && { echo ""; return 0; }
+
+  # 1. Exact run_index match.
+  if [[ -n "${RUN_INDEX:-}" && -f ".context/${base}-${RUN_INDEX}.md" ]]; then
+    echo ".context/${base}-${RUN_INDEX}.md"
+    return 0
   fi
+
+  # 2. Highest-N numbered artifact. Sort numerically on the trailing -N suffix so
+  #    'development-10.md' beats 'development-2.md' (lexical -t would not).
+  newest=$(ls -1 ".context/${base}-"*.md 2>/dev/null \
+    | sed -E 's/.*-([0-9]+)\.md$/\1 &/' \
+    | grep -E '^[0-9]+ ' \
+    | sort -k1,1 -n \
+    | tail -1 \
+    | sed -E 's/^[0-9]+ //')
+  if [[ -n "$newest" && -f "$newest" ]]; then
+    echo "$newest"
+    return 0
+  fi
+
+  # 3. Legacy bare basename.
+  if [[ -f ".context/${base}.md" ]]; then
+    echo ".context/${base}.md"
+    return 0
+  fi
+
+  # 4. No match.
+  echo ""
+}
+
+if [[ -z "$ART" && -n "$STAGE" ]]; then
+  # run_index from state.json (canonical); the hook receives no dedicated env var.
+  RUN_INDEX=""
+  if [[ -f "$STATE_JSON" ]] && command -v jq >/dev/null 2>&1; then
+    RUN_INDEX=$(jq -r '.run_index // empty' "$STATE_JSON" 2>/dev/null || echo "")
+  fi
+  ART=$(resolve_artifact "$(basename_for_stage "$STAGE")")
 fi
 
 if [[ -z "$ART" || ! -f "$ART" ]]; then
@@ -138,8 +266,12 @@ if [[ ! -f "$STATE_JSON" ]]; then
 fi
 
 # ---------- Parse frontmatter ----------
+# select(documentIndex == 0): an artifact is `--- handoff: … --- # Body`, which
+# yq reads as TWO YAML documents. Without the selector, expressions like
+# `.handoff.verdict // "ok"` evaluate per-document and emit the value twice
+# (e.g. "ok\nok"), corrupting the merged verdict. Pin to the frontmatter doc.
 parse_yq() {
-  yq eval '.handoff' "$1" 2>/dev/null
+  yq eval 'select(documentIndex == 0) | .handoff' "$1" 2>/dev/null
 }
 
 # Awk subset fallback: extract block between first two `^---$` lines.
@@ -168,9 +300,9 @@ if [[ -z "$FM" || "$FM" == "null" ]]; then
     [[ -z "$PARSED_SUMMARY" ]] && PARSED_SUMMARY="(auto)"
   fi
 else
-  PARSED_STAGE=$(yq eval '.handoff.stage // ""' "$ART")
-  PARSED_VERDICT=$(yq eval '.handoff.verdict // "ok"' "$ART")
-  PARSED_SUMMARY=$(yq eval '.handoff.summary // ""' "$ART")
+  PARSED_STAGE=$(yq eval 'select(documentIndex == 0) | .handoff.stage // ""' "$ART")
+  PARSED_VERDICT=$(yq eval 'select(documentIndex == 0) | .handoff.verdict // "ok"' "$ART")
+  PARSED_SUMMARY=$(yq eval 'select(documentIndex == 0) | .handoff.summary // ""' "$ART")
 fi
 
 if [[ -z "$PARSED_STAGE" ]]; then
