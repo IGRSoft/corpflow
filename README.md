@@ -210,7 +210,6 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 |---------|-------------|
 | `/design-specs` | Generate design specifications |
 | `/design-review` | Review design decisions |
-| `/ux-flow` | Create user flow diagrams |
 | `/a11y-audit` | Accessibility audit (WCAG) |
 
 #### Product Manager
