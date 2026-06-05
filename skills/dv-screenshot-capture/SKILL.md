@@ -140,10 +140,15 @@ The manifest is the authoritative index. It is rewritten atomically on every ski
 
 > Authored by DV stage via `dv-screenshot-capture` skill. Run index: <N>.
 
-| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured |
-|---|------|------|-------|----------|---------|---------|----------|
-| 01 | <slug> | dv-01-<slug>.png | 187234 | apple | apple_adapter | <one-line caption> | <ISO-8601 UTC> |
-| 02 | <slug> | dv-02-<slug>.txt | 0      | all   | cli_fallback (.txt) | tool_missing: silicon and magick absent | <ISO-8601 UTC> |
+| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |
+|---|------|------|-------|----------|---------|---------|----------|------------|
+| 01 | <slug> | dv-01-<slug>.png | 187234 | apple | apple_adapter | <one-line caption> | <ISO-8601 UTC> | design-002 |
+| 02 | <slug> | dv-02-<slug>.txt | 0      | all   | cli_fallback (.txt) | tool_missing: silicon and magick absent | <ISO-8601 UTC> | — |
+
+The trailing **`Design Ref`** column is the QA join key (Option A). It carries the
+matching `figma-registry.md` row `ID` when this capture maps to a known design
+frame, else `—`. See **Registry tagging** below. The column is optional and
+append-only: old manifests lacking it parse fine (QA treats a missing value as `—`).
 
 ## Fallbacks invoked
 
@@ -153,6 +158,26 @@ The manifest is the authoritative index. It is rewritten atomically on every ski
 
 - (none) | <path>: <bytes> after quantize, exceeds 500 KB
 ```
+
+### Registry tagging (`Design Ref` resolution — advisory)
+
+When `.context/designs/figma-registry.md` exists at capture time, resolve each
+capture's `Design Ref` so QA can reuse the result image instead of re-capturing:
+
+1. Determine the capture's intended **Screen** and **State** (from the slug / capture
+   purpose / the AC it satisfies).
+2. Find the registry row whose `Screen` **and** `State` both equal the capture's
+   Screen+State. On a unique match, write that row's `ID` (e.g. `design-002`) into
+   `Design Ref`.
+3. **Overview rows (`State: overview`) are NEVER a match target** — they are
+   container-completeness references, not per-state result frames. Skip them.
+4. No registry, no unique match, or an ambiguous (multi-row) match → write `—`.
+
+This step is **advisory**: it never fails DV. A failed, missing, or ambiguous match
+writes `—` and DV proceeds normally. The registry is **PM-owned** — DV reads it but
+NEVER writes or back-patches it. The match is conservative by construction: when in
+doubt write `—`, which routes QA to its safe live-capture fallback (never a wrong
+pairing).
 
 When `metadata.requires_screenshots: false` and DV captures nothing:
 
@@ -211,7 +236,7 @@ When using the `cli/fallback` adapter, the `git diff` pipe may expose env files,
 |----------|-------|----------------|-----------------|
 | **DV** | DV | Captures; writes `screenshots.md` + `state.json → facts.screenshots[]` | `development-N.md § Decisions` + audit.jsonl |
 | **DR** | DR | `screenshots.md` (count, first filename, fallbacks, oversize notes) | `developer-review-N.md § Findings` |
-| **QA** | QA | `screenshots.md` + each PNG/txt | `testing-N.md § Visual Evidence` |
+| **QA** | QA | `screenshots.md` + each PNG/txt. The `Design Ref` column joins each result image to a `figma-registry.md` row `ID`; `screenshots.md` is now the **RMSE result-image source** for QA's Registry-Driven Design Comparison (the `--candidate` for `scripts/visual-diff.sh`). Live re-capture is QA's fallback only. | `testing-N.md § Visual Evidence` + `§ Design Comparison` |
 
 ### state.json registration schema
 
