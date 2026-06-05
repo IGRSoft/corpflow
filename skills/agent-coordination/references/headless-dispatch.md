@@ -8,6 +8,7 @@ External orchestrators (CI runners, batch schedulers, the user's own shell) that
 
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
+| `agent` | `--agent <name>` | string | N/A (in-process uses `Task({subagent_type})`) | overrides the session's `settings.json` `agent` default (v2.1.157); e.g. force `igrsoft:developer` for a one-shot run |
 | `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-4-8`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6` |
 | `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN/RE→`medium` |
 | `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` | **Yes — audited** (see § Permission-Mode Pinning below) | SR/FN→`default`; DV under `--auto-continue`→`bypassPermissions` |
@@ -55,14 +56,18 @@ Three usage patterns:
 
 Caveat: the CLI is stable but the JSON schema is not formally versioned — guard every read with defensive jq (`.parent_agent_id // "none"`). See § Schema Versioning Watch below.
 
-### Schema Versioning Watch (v2.1.150 baseline)
+### Schema Versioning Watch (v2.1.162 baseline)
 
-The `claude agents --json` output schema is **not formally versioned** by Claude Code as of v2.1.150. Plugin consumers must defensively guard fields.
+The `claude agents --json` output schema is **not formally versioned** by Claude Code as of v2.1.162. Plugin consumers must defensively guard fields.
 
-**Recorded baseline** (CC 2.1.150) — array of objects with these observed top-level fields:
+**Recorded baseline** (CC 2.1.162) — array of objects with these observed top-level fields:
 
 - Required: `session_id` (string), `agent_type` (string), `agent_id` (string), `started_at` (ISO-8601 string)
-- Optional: `parent_agent_id` (string), `cwd` (string), `tag` (string), `metadata` (object)
+- Optional: `parent_agent_id` (string), `cwd` (string), `tag` (string), `metadata` (object), `waitingFor` (string — what a live session is blocked on, e.g. `approval`/`input`; empty/null = busy mid-work; observed v2.1.162)
+
+Rows additionally render a `done/total` progress count (v2.1.161) in the human-readable (non-`--json`) listing.
+
+`waitingFor` is read defensively (`.waitingFor // empty`), so its absence on CC < 2.1.162 is a no-op — an additive optional field does **not** bump min CC (per the "If the baseline shifts" rule below, which is reserved for *required* / renamed / type-changed fields). The resume loop's 3-way `waitingFor` branch (`skills/worktask/SKILL.md § Resume Procedure` step 0a) layers on top of the existing v2.1.145 binary live-check.
 
 **Watch protocol for future `/cc-update` runs**: in any cc-update where the CC version delta touches `claude agents` CLI surface, the prompt-engineer MUST run `claude agents --json | jq 'first | keys'` and diff the key list against this recorded baseline. Surface any drift as a Q for the operator.
 
@@ -70,13 +75,16 @@ The `claude agents --json` output schema is **not formally versioned** by Claude
 
 ```jq
 .[] | {
-  session: (.session_id // "unknown"),
-  parent:  (.parent_agent_id // "none"),
-  tag:     (.tag // "untagged")
+  session:    (.session_id // "unknown"),
+  parent:     (.parent_agent_id // "none"),
+  tag:        (.tag // "untagged"),
+  waiting_for: (.waitingFor // "")   # "" = busy mid-work; "approval"/"input" = parked on us
 }
 ```
 
 **If the baseline shifts** (new required field, renamed field, type change), the next cc-update MUST bump min CC version and add a migration note to the relevant `cc-features-<from>-<to>.md` band file.
+
+> **`--tools` Grep/Glob (v2.1.162)**: when a headless dispatch passes `--tools` and explicitly lists `Grep`/`Glob`, native builds now wire up dedicated search tools for them (rather than falling back to shelling out). No plugin change needed — relevant only when an external runner hand-builds the `--tools` set; the in-process `Task()` path inherits agent-frontmatter `tools:` unchanged.
 
 ## Permission-Mode Pinning (in-process)
 

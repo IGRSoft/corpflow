@@ -4,6 +4,8 @@ A comprehensive 9-stage worktask system for Claude Code with Task System integra
 
 claude-code min version: "2.1.114"
 
+> **Managed version gating (optional, v2.1.163+)**: organizations can hard-gate the Claude Code version this plugin runs on via the `requiredMinimumVersion` / `requiredMaximumVersion` managed-settings keys (enterprise/team managed `settings.json`). The plugin itself introduces **no new hard dependency** — every feature in the v2.1.157→2.1.165 band is additive/optional, so the minimum stays **2.1.114**. Use these keys only if your org needs to pin CC within a tested window.
+
 ## Features
 
 - **9-Stage Worktask**: Planning → Architecture → Team Lead → Development → Developer Review → QA → Documentation → Finalization → Stakeholder

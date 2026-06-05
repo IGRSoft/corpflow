@@ -62,7 +62,7 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--milestone:N:ISSUE` | Execute specific issue |
 | `--parallel:N` | N concurrent tracks (max 5) |
 | `--auto-continue` | Skip approval gates |
-| `--dynamic` | Run the autonomous span (AR→…→QA/DC/RE, between the PL0 and FN human gates) on Claude Code's native Workflow engine (`Workflow` tool, v2.1.154+) instead of the manual stage loop. Opt-in and additive; both human gates and the no-self-commit rule stay orchestrator-owned. Degrades to the manual loop when the `Workflow` tool is absent (older CC, headless, `--print`). See `skills/worktask/references/dynamic-workflow.md`. |
+| `--dynamic` | Run the autonomous span (AR→…→QA/DC/RE, between the PL0 and FN human gates) on Claude Code's native Workflow engine (`Workflow` tool, v2.1.154+) instead of the manual stage loop. Opt-in and additive; both human gates and the no-self-commit rule stay orchestrator-owned. Degrades to the manual loop when the `Workflow` tool is absent (older CC, headless, `--print`). The plugin flag stays `--dynamic`; CC's *native* keyword for the same engine was renamed `workflow` → **`ultracode`** (`/effort ultracode`, v2.1.160). See `skills/worktask/references/dynamic-workflow.md`. |
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |

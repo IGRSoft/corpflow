@@ -274,7 +274,7 @@ The orchestrator builds every delegation prompt in a **binding** order so consec
 [4] Stage contract excerpt                 ← stable WITHIN stage type (cacheable)
 ─────── (cache prefix boundary) ───────
 [5] task.description                       ← dynamic per delegation
-[6] retry hints (if retry_count > 0)       ← dynamic per delegation
+[6] retry hints + gate remediation (if retry_count > 0) ← dynamic per delegation
 [7] Stage-specific banners (DR Skill, FN Conductor, MCP fallback) ← SUFFIX, dynamic
 ```
 
@@ -432,6 +432,36 @@ while (tasks.some(t => t.status !== "completed")) {
           `NOTE: Expected context files missing: ${missing.join(', ')}. ` +
           `Proceed using what is available; do not fabricate content.\n\n` +
           full.description;
+      }
+    }
+
+    // 4.6. Gate-feedback injection — DR→DV / QA→DV loop-back (gate-feedback contract).
+    //      When the previous DR returned `verdict:fail` or QA returned `verdict:no-go`,
+    //      the orchestrator re-dispatches DV (run_index bumped, retry_count++). This
+    //      step carries the upstream remediation VERBATIM into the retry prompt so the
+    //      re-run targets *those* findings instead of re-inferring the fix — the
+    //      orchestrator surface of the gate-feedback contract (the hook surface is
+    //      `hookSpecificOutput.additionalContext`; see
+    //      skills/agent-coordination/references/hook-monitoring.md §"Gate-feedback contract").
+    //      Symmetric with dv-screenshot-gate.sh's block-path additionalContext.
+    if (full.metadata.stage === "DV" && (full.metadata.retry_count ?? 0) > 0) {
+      // Read the upstream gate handoff for this run: DR `.context/developer-review-N.md`
+      // (DRHandoff.blockers[]) and/or QA `.context/testing-N.md` (QAHandoff.blocking_defects[]),
+      // N = the failing upstream run_index. Embed whichever is present as a remediation block.
+      const fromStage = full.metadata.gate_from_stage; // "DR" | "QA" (set by the loop-back)
+      const blockers = full.metadata.gate_blockers ?? []; // blockers[] | blocking_defects[]
+      if (fromStage && blockers.length > 0) {
+        const remediation =
+          `REMEDIATION (from ${fromStage} gate — fix these specific findings before re-stop):\n` +
+          blockers.map((b, i) => `  ${i + 1}. ${b}`).join("\n");
+        full.description = remediation + "\n\n" + full.description;
+        appendAudit({
+          actor: "orchestrator",
+          action: "gate_remediation_injected",
+          subject: full.metadata.stage,
+          result: "ok",
+          metadata: { from_stage: fromStage, to_stage: "DV", count: blockers.length }
+        });
       }
     }
 
@@ -906,7 +936,9 @@ before resuming.
 | PL0 `completed`, all stages `completed` except FN, FN `pending`, audit tail has `fn_gate_waiting` for FN | — | At FN gate. Re-present pre-FN summary; STOP and wait for human approval (unless `PL0.metadata.fn_gate == "bypass"`) |
 | PL0 `completed`, all stages `completed` except FN | — | Near-done. Re-enter loop; FN gate check decides whether to STOP or proceed |
 | Stages `in_progress` with no `metadata.retry_count` | missing audit lines | Stale task state. Re-derive from most recent `.context/logs/` capture |
-| Any stage `in_progress` AND `claude agents --json` shows live `agent_id` matching that stage | — | Subagent still alive (v2.1.145+). `SendMessage` to nudge rather than re-delegating |
+| Any stage `in_progress` AND `claude agents --json` shows live `agent_id` matching that stage | — | Subagent still alive (v2.1.145+). `SendMessage` to nudge rather than re-delegating. On CC v2.1.162+ read `waitingFor` first (see 3-way branch below) — only `SendMessage` when it is `approval`/`input`; leave a busy agent (`waitingFor` empty) alone |
+| Live `agent_id` matching that stage AND `waitingFor` = `approval`/`input` (v2.1.162+) | — | Agent parked **on us**. Cheap `SendMessage` reattach with the awaited answer — do not re-delegate |
+| Live `agent_id` matching that stage AND `waitingFor` = null/empty (mid-work, v2.1.162+) | — | Agent busy. **Leave it** — poll/await; do **not** double-dispatch or nudge |
 | `state.json.workflow.run_id` present, `workflow.status:"running"`, `Workflow` tool available | audit tail has `workflow_launched`, no `workflow_returned` | Dynamic span still in flight. `resumeFromRunId = workflow.run_id` — the engine replays the cached prefix and continues from the first incomplete stage (`dynamic-workflow.md#resume`). |
 | `state.json.workflow.run_id` present, `Workflow` tool **absent** (cold resume on older CC / headless / `--print`) | `workflow_launched` present, no live engine run | Degrade to manual mode: write `dynamic_fallback`, rebuild the ledger via F4 frontmatter walk if needed, continue the manual loop from the first incomplete stage. Resume is replay-or-degrade, never rejoin. |
 | `state.json.workflow.run_id` present, `workflow.status:"returned"` | audit tail has `workflow_returned` | Span complete — re-enter at the FN gate (orchestrator-owned). Build the pre-FN summary from reconciled `state.json`. |
@@ -914,6 +946,13 @@ before resuming.
 ### Resume Procedure
 
 0. (Optional, CC v2.1.145+) `claude agents --json | jq '[.[] | .agent_id]'` — if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` appears in the live list, prefer `SendMessage` reattach over re-delegation. Skip silently on CC < 2.1.145 or when the command is unavailable. Eliminates the "blind respawn of an already-working subagent" token-waste class. See `skills/agent-coordination/references/headless-dispatch.md § Live Session Discovery`.
+
+   **0a. (Optional, CC v2.1.162+) `waitingFor` 3-way refinement.** When the live row carries the `waitingFor` field (`claude agents --json | jq '.[] | {agent_id, waitingFor}'`), refine the binary live-check above into three branches:
+   - live + `waitingFor` = `approval`/`input` → it is parked **on us**; `SendMessage` the awaited answer (cheap nudge, no re-dispatch).
+   - live + `waitingFor` = null/empty (mid-work) → **leave it**; poll/await — do **not** `SendMessage` (avoids nudging a busy agent) and do **not** re-delegate.
+   - `agent_id` **absent** from the list (done or crashed) → re-delegate from the first incomplete stage (the existing path).
+
+   This is a strict refinement layered on top of step 0: on CC < 2.1.162 (or when `waitingFor` is absent) it falls through to the v2.1.145 binary behavior, which itself silent-skips on CC < 2.1.145. Two nested degrade tiers, both preserved. Eliminates two waste classes — blind respawn of a *waiting* agent and redundant nudging of a *busy* one.
 1. `tail -n 50 .context/logs/audit.jsonl | jq .` — last 50 audit lines
 2. `TaskList()` — current Task System state
 3. Cross-reference with `stage-contracts.md` — identify first incomplete stage

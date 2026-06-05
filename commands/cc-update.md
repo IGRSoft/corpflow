@@ -39,6 +39,7 @@ At the end of the update, bump this value in `README.md` to the new version when
 - `--agent <name>` - Restrict update to a specific agent file (e.g., developer)
 - `--command <name>` - Restrict update to a specific command file (e.g., worktask)
 - `--force` - Proceed even if version is older than current min version
+- `--worktask-impact-only` - Emit just the `## Worktask Efficiency Impact` table (the standing efficiency-analysis pass output) for a quick read, without applying file edits
 
 ## Examples
 
@@ -101,6 +102,17 @@ For multi-version updates (e.g., 2.1.77 through 2.1.86):
 | Opus 4.7 model alias registered | Model | Medium |
 | Sparse worktree path filtering | Context | Low |
 
+## Worktask Efficiency Impact
+
+Output of the standing `## Worktask Efficiency Analysis (required pass)` (see the section below this fence). Behavioral rows lead — they each get an implementation task, prioritized above doc-only edits.
+
+| Feature | Axis | Verdict | Improvement (mechanism) |
+|---------|------|---------|--------------------------|
+| Stop/SubagentStop `hookSpecificOutput.additionalContext` | Gates | **Behavioral** | DV screenshot-gate block path now emits actionable remediation into the re-run's context (self-healing gate) instead of a dead-end block |
+| `claude agents --json waitingFor` | Resume/recovery | **Behavioral** | Resume loop reads `waitingFor` → 3-way reattach/await/re-dispatch, avoiding blind respawn of a waiting agent and redundant nudging of a busy one |
+| ExitWorktree now GA | Parallelism | Doc-only | reference accuracy; no pipeline-execution change |
+| Opus 4.7 model alias | Dispatch | N/A | no worktask gate/handoff/resume surface |
+
 ## Impact Mapping
 
 ### High Impact
@@ -161,6 +173,27 @@ Bump when updated files depend on new CC capabilities. Use `--bump-min` to force
 4. **If invoked under `/worktask`**: hand control back to the orchestrator. DR (technical-lead) reviews the diff; QA validates frontmatter integrity. Do NOT self-commit when running inside a worktask — FN (or the user, in compressed worktasks) owns the commit.
 ```
 
+## Worktask Efficiency Analysis (required pass)
+
+A **standing, required pass** run on every invocation (including `--dry-run`; skipped only under `--memory-only`). Feature Extraction answers *which files* a feature touches; this pass answers the question that surfaces behavioral wins: **how does each feature change worktask behavior/efficiency?** Its output is the `## Worktask Efficiency Impact` report table (inside Output Format above), and it is the explicit input that promotes a feature from "documented" to "implemented."
+
+For each extracted feature, score it against the worktask **leverage axes** and assign a verdict:
+
+**Leverage axes**:
+- **Gates** — DV/DR/QA/SR feedback & hook blocks (e.g., `hookSpecificOutput.additionalContext`, screenshot-gate, gate-feedback contract).
+- **Handoffs** — stage→stage compression, schema returns, cache-prefix prompt layout.
+- **Resume/recovery** — session discovery, reattach vs re-dispatch (`claude agents --json`, `waitingFor`, PostCompact).
+- **Parallelism** — worktree isolation, native Workflow fan-out, milestone lanes.
+- **Dispatch** — headless CLI flags, permission/model/effort metadata.
+- **Observability/Cost** — OTEL, audit rows, token baselines.
+
+**Verdict per feature** (mutually exclusive):
+- **Behavioral** — changes pipeline *execution* (a gate, handoff, resume loop, or parallelism mechanism). Gets its own implementation task, **prioritized above doc-only edits**. Record the *mechanism*: which gate/handoff/loop changes and how.
+- **Doc-only** — accuracy / reference update; no execution change.
+- **N/A** — no worktask surface.
+
+Behavioral rows lead the `## Worktask Efficiency Impact` table so the report opens with the changes that alter how the pipeline runs. This pass feeds (and orders) Impact Mapping.
+
 ## Feature Category Mapping
 
 How changelog entries are categorized and routed to affected files:
@@ -185,6 +218,8 @@ This command is used by:
 - As a prerequisite before running `/prompt-audit`
 
 Not part of the 9/11-stage worktask — standalone maintenance command with stage code **PE**. Recommended cadence: run within one week of each Claude Code release. Use `--dry-run` first to review impact scope, then apply.
+
+The **`## Worktask Efficiency Analysis (required pass)`** runs on **every** invocation (including `--dry-run`, where it previews behavioral wins before any file is touched). It is skipped only under `--memory-only` (which deliberately bypasses file analysis). No new *required* flag is added — the surface stays stable; the optional `--worktask-impact-only` emits just the resulting `## Worktask Efficiency Impact` table for a quick read. This pass is the explicit gate that promotes a feature from "documented" to "implemented": every Behavioral verdict it produces becomes an implementation task ahead of doc-only edits.
 
 ## Worktask Routing (BINDING)
 

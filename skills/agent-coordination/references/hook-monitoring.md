@@ -33,6 +33,30 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 > Subagents that stall fail with a clear error after 10 minutes (v2.1.113). Orchestrators should surface this error and either retry the stage or escalate rather than waiting indefinitely. Crash fix (v2.1.114): permission dialog no longer crashes when an agent teams teammate requests tool permission.
 
+### Gate-feedback contract & Stop/SubagentStop additionalContext (v2.1.163+)
+
+Stop and SubagentStop hooks may return `hookSpecificOutput.additionalContext` (v2.1.163) to feed remediation text back to the model **without** being labeled an error. Unlike a bare `{"decision":"block"}`, the `additionalContext` rides into the re-run's context as actionable guidance, turning a dead-end block into a fix instruction.
+
+```json
+{
+  "decision": "block",
+  "reason": "missing screenshots.md …",
+  "hookSpecificOutput": {
+    "hookEventName": "SubagentStop",
+    "additionalContext": "run dv-screenshot-capture (apple-canvas/cli-fallback); headless is not a skip reason; expected manifest .context/images/<worktask_id>/screenshots.md"
+  }
+}
+```
+
+**Gate-feedback contract (one contract, two surfaces).** Every worktask gate — hook-enforced *or* orchestrator-mediated — must return **structured remediation** that flows into the *next attempt's context*:
+
+| Surface | Mechanism | Reference user |
+|---------|-----------|----------------|
+| Hook gate | `hookSpecificOutput.additionalContext` alongside `decision:block` | `hooks/dv-screenshot-gate.sh` (block path) |
+| Orchestrator gate | inject `blockers[]` / `blocking_defects[]` verbatim into the re-dispatched stage prompt | `skills/worktask/SKILL.md` DR→DV / QA→DV loop-back (`gate_remediation_injected` audit row) |
+
+The two surfaces are symmetric: the hook embeds remediation in the block JSON; the orchestrator embeds the upstream blocker list in the retry prompt. Keep them in sync when either changes. The block-path `decision:block` verb, the exit-0 discipline, and the `screenshot_gate_block` audit-row schema are unchanged — `hookSpecificOutput` is an additive stdout field only.
+
 ### OTEL Dispatch Tree Parenting (v2.1.145)
 
 `claude_code.tool` OTEL spans now carry `agent_id` and `parent_agent_id` attributes; subagent spans correctly nest under the dispatching `Agent` tool span (prior to v2.1.145, background subagent spans appeared as orphan roots).
@@ -53,6 +77,11 @@ Captured fields (additive metadata on existing audit rows; written by `hooks/aud
 - `session_cron_ids: ((.session_crons // []) | map(.id // .cron_id // "unknown"))`
 
 Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved.
+
+### OTEL `tool_parameters` & resource-attribute labels (v2.1.157 / v2.1.161)
+
+- `tool_decision` telemetry events now carry a `tool_parameters` field (v2.1.157) — the decision span records *which* tool args were classified, not just the tool name. Lets cost/audit dashboards distinguish e.g. a `Bash git push` decision from a `Bash ls`.
+- `OTEL_RESOURCE_ATTRIBUTES` values now surface as **metric-datapoint labels** (v2.1.161), not only on spans. Tag `worktask_id` / `stage` there to slice collector dashboards (Honeycomb/Datadog) per-stage without parsing span attributes.
 
 **BG-Task ID Schema Watch**: the ID extraction uses a defensive coalesce `(.id // .task_id // "unknown")` / `(.id // .cron_id // "unknown")` because the canonical key name is not yet confirmed in CC docs. Any `"unknown"` value appearing in `background_task_ids` or `session_cron_ids` is a signal that CC has begun populating the arrays with payloads whose ID field name is neither `id` nor `task_id`/`cron_id`. When that happens, the next `/cc-update` should pin the canonical key (remove the coalesce) and update both hook scripts. Until then the coalesce keeps the capture working across whichever name CC chooses.
 

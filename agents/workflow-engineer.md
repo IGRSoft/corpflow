@@ -232,7 +232,7 @@ from the filesystem. Diagnose by comparing `git worktree list` to
 - `/reload-plugins` picks up new skills without requiring restart
 - Plugin skills use frontmatter `name` field for invocation, not directory basename
 - Plugins can declare background monitors via `monitors` manifest key; these stream events without occupying a foreground tool call
-- `EnterWorktree` accepts a `path` parameter to target a specific worktree directory
+- `EnterWorktree` accepts a `path` parameter to target a specific worktree directory; as of v2.1.157 it can switch between Claude-managed worktrees mid-session (re-target without an `ExitWorktree` first)
 - Subagents stalled for more than 10 minutes fail with a clear error — escalate or retry rather than waiting indefinitely
 
 ### Orchestrator / Worktree Mismatch
