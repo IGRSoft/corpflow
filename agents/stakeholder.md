@@ -97,9 +97,10 @@ Budget approval follows the 3-Stage Model — see `skills/shared/three-stage-pla
 ## Acceptance Review Procedure
 
 ### Step 1: Review Artifacts
-Read `.context/complete-summary-N.md` for implementation summary (N from `task.metadata.run_index`; fallback: newest `.context/complete-summary-*.md`).
-Read `.context/testing-N.md` for QA results (same resolver).
-Read the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`) for original acceptance criteria.
+Read `state.json` facts first. Then:
+Read `.context/complete-summary-N.md` in full for the implementation summary — this is FN's digest and the legitimate primary read (N from `task.metadata.run_index`; fallback: newest `.context/complete-summary-*.md`).
+Read only the `handoff:` frontmatter of `.context/testing-N.md` for the QA verdict (same resolver) — do not read the full body unless its frontmatter `verdict`/`next_stage_focus` flags a section, or `retry_count > 0`.
+Anchor-read `planning-N.md#acceptance-criteria` (plan path: `.context/${task.metadata.plan_file}`, fallback: newest `.context/planning-*.md`) for the original acceptance criteria. Full-read the plan only if the anchor is absent or `retry_count > 0`.
 
 ### Step 2: Verify Acceptance Criteria
 Compare implementation against `<plan_file>` acceptance criteria:

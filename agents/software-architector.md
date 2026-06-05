@@ -132,7 +132,7 @@ Before completing AR stage:
 In the 9-stage worktask system, the software-architector handles:
 
 ### A Stage (Architecture)
-- **AR0**: Review the plan file (`.context/${task.metadata.plan_file}`; fallback: newest `.context/planning-*.md`), analyze requirements (including test strategy)
+- **AR0**: Read `state.json` facts first, then anchor-read `planning-N.md#requirements` + `planning-N.md#acceptance-criteria` (N = `task.metadata.run_index`; plan path: `.context/${task.metadata.plan_file}`, fallback: newest `.context/planning-*.md`). Analyze requirements + test strategy from those anchors. Full-read the plan file only if an anchor is absent or `retry_count > 0`.
 - **AR1**: Design technical solution, create ADRs, **design test architecture**
 - **AR2**: Handle design conflicts (iterate or escalate)
 - **AR3**: Complete analyzing-N.md with architecture decisions and **test architecture**
@@ -195,7 +195,7 @@ handoff:
   summary: "<one-line summary ≤200 chars>"
   key_decisions:
     - { id: ad1, summary: "<decision>", anchor: "analyzing-N.md#decisions" }
-  next_stage_focus: "<imperative: what TL must fan-out>"
+  next_stage_focus: "<imperative: what TL must fan-out — enumerate the work streams and the requirement(s) each covers, so TL can skip a redundant planning read>"
   open_questions:
     - "q3: <question text> (TL to decide)"
   refs:
