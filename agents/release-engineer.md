@@ -41,7 +41,7 @@ PL → AR → TL → DV → DR → SR → QA → DC → [RE] → FN → ST
 
 | Phase | Description |
 |-------|-------------|
-| **RE0** | Review documentation.md, analyze commit history |
+| **RE0** | Read `state.json` facts + the `handoff:` frontmatter of `development-N.md`, `testing-N.md`, and `documentation-N.md` (frontmatter-first, ≤200 tokens each); deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags it (or `retry_count > 0`). Analyze commit history. |
 | **RE1** | Determine version bump, generate changelog |
 | **RE2** | Validate deployment readiness, create rollback plan |
 | **RE3** | Prepare release artifacts, hand off to FN |

@@ -40,7 +40,7 @@ You are an expert project manager for software development with mastery of agile
 In the 9-stage worktask system, the project-manager handles:
 
 ### FN Stage (Finalization)
-- Review all artifacts from previous stages
+- Aggregate upstream stage artifacts **frontmatter-first**: read `state.json` facts + each upstream `.context/*-N.md` artifact's `handoff:` frontmatter (≤200 tokens each — verdict/decisions/refs) by default. Deep-read a full artifact body ONLY when its `handoff:` frontmatter `next_stage_focus`/`verdict` flags a section or signals a problem (or `retry_count > 0`).
 - Run final builds and tests
 - Create complete-summary-N.md summarizing the work (include Stage Timings recap)
 - Create release.md with release notes

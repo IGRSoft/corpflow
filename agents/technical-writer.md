@@ -115,7 +115,7 @@ Use PostgreSQL for relational data
 In the 9-stage worktask system, the technical-writer handles:
 
 ### DC Stage (Documentation)
-- **DC0**: Analyze artifacts, discover documentation needing updates
+- **DC0**: Read `state.json` facts + the `handoff:` frontmatter of `development-N.md` and `analyzing-N.md` (frontmatter-first, ≤200 tokens each) to discover documentation needing updates; deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags a section (or `retry_count > 0`).
 - **DC1**: Update code docs, README, CLAUDE.md, ARCHITECTURE files
 - **DC3**: All documentation updated, create documentation.md summary
 
