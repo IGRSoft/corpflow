@@ -348,10 +348,38 @@ Always emit fully-qualified `plugin:agent` form. The plugin prefix follows the a
 | FN0 | `igrsoft:project-manager` | (same) |
 | ST0 | `igrsoft:stakeholder` | (same) |
 
+**DV0 routing override — plugin worktask-infrastructure** (single source of truth;
+do NOT duplicate this decision table elsewhere): the DV0 default `igrsoft:developer`
+is a *platform app-code* router. When the DV scope is the igrsoft plugin's own
+worktask machinery rather than platform app code, set
+`metadata.agent: "igrsoft:workflow-engineer"` (model `opus`,
+error_file = `.context/errors/workflow-engineer.md`) instead. Heuristic — route DV
+to `workflow-engineer` when the change touches any of:
+
+- `skills/worktask/references/*.sh` (worktask reference helpers, e.g. `publish-pl-issue.sh`)
+- the worktask state-machine / stage transitions / Task-System glue under `skills/worktask/**`
+- `hooks/**` (worktask runtime hooks)
+
+Platform/app code (Swift, server, web, and other product source) stays
+`igrsoft:developer` (or the `apple-developer:*` variant). When a worktask mixes
+both, split DV sub-tasks by scope and route each independently. `skills/shared/stage-codes.md`
+keeps its single unconditional DV default and points here for the conditional rule.
+
+*Precedent*: the worktask that fixed Figma image embedding in private/internal
+GitHub issues (the `publish-pl-issue.sh` hosting-tier redesign) ran DV0 on
+`igrsoft:workflow-engineer`, because the entire change set was a worktask reference
+helper plus this very routing rule — not platform app code. That worktask is the
+reason this override exists.
+
 **Worked example** — `--platform Apple` worktask at score 25 (Moderate):
 - AR0 → `agent: "apple-developer:apple-architector"`
 - TL0 → `agent: "igrsoft:team-lead"`
 - DV0 → `agent: "apple-developer:ios-developer"` (error_file = `.context/errors/ios-developer.md`)
+- DR0 → `agent: "igrsoft:technical-lead"`
+- QA0 → `agent: "igrsoft:qa-engineer"`
+
+**Worked example** — worktask-infrastructure fix (e.g. a `publish-pl-issue.sh` change):
+- DV0 → `agent: "igrsoft:workflow-engineer"` (model `opus`, error_file = `.context/errors/workflow-engineer.md`)
 - DR0 → `agent: "igrsoft:technical-lead"`
 - QA0 → `agent: "igrsoft:qa-engineer"`
 

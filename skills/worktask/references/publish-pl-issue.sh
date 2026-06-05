@@ -20,7 +20,7 @@
 #     dedupe_key=<worktask_id>:<run_index>:gh_issue.
 #   - Exit codes: 0 all operational paths, 1 catastrophic, 2 --self-test failure.
 #
-# Asset host-and-rewrite contract (Figma image embed — REQ-1..REQ-5):
+# Asset host-and-rewrite contract (Figma image embed — REQ-1..REQ-6):
 #   The PM authors the `## design-preview` anchor with placeholder tokens of the
 #   shape `{{asset:<basename>}}` on their own line (basename only — NO `.context/`
 #   path), each followed by a `- <description>` bullet, with the Figma source URL
@@ -30,34 +30,66 @@
 #   a hosted markdown image line `![<basename>](<url>)` — so the image line never
 #   faces L1 and no local path ever reaches the issue body.
 #
-#   Hosting (q1/q2 resolved here):
-#     - Disk lookup: <basename> resolves to .context/designs/<basename> (canonical
-#       per skills/task-folder-organization/SKILL.md); .context/images/<basename>
-#       accepted as a legacy fallback location.
-#     - assets path (q1): the PNG is copied to ASSET_DIR_REL =
-#       ".worktask-assets/<worktask_id>/<basename>" on the worktask branch, and
-#       referenced via https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>.
-#       <owner>/<repo> parsed from `git remote get-url origin` (git@ + https forms);
-#       <ref> from `git rev-parse --abbrev-ref HEAD`.
-#     - push contract (q2): the helper does NOT push or commit (no surprising git
-#       side effects at Step 6.5). It copies the file into the worktree path so a
-#       later human-gated commit (FN) picks it up, and it verifies the ref is
-#       reachable on the remote with `git ls-remote --exit-code origin <ref>`
-#       before emitting raw URLs. If the branch/asset is not yet pushed, it
-#       degrades down the fallback chain — non-blocking, exit 0.
-#     - Fallback chain (REQ-5): tier-1 raw URL (ref reachable) → tier-2 gist
-#       (`gh gist create`) → tier-3 URL-only note (Figma URL + exactly one note
-#       line "Screenshots persisted on disk; inline hosting unavailable — see
-#       designs registry."). No broken `![]()` at any tier. A degradation appends
-#       an audit row with reason=image_hosting_unavailable using a distinct
-#       dedupe key suffix (`:asset_hosting`) so it cannot mask the final
-#       github_issue_created result row in audit dedupe consumers.
+#   Tier order (REQ-3, highest priority first):
+#     0. user-attachments (OPT-IN, env-gated) — GitHub's native
+#        github.com/user-attachments/assets/<uuid> store the web composer uses.
+#        These URLs render for authenticated viewers of PRIVATE/INTERNAL repos
+#        (camo-proxied). DISABLED BY DEFAULT. See "q1 spike outcome" below: the
+#        upload-policy flow (`POST github.com/upload/policies/assets` + S3 PUT) is
+#        NOT drivable with a `gh` OAuth/PAT token — it requires a browser session
+#        cookie (`_gh_sess`) + CSRF authenticity_token. So this tier ships gated
+#        off and is exercised only via the USER_ATTACH_URL_BASE mock in self-tests
+#        (or a future ASSET_UA_ENABLE=1 opt-in once a token-driven path is proven).
+#        It NEVER becomes a hard runtime dependency and degrades silently.
+#     1. raw (verified to RENDER, not merely to exist) — raw.githubusercontent.com.
+#        REQ-1: the gate now approximates GitHub's camo image proxy, which fetches
+#        the URL ANONYMOUSLY. A private/internal repo's raw URL 404s for an
+#        anonymous fetch even though an authenticated `gh api contents` check
+#        passes — that false positive is exactly what broke private-repo embeds.
+#        So: if `gh repo view --json visibility` reports PRIVATE or INTERNAL, the
+#        raw tier is REFUSED (it would render broken) and we degrade. For PUBLIC
+#        repos we additionally require an anonymous `curl -fsIL` HEAD to succeed.
+#     2. gist (`gh gist create`) — raw gist asset URL.
+#     3. none — URL-only note (Figma URL + exactly one note line "Screenshots
+#        persisted on disk; inline hosting unavailable — see designs registry.").
+#   No broken `![]()` at any tier. Each downgrade appends a non-blocking audit row
+#   with reason=image_hosting_unavailable under a distinct dedupe-key suffix
+#   (`:asset_hosting`) so it cannot mask the final github_issue_created result row.
+#
+#   q1 spike outcome (DV0, recorded per REQ-2): the user-attachments upload-policy
+#   endpoint is web-session-oriented. `gh api -X POST upload/policies/assets`
+#   returns HTTP 404 (the endpoint is on github.com, not api.github.com); a direct
+#   `curl -X POST -H "Authorization: Bearer <gh-token>"
+#   https://github.com/upload/policies/assets` returns HTTP 422 (malformed) rather
+#   than 401/403 — i.e. the Bearer token is NOT accepted as an authenticated web
+#   session; the flow needs the browser `_gh_sess` cookie + CSRF token. VERDICT:
+#   NOT viable with gh auth → tier-0 stays opt-in/mock-only; REQ-1
+#   render-verification is the shipped cure (it fixes the broken-image symptom by
+#   degrading instead of emitting a dead raw URL).
+#
+#   Disk lookup: <basename> resolves to .context/designs/<basename> (canonical per
+#   skills/task-folder-organization/SKILL.md); .context/images/<basename> accepted
+#   as a legacy fallback location.
+#   raw path: the PNG is copied to ASSET_DIR_REL =
+#     ".worktask-assets/<worktask_id>/<basename>" on the worktask branch, referenced
+#     via https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>.
+#     <owner>/<repo> parsed from `git remote get-url origin` (git@ + https forms);
+#     <ref> from `git rev-parse --abbrev-ref HEAD`.
+#   push contract: the helper does NOT push or commit (no surprising git side
+#     effects at Step 6.5). It copies the file into the worktree path so a later
+#     human-gated commit (FN) picks it up, and verifies the ref is reachable on the
+#     remote with `git ls-remote --exit-code origin <ref>` before emitting raw URLs.
+#     If the branch/asset is not yet pushed, it degrades — non-blocking, exit 0.
 #
 # Env vars for injection (test/dev): STATE_FILE, WORKSPACE_ROOT, GH_BIN, DRY_RUN,
 # GH_TIMEOUT (default 30). Asset-hosting test hooks: ASSET_HOST_MODE
-# (raw|gist|none — forces a tier for self-tests, bypassing live git/gh probes),
-# ASSET_OWNER_REPO (mock "owner/repo"), ASSET_REF (mock ref), GIST_RAW_URL_BASE
-# (mock gist raw base). When unset, real git/gh probes drive tier selection.
+# (user-attachments|raw|gist|none — forces a tier for self-tests, bypassing live
+# git/gh probes), ASSET_OWNER_REPO (mock "owner/repo"), ASSET_REF (mock ref),
+# GIST_RAW_URL_BASE (mock gist raw base), USER_ATTACH_URL_BASE (mock
+# user-attachments asset base, mirrors GIST_RAW_URL_BASE), ASSET_REPO_VISIBILITY
+# (mock `gh repo view` visibility: PUBLIC|PRIVATE|INTERNAL — drives REQ-1
+# render-verification offline). ASSET_UA_ENABLE=1 is the (currently inert, see q1)
+# live opt-in for tier-0. When unset, real git/gh probes drive tier selection.
 
 set -u
 
@@ -79,10 +111,18 @@ ASSET_ROOT="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}"
 ASSET_DESIGNS_DIR="$ASSET_ROOT/.context/designs"     # canonical Figma dir
 ASSET_IMAGES_DIR="$ASSET_ROOT/.context/images"        # legacy fallback location
 # Test hooks (unset in production → real git/gh probes drive tier selection):
-ASSET_HOST_MODE="${ASSET_HOST_MODE:-}"                # raw|gist|none force
+ASSET_HOST_MODE="${ASSET_HOST_MODE:-}"                # user-attachments|raw|gist|none force
 ASSET_OWNER_REPO="${ASSET_OWNER_REPO:-}"              # mock "owner/repo"
 ASSET_REF="${ASSET_REF:-}"                            # mock <ref>
 GIST_RAW_URL_BASE="${GIST_RAW_URL_BASE:-}"            # mock gist raw base
+USER_ATTACH_URL_BASE="${USER_ATTACH_URL_BASE:-}"      # mock user-attachments asset base
+ASSET_REPO_VISIBILITY="${ASSET_REPO_VISIBILITY:-}"    # mock PUBLIC|PRIVATE|INTERNAL (REQ-1)
+# Live opt-in for the user-attachments tier. Currently inert: q1 spike found the
+# upload-policy flow needs a browser session cookie, not a gh token (see header).
+# Kept as a forward hook so a future token-driven implementation can flip it on
+# without re-plumbing. When "1" AND a token-driven uploader is implemented, the
+# tier is attempted live; any failure still degrades. Default off.
+ASSET_UA_ENABLE="${ASSET_UA_ENABLE:-0}"
 # Reason recorded by resolve_design_assets() when it degrades below tier-1.
 # resolve_design_assets runs in a command substitution (subshell), so it cannot
 # set a parent variable — it writes the reason to ASSET_DEGRADED_FILE instead,
@@ -269,8 +309,22 @@ resolve_asset_path() {
   return 1
 }
 
+# Echo the target repo visibility (PUBLIC|PRIVATE|INTERNAL|"" unknown). Honours
+# the ASSET_REPO_VISIBILITY mock first (offline self-tests), else probes
+# `gh repo view --json visibility`. NON-BLOCKING: any failure echoes empty.
+repo_visibility() {
+  if [ -n "$ASSET_REPO_VISIBILITY" ]; then
+    printf '%s' "$ASSET_REPO_VISIBILITY" | tr '[:lower:]' '[:upper:]'
+    return 0
+  fi
+  command -v "$GH_BIN" >/dev/null 2>&1 || { printf ''; return 0; }
+  "$GH_BIN" auth status >/dev/null 2>&1 || { printf ''; return 0; }
+  "$GH_BIN" repo view --json visibility --jq '.visibility' 2>/dev/null \
+    | tr '[:lower:]' '[:upper:]'
+}
+
 # Decide the hosting tier + compute owner/repo + ref. Sets globals:
-#   HOST_TIER  ∈ {raw, gist, none}
+#   HOST_TIER  ∈ {user-attachments, raw, gist, none}
 #   HOST_OWNER_REPO, HOST_REF   (for raw tier)
 # Honors ASSET_HOST_MODE override (self-tests); otherwise probes git/gh.
 # NON-BLOCKING: any probe failure degrades the tier, never errors.
@@ -281,6 +335,8 @@ select_host_tier() {
   HOST_TIER="none"; HOST_OWNER_REPO=""; HOST_REF=""
   # Forced mode (self-tests bypass live probes).
   case "$ASSET_HOST_MODE" in
+    user-attachments)
+      HOST_TIER="user-attachments"; return 0 ;;
     raw)
       HOST_TIER="raw"
       HOST_OWNER_REPO="${ASSET_OWNER_REPO:-owner/repo}"
@@ -291,13 +347,27 @@ select_host_tier() {
     *) ;;  # fall through to live probes
   esac
 
+  # Tier-0 (user-attachments) — OPT-IN, env-gated. q1 spike: not viable with gh
+  # auth (session-cookie only), so this stays off by default and is only selected
+  # when a future token-driven uploader is proven AND opted in. Mock-only in tests
+  # (ASSET_HOST_MODE=user-attachments). Never a hard dependency.
+  if [ "$ASSET_UA_ENABLE" = "1" ] && [ -n "$USER_ATTACH_URL_BASE" ]; then
+    HOST_TIER="user-attachments"; return 0
+  fi
+
   # Tier-1 (raw.githubusercontent.com) preconditions: remote parseable AND ref
-  # reachable on origin. The helper does NOT push (q2) — it only checks.
-  local remote owner_repo ref
+  # reachable on origin. The helper does NOT push — it only checks. REQ-1: refuse
+  # the raw tier for PRIVATE/INTERNAL repos, because GitHub's camo image proxy
+  # fetches the URL anonymously and would 404 — emitting a broken image. Those
+  # repos degrade to gist/none instead. raw_asset_url_reachable() re-checks at
+  # host time (defence in depth); selecting away here avoids the wasted cp.
+  local remote owner_repo ref vis
   remote=$(git remote get-url origin 2>/dev/null || true)
   owner_repo=$(parse_owner_repo "$remote")
   ref=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
-  if [ -n "$owner_repo" ] && [ -n "$ref" ] && [ "$ref" != "HEAD" ]; then
+  vis=$(repo_visibility)
+  if [ -n "$owner_repo" ] && [ -n "$ref" ] && [ "$ref" != "HEAD" ] \
+     && [ "$vis" != "PRIVATE" ] && [ "$vis" != "INTERNAL" ]; then
     if git ls-remote --exit-code origin "$ref" >/dev/null 2>&1; then
       HOST_TIER="raw"; HOST_OWNER_REPO="$owner_repo"; HOST_REF="$ref"
       return 0
@@ -313,21 +383,41 @@ select_host_tier() {
   return 0
 }
 
-# Return success only when a constructed raw.githubusercontent.com URL is
-# verifiably reachable at the target ref/path.
+# Return success only when a constructed raw.githubusercontent.com URL will
+# RENDER inside a GitHub issue — i.e. when GitHub's camo image proxy (which
+# fetches the URL ANONYMOUSLY) can retrieve it. REQ-1.
 #
-# Private repos: prefer authenticated `gh api repos/<owner>/<repo>/contents/...`
-# existence checks (works for private content where anonymous raw HEAD returns
-# 404). Public repos (or environments without gh auth): fall back to a raw URL
-# HEAD probe via curl. Any uncertainty degrades away from tier-1 (non-blocking).
+# The historical bug: this gate used an AUTHENTICATED `gh api contents` existence
+# check, which succeeds for PRIVATE/INTERNAL content the anonymous camo proxy
+# CANNOT fetch — a false positive that emitted a dead raw URL (broken image).
+#
+# New semantics:
+#   - PRIVATE/INTERNAL repo  → ALWAYS fail (anonymous fetch would 404; degrade).
+#   - PUBLIC repo            → require an anonymous `curl -fsIL` HEAD to succeed
+#                              (no auth header — mirrors what camo sees). When
+#                              curl is absent, fall back to the authenticated
+#                              existence check (best effort; public content the
+#                              auth check sees is anonymously fetchable too).
+# Any uncertainty degrades away from the raw tier (non-blocking).
 raw_asset_url_reachable() {
   # $1=owner/repo $2=ref $3=rel-path $4=raw-url
   local owner_repo="$1" ref="$2" rel="$3" raw_url="$4"
+  local vis
+  vis=$(repo_visibility)
+  # REQ-1: never emit a raw URL for non-public repos — camo can't fetch it.
+  if [ "$vis" = "PRIVATE" ] || [ "$vis" = "INTERNAL" ]; then
+    return 1
+  fi
+  # Public (or unknown-visibility public-by-default): approximate the camo proxy's
+  # ANONYMOUS fetch. Strip any ambient auth so the HEAD matches what camo sees.
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsIL --max-time 10 -H 'Authorization:' "$raw_url" >/dev/null 2>&1 && return 0
+    return 1
+  fi
+  # No curl: fall back to authenticated existence (best effort; only reached for
+  # public/unknown repos, where existence implies anonymous reachability).
   if command -v "$GH_BIN" >/dev/null 2>&1 && "$GH_BIN" auth status >/dev/null 2>&1; then
     "$GH_BIN" api --silent -X GET "repos/$owner_repo/contents/$rel" -f ref="$ref" >/dev/null 2>&1 && return 0
-  fi
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsIL --max-time 10 "$raw_url" >/dev/null 2>&1 && return 0
   fi
   return 1
 }
@@ -338,6 +428,19 @@ raw_asset_url_reachable() {
 host_one_asset() {
   local base="$1" src="$2"
   case "$HOST_TIER" in
+    user-attachments)
+      # OPT-IN, env-gated TOP tier. github.com/user-attachments/assets/<uuid>.
+      # q1 spike (see header): the upload-policy flow is NOT drivable with a gh
+      # token (needs a browser session cookie), so the LIVE uploader is not
+      # implemented — shipping a guessed POST would be a fake. This branch is
+      # therefore exercised only via the USER_ATTACH_URL_BASE mock; if that mock
+      # is unset (no proven live path), it returns failure so the caller degrades.
+      if [ -n "$USER_ATTACH_URL_BASE" ]; then
+        # Mirror GIST_RAW_URL_BASE: synthesise the asset URL offline. A real UUID
+        # is server-assigned; the mock base stands in for it in tests.
+        printf '%s/%s' "${USER_ATTACH_URL_BASE%/}" "$base"; return 0
+      fi
+      return 1 ;;
     raw)
       # Copy the PNG into the tracked assets path on the worktask branch so a
       # later (human-gated) commit ships it. We do NOT git-add/commit/push here.
@@ -1138,6 +1241,159 @@ MOCK
     rm -rf "$t10_dir"
   else
     echo "publish-pl-issue: self-test 10-image-embed SKIP (fixture missing)"
+    fail=$((fail + 1))
+  fi
+
+  # ---- Fixture 11: user-attachments tier + REQ-1 render-verification ----
+  # Re-uses fixture 10's design-preview anchor; all paths fully offline (mocks).
+  local f11="$fixtures_dir/10-figma-image-embed.md"
+  if [ -f "$f11" ]; then
+    local t11_dir
+    t11_dir=$(mktemp -d 2>/dev/null || echo "/tmp/publish-pl-self-test-11.$$")
+    mkdir -p "$t11_dir/.context/designs"
+    printf '\211PNG\r\n\032\n' > "$t11_dir/.context/designs/figma-scan-25-default-255-2264.png"
+    printf '\211PNG\r\n\032\n' > "$t11_dir/.context/designs/figma-analyzing-default-255-2267.png"
+    local f11_design
+    f11_design=$(extract_anchor "$f11" "design-preview" | sanitise_body)
+
+    # Save/restore the hosting globals around the whole fixture.
+    local _s_root="$ASSET_ROOT" _s_designs="$ASSET_DESIGNS_DIR" _s_images="$ASSET_IMAGES_DIR"
+    local _s_mode="$ASSET_HOST_MODE" _s_or="$ASSET_OWNER_REPO" _s_ref="$ASSET_REF"
+    local _s_dry="$DRY_RUN" _s_wid="${WORKTASK_ID:-}" _s_uab="$USER_ATTACH_URL_BASE"
+    local _s_uae="$ASSET_UA_ENABLE" _s_vis="$ASSET_REPO_VISIBILITY" _s_degfile="$ASSET_DEGRADED_FILE"
+    ASSET_ROOT="$t11_dir"
+    ASSET_DESIGNS_DIR="$t11_dir/.context/designs"
+    ASSET_IMAGES_DIR="$t11_dir/.context/images"
+    DRY_RUN=1
+    WORKTASK_ID="fixture-11"
+    ASSET_DEGRADED_FILE="$t11_dir/.degraded"
+
+    # --- 11a: user-attachments happy path (mocked base, forced mode) (AC-2) ---
+    ASSET_HOST_MODE="user-attachments"
+    USER_ATTACH_URL_BASE="https://github.com/user-attachments/assets/mock-uuid"
+    : > "$ASSET_DEGRADED_FILE"
+    local f11a_embed
+    f11a_embed=$(printf '%s' "$f11_design" | resolve_design_assets)
+    local f11a_reason; f11a_reason=$(cat "$ASSET_DEGRADED_FILE" 2>/dev/null || echo "")
+    local f11a_ok=1
+    printf '%s\n' "$f11a_embed" | grep -qF '![figma-scan-25-default-255-2264.png](https://github.com/user-attachments/assets/mock-uuid/figma-scan-25-default-255-2264.png)' || f11a_ok=0
+    printf '%s\n' "$f11a_embed" | grep -qF '![figma-analyzing-default-255-2267.png](https://github.com/user-attachments/assets/mock-uuid/figma-analyzing-default-255-2267.png)' || f11a_ok=0
+    if printf '%s\n' "$f11a_embed" | grep -qF '{{asset:'; then f11a_ok=0; fi
+    [ -z "$f11a_reason" ] || f11a_ok=0
+    if [ "$f11a_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 11a-user-attachments-happy PASS"; pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 11a-user-attachments-happy FAIL"
+      printf '%s\n' "$f11a_embed" | head -20 >&2; fail=$((fail + 1))
+    fi
+
+    # --- 11b: user-attachments unavailable (no mock base) → degrade (AC-3) ---
+    # Forced UA mode but USER_ATTACH_URL_BASE empty → host_one_asset returns 1 →
+    # tokens drop + degradation flagged. Non-blocking, no broken markup.
+    ASSET_HOST_MODE="user-attachments"
+    USER_ATTACH_URL_BASE=""
+    : > "$ASSET_DEGRADED_FILE"
+    local f11b_embed
+    f11b_embed=$(printf '%s' "$f11_design" | resolve_design_assets)
+    local f11b_reason; f11b_reason=$(cat "$ASSET_DEGRADED_FILE" 2>/dev/null || echo "")
+    local f11b_ok=1
+    if printf '%s\n' "$f11b_embed" | grep -qF '!['; then f11b_ok=0; fi
+    if printf '%s\n' "$f11b_embed" | grep -qF '{{asset:'; then f11b_ok=0; fi
+    [ "$f11b_reason" = "image_hosting_unavailable" ] || f11b_ok=0
+    printf '%s\n' "$f11b_embed" | grep -qF 'https://www.figma.com/design/FOO/FaceScan?node-id=255-2263' || f11b_ok=0
+    if [ "$f11b_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 11b-user-attachments-degrade PASS"; pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 11b-user-attachments-degrade FAIL"
+      printf '%s\n' "$f11b_embed" | head -20 >&2; fail=$((fail + 1))
+    fi
+
+    # --- 11c: REQ-1 — raw render-verification fails for PRIVATE repo (AC-1) ---
+    # raw_asset_url_reachable() must return 1 when visibility is PRIVATE, even
+    # when the authenticated existence check would pass. Direct unit assertion
+    # (no network — ASSET_REPO_VISIBILITY mock drives the gate).
+    ASSET_REPO_VISIBILITY="PRIVATE"
+    local f11c_ok=1
+    if raw_asset_url_reachable "owner/repo" "feat/x" ".worktask-assets/t/a.png" \
+         "https://raw.githubusercontent.com/owner/repo/feat/x/.worktask-assets/t/a.png"; then
+      f11c_ok=0   # MUST have returned non-zero for a private repo
+    fi
+    ASSET_REPO_VISIBILITY="INTERNAL"
+    if raw_asset_url_reachable "owner/repo" "feat/x" ".worktask-assets/t/a.png" \
+         "https://raw.githubusercontent.com/owner/repo/feat/x/.worktask-assets/t/a.png"; then
+      f11c_ok=0   # MUST also fail for INTERNAL
+    fi
+    if [ "$f11c_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 11c-raw-private-refused PASS"; pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 11c-raw-private-refused FAIL"; fail=$((fail + 1))
+    fi
+
+    # --- 11d: REQ-1 — PRIVATE repo, live tier select → raw refused, degrade ---
+    # select_host_tier() with PRIVATE visibility + gh authed must NOT pick raw;
+    # it should fall to gist (gh present mock) — proves the camo false-positive
+    # is closed at selection time too. Mock gh `auth status` success via a stub.
+    local t11d_bin="$t11_dir/bin"
+    mkdir -p "$t11d_bin"
+    cat > "$t11d_bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1" in
+  auth) exit 0 ;;
+  repo) echo "PRIVATE"; exit 0 ;;   # --json visibility --jq path
+esac
+exit 0
+MOCK
+    chmod +x "$t11d_bin/gh"
+    cat > "$t11d_bin/git" <<'MOCK'
+#!/usr/bin/env bash
+if [ "$1" = "remote" ] && [ "$2" = "get-url" ]; then echo "git@github.com:owner/repo.git"; exit 0; fi
+if [ "$1" = "rev-parse" ]; then echo "feature/x"; exit 0; fi
+if [ "$1" = "ls-remote" ]; then exit 0; fi
+exec /usr/bin/env -i PATH=/usr/bin:/bin git "$@"
+MOCK
+    chmod +x "$t11d_bin/git"
+    local f11d_tier
+    f11d_tier=$( PATH="$t11d_bin:$PATH" GH_BIN=gh \
+      ASSET_HOST_MODE="" ASSET_REPO_VISIBILITY="" ASSET_UA_ENABLE=0 \
+      bash -c '
+        '"$(declare -f parse_owner_repo)"'
+        '"$(declare -f repo_visibility)"'
+        '"$(declare -f select_host_tier)"'
+        select_host_tier
+        printf "%s" "$HOST_TIER"
+      ' )
+    if [ "$f11d_tier" = "gist" ]; then
+      echo "publish-pl-issue: self-test 11d-private-selects-gist PASS"; pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 11d-private-selects-gist FAIL (tier='$f11d_tier' want gist)"; fail=$((fail + 1))
+    fi
+
+    # --- 11e: ASSET_HOST_MODE=user-attachments accepted offline (AC-7) ---
+    # Forced mode must select the tier without any network probe.
+    local f11e_tier
+    f11e_tier=$( ASSET_HOST_MODE="user-attachments" bash -c '
+        '"$(declare -f parse_owner_repo)"'
+        '"$(declare -f repo_visibility)"'
+        '"$(declare -f select_host_tier)"'
+        ASSET_UA_ENABLE=0 USER_ATTACH_URL_BASE=""
+        select_host_tier
+        printf "%s" "$HOST_TIER"
+      ' )
+    if [ "$f11e_tier" = "user-attachments" ]; then
+      echo "publish-pl-issue: self-test 11e-mode-override-offline PASS"; pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 11e-mode-override-offline FAIL (tier='$f11e_tier')"; fail=$((fail + 1))
+    fi
+
+    # Restore globals + clean up.
+    ASSET_ROOT="$_s_root"; ASSET_DESIGNS_DIR="$_s_designs"; ASSET_IMAGES_DIR="$_s_images"
+    ASSET_HOST_MODE="$_s_mode"; ASSET_OWNER_REPO="$_s_or"; ASSET_REF="$_s_ref"
+    DRY_RUN="$_s_dry"; WORKTASK_ID="$_s_wid"; USER_ATTACH_URL_BASE="$_s_uab"
+    ASSET_UA_ENABLE="$_s_uae"; ASSET_REPO_VISIBILITY="$_s_vis"; ASSET_DEGRADED_FILE="$_s_degfile"
+    ASSET_DEGRADED_REASON=""
+    rm -rf "$t11_dir"
+  else
+    echo "publish-pl-issue: self-test 11-user-attachments SKIP (fixture missing)"
     fail=$((fail + 1))
   fi
 
