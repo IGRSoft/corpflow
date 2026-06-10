@@ -199,10 +199,9 @@ Every stage (AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) writes its artifact
 | IR | incident | `incident-N.md` |
 | ET | ethics-review | `ethics-review-N.md` |
 
-**Three-step resolver** (every stage agent uses this):
+**Two-step resolver** (every stage agent uses this):
 1. `task.metadata.run_index` → `<basename>-${N}.md`.
 2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
-3. Legacy unnumbered `<basename>.md` (one release cycle fallback; log WARN when used).
 
 ### PL0 Stage (Planning)
 - **Detect workspace context** from task metadata

@@ -1,7 +1,7 @@
 ---
 name: security-reviewer
 description: Security review specialist for OWASP compliance, vulnerability scanning, and secure coding validation. Owns the SR (Security Review) stage in secure/full worktasks. Use PROACTIVELY for security audits, vulnerability assessment, or OWASP compliance checks.
-model: opus
+model: fable
 color: red
 effort: xhigh
 maxTurns: 50

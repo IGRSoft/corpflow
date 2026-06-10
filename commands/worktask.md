@@ -62,7 +62,7 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--milestone:N:ISSUE` | Execute specific issue |
 | `--parallel:N` | N concurrent tracks (max 5) |
 | `--auto-continue` | Skip approval gates |
-| `--dynamic` | Run the autonomous span (AR→…→QA/DC/RE, between the PL0 and FN human gates) on Claude Code's native Workflow engine (`Workflow` tool, v2.1.154+) instead of the manual stage loop. Opt-in and additive; both human gates and the no-self-commit rule stay orchestrator-owned. Degrades to the manual loop when the `Workflow` tool is absent (older CC, headless, `--print`). The plugin flag stays `--dynamic`; CC's *native* keyword for the same engine was renamed `workflow` → **`ultracode`** (`/effort ultracode`, v2.1.160). See `skills/worktask/references/dynamic-workflow.md`. |
+| `--dynamic` | Run the autonomous span (AR→…→QA/DC/RE, between the PL0 and FN human gates) on Claude Code's native Workflow engine (`ultracode` tool) instead of the manual stage loop. Opt-in and additive; both human gates and the no-self-commit rule stay orchestrator-owned. Degrades to the manual loop when the `ultracode` tool is absent (headless `claude agents run`, SDK / `--print`). The plugin flag stays `--dynamic`. See `skills/worktask/references/dynamic-workflow.md`. |
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
@@ -183,7 +183,7 @@ sanitiser rules and non-blocking guarantee.
 
 Read `PL0.metadata.execution_mode` (default `"manual"` when absent — in-flight worktasks stay manual).
 
-- **If `execution_mode == "dynamic"` AND the `Workflow` tool is present** in the orchestrator's tool list:
+- **If `execution_mode == "dynamic"` AND the `ultracode` tool is present** in the orchestrator's tool list:
   dispatch the autonomous span (AR → … → QA/DC/RE, stopping before FN) on the native Workflow engine per
   `skills/worktask/references/dynamic-workflow.md` (`#script-template` single-issue; `#milestone-template`
   for `--milestone:N` — which requires the R1 one-confirmation multi-PR guard BEFORE any lane runs). Write a
@@ -192,7 +192,7 @@ Read `PL0.metadata.execution_mode` (default `"manual"` when absent — in-flight
   FN gate exactly as in the manual loop** (`skills/worktask/SKILL.md § FN Gate`) — the workflow span never
   crosses FN; commit/push/PR remains the human-gated FN stage.
 - **Otherwise** (`execution_mode == "manual"`, OR `--dynamic` was set but the `Workflow` tool is absent —
-  older CC, headless `claude agents run`, SDK/`--print`): when `--dynamic` was requested but unavailable,
+  headless `claude agents run`, SDK/`--print`): when `--dynamic` was requested but unavailable,
   write a `dynamic_fallback` audit row first, then run the manual loop below unchanged. A crashed dynamic
   run also resumes in manual mode (`dynamic-workflow.md#resume`).
 

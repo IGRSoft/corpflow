@@ -236,7 +236,7 @@ properties:
   workflow:
     type: object
     description: |
-      OPTIONAL. Present only in `--dynamic` execution mode (CC native Workflow engine, v2.1.154+).
+      OPTIONAL. Present only in `--dynamic` execution mode (CC native Workflow engine).
       Additive and version-1-compatible: absent in manual mode and ignored by readers that predate it,
       so adding it never breaks an existing reader. The native `run_id` is a RESUME POINTER only —
       `state.json` + the Task System remain the source of truth. Written by the orchestrator at launch
@@ -309,7 +309,7 @@ Five documented degradation paths. Worktask MUST complete in all five (AC-16, AC
 
 ### F4 regeneration walk
 
-1. Glob `.context/{planning-*,analyzing-*,coordination-*,development-*,developer-review-*,security-review-*,testing-*,documentation-*,release-*,complete-summary-*,retrospective-*,incident-*,ethics-review-*}.md`. Also include legacy unnumbered names (one release cycle fallback): `.context/{analyzing,coordination,development,developer-review,security-review,testing,documentation,release,complete-summary,retrospective,incident,ethics-review}.md`.
+1. Glob `.context/{planning-*,analyzing-*,coordination-*,development-*,developer-review-*,security-review-*,testing-*,documentation-*,release-*,complete-summary-*,retrospective-*,incident-*,ethics-review-*}.md`.
 2. For each file, extract `handoff:` frontmatter (yq or fallback parser).
 3. Sort by stage order: PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET.
 4. Build state.json from PL0's frontmatter as seed.
@@ -322,7 +322,7 @@ Five documented degradation paths. Worktask MUST complete in all five (AC-16, AC
 
 Canonical mapping from stage code to artifact filename (used by orchestrator, hook, and F4 regeneration walk).
 
-All stage artifacts are numbered; N is allocated by PL0 (same value as `planning-N.md`) and propagated via `task.metadata.run_index`. Readers fall back to newest-glob (`<basename>-*.md`), then legacy unnumbered names (accepted for one release cycle).
+All stage artifacts are numbered; N is allocated by PL0 (same value as `planning-N.md`) and propagated via `task.metadata.run_index`. Readers fall back to newest-glob (`<basename>-*.md`).
 
 | Stage code | Artifact filename | Plural? |
 |------------|-------------------|---------|
@@ -340,7 +340,7 @@ All stage artifacts are numbered; N is allocated by PL0 (same value as `planning
 | IR | `incident-N.md` | yes |
 | ET | `ethics-review-N.md` | yes |
 
-The same N is shared across all stages within a worktask run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. See `agents/product-manager.md § Plan File & Run Index Naming` for the full three-step resolver and propagation algorithm.
+The same N is shared across all stages within a worktask run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. See `agents/product-manager.md § Plan File & Run Index Naming` for the full resolver and propagation algorithm.
 
 ---
 

@@ -214,7 +214,7 @@ DV's D2 step parses test sources for the markers documented in `skills/shared/te
 
 QA reads this section verbatim. If QA adds new tests during Q-stage edge-case review, it appends them to a `## Selected Tests (QA additions)` section in `testing-N.md`.
 
-### Backward compatibility (one release cycle)
+### Backward compatibility (deprecated `requires_ui_tests` flag)
 
 If `<plan_file>` has the legacy `requires_ui_tests` flag and no `test_mode`:
 
