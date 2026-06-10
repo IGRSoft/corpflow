@@ -232,7 +232,7 @@ Configure in project `settings.json` or agent frontmatter `hooks` field:
 
 `TeammateIdle` and `TaskCompleted` require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
 
-> Hooks support a conditional `if` field (v2.1.85+) using permission rule syntax to reduce process spawning overhead.
+> Hooks support a conditional `if` field using permission rule syntax to reduce process spawning overhead.
 
 > `SessionEnd` hook timeout is configurable via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` for worktasks requiring cleanup time (e.g., worktree pruning, orchestrator state finalization).
 

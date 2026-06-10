@@ -49,37 +49,37 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 
 Support agents don't own worktask stages but can be invoked on-demand via Task tool.
 
-> Model column uses aliases (`fable`, `opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-8`) are also supported in agent frontmatter. Use aliases for portability across providers. **Fable 5** = `claude-fable-5`, the Mythos-class top reasoning model (v2.1.170+) — the `fable` alias resolves only on CC ≥ 2.1.170 and degrades to the provider default below that. **Opus 4.8** is the prior top Claude model (v2.1.154+); Opus 4.6 and Opus 4.7 remain supported. Auto mode is available for Max subscribers on Opus 4.8 and no longer requires `--enable-auto-mode` (v2.1.111).
+> Model column uses aliases (`fable`, `opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-8`) are also supported in agent frontmatter. Use aliases for portability across providers. **Fable 5** = `claude-fable-5`, the Mythos-class top reasoning model (v2.1.170+) — the `fable` alias resolves only on CC ≥ 2.1.170 and degrades to the provider default below that. **Opus 4.8** is the prior top Claude model; Opus 4.6 and Opus 4.7 remain supported. Auto mode is available for Max subscribers on Opus 4.8 and does not require `--enable-auto-mode`.
 
-> **Default effort is now `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans (v2.1.94). Only Pro plan retains medium default. Agents with explicit `effort:` frontmatter are unaffected.
+> **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans. Only Pro plan retains medium default. Agents with explicit `effort:` frontmatter are unaffected.
 
-## Agent Frontmatter Fields (v2.1.78+)
+## Agent Frontmatter Fields
 
-| Field | Type | Version | Purpose |
-|-------|------|---------|---------|
-| `effort` | `low`/`medium`/`high`/`xhigh`/`max` | 2.1.78 (xhigh added 2.1.111) | Set default effort level for agent |
-| `maxTurns` | number | 2.1.78 | Limit agent turn count |
-| `disallowedTools` | comma-separated | 2.1.78 | Block specific tools from agent |
-| `initialPrompt` | string | 2.1.83 | Auto-submit first turn on agent start |
-| `permissionMode` | string | 2.1.119 (honored under `--agent`) | Controls permission flow for built-in agents launched via `--agent <name>` |
-| `mcpServers` | YAML map | 2.1.117 (main-thread) | MCP servers loaded for both subagent and main-thread (`--agent`) sessions |
-| `hooks` | YAML map | 2.1.116 (main-thread) | Hooks now also fire for main-thread (`--agent`) runs |
+| Field | Type | Purpose |
+|-------|------|---------|
+| `effort` | `low`/`medium`/`high`/`xhigh`/`max` | Set default effort level for agent |
+| `maxTurns` | number | Limit agent turn count |
+| `disallowedTools` | comma-separated | Block specific tools from agent |
+| `initialPrompt` | string | Auto-submit first turn on agent start |
+| `permissionMode` | string | Controls permission flow for built-in agents launched via `--agent <name>` |
+| `mcpServers` | YAML map | MCP servers loaded for both subagent and main-thread (`--agent`) sessions |
+| `hooks` | YAML map | Hooks fire for both subagent and main-thread (`--agent`) runs |
 
-> **`--print` mode honors agent frontmatter** (v2.1.119+): `tools:` and `disallowedTools:` are now enforced in `--print`/SDK runs, matching interactive-mode behavior. Plugin agents shipping a least-privilege `tools:` line keep that contract in non-interactive flows.
+> **`--print` mode honors agent frontmatter**: `tools:` and `disallowedTools:` are enforced in `--print`/SDK runs, matching interactive-mode behavior. Plugin agents shipping a least-privilege `tools:` line keep that contract in non-interactive flows.
 
-### Skill/Command Frontmatter (v2.1.80+)
+### Skill/Command Frontmatter
 
-Skills and slash commands can declare `effort` in YAML frontmatter to set effort level when invoked. As of **v2.1.152**, skills AND slash commands (not just agents) can also set `disallowed-tools` in frontmatter to restrict tool access within that skill/command's scope.
+Skills and slash commands can declare `effort` in YAML frontmatter to set effort level when invoked, and can also set `disallowed-tools` in frontmatter to restrict tool access within that skill/command's scope.
 
-### keep-coding-instructions Frontmatter (v2.1.94+)
+### keep-coding-instructions Frontmatter
 
 The `keep-coding-instructions` field in plugin output style frontmatter preserves coding instructions across style changes.
 
-### Skill Name Resolution (v2.1.94+)
+### Skill Name Resolution
 
-Plugin skills use the frontmatter `name` field for invocation instead of directory basename. Ensure all SKILL.md files have accurate `name:` frontmatter. Skills also honor `context` and `agent` frontmatter fields (fixed v2.1.101).
+Plugin skills use the frontmatter `name` field for invocation instead of directory basename. Ensure all SKILL.md files have accurate `name:` frontmatter. Skills also honor `context` and `agent` frontmatter fields.
 
-### paths: Frontmatter (v2.1.84+)
+### paths: Frontmatter
 
 The `paths:` field accepts a YAML list of globs for flexible path-based activation:
 

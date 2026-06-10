@@ -70,13 +70,13 @@ This reduces disk usage per worktree and speeds up initialization.
 
 > `--worktree` startup reads git refs directly and skips redundant fetch, significantly faster for repos with many branches.
 
-> **v2.1.101**: Sub-agents executing in isolated worktrees automatically receive Read/Edit access to their own worktree directory — no explicit `tools:` grant needed in agent frontmatter.
+> Sub-agents executing in isolated worktrees automatically receive Read/Edit access to their own worktree directory — no explicit `tools:` grant needed in agent frontmatter.
 
 ### FN Gate Bypass in Milestone Mode
 
 Milestone orchestration processes N issues sequentially (or in parallel tracks) without intervening user input. To prevent each per-issue worktask from stalling at the FN approval gate defined in `skills/worktask/SKILL.md § FN Gate`, every per-issue PL0 task is created with `metadata.fn_gate = "bypass"`. The orchestrator's gate check honors this field and proceeds directly to commit/push/PR for each issue. The same bypass applies under `--worktree` (where issue isolation already serves the review purpose) and `--auto-continue`. If you need to review each commit before push, use standard mode (`/worktask "..."`) instead of `--milestone`.
 
-> For headless `-p` mode runs, set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait entirely. Combined with `--mcp-config`, server connections are bounded at 5s instead of blocking on the slowest server (v2.1.89+).
+> For headless `-p` mode runs, set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait entirely. Combined with `--mcp-config`, server connections are bounded at 5s instead of blocking on the slowest server.
 
 ### Status Transitions
 
