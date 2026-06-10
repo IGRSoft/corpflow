@@ -90,8 +90,6 @@ case "${1:-}" in
     cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
     # shellcheck disable=SC2046
     lint $(ls agents/*.md commands/*.md skills/*/SKILL.md 2>/dev/null) | { grep -v " ok$" || true; }
-    # re-run for exit code (grep above consumes it)
-    lint $(ls agents/*.md commands/*.md skills/*/SKILL.md 2>/dev/null) >/dev/null
     ;;
   *) lint "$@" ;;
 esac
