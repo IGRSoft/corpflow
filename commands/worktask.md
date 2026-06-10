@@ -216,7 +216,7 @@ if [ "$_orch_root" != "$_task_root" ]; then
 fi
 ```
 
-The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line of every stage prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to target. See `skills/worktask/SKILL.md § Conductor Workspace Topology` for the failure mode this guard prevents.
+The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line of every stage prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to target. See `skills/worktask/references/workspace-modes.md § Conductor Workspace Topology` for the failure mode this guard prevents.
 
 **BINDING: Post-delegation state.json enforcement** — After every `Task()` return and before `TaskUpdate(stage→completed)`, the orchestrator MUST:
 1. Re-read `.context/state.json` and check `stages.<CODE>.status`.

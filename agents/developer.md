@@ -83,7 +83,7 @@ When building or testing Apple platform code directly (not delegating to apple-d
   2. If the stage prompt contains absolute paths, verify each path shares the same prefix as `WORKSPACE_ROOT`.
   3. If any path falls outside `WORKSPACE_ROOT`, do NOT edit it. Log a `workspace_path_mismatch` audit row and return `verdict: blocked` to the orchestrator with the mismatched paths listed.
   4. Document `WORKSPACE_ROOT` in `development-N.md § Approach` (one line).
-  See `skills/worktask/SKILL.md § Conductor Workspace Topology` for rationale and failure mode.
+  See `skills/worktask/references/workspace-modes.md § Conductor Workspace Topology` for rationale and failure mode.
 - **D0.1**: Analyze requirements, set up development environment, read test specs from `<plan_file>`
 - **D1**: Implement code changes using the **edit-batch-build** pattern:
   1. **Plan all edits first**: before the first `Edit`/`Write`, list every file that needs changes and what each change is. Write this list to `development-N.md § Approach` BEFORE editing.
