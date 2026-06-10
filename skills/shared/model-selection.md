@@ -13,18 +13,21 @@ effort: low
 | **haiku** | 1x (baseline) | ~$0.25 | Formatting, routing, checklists, status checks |
 | **sonnet** | ~10x haiku | ~$3.00 | Implementation, analysis, code review, coordination |
 | **opus** | ~50x haiku | ~$15.00 | Architecture decisions, complex reasoning, meta-optimization |
+| **fable** | premium (see `/model`) | premium (see `/model`) | Max-reasoning stages: architecture, security/ethics review, agent optimization, complex development |
 
-> **Opus 4.8 Effort Levels** (latest, v2.1.154+): `low` ○, `medium` ◐, `high` ●, `xhigh` ⬣ (v2.1.111+), `max` ⬛. **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans (v2.1.94). Pro/Max subscribers also get `high` default on **Opus 4.6 and Sonnet 4.6** (v2.1.117+ — was `medium`). Pro plan continues to retain medium default on older models. The keyword "ultrathink" still triggers high effort. Use `/effort auto` to reset; `/effort` opens an interactive slider with **Faster/Smarter** labels (v2.1.154; was arrow-key navigation in v2.1.111). Opus 4.6 and Opus 4.7 remain supported. Use `/effort xhigh` for hardest tasks requiring maximum reasoning.
+> **Fable 5** (`claude-fable-5`) is the Mythos-class top reasoning model (v2.1.170). It sits above `opus` as the new top tier and is the default for the highest-reasoning stages (AR, DR/TC, DV, SR, PE, ET). The `fable` alias only resolves on **CC ≥ 2.1.170**; on CC 2.1.169 (the current plugin minimum) the alias degrades to the provider default until the operator updates. Pull the exact `$/1M` pricing from `/model` (or the `claude-api` skill) when filling the Cost/1M cell.
 
-> **Opus 4.8 context window** (v2.1.154+): Opus 4.8 has a native **1M context window** (same as Opus 4.7 — v2.1.117 fix originally applied to 4.7). Claude Code correctly computes `/context` percentages against the full 1M window — eliminates premature autocompacting on long Opus 4.8 sessions.
+> **Opus 4.8 Effort Levels**: `low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛. **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans. Pro/Max subscribers also get `high` default on **Opus 4.6 and Sonnet 4.6**; Pro plan retains `medium` default on older models. The keyword "ultrathink" still triggers high effort. Use `/effort auto` to reset; `/effort` opens an interactive slider with **Faster/Smarter** labels. Opus 4.6 and Opus 4.7 remain supported. Use `/effort xhigh` for hardest tasks requiring maximum reasoning.
 
-> **Hook Effort Visibility** (v2.1.133+): hooks observe the active effort tier via `effort.level` (JSON payload) and the `$CLAUDE_EFFORT` env var. Cost/audit hooks can attribute spend per tier without parsing model metadata. See `skills/agent-coordination/references/hook-monitoring.md § Hook Effort Visibility`.
+> **Opus 4.8 context window**: Opus 4.8 has a native **1M context window** (same as Opus 4.7). Claude Code computes `/context` percentages against the full 1M window — eliminates premature autocompacting on long Opus 4.8 sessions.
 
-> **Fast Mode on Opus 4.8** (v2.1.154): fast mode on Opus 4.8 delivers **2x rate for 2.5x speed**. `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE` was **removed in v2.1.160** (deprecated 2026-06-01) — pin fast mode via `/model` selection instead. Plugin agents that rely on `xhigh` effort now require Opus 4.8 (was Opus 4.7 in v2.1.111+).
+> **Hook Effort Visibility**: hooks observe the active effort tier via `effort.level` (JSON payload) and the `$CLAUDE_EFFORT` env var. Cost/audit hooks can attribute spend per tier without parsing model metadata. See `skills/agent-coordination/references/hook-monitoring.md § Hook Effort Visibility`.
 
-> **Auto mode on Bedrock/Vertex/Foundry** (v2.1.158): `CLAUDE_CODE_ENABLE_AUTO_MODE=1` enables auto model/effort selection for Opus 4.7/4.8 on Bedrock, Vertex, and Foundry providers (previously first-party only). Opt-in; leaves explicit `--model`/`--effort` (and `metadata.model`) overrides authoritative when set.
+> **Fast Mode on Opus 4.8**: fast mode on Opus 4.8 delivers **2x rate for 2.5x speed**; pin fast mode via `/model` selection (the `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE` env var has been removed). Plugin agents that rely on `xhigh` effort require **Opus 4.8 or Fable 5**.
 
-> **Lean system prompt default** (v2.1.154): Opus 4.8 uses a lean (shorter) system prompt by default. Haiku, Sonnet, and Opus ≤4.7 continue to use the standard system prompt.
+> **Auto mode on Bedrock/Vertex/Foundry**: `CLAUDE_CODE_ENABLE_AUTO_MODE=1` enables auto model/effort selection for Opus 4.7/4.8 on Bedrock, Vertex, and Foundry providers. Opt-in; leaves explicit `--model`/`--effort` (and `metadata.model`) overrides authoritative when set.
+
+> **Lean system prompt default**: Opus 4.8 uses a lean (shorter) system prompt by default. Haiku, Sonnet, and Opus ≤4.7 continue to use the standard system prompt.
 
 ## Selection Criteria
 
@@ -32,7 +35,8 @@ effort: low
 |------------|-------|-----------|
 | Simple | haiku | Formatting, routing, checklists, status tracking |
 | Moderate | sonnet | Implementation, analysis, coordination, reviews |
-| Complex | opus | Architecture, strategy, meta-optimization, research |
+| Complex | opus | Planning (PL), incident response (IR), general high-complexity reasoning |
+| Max-reasoning | fable | Architecture, high-stakes review gates, meta-optimization, complex development (AR, DR/TC, DV, SR, PE, ET) |
 
 **Use haiku when**:
 - Task is procedural with clear steps
@@ -49,11 +53,16 @@ effort: low
 - Standard analysis and reviews
 
 **Use opus when**:
-- Complex multi-step reasoning
-- Architectural decisions with tradeoffs
-- Meta-level optimization (agents about agents)
+- Complex multi-step reasoning below the max-reasoning bar
+- Planning and product scoping (PL) or incident response (IR)
 - Novel problem solving
-- High-stakes decisions
+- General high-complexity work where `fable` is not warranted
+
+**Use fable when** (top tier — the `fable` alias resolves on **CC ≥ 2.1.170** and degrades to opus/provider default below that; caveat applies to every `fable` row in this file):
+- Architectural decisions with tradeoffs (AR)
+- High-stakes review gates: code review (DR/TC), security (SR), ethics (ET)
+- Meta-level optimization, agents about agents (PE)
+- Complex development stages (DV)
 
 ## Selection Matrix by Task Type
 
@@ -67,9 +76,9 @@ effort: low
 | Code review | sonnet | Analysis + suggestions |
 | Test design | sonnet | Coverage analysis |
 | Team coordination | sonnet | Multi-factor decisions |
-| Architecture design | opus | Complex tradeoffs |
-| System analysis | opus | Deep reasoning |
-| Prompt optimization | opus | Meta-level thinking |
+| Architecture design | fable | Complex tradeoffs |
+| System analysis | fable | Deep reasoning |
+| Prompt optimization | fable | Meta-level thinking |
 
 ## Per-Invocation Override
 

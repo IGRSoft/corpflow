@@ -2,9 +2,13 @@
 
 A comprehensive 9-stage worktask system for Claude Code with Task System integration, stage transitions, approval gates, and structured task management.
 
-claude-code min version: "2.1.114"
+claude-code min version: "2.1.169"
 
-> **Managed version gating (optional, v2.1.163+)**: organizations can hard-gate the Claude Code version this plugin runs on via the `requiredMinimumVersion` / `requiredMaximumVersion` managed-settings keys (enterprise/team managed `settings.json`). The plugin itself introduces **no new hard dependency** — every feature in the v2.1.157→2.1.165 band is additive/optional, so the minimum stays **2.1.114**. Use these keys only if your org needs to pin CC within a tested window.
+> **Claude Code feature bands**: latest integrated band is **2.1.166→2.1.170** (latest known CC: **2.1.170**). The headline is **Fable 5** (`claude-fable-5`, Mythos-class top reasoning model, shipped in 2.1.170): plugin **3.13.0** routes the 6 highest-reasoning agents — software-architector (AR), technical-lead (DR/TC), developer (DV), prompt-engineer (PE), security-reviewer (SR), ethics-reviewer (ET) — onto the new `fable` tier (product-manager/PL and incident-responder/IR stay `opus`). **Alias caveat**: Fable 5 ships in 2.1.170, so the `fable` alias resolves only on **CC ≥ 2.1.170**; on the new minimum (2.1.169) the alias degrades to the provider default until you update.
+
+> **3.14.0 maintenance note**: plugin **3.14.0** retires the sub-2.1.169 backward-compat layer — the resume degrade tiers, dead "(v2.1.XXX+)" gates in operational guidance, and the legacy *unnumbered* artifact-name grace are gone (min CC stays **2.1.169**; integrated band stays **2.1.166→2.1.170**). **Resume caveat**: a worktask interrupted under plugin ≤3.13.0 that wrote unnumbered `.context/<basename>.md` artifacts will no longer resume-resolve them — finish in-flight worktasks before upgrading. Numbered `<basename>-N.md` artifacts (the default for many releases) are unaffected.
+
+> **Managed version gating (optional, v2.1.163+)**: organizations can hard-gate the Claude Code version this plugin runs on via the `requiredMinimumVersion` / `requiredMaximumVersion` managed-settings keys (enterprise/team managed `settings.json`). Use these keys if your org needs to pin CC within a tested window.
 
 ## Features
 

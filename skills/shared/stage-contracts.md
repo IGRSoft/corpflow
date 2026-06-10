@@ -23,10 +23,9 @@ Every stage agent reads inputs in this order, anchor-first:
 3. Read only the listed anchors in upstream artifacts (e.g. `analyzing-N.md#decisions`, `planning-N.md#requirements`). Do **not** read whole files unless an anchor is absent.
 4. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
 
-**Run Index Resolution** (three-step resolver — see `agents/product-manager.md § Stage Artifact Naming`):
+**Run Index Resolution** (two-step resolver — see `agents/product-manager.md § Stage Artifact Naming`):
 1. `task.metadata.run_index` → `<basename>-${N}.md`.
 2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
-3. Legacy unnumbered `<basename>.md` (one release cycle fallback; log WARN when used).
 
 **Backward-compatibility fallback (F1)**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Cache benefit collapses in this mode (no cache-friendly preamble), so this is **silent cache degradation**.
 
@@ -45,15 +44,14 @@ printf '%s\t%s\t%s\t%s\n' \
 
 Then proceed with the legacy read. The fallback log is consumed by `/cost-report` to flag worktasks that lost cache hits silently.
 
-> Agents MUST NOT restate this F1 telemetry snippet, the three-step run-index resolver, or the atomic-write pseudocode in their own files — link to `#f1-telemetry`, `#run-index-resolution`, or `handoff-protocol.md#atomic-write` instead. Drift checker: `cache-lint.sh --frontmatter-template-lint`.
+> Agents MUST NOT restate this F1 telemetry snippet, the run-index resolver, or the atomic-write pseudocode in their own files — link to `#f1-telemetry`, `#run-index-resolution`, or `handoff-protocol.md#atomic-write` instead. Drift checker: `cache-lint.sh --frontmatter-template-lint`.
 
 ### #run-index-resolution
 
-Three-step resolver (canonical):
+Two-step resolver (canonical):
 
 1. `task.metadata.run_index` → `<basename>-${N}.md`.
 2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
-3. Legacy unnumbered `<basename>.md` (one release cycle fallback; log WARN when used).
 
 ### #f1-telemetry
 
@@ -69,7 +67,7 @@ Every stage's output artifact MUST:
 
 ## Contract Table
 
-All artifact paths use `<basename>-N.md` where `N = task.metadata.run_index`. Resolver: metadata → newest glob `<basename>-*.md` → legacy unnumbered (one-release fallback). See **Run Index Resolution** above.
+All artifact paths use `<basename>-N.md` where `N = task.metadata.run_index`. Resolver: metadata → newest glob `<basename>-*.md`. See **Run Index Resolution** above.
 
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|

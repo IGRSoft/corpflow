@@ -164,7 +164,7 @@ TaskUpdate({ taskId: "8", addBlockedBy: ["6", "7"] });  // FN ← QA AND DC
 
 Use `--sequential` when DC requires test results.
 
-### Monitor Tool Integration (v2.1.98+)
+### Monitor Tool Integration
 
 Use the `Monitor` tool to stream events from background processes during worktask stages. Replaces polling patterns for build output, test progress, and log streaming. Available to any agent with Bash access. Persist raw stream output to `.context/logs/<kind>-<scope>-<timestamp>.log` per the `logging-conventions` skill.
 
@@ -309,8 +309,9 @@ function stageArtifactPath(code: string, runIndex: number): string {
     return n(a) - n(b);
   });
   if (matches.length > 0) return matches.pop()!;
-  // Legacy unnumbered fallback (one release cycle)
-  return `.context/${base}.md`;
+  // No artifact on disk: return the canonical numbered path so the
+  // caller's existence check surfaces the miss at the expected location.
+  return numbered;
 }
 ```
 
@@ -936,23 +937,26 @@ before resuming.
 | PL0 `completed`, all stages `completed` except FN, FN `pending`, audit tail has `fn_gate_waiting` for FN | — | At FN gate. Re-present pre-FN summary; STOP and wait for human approval (unless `PL0.metadata.fn_gate == "bypass"`) |
 | PL0 `completed`, all stages `completed` except FN | — | Near-done. Re-enter loop; FN gate check decides whether to STOP or proceed |
 | Stages `in_progress` with no `metadata.retry_count` | missing audit lines | Stale task state. Re-derive from most recent `.context/logs/` capture |
-| Any stage `in_progress` AND `claude agents --json` shows live `agent_id` matching that stage | — | Subagent still alive (v2.1.145+). `SendMessage` to nudge rather than re-delegating. On CC v2.1.162+ read `waitingFor` first (see 3-way branch below) — only `SendMessage` when it is `approval`/`input`; leave a busy agent (`waitingFor` empty) alone |
-| Live `agent_id` matching that stage AND `waitingFor` = `approval`/`input` (v2.1.162+) | — | Agent parked **on us**. Cheap `SendMessage` reattach with the awaited answer — do not re-delegate |
-| Live `agent_id` matching that stage AND `waitingFor` = null/empty (mid-work, v2.1.162+) | — | Agent busy. **Leave it** — poll/await; do **not** double-dispatch or nudge |
+| Any stage `in_progress` AND `claude agents --json --all` shows live `agent_id` matching that stage | — | Subagent still alive. Branch on `{state, waitingFor}` (see Resume Procedure step 0) — never blind re-delegate a live agent |
+| Live `agent_id` matching that stage AND `waitingFor` = `approval`/`input` | — | Agent parked **on us**. Cheap `SendMessage` reattach with the awaited answer — do not re-delegate |
+| Live `agent_id` matching that stage AND `waitingFor` = null/empty (mid-work) | — | Agent busy. **Leave it** — poll/await; do **not** double-dispatch or nudge |
+| `agent_id` for an `in_progress` stage shows `state: blocked` | — | Alive but parked. Reattach via `SendMessage` — do not re-delegate |
+| `agent_id` absent from `claude agents --json --all` (or `state: done`) for an `in_progress` stage | — | Agent gone. Re-delegate from the first incomplete stage |
 | `state.json.workflow.run_id` present, `workflow.status:"running"`, `Workflow` tool available | audit tail has `workflow_launched`, no `workflow_returned` | Dynamic span still in flight. `resumeFromRunId = workflow.run_id` — the engine replays the cached prefix and continues from the first incomplete stage (`dynamic-workflow.md#resume`). |
-| `state.json.workflow.run_id` present, `Workflow` tool **absent** (cold resume on older CC / headless / `--print`) | `workflow_launched` present, no live engine run | Degrade to manual mode: write `dynamic_fallback`, rebuild the ledger via F4 frontmatter walk if needed, continue the manual loop from the first incomplete stage. Resume is replay-or-degrade, never rejoin. |
+| `state.json.workflow.run_id` present, `Workflow` tool **absent** (cold resume in headless `claude agents run`, SDK / `--print`) | `workflow_launched` present, no live engine run | Degrade to manual mode: write `dynamic_fallback`, rebuild the ledger via F4 frontmatter walk if needed, continue the manual loop from the first incomplete stage. Resume is replay-or-degrade, never rejoin. |
 | `state.json.workflow.run_id` present, `workflow.status:"returned"` | audit tail has `workflow_returned` | Span complete — re-enter at the FN gate (orchestrator-owned). Build the pre-FN summary from reconciled `state.json`. |
 
 ### Resume Procedure
 
-0. (Optional, CC v2.1.145+) `claude agents --json | jq '[.[] | .agent_id]'` — if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` appears in the live list, prefer `SendMessage` reattach over re-delegation. Skip silently on CC < 2.1.145 or when the command is unavailable. Eliminates the "blind respawn of an already-working subagent" token-waste class. See `skills/agent-coordination/references/headless-dispatch.md § Live Session Discovery`.
-
-   **0a. (Optional, CC v2.1.162+) `waitingFor` 3-way refinement.** When the live row carries the `waitingFor` field (`claude agents --json | jq '.[] | {agent_id, waitingFor}'`), refine the binary live-check above into three branches:
+0. `claude agents --json --all | jq '.[] | {agent_id, state, waitingFor}'` — match rows against `.context/state.json.facts.dispatched_agents[]` (`--all` also surfaces completed and just-dispatched sessions) and branch directly:
    - live + `waitingFor` = `approval`/`input` → it is parked **on us**; `SendMessage` the awaited answer (cheap nudge, no re-dispatch).
    - live + `waitingFor` = null/empty (mid-work) → **leave it**; poll/await — do **not** `SendMessage` (avoids nudging a busy agent) and do **not** re-delegate.
-   - `agent_id` **absent** from the list (done or crashed) → re-delegate from the first incomplete stage (the existing path).
+   - `state` = `blocked` → alive but parked; **reattach** via `SendMessage`, do not re-delegate.
+   - `state` = `done`, or the `agent_id` is genuinely absent even with `--all` → re-delegate from the first incomplete stage.
 
-   This is a strict refinement layered on top of step 0: on CC < 2.1.162 (or when `waitingFor` is absent) it falls through to the v2.1.145 binary behavior, which itself silent-skips on CC < 2.1.145. Two nested degrade tiers, both preserved. Eliminates two waste classes — blind respawn of a *waiting* agent and redundant nudging of a *busy* one.
+   This single pre-check eliminates three waste classes: blind respawn of an already-working subagent, redundant nudging of a busy one, and blind re-dispatch of an invisible blocked one. If the `claude agents` command is unavailable in the environment (runtime/tool fallback), skip the pre-check and re-delegate from the first incomplete stage. See `skills/agent-coordination/references/headless-dispatch.md § Live Session Discovery`.
+
+   **Authority caveat**: a `SendMessage` reattach may *nudge* a parked agent (supply an awaited answer, re-prompt) but **cannot authorize** anything — a relayed `SendMessage` does not carry the operator's permission authority (the receiver refuses relayed permission requests; auto mode blocks them). PL0 and FN gates stay operator-owned: never treat a reattach as standing in for the human approval gate.
 1. `tail -n 50 .context/logs/audit.jsonl | jq .` — last 50 audit lines
 2. `TaskList()` — current Task System state
 3. Cross-reference with `stage-contracts.md` — identify first incomplete stage
@@ -967,7 +971,7 @@ See `context-compression.md § PostCompact Recovery` for the compaction-specific
 
 The approval gates (PL0 and FN) are currently honor-system — the orchestrator
 is expected to `STOP IMMEDIATELY` and wait for the user. `PreToolUse` hooks
-(v2.1.85+) can enforce each gate programmatically. Each hook scopes its grep
+can enforce each gate programmatically. Each hook scopes its grep
 by `subject` so that PL0 approval does not satisfy the FN predicate (and vice
 versa).
 
@@ -1001,7 +1005,7 @@ commit/push/PR calls without blocking earlier stages' write/edit activity.
 
 ### Blocking Rollout (Phase 2, after observation)
 
-Change `mode: "warn"` to `mode: "deny"`. The hook returns `defer` (v2.1.89+)
+Change `mode: "warn"` to `mode: "deny"`. The hook returns `defer`
 with guidance: "Worktask awaiting user approval after PL0. Reply 'approve',
 'proceed', 'go', 'yes', or 'continue' to unblock."
 

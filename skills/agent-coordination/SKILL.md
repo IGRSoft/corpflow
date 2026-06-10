@@ -167,7 +167,7 @@ With `--worktree` mode, additional parallelism becomes safe because each issue h
 ### Native Workflow Fan-Out (`--dynamic` mode)
 
 In the opt-in `--dynamic` execution mode the autonomous span runs on Claude Code's native Workflow engine
-(`Workflow` tool, v2.1.154+), which provides **engine-managed parallelism** instead of the manual
+(`Workflow` tool), which provides **engine-managed parallelism** instead of the manual
 worktree-split above. The two are distinct mechanisms with the same isolation guarantee:
 
 | | Manual worktree-split (default) | Native Workflow fan-out (`--dynamic`) |
@@ -187,7 +187,7 @@ PL0 human gate and ALWAYS returns to the FN human gate after it.
 
 ### Parallel Tool Call Safety
 
-Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool calls. As of **v2.1.128**, failing read-only `Bash` calls (`grep`, `git diff`, `ls`, etc.) also no longer cancel siblings — only mutating `Bash` errors cascade. This makes parallel reads, searches, and shell probes more reliable within agents.
+Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool calls. Failing read-only `Bash` calls (`grep`, `git diff`, `ls`, etc.) likewise don't cancel siblings — only mutating `Bash` errors cascade. This makes parallel reads, searches, and shell probes more reliable within agents.
 
 ### Never Parallelize
 
@@ -351,15 +351,17 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 
 > Agent teams inherit the leader's model. Teammates use the parent session's model unless explicitly overridden. Model aliases (`opus`/`sonnet`/`haiku`) work correctly across all providers (Anthropic, Bedrock, Vertex, Foundry).
 
-> Named subagents appear in `@`-mention typeahead suggestions (v2.1.89+), making it easier to reference and communicate with running agents via `SendMessage`.
+> Named subagents appear in `@`-mention typeahead suggestions, making it easier to reference and communicate with running agents via `SendMessage`.
 
-> Subagents now discover project + user + plugin skills natively (v2.1.133 fix). Orchestrators no longer need to inline-load skill instructions before delegation — the child can resolve `Skill("name")` from any source the parent could.
+> **SendMessage authority hardening**: a relayed `SendMessage` does not carry the originating user's authority. Receivers **refuse relayed permission requests**, and auto mode blocks them outright. A reattach can *nudge* a parked agent (re-prompt, supply an awaited answer) but cannot *authorize* a permission escalation or stand in for a human gate. The PL0 and FN approval gates therefore stay operator-owned — never satisfy them via a relayed message.
 
-> `subagent_type` matching is case- and separator-insensitive (v2.1.140). `Task({ subagent_type: "IGRSoft:Developer" })` resolves to the same agent as `igrsoft:developer`. Bare-name → `igrsoft:` prefix convention still applies for resolution priority, but typos in case/separator no longer fail-stop the call.
+> Subagents discover project + user + plugin skills natively. Orchestrators do not need to inline-load skill instructions before delegation — the child can resolve `Skill("name")` from any source the parent could.
 
-> `claude agents` dispatch flags (v2.1.141 `--cwd`; v2.1.142 `--add-dir`, `--settings`, `--mcp-config`, `--plugin-dir`, `--permission-mode`, `--model`, `--effort`, `--dangerously-skip-permissions`) are mapped to `task.metadata` fields per the **`references/headless-dispatch.md`** translation table. PL0 populates the optional fields per `agents/product-manager.md § Optional dispatch metadata`; external runners consume them via the canonical one-liner in `commands/worktask.md § Headless dispatch`.
+> `subagent_type` matching is case- and separator-insensitive. `Task({ subagent_type: "IGRSoft:Developer" })` resolves to the same agent as `igrsoft:developer`. Bare-name → `igrsoft:` prefix convention still applies for resolution priority, but typos in case/separator no longer fail-stop the call.
 
-> `/agents` displays a tabbed layout (Running/Library tabs) with a `* N running` indicator next to agent types with live instances (v2.1.97/2.1.98).
+> `claude agents` dispatch flags (`--cwd`, `--add-dir`, `--settings`, `--mcp-config`, `--plugin-dir`, `--permission-mode`, `--model`, `--effort`, `--dangerously-skip-permissions`) are mapped to `task.metadata` fields per the **`references/headless-dispatch.md`** translation table. PL0 populates the optional fields per `agents/product-manager.md § Optional dispatch metadata`; external runners consume them via the canonical one-liner in `commands/worktask.md § Headless dispatch`.
+
+> `/agents` displays a tabbed layout (Running/Library tabs) with a `* N running` indicator next to agent types with live instances.
 
 ### Agent Naming & Collision Avoidance
 
@@ -369,7 +371,7 @@ For new agents, prefer **plugin-scoped names** (`<plugin>-<role>`, e.g. `igrsoft
 
 When authoring new agents via `/create-agent` / `/optimize-agent`, audit the `name:` field against known marketplace stems (`apple-developer:`, `security-scanning:`, `debugging-toolkit:`) before merging. `/optimize-agent § Frontmatter Audit` flags this as P1.
 
-### Monitor Tool for Background Events (v2.1.98+)
+### Monitor Tool for Background Events
 
 The `Monitor` tool streams events (stdout lines) from background scripts started
 via Bash with `run_in_background`. Event-driven — no polling loops. Tee the
@@ -393,18 +395,18 @@ capture persists after the Monitor session ends — see `logging-conventions` sk
 the returned shell ID, then attach `Monitor` to that ID. When Monitor detaches
 (timeout, stage transition), the `.log` file is still readable via `Read`.
 
-#### Stall Timeout (v2.1.113+)
+#### Stall Timeout
 
-Subagents stalled for more than 10 minutes now fail with a clear error rather
+Subagents stalled for more than 10 minutes fail with a clear error rather
 than hanging indefinitely. Monitor sessions inherit this guard — if the
 background process stops producing output for >10min, treat as failure and
 escalate per `Error Handling § Retry / Escalate Matrix`.
 
 ### MCP Large Result Handling
 
-MCP servers can annotate tool results with `_meta["anthropic/maxResultSizeChars"]` to allow results up to 500K characters without truncation (v2.1.91+). Useful for large outputs like database schemas or build logs from XcodeBuildMCP.
+MCP servers can annotate tool results with `_meta["anthropic/maxResultSizeChars"]` to allow results up to 500K characters without truncation. Useful for large outputs like database schemas or build logs from XcodeBuildMCP.
 
-### MCP Tool Inheritance (v2.1.101+)
+### MCP Tool Inheritance
 
 Subagents inherit MCP tools from MCP servers that are **already running** in the parent session at delegation time. Cross-plugin MCP tools (XcodeBuildMCP, Pencil, etc.) are available to stage agents without explicit `tools:` frontmatter entries for each MCP tool — **provided the parent has already spawned the server**.
 
@@ -422,29 +424,29 @@ MCP_UNAVAILABLE_RE = /(tool not available|server (not reachable|unavailable)|con
 
 This is a **closed list of known-transient outages**, not a catch-all. Errors outside the list (e.g., `TypeError`, schema-validation failures, assertion errors) are real bugs and MUST propagate — do not retry, do not fall back. New lazy-spawn MCPs that surface a new transient error string SHOULD extend this regex here rather than redefine the match locally.
 
-### Subagent Worktree Access (v2.1.101+)
+### Subagent Worktree Access
 
 Sub-agents in isolated worktrees automatically receive Read/Edit access to their own worktree directory. No explicit tool grant needed.
 
-### Background Subagent Partial Progress (v2.1.98+)
+### Background Subagent Partial Progress
 
-Background subagents that fail now report partial progress instead of returning nothing. Orchestrators can inspect partial results for recovery.
+Background subagents that fail report partial progress instead of returning nothing. Orchestrators can inspect partial results for recovery.
 
-### Forked Subagents (v2.1.117+)
+### Forked Subagents
 
-External builds of Claude Code can enable forked subagents by setting `CLAUDE_CODE_FORK_SUBAGENT=1`. As of v2.1.121 this also works in non-interactive sessions (SDK and `claude -p`). Use forked subagents when a stage needs a deterministic snapshot of the parent's context rather than a fresh session.
+External builds of Claude Code can enable forked subagents by setting `CLAUDE_CODE_FORK_SUBAGENT=1`. This also works in non-interactive sessions (SDK and `claude -p`). Use forked subagents when a stage needs a deterministic snapshot of the parent's context rather than a fresh session.
 
-### Subagent Worktree Isolation Reuse (v2.1.119+)
+### Subagent Worktree Isolation Reuse
 
-Agent tool with `isolation: "worktree"` no longer reuses **stale** worktrees from prior sessions — each delegation gets a fresh worktree. Removes the failure mode where a previous run's untracked files leaked into a new stage.
+Agent tool with `isolation: "worktree"` never reuses **stale** worktrees from prior sessions — each delegation gets a fresh worktree. Removes the failure mode where a previous run's untracked files leaked into a new stage.
 
-### Subagent cwd Restoration on Resume (v2.1.118+)
+### Subagent cwd Restoration on Resume
 
-Subagents resumed via `SendMessage` now correctly restore the explicit `cwd` they were spawned with. Stages that resume mid-task no longer fall back to the parent's cwd unexpectedly.
+Subagents resumed via `SendMessage` correctly restore the explicit `cwd` they were spawned with. Stages that resume mid-task do not fall back to the parent's cwd unexpectedly.
 
-### TaskList Sort Order (v2.1.119+)
+### TaskList Sort Order
 
-`TaskList` now returns tasks **sorted by ID** (was: arbitrary filesystem order). Stage agents can rely on iteration order matching creation order for stable handoff math (e.g., "the latest DV task is the highest-numbered DVN").
+`TaskList` returns tasks **sorted by ID**. Stage agents can rely on iteration order matching creation order for stable handoff math (e.g., "the latest DV task is the highest-numbered DVN").
 
 ## Coordination Patterns
 
@@ -612,11 +614,11 @@ For complex bugs with multiple potential causes:
 3. Each investigator gathers confirming/falsifying evidence
 4. Arbitrate across findings, rank by confidence and evidence strength
 
-See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, PostToolUse format-on-save safety, MCP-tool-typed hooks (v2.1.118), `duration_ms` in PostToolUse payload (v2.1.119), and PostToolUse output replacement via `updatedToolOutput` (v2.1.121)), agent teams comparison, MCP elicitation patterns, and team communication protocols (message types, anti-patterns, deadlock resolution).
+See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, PostToolUse format-on-save safety, MCP-tool-typed hooks, `duration_ms` in PostToolUse payload, and PostToolUse output replacement via `updatedToolOutput`), agent teams comparison, MCP elicitation patterns, and team communication protocols (message types, anti-patterns, deadlock resolution).
 
 ## Native Dynamic Workflows vs igrsoft Staged Worktask
 
-As of v2.1.154, Claude Code ships a native `/workflows` command and Workflow tool for **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. This is complementary to (not a replacement for) the igrsoft 11-stage worktask system:
+Claude Code ships a native `/workflows` command and Workflow tool for **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. This is complementary to (not a replacement for) the igrsoft 11-stage worktask system:
 
 | Dimension | Native dynamic workflows (`/workflows`) | igrsoft staged worktask |
 |---|---|---|
@@ -633,7 +635,7 @@ As of v2.1.154, Claude Code ships a native `/workflows` command and Workflow too
 
 They can compose: a DV agent inside an igrsoft worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
 
-> Claude now reserves multiple-choice / AskUserQuestion prompts for genuine decisions (v2.1.154). This reinforces the existing text-approval-gate design in worktask stages — the orchestrator's approval gate (after PL0) is a real decision checkpoint, not a procedural confirmation.
+> Claude reserves multiple-choice / AskUserQuestion prompts for genuine decisions. This reinforces the existing text-approval-gate design in worktask stages — the orchestrator's approval gate (after PL0) is a real decision checkpoint, not a procedural confirmation.
 
 ## Related
 

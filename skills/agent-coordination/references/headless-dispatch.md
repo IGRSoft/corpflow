@@ -9,6 +9,7 @@ External orchestrators (CI runners, batch schedulers, the user's own shell) that
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
 | `agent` | `--agent <name>` | string | N/A (in-process uses `Task({subagent_type})`) | overrides the session's `settings.json` `agent` default (v2.1.157); e.g. force `igrsoft:developer` for a one-shot run |
+| `--all` (listing flag, not a `metadata` key) | `claude agents --all` | bool | N/A (listing only) | includes **completed** sessions in `claude agents [--json]` output (v2.1.169); pair with `state` to tell `done` apart from `running`/`blocked` |
 | `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-4-8`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6` |
 | `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN/RE→`medium` |
 | `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` | **Yes — audited** (see § Permission-Mode Pinning below) | SR/FN→`default`; DV under `--auto-continue`→`bypassPermissions` |
@@ -56,18 +57,20 @@ Three usage patterns:
 
 Caveat: the CLI is stable but the JSON schema is not formally versioned — guard every read with defensive jq (`.parent_agent_id // "none"`). See § Schema Versioning Watch below.
 
-### Schema Versioning Watch (v2.1.162 baseline)
+### Schema Versioning Watch (v2.1.169 baseline)
 
-The `claude agents --json` output schema is **not formally versioned** by Claude Code as of v2.1.162. Plugin consumers must defensively guard fields.
+The `claude agents --json` output schema is **not formally versioned** by Claude Code as of v2.1.169. Plugin consumers must defensively guard fields.
 
-**Recorded baseline** (CC 2.1.162) — array of objects with these observed top-level fields:
+**Recorded baseline** (CC 2.1.169) — array of objects with these observed top-level fields:
 
 - Required: `session_id` (string), `agent_type` (string), `agent_id` (string), `started_at` (ISO-8601 string)
-- Optional: `parent_agent_id` (string), `cwd` (string), `tag` (string), `metadata` (object), `waitingFor` (string — what a live session is blocked on, e.g. `approval`/`input`; empty/null = busy mid-work; observed v2.1.162)
+- Optional: `parent_agent_id` (string), `cwd` (string), `tag` (string), `metadata` (object), `waitingFor` (string — what a live session is blocked on, e.g. `approval`/`input`; empty/null = busy mid-work; observed v2.1.162), `id` (string — stable session identifier; v2.1.169), `state` (string — lifecycle phase, e.g. `running`/`blocked`/`done`; v2.1.169)
 
 Rows additionally render a `done/total` progress count (v2.1.161) in the human-readable (non-`--json`) listing.
 
-`waitingFor` is read defensively (`.waitingFor // empty`), so its absence on CC < 2.1.162 is a no-op — an additive optional field does **not** bump min CC (per the "If the baseline shifts" rule below, which is reserved for *required* / renamed / type-changed fields). The resume loop's 3-way `waitingFor` branch (`skills/worktask/SKILL.md § Resume Procedure` step 0a) layers on top of the existing v2.1.145 binary live-check.
+> **`--all` + omission fix (v2.1.169)**: `claude agents [--json] --all` includes **completed** sessions (otherwise filtered out), and v2.1.169 fixed an earlier omission where **blocked** and **just-dispatched** sessions were silently absent from the listing. Combined with the new `state` field, a resume scan can now distinguish a `blocked` agent (reattach via `SendMessage`) from a genuinely absent one (re-delegate) — closing the "blind re-dispatch of an invisible blocked agent" waste class. See `skills/worktask/SKILL.md § Resume Procedure` step 0.
+
+`waitingFor`, `id`, and `state` are read defensively (`.waitingFor // empty`, `.id // ""`, `.state // ""`) to guard against schema drift — the listing schema is not formally versioned, and additive optional fields do **not** bump min CC (per the "If the baseline shifts" rule below, which is reserved for *required* / renamed / type-changed fields). The resume loop branches directly on `{agent_id, state, waitingFor}` (`skills/worktask/SKILL.md § Resume Procedure` step 0).
 
 **Watch protocol for future `/cc-update` runs**: in any cc-update where the CC version delta touches `claude agents` CLI surface, the prompt-engineer MUST run `claude agents --json | jq 'first | keys'` and diff the key list against this recorded baseline. Surface any drift as a Q for the operator.
 
@@ -78,7 +81,8 @@ Rows additionally render a `done/total` progress count (v2.1.161) in the human-r
   session:    (.session_id // "unknown"),
   parent:     (.parent_agent_id // "none"),
   tag:        (.tag // "untagged"),
-  waiting_for: (.waitingFor // "")   # "" = busy mid-work; "approval"/"input" = parked on us
+  waiting_for: (.waitingFor // ""),  # "" = busy mid-work; "approval"/"input" = parked on us
+  state:       (.state // "")        # "running"/"blocked"/"done" (v2.1.169)
 }
 ```
 

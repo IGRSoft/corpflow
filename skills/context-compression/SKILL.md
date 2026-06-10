@@ -297,13 +297,13 @@ When context exceeds budget:
 | Error retry | Trim non-essential context |
 | User request | Manual compression |
 | Post-compaction | Deferred tool schemas preserved — no need to re-fetch after compaction |
-| Auto-compact thrash | v2.1.89 detects when context refills immediately after compaction 3 times and stops with actionable error instead of burning API calls |
-| Focus mode | Focus view (Ctrl+O) generates self-contained summaries; v2.1.101 improves completeness |
-| Compaction duplicates | Compaction no longer produces duplicate transcript entries (fixed v2.1.97) |
+| Auto-compact thrash | CC detects when context refills immediately after compaction 3 times and stops with actionable error instead of burning API calls |
+| Focus mode | Focus view (Ctrl+O) generates self-contained summaries |
+| Compaction duplicates | Compaction does not produce duplicate transcript entries |
 
 ### PreCompact & PostCompact Hooks
 
-The `PreCompact` hook (v2.1.105+) fires **before** automatic context compaction begins. Return exit code 2 to block compaction (useful when critical stage work is in-flight and cannot afford summarization). The `PostCompact` hook (v2.1.76+) fires **after** compaction completes and is used for context recovery.
+The `PreCompact` hook fires **before** automatic context compaction begins. Return exit code 2 to block compaction (useful when critical stage work is in-flight and cannot afford summarization). The `PostCompact` hook fires **after** compaction completes and is used for context recovery.
 
 ```json
 {
@@ -381,9 +381,9 @@ execution loop from the first incomplete stage.
 See `skills/worktask/SKILL.md § Resume After Interruption` for the full state
 table and procedure.
 
-### Session Recap (v2.1.108+)
+### Session Recap
 
-Claude Code auto-generates a session recap at key moments (also available via `/recap` or `--recap` on resume). Recaps are self-contained summaries that survive compaction and can be used as handoff context between worktask sessions. Telemetry-disabled users also receive recaps (fixed v2.1.110).
+Claude Code auto-generates a session recap at key moments (also available via `/recap` or `--recap` on resume). Recaps are self-contained summaries that survive compaction and can be used as handoff context between worktask sessions. Telemetry-disabled users also receive recaps.
 
 ### Context Size Estimation
 

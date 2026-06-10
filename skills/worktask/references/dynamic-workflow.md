@@ -315,7 +315,7 @@ replay correct, which is why the script body MUST be free of timestamps/counters
 | State on reattach | Action |
 |-------------------|--------|
 | `workflow.run_id` present, `status:"running"`, `Workflow` tool available | `resumeFromRunId` — engine replays cached prefix, continues from first incomplete stage. |
-| `workflow.run_id` present, `Workflow` tool **absent** (cold resume on older CC / headless / `--print`) | Degrade to manual loop. State→Action table is authoritative; F4 frontmatter walk rebuilds ledger; continue manually from first incomplete stage. |
+| `workflow.run_id` present, `Workflow` tool **absent** (cold resume in headless `claude agents run`, SDK / `--print`) | Degrade to manual loop. State→Action table is authoritative; F4 frontmatter walk rebuilds ledger; continue manually from first incomplete stage. |
 | `workflow.run_id` present, `status:"returned"` | Span done — re-enter at the FN gate. |
 
 > **Lost live-reattach (risk).** Once a dynamic run is resumed in manual mode, the live native run is not
@@ -328,7 +328,7 @@ replay correct, which is why the script body MUST be free of timestamps/counters
 
 | Trigger | Detection | Degradation |
 |---------|-----------|-------------|
-| `Workflow` tool absent | `--dynamic` set but the `Workflow` tool is not in the orchestrator's tool list (older CC, headless `claude agents run`, SDK/`--print`) | Write `dynamic_fallback` audit row → run the **existing manual loop unchanged** (`skills/worktask/SKILL.md § Orchestrator Execution Loop`). |
+| `Workflow` tool absent | `--dynamic` set but the `Workflow` tool is not in the orchestrator's tool list (headless `claude agents run`, SDK/`--print`) | Write `dynamic_fallback` audit row → run the **existing manual loop unchanged** (`skills/worktask/SKILL.md § Orchestrator Execution Loop`). |
 | Dynamic run crashed | `workflow.status:"running"` on reattach but engine reports no live run | Resume in manual mode (see #resume). A crashed dynamic run always has a manual-mode recovery. |
 | Mid-span state.json un-patchable | Script could not merge a stage's return | **F5** (`handoff-protocol.md#fallback-paths`): reconcile from typed schema returns; else F4 frontmatter walk on return. |
 

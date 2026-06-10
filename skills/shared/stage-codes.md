@@ -12,11 +12,11 @@ Single source of truth for worktask stage codes.
 | Code | Stage | Agent | Model |
 |------|-------|-------|-------|
 | PL | Planning | product-manager | opus |
-| AR | Architecture | software-architector | opus |
+| AR | Architecture | software-architector | fable |
 | TL | Team Lead | team-lead | sonnet |
-| DV | Development | developer | opus |
+| DV | Development | developer | fable |
 | DR | Developer Review | technical-lead | sonnet |
-| SR | Security Review | security-reviewer | opus |
+| SR | Security Review | security-reviewer | fable |
 | QA | QA Testing | qa-engineer | sonnet |
 | DC | Documentation | technical-writer | haiku |
 | RE | Release Engineering | release-engineer | haiku |
@@ -32,7 +32,8 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 
 | Model | Stages |
 |-------|--------|
-| opus | PL, AR, DV, SR, FN, TC, PE, ET |
+| fable | AR, DV, SR, TC, PE, ET |
+| opus | PL, FN |
 | sonnet | TL, DR, QA, ST, IR, DS, WE |
 | haiku | DC, RE |
 
@@ -41,14 +42,14 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 | Code | Agent | Model | Invoked By |
 |------|-------|-------|------------|
 | DS | designer | sonnet | PL, AR, DV, QA |
-| TC | technical-lead | opus | AR, TL, DV, QA |
-| ET | ethics-reviewer | opus | Any stage |
-| PE | prompt-engineer | opus | Agent optimization |
+| TC | technical-lead | fable | AR, TL, DV, QA |
+| ET | ethics-reviewer | fable | Any stage |
+| PE | prompt-engineer | fable | Agent optimization |
 | WE | workflow-engineer | sonnet | Worktask troubleshooting |
 
 Support agents don't own worktask stages but can be invoked on-demand via Task tool.
 
-> Model column uses aliases (`opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-8`) are also supported in agent frontmatter. Use aliases for portability across providers. **Opus 4.8** is the latest Claude model (v2.1.154+); Opus 4.6 and Opus 4.7 remain supported. Auto mode is available for Max subscribers on Opus 4.8 and no longer requires `--enable-auto-mode` (v2.1.111).
+> Model column uses aliases (`fable`, `opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-8`) are also supported in agent frontmatter. Use aliases for portability across providers. **Fable 5** = `claude-fable-5`, the Mythos-class top reasoning model (v2.1.170+) — the `fable` alias resolves only on CC ≥ 2.1.170 and degrades to the provider default below that. **Opus 4.8** is the prior top Claude model (v2.1.154+); Opus 4.6 and Opus 4.7 remain supported. Auto mode is available for Max subscribers on Opus 4.8 and no longer requires `--enable-auto-mode` (v2.1.111).
 
 > **Default effort is now `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans (v2.1.94). Only Pro plan retains medium default. Agents with explicit `effort:` frontmatter are unaffected.
 
@@ -133,4 +134,4 @@ QA0: QA Testing        ← agents can split: QA0, QA1
 | IR | incident-N.md |
 | ET | ethics-review-N.md |
 
-N inherits from PL0's `planning-N.md` (see `agents/product-manager.md § Plan File & Run Index Naming`). Legacy unnumbered names accepted as fallback for one release.
+N inherits from PL0's `planning-N.md` (see `agents/product-manager.md § Plan File & Run Index Naming`).
