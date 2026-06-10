@@ -57,33 +57,13 @@ Invokes `skills/self-improvement/SKILL.md`. The skill handles the heavy lifting;
 
 ## Behavior
 
-### Phase 1 — Skill invocation
+The skill owns the pipeline; this command wires flags around it:
 
-1. Parse flags.
-2. Determine baseline SHA:
-   - If `--since` present, use it (verify it's a valid git ref).
-   - Else, delegate to `skills/self-improvement/scripts/detect-user-changes.sh` default resolution.
-3. Build used-in-context set:
-   - Default: via `skills/self-improvement/scripts/build-context-set.sh` (Task System + `.context/*.md` + git trailers).
-   - If `--no-scope-filter` is set, mark the set as "unbounded" so the mapper keeps every mapped proposal.
-4. Invoke the skill's classify → map → emit pipeline. Writes:
-   - `.context/learnings.md` if any proposal survives; and
-   - `.context/logs/self-improve-<ts>.log` always.
-5. Filter proposals by `--target` (post-emit): drop items whose target path doesn't match the selected kind(s).
-
-### Phase 2 — Present to user
-
-Read `.context/learnings.md` back to the user, highlighting:
-- Proposal count by confidence (high/medium).
-- Deferred count.
-- Out-of-context discard count (from log file).
-
-### Phase 3 — Apply (only when `--apply` and not `--dry-run`)
-
-1. STOP. Wait for the user to check the boxes (`- [ ]` → `- [x]`) of proposals they accept, then signal approval ("apply", "go").
-2. Re-read `.context/learnings.md`; collect checked items.
-3. Delegate to `igrsoft:prompt-engineer` with the protocol from `agents/prompt-engineer.md § Self-Improvement Patch Application`. Each applied proposal becomes its own commit with a `version:` bump on the target.
-4. Append an audit entry to `.context/logs/audit.jsonl`:
+1. Parse flags; resolve baseline (`--since` if given and valid, else `skills/self-improvement/scripts/detect-user-changes.sh` default resolution).
+2. Build used-in-context set via `skills/self-improvement/scripts/build-context-set.sh`; `--no-scope-filter` marks it unbounded (mapper keeps every mapped proposal).
+3. Run the skill's classify → map → emit pipeline — writes `.context/learnings.md` when proposals survive, `.context/logs/self-improve-<ts>.log` always. Post-filter proposals by `--target`.
+4. Present `learnings.md` to the user: proposal count by confidence (high/medium), deferred count, out-of-context discard count.
+5. **Apply phase** (only with `--apply`, never under `--dry-run`): STOP for user box-checking (`- [ ]` → `- [x]`) + explicit approval message → re-read checked items → delegate to `igrsoft:prompt-engineer` per `agents/prompt-engineer.md § Self-Improvement Patch Application` (one commit + `version:` bump per proposal) → append audit line:
    ```json
    {"actor": "command:/improve-yourself", "action": "self_improvement_applied", "applied_count": N, "skipped_count": M, "result": "ok"}
    ```
@@ -111,13 +91,7 @@ Read `.context/learnings.md` back to the user, highlighting:
 
 ## Relationship to Automatic ST Invocation
 
-This command and the ST-stage automatic invocation share the same skill and write the same `.context/learnings.md`. Use the manual command when:
-
-- You are **not** running a full `/worktask` — e.g., touching up prompts after ad-hoc edits.
-- You want to **iterate** on the proposals (re-run with `--since` or `--target` to narrow).
-- You want to **dry-run** to inspect the proposal set before committing to apply.
-
-The ST-stage invocation is the production path — this command is for tooling and iteration.
+Same skill, same `.context/learnings.md`. The ST-stage invocation is the production path; use this command outside a full worktask, to iterate on proposals (`--since`/`--target`), or to `--dry-run` the proposal set before applying.
 
 ## Constraints (DO NOT)
 

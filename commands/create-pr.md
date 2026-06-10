@@ -2,10 +2,8 @@
 name: create-pr
 description: >
   Generate a conventional commit message from staged changes and worktask
-  artifacts, commit the changes, and open a pull request to the parent branch.
-  Use this skill whenever the user wants to commit and submit a PR — especially
-  after finishing a worktask stage or feature. Trigger on: "create a PR",
-  "commit and PR", "push and open PR", "submit my changes", "finish and create PR".
+  artifacts, commit, and open a pull request to the parent branch. Trigger on:
+  "create a PR", "commit and PR", "submit my changes".
 argument-hint: '[--draft] [--base <branch>]'
 allowed-tools: Read, Glob, Grep, Bash(git *), Bash(gh *)
 model: sonnet

@@ -40,7 +40,7 @@ from this template — single source of truth.
 
 ### Writer 1 — Orchestrator pre-gate (tool-explicit)
 
-Runs as **Step 1 of the *Effect, in order* list** in `skills/worktask/SKILL.md § FN Gate` — not as a separate phase. The full procedure lives in `§ Pre-gate Conductor-attachments writer` (same FN Gate section). Three separate `test -f` trip-wires (Effect steps 2, 3, 6) wrap this writer so a skipped or partially-completed run cannot reach `return` silently. Fires on the gated path only. Goal: Conductor sees worktask-aware files even if the user never approves the gate.
+Runs as **Step 1 of the *Effect, in order* list** in `skills/worktask/references/fn-gate.md` — not as a separate phase. The full procedure lives in `fn-gate.md § Pre-gate Conductor-attachments writer` (gate detection stays in `skills/worktask/SKILL.md § FN Gate`). Three separate `test -f` trip-wires (Effect steps 2, 3, 6) wrap this writer so a skipped or partially-completed run cannot reach `return` silently. Fires on the gated path only. Goal: Conductor sees worktask-aware files even if the user never approves the gate.
 
 ### Writer 2 — FN agent post-approval
 

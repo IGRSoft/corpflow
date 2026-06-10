@@ -12,7 +12,7 @@ For per-stage token baselines, context window improvements, and ethics cost budg
 
 ## Model Cost Tiers & Selection Matrix
 
-Canonical tables live in `${CLAUDE_SKILL_DIR}/../shared/model-selection.md` (§ Cost Tiers, § Selection Matrix by Task Type). For non-Pro plans, prefer explicit `effort: medium` in frontmatter for cost-sensitive stages (QA, DC, RE). For long-running sessions that benefit from extended cache retention, set `ENABLE_PROMPT_CACHING_1H=1` to use a 1-hour prompt cache TTL (v2.1.108).
+Canonical tables live in `${CLAUDE_SKILL_DIR}/../shared/model-selection.md` (§ Cost Tiers, § Selection Matrix by Task Type). For non-Pro plans, prefer explicit `effort: medium` in frontmatter for cost-sensitive stages (QA, DC, RE). For long-running sessions that benefit from extended cache retention, set `ENABLE_PROMPT_CACHING_1H=1` to use a 1-hour prompt cache TTL.
 
 ## Per-Effort Thinking-Budget Ceilings
 
@@ -22,7 +22,7 @@ Effort levels (`low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛) map 
 |---------|-----------------|---------------------------------------------------------------|-----------------------------------------------------------|
 | `low`     | ≤ 4K tokens     | Mechanical tasks, formatting, routing, status updates           | haiku-tier supports                                          |
 | `medium`  | ≤ 16K tokens    | Standard implementation, code review, coordination             | qa-engineer, technical-writer, release-engineer              |
-| `high`    | ≤ 32K tokens    | Multi-step reasoning, default for sonnet/opus on API/Team plans | developer, technical-lead, project-manager (default since v2.1.94) |
+| `high`    | ≤ 32K tokens    | Multi-step reasoning, default for sonnet/opus on API/Team plans | developer, technical-lead, project-manager |
 | `xhigh`   | ≤ 50K tokens    | Hard tradeoffs, meta-optimization, architecture                | software-architector, security-reviewer, prompt-engineer     |
 | `max`     | ≤ 64K tokens    | Reserved for novel-domain research; cap risk of runaway thinking | (none assigned by default)                                   |
 
@@ -211,7 +211,7 @@ jq -cn --arg ts "$(date -u +%FT%TZ)" '{
 }' >> "$LOG"
 ```
 
-`CLAUDE_CACHE_READ_INPUT_TOKENS` and `CLAUDE_CACHE_CREATION_INPUT_TOKENS` are exported by Claude Code 2.1.114+ on SubagentStop alongside `CLAUDE_INPUT_TOKENS`/`CLAUDE_OUTPUT_TOKENS`. The `// "0"` fallback keeps the line valid on older runtimes (those values stay 0, and `/cost-report § Cache Performance` flags the row with an `n/a` hit ratio). `CLAUDE_EFFORT` is exported by CC 2.1.133+ (and hook stdin JSON also carries `effort.level`); on older runtimes the row gets `"unknown"` and `/cost-report § Effort Distribution` flags it accordingly.
+`CLAUDE_CACHE_READ_INPUT_TOKENS` and `CLAUDE_CACHE_CREATION_INPUT_TOKENS` are exported on SubagentStop alongside `CLAUDE_INPUT_TOKENS`/`CLAUDE_OUTPUT_TOKENS`; `CLAUDE_EFFORT` is exported too (hook stdin JSON also carries `effort.level`). The `// "0"`/`"unknown"` fallbacks keep the line valid if an env var is absent — `/cost-report` flags such rows (`n/a` hit ratio, `unknown` effort).
 
 ### Schema
 

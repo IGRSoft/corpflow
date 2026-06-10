@@ -126,73 +126,19 @@ Background activity columns require plugin v3.10.6+ audit rows. Earlier `audit.j
 
 ### Optimization Report (`--optimize`)
 
-```
-## Optimization Recommendations
-
-### High Impact
-1. **A Stage: Consider sonnet for non-critical decisions**
-   - Current: opus ($0.225)
-   - Recommended: sonnet for research, opus for final decision only
-   - Potential Savings: ~$0.15 (67%)
-
-2. **Context Compression Opportunity**
-   - Current context size: 35,000 tokens
-   - After compression: ~20,000 tokens
-   - Potential Savings: ~$0.05 (15%)
-
-### Medium Impact
-3. **Batch File Reads**
-   - Detected: 12 separate file read operations
-   - Recommendation: Batch into 3 groups
-   - Potential Savings: ~$0.02
-
-### Model Usage Summary
-| Model | Invocations | Tokens | Cost |
-|-------|-------------|--------|------|
-| haiku | 5 | 3,000 | $0.001 |
-| sonnet | 12 | 27,000 | $0.081 |
-| opus | 3 | 15,000 | $0.225 |
-```
+Emit `## Optimization Recommendations` grouped **High Impact** / **Medium Impact** — each item: current state, recommendation, estimated savings ($, %) — plus a `### Model Usage Summary` table (`Model | Invocations | Tokens | Cost`). Source the strategies from `skills/cost-optimization/SKILL.md` (model downgrade per task type, context compression at thresholds, batched reads).
 
 ### Stage Detail (`--stage D`)
 
-```
-## D Stage Cost Detail
-
-### Summary
-| Metric | Value |
-|--------|-------|
-| Total Tokens | 18,500 |
-| Model | sonnet |
-| Cost | $0.056 |
-| Duration | 8 minutes |
-
-### Operation Breakdown
-| Operation | Tokens | Cost |
-|-----------|--------|------|
-| Code analysis | 5,000 | $0.015 |
-| Implementation | 8,500 | $0.026 |
-| Self-review | 3,000 | $0.009 |
-| Formatting | 2,000 | $0.006 |
-
-### Context Usage
-- Input context: 12,000 tokens
-- Output generated: 6,500 tokens
-- Overhead: ~2,000 tokens (system, formatting)
-```
+Emit `## <Stage> Cost Detail` with: `### Summary` (Total Tokens, Model, Cost, Duration), `### Operation Breakdown` (per-operation tokens + cost from that stage's cost-*.jsonl rows), `### Context Usage` (input context / output generated / overhead).
 
 ## Cost Calculation
 
-### Formula
-
 ```
-Stage Cost = (Input Tokens + Output Tokens) × Model Rate
-
-Model Rates (per 1M tokens):
-- haiku: $0.25 input, $1.25 output
-- sonnet: $3.00 input, $15.00 output
-- opus: $15.00 input, $75.00 output
+Stage Cost = (Input Tokens × input rate) + (Output Tokens × output rate)
 ```
+
+Model rates: canonical table in `skills/shared/model-selection.md § Cost Tiers` — do not hardcode rates here; pull current `$/1M` from `/model` when the table lags.
 
 ### Budget Tracking
 
@@ -224,41 +170,14 @@ Model Rates (per 1M tokens):
 
 ## Examples
 
-### Basic Cost Report
+```bash
+/cost-report                          # summary for current worktask
+/cost-report --stage A                # per-stage detail
+/cost-report --optimize               # + actionable recommendations
+/cost-report --budget-alert 60%      # alert at 60% budget consumption
+/cost-report --export                 # writes cost-report.csv to .context/
+/cost-report --compare <task-id>      # side-by-side with another worktask
 ```
-/cost-report
-```
-Shows summary for current worktask.
-
-### Stage-Specific Analysis
-```
-/cost-report --stage A
-```
-Detailed breakdown for Architecture stage.
-
-### With Optimization Suggestions
-```
-/cost-report --optimize
-```
-Includes actionable recommendations for cost reduction.
-
-### Set Budget Alert
-```
-/cost-report --budget-alert 60%
-```
-Alert when 60% of budget is consumed.
-
-### Export for Tracking
-```
-/cost-report --export
-```
-Generates `cost-report.csv` in `.context/`.
-
-### Compare Tasks
-```
-/cost-report --compare previous-task-id
-```
-Side-by-side comparison with another worktask.
 
 ## Data Source
 

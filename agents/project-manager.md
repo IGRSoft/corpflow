@@ -157,7 +157,7 @@ Before marking FN stage complete, verify:
 
 ## Handoff Protocol
 
-Required Inputs (anchor-first reads + F1 fallback), Completion Verification, run-index resolver, and atomic-write rules live in `skills/shared/stage-contracts.md § Required Inputs (handoff-protocol)` and `§ Completion Verification (handoff-protocol)`. Do not restate them here. Canonical per-stage template: `stage-contracts.md#tpl-fn`. Prev→this label: `RE→FN` (or `DC→FN` when RE is absent).
+Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-fn`. Prev→this label: `RE→FN` (or `DC→FN` when RE is absent).
 
 ### Frontmatter for this stage (FN)
 

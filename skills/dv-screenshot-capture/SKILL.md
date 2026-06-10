@@ -1,13 +1,9 @@
 ---
 name: dv-screenshot-capture
 description: |
-  Capture screenshots during the DV (Development) stage and attach them to the PR as visual evidence
-  for QA acceptance and DR review. Use this skill whenever DV needs to produce visual artifacts of
-  implemented work — UI screens after code changes, CLI output for backend/meta-work, before/after pairs
-  for bug fixes, or annotated diff renders when no UI surface exists. ALWAYS use this skill when DV
-  is about to complete and `metadata.requires_screenshots` is true (default), even if the user did not
-  explicitly ask for screenshots; the completion gate fails otherwise. Also use it when QA or DR ask
-  for visual evidence retroactively, or when a previous worktask run's screenshots need refreshing.
+  Capture screenshots during the DV stage and attach to the PR as visual evidence for QA and DR.
+  ALWAYS use this skill when DV is about to complete and `metadata.requires_screenshots` is true
+  (default) — the completion gate fails otherwise.
 version: 1.0.0
 effort: medium
 argument-hint: "<worktask_id> <platform> <slug> [args-json]"

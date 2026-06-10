@@ -62,7 +62,7 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--milestone:N:ISSUE` | Execute specific issue |
 | `--parallel:N` | N concurrent tracks (max 5) |
 | `--auto-continue` | Skip approval gates |
-| `--dynamic` | Run the autonomous span (AR→…→QA/DC/RE, between the PL0 and FN human gates) on Claude Code's native Workflow engine (`ultracode` tool) instead of the manual stage loop. Opt-in and additive; both human gates and the no-self-commit rule stay orchestrator-owned. Degrades to the manual loop when the `ultracode` tool is absent (headless `claude agents run`, SDK / `--print`). The plugin flag stays `--dynamic`. See `skills/worktask/references/dynamic-workflow.md`. |
+| `--dynamic` | Run the autonomous span (AR→…→QA/DC/RE, between the two human gates) on the native Workflow engine (`ultracode` tool). Both gates and the no-self-commit rule stay orchestrator-owned; degrades to the manual loop when the tool is absent. See `skills/worktask/references/dynamic-workflow.md`. |
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
@@ -74,24 +74,10 @@ See `skills/shared/stage-codes.md` for stage details.
 ## Examples
 
 ```bash
-# Milestone mode
-/worktask --milestone:1
-/worktask --milestone:1 --parallel:3
-/worktask --milestone:2:123
-
-# Worktree mode (true parallel isolation)
-/worktask --milestone:1 --worktree
-/worktask --milestone:1 --worktree --parallel:3
-
-# Standard mode
-/worktask "Add dark mode support"
-/worktask "Fix login crash" --priority High
-
-# Secure worktask
-/worktask "Implement OAuth" --secure
-
-# Emergency
-/emergency "Production login failing"
+/worktask --milestone:1                  # Milestone mode (compose with --parallel:N, :ISSUE)
+/worktask --milestone:1 --worktree       # Worktree mode (true parallel isolation)
+/worktask "Add dark mode support"        # Standard mode (compose with --priority, --secure)
+/emergency "Production login failing"    # Emergency
 ```
 
 ## Phase 1: Planning (execute immediately)
@@ -167,38 +153,28 @@ approval is confirmed):
     fi
 
 - The trailing `; true` is mandatory — the helper is non-blocking by contract.
-  A helper failure (exit 1, deferred exit 0, network error) MUST NEVER fail the
-  worktask.
-- The helper self-skips when it should: `--no-gh-issue` (`metadata.no_gh_issue`
-  set), milestone mode (`metadata.milestone` / `workspace.json`), already
-  published (`metadata.github_issue_url` set), missing `gh`/auth/remote — each
-  exits 0 and audits a `deferred` row.
+  A helper failure MUST NEVER fail the worktask.
+- The helper self-skips (`--no-gh-issue`, milestone mode, already published,
+  missing `gh`/auth/remote) — each exits 0 and audits a `deferred` row.
+  Sanitiser rules + non-blocking guarantee: `skills/worktask/SKILL.md § PL Issue Publish`.
 - This step is NOT optional. Do not skip it because SKILL.md describes it —
   the orchestrator MUST run the command above as written.
 
-See `skills/worktask/SKILL.md § Step 6.5` and `§ PL Issue Publish` for the
-sanitiser rules and non-blocking guarantee.
-
 **Step B — Select execution mode** (after Step A, before/around the stage loop):
 
-Read `PL0.metadata.execution_mode` (default `"manual"` when absent — in-flight worktasks stay manual).
+Read `PL0.metadata.execution_mode` (default `"manual"` when absent).
 
-- **If `execution_mode == "dynamic"` AND the `ultracode` tool is present** in the orchestrator's tool list:
-  dispatch the autonomous span (AR → … → QA/DC/RE, stopping before FN) on the native Workflow engine per
-  `skills/worktask/references/dynamic-workflow.md` (`#script-template` single-issue; `#milestone-template`
-  for `--milestone:N` — which requires the R1 one-confirmation multi-PR guard BEFORE any lane runs). Write a
-  `workflow_launched` audit row, then on workflow return run the boundary reconciliation
-  (`dynamic-workflow.md#boundary-reconciliation`) and a `workflow_returned` audit row. **Then evaluate the
-  FN gate exactly as in the manual loop** (`skills/worktask/SKILL.md § FN Gate`) — the workflow span never
-  crosses FN; commit/push/PR remains the human-gated FN stage.
-- **Otherwise** (`execution_mode == "manual"`, OR `--dynamic` was set but the `Workflow` tool is absent —
-  headless `claude agents run`, SDK/`--print`): when `--dynamic` was requested but unavailable,
-  write a `dynamic_fallback` audit row first, then run the manual loop below unchanged. A crashed dynamic
-  run also resumes in manual mode (`dynamic-workflow.md#resume`).
+- **Dynamic** (`execution_mode == "dynamic"` AND the `ultracode` tool present): dispatch the autonomous
+  span (AR→…→QA/DC/RE, stopping before FN) per `skills/worktask/references/dynamic-workflow.md`
+  (`#script-template`; `#milestone-template` + R1 one-confirmation multi-PR guard for `--milestone:N`).
+  Audit `workflow_launched`; on return run `#boundary-reconciliation` + audit `workflow_returned`;
+  **then evaluate the FN gate exactly as in the manual loop** — the span never crosses FN.
+- **Otherwise** run the manual loop below unchanged; if `--dynamic` was requested but the tool is absent,
+  write a `dynamic_fallback` audit row first. Crashed dynamic runs resume in manual mode
+  (`dynamic-workflow.md#resume`).
 
-The PL0 gate above and the FN gate below are **orchestrator-owned in both modes** — the dynamic branch only
-changes how the gate-free AR→…→QA span executes. The two APPROVAL PROTOCOL blocks at the top of this file
-are unaffected.
+Both gates are **orchestrator-owned in both modes**; the APPROVAL PROTOCOL blocks at the top of this
+file are unaffected.
 
 Execute the orchestrator execution loop from `skills/worktask/SKILL.md § Orchestrator Execution Loop`. The loop enforces a second approval gate immediately before any FN-stage task — see `skills/worktask/SKILL.md § FN Gate` for the pre-FN summary template and bypass semantics.
 
@@ -216,19 +192,15 @@ if [ "$_orch_root" != "$_task_root" ]; then
 fi
 ```
 
-The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line of every stage prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to target. See `skills/worktask/SKILL.md § Conductor Workspace Topology` for the failure mode this guard prevents.
+The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line of every stage prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to target. See `skills/worktask/references/workspace-modes.md § Conductor Workspace Topology` for the failure mode this guard prevents.
 
-**BINDING: Post-delegation state.json enforcement** — After every `Task()` return and before `TaskUpdate(stage→completed)`, the orchestrator MUST:
-1. Re-read `.context/state.json` and check `stages.<CODE>.status`.
-2. If status is NOT `completed`, invoke the state-merge hook synchronously:
+**BINDING: Post-delegation state.json enforcement** — After every `Task()` return, before `TaskUpdate(stage→completed)`: re-read `.context/state.json`; if `stages.<CODE>.status` is NOT `completed`, run
    ```bash
    CLAUDE_ARTIFACT_PATH=".context/<artifact>-N.md" \
    CLAUDE_TASK_METADATA_STAGE="<CODE>" \
    bash .claude/hooks/state-merge.sh
    ```
-3. Re-read state.json again. If STILL not `completed`, apply the orchestrator's own F3 fallback (derive minimal patch from agent return text).
-
-This guarantees Layer 2 fires even if the SubagentStop hook event was not delivered (e.g. non-plugin environments). See `skills/worktask/SKILL.md § Step 6.5`.
+   then re-read; if STILL not `completed`, apply the F3 fallback (derive minimal patch from agent return text). This covers environments where the SubagentStop hook never fired. Full three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5.
 
 ## Phase 3: Post-Worktask Self-Improvement
 

@@ -378,8 +378,8 @@ After compaction, the orchestrator's next turn reads the most recent
 `post-compact-*.json`, follows the `resume_guide_ref`, and continues the
 execution loop from the first incomplete stage.
 
-See `skills/worktask/SKILL.md § Resume After Interruption` for the full state
-table and procedure.
+See `skills/worktask/references/resume.md` for the full state table and
+procedure (stub: `skills/worktask/SKILL.md § Resume After Interruption`).
 
 ### Session Recap
 

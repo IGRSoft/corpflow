@@ -90,66 +90,19 @@ Each task includes `metadata.agent` for executor resolution. See `initialization
 
 ### Budget estimate (dynamic mode)
 
-When the worktask runs with `--dynamic` (`PL0.metadata.execution_mode == "dynamic"`), PL0 additionally emits a **budget estimate** for the autonomous span: a per-stage token/cost estimate summed across AR→…→QA/DC/RE, recorded at `state.json.workflow.budget.estimate_usd`. The orchestrator derives a headroom `ceiling_usd` from it and passes the ceiling to the native Workflow engine; when the engine reaches the ceiling it pauses (not kills) the run and surfaces the pause to the operator. Budget is best-effort — it bounds spend, it does not guarantee completion. See `references/dynamic-workflow.md#budget`. In manual mode this estimate is unused.
+Dynamic mode only: PL0 emits a per-stage budget estimate at `state.json.workflow.budget.estimate_usd`; the orchestrator derives a `ceiling_usd` headroom for the engine (reaching it pauses, not kills, the run). Best-effort — bounds spend, does not guarantee completion. Detail: `references/dynamic-workflow.md#budget`. Unused in manual mode.
 
 ## Workspace Mode
 
-When using `--milestone:N`, each ticket executes in an isolated workspace.
+`--milestone:N` tickets run in isolated workspaces. `.context/` base path by mode (resolve via `task.metadata.workspace_path` + `metadata.isolation`):
 
-### Workspace Detection
+| Mode | `.context/` base |
+|------|------------------|
+| Standard | `.context/` |
+| Workspace (legacy) | `.workspaces/milestone-{N}/{issue#}/.context/` |
+| Worktree | `.worktrees/milestone-{N}/{issue#}/.context/` |
 
-```typescript
-const task = TaskGet({ taskId: currentTaskId });
-const workspacePath = task.metadata?.workspace_path;
-const isolation = task.metadata?.isolation;  // 'worktree' or undefined
-
-if (isolation === 'worktree') {
-  // WORKTREE MODE: workspace_path IS the worktree directory
-  // All git operations happen inside the worktree
-  // .context/ lives inside the worktree alongside source files
-  const contextPath = `${workspacePath}/.context`;
-} else if (workspacePath) {
-  // LEGACY WORKSPACE MODE: directory-based artifact isolation only
-  const contextPath = `${workspacePath}/.context`;
-} else {
-  // STANDARD MODE: project root
-  const contextPath = '.context';
-}
-```
-
-### Path Resolution
-
-| Mode | Base Path | Git Operations | Source Isolation |
-|------|-----------|----------------|------------------|
-| Standard | `.context/` | Main working directory | None |
-| Workspace (legacy) | `.workspaces/milestone-{N}/{issue#}/.context/` | Shared working directory | Artifacts only |
-| Worktree | `.worktrees/milestone-{N}/{issue#}/.context/` | Dedicated worktree | Full (git + artifacts) |
-
-### Conductor Workspace Topology
-
-When CC spawns a worktask session inside a Conductor-managed workspace clone
-(e.g. `/Users/<user>/conductor/workspaces/<plugin>/<workspace-id>/`), the
-canonical plugin source directory (e.g. `/Users/<user>/Projects/igrsoft/company-worktask/`)
-is a SIBLING repo on a different branch and MUST NOT be edited.
-
-Rule: all `Edit`/`Write` calls MUST target paths under `git rev-parse --show-toplevel`
-of the current session, NOT paths under the canonical plugin source.
-
-Orchestrator enforcement:
-1. Before every `Task()` delegation, resolve `WORKSPACE_ROOT = $(git rev-parse --show-toplevel)`.
-2. Inject `WORKSPACE_ROOT=<path>` as the FIRST LINE of the stage prompt banner (section [7]).
-3. Never allow absolute paths from outside `WORKSPACE_ROOT` in stage prompts — rewrite them as `$WORKSPACE_ROOT/<relative>`.
-
-Failure mode: edits in the sibling repo land on the wrong branch, are not visible to `git diff` in the workspace, require manual `cp` surgery, and corrupt the source repo's working tree.
-
-### Task ID Namespacing
-
-| Track | Task IDs |
-|-------|----------|
-| Track 1 | `t1-1`, `t1-2`, ... |
-| Track N | `t{N}-1`, `t{N}-2`, ... |
-
-See `../worktask-milestone/SKILL.md` for full workspace documentation.
+**WHEN in milestone/worktree mode, inside a Conductor workspace clone, or on any cwd↔workspace_path mismatch: Read `references/workspace-modes.md`** (detection snippet, Conductor sibling-repo rule, task-ID namespacing). Binding enforcement (workspace-root cross-check + `WORKSPACE_ROOT` banner injection) lives in `commands/worktask.md` Phase 2. Full milestone docs: `../worktask-milestone/SKILL.md`.
 
 ## Parallel Execution
 
@@ -467,7 +420,8 @@ while (tasks.some(t => t.status !== "completed")) {
     }
 
     // 4.9. FN approval gate — STOP before any FN-stage task unless bypassed
-    //      See § FN Gate below for the pre-FN summary template.
+    //      See § FN Gate stub below — Read references/fn-gate.md at gate time
+    //      for the 6-step procedure and the pre-FN summary template.
     if (full.metadata.stage === "FN") {
       const pl0 = tasks.find(t => t.metadata?.stage === "PL");
       const gateModeRaw = pl0?.metadata?.fn_gate;
@@ -498,7 +452,8 @@ while (tasks.some(t => t.status !== "completed")) {
         // (c) Write `fn_gate_waiting` audit line.
 
         // 4.9.1. Pre-gate Conductor-attachments writer
-        //        See § Pre-gate Conductor-attachments writer for the imperative checklist.
+        //        Imperative checklist: references/fn-gate.md § Pre-gate
+        //        Conductor-attachments writer (Read at gate time, step 1 of 6).
 
         // (d) End the orchestrator turn — wait for HUMAN approval.
         return;  // exits the entire execution loop; resume happens in a fresh turn
@@ -740,299 +695,30 @@ new trigger block when introducing one (e.g., Pencil, Sosumi).
 
 ## FN Gate
 
-A second human-in-the-loop checkpoint immediately before any FN-stage task. The orchestrator MUST present a pre-FN summary and STOP unless the PL0 task carries `metadata.fn_gate = "bypass"`.
+A second human-in-the-loop checkpoint immediately before any FN-stage task: present the pre-FN summary and STOP unless `PL0.metadata.fn_gate == "bypass"` (default `required`, fail-closed; bypass set by `--auto-continue` / `--milestone:N` / `--worktree`). Detection + bypass-audit logic is complete in loop step 4.9 above; in dynamic mode the gate fires on workflow return with identical ownership, bypass semantics, and template.
 
-> **Dynamic mode**: when `PL0.metadata.execution_mode == "dynamic"`, this gate fires on **workflow return** (the native Workflow span stops before FN). The pre-FN summary is built from the **reconciled `state.json`** (`dynamic-workflow.md#boundary-reconciliation`) exactly as in manual mode — the gate's ownership, bypass semantics, and template are identical. The workflow never commits, pushes, or opens a PR; FN remains orchestrator-owned and human-gated.
-
-### Gate semantics
-
-- **Carrier**: `PL0.metadata.fn_gate ∈ {"required", "bypass"}`. PL0 sets the value at worktask init based on invocation flags (see `commands/worktask.md` Phase 1, step 4).
-- **Default**: missing or unrecognized value → treat as `"required"` (`?? "required"`). This makes in-flight worktasks safe across the change.
-- **Bypass triggers**: `--auto-continue`, `--milestone:N`, `--worktree`. (`/emergency` is a documented TODO — not yet wired.)
-- **Trigger condition**: gate fires when the next ready task has `metadata.stage === "FN"` AND `gateMode !== "bypass"`.
-- **Effect, in order** (6 steps — none skippable, none reorderable):
-  1. **Run the Pre-gate writer** (full procedure in *Pre-gate Conductor-attachments writer* subsection below). Produces both attachment files on disk. Do this **first**, before composing the summary or anything else — the summary template in this same section references both files as `[x]` Planned FN actions, and printing it while files are absent misleads the user.
-  2. **Verify pre-seed** — `Bash: test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md"`. On success → append `fn_attachments_preseed` audit line. On failure → append `fn_attachments_preseed_failed`, re-run step 1 once, then re-verify. If the second verify still fails, prepend `> WARN: attachment pre-seed failed — Conductor will use built-in defaults.` to the summary in step 4 so the user sees it before approving.
-  3. **Hard precondition for printing the summary**: do not proceed past this point until step 2 has succeeded (or its WARN has been queued for the summary). The summary describes the writer's outputs; emitting it while the outputs are silently missing is a soft failure with no recovery (Conductor caches the absent state).
-  4. **Print the pre-FN summary** (template at end of this section).
-  5. **Append `fn_gate_waiting`** audit entry.
-  6. **Re-verify, then `return`** — immediately before `return`, run `Bash: test -f` once more on both paths. On failure, append `fn_attachments_missing_at_return` audit line AND prepend a visible WARN to your final user message (this catches a writer that ran but wrote to the wrong path or was clobbered between step 2 and step 6). Then `return` from the execution loop. The FN task stays `pending`. The orchestrator MUST NOT call `TaskUpdate` for the FN task.
-
-### Pre-gate Conductor-attachments writer
-
-**Why this exists.** The two files this writer produces are how Conductor's *Create PR* / *Request Review* actions inherit worktask context in later sessions — DR/QA verdicts, resolved base branch, conventional-commit type, link to `complete-summary-N.md`. If they are absent, Conductor falls back to generic built-in templates and the FN agent (running post-approval) has no canonical script to follow. **Skipping this writer silently breaks the handoff — there is no recovery once the gate has returned**, because Conductor will cache the absent state for the duration of the next session. That is why the *Effect, in order* list above wraps this writer in three separate `test -f` checks (steps 2, 3, 6).
-
-The writer is unconditional on the gated path; bypass path falls through to FN-agent Writer 2 (in `agents/project-manager.md § FN Stage`). It is idempotent: every FN-gate entry overwrites both files from scratch. Run it directly — do not delegate to a subagent.
-
-Steps:
-
-1. **Gather all git state in one Bash call** (single tool invocation reduces the chance of abandoning mid-sequence; parse the four values from the output):
-
-   ```bash
-   mkdir -p .context/attachments
-   echo "BRANCH=$(git rev-parse --abbrev-ref HEAD)"
-   echo "BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo main)"
-   echo "UNCOMMITTED=$(git status --porcelain | wc -l | tr -d ' ')"
-   echo "UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo 'no upstream')"
-   ```
-
-2. `Read: <plan_file>` (resolve via `FN0.metadata.plan_file`; fallback newest `.context/planning-*.md`) → derive COMMIT_TYPE from first match of `\b(fix|refactor|perf|docs|chore|test|ci|build|style|feat)\b` (default `feat`).
-3. `Read: .context/developer-review-N.md` (N = `FN0.metadata.run_index`) → DR_VERDICT, DR_CONCERNS.
-4. `Read: .context/testing-N.md` → QA_VERDICT, QA_NOTES.
-5. `Write: .context/attachments/PR instructions.md` using template in `skills/worktask/references/conductor-attachments.md § Template — PR instructions.md`.
-6. `Write: .context/attachments/Review request.md` using template in `skills/worktask/references/conductor-attachments.md § Template — Review request.md`.
-
-Verification is owned by the *Effect, in order* list (step 2 immediately after this writer, step 6 immediately before `return`). Do not skip those — they exist because partial writer completion has happened in practice.
-
-**Fault tolerance — per-input policy** (each Read is independent; do NOT wrap the whole sequence in a single try/catch — failure of one optional input must not skip the Writes):
-
-| Input | Required? | If missing |
-|-------|-----------|-----------|
-| Plan file (step 2) | **Required** | Abort writer. Audit `fn_attachments_preseed_failed` with `reason: "plan_file_missing"`. The *Effect, in order* step 2 trip-wire will surface this to the user; do not write empty templates. |
-| `developer-review-N.md` (step 3) | Optional | Defaults: `DR_VERDICT="unknown"`, `DR_CONCERNS="(none flagged)"`. Proceed to write. |
-| `testing-N.md` (step 4) | Optional | Defaults: `QA_VERDICT="unknown"`, `QA_NOTES="(none)"`. Proceed to write. |
-
-### `return` vs `continue`
-
-The gate uses `return` (exit the loop), not `continue` (skip to next iteration). Rationale: any other ready task would also re-enter the loop on the next turn anyway, and exiting avoids partial side-effects (e.g., starting a sibling task while the user is reviewing the FN summary). Mirrors the PL0 gate pattern.
-
-### Resume after approval
-
-On the next orchestrator turn (triggered by the user's `approve`/`go`/`yes`/`continue`/`proceed` message):
-
-1. Re-enter the loop. The FN task is still `pending`.
-2. The gate check runs again. If the user adjusted PL0 metadata (e.g., set `fn_gate = "bypass"`), the gate now passes.
-3. Otherwise: treat the user's most recent approval message as FN approval and proceed past the gate. Disambiguation: only one gate can be active at a time — PL0 is `completed` and no stage task is `in_progress`, so the approval can only be FN.
-4. Write an `approval_received` audit entry with `subject: "FN"`.
-
-### Pre-FN summary template
-
-**Hard precondition (do not skip).** Before printing this summary, run:
-
-```bash
-test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md" && echo OK
-```
-
-If you do not see `OK`, run the *Pre-gate Conductor-attachments writer* above, then re-check. The summary lists those two file writes as `[x]` Planned FN actions — emitting it while either file is absent is a soft failure that the user has no way to detect, and Conductor will inherit the absent state into the next session. Only proceed past this check after `OK` is observed (or, on a second failure, after queuing the `> WARN:` line per *Effect, in order* step 2).
-
-Replace each `- [ ]` with `- [x]` for any Planned FN action whose output already exists on disk — the two attachment writes should now be `[x]`. Build the rest directly from artifacts written by upstream stages — no agent roundtrip needed.
-
-```
-## FN gate — review before push
-
-### Change surface
-- N commits on branch `<branch>`: <short shas + titles>
-- Target: PR against `<base-branch>`
-- Net diff: +X / -Y lines across N files
-
-### Quality evidence
-- QA verdict: <GO/NO-GO>           (.context/testing-N.md)
-- DR verdict: <PASS/CONCERNS>      (.context/developer-review-N.md)
-- Tests: <M passed / N failed>
-
-### Planned FN actions
-- [ ] Write `.context/attachments/PR instructions.md` (Conductor attachment)
-- [ ] Write `.context/attachments/Review request.md` (Conductor attachment)
-- [ ] Write `.context/complete-summary-N.md` (worktask summary + stage timings)
-- [ ] Create commit(s) with conventional-format messages
-- [ ] Push branch with upstream tracking
-- [ ] Open PR against <base-branch> with Motivation / Changes / Notes
-
-Reply `approve` to proceed, or describe any changes needed.
-```
-
-Source files (per `skills/shared/stage-contracts.md`):
-
-| Field | Source |
-|-------|--------|
-| Branch / commits | `git status` + `git log <base>..HEAD --oneline` |
-| QA verdict | `.context/testing-N.md` (GO/NO-GO line; N from run_index) |
-| DR verdict | `.context/developer-review-N.md` (PASS/CONCERNS; N from run_index) |
-| Diff stats | `git diff <base>..HEAD --shortstat` |
-| Base branch | `workspace.json § base_branch` (milestone) or repo default |
-
-### User amendment at the gate
-
-If the user replies with edits instead of `approve` (e.g., "change the commit message to X"), the orchestrator:
-
-1. Updates the FN task description via `TaskUpdate({taskId, description: ...})`.
-2. Re-builds and re-presents the pre-FN summary.
-3. STOPs again. The FN task remains `pending` throughout.
-
-### Post-amendment audit
-
-Each gate transition writes an audit line:
-
-```json
-{"actor":"orchestrator","action":"fn_gate_waiting","subject":"FN0","result":"pending"}
-{"actor":"orchestrator","action":"approval_received","subject":"FN0","result":"ok"}
-```
-
-Bypassed gates write a single line:
-
-```json
-{"actor":"orchestrator","action":"fn_gate_bypass","subject":"FN0","result":"ok","reason":"auto-continue|milestone|worktree"}
-```
+**WHEN the gate fires — Read `references/fn-gate.md` BEFORE printing anything** and follow its 6-step "Effect, in order" list (pre-gate attachments writer → verify pre-seed → summary precondition → pre-FN summary → `fn_gate_waiting` → re-verify + `return`). The same file covers the Pre-gate Conductor-attachments writer, `return` vs `continue`, resume-after-approval, user amendment, and gate audit lines.
 
 ## Post-Worktask Self-Improvement
 
-After the execution loop exits (all tasks completed, including ST), the orchestrator runs a final check to handle any learnings captured at ST.
-
-### Post-ST Procedure
-
-1. **Check for learnings artifact:** `fs.existsSync(".context/learnings.md")`.
-   - Absent → nothing to do. Worktask complete.
-   - Present → continue.
-
-2. **Surface to user:** read `.context/learnings.md` and present it to the user. Focus attention on the `## Proposed Updates` checklist.
-
-3. **Wait for user approval decisions.** The user indicates which proposals to accept by checking boxes (`- [ ]` → `- [x]`). The orchestrator MUST NOT auto-check boxes or assume approval.
-
-4. **Read checked items:** parse `.context/learnings.md` for lines matching `- [x]` under `## Proposed Updates`. Each checked item is a proposal to apply.
-   - If zero checked items → skip to step 6.
-
-5. **Delegate to prompt-engineer** with one `Agent` call carrying the full list of checked proposals:
-   ```typescript
-   Task({
-     subagent_type: "igrsoft:prompt-engineer",
-     model: "opus",
-     prompt: `Apply self-improvement learnings from .context/learnings.md.
-              Apply ONLY checked items (- [x]). Follow the Apply Protocol in your agent definition.
-              Do not propose new changes; only apply approved ones.
-              Return a summary of applied/skipped proposals and the commit SHAs created.`
-   });
-   ```
-   The prompt-engineer applies each proposal as its own commit with a `version:` bump (see `agents/prompt-engineer.md § Self-Improvement Patch Application`).
-
-6. **Audit entry:** append one line to `.context/logs/audit.jsonl`:
-   ```json
-   {"actor": "orchestrator", "action": "self_improvement_applied", "subject": "<worktask_id>", "applied_count": N, "skipped_count": M, "result": "ok"}
-   ```
-
-7. **Terminate.** Worktask is now fully complete. Do not re-enter the execution loop.
-
-### Safety invariants
-
-- DO NOT apply proposals the user did not explicitly check.
-- DO NOT re-run self-improvement on the orchestrator's own post-ST activity (no recursion).
-- DO NOT modify `.context/learnings.md` after ST produced it; the prompt-engineer only reads it.
-- If `learnings.md` is malformed (no `## Proposed Updates` section) → log warning, skip apply, continue to terminate.
+After the execution loop exits (all tasks completed, including ST): if `.context/learnings.md` exists, Read `references/fn-gate.md § Post-Worktask Self-Improvement` and follow the Post-ST procedure (surface learnings → user checks boxes → delegate checked items to prompt-engineer → audit → terminate). Absent → worktask complete. Never apply unchecked proposals.
 
 ## Resume After Interruption
 
-The orchestrator loop is restartable. On reattach (PostCompact, session crash,
-`--resume` flag), diagnose state via `TaskList()` + `.context/logs/audit.jsonl` tail
-before resuming.
-
-### State → Action Table
-
-| TaskList Shape | Audit Tail | Action |
-|----------------|------------|--------|
-| No tasks | — | Worktask never initialized. Start over with `/worktask <task>` |
-| PL0 only, `pending` | — | PL0 not started. Delegate PL0 and wait for approval |
-| PL0 only, `in_progress` | no `subagent_stopped` for PL0 | PL0 crashed mid-stage. Re-delegate PL0 (idempotent) |
-| PL0 `completed`, no stage tasks | — | PL0 did not create stages. Re-run PL0 |
-| PL0 `completed`, stage tasks `pending`, no `approval_received` line | — | Awaiting user approval. STOP and prompt user |
-| PL0 `completed`, `approval_received` present, some stages `in_progress` | most recent `subagent_stopped` `result: error` | Mid-stage failure. Read `.context/errors/<agent>.md`, honor `retry_count` |
-| PL0 `completed`, all stages `completed` except FN, FN `pending`, audit tail has `fn_gate_waiting` for FN | — | At FN gate. Re-present pre-FN summary; STOP and wait for human approval (unless `PL0.metadata.fn_gate == "bypass"`) |
-| PL0 `completed`, all stages `completed` except FN | — | Near-done. Re-enter loop; FN gate check decides whether to STOP or proceed |
-| Stages `in_progress` with no `metadata.retry_count` | missing audit lines | Stale task state. Re-derive from most recent `.context/logs/` capture |
-| Any stage `in_progress` AND `claude agents --json --all` shows live `agent_id` matching that stage | — | Subagent still alive. Branch on `{state, waitingFor}` (see Resume Procedure step 0) — never blind re-delegate a live agent |
-| Live `agent_id` matching that stage AND `waitingFor` = `approval`/`input` | — | Agent parked **on us**. Cheap `SendMessage` reattach with the awaited answer — do not re-delegate |
-| Live `agent_id` matching that stage AND `waitingFor` = null/empty (mid-work) | — | Agent busy. **Leave it** — poll/await; do **not** double-dispatch or nudge |
-| `agent_id` for an `in_progress` stage shows `state: blocked` | — | Alive but parked. Reattach via `SendMessage` — do not re-delegate |
-| `agent_id` absent from `claude agents --json --all` (or `state: done`) for an `in_progress` stage | — | Agent gone. Re-delegate from the first incomplete stage |
-| `state.json.workflow.run_id` present, `workflow.status:"running"`, `Workflow` tool available | audit tail has `workflow_launched`, no `workflow_returned` | Dynamic span still in flight. `resumeFromRunId = workflow.run_id` — the engine replays the cached prefix and continues from the first incomplete stage (`dynamic-workflow.md#resume`). |
-| `state.json.workflow.run_id` present, `Workflow` tool **absent** (cold resume in headless `claude agents run`, SDK / `--print`) | `workflow_launched` present, no live engine run | Degrade to manual mode: write `dynamic_fallback`, rebuild the ledger via F4 frontmatter walk if needed, continue the manual loop from the first incomplete stage. Resume is replay-or-degrade, never rejoin. |
-| `state.json.workflow.run_id` present, `workflow.status:"returned"` | audit tail has `workflow_returned` | Span complete — re-enter at the FN gate (orchestrator-owned). Build the pre-FN summary from reconciled `state.json`. |
-
-### Resume Procedure
-
-0. `claude agents --json --all | jq '.[] | {agent_id, state, waitingFor}'` — match rows against `.context/state.json.facts.dispatched_agents[]` (`--all` also surfaces completed and just-dispatched sessions) and branch directly:
-   - live + `waitingFor` = `approval`/`input` → it is parked **on us**; `SendMessage` the awaited answer (cheap nudge, no re-dispatch).
-   - live + `waitingFor` = null/empty (mid-work) → **leave it**; poll/await — do **not** `SendMessage` (avoids nudging a busy agent) and do **not** re-delegate.
-   - `state` = `blocked` → alive but parked; **reattach** via `SendMessage`, do not re-delegate.
-   - `state` = `done`, or the `agent_id` is genuinely absent even with `--all` → re-delegate from the first incomplete stage.
-
-   This single pre-check eliminates three waste classes: blind respawn of an already-working subagent, redundant nudging of a busy one, and blind re-dispatch of an invisible blocked one. If the `claude agents` command is unavailable in the environment (runtime/tool fallback), skip the pre-check and re-delegate from the first incomplete stage. See `skills/agent-coordination/references/headless-dispatch.md § Live Session Discovery`.
-
-   **Authority caveat**: a `SendMessage` reattach may *nudge* a parked agent (supply an awaited answer, re-prompt) but **cannot authorize** anything — a relayed `SendMessage` does not carry the operator's permission authority (the receiver refuses relayed permission requests; auto mode blocks them). PL0 and FN gates stay operator-owned: never treat a reattach as standing in for the human approval gate.
-1. `tail -n 50 .context/logs/audit.jsonl | jq .` — last 50 audit lines
-2. `TaskList()` — current Task System state
-3. Cross-reference with `stage-contracts.md` — identify first incomplete stage
-4. Re-read that stage's `.context/*.md` artifact (if partial)
-5. If `metadata.retry_count > 0`, read `.context/errors/<agent>.md` for retry history
-6. Continue from the execution loop's `while (tasks.some(...))` — no need to replay completed stages
-7. Write a `resume` audit entry: `{actor: "orchestrator", action: "resume", subject: "<worktask_id>", result: "ok"}`
-
-See `context-compression.md § PostCompact Recovery` for the compaction-specific flow.
+The orchestrator loop is restartable. **WHEN reattaching** (PostCompact, session crash, `--resume`, or stale `in_progress` tasks found at session start): **Read `references/resume.md` FIRST** — it maps TaskList shape + audit tail → exact action, including the live-agent `claude agents --json --all` pre-check that forbids blind re-delegation of a live, busy, or parked subagent. Never re-delegate before consulting it. Compaction-specific flow: `context-compression.md § PostCompact Recovery`.
 
 ## Approval Gate Hook
 
-The approval gates (PL0 and FN) are currently honor-system — the orchestrator
-is expected to `STOP IMMEDIATELY` and wait for the user. `PreToolUse` hooks
-can enforce each gate programmatically. Each hook scopes its grep
-by `subject` so that PL0 approval does not satisfy the FN predicate (and vice
-versa).
+Both gates (PL0, FN) are honor-system; optional `PreToolUse` hooks can warn on / deny gate violations. **WHEN installing or troubleshooting gate hooks** (`approval-gate.sh`, warn→deny rollout, hook predicates): Read `references/approval-gate-hook.md`.
 
-### Advisory Rollout (Phase 1)
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Write|Edit|Bash",
-        "if": "test -f .context/logs/audit.jsonl && ! grep -q 'approval_received.*\"subject\":\"PL0\"' .context/logs/audit.jsonl",
-        "command": ".claude/hooks/approval-gate.sh",
-        "mode": "warn"
-      },
-      {
-        "matcher": "Bash",
-        "if": "test -f .context/logs/audit.jsonl && grep -q 'fn_gate_waiting.*\"subject\":\"FN0\"' .context/logs/audit.jsonl && ! grep -q 'approval_received.*\"subject\":\"FN0\"' .context/logs/audit.jsonl && ! grep -q 'fn_gate_bypass.*\"subject\":\"FN0\"' .context/logs/audit.jsonl",
-        "command": ".claude/hooks/approval-gate.sh",
-        "mode": "warn"
-      }
-    ]
-  }
-}
-```
-
-The second stanza only fires once `fn_gate_waiting` has been written (so it
-is dormant before FN is reached) and clears once either `approval_received`
-or `fn_gate_bypass` is written for `FN0`. The `Bash` matcher covers FN's
-commit/push/PR calls without blocking earlier stages' write/edit activity.
-
-### Blocking Rollout (Phase 2, after observation)
-
-Change `mode: "warn"` to `mode: "deny"`. The hook returns `defer`
-with guidance: "Worktask awaiting user approval after PL0. Reply 'approve',
-'proceed', 'go', 'yes', or 'continue' to unblock."
-
-### `--auto-continue` Short-Circuit
-
-When `/worktask --auto-continue` is used, the orchestrator sets
-`TaskUpdate({taskId: "PL0", metadata: {approved: "auto", fn_gate: "bypass"}})`
-and writes an `approval_received` audit line with `subject: "PL0"` and
-`result: "auto"`. The PL0 hook's `if` expression evaluates false and execution
-proceeds without user input.
-
-The `fn_gate: "bypass"` value is read by the FN gate check in the execution
-loop (see § FN Gate). When bypass fires, the orchestrator writes an
-`fn_gate_bypass` audit line with `subject: "FN0"` and the triggering `reason`,
-which clears the FN hook predicate. The same bypass flag is set by
-`--milestone:N` and `--worktree` so per-issue or unattended runs do not stall
-at FN.
-
-### Safety Valve
-
-If the hook misfires (blocks legitimate post-approval work), the user can
-always remove the hook stanza from `settings.json` and retry. No persistent
-state is stored in the hook itself — the Task System metadata + audit log
-remain authoritative.
+Operative regardless of hooks: `--auto-continue` sets PL0 `{approved: "auto", fn_gate: "bypass"}` via `TaskUpdate` and writes an `approval_received` audit line (`subject: "PL0"`, `result: "auto"`); the same bypass flag is set by `--milestone:N` and `--worktree` so per-issue or unattended runs do not stall at FN. When bypass fires at FN, the orchestrator writes `fn_gate_bypass` with the triggering reason (see § FN Gate).
 
 ## Related
 
+- `references/fn-gate.md` - FN gate full procedure + post-worktask self-improvement (Read at gate time)
+- `references/resume.md` - Resume-after-interruption state table + procedure (Read on reattach)
+- `references/workspace-modes.md` - Milestone/worktree/Conductor workspace rules (Read in workspace modes)
+- `references/approval-gate-hook.md` - Optional gate-enforcement hooks (Read when installing hooks)
 - `../worktask-milestone/SKILL.md` - GitHub milestone integration
 - `agent-coordination.md` - Multi-agent coordination
 - `cost-optimization.md` - Budget management

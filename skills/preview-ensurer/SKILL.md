@@ -1,13 +1,9 @@
 ---
 name: preview-ensurer
 description: |
-  Detect SwiftUI View files modified in the current diff that lack a `#Preview` macro or `PreviewProvider`,
-  and auto-add a minimal `#Preview { TypeName(<mocked-args>) }` block in-source using SwiftSyntax. Use this
-  skill from inside the `dv-screenshot-capture` `apple-canvas` adapter ONLY (v1 single-chokepoint rule):
-  it runs BEFORE `swift run SnapshotHost` so the host has a `#Preview` to render. Mock-arg derivation
-  follows Binding→.constant / Optional→nil / Protocol→Mock<P> conventions; A4 invariant: existing previews
-  are never overwritten. Returns `{views: [...], errors: [...]}`; non-empty errors bubble as missing_input
-  to the calling DV stage.
+  Detect modified SwiftUI View files lacking `#Preview`/`PreviewProvider` and auto-add a minimal
+  `#Preview` block via SwiftSyntax. Use ONLY from the `dv-screenshot-capture` `apple-canvas`
+  adapter, BEFORE `swift run SnapshotHost`.
 version: 1.0.0
 model: sonnet
 effort: medium

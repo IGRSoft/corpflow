@@ -67,7 +67,7 @@ emergency: [description]
 | RE | release-engineer | Prepare hotfix release |
 | FN | project-manager | Execute emergency deployment |
 
-> **DV Hotfix Tip (v2.1.98+)**: Use the Monitor tool to stream build output during hotfix implementation. Combine `run_in_background` Bash with Monitor for real-time error detection instead of polling. Tee the build stream into `.context/logs/hotfix-<YYYYMMDD-HHMMSS>.log` so the evidence survives into `complete.md` / `release-prep.md`. See `${CLAUDE_SKILL_DIR}/../agent-coordination/SKILL.md §Monitor Tool` and `${CLAUDE_SKILL_DIR}/../logging-conventions/SKILL.md`.
+> **DV Hotfix Tip**: Use the Monitor tool to stream build output during hotfix implementation. Combine `run_in_background` Bash with Monitor for real-time error detection instead of polling. Tee the build stream into `.context/logs/hotfix-<YYYYMMDD-HHMMSS>.log` so the evidence survives into `complete.md` / `release-prep.md`. See `${CLAUDE_SKILL_DIR}/../agent-coordination/SKILL.md §Monitor Tool` and `${CLAUDE_SKILL_DIR}/../logging-conventions/SKILL.md`.
 
 ### IR → DV Handoff Contract
 
