@@ -68,7 +68,7 @@ At the end of the update, bump this value in `README.md` to the new version when
 For multi-version updates (e.g., 2.1.77 through 2.1.86):
 1. Run `/cc-update <version> --dry-run` per version to preview cumulative impact
 2. Apply updates version-by-version in chronological order
-3. Consolidate MEMORY.md entries into a range header (e.g., "Claude Code 2.1.77→2.1.86")
+3. Add/extend one row in MEMORY.md `## CC Feature Band Index` (e.g. `2.1.77→2.1.86`); never write categorized feature narratives into MEMORY.md — those go only in the canonical band file (step 5)
 4. Commit once after the full batch
 5. Write the consolidated band file at the canonical path:
    `~/.claude/projects/<project-slug>/memory/cc-features-<FROM>-<TO>.md` using the prior band's structure (categorized: Model & Effort / Hooks / Tools / Plugins / Context / Performance / Subagents / Security / UX / Settings — only categories that apply).
@@ -138,14 +138,16 @@ Output of the standing `## Worktask Efficiency Analysis (required pass)` (see th
 
 ## MEMORY.md Update
 
-Add version section under `## Claude Code {VERSION} Key Features Integrated` with categorized entries (`### Hooks`, `### Tools`, etc.). Update version fields:
+MEMORY.md is a lean rolling file (~5KB hard cap). Update ONLY:
+1. `Plugin version:` line — keep the exact `- Plugin version: **X.Y.Z** (<one-line summary>)` shape (release tooling parses it)
+2. `Claude Code latest integrated band` line
+3. One new/extended row in `## CC Feature Band Index` — full categorized feature narratives go ONLY in the canonical band file (Batch step 5), never in MEMORY.md
+4. Prepend one `## Release History` line: `- YYYY-MM-DD: vX.Y.Z — Claude Code {VERSION} update ({N} files, key changes)` (≤25 words); enforce the 12-row cap by deleting the oldest
 
 | Field | Before | After |
 |-------|--------|-------|
-| Claude Code latest known | 2.1.76 | 2.1.77 |
+| Claude Code latest integrated band | 2.1.51→2.1.76 | 2.1.51→2.1.86 |
 | Claude Code min required | 2.1.72 | 2.1.72 (unchanged) |
-
-Add optimization history entry: `- YYYY-MM-DD: vX.Y.Z — Claude Code {VERSION} update ({N} files, key changes)`
 
 ## README.md Min Version Update
 
@@ -235,7 +237,7 @@ PL0 must set `metadata.agent: "igrsoft:prompt-engineer"` on the implementation t
 | No release notes for version | Report "No notes found" and exit without changes |
 | Version older than current min | Warn and skip unless `--force` is used |
 | `--scope` yields zero changes | Report clean scan; skip MEMORY.md update |
-| MEMORY.md missing or malformed | Create version tracking section from scratch |
+| MEMORY.md missing or malformed | Recreate the lean skeleton (Version Tracking + CC Feature Band Index + Release History) from scratch |
 | Plugin version bump suggested | 3.2.0 → 3.3.0 |
 
 ## Related
