@@ -90,16 +90,7 @@ List all image files in `AppStore/images/`:
 
 ### Step 4 — Write Compelling Copy
 
-For each screenshot, generate:
-
-- **Headline** (3-6 words): emotional benefit, not feature description
-- **Subtitle** (6-12 words): adds context or specificity
-
-Follow the "screenshots are ads" philosophy from the `appstore-screenshots` skill:
-- Lead with emotional benefit, not feature name
-- Each screenshot tells a micro-story
-- First screenshot = core value proposition
-- Use power words: effortless, instant, beautiful, smart, secure, free
+For each screenshot, generate a **Headline** (3-6 words) and **Subtitle** (6-12 words) following the "screenshots are ads" philosophy in `skills/appstore-screenshots/SKILL.md` (emotional benefit over feature name; first slide = core value proposition; power words).
 
 ### Step 5 — Select Platform Devices
 
@@ -113,19 +104,9 @@ Based on `--platform` flag, select device sets from the `appstore-screenshots` s
 | `watchos` | 3 Apple Watch sizes | portrait | full-bleed image | `watchos.pen` |
 | `all` | all of the above (22 total) | mixed | mixed | all .pen files |
 
-**tvOS and watchOS** use full-bleed image layout — no text layers. Just background + screenshot filling the canvas.
-
 ### Step 6 — Create .pen Files with Pencil MCP
 
-Create `AppStore/screenshots/` directory for output files. Follow the Pencil MCP worktask in `skills/appstore-screenshots/SKILL.md §Building with batch_design`.
-
-Key rules:
-- Max 25 ops per `batch_design` call; batch up to 3 slides per call (~7 ops/slide)
-- Rotate layouts A, B, C, D — never repeat consecutively; first and last slides use Layout A or D
-- With bg.png: frame + bg image + G() + screenshot + G() + headline + subtitle
-- Without bg.png: gradient fill on slide frame (fillType: "gradient")
-- Full-bleed (tvOS/watchOS): bg image fill + screenshot fill, no text layers
-- Phone aspect ratio formula: `ss_h = H * ratio`, `ss_w = ss_h / (19.5/9)`, `ss_x = (W - ss_w) / 2`
+Create `AppStore/screenshots/` directory for output files. Follow `skills/appstore-screenshots/SKILL.md` for ALL build rules — `§ Building with batch_design` (op sequences, bg.png vs gradient fallback, full-bleed tvOS/watchOS, aspect-ratio formula), `§ Batch Operation Limits` (25 ops/call), and `references/layout-patterns.md` (Layout A–D rotation: never repeat consecutively; first and last slides use Layout A or D). Do not improvise op sequences.
 
 ### Step 7 — Visual Validation
 
@@ -155,35 +136,10 @@ Print summary:
 ```markdown
 # App Store Screenshots — Summary
 
-## Configuration
-| Field | Value |
-|-------|-------|
-| Platform | [ios/macos/tvos/watchos/all] |
-| Language | [en/ua] |
-| Screenshots | [N found] |
-| Background | [bg.png / gradient fallback] |
-| Devices | [N devices generated] |
-
-## Files Generated
-| File | Devices | Slides |
-|------|---------|--------|
-| AppStore/screenshots/ios-phones.pen | 7 iPhones | N slides each |
-| AppStore/screenshots/ios-ipads.pen | 7 iPads | N slides each |
-| ... | ... | ... |
-
-## Slides
-| # | Screenshot | Headline | Subtitle |
-|---|-----------|----------|----------|
-| 1 | 01-home.png | Your Core Value | A short benefit description |
-| 2 | 02-search.png | Find Anything Instantly | Search across all your content |
-| ... | ... | ... | ... |
-
-## Next Steps
-1. Open .pen files in Pencil to review and fine-tune
-2. Adjust text copy for your brand voice
-3. Customize colors and backgrounds
-4. Export each slide frame as PNG at device resolution
-5. Upload to the appropriate device slots in App Store Connect
+## Configuration        ← Platform, Language, Screenshots found, Background (bg.png/gradient), Devices generated
+## Files Generated      ← table: File | Devices | Slides (one row per .pen)
+## Slides               ← table: # | Screenshot | Headline | Subtitle
+## Next Steps           ← review in Pencil → adjust copy → export PNGs at device resolution → upload to App Store Connect slots
 ```
 
 ## Error Handling
@@ -198,21 +154,12 @@ Print summary:
 
 ## Examples
 
-```
-# Generate iOS screenshots (default)
-/appstore-screenshots
-
-# Generate for all Apple platforms
-/appstore-screenshots --platform all
-
-# Generate macOS screenshots with Ukrainian copy
-/appstore-screenshots --platform macos --lang ua
-
-# Preview slide plan without generating files
-/appstore-screenshots --dry-run
-
-# Use a specific project directory
-/appstore-screenshots --path ~/projects/MyApp --platform ios
+```bash
+/appstore-screenshots                              # iOS (default)
+/appstore-screenshots --platform all               # all Apple platforms
+/appstore-screenshots --platform macos --lang ua   # macOS, Ukrainian copy
+/appstore-screenshots --dry-run                    # plan only, no files
+/appstore-screenshots --path ~/projects/MyApp      # specific project dir
 ```
 
 ## Integration

@@ -51,71 +51,22 @@ Estimate task complexity, effort, and resources before starting a worktask. Help
 ```
 
 ### Detailed Estimation
-```markdown
-## Detailed Estimate: Implement user authentication
 
-### Sizing
-| Metric | Value | Notes |
-|--------|-------|-------|
-| T-Shirt Size | L | Multiple components affected |
-| SP Min | 5 | Optimistic estimate |
-| SP Max | 10 | Pessimistic estimate |
-| Hours Min | 30 | SP Min × 6h |
-| Hours Max | 60 | SP Max × 6h |
+Emit `## Detailed Estimate: <task>` with these sections, in order:
 
-### Complexity Analysis
-| Factor | Score (1-5) | Notes |
-|--------|-------------|-------|
-| Technical Complexity | 4 | OAuth integration, token management |
-| Integration Points | 3 | Backend API, storage, UI |
-| Risk Level | 3 | Security-sensitive feature |
-| Unknowns | 2 | Well-documented OAuth providers |
+| Section | Content |
+|---------|---------|
+| `### Sizing` | T-Shirt Size, SP Min/Max, Hours Min/Max (SP × multiplier) |
+| `### Complexity Analysis` | The 5 factors scored 1–5 each, with notes (see Sizing Guide below) |
+| `### Recommended Worktask` | Tier + rationale (see Worktask Recommendation Logic below) |
+| `### Resource Requirements` | Skills needed, dependencies, blockers |
+| `### Breakdown` | Per-component table: Component, Size, SP Min, SP Max, Notes — tests included per component |
+| `### Risk Assessment` | Risk, Probability, Impact, Mitigation |
+| `### Budget Calculation` | Base Hours (SP × multiplier), Buffer (15%), Total Hours, Budget = Total × `--dev-rate` |
+| `### AI Cost` | Est. tokens, AI cost, % of total budget — formula + per-task-type token bands: `skills/estimation/SKILL.md § AI Agent Cost Estimation` |
 
-### Recommended Worktask
-**Tier**: `worktask:` (Full 9-stage)
-**Rationale**: Security-sensitive, multiple files, requires architecture review
-
-### Resource Requirements
-- **Skills Needed**: Backend, Security, Frontend
-- **Dependencies**: API endpoints, OAuth provider setup
-- **Blockers**: None identified
-
-### Breakdown
-| Component | Size | SP Min | SP Max | Notes |
-|-----------|------|--------|--------|-------|
-| OAuth Provider Setup | S | 2 | 3 | Configuration only |
-| Token Management | M | 3 | 5 | Storage, refresh logic |
-| Login UI | S | 2 | 3 | Form and error handling |
-| Session Management | M | 3 | 5 | State persistence |
-| Tests | M | 3 | 5 | Security tests critical |
-| Documentation | S | 2 | 3 | API docs, user guide |
-
-### Risk Assessment
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| Token security issues | Medium | High | Security review in AR stage |
-| OAuth provider changes | Low | Medium | Abstract provider interface |
-
-### Budget Calculation
-| Metric | Min | Max |
-|--------|-----|-----|
-| Base Hours | [SP Min × 6h] | [SP Max × 6h] |
-| Buffer (15%) | [Base Min × 0.15] | [Base Max × 0.15] |
-| Total Hours | [Base Min + Buffer Min] | [Base Max + Buffer Max] |
-| Budget | $[Total Min × Rate] | $[Total Max × Rate] |
-
-If `--dev-rate` is omitted, the Budget row is replaced by:
+If `--dev-rate` is omitted, the Budget row is replaced by
 `[budget skipped: --dev-rate not set]` and only Base/Buffer/Total Hours are emitted.
-
-### AI Cost
-| Metric | Value |
-|--------|-------|
-| Est. Tokens | 60K–120K (mixed haiku/sonnet/opus) |
-| AI Cost | $0.20–$0.50 |
-| % of Total Budget | <0.1% |
-
-See `skills/estimation/SKILL.md § AI Agent Cost Estimation` for the formula and per-task-type token bands.
-```
 
 ### Comparison Output (`--compare`)
 
