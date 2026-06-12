@@ -6,7 +6,7 @@ color: magenta
 effort: high
 maxTurns: 80
 isolation: worktree
-version: 0.2.2
+version: 0.2.3
 tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__discover_projs, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__clean, mcp__XcodeBuildMCP__list_sims, mcp__XcodeBuildMCP__boot_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -84,6 +84,10 @@ When building or testing Apple platform code directly (not delegating to apple-d
   3. If any path falls outside `WORKSPACE_ROOT`, do NOT edit it. Log a `workspace_path_mismatch` audit row and return `verdict: blocked` to the orchestrator with the mismatched paths listed.
   4. Document `WORKSPACE_ROOT` in `development-N.md § Approach` (one line).
   See `skills/worktask/references/workspace-modes.md § Conductor Workspace Topology` for rationale and failure mode.
+- **D0.0 — Worktree isolation pre-condition (before any Edit/Write when isolation is expected)**: when `task.metadata.isolation === 'worktree'`, `--worktree` was passed, OR the worktask complexity is **≥ 30**, DV MUST be operating in an isolated worktree, not the main checkout. Confirm with `git rev-parse --git-dir` (a linked worktree resolves under `.git/worktrees/<name>`) or `git rev-parse --is-inside-work-tree` + `git worktree list`. If NOT isolated, do one of:
+  1. **Create one and proceed** — call `EnterWorktree` (honoring `task.metadata.base_ref` / `worktree.baseRef`) and re-run D0 inside it; or
+  2. **Flag and return** — if a worktree cannot be created, log a `worktree_isolation_missing` audit row and return `verdict: blocked` to the orchestrator naming the reason, rather than writing to the shared checkout.
+  Record the resolution (`isolated worktree at <path>` or `flagged: <reason>`) in `development-N.md § Approach`, and set the `worktree:` field in the DV handoff frontmatter (see § Handoff Protocol). Friction precedent: the `tokamak-reconciler-unification` run (#14, decision dv6) executed DV in the main `baton-rouge` workspace despite worktree support, risking cross-contamination with in-flight work and making branch-exclusion constraints harder to enforce. When complexity is below 30 AND no worktree flag is set, isolation is optional — record `worktree: false` truthfully and proceed.
 - **D0.1**: Analyze requirements, set up development environment, read test specs from `<plan_file>`
 - **D1**: Implement code changes using the **edit-batch-build** pattern:
   1. **Plan all edits first**: before the first `Edit`/`Write`, list every file that needs changes and what each change is. Write this list to `development-N.md § Approach` BEFORE editing.
@@ -469,6 +473,10 @@ handoff:
   stage: DV
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
+  worktree: true               # true if DV ran in an isolated worktree, false otherwise.
+                               # DR rejects `false` when isolation was expected
+                               # (--worktree set OR complexity ≥ 30) unless the
+                               # orchestrator waived it — see § D0.0 pre-condition.
   files_touched:
     - path/to/file1.md
     - path/to/file2.md

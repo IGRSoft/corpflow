@@ -2,7 +2,7 @@
 name: worktask
 description: Complete staged worktask system with dynamic sizing, task initialization, and stage management. Use when executing multi-stage worktasks, initializing tasks, or managing worktask state.
 effort: high
-version: 0.1.2
+version: 0.1.3
 ---
 
 # Worktask System
@@ -478,6 +478,38 @@ while (tasks.some(t => t.status !== "completed")) {
             completed: dvProgress.completed_batches,
             next_batch: dvProgress.next_batch ?? null
           }
+        });
+      }
+    }
+
+    // 4.8. DV worktree-isolation enforcement — inject the isolation pre-condition.
+    //       When `--worktree` is set (task.metadata.isolation === "worktree") OR the
+    //       worktask complexity is ≥ 30, DV must run in an isolated worktree before
+    //       writing files (see agents/developer.md § D0.0). Carry that requirement into
+    //       the DV prompt so the agent confirms isolation, creates a worktree, or flags
+    //       the deviation and returns — instead of silently editing the shared checkout.
+    //       Friction precedent: tokamak-reconciler-unification (#14, decision dv6) ran DV
+    //       in the main baton-rouge workspace, risking cross-contamination and weakening
+    //       branch-exclusion constraints. DR rejects a DV handoff carrying `worktree:false`
+    //       when isolation was expected, unless the orchestrator explicitly waives it.
+    if (full.metadata.stage === "DV") {
+      const complexity = full.metadata.complexity
+        ?? state.stages?.PL?.complexity ?? 0;
+      const worktreeExpected =
+        full.metadata.isolation === "worktree" || complexity >= 30;
+      if (worktreeExpected) {
+        const enforce =
+          `WORKTREE ISOLATION REQUIRED (--worktree set or complexity ${complexity} ≥ 30): ` +
+          `confirm you are in an isolated worktree before any Edit/Write (D0.0). ` +
+          `If not, EnterWorktree and proceed, or flag worktree_isolation_missing and ` +
+          `return verdict:blocked. Set handoff frontmatter \`worktree: true|false\` truthfully.`;
+        full.description = full.description + "\n\n" + enforce;
+        appendAudit({
+          actor: "orchestrator",
+          action: "dv_worktree_enforced",
+          subject: "DV",
+          result: "ok",
+          metadata: { complexity, isolation: full.metadata.isolation ?? null }
         });
       }
     }
