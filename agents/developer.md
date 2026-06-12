@@ -6,7 +6,7 @@ color: magenta
 effort: high
 maxTurns: 80
 isolation: worktree
-version: 0.2.0
+version: 0.2.1
 tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__discover_projs, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__clean, mcp__XcodeBuildMCP__list_sims, mcp__XcodeBuildMCP__boot_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -427,6 +427,14 @@ Before marking DV stage complete, verify:
 - [ ] If captures > 0, `state.json → facts.screenshots[]` populated
 - [ ] At least one `audit.jsonl` row with `action: "screenshot_captured"` OR `action: "screenshot_skipped"`
 
+### Artifact-Complete Gate (MANDATORY before final return)
+
+A DV invocation is **not** complete until the work is finished AND the artifact reflects it. Returning mid-run with a progress update — instead of a completed artifact/summary — forces the orchestrator to resume the agent and breaks the handoff contract. Before producing your final response, confirm all four:
+
+- [ ] **All planned sub-batches applied AND verified** — every batch in the plan (e.g. B1/B2/B3) is implemented and individually checked; no batch left "in progress" or deferred without an explicit `## Blockers` entry
+- [ ] **Stage artifact written** — `development-N.md` exists on disk in `.context/` (N = `task.metadata.run_index`); do not rely on a pre-seed or intend-to-write
+- [ ] **Test gate confirmed differentially** — `Executed Tests (DV)` show a real pass for tests Added/Modified this run plus `always_required_tests`; "tests ran" or "build started" is not a pass
+- [ ] **Final response is the completed handoff, never a progress narration** — if any box above is unchecked, keep working; only return once the artifact is written. A mid-run status update is never a valid final message for the DV stage.
 
 ## Handoff Protocol
 
