@@ -6,7 +6,7 @@ color: magenta
 effort: high
 maxTurns: 80
 isolation: worktree
-version: 0.2.1
+version: 0.2.2
 tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__discover_projs, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__clean, mcp__XcodeBuildMCP__list_sims, mcp__XcodeBuildMCP__boot_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -437,6 +437,23 @@ A DV invocation is **not** complete until the work is finished AND the artifact 
 - [ ] **Stage artifact written** — `development-N.md` exists on disk in `.context/` (N = `task.metadata.run_index`); do not rely on a pre-seed or intend-to-write
 - [ ] **Test gate confirmed differentially** — `Executed Tests (DV)` show a real pass for tests Added/Modified this run plus `always_required_tests`; "tests ran" or "build started" is not a pass
 - [ ] **Final response is the completed handoff, never a progress narration** — if any box above is unchecked, keep working; only return once the artifact is written. A mid-run status update is never a valid final message for the DV stage.
+
+### Budget-Aware Checkpointing (multi-batch runs)
+
+The gate above fires at *return* time. It cannot fire if you exhaust your context/token budget mid-batch — you simply stop, and the orchestrator inherits partial, undocumented state. This happened twice in the `tokamak-reconciler-unification` run (#14): DV hit its budget mid-implementation and returned a progress narration instead of a checkpoint, forcing the orchestrator to reconstruct state by hand. To make the run resumable, checkpoint as you go:
+
+1. **After each sub-batch commit**, merge a lightweight progress record into `state.json → stages.DV.progress` (schema: `handoff-protocol.md#state-json-schema`). Record the completed batch ids and the next pending batch — nothing heavier (no diffs, no file contents):
+
+   ```bash
+   _sf=".context/state.json"; _tmp="${_sf}.tmp.$$"
+   jq --argjson done '["B1","B2"]' --arg next "B3" \
+      '.stages.DV.progress = {completed_batches:$done, next_batch:$next, updated_at:(now|todateiso8601)}' \
+      "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
+   ```
+
+2. **When budget is near exhaustion** (you sense the remaining context cannot finish the next batch *and* write the artifact), do NOT push forward and risk stopping mid-batch. Instead: finish and commit the batch in flight, write `development-N.md` covering the batches completed so far, list every unfinished batch under `## Blockers` (`kind: hard_constraint`, `escalate_to: TL`), update `stages.DV.progress`, then return the **completed-so-far artifact** as your handoff. The orchestrator resumes DV from `stages.DV.progress.next_batch` on the next run (`retry_count` bumped) — see `skills/worktask/SKILL.md § Orchestrator Execution Loop` (DV resume).
+
+3. **Never emit a progress narration as your terminal output.** A budget-exhausted DV that has written a checkpoint artifact + `## Blockers` is a valid (partial) handoff; a chat-style "here's where I got to" message is not, and is rejected by the same handoff contract that the Artifact-Complete Gate enforces.
 
 ## Handoff Protocol
 

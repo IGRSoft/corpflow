@@ -163,6 +163,20 @@ properties:
         verdict: { type: string }
         retry_count: { type: integer, minimum: 0, default: 0 }
         error_file: { type: string }
+        progress:
+          type: object
+          description: |
+            OPTIONAL. Budget-aware checkpoint for multi-batch stages (currently DV).
+            Written after each sub-batch commit so a budget-exhausted agent leaves a
+            resumable record instead of a progress narration. The orchestrator reads
+            `next_batch` to resume the stage from where it stopped (see
+            `agents/developer.md § Budget-Aware Checkpointing` and
+            `skills/worktask/SKILL.md § Orchestrator Execution Loop` step 4.7).
+            Stores batch ids only — never diffs, file contents, or test output.
+          properties:
+            completed_batches: { type: array, items: { type: string } }
+            next_batch: { type: string, description: "id of the next pending sub-batch, or absent when done" }
+            updated_at: { type: string, format: date-time }
   facts:
     type: object
     required: [files_modified, tests_added, decisions, open_questions, verdicts]

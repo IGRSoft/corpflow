@@ -2,7 +2,7 @@
 name: worktask
 description: Complete staged worktask system with dynamic sizing, task initialization, and stage management. Use when executing multi-stage worktasks, initializing tasks, or managing worktask state.
 effort: high
-version: 0.1.0
+version: 0.1.1
 ---
 
 # Worktask System
@@ -417,6 +417,37 @@ while (tasks.some(t => t.status !== "completed")) {
           subject: full.metadata.stage,
           result: "ok",
           metadata: { from_stage: fromStage, to_stage: "DV", count: blockers.length }
+        });
+      }
+    }
+
+    // 4.7. DV checkpoint resume — restart DV from its last budget-aware checkpoint.
+    //       When a prior DV run exhausted its budget mid-implementation, it wrote a
+    //       partial `development-N.md` (+ `## Blockers`) and recorded the completed
+    //       sub-batches at `state.json → stages.DV.progress` rather than emitting a
+    //       progress narration (see agents/developer.md § Budget-Aware Checkpointing).
+    //       On re-dispatch, carry the checkpoint forward so the re-run resumes from
+    //       `next_batch` instead of redoing applied work. Friction precedent:
+    //       tokamak-reconciler-unification (#14) — DV hit its budget twice and the
+    //       orchestrator had to reconstruct partial state by hand.
+    if (full.metadata.stage === "DV") {
+      const dvProgress = state.stages?.DV?.progress;  // {completed_batches, next_batch, updated_at}
+      if (dvProgress && (dvProgress.completed_batches?.length ?? 0) > 0) {
+        const resume =
+          `RESUME (DV checkpoint — prior run completed batches ` +
+          `[${dvProgress.completed_batches.join(", ")}]; resume from ` +
+          `${dvProgress.next_batch ?? "the next pending batch"}). Do NOT redo applied ` +
+          `batches — read the partial development-N.md and continue forward.`;
+        full.description = resume + "\n\n" + full.description;
+        appendAudit({
+          actor: "orchestrator",
+          action: "dv_checkpoint_resume",
+          subject: "DV",
+          result: "ok",
+          metadata: {
+            completed: dvProgress.completed_batches,
+            next_batch: dvProgress.next_batch ?? null
+          }
         });
       }
     }
