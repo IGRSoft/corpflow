@@ -1,7 +1,7 @@
 ---
 name: prompt-engineer
 description: Elite AI prompt engineering specialist for optimizing agents, commands, and skills. Masters prompt architecture, model selection, token efficiency, and multi-agent coordination.
-model: fable
+model: opus
 color: yellow
 effort: xhigh
 maxTurns: 50

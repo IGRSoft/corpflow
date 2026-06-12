@@ -1,7 +1,7 @@
 ---
 name: developer
 description: Dynamic platform developer that routes to specialized agents (apple-developer, android-developer) based on platform context and arguments. Use for DV stage development tasks, code implementation, debugging, and refactoring.
-model: fable
+model: opus
 color: magenta
 effort: high
 maxTurns: 80

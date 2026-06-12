@@ -10,7 +10,7 @@ External orchestrators (CI runners, batch schedulers, the user's own shell) that
 |---|---|---|---|---|
 | `agent` | `--agent <name>` | string | N/A (in-process uses `Task({subagent_type})`) | overrides the session's `settings.json` `agent` default (v2.1.157); e.g. force `igrsoft:developer` for a one-shot run |
 | `--all` (listing flag, not a `metadata` key) | `claude agents --all` | bool | N/A (listing only) | includes **completed** sessions in `claude agents [--json]` output (v2.1.169); pair with `state` to tell `done` apart from `running`/`blocked` |
-| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-fable-5`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6`. Caveat: a managed `availableModels` allowlist now also constrains subagent model overrides (v2.1.172), and `enforceAvailableModels` (v2.1.175) constrains the Default model too — a requested id may silently down-resolve; audit, don't assume |
+| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-4-8`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6`. Caveat: a managed `availableModels` allowlist now also constrains subagent model overrides (v2.1.172), and `enforceAvailableModels` (v2.1.175) constrains the Default model too — a requested id may silently down-resolve; audit, don't assume |
 | `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN/RE→`medium` |
 | `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` | **Yes — audited** (see § Permission-Mode Pinning below) | SR/FN→`default`; DV under `--auto-continue`→`bypassPermissions` |
 | `workspace_path` | `--cwd <path>` | string | N/A (in-process inherits parent cwd) | milestone tracks → per-issue worktree |
@@ -28,7 +28,7 @@ The minimum recommended flag set per stage when dispatching from a headless runn
 
 | Stage | Canonical headless one-liner |
 |---|---|
-| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-fable-5 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` † |
+| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` † |
 | **DR** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort high --permission-mode acceptEdits -- igrsoft:technical-lead < dr-prompt.txt` |
 | **SR** | `claude agents run --cwd "$WORKTREE" --model claude-fable-5 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` † |
 | **QA** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort high --permission-mode acceptEdits -- igrsoft:qa-engineer < qa-prompt.txt` |

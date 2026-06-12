@@ -12,9 +12,9 @@ Single source of truth for worktask stage codes.
 | Code | Stage | Agent | Model |
 |------|-------|-------|-------|
 | PL | Planning | product-manager | opus |
-| AR | Architecture | software-architector | fable |
+| AR | Architecture | software-architector | opus |
 | TL | Team Lead | team-lead | sonnet |
-| DV | Development | developer | fable |
+| DV | Development | developer | opus |
 | DR | Developer Review | technical-lead | sonnet |
 | SR | Security Review | security-reviewer | fable |
 | QA | QA Testing | qa-engineer | sonnet |
@@ -32,8 +32,8 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 
 | Model | Stages |
 |-------|--------|
-| fable | AR, DV, SR, TC, PE, ET |
-| opus | PL, FN |
+| fable | SR, ET |
+| opus | PL, AR, TC, DV, PE, FN |
 | sonnet | TL, DR, QA, ST, IR, DS, WE |
 | haiku | DC, RE |
 
@@ -42,9 +42,9 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 | Code | Agent | Model | Invoked By |
 |------|-------|-------|------------|
 | DS | designer | sonnet | PL, AR, DV, QA |
-| TC | technical-lead | fable | AR, TL, DV, QA |
+| TC | technical-lead | opus | AR, TL, DV, QA |
 | ET | ethics-reviewer | fable | Any stage |
-| PE | prompt-engineer | fable | Agent optimization |
+| PE | prompt-engineer | opus | Agent optimization |
 | WE | workflow-engineer | sonnet | Worktask troubleshooting |
 
 Support agents don't own worktask stages but can be invoked on-demand via Task tool.

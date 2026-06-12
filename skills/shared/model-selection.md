@@ -39,8 +39,8 @@ effort: low
 |------------|-------|-----------|
 | Simple | haiku | Formatting, routing, checklists, status tracking |
 | Moderate | sonnet | Implementation, analysis, coordination, reviews |
-| Complex | opus | Planning (PL), incident response (IR), general high-complexity reasoning |
-| Max-reasoning | fable | Architecture, high-stakes review gates, meta-optimization, complex development (AR, DR/TC, DV, SR, PE, ET) |
+| Complex | opus | Planning (PL), Architecture (AR), complex development (DV), incident response (IR), general high-complexity reasoning (DR/TC, PE) |
+| Max-reasoning | fable | high-stakes review gates, meta-optimization (DR/TC, SR, PE, ET) |
 
 **Use haiku when**:
 - Task is procedural with clear steps

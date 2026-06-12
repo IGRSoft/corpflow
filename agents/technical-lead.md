@@ -1,7 +1,7 @@
 ---
 name: technical-lead
 description: Technical excellence champion for code quality, technical decisions, debt management, and implementation guidance. Use PROACTIVELY for deep technical reviews, technology evaluation, or code quality enforcement.
-model: fable
+model: opus
 color: magenta
 effort: high
 maxTurns: 60

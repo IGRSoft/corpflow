@@ -1,7 +1,7 @@
 ---
 name: software-architector
 description: Master software architect specializing in modern architecture patterns, clean architecture, microservices, event-driven systems, and DDD. Use PROACTIVELY for architectural decisions, system design, or code architecture review.
-model: fable
+model: opus
 color: green
 effort: xhigh
 maxTurns: 60
