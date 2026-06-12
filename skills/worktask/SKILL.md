@@ -2,7 +2,7 @@
 name: worktask
 description: Complete staged worktask system with dynamic sizing, task initialization, and stage management. Use when executing multi-stage worktasks, initializing tasks, or managing worktask state.
 effort: high
-version: 0.1.1
+version: 0.1.2
 ---
 
 # Worktask System
@@ -164,6 +164,36 @@ Document errors in `.context/errors/<agent>.md` (per-agent, append-only; one `##
 |-------|-----------|--------|
 | Context size | > 50% window (standard) or > 30% (1M window) | Compress previous stages |
 | Budget usage | > 75% | Alert user |
+| Free disk space | < 5 GB before a build stage (AR/DV/QA/SR/RE) | Halt with remediation — see § Pre-Stage Disk Guard |
+| Free disk space | < 8 GB before a build stage | Warn; run `swift package clean` hygiene before delegating |
+
+### Pre-Stage Disk Guard (ENOSPC)
+
+Stages that invoke `swift build` / `xcodebuild` — **AR, DV, QA, SR, RE** — accumulate `.build/` and DerivedData artifacts across runs. With no pre-flight disk check, an exhausted filesystem kills the build harness mid-stage. In the `tokamak-reconciler-unification` run (#14) ENOSPC killed the harness twice: AR partially (recovered) and SR fully (the orchestrator could only persist the stage from the artifact frontmatter, noting `"agent hit ENOSPC"` in state.json). Before delegating any of those five stages, assert free space on the workspace filesystem:
+
+```bash
+# Threshold is configurable via DISK_MIN_GB (hard halt, default 5) and
+# DISK_WARN_GB (hygiene warn, default 8).
+MIN_GB="${DISK_MIN_GB:-5}"; WARN_GB="${DISK_WARN_GB:-8}"
+AVAIL_GB=$(df -Pg "${WORKSPACE_ROOT:-.}" 2>/dev/null | awk 'NR==2 {print $4+0}')
+if [ -n "$AVAIL_GB" ] && [ "$AVAIL_GB" -lt "$MIN_GB" ]; then
+  appendAudit action=pre_stage_disk_halt result=blocked \
+    metadata="{\"stage\":\"$CODE\",\"avail_gb\":$AVAIL_GB,\"min_gb\":$MIN_GB}"
+  echo "HALT: only ${AVAIL_GB} GB free (< ${MIN_GB} GB) before $CODE." \
+       "Reclaim space, then resume:" \
+       "  swift package clean   # drops .build/" \
+       "  rm -rf ~/Library/Developer/Xcode/DerivedData/*   # drops DerivedData" >&2
+  # Do NOT delegate the stage — return to the user for remediation.
+elif [ -n "$AVAIL_GB" ] && [ "$AVAIL_GB" -lt "$WARN_GB" ]; then
+  appendAudit action=pre_stage_disk_warn result=ok \
+    metadata="{\"stage\":\"$CODE\",\"avail_gb\":$AVAIL_GB,\"warn_gb\":$WARN_GB}"
+  # Optional hygiene before DV: swift package clean to reclaim build artifacts.
+fi
+```
+
+- **Hard halt** (< `DISK_MIN_GB`, default 5): do NOT delegate; surface the remediation and return — a halted run is recoverable, an ENOSPC-killed harness mid-stage is not.
+- **Warn** (< `DISK_WARN_GB`, default 8): proceed, but run `swift package clean` as a pre-DV hygiene step to reclaim `.build/` first.
+- `df -Pg` (`-g` = whole GiB blocks; `-P` = portable single-line rows) is POSIX-portable on macOS and Linux; the guard degrades to a no-op (skips the check, proceeds) if `df` output is unparseable, so it never blocks a run on a measurement failure.
 
 ### Post-Stage
 
