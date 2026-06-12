@@ -16,6 +16,10 @@ effort: low
 | **fable** | premium (see `/model`) | premium (see `/model`) | Max-reasoning stages: architecture, security/ethics review, agent optimization, complex development |
 
 > **Fable 5** (`claude-fable-5`) is the Mythos-class top reasoning model (v2.1.170). It sits above `opus` as the new top tier and is the default for the highest-reasoning stages (AR, DR/TC, DV, SR, PE, ET). The `fable` alias only resolves on **CC ≥ 2.1.170**; on CC 2.1.169 (the current plugin minimum) the alias degrades to the provider default until the operator updates. Pull the exact `$/1M` pricing from `/model` (or the `claude-api` skill) when filling the Cost/1M cell.
+>
+> **Fable 5 = 1M context by default** (v2.1.173 — `[1m]`-suffixed model names normalized into the base id). On accounts **without 1M usage credits**, a fable-tier *dispatch* fails hard with `API Error: Usage credits required for 1M context` (observed live 2026-06-12); an *interactive* 1M session without credits instead auto-compacts back under the standard limit (v2.1.172). Degrade path: set a session `fallbackModel` (`--fallback-model`, v2.1.166) or pin the stage via a direct `Task({ model })` / `metadata.model` override — do **not** rely on the Workflow tool's per-`agent()` `opts.model` de-escalation, which was observed not to rescue dispatch under credit gating (see `skills/worktask/references/dynamic-workflow.md` risk R8).
+>
+> **Managed model allowlists** (v2.1.172/v2.1.175): a managed `availableModels` list now constrains **subagent model overrides** and the dispatch model picker too (v2.1.172), and `enforceAvailableModels` (v2.1.175) extends the allowlist to the **Default model** — user/project settings can no longer widen a managed list. Consequence for the worktask rule "always pass `metadata.model` to `Task({model})`": a valid alias may silently resolve to a different model under management. Pre-Stage Validation step 6 (`skills/worktask/SKILL.md`) emits an audit row instead of hard-blocking.
 
 > **Opus 4.8 Effort Levels**: `low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛. **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans. Pro/Max subscribers also get `high` default on **Opus 4.6 and Sonnet 4.6**; Pro plan retains `medium` default on older models. The keyword "ultrathink" still triggers high effort. Use `/effort auto` to reset; `/effort` opens an interactive slider with **Faster/Smarter** labels. Opus 4.6 and Opus 4.7 remain supported. Use `/effort xhigh` for hardest tasks requiring maximum reasoning.
 
@@ -23,9 +27,9 @@ effort: low
 
 > **Hook Effort Visibility**: hooks observe the active effort tier via `effort.level` (JSON payload) and the `$CLAUDE_EFFORT` env var. Cost/audit hooks can attribute spend per tier without parsing model metadata. See `skills/agent-coordination/references/hook-monitoring.md § Hook Effort Visibility`.
 
-> **Fast Mode on Opus 4.8**: fast mode on Opus 4.8 delivers **2x rate for 2.5x speed**; pin fast mode via `/model` selection (the `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE` env var has been removed). Plugin agents that rely on `xhigh` effort require **Opus 4.8 or Fable 5**.
+> **Fast Mode on Opus 4.8**: fast mode on Opus 4.8 delivers **2x rate for 2.5x speed**; pin fast mode via `/model` selection (the `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE` env var has been removed). Plugin agents that rely on `xhigh` effort require **Opus 4.8 or Fable 5** — and Fable 5 carries the 1M-credit dispatch caveat above; on credit-gated accounts route `xhigh` work to Opus 4.8.
 
-> **Auto mode on Bedrock/Vertex/Foundry**: `CLAUDE_CODE_ENABLE_AUTO_MODE=1` enables auto model/effort selection for Opus 4.7/4.8 on Bedrock, Vertex, and Foundry providers. Opt-in; leaves explicit `--model`/`--effort` (and `metadata.model`) overrides authoritative when set.
+> **Auto mode on Bedrock/Vertex/Foundry**: `CLAUDE_CODE_ENABLE_AUTO_MODE=1` enables auto model/effort selection for Opus 4.7/4.8 on Bedrock, Vertex, and Foundry providers. Opt-in; leaves explicit `--model`/`--effort` (and `metadata.model`) overrides authoritative when set. Bedrock also resolves its region from `~/.aws` config when `AWS_REGION` is unset (v2.1.172), and GovCloud inference profiles get the correct `us-gov` prefix (v2.1.174) — headless runners no longer need to export region env explicitly on configured machines.
 
 > **Lean system prompt default**: Opus 4.8 uses a lean (shorter) system prompt by default. Haiku, Sonnet, and Opus ≤4.7 continue to use the standard system prompt.
 

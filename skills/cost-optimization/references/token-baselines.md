@@ -90,6 +90,12 @@ Typical token usage by worktask stage (sonnet model):
 | `cache_creation_input_tokens` nested-breakdown fix | 2.1.152 | Nested API calls now correctly attribute cache_creation tokens to sub-call layer; was previously double-counted in parent layer |
 | Dynamic workflows background orchestration | 2.1.154 | Native `/workflows` Workflow tool spawns lightweight background agents (tens–hundreds); no worktask state overhead — complementary to igrsoft staged pipeline |
 | Lean system prompt default on Opus 4.8 | 2.1.154 | Opus 4.8 uses shorter system prompt by default (Haiku/Sonnet/Opus ≤4.7 unchanged); reduces input token cost per request |
+| Fable 5 ships 1M context by default (`[1m]` suffix normalized) | 2.1.173 | fable-tier stages get the full 1M window without a model-id suffix — but dispatch **fails** on accounts without 1M credits; see `skills/shared/model-selection.md` degrade path |
+| 1M sessions without usage credits auto-compact under standard limit | 2.1.172 | Interactive sessions degrade gracefully instead of erroring; budget handoffs against the **standard** window when credits are absent |
+| `availableModels` applied to subagent model overrides + dispatch picker | 2.1.172 | `Task({model})`/`metadata.model` may silently down-resolve under a managed allowlist — cost projections per stage tier need the *resolved* model |
+| `enforceAvailableModels` managed setting | 2.1.175 | Allowlist also constrains the Default model; user/project settings cannot widen a managed list — org-pinned cost ceilings become enforceable |
+| Skill hot-reload re-announces only changed skills | 2.1.174 | `/reload-skills` mid-session no longer re-injects the full skill listing — smaller context delta on plugin-dev iterations |
+| Long-conversation responsiveness + idle-CPU fixes | 2.1.172 | Faster turn startup on long worktask sessions; no token effect, less wall-clock per stage |
 
 These are automatic — no agent or worktask changes needed. They compound across multi-stage worktasks.
 

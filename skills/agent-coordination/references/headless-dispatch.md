@@ -10,7 +10,7 @@ External orchestrators (CI runners, batch schedulers, the user's own shell) that
 |---|---|---|---|---|
 | `agent` | `--agent <name>` | string | N/A (in-process uses `Task({subagent_type})`) | overrides the session's `settings.json` `agent` default (v2.1.157); e.g. force `igrsoft:developer` for a one-shot run |
 | `--all` (listing flag, not a `metadata` key) | `claude agents --all` | bool | N/A (listing only) | includes **completed** sessions in `claude agents [--json]` output (v2.1.169); pair with `state` to tell `done` apart from `running`/`blocked` |
-| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-4-8`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6` |
+| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-fable-5`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6`. Caveat: a managed `availableModels` allowlist now also constrains subagent model overrides (v2.1.172), and `enforceAvailableModels` (v2.1.175) constrains the Default model too — a requested id may silently down-resolve; audit, don't assume |
 | `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN/RE→`medium` |
 | `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` | **Yes — audited** (see § Permission-Mode Pinning below) | SR/FN→`default`; DV under `--auto-continue`→`bypassPermissions` |
 | `workspace_path` | `--cwd <path>` | string | N/A (in-process inherits parent cwd) | milestone tracks → per-issue worktree |
@@ -28,15 +28,19 @@ The minimum recommended flag set per stage when dispatching from a headless runn
 
 | Stage | Canonical headless one-liner |
 |---|---|
-| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` |
-| **DR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort high --permission-mode acceptEdits -- igrsoft:technical-lead < dr-prompt.txt` |
-| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` |
+| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-fable-5 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` † |
+| **DR** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort high --permission-mode acceptEdits -- igrsoft:technical-lead < dr-prompt.txt` |
+| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-fable-5 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` † |
 | **QA** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort high --permission-mode acceptEdits -- igrsoft:qa-engineer < qa-prompt.txt` |
 | **FN** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:project-manager < fn-prompt.txt` |
 | **RE** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:release-engineer < re-prompt.txt` |
 | **ST** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode acceptEdits -- igrsoft:stakeholder < st-prompt.txt` |
 
-The model/effort defaults track `skills/shared/model-selection.md`. Override per task when `metadata.model` / `metadata.effort` are set.
+The model/effort defaults track `skills/shared/model-selection.md`. Override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **sonnet** (stage override per `skills/shared/stage-codes.md`); the agent's `model: fable` frontmatter default applies only to direct TC consults.
+
+> † **Fable-tier degrade (v2.1.173)**: Fable 5 includes **1M context by default** (`[1m]` suffix normalized). On accounts without 1M usage credits, a fable dispatch fails with `API Error: Usage credits required for 1M context` (observed live, 2026-06-12). Mitigation: pass `--fallback-model claude-sonnet-4-6` (v2.1.166) or pin the row's `--model` to `claude-sonnet-4-6`/`claude-opus-4-8` for that account. Interactive 1M sessions without credits auto-compact back under the standard limit (v2.1.172) — headless dispatch fails instead; plan for it.
+>
+> **Background-worker reliability (v2.1.172/2.1.174)**: fixed — pre-warmed workers leaking another directory's project settings, `EAUTH` on attach after daemon auto-update and on claim-after-idle, stuck-`active` state after a nested child stopped, and background sessions inheriting another session's `ANTHROPIC_*` provider env. No plugin workaround needed on CC ≥ 2.1.174; on older CC, restart the daemon when attach fails with `EAUTH`.
 
 ## Live Session Discovery (v2.1.145–146)
 
@@ -74,12 +78,15 @@ Rows additionally render a `done/total` progress count (v2.1.161) in the human-r
 
 **Watch protocol for future `/cc-update` runs**: in any cc-update where the CC version delta touches `claude agents` CLI surface, the prompt-engineer MUST run `claude agents --json | jq 'first | keys'` and diff the key list against this recorded baseline. Surface any drift as a Q for the operator.
 
+> ⚠ **Drift observed on CC 2.1.175** (2026-06-12, v3.17.0 cc-update; unannounced in the changelog): with only interactive sessions live, rows came back as `{pid, cwd, kind: "interactive", startedAt, sessionId}` — **camelCase** (`session_id` → `sessionId`), `startedAt` as **epoch-millis number** (was ISO-8601 string), a new `kind` discriminator, and no `agent_id`/`state`/`waitingFor` on that row type. **Unconfirmed** whether dispatched-agent rows (`kind` ≠ `interactive`) kept the snake_case baseline shape — no live agents existed at observation time. Until the next cc-update pins the agent-row variant: (a) coalesce both spellings in every read (pattern below); (b) filter by `kind` before matching resume rows; (c) expect the resume pre-check to degrade safely to "absent → re-delegate" when fields read null. Min CC was NOT bumped on this evidence (interactive-row variant only); if agent rows are confirmed renamed, the baseline-shift rule below applies and the next cc-update must bump.
+
 **Defensive jq pattern** (canonical for any plugin code reading this output):
 
 ```jq
 .[] | {
-  session:    (.session_id // "unknown"),
-  parent:     (.parent_agent_id // "none"),
+  session:    (.session_id // .sessionId // "unknown"),   # camelCase observed on 2.1.175
+  kind:       (.kind // "agent"),                          # "interactive" rows are NOT dispatched agents — filter before matching
+  parent:     (.parent_agent_id // .parentAgentId // "none"),
   tag:        (.tag // "untagged"),
   waiting_for: (.waitingFor // ""),  # "" = busy mid-work; "approval"/"input" = parked on us
   state:       (.state // "")        # "running"/"blocked"/"done" (v2.1.169)

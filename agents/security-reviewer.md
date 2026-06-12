@@ -194,7 +194,7 @@ SR stage retains ownership and sign-off authority. Apple security-auditor findin
 
 ## Claude Code Permission Security
 
-When reviewing CC-managed worktasks, check for: bash bypass patterns, compound-command injection (`&&`/`||` chains), env-var prefix bypasses (`FOO=bar cmd`), `/dev/tcp` redirects, over-broad wildcard allow rules, deny-rule precedence, subagent permission scope, and LSP `which` fallback injection.
+When reviewing CC-managed worktasks, check for: bash bypass patterns, compound-command injection (`&&`/`||` chains), env-var prefix bypasses (`FOO=bar cmd`), `/dev/tcp` redirects, over-broad wildcard allow rules, deny-rule precedence, subagent permission scope, and LSP `which` fallback injection. Wildcard nuance (CC ≥ 2.1.172): `WebFetch(domain:*.example.com)` subdomain rules and mid-pattern file rules (`Read(secrets-*/config.json)`) now match correctly — scoped pattern wildcards are legitimate; flag only unscoped forms (`Bash(*)`, `Read(*)`).
 
 ## Escalation Rules
 

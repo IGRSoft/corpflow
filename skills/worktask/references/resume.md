@@ -34,6 +34,8 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 
    This single pre-check eliminates three waste classes: blind respawn of an already-working subagent, redundant nudging of a busy one, and blind re-dispatch of an invisible blocked one. If the `claude agents` command is unavailable in the environment (runtime/tool fallback), skip the pre-check and re-delegate from the first incomplete stage. See `skills/agent-coordination/references/headless-dispatch.md § Live Session Discovery`.
 
+   **Reliability note (CC ≥ 2.1.172)**: the `state` signal got more trustworthy — CC 2.1.172 fixed background sub-agents staying stuck as `active` after a nested child they spawned was stopped, and removed the up-to-30s busy-spinner lag in the agents view. With nested spawning live (5 levels), only match **top-level** dispatched agents from `facts.dispatched_agents[]`; rows whose `parent_agent_id` points at another live row are the stage agent's own children — never reattach or re-delegate those directly. Nothing here is retired; the branch table above is unchanged.
+
    **Authority caveat**: a `SendMessage` reattach may *nudge* a parked agent (supply an awaited answer, re-prompt) but **cannot authorize** anything — a relayed `SendMessage` does not carry the operator's permission authority (the receiver refuses relayed permission requests; auto mode blocks them). PL0 and FN gates stay operator-owned: never treat a reattach as standing in for the human approval gate.
 1. `tail -n 50 .context/logs/audit.jsonl | jq .` — last 50 audit lines
 2. `TaskList()` — current Task System state
