@@ -5,6 +5,7 @@ model: sonnet
 color: cyan
 effort: medium
 maxTurns: 40
+version: 0.1.0
 tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 hooks:
   Stop:
@@ -82,6 +83,27 @@ In the 9-stage worktask system, the project-manager handles:
   fi
   ```
 
+- **Branch-continuity validation (runs BEFORE any merge/fast-forward/PR push)**:
+
+  The worktree branch can be renamed or rebased externally mid-run (e.g. a Conductor workspace rename, or a user commit to the integration branch), leaving the worktree HEAD no longer reachable from the integration branch. A blind fast-forward then fails or, worse, silently drops commits. Verify continuity first:
+
+  1. **Ancestor check** — confirm the worktree branch HEAD is an ancestor of (or equal to) the integration branch target. Use `git merge-base --is-ancestor <worktree-branch-HEAD> <integration-branch>`. If true, fast-forward / standard merge is safe.
+  2. **Diverged → explicit cherry-pick fallback** — if the worktree HEAD is NOT reachable, log a clear diagnostic before falling back: `worktree branch diverged — falling back to cherry-pick; verify commits are complete.` Append one `audit.jsonl` row (`action: "branch_continuity"`, `result: "diverged_cherry_pick"`, `metadata: {worktree_head, integration_branch, commit_count}`). Cherry-pick the worktree commits onto the integration branch and confirm the commit count matches the worktree's unmerged set.
+  3. **Document the fallback** — record the outcome (fast-forward vs cherry-pick fallback, with commit count) in `complete-summary-N.md` so ST can confirm every worktree commit is accounted for in the final merge.
+
+  ```bash
+  wt_head=$(git rev-parse HEAD)
+  int_branch="$(jq -r '.git.base_branch // "main"' .context/state.json 2>/dev/null || echo main)"
+  if git merge-base --is-ancestor "$wt_head" "$int_branch" 2>/dev/null; then
+    : # continuous — fast-forward / merge is safe
+  else
+    echo "worktree branch diverged — falling back to cherry-pick; verify commits are complete." >&2
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); n=$(git rev-list --count "$int_branch..$wt_head" 2>/dev/null || echo 0)
+    printf '{"ts":"%s","actor":"project-manager","action":"branch_continuity","subject":"FN0","result":"diverged_cherry_pick","metadata":{"worktree_head":"%s","integration_branch":"%s","commit_count":%s}}\n' \
+      "$ts" "$wt_head" "$int_branch" "$n" >> .context/logs/audit.jsonl
+  fi
+  ```
+
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
 
@@ -151,6 +173,7 @@ Before marking FN stage complete, verify:
 - [ ] `.context/attachments/Review request.md` written with final data (per `skills/worktask/references/conductor-attachments.md`; overwrite any pre-seeded file from the orchestrator) — **verified by `test -f`, not assumed from prior pre-seed**
 - [ ] All stage artifacts collected and reviewed
 - [ ] PR created with proper title and description
+- [ ] Branch-continuity validated before merge/push (ancestor check passed, OR cherry-pick fallback used AND documented in complete-summary-N.md)
 - [ ] All tests passing in final build
 - [ ] No unresolved blockers from any stage
 
