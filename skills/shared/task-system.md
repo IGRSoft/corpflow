@@ -132,6 +132,10 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
     },
     "approved": {
       "enum": ["user", "auto"]
+    },
+    "requires_screenshots": {
+      "type": "boolean",
+      "description": "Advisory: DV and QA tasks SHOULD carry this, stamped by PL0 from the plan frontmatter (writer: product-manager via detect-ui-change.sh). Drives dv-screenshot-capture + hooks/dv-screenshot-gate.sh + attach-visual-evidence.sh. Downstream readers default it true as defense-in-depth when absent."
     }
   },
   "allOf": [

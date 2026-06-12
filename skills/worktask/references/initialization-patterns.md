@@ -320,6 +320,11 @@ After planning completes, PL0 creates stage tasks based on complexity score. Eac
 ```typescript
 // Example: PL0 creates stages for a medium-complexity task
 const worktaskId = "dark-mode-2025";
+// requires_screenshots: the value PL0 stamped on the plan frontmatter, computed
+// by `skills/worktask/references/detect-ui-change.sh <plan> --platform <p>`
+// (true whenever the change set touches UI; fail-safe true on detector error).
+// Read it back from the plan frontmatter and propagate to DV + QA below.
+const requiresScreenshots = planMetadata.requires_screenshots; // boolean
 
 // Capture task IDs returned by TaskCreate.
 // NOTE: context_files includes error_file per task-system § context_files ↔ error_file coupling.
@@ -346,6 +351,10 @@ const dv0 = TaskCreate({
     error_file: ".context/errors/developer.md",
     context_files: `exploration.md,${planFile},analyzing.md,coordination.md,.context/errors/developer.md`,
     plan_file: planFile,
+    // requires_screenshots is the value PL0 stamped on the plan frontmatter
+    // (set by detect-ui-change.sh — see agents/product-manager.md). Propagated
+    // here so the capture skill + dv-screenshot-gate fire deterministically.
+    requires_screenshots: requiresScreenshots,
     worktask_id: worktaskId, priority: "medium"
   }
 });
@@ -372,6 +381,9 @@ const qa0 = TaskCreate({
     error_file: ".context/errors/qa-engineer.md",
     context_files: `exploration.md,${planFile},developer-review.md,testing.md,.context/errors/qa-engineer.md`,
     plan_file: planFile,
+    // Same flag PL0 stamped on the plan frontmatter — QA's Q1.5 manifest
+    // ingestion / advisory-skip reads it (agents/qa-engineer.md).
+    requires_screenshots: requiresScreenshots,
     worktask_id: worktaskId, priority: "medium"
   }
 });

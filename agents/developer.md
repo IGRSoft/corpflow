@@ -178,7 +178,9 @@ Before marking DV complete, DV MUST capture visual evidence of the implemented w
 
 ### Trigger (DV-final precondition)
 
-Run this immediately after `D3` (tests pass) and before writing the DV Completion Checklist:
+Run this immediately after `D3` (tests pass) and before writing the DV Completion Checklist.
+
+PL0 is the writer of `requires_screenshots` (stamped on the plan frontmatter, your task metadata, and `state.json` via `detect-ui-change.sh`); the `?? true` below is defense-in-depth for ad-hoc/legacy runs only, not the primary source.
 
 ```
 if (task.metadata.requires_screenshots ?? true) {

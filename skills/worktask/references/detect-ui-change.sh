@@ -1,0 +1,259 @@
+#!/usr/bin/env bash
+# detect-ui-change.sh — deterministic UI-change detection for PL0.
+#
+# PL (product-manager) runs this against the draft plan to decide whether the
+# worktask's change set touches UI, and stamps the result on
+# `metadata.requires_screenshots` (plan frontmatter + DV/QA task metadata +
+# state.json). The flag drives dv-screenshot-capture and its completion gate.
+# See agents/product-manager.md § Required Metadata and analyzing-0.md (ad2).
+#
+# Usage:
+#   detect-ui-change.sh <plan-file> [--platform <p>]
+#   detect-ui-change.sh --self-test
+#
+# Output (stdout, single JSON line):
+#   {"requires_screenshots": <bool>, "signals": ["S1",...], "rationale": "<one line>"}
+#
+# Contract:
+#   - Exit 0 ALWAYS on the detection path. Any parse/IO error → emit
+#     {"requires_screenshots": true, ..., "rationale": "...fail_safe_default"} and
+#     still exit 0. The safe failure direction is toward capture (false positives
+#     are cheap; a missed UI capture re-opens the original bug).
+#   - ANY signal true ⇒ requires_screenshots: true (OR over S1..S4).
+#
+# Signals (analyzing-0.md#architecture (a)):
+#   S1  plan frontmatter `ui_visual_check: true` (invariant: ui_visual_check ⇒ true)
+#   S2  .context/designs/ contains figma-registry.md OR any *.png
+#   S3  plan ## scope / ## requirements match the UI keyword set (word-boundary, -i)
+#   S4  platform ∈ {apple,web,android} AND scope names UI path classes
+#
+# Override asymmetry (caller-side policy, documented here for completeness):
+#   PL may force TRUE at any time without justification. Forcing FALSE when the
+#   detector said TRUE requires an explicit user directive quoted in the plan
+#   rationale. The detector itself never silently downgrades.
+
+set -u
+
+PLATFORM=""
+PLAN_FILE=""
+# .context root for the S2 designs probe. Defaults beside the plan file's repo;
+# overridable for self-tests via DESIGNS_DIR.
+DESIGNS_DIR="${DESIGNS_DIR:-.context/designs}"
+
+# UI keyword set (S3) — word-boundary, case-insensitive.
+UI_KEYWORDS='SwiftUI|UIKit|AppKit|storyboard|xib|screen|layout|styling|CSS|HTML|component|animation|theme|view'
+# UI path classes (S4).
+UI_PATH_CLASSES='Views/|Screens/|UI/|Components/|\.storyboard|\.xib|\.tsx|\.jsx|\.vue|\.svelte|\.css|\.scss|\.html'
+
+emit() {
+  # $1=bool ("true"/"false"), $2=signals-json-array, $3=rationale
+  if command -v jq >/dev/null 2>&1; then
+    jq -cn --argjson req "$1" --argjson sig "$2" --arg r "$3" \
+      '{requires_screenshots:$req, signals:$sig, rationale:$r}'
+  else
+    # jq-absent floor: hand-rolled JSON (rationale never contains a quote here).
+    printf '{"requires_screenshots":%s,"signals":%s,"rationale":"%s"}\n' "$1" "$2" "$3"
+  fi
+}
+
+fail_safe() {
+  # $1=rationale-suffix. Emit true + fail_safe_default, exit 0.
+  emit true '["fail_safe"]' "UI-change detection error: $1; defaulting to true (fail_safe_default)"
+  exit 0
+}
+
+# Extract the frontmatter `ui_visual_check` value (S1). Echoes true|false|"".
+plan_ui_visual_check() {
+  local plan="$1"
+  awk '
+    NR==1 && $0=="---" { fm=1; next }
+    fm==1 && $0=="---" { exit }
+    fm==1 && /^[[:space:]]*ui_visual_check[[:space:]]*:/ {
+      v=$0; sub(/.*:[[:space:]]*/,"",v); sub(/[[:space:]]*#.*/,"",v); gsub(/[[:space:]"]+/,"",v)
+      print tolower(v); exit
+    }
+  ' "$plan" 2>/dev/null
+}
+
+# Echo the body of ## scope and ## requirements sections (S3/S4 search corpus).
+plan_ui_sections() {
+  local plan="$1"
+  awk '
+    /^##[[:space:]]/ {
+      h=tolower($0)
+      inblk = (h ~ /^##[[:space:]]+(scope|requirements)([[:space:]]|$)/) ? 1 : 0
+      next
+    }
+    inblk==1 { print }
+  ' "$plan" 2>/dev/null
+}
+
+detect() {
+  local plan="$1" platform="$2"
+  [ -f "$plan" ] || fail_safe "plan file not readable: $plan"
+
+  local signals=() req="false"
+
+  # S1 — ui_visual_check: true (invariant).
+  local uvc; uvc=$(plan_ui_visual_check "$plan")
+  if [ "$uvc" = "true" ]; then
+    signals+=("S1"); req="true"
+  fi
+
+  # S2 — design artifacts present.
+  if [ -f "$DESIGNS_DIR/figma-registry.md" ] || \
+     ls "$DESIGNS_DIR"/*.png >/dev/null 2>&1; then
+    signals+=("S2"); req="true"
+  fi
+
+  local sections; sections=$(plan_ui_sections "$plan")
+
+  # S3 — UI keyword match (word-boundary, case-insensitive) in scope/requirements.
+  if printf '%s\n' "$sections" | grep -qiwE "$UI_KEYWORDS" 2>/dev/null; then
+    signals+=("S3"); req="true"
+  fi
+
+  # S4 — platform ∈ {apple,web,android} AND scope names UI path classes.
+  case "$platform" in
+    apple|web|android)
+      if printf '%s\n' "$sections" | grep -qE "$UI_PATH_CLASSES" 2>/dev/null; then
+        signals+=("S4"); req="true"
+      fi ;;
+  esac
+
+  # Build signals JSON array.
+  local sig_json="[]"
+  if [ "${#signals[@]}" -gt 0 ]; then
+    if command -v jq >/dev/null 2>&1; then
+      sig_json=$(printf '%s\n' "${signals[@]}" | jq -R . | jq -cs .)
+    else
+      local s out=""
+      for s in "${signals[@]}"; do out="$out\"$s\","; done
+      sig_json="[${out%,}]"
+    fi
+  fi
+
+  local rationale
+  if [ "$req" = "true" ]; then
+    rationale="UI change detected (signals: ${signals[*]}); requires_screenshots=true"
+  else
+    rationale="No UI signal in plan scope/requirements (platform=$platform); requires_screenshots=false"
+  fi
+  emit "$req" "$sig_json" "$rationale"
+}
+
+# ---------- self-test -------------------------------------------------------
+run_self_tests() {
+  local pass=0 fail=0 td out
+  td=$(mktemp -d 2>/dev/null || echo "/tmp/detect-ui-change.$$")
+  mkdir -p "$td/.context/designs"
+
+  _assert() { # $1=label $2=expected-bool $3=actual-json
+    local got; got=$(printf '%s' "$3" | jq -r '.requires_screenshots' 2>/dev/null)
+    if [ "$got" = "$2" ]; then
+      echo "detect-ui-change: $1 PASS (requires_screenshots=$got)"; pass=$((pass+1))
+    else
+      echo "detect-ui-change: $1 FAIL (want=$2 got=$got json=$3)"; fail=$((fail+1))
+    fi
+  }
+
+  # t1 — UI-scoped plan via S3 keyword → true.
+  cat > "$td/ui.md" <<'MD'
+---
+ui_visual_check: false
+---
+# Plan
+## requirements
+- REQ-1: add a new SwiftUI view with custom layout and animation
+## scope
+In: Views/Settings. Out: backend.
+MD
+  out=$(DESIGNS_DIR="$td/.context/designs" bash "$0" "$td/ui.md" --platform apple)
+  _assert "t1-keyword-S3" true "$out"
+
+  # t2 — non-UI plan → false.
+  cat > "$td/nonui.md" <<'MD'
+---
+ui_visual_check: false
+---
+# Plan
+## requirements
+- REQ-1: refactor the bash audit helper and tighten jq parsing
+## scope
+In: skills/worktask/references. Out: any UI.
+MD
+  out=$(DESIGNS_DIR="$td/.context/designs" bash "$0" "$td/nonui.md" --platform all)
+  _assert "t2-non-ui" false "$out"
+
+  # t3 — S1 invariant: ui_visual_check:true forces true even with no keywords.
+  cat > "$td/s1.md" <<'MD'
+---
+ui_visual_check: true
+---
+# Plan
+## requirements
+- REQ-1: pure backend rewrite, no visuals
+## scope
+In: server. Out: client.
+MD
+  out=$(DESIGNS_DIR="$td/.context/designs" bash "$0" "$td/s1.md" --platform all)
+  _assert "t3-S1-invariant" true "$out"
+  if printf '%s' "$out" | jq -e '.signals | index("S1")' >/dev/null 2>&1; then
+    echo "detect-ui-change: t3-S1-signal PASS"; pass=$((pass+1))
+  else
+    echo "detect-ui-change: t3-S1-signal FAIL (S1 not in signals: $out)"; fail=$((fail+1))
+  fi
+
+  # t4 — fail-safe: missing plan file → true.
+  out=$(DESIGNS_DIR="$td/.context/designs" bash "$0" "$td/does-not-exist.md" --platform all)
+  _assert "t4-fail-safe" true "$out"
+  if printf '%s' "$out" | grep -q 'fail_safe_default'; then
+    echo "detect-ui-change: t4-fail-safe-reason PASS"; pass=$((pass+1))
+  else
+    echo "detect-ui-change: t4-fail-safe-reason FAIL ($out)"; fail=$((fail+1))
+  fi
+
+  # t5 — S4 path-class match (platform apple + Views/ path) with no S3 keyword.
+  cat > "$td/s4.md" <<'MD'
+---
+ui_visual_check: false
+---
+# Plan
+## requirements
+- REQ-1: relocate files under Views/Profile/ for tidiness
+## scope
+In: Views/Profile. Out: nothing visual described in words.
+MD
+  out=$(DESIGNS_DIR="$td/.context/designs" bash "$0" "$td/s4.md" --platform apple)
+  _assert "t5-S4-pathclass" true "$out"
+
+  # t6 — S2 design artifact present forces true on an otherwise non-UI plan.
+  cp /dev/null "$td/.context/designs/figma-registry.md"
+  out=$(DESIGNS_DIR="$td/.context/designs" bash "$0" "$td/nonui.md" --platform all)
+  _assert "t6-S2-designs" true "$out"
+
+  rm -rf "$td"
+  echo "detect-ui-change: self-test summary — pass=$pass fail=$fail"
+  [ "$fail" -eq 0 ]
+}
+
+# ---------- entrypoint ------------------------------------------------------
+if [ "${1:-}" = "--self-test" ]; then
+  run_self_tests || exit 2
+  exit 0
+fi
+
+# Parse args: first non-flag = plan file; --platform <p>.
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --platform) PLATFORM="${2:-}"; shift 2 ;;
+    --platform=*) PLATFORM="${1#*=}"; shift ;;
+    -h|--help)
+      sed -n '2,30p' "$0"; exit 0 ;;
+    *) [ -z "$PLAN_FILE" ] && PLAN_FILE="$1"; shift ;;
+  esac
+done
+
+[ -n "$PLAN_FILE" ] || fail_safe "no plan file argument"
+detect "$PLAN_FILE" "$PLATFORM"
+exit 0

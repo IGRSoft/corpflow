@@ -115,11 +115,15 @@ If a PR already exists, print its URL and stop — do not create a duplicate.
 ## Test plan
 <from QA verdict in testing artifact, or generic checklist>
 
+<!-- ## Visual evidence — inserted here when UI changed; see below -->
+
 ## Notes
 <DR verdict, risks, follow-ups if available; omit section if nothing to add>
 
 Closes #<issue>
 ```
+
+**Visual evidence section** (between `## Test plan` and `## Notes`): run `skills/worktask/references/attach-visual-evidence.sh --emit pr` and insert its stdout verbatim between those two sections. Insert only when stdout is non-empty (helper self-gates: empty when `metadata.requires_screenshots == false` or no captures exist). Never hand-author the section; never emit relative `.context/` image refs.
 
 The trailing `Closes #<issue>` line is **mandatory** when the worktask has a linked issue (resolved per `agents/project-manager.md § FN Stage` PR-issue-link validator). Omit only when no issue number is resolvable from any source.
 
@@ -138,6 +142,7 @@ gh pr create \
 ## Test plan
 <...>
 
+$(bash "${CLAUDE_PLUGIN_ROOT}/skills/worktask/references/attach-visual-evidence.sh" --emit pr 2>/dev/null || true)
 ## Notes
 <...>
 
