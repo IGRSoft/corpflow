@@ -130,6 +130,9 @@ build_block() {
   fi
 
   select_host_tier   # sets HOST_TIER (+ owner/ref for raw)
+  # Propagate HOST_TIER past the command-substitution subshell boundary: callers
+  # pass a tempfile path via HOST_TIER_FILE and read it back after $() returns.
+  [ -n "${HOST_TIER_FILE:-}" ] && printf '%s' "$HOST_TIER" > "$HOST_TIER_FILE"
 
   local img_dir; img_dir=$(dirname "$mf")
   local out="" embed_count=0 num path cap kind src url bullets=""
@@ -144,6 +147,7 @@ build_block() {
         fi
         # none-tier: never embed an image; list as bullet instead (no broken ![]()).
         if [ "$HOST_TIER" = "none" ]; then
+          bullets="${bullets}- ${path} — inline hosting unavailable; see manifest."$'\n'
           continue
         fi
         src="$img_dir/$(basename "$path")"
@@ -197,16 +201,19 @@ emit_pr() {
     return 0   # empty stdout
   fi
   local mf; mf=$(manifest_path)
-  local block
-  if block=$(BLOCK_MANIFEST_REF=".context/images/$WORKTASK_ID/screenshots.md" \
+  local block _tier_tmp _tier; _tier="none"
+  _tier_tmp=$(mktemp 2>/dev/null || printf '%s' "${TMPDIR:-/tmp}/ave-tier-pr.$$")
+  if block=$(HOST_TIER_FILE="$_tier_tmp" BLOCK_MANIFEST_REF=".context/images/$WORKTASK_ID/screenshots.md" \
              build_block "$mf" "## Visual evidence"); then
+    _tier=$(cat "$_tier_tmp" 2>/dev/null || printf 'none'); rm -f "$_tier_tmp"
     printf '%s' "$block"
     local caps; caps=$(printf '%s' "$block" | grep -c '^!\[' || true)
     audit_av "visual_evidence_pr_emitted" "ok" \
       "$(jq -cn --arg w "$WORKTASK_ID" --argjson r "$RUN_INDEX" --argjson c "${caps:-0}" \
-         --arg t "${HOST_TIER:-none}" --arg dk "$dk" \
+         --arg t "$_tier" --arg dk "$dk" \
          '{worktask_id:$w, run_index:$r, captures:$c, host_tier:$t, reason:"emitted", dedupe_key:$dk}')"
   else
+    rm -f "$_tier_tmp"
     # No captures → empty emission.
     audit_av "visual_evidence_pr_emitted" "skipped" \
       "$(jq -cn --arg w "$WORKTASK_ID" --argjson r "$RUN_INDEX" --arg dk "$dk" \
@@ -246,19 +253,22 @@ post_issue() {
 
   # Gate 3: build block; no captures → skip.
   local mf; mf=$(manifest_path)
-  local block
-  if ! block=$(BLOCK_MANIFEST_REF=".context/images/$WORKTASK_ID/screenshots.md" \
+  local block _tier_tmp _tier; _tier="none"
+  _tier_tmp=$(mktemp 2>/dev/null || printf '%s' "${TMPDIR:-/tmp}/ave-tier-issue.$$")
+  if ! block=$(HOST_TIER_FILE="$_tier_tmp" BLOCK_MANIFEST_REF=".context/images/$WORKTASK_ID/screenshots.md" \
                build_block "$mf" "## Visual evidence (DV captures, run $RUN_INDEX)"); then
+    rm -f "$_tier_tmp"
     audit_av "visual_evidence_issue_commented" "skipped" \
       "$(_issue_meta 0 none no_captures "$issue_url" "$dk")"
     return 0
   fi
+  _tier=$(cat "$_tier_tmp" 2>/dev/null || printf 'none'); rm -f "$_tier_tmp"
   local caps; caps=$(printf '%s' "$block" | grep -c '^!\[' || true)
 
   # Gate 4: idempotency — marker already present on the issue → skip.
   if issue_has_marker "$issue_url" "$marker"; then
     audit_av "visual_evidence_issue_commented" "skipped" \
-      "$(_issue_meta "${caps:-0}" "${HOST_TIER:-none}" already_published "$issue_url" "$dk")"
+      "$(_issue_meta "${caps:-0}" "$_tier" already_published "$issue_url" "$dk")"
     return 0
   fi
 
@@ -270,10 +280,10 @@ post_issue() {
   comment_body="$(printf '%s\n%s' "$marker" "$block")"
   if printf '%s' "$comment_body" | "$GH_BIN" issue comment "$issue_url" --body-file - >/dev/null 2>&1; then
     audit_av "visual_evidence_issue_commented" "ok" \
-      "$(_issue_meta "${caps:-0}" "${HOST_TIER:-none}" commented "$issue_url" "$dk")"
+      "$(_issue_meta "${caps:-0}" "$_tier" commented "$issue_url" "$dk")"
   else
     audit_av "visual_evidence_issue_commented" "deferred" \
-      "$(_issue_meta "${caps:-0}" "${HOST_TIER:-none}" gh_error "$issue_url" "$dk")"
+      "$(_issue_meta "${caps:-0}" "$_tier" gh_error "$issue_url" "$dk")"
   fi
   return 0
 }
