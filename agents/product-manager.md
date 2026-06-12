@@ -73,13 +73,14 @@ When planning features, define the test strategy in the plan file. Include: test
 
 ### Required Metadata: Test Selection Gate
 
-Every plan file (`planning-N.md`) MUST declare three fields in its frontmatter `metadata` block. These drive DV (step D2), QA (step Q1), and the Visual Comparison subsection.
+Every plan file (`planning-N.md`) MUST declare four fields in its frontmatter `metadata` block. These drive DV (step D2), QA (step Q1), the Visual Comparison subsection, and the screenshot capture gate.
 
 ```yaml
 metadata:
   test_mode: scoped              # build-only | scoped | full
   always_required_tests: []      # explicit override list of test IDs
   ui_visual_check: false         # gate for QA's visual/design comparison
+  requires_screenshots: false    # REQUIRED — drives DV screenshot capture + gate
 ```
 
 #### `test_mode` — selection breadth
@@ -114,6 +115,22 @@ Independent of `test_mode`. Set `true` when at least one applies:
 
 When `true` AND `.context/designs/` has artifacts, QA performs Design Comparison during Q1.
 
+#### `requires_screenshots` — DV screenshot capture gate (REQUIRED)
+
+Drives `dv-screenshot-capture` and its SubagentStop completion gate (`hooks/dv-screenshot-gate.sh`). When `true`, DV MUST produce `.context/images/<worktask_id>/screenshots.md`; the captures are later embedded in BOTH the PR body and the GitHub issue (binding user directive — UI changes always surface screenshots on both). When `false`, DV writes a skip-rationale manifest and the gate passes.
+
+**PL0 is the sole WRITER of this flag.** Do not rely on the downstream `?? true` defaults — those are defense-in-depth for ad-hoc/legacy runs only. Stamp it deterministically:
+
+1. Run the detector against the draft plan:
+   ```bash
+   skills/worktask/references/detect-ui-change.sh <draft-plan> --platform <platform>
+   ```
+   It emits `{"requires_screenshots": <bool>, "signals": [...], "rationale": "..."}`. Signals (ANY true ⇒ true): **S1** `ui_visual_check: true` (invariant); **S2** `.context/designs/` has `figma-registry.md` or any `*.png`; **S3** the `## scope`/`## requirements` text matches the UI keyword set; **S4** platform ∈ {apple, web, android} AND scope names UI path classes (`Views/`, `Screens/`, `*.storyboard`, `*.tsx`, …). The detector exits 0 always; any error returns `true` (`fail_safe_default`).
+2. Stamp the returned value on the plan frontmatter `metadata.requires_screenshots` and record the `rationale` line in the plan (this satisfies AC-2's "recorded rationale" when false).
+3. **Override asymmetry**: you may force `true` at any time without justification. Forcing `false` when the detector said `true` requires an explicit user directive quoted in the plan rationale — the detector never silently downgrades.
+
+The flag MUST be propagated on all three writer surfaces (see Downstream propagation below): plan frontmatter, the DV+QA task metadata, and `state.json .metadata.requires_screenshots` (the channel the gate reads — SubagentStop stdin does not carry task metadata in live runs).
+
 #### Backward compatibility
 
 Legacy `requires_ui_tests` was sunset; new plans MUST use `test_mode` + `ui_visual_check`. See `skills/shared/testing-strategy.md § Backward compatibility` for the historical mapping table preserved for one release cycle, and `skills/shared/test-selection-syntax.md` for the marker grammar that DV parses.
@@ -146,7 +163,7 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 1. Glob `.context/planning-*.md`. Extract the integer suffix from each match.
 2. If matches exist, set `N = max(existing) + 1`. Otherwise `N = 0`.
 3. Write `.context/planning-${N}.md`. Do **not** overwrite `planning-0.md`, ..., `planning-(N-1).md` — they remain as historical plans.
-4. **state.json reset** (new run in existing `.context/`): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, and empty `facts.*` (preserves `version`, `worktask_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
+4. **state.json reset** (new run in existing `.context/`): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, `metadata.requires_screenshots` set to the detector's value (the channel `hooks/dv-screenshot-gate.sh` and `attach-visual-evidence.sh` read), and empty `facts.*` (preserves `version`, `worktask_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
 
 **Downstream propagation**: when PL creates downstream stage tasks via `TaskCreate`, stamp **all** of the following on each:
 
@@ -156,6 +173,7 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 | `metadata.run_index` | `N` (integer) | Resolve `<basename>-${N}.md` artifacts |
 | `metadata.skip_exploration` | `true` if `.context/exploration.md` exists | Suppress redundant Glob/Grep in AR/TL/DV |
 | `metadata.exploration_anchors` | `["exploration.md#facts", "exploration.md#refs", "planning-${N}.md#requirements"]` (when `skip_exploration: true`) | Authoritative pre-explored set |
+| `metadata.requires_screenshots` | the detector value from the plan frontmatter (boolean) | Drive DV capture + gate; consumed by DV (capture), QA (Q1.5), and `attach-visual-evidence.sh`. Stamp on DV and QA tasks. |
 
 Every stage agent uses `run_index` to resolve its artifact path as `<basename>-${N}.md`. Reader resolution order for `plan_file`: `metadata.plan_file` first, then newest `.context/planning-*.md` (highest N) if metadata is absent.
 

@@ -1416,6 +1416,9 @@ MOCK
   [ "$fail" -eq 0 ]
 }
 
+# Library mode: attach-visual-evidence.sh sources this file for the tier logic.
+[ "${PUBLISH_LIB_ONLY:-0}" = "1" ] && return 0 2>/dev/null
+
 # ---------- entrypoint ------------------------------------------------------
 if [ "${1:-}" = "--self-test" ]; then
   run_self_tests || exit 2

@@ -699,6 +699,26 @@ A second human-in-the-loop checkpoint immediately before any FN-stage task: pres
 
 **WHEN the gate fires — Read `references/fn-gate.md` BEFORE printing anything** and follow its 6-step "Effect, in order" list (pre-gate attachments writer → verify pre-seed → summary precondition → pre-FN summary → `fn_gate_waiting` → re-verify + `return`). The same file covers the Pre-gate Conductor-attachments writer, `return` vs `continue`, resume-after-approval, user amendment, and gate audit lines.
 
+## Post-capture issue update (Visual evidence)
+
+After the execution loop exits (all stage tasks completed — this runs whether or not the stage set includes FN, and after the FN push when it does so the raw asset tier sees a reachable ref): post the DV screenshot captures to the GitHub issue as a marker-deduped comment. Mirrors Step 6.5's invocation discipline exactly — **non-blocking by contract** (`; true`; helper exits 0 on every operational outcome):
+
+```bash
+HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/references/attach-visual-evidence.sh"
+if [ -f "$HELPER" ]; then
+  bash "$HELPER" --post issue; true
+else
+  LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
+  mkdir -p "$LOG_DIR"
+  STATE_FILE="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/state.json"
+  jq -cn --arg ts "$(date -u +%FT%TZ)" --arg dk "$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo unknown):$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo 0):visual_evidence:issue" \
+    '{ts:$ts, actor:"orchestrator", action:"visual_evidence_issue_commented", result:"deferred", metadata:{via:"attach-visual-evidence.sh", reason:"helper_not_found", dedupe_key:$dk}}' \
+    >> "$LOG_DIR/audit.jsonl"; true
+fi
+```
+
+The helper self-gates: it skips silently when `metadata.requires_screenshots == false` or no captures exist, defers when `metadata.github_issue_url` is absent (publish deferred / failed at Step 6.5) or under milestone mode, and dedupes on the HTML marker `<!-- visual-evidence:<worktask_id>:<run_index> -->` so a retry never double-posts. Each outcome is one `visual_evidence_issue_commented` audit row (`result ∈ {ok, skipped, deferred}`). The PR-body counterpart (`--emit pr`) is owned by the FN stage during PR composition, not here — see `agents/project-manager.md` and `references/conductor-attachments.md`.
+
 ## Post-Worktask Self-Improvement
 
 After the execution loop exits (all tasks completed, including ST): if `.context/learnings.md` exists, Read `references/fn-gate.md § Post-Worktask Self-Improvement` and follow the Post-ST procedure (surface learnings → user checks boxes → delegate checked items to prompt-engineer → audit → terminate). Absent → worktask complete. Never apply unchecked proposals.
