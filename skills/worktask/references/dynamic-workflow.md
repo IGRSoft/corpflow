@@ -68,9 +68,12 @@ PL0 (plan) -> PL0 GATE (HUMAN) -> publish-pl-issue.sh
 The script is a pure JS module: a literal `meta` export followed by a top-level body. Helpers (`phase`,
 `agent`, `parallel`) are runtime globals provided by the Workflow engine. **Cache-prefix discipline
 (binding):** the script body MUST be deterministic — no `Date.now()`, no `Math.random()`, no per-run
-counters or timestamps baked into prompts or `meta`. All run-varying values (`run_index`, `worktask_id`,
-model aliases) are passed in as `args` (the global provided by the Workflow engine), not generated inside
-the body. This keeps the cached prefix stable so `resumeFromRunId` replay hits cache.
+counters or timestamps baked into prompts or `meta`. (Since v2.1.172 the engine's validator rejects only
+*real calls* — prompt strings or comments that merely mention `Date.now()`/`Math.random()` pass validation.
+The semantic rule here is unchanged: determinism is what keeps replay cache-stable.) All run-varying values
+(`run_index`, `worktask_id`, model aliases) are passed in as `args` (the global provided by the Workflow
+engine), not generated inside the body. This keeps the cached prefix stable so `resumeFromRunId` replay
+hits cache.
 
 ```js
 // .context/workflow/single-issue.workflow.js  (authored per-run by the orchestrator from the template)
@@ -358,7 +361,7 @@ script (the orchestrator's reconciliation rows are authoritative).
 |--------|--------|------|-------|
 | `workflow_launched` | orchestrator | After PL0 gate, before dispatching the `Workflow` tool | `metadata: { run_id, mode, stops_before, budget }` |
 | `workflow_returned` | orchestrator | On workflow return, after reconciliation | `metadata: { run_id, stages_completed[] }` |
-| `workflow_agent_stopped` | `workflow-script` | Each `agent()` child completion (advisory) | Mirrors `subagent_stopped`; deduped against the hook row if `SubagentStop` also fires. |
+| `workflow_agent_stopped` | `workflow-script` | Each `agent()` child completion (advisory) | Mirrors `subagent_stopped`; deduped against the hook row if `SubagentStop` also fires. Per-agent attribution headers on `agent()` children are present since v2.1.174 (previously missing) — child output is attributable without the advisory row, but keep emitting it for the audit trail. |
 | `dynamic_fallback` | orchestrator | `Workflow` tool absent or run crashed → manual loop | `metadata: { reason }` |
 
 ---
@@ -379,9 +382,10 @@ silent kill). Budget is **best-effort** — it bounds spend, it does not guarant
 | ID | Risk | Mitigation (binding) |
 |----|------|----------------------|
 | **R1** | **Dynamic-milestone opens N PRs autonomously**, bypassing per-issue human review. | The dynamic-milestone launch **requires one explicit operator confirmation that states the exact PR count** before any lane runs. Per-lane `fn_gate` policy MUST be explicit. The launch banner reads: `"Dynamic milestone N will open <count> PRs across <count> issues autonomously. Confirm to proceed."` No lane runs until the operator confirms. |
-| **R2** | Unknown whether `SubagentStop` fires for workflow-spawned `agent()` children (so `state-merge.sh`/`audit-subagent.sh` may not run). | **Pessimistic design**: the script does its own schema-merge + emits advisory `workflow_agent_stopped` rows, so it is correct either way. If the hook fires, merges are idempotent no-ops. Recorded as open question q1 (build-time verification). |
+| **R2** | Unknown whether `SubagentStop` fires for workflow-spawned `agent()` children (so `state-merge.sh`/`audit-subagent.sh` may not run). | **Pessimistic design**: the script does its own schema-merge + emits advisory `workflow_agent_stopped` rows, so it is correct either way. If the hook fires, merges are idempotent no-ops. Recorded as open question q1 (build-time verification). **Verify-then-retire**: v2.1.174 fixed `agent()` children missing per-agent attribution headers — child lifecycle is now first-class in the engine, so the hook likely fires; confirm on the next dynamic run and retire this row if `subagent_stopped` hook rows appear for `agent()` children. |
 | **R3** | `agent()` has no `effort` param → per-stage effort cannot be passed explicitly. | Falls back to agent **frontmatter `effort:`** (#stage-agent-map). Documented; retire when the param lands. |
 | **R4** | Budget ceiling is best-effort, not a hard cap. | `ceiling_usd` bounds spend and pauses (not kills) the run; operator is surfaced the pause. Budget never guarantees completion. |
 | **R5** | Lost live-reattach + DR-iteration efficiency: a resumed dynamic run degrades to manual rather than rejoining the live engine run; DR fix/re-review iterations inside the span re-run full stages rather than incremental. | Resume is "replay-or-degrade", never "rejoin" (#resume). DR adversarial fan-out is bounded to complexity ≥ 25 (#script-template) to limit iteration cost. |
 | **R6** | The engine's ~1000-agent cap can be exceeded by very large milestones (each issue spends multiple lanes). | **Shard milestones larger than ~200 issues** into multiple dynamic runs (4-5 lanes/issue × 200 ≈ the cap). The orchestrator computes `lanes × issues` before launch and refuses a single run that would exceed the cap, prompting the operator to shard. |
 | ~~**R7**~~ | ~~Workflow `agent()` calls with `isolation:'worktree'` were silently blocked from editing their own worktree.~~ | **RESOLVED upstream (v2.1.161).** The CC fix lets `isolation:'worktree'` `agent()` children edit their worktree reliably; the prior silent edit-block is gone. The plugin's `parallel()` + `isolation:'worktree'` fan-out (#stage-agent-map, #script-template) now executes as documented — no workaround needed. Retained as a struck-through row so future reconciles do not re-chase it. |
+| **R8** | `agent()` per-call `opts.model` override is NOT honored when the session model requires 1M usage credits the account lacks: children die at dispatch with `API Error: Usage credits required for 1M context` even with `{model:'sonnet'}` (observed live 2026-06-12 on a Fable 5 session — Fable is 1M-by-default per v2.1.173; the direct Agent-tool `model:` pin DID work). | Do **not** rely on per-`agent()` model de-escalation in credit-gated environments. Mitigation: set a session `fallbackModel` (`--fallback-model`, v2.1.166) before launching the span, or skip dynamic mode (`dynamic_fallback` → manual loop, where direct `Task({model})` pins are honored). Re-test on each CC upgrade; retire if a future release resolves override-at-dispatch. |

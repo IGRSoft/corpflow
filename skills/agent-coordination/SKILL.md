@@ -176,7 +176,7 @@ worktree-split above. The two are distinct mechanisms with the same isolation gu
 | Parallelism | Orchestrator delegates one `Task()` per worktree, in-context | Engine spawns children via `parallel()` / `pipeline()` |
 | Isolation | Orchestrator creates `.worktrees/…` per issue | `agent(prompt, { …, isolation: 'worktree' })` — engine provisions the worktree |
 | Decision point | Orchestrator loop (blockedBy resolution) | TL stage output drives DV `parallel()` fan-out (`dynamic-workflow.md#script-template`) |
-| Scale | Bounded by `--parallel:N` (max 5) | Tens–hundreds of children (engine ~1000-agent cap; shard >~200-issue milestones) |
+| Scale | Bounded by `--parallel:N` (max 5) — that bound is **breadth** (sibling tracks); delegation **depth** is separate: sub-agents nest up to 5 levels (CC ≥ 2.1.172) | Tens–hundreds of children (engine ~1000-agent cap; shard >~200-issue milestones) |
 | Gates | PL0 + FN orchestrator-owned | **PL0 + FN STILL orchestrator-owned** — the span runs strictly between them |
 
 The `isolation: 'worktree'` setting maps onto the same `.worktrees/milestone-{N}/{issue#}/` topology as
@@ -330,6 +330,8 @@ for full code patterns.
 
 > **Cross-plugin AR collaboration**: For Apple platform projects, `software-architector` consults `apple-developer:apple-architector` during AR stage for Swift app architecture (pattern selection, DI, navigation, concurrency). See `cross-plugin-handoff` skill for the full protocol.
 
+> **Nested delegation (CC ≥ 2.1.172)**: sub-agents spawn their own sub-agents, up to **5 levels deep**. Level-2 specialists reached via the table above may themselves delegate Level-3 — e.g. orchestrator → `developer` → `apple-developer:ios-developer` → `apple-developer:test-generator` is now a native chain; the orchestrator no longer needs to flatten Tier-2 dispatch into its own loop. Budget accordingly: each level summarizes results upward, and `/cost-report`'s `dispatch_depth` column makes depth visible.
+
 ### Model Selection
 
 ```
@@ -349,13 +351,13 @@ The Task tool `model` parameter allows per-invocation overrides:
 Task({ subagent_type: "igrsoft:developer", model: "opus" })
 ```
 
-> Agent teams inherit the leader's model. Teammates use the parent session's model unless explicitly overridden. Model aliases (`opus`/`sonnet`/`haiku`) work correctly across all providers (Anthropic, Bedrock, Vertex, Foundry).
+> Agent teams inherit the leader's model. Teammates use the parent session's model unless explicitly overridden. Model aliases (`fable`/`opus`/`sonnet`/`haiku`) work correctly across all providers (Anthropic, Bedrock, Vertex, Foundry). Allowlist caveat (v2.1.172/v2.1.175): a managed `availableModels` list now constrains subagent model overrides too, and `enforceAvailableModels` constrains the Default model — a valid alias may silently resolve to a different model; see `skills/worktask/SKILL.md § Pre-Stage Validation` step 6.
 
 > Named subagents appear in `@`-mention typeahead suggestions, making it easier to reference and communicate with running agents via `SendMessage`.
 
 > **SendMessage authority hardening**: a relayed `SendMessage` does not carry the originating user's authority. Receivers **refuse relayed permission requests**, and auto mode blocks them outright. A reattach can *nudge* a parked agent (re-prompt, supply an awaited answer) but cannot *authorize* a permission escalation or stand in for a human gate. The PL0 and FN approval gates therefore stay operator-owned — never satisfy them via a relayed message.
 
-> Subagents discover project + user + plugin skills natively. Orchestrators do not need to inline-load skill instructions before delegation — the child can resolve `Skill("name")` from any source the parent could.
+> Subagents discover project + user + plugin skills natively. Orchestrators do not need to inline-load skill instructions before delegation — the child can resolve `Skill("name")` from any source the parent could. This holds at every nesting depth (CC ≥ 2.1.172): a Level-3 child resolves skills the same way a Level-1 child does.
 
 > `subagent_type` matching is case- and separator-insensitive. `Task({ subagent_type: "IGRSoft:Developer" })` resolves to the same agent as `igrsoft:developer`. Bare-name → `igrsoft:` prefix convention still applies for resolution priority, but typos in case/separator no longer fail-stop the call.
 

@@ -1,7 +1,7 @@
 {
   "name": "igrsoft",
   "description": "Comprehensive 11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with Task System integration, developer review, security review, release engineering, incident response, and ST-stage self-improvement retrospectives.",
-  "version": "3.16.0",
+  "version": "3.17.0",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
@@ -98,7 +98,11 @@
     "fable-5",
     "deprecation-cleanup",
     "visual-evidence",
-    "ui-change-detection"
+    "ui-change-detection",
+    "nested-subagents",
+    "available-models",
+    "enforce-available-models",
+    "fable-1m-default"
   ],
   "hooks": {
     "PostToolUse": [

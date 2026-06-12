@@ -19,7 +19,7 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 > As of CC 2.1.77, the Agent tool `resume` parameter is removed. Use `SendMessage` to communicate with running agents instead.
 
-> **SessionStart `reloadSkills:true`** (v2.1.152+): when a `SessionStart` hook fires with `reloadSkills: true`, all plugin skills are reloaded mid-session (e.g., after a `/reload-skills` command). Hooks listening on `SessionStart` can use this flag to re-apply skill-specific initialization (inject env vars, validate skill state). The `sessionTitle` field (v2.1.77 — allows the agent to set the session title visible in the UI) continues to be available alongside `reloadSkills`.
+> **SessionStart `reloadSkills:true`** (v2.1.152+): when a `SessionStart` hook fires with `reloadSkills: true`, plugin skills are reloaded mid-session (e.g., after a `/reload-skills` command). Since v2.1.174 hot-reload re-announces **only changed skills** (delta, not the full set) — hooks listening on `SessionStart` must re-apply skill-specific initialization idempotently and must not assume every skill re-announces. The `sessionTitle` field (v2.1.77 — allows the agent to set the session title visible in the UI) continues to be available alongside `reloadSkills`.
 
 > Parent agents reliably recover subagent results after context compaction. Background agents that are killed or interrupted preserve partial results in context, preventing total loss of intermediate work. The `PostCompact` hook can re-inject critical state after auto-compaction.
 
@@ -76,12 +76,13 @@ Captured fields (additive metadata on existing audit rows; written by `hooks/aud
 - `session_crons_count: ((.session_crons // []) | length)`
 - `session_cron_ids: ((.session_crons // []) | map(.id // .cron_id // "unknown"))`
 
-Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved.
+Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved. With nested sub-agent spawning live (CC ≥ 2.1.172), real `parent_agent_id` values now flow in hook stdin — `hooks/audit-dedup.sh --check-mode` auto-detects them and switches base→extended dedupe keys with no code change (designed for exactly this cut-over in v3.10.6).
 
-### OTEL `tool_parameters` & resource-attribute labels (v2.1.157 / v2.1.161)
+### OTEL `tool_parameters` & resource-attribute labels (v2.1.157 / v2.1.161 / v2.1.172)
 
 - `tool_decision` telemetry events now carry a `tool_parameters` field (v2.1.157) — the decision span records *which* tool args were classified, not just the tool name. Lets cost/audit dashboards distinguish e.g. a `Bash git push` decision from a `Bash ls`.
 - `OTEL_RESOURCE_ATTRIBUTES` values now surface as **metric-datapoint labels** (v2.1.161), not only on spans. Tag `worktask_id` / `stage` there to slice collector dashboards (Honeycomb/Datadog) per-stage without parsing span attributes.
+- `claude_code.lines_of_code.count` carries a `model` attribute (v2.1.172) — per-model LoC attribution lands in collector dashboards for free; pairs with the fable/opus/sonnet stage split in `skills/shared/stage-codes.md` to show which tier wrote the code.
 
 **BG-Task ID Schema Watch**: the ID extraction uses a defensive coalesce `(.id // .task_id // "unknown")` / `(.id // .cron_id // "unknown")` because the canonical key name is not yet confirmed in CC docs. Any `"unknown"` value appearing in `background_task_ids` or `session_cron_ids` is a signal that CC has begun populating the arrays with payloads whose ID field name is neither `id` nor `task_id`/`cron_id`. When that happens, the next `/cc-update` should pin the canonical key (remove the coalesce) and update both hook scripts. Until then the coalesce keeps the capture working across whichever name CC chooses.
 
@@ -314,7 +315,7 @@ Use cases: stop teammate when its issue is complete, when milestone budget is ex
 | Coordination | Task dependencies (blockedBy) | Shared task list + messaging |
 | Tool restrictions | `tools` frontmatter per agent | Inherits lead's permissions |
 | Token cost | Lower (results summarized) | Higher (N context windows) |
-| Nesting | Cannot spawn sub-subagents | Cannot spawn sub-teams |
+| Nesting | Up to 5 levels deep (CC ≥ 2.1.172; previously could not spawn sub-subagents) | Cannot spawn sub-teams |
 | Source isolation | None by default; `isolation: worktree` in frontmatter | None by default; worktree mode recommended for milestone |
 
 ### When to Use Each
@@ -330,7 +331,7 @@ Use cases: stop teammate when its issue is complete, when milestone budget is ex
 
 ### Limitations
 
-- Teammates cannot spawn their own teams or sub-agents (runtime-enforced)
+- Teammates cannot spawn their own teams (runtime-enforced). Task-tool sub-agents nest up to 5 levels deep as of CC 2.1.172; whether the teammate runtime inherits that nesting is unverified — treat teammate→sub-agent spawning as unsupported until observed
 - One team per session; clean up before starting another
 - No session resumption for in-process teammates
 - Higher token cost (~Nx for N teammates)

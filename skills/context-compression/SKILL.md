@@ -232,7 +232,7 @@ Maximum tokens to pass between stages:
 
 ### Extended Context Budget (1M Window)
 
-When running on Opus 4.6/4.7/4.8 with Max/Team/Enterprise plans, the context window is 1M tokens. Handoff budgets scale proportionally:
+When running on Opus 4.6/4.7/4.8 with Max/Team/Enterprise plans — or on **Fable 5, which includes 1M context by default with no plan qualifier** (v2.1.173) — the context window is 1M tokens. Handoff budgets scale proportionally:
 
 | Handoff | Standard Budget | Extended Budget (1M) |
 |---------|----------------|---------------------|
@@ -246,6 +246,8 @@ When running on Opus 4.6/4.7/4.8 with Max/Team/Enterprise plans, the context win
 | **FN→ST** | 150 | 600 |
 
 > Use extended budgets only when complexity warrants it — standard budgets are still preferred for cost efficiency. Compression remains a best practice regardless of window size.
+>
+> **WARNING (v2.1.172)**: a 1M session on an account **without 1M usage credits** auto-compacts back under the standard limit — extended handoff budgets are NOT guaranteed just because the model nominally has a 1M window (Fable 5 always does). Plan stage handoffs against the **standard** column unless the account's 1M credits are confirmed; fable-tier *dispatch* on such accounts fails outright (see `skills/shared/model-selection.md`).
 
 ## Exploration Cache Budget
 
@@ -300,6 +302,7 @@ When context exceeds budget:
 | Auto-compact thrash | CC detects when context refills immediately after compaction 3 times and stops with actionable error instead of burning API calls |
 | Focus mode | Focus view (Ctrl+O) generates self-contained summaries |
 | Compaction duplicates | Compaction does not produce duplicate transcript entries |
+| 1M without credits (v2.1.172) | Sessions on a 1M-window model without usage credits auto-compact back under the standard limit — treat as a standing trigger on Fable 5 (1M by default) when credits are absent |
 
 ### PreCompact & PostCompact Hooks
 
