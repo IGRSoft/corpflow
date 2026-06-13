@@ -94,6 +94,7 @@ When Claude detects these prefixes, it automatically invokes `/worktask` to set 
 worktask: Add dark mode to settings
 fworktask: Fix login button typo
 worktask: /apple-developer:code-legacy-modernize migrate @StateObject to @Environment
+worktask: /system-developer:code-modernize . --target cpp23
 quick: Add validation to login form
 ```
 

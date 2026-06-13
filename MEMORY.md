@@ -4,7 +4,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **3.17.0** (CC 2.1.171→2.1.175 band: 5-level nested sub-agents, availableModels/enforceAvailableModels caveats, Fable-1M degrade guidance + R8, three fable-blind drift fixes)
+- Plugin version: **3.18.0** (system-developer routing: DV detection rules + specialist tables for C/C++/Python/Bash, Task(system-developer:*) delegations, cross-plugin-handoff protocol table, systems cli-fallback screenshot row)
 - Claude Code min required: **2.1.169** (README.md is authoritative; Fable alias resolves only on CC ≥ 2.1.170, degrades to provider default on 2.1.169)
 - Claude Code latest integrated band: **2.1.171→2.1.175** (2.1.171 never published)
 
@@ -31,6 +31,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-06-12: v3.18.0 — system-developer plugin routing: developer.md detection rules + specialist tables for C/C++/Python/Bash (closes unhandled `.py` gap), `systems` platform enum + cli-fallback screenshot row, cross-plugin-handoff system-developer protocol table.
 - 2026-06-12: v3.17.0 — CC 2.1.171→2.1.175 band (15 files): 5-level nested sub-agents, availableModels/enforceAvailableModels caveats, Fable-1M degrade + R8, fable-blind drift fixes.
 - 2026-06-12: v3.16.0 — screenshot-attachment wiring (#150): PL stamps `requires_screenshots` (detect-ui-change.sh S1–S4, fail-safe-true), PR `## Visual evidence` embed + marker-deduped issue comment via attach-visual-evidence.sh (PUBLISH_LIB_ONLY host-tier reuse; UI change ⇒ screenshots on BOTH issue and PR).
 - 2026-06-10: v3.15.0 — token optimization: worktask SKILL split into trigger-read references (−32%), lean MEMORY.md (−95%), description cap, command thinning, desc-lint.sh.

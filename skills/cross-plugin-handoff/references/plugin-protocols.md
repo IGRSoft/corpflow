@@ -12,6 +12,19 @@
 | RE (Release) | ios-developer, macos-developer | App Store/TestFlight submission data, notarization |
 | IR (Incident) | All platform agents | incident context + hotfix constraints (no App Store rollback) |
 
+## system-developer Plugin
+
+| igrsoft Stage | system-developer Agent | Handoff Data |
+|---------------|------------------------|--------------|
+| AR (Architecture) | system-architector | planning context + system constraints (consultation model, like apple-architector) |
+| DV (Development) | system-developer (router), c-developer, cpp-developer, python-developer, bash-developer | planning + architecture context; `requires_screenshots: false` for CLI work (Build Evidence = terminal transcripts) |
+| DR (Developer Review) | sys-code-fixer | gate blockers (`metadata.gate_blockers[]`) + minimal-diff remediation |
+| SR (Security) | sys-security-auditor | development context + systems security checklist (sanitizers, CWE Top 25, injection, hardening flags) |
+| QA (Quality) | sys-test-generator | development context + test requirements; QA gate includes ASan+UBSan clean on changed components |
+| DV-support (performance) | sys-performance-engineer | profiling artifacts under `.context/logs/profile-*/` |
+| DV-support (dependencies) | sys-dependency-manager | manifest paths (vcpkg.json, conanfile, pyproject.toml + uv.lock) + CVE audit scope |
+| IR (Incident) | All language agents | incident context + hotfix constraints |
+
 ## security-scanning Plugin
 
 | igrsoft Stage | security-scanning Agent | Handoff Data |
