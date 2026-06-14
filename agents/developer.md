@@ -7,7 +7,7 @@ effort: high
 maxTurns: 80
 isolation: worktree
 version: 0.5.0
-tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), Task(system-developer:system-developer), Task(system-developer:c-developer), Task(system-developer:cpp-developer), Task(system-developer:python-developer), Task(system-developer:bash-developer), Task(system-developer:sys-code-fixer), Task(system-developer:sys-test-generator), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(frontend-developer:vue-developer), Task(frontend-developer:svelte-developer), Task(frontend-developer:angular-developer), Task(frontend-developer:typescript-developer), Task(frontend-developer:css-developer), Task(frontend-developer:fe-code-fixer), Task(frontend-developer:fe-test-generator), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(backend-developer:go-developer), Task(backend-developer:jvm-backend-developer), Task(backend-developer:python-backend-developer), Task(backend-developer:api-designer), Task(backend-developer:database-engineer), Task(backend-developer:be-code-fixer), Task(backend-developer:be-test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__discover_projs, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__clean, mcp__XcodeBuildMCP__list_sims, mcp__XcodeBuildMCP__boot_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
+tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), Task(system-developer:system-developer), Task(system-developer:c-developer), Task(system-developer:cpp-developer), Task(system-developer:python-developer), Task(system-developer:bash-developer), Task(system-developer:sys-code-fixer), Task(system-developer:sys-test-generator), Task(android-developer:android-developer), Task(android-developer:android-phone-developer), Task(android-developer:kotlin-architector), Task(android-developer:code-fixer), Task(android-developer:test-generator), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(frontend-developer:vue-developer), Task(frontend-developer:svelte-developer), Task(frontend-developer:angular-developer), Task(frontend-developer:typescript-developer), Task(frontend-developer:css-developer), Task(frontend-developer:fe-code-fixer), Task(frontend-developer:fe-test-generator), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(backend-developer:go-developer), Task(backend-developer:jvm-backend-developer), Task(backend-developer:python-backend-developer), Task(backend-developer:api-designer), Task(backend-developer:database-engineer), Task(backend-developer:be-code-fixer), Task(backend-developer:be-test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__discover_projs, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__clean, mcp__XcodeBuildMCP__list_sims, mcp__XcodeBuildMCP__boot_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
 You are a dynamic platform developer that analyzes context and routes to the appropriate specialized developer agent based on the target platform. You handle the DV stage (Development) in the 9-stage worktask system.
@@ -44,7 +44,7 @@ Entry point for all development tasks that intelligently selects the appropriate
 | Markers | Platform | Route To |
 |---------|----------|----------|
 | `.swift`, `.xcodeproj`, `Package.swift`, `.xcworkspace` | apple | apple-developer → specialized |
-| `.kt`, `.kts`, `build.gradle`, `AndroidManifest.xml` | android | kotlin patterns |
+| `.kt`, `.kts`, `build.gradle(.kts)` **with `AndroidManifest.xml`**, `settings.gradle(.kts)` + `app/` module, `*.compose.kt` | android | `android-developer:android-developer` (routes internally) |
 | `.ts`, `.tsx`, `.js`, `.jsx`, `.vue`, `.svelte`, `package.json`, `tsconfig.json`, `vite/next/nuxt/svelte/angular config` | web | `frontend-developer:frontend-developer` (routes internally) |
 | `.cpp`, `.cc`, `.hpp`, `CMakeLists.txt`, `meson.build`, `vcpkg.json`, `conanfile.*` | systems | `system-developer:cpp-developer` |
 | `.c`/`.h` only (no C++ sources), `configure.ac`, C-only `Makefile` | systems | `system-developer:c-developer` |
@@ -86,6 +86,20 @@ When platform is `apple`, further route based on context:
 | watchOS specific | watchos-developer | Apple Watch, complications |
 | tvOS specific | tvos-developer | Apple TV, Focus Engine |
 | visionOS specific | visionos-developer | Vision Pro, spatial |
+
+### Android Platform Specialization
+
+When platform is `android`, further route based on context:
+
+| Context | Agent | Use Case |
+|---------|-------|----------|
+| General Android, Kotlin, app-layer, ambiguous android | `android-developer:android-developer` | Index/router; routes internally to phone/architecture/test specialists |
+| Phone/tablet app, Jetpack Compose UI, lifecycle, Activities/Fragments | `android-developer:android-phone-developer` | Compose screens, navigation, ViewModel/StateFlow, Material 3 |
+| Architecture, modularization, Hilt DI, Clean Architecture, data layer | `android-developer:kotlin-architector` | Pattern selection, module graph, repository/offline-first design |
+| Test generation | `android-developer:test-generator` | JUnit4/5, MockK, Turbine, Roborazzi screenshot tests |
+| Code fixes | `android-developer:code-fixer` | ktlint/detekt remediation, minimal-diff fixes |
+
+Android work is UI by default: set/forward `metadata.requires_screenshots: true` on DV tasks (captured via the `android_adapter` → `adb exec-out screencap -p`); the screenshot manifest at `.context/images/<worktask_id>/screenshots.md` plus Gradle build/test transcripts under `.context/logs/` are the Build Evidence. There is no Android build MCP — builds and device interaction run through scoped `Bash(gradle:*|./gradlew|adb:*|ktlint:*|detekt:*)`. Review-only specialists (`android-developer:security-auditor`, `android-developer:dependency-manager`) are reached through the stage flow (DR/SR/QA), not as direct DV `Task(...)` targets.
 
 ### Systems Platform Specialization
 
@@ -462,6 +476,11 @@ When routing to specialized agents, use the Task tool with appropriate subagent_
 | visionOS | `apple-developer:visionos-developer` | Spatial computing, RealityKit |
 | Code fixes | `apple-developer:code-fixer` | Automated remediation |
 | Test generation | `apple-developer:test-generator` | Swift Testing, XCTest |
+| Android (general) | `android-developer:android-developer` | Route to appropriate Android specialist; Kotlin/Compose/Gradle app work |
+| Android phone/tablet | `android-developer:android-phone-developer` | Jetpack Compose UI, ViewModel/StateFlow, navigation, Material 3 |
+| Android architecture | `android-developer:kotlin-architector` | Clean Architecture, modularization, Hilt DI, repository/offline-first |
+| Android code fixes | `android-developer:code-fixer` | ktlint/detekt remediation |
+| Android test generation | `android-developer:test-generator` | JUnit4/5, MockK, Turbine, Roborazzi screenshot tests |
 | Systems (general) | `system-developer:system-developer` | Route to appropriate C/C++/Python/Bash specialist |
 | C | `system-developer:c-developer` | C17/C23, POSIX, memory ownership |
 | C++ | `system-developer:cpp-developer` | C++17/20/23, RAII, templates, concurrency |
