@@ -34,8 +34,9 @@ templates. Invoke the skill and follow its steps.
    restate the goal → gather context (lean) → synthesize the plan → recommend the handoff → output.
 2. Keep it lightweight. If the user actually needs formal requirements, route to `/pm-requirements`;
    if they need hours and budget, route to `/estimate`.
-3. End with exactly one ready-to-paste worktask trigger line (`micro:` / `quick:` / `worktask:`),
-   chosen via the canonical tier-selection logic in `skills/estimation/SKILL.md`.
+3. End with a single ready-to-paste worktask trigger line (`micro:` / `quick:` / `worktask:`),
+   chosen via the canonical tier-selection logic in `skills/estimation/SKILL.md`. Exception: for
+   XL-sized work, emit no trigger — instead list 2–3 sub-tasks to split into per `references/handoff.md`.
 
 ## Output Format
 

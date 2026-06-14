@@ -15,6 +15,7 @@ security   = true if Risk Level ≥ 4 OR the work touches auth / PII / payments
 
 IF size == XL:                              → split first (too big for one worktask)
 ELSE IF size == XS AND complexity ≤ 5 AND NOT security:   → micro:
+ELSE IF size == XS AND NOT security:        → quick:   (XS but complexity > 5)
 ELSE IF size == S AND NOT security:         → quick:
 ELSE IF size ∈ {M, L} OR security:          → worktask:
 ```
