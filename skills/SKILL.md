@@ -21,6 +21,7 @@ All available skills for the igrsoft worktask plugin.
 | [pencil-design](pencil-design/SKILL.md) | Design mockup generation worktask using Pencil MCP tools | high |
 | [preview-ensurer](preview-ensurer/SKILL.md) | Detect SwiftUI View files without previews and auto-add minimal `#Preview` blocks | medium |
 | [release-engineering](release-engineering/SKILL.md) | Semantic versioning, changelog generation, and deployment readiness patterns | high |
+| [request-plan](request-plan/SKILL.md) | Lightweight context-aware plan (goal, scope, phases, rough effort, risks) from a free-form request, with a worktask-trigger handoff | medium |
 | [review](review/SKILL.md) | Technical review framework for estimates by platform specialists | low |
 | [security-review-process](security-review-process/SKILL.md) | OWASP Top 10 security review checklist and secure coding patterns | medium |
 | [self-improvement](self-improvement/SKILL.md) | ST-stage retrospective: diff-based learning from user edits; writes `.context/learnings.md` with per-proposal approval checklist | medium |

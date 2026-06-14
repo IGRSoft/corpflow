@@ -13,7 +13,7 @@
       "name": "igrsoft",
       "source": "./",
       "description": "11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) with Task System integration, developer review, security review, release engineering, incident response, and cross-plugin handoffs",
-      "version": "3.8.3",
+      "version": "3.9.0",
       "author": {
         "name": "igrsoft",
         "url": "https://github.com/igrsoft"
@@ -77,6 +77,7 @@
         "./commands/prompt-audit.md",
         "./commands/qa-report.md",
         "./commands/readme-update.md",
+        "./commands/request-plan.md",
         "./commands/risk-assess.md",
         "./commands/roi-analysis.md",
         "./commands/senior-review.md",
@@ -120,6 +121,7 @@
         "./skills/logging-conventions",
         "./skills/pencil-design",
         "./skills/release-engineering",
+        "./skills/request-plan",
         "./skills/review",
         "./skills/security-review-process",
         "./skills/self-improvement",

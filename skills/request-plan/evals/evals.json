@@ -1,0 +1,23 @@
+{
+  "skill_name": "request-plan",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "we keep getting duplicate push notifications on the macOS app when it wakes from sleep. help me plan a fix before i dive in.",
+      "expected_output": "Lightweight grounded plan: restated goal, context referencing the repo, scope in/out, P0/P1/P2 phases, T-shirt + complexity effort, risks, and a single worktask trigger line (likely quick: or worktask:).",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "i want to add CSV export to the estimates feature. what's the plan?",
+      "expected_output": "Plan that notices existing estimate/export functionality (csv-export-templates, /export-estimate), scopes accordingly, phases the work, gives rough effort, and recommends a worktask trigger. Should reuse rather than rebuild existing export pieces.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "plan out migrating our settings storage from UserDefaults to Keychain",
+      "expected_output": "Plan flagging this as security-sensitive (credential storage), phasing the migration, sizing it, and routing to worktask: regardless of size per the security rule. Tests included inside phases.",
+      "files": []
+    }
+  ]
+}

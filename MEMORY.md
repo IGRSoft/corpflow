@@ -4,7 +4,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **3.18.0** (system-developer routing: DV detection rules + specialist tables for C/C++/Python/Bash, Task(system-developer:*) delegations, cross-plugin-handoff protocol table, systems cli-fallback screenshot row)
+- Plugin version: **3.21.0** (request-plan skill + /request-plan command: lightweight context-aware plan-from-request bridge → worktask trigger; reuses estimation tier-selection + three-stage-planning phasing)
 - Claude Code min required: **2.1.169** (README.md is authoritative; Fable alias resolves only on CC ≥ 2.1.170, degrades to provider default on 2.1.169)
 - Claude Code latest integrated band: **2.1.171→2.1.175** (2.1.171 never published)
 
