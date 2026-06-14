@@ -1,0 +1,67 @@
+---
+name: request-plan
+description: Turn a free-form request into a lightweight, context-aware plan (goal, scope, phases, rough effort, risks) and recommend the worktask trigger to execute it
+argument-hint: '<request> [--save]'
+model: sonnet
+allowed-tools: Read, Glob, Grep, Write, Task
+---
+
+# Request Plan Command
+
+Produce a **lightweight, grounded plan** from a free-form request plus the current repository
+context, then hand off to the worktask system. The bridge between "I have an idea" and committing to
+a full worktask — lighter than a PRD (`/pm-requirements`), broader than a sizing estimate
+(`/estimate`).
+
+This command is a thin entry point to the **`request-plan` skill**, which holds the full workflow and
+templates. Invoke the skill and follow its steps.
+
+## Usage
+
+```
+/request-plan "we keep getting duplicate push notifications, help me plan a fix"
+/request-plan --save "add CSV export to the estimates feature"
+```
+
+## Options
+
+- `--save` — persist the plan to `.context/request-plan-0.md` (naming per
+  `skills/task-folder-organization/SKILL.md`). Default is inline output only.
+
+## Workflow
+
+1. Load the `request-plan` skill (`skills/request-plan/SKILL.md`) and follow its 5 steps:
+   restate the goal → gather context (lean) → synthesize the plan → recommend the handoff → output.
+2. Keep it lightweight. If the user actually needs formal requirements, route to `/pm-requirements`;
+   if they need hours and budget, route to `/estimate`.
+3. End with a single ready-to-paste worktask trigger line (`micro:` / `quick:` / `worktask:`),
+   chosen via the canonical tier-selection logic in `skills/estimation/SKILL.md`. Exception: for
+   XL-sized work, emit no trigger — instead list 2–3 sub-tasks to split into per `references/handoff.md`.
+
+## Output Format
+
+The plan follows `skills/request-plan/references/plan-template.md`:
+
+```markdown
+# Plan: <one-line goal>
+
+## Context
+## Goal
+## Scope
+## Phases
+## Effort (rough)
+## Risks & Dependencies
+## Recommended next step   ← single worktask trigger line
+```
+
+## Integration
+
+- `/worktask` — execute the recommended tier
+- `/estimate` — when hours, budget, or CSV export are needed instead of a rough cut
+- `/pm-requirements` — when a full PRD is needed instead of a lightweight plan
+
+## Related
+
+- [request-plan skill](../skills/request-plan/SKILL.md) — full workflow and templates
+- [estimation](../skills/estimation/SKILL.md) — complexity scoring and tier selection
+- [three-stage-planning](../skills/shared/three-stage-planning.md) — P0/P1/P2 phasing

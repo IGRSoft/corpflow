@@ -1,0 +1,74 @@
+---
+name: request-plan
+description: Turn a free-form request into a lightweight, context-aware plan (goal, scope, phases, rough effort, risks) and recommend the worktask trigger to execute it. Use whenever the user asks for a plan, an approach, a breakdown, "how would you tackle this", "what's the plan for X", or scoping of a task — even when they don't say the word "plan". Prefer this over the heavier /pm-requirements or /estimate when the user wants a fast, grounded plan that reads the current repo context before answering.
+effort: medium
+version: 0.1.0
+---
+
+# Request Plan
+
+Produce a **lightweight, grounded plan** from a free-form request plus the current repository
+context, then hand off to the worktask system for execution. This is the missing bridge between
+"I have an idea" and committing to a full worktask — it is intentionally lighter than a PRD
+(`/pm-requirements`) and broader than a pure sizing estimate (`/estimate`).
+
+The value is in being **grounded**: the plan reflects what is already in this repo (in-flight work,
+recent commits, project memory, relevant code) rather than a generic template. Read context before
+planning, and let the context change the plan — otherwise this is just a wishlist.
+
+## Workflow
+
+### 1. Restate the goal
+
+State the goal in one line, in your own words, so the user can correct a misread cheaply. If the
+request is too vague to scope (no clear outcome, or several incompatible readings), ask **1–2**
+focused clarifying questions before continuing. Don't invent scope to fill silence — a wrong
+assumption here propagates into every later section.
+
+### 2. Gather context (lean)
+
+Follow `references/context-gathering.md`. Read only what could actually change the plan: existing
+`.context/` artifacts, project memory, recent git activity, and the specific code the request
+touches. Prefer the `Explore` agent for open-ended "where does X live" questions over manual grep
+sweeps. Stop gathering once more reading wouldn't move scope, phases, or effort.
+
+### 3. Synthesize the plan
+
+Fill the template in `references/plan-template.md` exactly (fixed section order). Key reuse — do not
+reinvent these:
+
+- **Phases** use the P0 Required / P1 Nice-to-have / P2 v1.1 model from
+  `skills/shared/three-stage-planning.md`. Keep each phase independently deliverable.
+- **Effort** is a T-shirt size plus the 5-factor complexity score (0–25) from
+  `skills/estimation/SKILL.md`. Give a range, not false precision — this is a rough cut, not a budget.
+- **Tests live inside each phase's scope**, never as a separate phase (per the estimation skill).
+
+### 4. Recommend the handoff
+
+Follow `references/handoff.md`. Map the size + complexity to a worktask trigger using the canonical
+**Worktask Tier Selection** logic in `skills/estimation/SKILL.md`, and emit a single, ready-to-paste
+trigger line (e.g. `worktask: <restated goal>`). Security-sensitive work (auth, PII, payments, or
+Risk ≥ 4) always routes to `worktask:` regardless of size.
+
+### 5. Output
+
+Print the plan inline. The default is **not** to write files — keep it conversational. Offer to
+persist it to `.context/request-plan-0.md` (naming per `skills/task-folder-organization/SKILL.md`)
+when the user wants it kept or when it will directly seed a worktask run.
+
+## What this skill is not
+
+- Not a PRD generator — if the user needs formal requirements, user stories, and acceptance criteria
+  at scale, route to `/pm-requirements`.
+- Not a budget/CSV estimator — if they need hours, rates, and exportable sizing, route to `/estimate`.
+- Not a roadmap — multi-quarter planning belongs in `/pm-roadmap`.
+
+Staying lightweight is the point; resist padding the output toward those heavier formats.
+
+## Reference files
+
+| File | Read when |
+|------|-----------|
+| `references/context-gathering.md` | Step 2 — deciding what context to read and when to stop |
+| `references/plan-template.md` | Step 3 — the exact output structure to fill |
+| `references/handoff.md` | Step 4 — mapping effort to a worktask trigger |
