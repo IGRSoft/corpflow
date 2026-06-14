@@ -22,7 +22,7 @@ For plugin-specific protocol tables and error handling, see `${CLAUDE_SKILL_DIR}
 
 ## Frontmatter Schema (BINDING for cross-plugin agents)
 
-The canonical schema lives at `skills/worktask/references/handoff-protocol.md` (frontmatter + state.json + cache layout). Cross-plugin agents (e.g. `apple-developer:ios-developer`, `apple-developer:macos-developer`, `system-developer:c-developer`, `system-developer:cpp-developer`, `system-developer:python-developer`, `system-developer:bash-developer`, `debugging-toolkit:*`, `security-scanning:*`) MUST adopt the **full schema** when they take over a worktask stage:
+The canonical schema lives at `skills/worktask/references/handoff-protocol.md` (frontmatter + state.json + cache layout). Cross-plugin agents (e.g. `apple-developer:ios-developer`, `apple-developer:macos-developer`, `system-developer:c-developer`, `system-developer:cpp-developer`, `system-developer:python-developer`, `system-developer:bash-developer`, `android-developer:android-phone-developer`, `android-developer:kotlin-architector`, `debugging-toolkit:*`, `security-scanning:*`) MUST adopt the **full schema** when they take over a worktask stage:
 
 - Artifact starts with `---\nhandoff:\n` YAML block per `handoff-protocol.md#frontmatter-schema`.
 - Per-stage required fields per `handoff-protocol.md#frontmatter-schema § Per-stage required-field matrix`.
@@ -53,7 +53,7 @@ handoff:
 ---
 ```
 
-The `error_file` for an apple-developer agent is `.context/errors/ios-developer.md` (last segment of qualified name) per `task-system.md § error_file derivation`. The same rule applies to system-developer agents (e.g., `.context/errors/c-developer.md`, `.context/errors/sys-code-fixer.md`). system-developer DV takeovers follow the identical frontmatter shape; note that systems work defaults `metadata.requires_screenshots: false` and supplies Build Evidence (terminal transcripts under `.context/logs/`) via the `cli_fallback_adapter` instead of UI screenshots.
+The `error_file` for an apple-developer agent is `.context/errors/ios-developer.md` (last segment of qualified name) per `task-system.md § error_file derivation`. The same rule applies to system-developer agents (e.g., `.context/errors/c-developer.md`, `.context/errors/sys-code-fixer.md`) and android-developer agents (e.g., `.context/errors/android-phone-developer.md`, `.context/errors/kotlin-architector.md`). system-developer DV takeovers follow the identical frontmatter shape; note that systems work defaults `metadata.requires_screenshots: false` and supplies Build Evidence (terminal transcripts under `.context/logs/`) via the `cli_fallback_adapter` instead of UI screenshots. android-developer DV takeovers default `metadata.requires_screenshots: true` and supply Build Evidence via the `android_adapter` (`adb exec-out screencap -p`) plus Gradle build/test transcripts under `.context/logs/`; there is no Android build MCP, so builds run through scoped `Bash(gradle:*|./gradlew|adb:*)`.
 
 ## #relaxed-profile
 

@@ -25,6 +25,17 @@
 | DV-support (dependencies) | sys-dependency-manager | manifest paths (vcpkg.json, conanfile, pyproject.toml + uv.lock) + CVE audit scope |
 | IR (Incident) | All language agents | incident context + hotfix constraints |
 
+## android-developer Plugin
+
+| igrsoft Stage | android-developer Agent | Handoff Data |
+|---------------|-------------------------|--------------|
+| AR (Architecture) | kotlin-architector | planning context + Android architecture constraints (Clean Architecture, modularization, Hilt DI — consultation model, like apple-architector) |
+| DV (Development) | android-developer (router), android-phone-developer | planning + architecture context; `requires_screenshots: true` (Build Evidence = `adb exec-out screencap -p` via `android_adapter` + Gradle build/test transcripts); no Android build MCP — scoped `Bash(gradle:*\|./gradlew\|adb:*)` |
+| DR (Developer Review) | code-fixer | gate blockers (`metadata.gate_blockers[]`) + ktlint/detekt minimal-diff remediation |
+| SR (Security) | security-auditor | development context + Android security checklist (EncryptedSharedPreferences/Keystore, no-cleartext, exported-component validation, no hardcoded secrets) |
+| QA (Quality) | test-generator | development context + test requirements; JUnit4/5, MockK, Turbine, Roborazzi screenshot tests |
+| DV-support (dependencies) | dependency-manager | version catalog (`libs.versions.toml`) + Gradle dependency CVE audit scope |
+
 ## security-scanning Plugin
 
 | igrsoft Stage | security-scanning Agent | Handoff Data |
