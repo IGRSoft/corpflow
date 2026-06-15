@@ -163,6 +163,9 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 1. Glob `.context/planning-*.md`. Extract the integer suffix from each match.
 2. If matches exist, set `N = max(existing) + 1`. Otherwise `N = 0`.
 3. Write `.context/planning-${N}.md`. Do **not** overwrite `planning-0.md`, ..., `planning-(N-1).md` — they remain as historical plans.
+
+> **PL0 is the authoritative writer.** Any `plan_file` / `run_index` already present in a pre-seeded `state.json` (the orchestrator's Phase-1 step 3a seed) is **provisional** — PL0 MUST recompute `N` via the step-1 glob and treat that result as authoritative, regardless of the seeded value. **Never write to a `planning-${N}.md` that already exists on disk**; if the computed target exists, the glob was stale — recompute `N`. The reader resolution order in the note below (`metadata.plan_file` first) applies to *downstream stages* consuming a finalized plan; it does **not** govern PL0's own write-target selection.
+
 4. **state.json reset** (new run in existing `.context/`): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, `metadata.requires_screenshots` set to the detector's value (the channel `hooks/dv-screenshot-gate.sh` and `attach-visual-evidence.sh` read), and empty `facts.*` (preserves `version`, `worktask_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
 
 **Downstream propagation**: when PL creates downstream stage tasks via `TaskCreate`, stamp **all** of the following on each:
@@ -175,7 +178,7 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 | `metadata.exploration_anchors` | `["exploration.md#facts", "exploration.md#refs", "planning-${N}.md#requirements"]` (when `skip_exploration: true`) | Authoritative pre-explored set |
 | `metadata.requires_screenshots` | the detector value from the plan frontmatter (boolean) | Drive DV capture + gate; consumed by DV (capture), QA (Q1.5), and `attach-visual-evidence.sh`. Stamp on DV and QA tasks. |
 
-Every stage agent uses `run_index` to resolve its artifact path as `<basename>-${N}.md`. Reader resolution order for `plan_file`: `metadata.plan_file` first, then newest `.context/planning-*.md` (highest N) if metadata is absent.
+Every **downstream reader** stage uses `run_index` to resolve its artifact path as `<basename>-${N}.md`. Reader resolution order for `plan_file`: `metadata.plan_file` first, then newest `.context/planning-*.md` (highest N) if metadata is absent. This order is for *readers* of an already-finalized plan only — PL0, the writer, never honors a pre-seeded `plan_file`; it always glob-increments per the algorithm above.
 
 See `skills/agent-coordination/SKILL.md § metadata.skip_exploration Propagation` for the full propagation contract.
 

@@ -7,10 +7,19 @@
 
 ## PL0 state.json Initialization (Phase 1)
 
-PL0 (or `commands/worktask.md` Phase 1) creates `.context/state.json` immediately after `mkdir -p .context/`. This seeds the worktask ledger that every subsequent stage reads and patches.
+PL0 (or `commands/worktask.md` Phase 1) creates `.context/state.json` immediately after `mkdir -p .context/`. This seeds the worktask ledger that every subsequent stage reads and patches. The seed is **re-run aware**: `run_index` (and the matching `plan_file`) is the next free planning index `N` computed from any pre-existing `.context/planning-*.md` (`0` on a fresh `.context/`). `run_index` is a **required** schema field (`handoff-protocol.md#state-json-schema`) — never omit it. The canonical executable snippet lives in `commands/worktask.md` Phase 1 step 3a.
 
 ```bash
 mkdir -p .context/
+
+# Re-run aware: next free planning index (0 on a fresh .context/)
+N=0
+for f in .context/planning-*.md; do
+  [ -e "$f" ] || continue
+  i="${f##*planning-}"; i="${i%.md}"
+  case "$i" in *[!0-9]*) continue ;; esac
+  [ "$i" -ge "$N" ] && N=$((i + 1))
+done
 
 # Atomic write: temp + fsync + rename
 tmp=".context/.state.json.$$.${RANDOM}.tmp"
@@ -18,8 +27,9 @@ cat > "$tmp" <<EOF
 {
   "version": 1,
   "worktask_id": "${WORKTASK_ID}",
-  "plan_file": ".context/${PLAN_FILE}",
+  "plan_file": ".context/planning-${N}.md",
   "platform": "${PLATFORM:-all}",
+  "run_index": ${N},
   "stages": { "PL": { "status": "in_progress" } },
   "facts": {
     "files_modified": [],

@@ -4,7 +4,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **3.22.0** (request-plan skill + /request-plan command: lightweight context-aware plan-from-request bridge → worktask trigger; reuses estimation tier-selection + three-stage-planning phasing)
+- Plugin version: **3.22.1** (PL plan-file overwrite fix: worktask.md seed now re-run aware (glob+increment next free `planning-N` index instead of hard-coded `0`); PL0 marked authoritative writer; 3 seed templates reconciled + `run_index` restored)
 - Claude Code min required: **2.1.169** (README.md is authoritative; Fable alias resolves only on CC ≥ 2.1.170, degrades to provider default on 2.1.169)
 - Claude Code latest integrated band: **2.1.171→2.1.175** (2.1.171 never published)
 
@@ -31,6 +31,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-06-15: v3.22.1 — PL plan-file overwrite fix: on a worktask re-run in a populated `.context/`, `commands/worktask.md` step 3a hard-coded `planning-0.md`/`run_index:0`, colliding with PL0's increment algorithm → PL sometimes overwrote `planning-0.md`. Seed is now re-run aware (bash glob+increment to next free `planning-N`); product-manager.md marks PL0 the authoritative writer (recompute N, never overwrite existing); handoff-protocol.md + initialization-patterns.md seeds reconciled (`run_index` restored — was schema-required but omitted). Related: v3.12.1.
 - 2026-06-15: v3.22.0 — request-plan skill + /request-plan command: lightweight context-aware plan-from-request bridge (goal/scope/P0-P1-P2 phases/rough effort/risks) → worktask trigger handoff; reuses estimation tier-selection + three-stage-planning phasing instead of duplicating /pm-requirements or /estimate. Registered in marketplace.json + skills index.
 - 2026-06-14: v3.21.0 — android-developer plugin routing: developer.md `android` detection row retargeted from dead "kotlin patterns" to `android-developer:android-developer`, Android Platform Specialization + Direct Routing tables (phone/architecture/test/code-fix), `Task(android-developer:*)` delegations, cross-plugin-handoff android-developer protocol table + error_file rule, `android_adapter` (adb screencap, `requires_screenshots: true`) Build Evidence. No Android build MCP — scoped `Bash(gradle/./gradlew/adb)`. Requires android-developer plugin installed alongside igrsoft.
 - 2026-06-12: v3.18.0 — system-developer plugin routing: developer.md detection rules + specialist tables for C/C++/Python/Bash (closes unhandled `.py` gap), `systems` platform enum + cli-fallback screenshot row, cross-plugin-handoff system-developer protocol table.
@@ -42,7 +43,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-06-05: v3.12.1 — state-merge numbered-artifact resolution (`resolve_artifact` exact→highest-N→legacy→empty; +3 self-tests).
 - 2026-06-05: v3.12.0 — CC 2.1.157→2.1.165 band + self-healing gates (`additionalContext` remediation) + precise resume (`waitingFor` 3-way branch).
 - 2026-06-05: v3.11.4 — design↔result image-diff join (QA joins DV images via registry ID; RMSE pre-pass before multimodal vision).
-- 2026-06-05: v3.11.3 — dv-screenshot-gate SubagentStop block hook + non-waivable DR manifest rule + Figma placement guard.
 
 ## Token Baselines
 
