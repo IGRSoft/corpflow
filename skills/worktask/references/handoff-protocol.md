@@ -295,7 +295,7 @@ the JSON below shows the resulting shape:
   "worktask_id": "<from task metadata>",
   "plan_file": ".context/planning-${N}.md",
   "platform": "all",
-  "run_index": "${N}",
+  "run_index": ${N},
   "stages": {
     "PL": { "status": "in_progress" }
   },
