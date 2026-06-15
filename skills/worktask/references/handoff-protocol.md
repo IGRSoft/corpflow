@@ -279,17 +279,23 @@ When state.json approaches the 500-token cap:
 4. Drop `facts.files_read` entries whose `stage` is older than 2 stages back.
 5. NEVER store diffs, file contents, or test output. Fetch from git/disk on demand.
 
-### PL0 seed (initial state)
+### PL0 seed (initial state) {#pl0-seed}
 
-PL0 (or `commands/worktask.md` Phase 1) writes the initial ledger:
+PL0 (or `commands/worktask.md` Phase 1) writes the initial ledger. The seed is
+**re-run aware** — `plan_file` and `run_index` use the next free planning index
+`N` computed from any pre-existing `.context/planning-*.md` (`0` on a fresh
+`.context/`). Hard-coding `0` would pin an old plan on a re-run and cause PL0 to
+overwrite `planning-0.md`. The canonical executable snippet (with the bash `N`
+computation) lives in `commands/worktask.md` Phase 1 step 3a — use it verbatim;
+the JSON below shows the resulting shape:
 
 ```json
 {
   "version": 1,
   "worktask_id": "<from task metadata>",
-  "plan_file": ".context/planning-0.md",
+  "plan_file": ".context/planning-${N}.md",
   "platform": "all",
-  "run_index": 0,
+  "run_index": ${N},
   "stages": {
     "PL": { "status": "in_progress" }
   },
@@ -305,7 +311,10 @@ PL0 (or `commands/worktask.md` Phase 1) writes the initial ledger:
 }
 ```
 
-**On a new PL run in an existing `.context/`**: PL0 atomically resets `stages` to `{PL: in_progress}`, resets `facts.*` to empty arrays/objects, and sets `run_index` to the new N. Historical run data lives in the on-disk `<stage>-N.md` artifacts, not in state.json.
+**On a new PL run in an existing `.context/`**: the seed sets `run_index = N`
+(next free index) up front; PL0 then atomically resets `stages` to
+`{PL: in_progress}` and resets `facts.*` to empty arrays/objects. Historical run
+data lives in the on-disk `<stage>-N.md` artifacts, not in state.json.
 
 ---
 
