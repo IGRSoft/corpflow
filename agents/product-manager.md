@@ -497,13 +497,14 @@ For each Figma URL (state defaults to `default`):
 3. **For each target node** (overview first, then child frames):
    a. `mcp__plugin_figma_figma__get_design_context({ fileKey, nodeId })` — code hints + component info.
    b. `mcp__plugin_figma_figma__get_screenshot({ fileKey, nodeId })` — returns a short-lived image URL.
-   c. **Persist in-turn**: compute `target_path` (filename grammar below), then download immediately. Always double-quote both arguments so the MCP-returned URL (an external value) cannot break out of the `curl` invocation — the `Bash(curl:*)` grant matches only commands that begin with `curl`, never a bare shell:
+   c. **Persist in-turn**: compute `target_path = .context/designs/` + the basename from the filename grammar below — the directory is **always** `.context/designs/`, **NEVER** `.context/images/` (see Placement guard above; `images/` is reserved for DV implementation screenshots and disables the QA design gate). Then download immediately. Always double-quote both arguments so the MCP-returned URL (an external value) cannot break out of the `curl` invocation — the `Bash(curl:*)` grant matches only commands that begin with `curl`, never a bare shell:
       ```bash
-      curl -sf -o "<target_path>" "<image_url>"
+      # target_path MUST be under .context/designs/ — e.g. .context/designs/figma-models-review-page-default-2456-16736.png
+      curl -sf -o ".context/designs/<basename>" "<image_url>"
       ```
    d. **Verify** the file is a real non-zero PNG before recording success: `file "<target_path>"` reports a PNG **and** the byte size is > 0. On failure (curl non-zero, missing file, zero bytes, or not a PNG), append a note to `.context/errors/product-manager.md` (`figma persist failed: <nodeId> → <target_path> (<reason>)`), record an open question in `state.json facts.open_questions[]`, and **continue** — never block the worktask (non-blocking contract; mirrors the auth soft-halt philosophy).
    e. Record a row `{nodeId, name, state, image_url, target_path}` into `state.json facts.figma_assets[]` (only verified rows count toward registry success; failed rows are recorded with a `failed: true` flag for traceability).
-4. **Filename grammar**: `figma-[screen]-[state]-[node-id].png`
+4. **Filename grammar** (full path — the directory component is mandatory): `.context/designs/figma-[screen]-[state]-[node-id].png`
    - **Per-frame child**: `[screen]` = child frame name (lowercased, spaces → hyphens), `[node-id]` = child id (colons → dashes).
    - **Overview** (container image): `[screen]` = container name (lowercased, spaces → hyphens), `[node-id]` = container id (colons → dashes).
    - `[state]`: from the State Input Contract above; defaults to `default`. A container's child frames inherit the URL-level state unless the user annotated per-frame states.
