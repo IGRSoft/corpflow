@@ -814,6 +814,26 @@ fi
 
 The helper self-gates: it skips silently when `metadata.requires_screenshots == false` or no captures exist, defers when `metadata.github_issue_url` is absent (publish deferred / failed at Step 6.5) or under milestone mode, and dedupes on the HTML marker `<!-- visual-evidence:<worktask_id>:<run_index> -->` so a retry never double-posts. Each outcome is one `visual_evidence_issue_commented` audit row (`result ∈ {ok, skipped, deferred}`). The PR-body counterpart (`--emit pr`) is owned by the FN stage during PR composition, not here — see `agents/project-manager.md` and `references/conductor-attachments.md`.
 
+## Post-merge completion comment
+
+After the post-capture issue update above (and after FN has created/merged the PR so the closing refs are real — "when the PR closes"): post a work-summary + screenshot completion comment to every related issue the PR closes. Same **non-blocking by contract** discipline (`; true`; helper exits 0 on every operational outcome):
+
+```bash
+HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/references/attach-visual-evidence.sh"
+if [ -f "$HELPER" ]; then
+  bash "$HELPER" --post completion; true
+else
+  LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
+  mkdir -p "$LOG_DIR"
+  STATE_FILE="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/state.json"
+  jq -cn --arg ts "$(date -u +%FT%TZ)" --arg dk "$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo unknown):$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo 0):completion:all" \
+    '{ts:$ts, actor:"orchestrator", action:"completion_summary_commented", result:"deferred", metadata:{via:"attach-visual-evidence.sh", reason:"helper_not_found", dedupe_key:$dk}}' \
+    >> "$LOG_DIR/audit.jsonl"; true
+fi
+```
+
+The helper resolves related issues from PR-body keywords (`Closes`/`Fixes`/`Resolves #N`, case-insensitive) unioned with `gh pr view --json closingIssuesReferences`, deduped to integers (so no untrusted PR-body text reaches a `gh` argv). It posts one comment per issue carrying the work summary (sourced from `.context/complete-summary-<run_index>.md`, else `state.json` `facts.goal`, else PR title+body — sanitised) plus the visual-evidence block when `requires_screenshots == true` and captures exist (summary-only otherwise). Per-issue HTML-marker dedup (`<!-- completion-summary:<worktask_id>:<run_index>:<issue_n> -->`) means a retry never double-posts; a partially-failed prior run re-posts only the missing issues. It defers under milestone mode (parent milestone issue is canonical) and audits `no_related_issues` when the PR closes nothing. Each issue yields one `completion_summary_commented` audit row (`result ∈ {ok, skipped, deferred}`); a single `gh` failure on one issue is audited and the loop continues to the rest (overall exit 0). The `FN` agent is NOT modified — it continues to own only `--emit pr` for the PR body. Timing note: at post-loop time the PR is created with its closing refs (populated at PR creation from the body keywords) even if the merge is a local fast-forward/push — so the resolver works; a later real merge re-running this step is a marker no-op.
+
 ## Post-Worktask Self-Improvement
 
 After the execution loop exits (all tasks completed, including ST): if `.context/learnings.md` exists, Read `references/fn-gate.md § Post-Worktask Self-Improvement` and follow the Post-ST procedure (surface learnings → user checks boxes → delegate checked items to prompt-engineer → audit → terminate). Absent → worktask complete. Never apply unchecked proposals.
