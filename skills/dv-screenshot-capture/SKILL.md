@@ -195,8 +195,9 @@ Instead, FN (or `commands/create-pr.md`) runs `skills/worktask/references/attach
 
 | Consumer | Stage | Action |
 |----------|-------|--------|
-| **FN / create-pr** | FN | `attach-visual-evidence.sh --emit pr` → insert block into PR body |
-| **Orchestrator** | Post-loop exit | `attach-visual-evidence.sh --post issue` → marker-deduped issue comment |
+| **FN / create-pr** | FN | `attach-visual-evidence.sh --emit pr` → insert block into PR body between ## Test plan and ## Notes |
+| **Orchestrator** | Post-loop exit | `attach-visual-evidence.sh --post issue` → marker-deduped `gh issue comment` on the PL-published issue (visual-evidence block only) |
+| **Orchestrator** | Post-merge (PR closes) | `attach-visual-evidence.sh --post completion` → one marker-deduped comment per related issue resolved by PR closes (work-summary + visual-evidence block when captures exist; summary-only otherwise). Resolves related issues via PR-body keywords (`Closes`/`Fixes`/`Resolves #N`) ∪ `gh pr view --json closingIssuesReferences`, deduped to integers |
 
 ## Size budget
 

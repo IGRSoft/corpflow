@@ -49,7 +49,16 @@
 #        So: if `gh repo view --json visibility` reports PRIVATE or INTERNAL, the
 #        raw tier is REFUSED (it would render broken) and we degrade. For PUBLIC
 #        repos we additionally require an anonymous `curl -fsIL` HEAD to succeed.
-#     2. gist (`gh gist create`) — raw gist asset URL.
+#     2. gist (`gh gist create --public`) — render-verified raw gist asset URL.
+#        AC1 PRIMARY for PRIVATE/INTERNAL repos: a PUBLIC gist raw URL is
+#        anonymously fetchable, so camo renders it inline even when the
+#        surrounding repo is private (the repo's privacy does not gate camo's
+#        outbound fetch of a public origin). The URL is render-verified by an
+#        anonymous HEAD (gist_raw_url_reachable) BEFORE it is emitted; a verify
+#        miss degrades to tier-3 (never a broken/non-rendering embed). The
+#        ASSET_GIST_PUBLIC=0 opt-out (q2/policy) creates a secret/unlisted gist
+#        instead — also anonymously fetchable, so it still renders; only
+#        discoverability differs. `gh gist create` already has `gist` scope.
 #     3. none — URL-only note (Figma URL + exactly one note line "Screenshots
 #        persisted on disk; inline hosting unavailable — see designs registry.").
 #   No broken `![]()` at any tier. Each downgrade appends a non-blocking audit row
@@ -89,7 +98,22 @@
 # user-attachments asset base, mirrors GIST_RAW_URL_BASE), ASSET_REPO_VISIBILITY
 # (mock `gh repo view` visibility: PUBLIC|PRIVATE|INTERNAL — drives REQ-1
 # render-verification offline). ASSET_UA_ENABLE=1 is the (currently inert, see q1)
-# live opt-in for tier-0. When unset, real git/gh probes drive tier selection.
+# live opt-in for tier-0. ASSET_GIST_PUBLIC (default 1; set to 0 for policy
+# opt-out to secret/unlisted gist) controls gist-tier visibility (AC1).
+# GIST_VERIFY_FORCE (pass|fail) short-circuits the gist render-verify HEAD for
+# offline self-tests. When unset, real git/gh probes drive tier selection.
+#
+# AC1 Privacy posture (C2 operator guidance):
+#   ASSET_GIST_PUBLIC=1 (default) creates a PUBLIC, world-readable-by-URL gist
+#   whose raw asset URL is anonymously fetchable. This is required for GitHub's
+#   camo image proxy to render DV screenshots inside a PRIVATE repo's issue/PR body.
+#   The exposure (screenshot bytes accessible by URL) is inherent to camo's
+#   anonymous-fetch design and is no-regression vs the prior secret-gist tier
+#   (also URL-readable, less discoverable). ASSET_GIST_PUBLIC=0 opt-out creates
+#   a secret/unlisted gist (still URL-readable anonymously for camo render).
+#   NEITHER tier preserves confidentiality — camo requires URL-reachability without
+#   auth. Do not capture screenshots containing secrets, tokens, PII (C3 capture
+#   policy). The FN gate provides human disclosure before merge (C1 gate condition).
 
 set -u
 
@@ -123,6 +147,18 @@ ASSET_REPO_VISIBILITY="${ASSET_REPO_VISIBILITY:-}"    # mock PUBLIC|PRIVATE|INTE
 # without re-plumbing. When "1" AND a token-driven uploader is implemented, the
 # tier is attempted live; any failure still degrades. Default off.
 ASSET_UA_ENABLE="${ASSET_UA_ENABLE:-0}"
+# Gist visibility opt-out (AC1, q2 decision: default-on). When "1" (default) the
+# gist tier creates a `--public` gist whose raw URL camo can fetch anonymously,
+# so the image renders inline even inside a PRIVATE repo's issue/PR body. Set to
+# "0" for policy-restricted environments that forbid public gists: the tier then
+# creates a secret/unlisted gist (also anonymously fetchable by URL, so it still
+# renders) — the only loss is "public-indexed" vs "unlisted". Both paths
+# render-verify before emitting a URL (see gist_raw_url_reachable).
+ASSET_GIST_PUBLIC="${ASSET_GIST_PUBLIC:-1}"
+# Offline render-verify test hook for gist_raw_url_reachable. When set to "pass"
+# the anonymous HEAD probe is short-circuited to success; "fail" forces failure
+# (caller degrades). Empty (production default) → a real anonymous curl HEAD.
+GIST_VERIFY_FORCE="${GIST_VERIFY_FORCE:-}"
 # Reason recorded by resolve_design_assets() when it degrades below tier-1.
 # resolve_design_assets runs in a command substitution (subshell), so it cannot
 # set a parent variable — it writes the reason to ASSET_DEGRADED_FILE instead,
@@ -373,7 +409,10 @@ select_host_tier() {
       return 0
     fi
   fi
-  # Tier-2 (gist): available iff gh is present + authed.
+  # Tier-2 (gist): available iff gh is present + authed. AC1: this is now the
+  # EFFECTIVE PRIMARY tier for PRIVATE/INTERNAL repos (raw refused above) — it
+  # creates a render-verified PUBLIC gist (ASSET_GIST_PUBLIC=1) whose raw URL
+  # camo can fetch anonymously. host_one_asset render-verifies before emitting.
   if command -v "$GH_BIN" >/dev/null 2>&1 && \
      "$GH_BIN" auth status >/dev/null 2>&1; then
     HOST_TIER="gist"; return 0
@@ -422,6 +461,34 @@ raw_asset_url_reachable() {
   return 1
 }
 
+# Return success only when a gist raw URL will RENDER inside a GitHub issue/PR —
+# i.e. when GitHub's camo image proxy (which fetches origins ANONYMOUSLY) can
+# retrieve it. AC1/REQ-1: a public-gist raw URL is anonymously fetchable, so it
+# renders inside a PRIVATE repo's body (the surrounding repo's privacy does not
+# gate camo's outbound fetch of a public origin). Mirrors raw_asset_url_reachable.
+#   $1 = gist raw URL
+# GIST_VERIFY_FORCE (offline test hook) short-circuits the network probe:
+#   pass → return 0 ; fail → return 1.
+gist_raw_url_reachable() {
+  local url="$1"
+  # Offline test hook: bypass the network entirely.
+  case "$GIST_VERIFY_FORCE" in
+    pass) return 0 ;;
+    fail) return 1 ;;
+  esac
+  # Approximate camo's ANONYMOUS fetch: strip any ambient auth header so the HEAD
+  # matches what camo sees AND so a leaked token is never sent to a URL derived
+  # from gh output.
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsIL --max-time 10 -H 'Authorization;' "$url" >/dev/null 2>&1 && return 0
+    return 1
+  fi
+  # No curl: optimistic-pass. A gist raw URL (public or unlisted/secret) is
+  # anonymously reachable by construction, so without a probe tool we assume it
+  # renders rather than dropping a working embed. Document the assumption.
+  return 0
+}
+
 # Host a single PNG and echo its public https URL (or empty on failure).
 #   $1 = basename, $2 = on-disk source path
 # Uses HOST_TIER/HOST_OWNER_REPO/HOST_REF set by select_host_tier().
@@ -461,6 +528,8 @@ host_one_asset() {
       printf '%s' "$raw_url"
       return 0 ;;
     gist)
+      # AC1 PRIMARY private-repo tier: a PUBLIC gist's raw URL is anonymously
+      # fetchable, so camo renders it inside a PRIVATE repo's issue/PR body.
       # Mock-friendly: if GIST_RAW_URL_BASE is set (self-tests), synthesise the
       # raw URL without touching the network. Otherwise upload via gh.
       if [ -n "$GIST_RAW_URL_BASE" ]; then
@@ -469,12 +538,25 @@ host_one_asset() {
       if [ "$DRY_RUN" = "1" ]; then
         printf 'https://gist.githubusercontent.com/dry/run/raw/%s' "$base"; return 0
       fi
-      local gout raw
-      gout=$("$GH_BIN" gist create "$src" 2>/dev/null) || return 1
+      local gout raw raw_url
+      # ASSET_GIST_PUBLIC (default 1) → `--public` gist (camo-renderable on
+      # private repos). =0 → secret/unlisted gist (policy opt-out; also
+      # anonymously fetchable, so it renders too — only discoverability differs).
+      if [ "${ASSET_GIST_PUBLIC:-1}" = "1" ]; then
+        gout=$("$GH_BIN" gist create --public "$src" 2>/dev/null) || return 1
+      else
+        gout=$("$GH_BIN" gist create "$src" 2>/dev/null) || return 1
+      fi
       # gh prints the gist web URL; the raw asset URL is web/raw/<base>.
       raw=$(printf '%s' "$gout" | grep -oE 'https://gist\.github\.com/[A-Za-z0-9._/-]+' | head -1)
       [ -z "$raw" ] && return 1
-      printf '%s/raw/%s' "$raw" "$base"
+      raw_url=$(printf '%s/raw/%s' "$raw" "$base")
+      # REQ-1: render-verify (anonymous HEAD) before emitting; on miss, signal
+      # failure so the caller degrades — never emit a non-rendering URL.
+      if ! gist_raw_url_reachable "$raw_url"; then
+        return 1
+      fi
+      printf '%s' "$raw_url"
       return 0 ;;
     *)
       return 1 ;;
@@ -1396,6 +1478,126 @@ MOCK
     echo "publish-pl-issue: self-test 11-user-attachments SKIP (fixture missing)"
     fail=$((fail + 1))
   fi
+
+  # ---- Fixture 12: AC1 PUBLIC-gist tier + render-verify (offline) ----
+  # All paths mockable via ASSET_GIST_PUBLIC / GIST_VERIFY_FORCE / GH_BIN — no
+  # live gh or curl. host_one_asset runs the gist branch directly via declare -f.
+  local t12_dir
+  t12_dir=$(mktemp -d 2>/dev/null || echo "/tmp/publish-pl-self-test-12.$$")
+  mkdir -p "$t12_dir/bin"
+  printf '\211PNG\r\n\032\n' > "$t12_dir/a.png"
+  # gh mock: `gist create [--public] <src>` records its full argv to argv.log and
+  # prints a gist web URL so the raw URL can be derived.
+  cat > "$t12_dir/bin/gh" <<MOCK
+#!/usr/bin/env bash
+if [ "\$1" = "gist" ] && [ "\$2" = "create" ]; then
+  printf '%s\n' "\$*" >> "$t12_dir/argv.log"
+  echo "https://gist.github.com/deadbeefdeadbeef"
+  exit 0
+fi
+exit 0
+MOCK
+  chmod +x "$t12_dir/bin/gh"
+
+  # --- 12a: --public flag gated by ASSET_GIST_PUBLIC ---
+  # Default-on (ASSET_GIST_PUBLIC=1) → `gh gist create` MUST receive --public.
+  # Opt-out (ASSET_GIST_PUBLIC=0)    → --public MUST be absent (secret gist).
+  : > "$t12_dir/argv.log"
+  local f12a_url_on f12a_url_off f12a_ok=1
+  f12a_url_on=$( PATH="$t12_dir/bin:$PATH" GH_BIN=gh \
+    bash -c '
+      '"$(declare -f gist_raw_url_reachable)"'
+      '"$(declare -f host_one_asset)"'
+      HOST_TIER=gist DRY_RUN=0 GIST_RAW_URL_BASE="" ASSET_GIST_PUBLIC=1 GIST_VERIFY_FORCE=pass
+      host_one_asset "a.png" "'"$t12_dir"'/a.png"
+    ' )
+  grep -qF 'gist create --public' "$t12_dir/argv.log" || f12a_ok=0
+  [ "$f12a_url_on" = "https://gist.github.com/deadbeefdeadbeef/raw/a.png" ] || f12a_ok=0
+  : > "$t12_dir/argv.log"
+  f12a_url_off=$( PATH="$t12_dir/bin:$PATH" GH_BIN=gh \
+    bash -c '
+      '"$(declare -f gist_raw_url_reachable)"'
+      '"$(declare -f host_one_asset)"'
+      HOST_TIER=gist DRY_RUN=0 GIST_RAW_URL_BASE="" ASSET_GIST_PUBLIC=0 GIST_VERIFY_FORCE=pass
+      host_one_asset "a.png" "'"$t12_dir"'/a.png"
+    ' )
+  grep -qF 'gist create --public' "$t12_dir/argv.log" && f12a_ok=0   # MUST be absent
+  grep -qE 'gist create [^-]' "$t12_dir/argv.log" || f12a_ok=0       # secret form: src follows directly, no flag
+  [ "$f12a_url_off" = "https://gist.github.com/deadbeefdeadbeef/raw/a.png" ] || f12a_ok=0
+  if [ "$f12a_ok" = "1" ]; then
+    echo "publish-pl-issue: self-test 12a-gist-public-flag-gated PASS"; pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test 12a-gist-public-flag-gated FAIL (on='$f12a_url_on' off='$f12a_url_off')"
+    cat "$t12_dir/argv.log" >&2; fail=$((fail + 1))
+  fi
+
+  # --- 12b: render-verify gate — pass emits URL, fail degrades (no URL) ---
+  local f12b_pass f12b_fail f12b_rc_pass f12b_rc_fail f12b_ok=1
+  # gist_raw_url_reachable unit assertions (offline hook).
+  if GIST_VERIFY_FORCE=pass gist_raw_url_reachable "https://x/raw/a.png"; then :; else f12b_ok=0; fi
+  if GIST_VERIFY_FORCE=fail gist_raw_url_reachable "https://x/raw/a.png"; then f12b_ok=0; fi
+  # host_one_asset: verify pass → emits the URL.
+  f12b_pass=$( PATH="$t12_dir/bin:$PATH" GH_BIN=gh \
+    bash -c '
+      '"$(declare -f gist_raw_url_reachable)"'
+      '"$(declare -f host_one_asset)"'
+      HOST_TIER=gist DRY_RUN=0 GIST_RAW_URL_BASE="" ASSET_GIST_PUBLIC=1 GIST_VERIFY_FORCE=pass
+      host_one_asset "a.png" "'"$t12_dir"'/a.png"
+    ' ); f12b_rc_pass=$?
+  [ "$f12b_rc_pass" = "0" ] && [ -n "$f12b_pass" ] || f12b_ok=0
+  # host_one_asset: verify fail → empty output + non-zero rc (caller degrades).
+  f12b_fail=$( PATH="$t12_dir/bin:$PATH" GH_BIN=gh \
+    bash -c '
+      '"$(declare -f gist_raw_url_reachable)"'
+      '"$(declare -f host_one_asset)"'
+      HOST_TIER=gist DRY_RUN=0 GIST_RAW_URL_BASE="" ASSET_GIST_PUBLIC=1 GIST_VERIFY_FORCE=fail
+      host_one_asset "a.png" "'"$t12_dir"'/a.png"
+    ' ); f12b_rc_fail=$?
+  [ "$f12b_rc_fail" != "0" ] && [ -z "$f12b_fail" ] || f12b_ok=0
+  if [ "$f12b_ok" = "1" ]; then
+    echo "publish-pl-issue: self-test 12b-gist-render-verify PASS"; pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test 12b-gist-render-verify FAIL (pass='$f12b_pass'/$f12b_rc_pass fail='$f12b_fail'/$f12b_rc_fail)"; fail=$((fail + 1))
+  fi
+
+  # --- 12c: PRIVATE repo selects the gist tier end-to-end (render-verified) ---
+  # select_host_tier() with PRIVATE visibility + gh authed must pick gist (raw
+  # refused), confirming gist is now the render-verified PRIVATE-repo primary.
+  cat > "$t12_dir/bin/gh-sel" <<'MOCK'
+#!/usr/bin/env bash
+case "$1" in
+  auth) exit 0 ;;
+  repo) echo "PRIVATE"; exit 0 ;;
+esac
+exit 0
+MOCK
+  chmod +x "$t12_dir/bin/gh-sel"
+  cat > "$t12_dir/bin/git-sel" <<'MOCK'
+#!/usr/bin/env bash
+if [ "$1" = "remote" ] && [ "$2" = "get-url" ]; then echo "git@github.com:owner/repo.git"; exit 0; fi
+if [ "$1" = "rev-parse" ]; then echo "feature/x"; exit 0; fi
+if [ "$1" = "ls-remote" ]; then exit 0; fi
+exec /usr/bin/env -i PATH=/usr/bin:/bin git "$@"
+MOCK
+  chmod +x "$t12_dir/bin/git-sel"
+  local f12c_tier
+  f12c_tier=$( cp "$t12_dir/bin/gh-sel" "$t12_dir/bin/gh2"; cp "$t12_dir/bin/git-sel" "$t12_dir/bin/git"; \
+    PATH="$t12_dir/bin:$PATH" GH_BIN=gh2 \
+    ASSET_HOST_MODE="" ASSET_REPO_VISIBILITY="" ASSET_UA_ENABLE=0 \
+    bash -c '
+      '"$(declare -f parse_owner_repo)"'
+      '"$(declare -f repo_visibility)"'
+      '"$(declare -f select_host_tier)"'
+      select_host_tier
+      printf "%s" "$HOST_TIER"
+    ' )
+  rm -f "$t12_dir/bin/git"   # avoid leaking the git shim past this test
+  if [ "$f12c_tier" = "gist" ]; then
+    echo "publish-pl-issue: self-test 12c-private-selects-gist PASS"; pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test 12c-private-selects-gist FAIL (tier='$f12c_tier' want gist)"; fail=$((fail + 1))
+  fi
+  rm -rf "$t12_dir"
 
   # ---- parse_owner_repo: both remote URL forms ----
   local _por

@@ -2,7 +2,7 @@
 # attach-visual-evidence.sh — embed DV screenshot captures into the PR body and
 # the GitHub issue, on a UI-change run (metadata.requires_screenshots=true).
 #
-# Two modes (analyzing-0.md ad4, change-map #4):
+# Three modes (analyzing-0.md ad4, change-map #4):
 #   --emit pr     Print a ready-to-insert "## Visual evidence" markdown block to
 #                 stdout. The PR-body composer (FN agent / create-pr command /
 #                 conductor-attachments skeleton) inserts it between ## Test plan
@@ -12,18 +12,39 @@
 #                 block. Run by the orchestrator at stage-loop exit (post-FN /
 #                 post-push). Non-blocking: operational failures → audit row +
 #                 exit 0 (mirrors publish-pl-issue.sh's contract class).
+#   --post completion [<pr-ref>]
+#                 (AC2) Post-merge completion: resolve every issue the PR closes
+#                 via PR-body keywords (Closes|Fixes|Resolves #N, case-insensitive)
+#                 ∪ gh closingIssuesReferences, deduped to integers (no untrusted
+#                 text in argv). Post ONE completion comment per issue carrying:
+#                 1. Work-summary: sourced from .context/complete-summary-<run_index>.md
+#                    → state.json facts.goal → PR title+body (sanitised via
+#                    sanitise_body; never local paths). 2. Visual-evidence block
+#                    (when requires_screenshots=true and captures exist; summary-only
+#                    otherwise). Per-issue HTML-marker idempotency
+#                    (<!-- completion-summary:<worktask_id>:<run_index>:<issue_n> -->):
+#                    a retry never double-posts; partial prior failure re-posts only
+#                    missing issues. Each gh failure audits and continues (overall
+#                    exit 0 always). Run by orchestrator post-loop after FN merge
+#                    ("when the PR closes"). <pr-ref> optional; defaults to current
+#                    branch's PR. Defers under milestone mode (parent milestone issue
+#                    is canonical); audits no_related_issues when PR closes nothing.
 #
 # Image hosting (REQ-5, ad7): reuse publish-pl-issue.sh's host-tier degradation
 # by sourcing it under PUBLISH_LIB_ONLY=1 — select_host_tier / host_one_asset /
-# raw_asset_url_reachable, with every ASSET_* env mock inherited for free.
-# Relative .context/ refs are REJECTED (they never render in PR/issue bodies and
-# camo can't fetch private/internal raw). none-tier emits a note line, never a
-# broken ![]().
+# gist_raw_url_reachable, with every ASSET_* env mock inherited for free. Relative
+# .context/ refs are REJECTED (never render in PR/issue bodies; camo can't fetch
+# private/internal raw). none-tier emits note line, never broken ![](). Both
+# --post modes share public-gist privacy posture: ASSET_GIST_PUBLIC=1 (default)
+# creates world-readable gist; =0 opt-out creates secret/unlisted gist (still
+# URL-readable for camo). Neither preserves screenshot confidentiality; do not
+# capture secrets/tokens/PII (C3 capture policy). See publish-pl-issue.sh header
+# § AC1 Privacy posture for full rationale.
 #
-# Idempotency (ad5): the issue comment is tagged with an HTML marker
-#   <!-- visual-evidence:<worktask_id>:<run_index> -->
-# Before posting, existing comments are grepped for the exact marker; present ⇒
-# skipped/already_published, no second comment.
+# Idempotency:
+#   --post issue: marked with <!-- visual-evidence:<worktask_id>:<run_index> -->
+#   --post completion: marked with <!-- completion-summary:<worktask_id>:<run_index>:<issue_n> -->
+# Exact-match grep (no regex breakout); retry never double-posts.
 #
 # Exit codes: 0 all operational paths (incl. deferred/skipped), 1 catastrophic
 # (jq missing / state corrupt — mirrors publish helper), 2 --self-test failure.
@@ -31,6 +52,7 @@
 # Env (injection / test hooks): STATE_FILE, WORKSPACE_ROOT, GH_BIN, DRY_RUN, plus
 # every ASSET_* / *_URL_BASE hook honoured by publish-pl-issue.sh (inherited via
 # the source-guard). MANIFEST_FILE overrides manifest discovery in self-tests.
+# MILESTONE_MODE=1 env override for offline testing.
 
 set -u
 
@@ -311,6 +333,164 @@ load_context() {
   RUN_INDEX=$(jq -r '.run_index // 0' "$STATE_FILE")
 }
 
+# ---------- mode: --post completion (AC2) -----------------------------------
+# Post-merge completion summary to every issue the PR closes. Resolves related
+# issues (PR-body keywords ∪ closingIssuesReferences, deduped ints), posts one
+# marker-deduped comment per issue. Non-blocking: each gh failure → audit row +
+# continue; overall exit 0. Marker grammar (EXACT):
+#   <!-- completion-summary:<worktask_id>:<run_index>:<issue_n> -->
+
+# Emit the per-issue idempotency marker. $1=issue_n.
+_completion_marker() {
+  printf '<!-- completion-summary:%s:%s:%s -->' "$WORKTASK_ID" "$RUN_INDEX" "$1"
+}
+
+# Resolve related issues for a PR. $1=optional pr-ref (number or URL); default =
+# current branch's PR (gh resolves it inside the worktree). Output: newline-sep
+# sorted-unique INTEGERS on stdout. Empty on no refs / gh failure. Always rc 0,
+# never blocks. SECURITY: output is filtered to ^[0-9]+$ so no shell metachar
+# from an untrusted PR body can ever reach a downstream gh argv.
+resolve_related_issues() {
+  local ref="${1:-}"
+  local body_json refs_json kw_nums ref_nums
+  # Source 1: PR body keywords (Closes|Fixes|Resolves #N, case-insensitive).
+  if [ -n "$ref" ]; then
+    body_json=$("$GH_BIN" pr view "$ref" --json body --jq '.body' 2>/dev/null || true)
+  else
+    body_json=$("$GH_BIN" pr view --json body --jq '.body' 2>/dev/null || true)
+  fi
+  kw_nums=$(printf '%s\n' "$body_json" \
+    | grep -ioE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#[0-9]+' \
+    | grep -oE '[0-9]+' || true)
+  # Source 2: closingIssuesReferences (GitHub's resolved link set).
+  if [ -n "$ref" ]; then
+    refs_json=$("$GH_BIN" pr view "$ref" --json closingIssuesReferences \
+      --jq '.closingIssuesReferences[].number' 2>/dev/null || true)
+  else
+    refs_json=$("$GH_BIN" pr view --json closingIssuesReferences \
+      --jq '.closingIssuesReferences[].number' 2>/dev/null || true)
+  fi
+  ref_nums=$(printf '%s\n' "$refs_json" | grep -oE '[0-9]+' || true)
+  # Union + dedup, integer-only (mandatory security + correctness filter).
+  printf '%s\n%s\n' "$kw_nums" "$ref_nums" \
+    | grep -E '^[0-9]+$' \
+    | sort -un
+  return 0
+}
+
+# Source the work-summary text for the completion comment (sanitised). First
+# available wins: complete-summary-<run_index>.md → state.json facts/goal → PR
+# title+body. Reads nothing from untrusted argv; output is sanitised via the
+# library sanitise_body so leaked local paths never reach the comment.
+_completion_summary_text() {
+  local ref="${1:-}"
+  local summ_file="$WORKSPACE_ROOT/.context/complete-summary-$RUN_INDEX.md"
+  if [ -f "$summ_file" ]; then
+    sanitise_body < "$summ_file"
+    return 0
+  fi
+  # Fallback 1: state.json facts.goal (+ facts summary if present).
+  local goal
+  goal=$(jq -r '.facts.goal // empty' "$STATE_FILE" 2>/dev/null || true)
+  if [ -n "$goal" ]; then
+    printf '%s' "$goal" | sanitise_body
+    return 0
+  fi
+  # Fallback 2: PR title + body.
+  local pr_txt
+  if [ -n "$ref" ]; then
+    pr_txt=$("$GH_BIN" pr view "$ref" --json title,body \
+      --jq '"\(.title)\n\n\(.body)"' 2>/dev/null || true)
+  else
+    pr_txt=$("$GH_BIN" pr view --json title,body \
+      --jq '"\(.title)\n\n\(.body)"' 2>/dev/null || true)
+  fi
+  printf '%s' "$pr_txt" | sanitise_body
+  return 0
+}
+
+# Build the completion comment body for one issue. $1=issue_n, $2=optional pr-ref.
+# Layout: marker + heading + work-summary [+ visual-evidence block]. The block is
+# appended only when requires_screenshots==true AND captures exist (build_block
+# returns 0). Summary-only otherwise — NO broken refs, NO note spam. stdout only.
+build_completion_body() {
+  local issue_n="$1" ref="${2:-}"
+  local marker summary req
+  marker=$(_completion_marker "$issue_n")
+  summary=$(_completion_summary_text "$ref")
+  printf '%s\n' "$marker"
+  printf '## Worktask completed\n\n'
+  [ -n "$summary" ] && printf '%s\n' "$summary"
+  # Append the visual-evidence block only when screenshots are on AND captures
+  # exist. build_block returns non-zero (no output) when there are no captures.
+  req=$(state_requires_screenshots)
+  if [ "$req" != "false" ]; then
+    local mf block _tier_tmp
+    mf=$(manifest_path)
+    _tier_tmp=$(mktemp 2>/dev/null || printf '%s' "${TMPDIR:-/tmp}/ave-tier-comp.$$")
+    if block=$(HOST_TIER_FILE="$_tier_tmp" \
+               BLOCK_MANIFEST_REF=".context/images/$WORKTASK_ID/screenshots.md" \
+               build_block "$mf" "## Visual evidence (DV captures, run $RUN_INDEX)"); then
+      printf '\n%s' "$block"
+    fi
+    rm -f "$_tier_tmp"
+  fi
+  return 0
+}
+
+# Build the per-issue completion audit metadata JSON.
+#   $1=issue_n $2=result-reason $3=dedupe_key
+_completion_meta() {
+  jq -cn --arg w "$WORKTASK_ID" --argjson r "$RUN_INDEX" \
+    --argjson issue "$1" --arg reason "$2" --arg dk "$3" \
+    '{worktask_id:$w, run_index:$r, issue:$issue, reason:$reason, dedupe_key:$dk}'
+}
+
+# Post one completion comment per related issue. $1=optional pr-ref. Non-blocking.
+post_completion() {
+  local ref="${1:-}"
+  local action="completion_summary_commented"
+
+  # Gate 0: milestone mode → defer (parent milestone issue is canonical).
+  if [ "${MILESTONE_MODE:-0}" = "1" ] || \
+     { [ -f "$STATE_FILE" ] && [ -n "$(jq -r '.metadata.milestone // empty' "$STATE_FILE" 2>/dev/null)" ]; }; then
+    audit_av "$action" "deferred" \
+      "$(_completion_meta 0 milestone_mode "$WORKTASK_ID:$RUN_INDEX:completion:all")"
+    return 0
+  fi
+
+  # Gate 1: resolve related issues. Empty → audit no_related_issues, exit 0.
+  local issues; issues=$(resolve_related_issues "$ref")
+  if [ -z "$issues" ]; then
+    audit_av "$action" "skipped" \
+      "$(_completion_meta 0 no_related_issues "$WORKTASK_ID:$RUN_INDEX:completion:none")"
+    return 0
+  fi
+
+  # One comment per issue. Integers only (resolver-validated). Non-blocking.
+  local n marker dk body
+  while IFS= read -r n; do
+    [ -z "$n" ] && continue
+    dk="$WORKTASK_ID:$RUN_INDEX:completion:$n"
+    marker=$(_completion_marker "$n")
+    # Gate 2: idempotency — per-issue marker already present → skip.
+    if issue_has_marker "$n" "$marker"; then
+      audit_av "$action" "skipped" "$(_completion_meta "$n" already_published "$dk")"
+      continue
+    fi
+    body=$(build_completion_body "$n" "$ref")
+    # Gate 3: post via stdin (--body-file -); never interpolate body into argv.
+    if printf '%s' "$body" | "$GH_BIN" issue comment "$n" --body-file - >/dev/null 2>&1; then
+      audit_av "$action" "ok" "$(_completion_meta "$n" commented "$dk")"
+    else
+      audit_av "$action" "deferred" "$(_completion_meta "$n" gh_error "$dk")"
+    fi
+  done <<EOF
+$issues
+EOF
+  return 0
+}
+
 # ---------- self-test -------------------------------------------------------
 run_self_tests() {
   local pass=0 fail=0
@@ -341,19 +521,45 @@ MD
   _fail() { echo "attach-visual-evidence: $1 FAIL${2:+ — $2}"; fail=$((fail+1)); }
 
   # GH mock: records calls, simulates `issue view` (marker presence via file) and
-  # `issue comment`. Marker store = $GH_MARKER_FILE.
+  # `issue comment`. Marker store = $GH_MARKER_FILE (single, legacy f4/f5) OR
+  # $GH_MARKER_DIR/<target> (per-issue, AC2 f9-f12). The mock also answers
+  # `pr view` for the completion resolver/summary:
+  #   $GH_PR_BODY    → PR body for keyword scan + title/body fallback
+  #   $GH_PR_REFS    → space-separated issue numbers for closingIssuesReferences
+  #   $GH_PR_TITLE   → PR title (title,body fallback)
+  #   $GH_FAIL_ISSUES→ space-separated issue numbers whose `issue comment` fails
   _mk_gh() { # $1=dir
     cat > "$1/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
+# Per-target marker store path. target = the issue ref/number ($3).
+_store() {
+  if [ -n "${GH_MARKER_DIR:-}" ]; then
+    printf '%s/%s' "$GH_MARKER_DIR" "$(printf '%s' "${1:-_}" | tr '/:' '__')"
+  else
+    printf '%s' "${GH_MARKER_FILE:-/dev/null}"
+  fi
+}
 case "$1 $2" in
+  "pr view")
+    # Determine which --json field was asked for.
+    if printf '%s' "$*" | grep -q 'closingIssuesReferences'; then
+      for n in ${GH_PR_REFS:-}; do printf '%s\n' "$n"; done
+    elif printf '%s' "$*" | grep -q 'title,body'; then
+      printf '%s\n\n%s\n' "${GH_PR_TITLE:-}" "${GH_PR_BODY:-}"
+    else
+      # --json body
+      printf '%s\n' "${GH_PR_BODY:-}"
+    fi
+    exit 0 ;;
   "issue view")
-    # --json comments --jq ... : echo stored comment bodies (marker store file).
-    [ -f "${GH_MARKER_FILE:-/nonexistent}" ] && cat "$GH_MARKER_FILE"
+    # --json comments --jq ... : echo stored comment bodies for this target.
+    s=$(_store "$3"); [ -f "$s" ] && cat "$s"
     exit 0 ;;
   "issue comment")
-    # read body from stdin (--body-file -) and append to marker store.
-    body=$(cat); printf '%s\n' "$body" >> "${GH_MARKER_FILE:-/dev/null}"
-    echo "https://github.com/o/r/issues/9#comment-1"; exit 0 ;;
+    # Simulated failure for selected issues (f12).
+    for f in ${GH_FAIL_ISSUES:-}; do [ "$f" = "$3" ] && exit 1; done
+    body=$(cat); s=$(_store "$3"); printf '%s\n' "$body" >> "$s"
+    echo "https://github.com/o/r/issues/$3#comment-1"; exit 0 ;;
   "auth status") exit 0 ;;
 esac
 exit 0
@@ -485,6 +691,112 @@ MD
   fi
   rm -rf "$d7"
 
+  # ---- f8: resolve_related_issues — keyword-only / refs-only / union+dedup ----
+  # Drive the resolver directly via declare -f with a gh mock on PATH. All
+  # offline (GH_PR_BODY / GH_PR_REFS mocks).
+  local d8; d8=$(_mk_sandbox); mkdir -p "$d8/bin"; _mk_gh "$d8"
+  _resolve() { # $1=body $2=refs ; echoes resolver output (sorted unique ints)
+    PATH="$d8/bin:$PATH" GH_BIN=gh GH_PR_BODY="$1" GH_PR_REFS="$2" \
+      WORKTASK_ID=wid-test RUN_INDEX=0 \
+      bash -c '
+        GH_BIN=gh
+        '"$(declare -f resolve_related_issues)"'
+        resolve_related_issues ""
+      '
+  }
+  local r_kw r_refs r_union f8_ok=1
+  r_kw=$(_resolve "Closes #10"$'\n'"Fixes #12" "")
+  [ "$(printf '%s' "$r_kw" | tr '\n' ' ')" = "10 12" ] || f8_ok=0
+  r_refs=$(_resolve "no keywords here" "12 15")
+  [ "$(printf '%s' "$r_refs" | tr '\n' ' ')" = "12 15" ] || f8_ok=0
+  r_union=$(_resolve "Closes #10" "12 10")
+  [ "$(printf '%s' "$r_union" | tr '\n' ' ')" = "10 12" ] || f8_ok=0
+  if [ "$f8_ok" = "1" ]; then
+    _ok "f8-resolve-union-dedup"
+  else
+    _fail "f8-resolve-union-dedup" "kw='$(printf '%s' "$r_kw" | tr '\n' ',')' refs='$(printf '%s' "$r_refs" | tr '\n' ',')' union='$(printf '%s' "$r_union" | tr '\n' ',')'"
+  fi
+  rm -rf "$d8"
+
+  # ---- f9: --post completion first run → one comment per issue + ok rows ----
+  local d9; d9=$(_mk_sandbox); _manifest_with_captures "$d9"
+  mkdir -p "$d9/bin" "$d9/markers"; _mk_gh "$d9"
+  ( PATH="$d9/bin:$PATH" STATE_FILE="$d9/.context/state.json" WORKSPACE_ROOT="$d9" \
+    GH_BIN=gh GH_MARKER_DIR="$d9/markers" GH_PR_BODY="Closes #10"$'\n'"Fixes #12" GH_PR_REFS="" \
+    ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
+    bash "$self" --post completion >/dev/null 2>&1 )
+  local f9_ok=1
+  [ -f "$d9/markers/10" ] && grep -qF "<!-- completion-summary:wid-test:0:10 -->" "$d9/markers/10" || f9_ok=0
+  [ -f "$d9/markers/12" ] && grep -qF "<!-- completion-summary:wid-test:0:12 -->" "$d9/markers/12" || f9_ok=0
+  local ok_rows; ok_rows=$(grep -c '"action":"completion_summary_commented".*"result":"ok"' "$d9/.context/logs/audit.jsonl" 2>/dev/null || echo 0)
+  [ "${ok_rows:-0}" -eq 2 ] || f9_ok=0
+  if [ "$f9_ok" = "1" ]; then
+    _ok "f9-completion-first-run"
+  else
+    _fail "f9-completion-first-run" "ok_rows=$ok_rows $(tail -2 "$d9/.context/logs/audit.jsonl" 2>/dev/null | tr '\n' '~')"
+  fi
+
+  # ---- f10: --post completion second run → idempotent, no duplicate ----
+  ( PATH="$d9/bin:$PATH" STATE_FILE="$d9/.context/state.json" WORKSPACE_ROOT="$d9" \
+    GH_BIN=gh GH_MARKER_DIR="$d9/markers" GH_PR_BODY="Closes #10"$'\n'"Fixes #12" GH_PR_REFS="" \
+    ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
+    bash "$self" --post completion >/dev/null 2>&1 )
+  local f10_ok=1 m10 m12 already
+  m10=$(grep -cF "<!-- completion-summary:wid-test:0:10 -->" "$d9/markers/10")
+  m12=$(grep -cF "<!-- completion-summary:wid-test:0:12 -->" "$d9/markers/12")
+  [ "$m10" -eq 1 ] && [ "$m12" -eq 1 ] || f10_ok=0   # still exactly one each
+  already=$(grep -c '"reason":"already_published"' "$d9/.context/logs/audit.jsonl" 2>/dev/null || echo 0)
+  [ "${already:-0}" -ge 2 ] || f10_ok=0
+  if [ "$f10_ok" = "1" ]; then
+    _ok "f10-completion-idempotent"
+  else
+    _fail "f10-completion-idempotent" "m10=$m10 m12=$m12 already=$already"
+  fi
+  rm -rf "$d9"
+
+  # ---- f11: requires_screenshots=false → summary-only comment, no image refs ----
+  local d11; d11=$(_mk_sandbox)
+  jq '.metadata.requires_screenshots=false' "$d11/.context/state.json" > "$d11/.context/state.json.t" \
+    && mv "$d11/.context/state.json.t" "$d11/.context/state.json"
+  mkdir -p "$d11/bin" "$d11/markers"; _mk_gh "$d11"
+  ( PATH="$d11/bin:$PATH" STATE_FILE="$d11/.context/state.json" WORKSPACE_ROOT="$d11" \
+    GH_BIN=gh GH_MARKER_DIR="$d11/markers" GH_PR_BODY="Closes #10" GH_PR_REFS="" DRY_RUN=1 \
+    bash "$self" --post completion >/dev/null 2>&1 )
+  local f11_ok=1
+  [ -f "$d11/markers/10" ] || f11_ok=0
+  # Summary present (heading), but NO image embeds and NO hosting note spam.
+  grep -qF "## Worktask completed" "$d11/markers/10" || f11_ok=0
+  grep -qE '!\[' "$d11/markers/10" && f11_ok=0
+  grep -qi 'inline hosting unavailable' "$d11/markers/10" && f11_ok=0
+  grep -qF "## Visual evidence" "$d11/markers/10" && f11_ok=0
+  if [ "$f11_ok" = "1" ]; then
+    _ok "f11-completion-summary-only"
+  else
+    _fail "f11-completion-summary-only" "$(cat "$d11/markers/10" 2>/dev/null | tr '\n' '~')"
+  fi
+  rm -rf "$d11"
+
+  # ---- f12: gh failure on one issue → continue to others, exit 0 ----
+  local d12; d12=$(_mk_sandbox); _manifest_with_captures "$d12"
+  mkdir -p "$d12/bin" "$d12/markers"; _mk_gh "$d12"
+  ( PATH="$d12/bin:$PATH" STATE_FILE="$d12/.context/state.json" WORKSPACE_ROOT="$d12" \
+    GH_BIN=gh GH_MARKER_DIR="$d12/markers" GH_PR_BODY="Closes #10"$'\n'"Fixes #12" GH_PR_REFS="" \
+    GH_FAIL_ISSUES="12" \
+    ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
+    bash "$self" --post completion >/dev/null 2>&1 )
+  local f12_rc=$?
+  local f12_ok=1
+  [ "$f12_rc" -eq 0 ] || f12_ok=0                          # non-blocking exit 0
+  [ -f "$d12/markers/10" ] || f12_ok=0                     # issue #10 succeeded
+  grep -q '"issue":10,"reason":"commented"' "$d12/.context/logs/audit.jsonl" 2>/dev/null || f12_ok=0
+  grep -q '"issue":12,"reason":"gh_error"' "$d12/.context/logs/audit.jsonl" 2>/dev/null || f12_ok=0
+  if [ "$f12_ok" = "1" ]; then
+    _ok "f12-completion-gh-failure-continues"
+  else
+    _fail "f12-completion-gh-failure-continues" "rc=$f12_rc $(grep completion_summary "$d12/.context/logs/audit.jsonl" 2>/dev/null | tr '\n' '~')"
+  fi
+  rm -rf "$d12"
+
   echo "attach-visual-evidence: self-test summary — pass=$pass fail=$fail"
   [ "$fail" -eq 0 ]
 }
@@ -512,10 +824,13 @@ case "$MODE" in
     [ "$TARGET" = "pr" ] || { echo "usage: $0 --emit pr" >&2; exit 1; }
     emit_pr ;;
   --post)
-    [ "$TARGET" = "issue" ] || { echo "usage: $0 --post issue" >&2; exit 1; }
-    post_issue ;;
+    case "$TARGET" in
+      issue) post_issue ;;
+      completion) post_completion "${3:-}" ;;
+      *) echo "usage: $0 --post {issue | completion [<pr-ref>]}" >&2; exit 1 ;;
+    esac ;;
   *)
-    echo "usage: $0 {--emit pr | --post issue | --self-test}" >&2
+    echo "usage: $0 {--emit pr | --post issue | --post completion [<pr-ref>] | --self-test}" >&2
     exit 1 ;;
 esac
 exit 0
