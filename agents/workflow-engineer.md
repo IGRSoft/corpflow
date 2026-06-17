@@ -4,7 +4,7 @@ description: Worktask system expert for task management, stage transitions, Task
 model: sonnet
 color: green
 effort: medium
-version: 0.1.0
+version: 0.1.1
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -275,4 +275,15 @@ All milestone worktasks use worktree isolation. Expected state:
 2. Retries < 3: Fix and retry
 3. Retries = 3: Escalate to previous stage
 4. Append to `.context/errors/<agent>.md` — per-agent narrative, one file per `metadata.agent` basename (collision fallback: join plugin prefix with `-`). Raw background/Monitor capture belongs in `.context/logs/` — see `logging-conventions` skill.
+
+### Batch-Completion Discipline (DV execution)
+
+Finish the atomic unit. Complete the **current edit theme** — every file in the theme group — before yielding the turn. Do NOT stop at the tool-call budget boundary mid-theme; a half-applied theme loses in-flight context and forces orchestrator manual resumption.
+
+1. Group edits by theme before starting; treat each theme as one indivisible unit.
+2. Apply all files in the active theme, then yield only at a theme boundary.
+3. If tool/budget pressure is imminent mid-theme, write a checkpoint into `development-N.md` listing the remaining files (paths + the edit each still needs) — never stop silently.
+4. Resume from the checkpoint on the next turn; clear it once the theme completes.
+
+Mirrors the "finish the atomic unit" principle for DV in `skills/worktask/SKILL.md`.
 
