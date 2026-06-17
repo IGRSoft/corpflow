@@ -13,6 +13,9 @@ PL0 (or `commands/worktask.md` Phase 1) creates `.context/state.json` immediatel
 mkdir -p .context/
 
 # Re-run aware: next free planning index (0 on a fresh .context/)
+# nullglob: empty glob expands to nothing instead of erroring under zsh
+# ("no matches found") or staying literal under bash.
+setopt null_glob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
 N=0
 for f in .context/planning-*.md; do
   [ -e "$f" ] || continue
