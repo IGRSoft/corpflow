@@ -2,7 +2,7 @@
 name: task-folder-organization
 description: Context folder structure (.context/) with artifact naming and path resolution. Use when setting up task folders, organizing worktask artifacts, or resolving artifact paths.
 effort: medium
-version: 0.1.0
+version: 0.2.0
 ---
 
 # Task Folder Organization
@@ -220,7 +220,7 @@ See references/ for detailed examples of folder structures across worktask varia
 3. **Creating subfolders**: Keep all .md files in .context/ root (except `designs/`, `images/`, `errors/`, and `logs/`)
 4. **Ignoring errors**: Always append to `.context/errors/<agent>.md` when escalation is needed
 5. **Multiple context folders**: Only one .context/ per project
-6. **Wrong .context/ location in worktree mode**: In worktree mode, `.context/` must be inside the worktree directory, not in the main repo's `.workspaces/`
+6. **Wrong .context/ location in worktree mode**: `.context/` must be inside the worktree directory (`.worktrees/milestone-{N}/{issue#}/.context/`), not in the main repo root
 7. **Single shared error file**: Never write to `.context/error.md` — that path is retired. Use per-agent files under `.context/errors/`.
 
 ### DO

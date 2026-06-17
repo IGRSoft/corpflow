@@ -7,18 +7,15 @@ Read when running in milestone/worktree mode, inside a Conductor workspace clone
 ```typescript
 const task = TaskGet({ taskId: currentTaskId });
 const workspacePath = task.metadata?.workspace_path;
-const isolation = task.metadata?.isolation;  // 'worktree' or undefined
+const isolation = task.metadata?.isolation;  // always 'worktree' for file-writing stages
 
 if (isolation === 'worktree') {
   // WORKTREE MODE: workspace_path IS the worktree directory
   // All git operations happen inside the worktree
   // .context/ lives inside the worktree alongside source files
   const contextPath = `${workspacePath}/.context`;
-} else if (workspacePath) {
-  // LEGACY WORKSPACE MODE: directory-based artifact isolation only
-  const contextPath = `${workspacePath}/.context`;
 } else {
-  // STANDARD MODE: project root
+  // STANDARD MODE: main checkout — orchestrator and non-isolated stages
   const contextPath = '.context';
 }
 ```
@@ -27,8 +24,7 @@ if (isolation === 'worktree') {
 
 | Mode | Base Path | Git Operations | Source Isolation |
 |------|-----------|----------------|------------------|
-| Standard | `.context/` | Main working directory | None |
-| Workspace (legacy) | `.workspaces/milestone-{N}/{issue#}/.context/` | Shared working directory | Artifacts only |
+| Standard | `.context/` (main checkout) | Main working directory | None (orchestrator/non-isolated stages) |
 | Worktree | `.worktrees/milestone-{N}/{issue#}/.context/` | Dedicated worktree | Full (git + artifacts) |
 
 ## Conductor Workspace Topology

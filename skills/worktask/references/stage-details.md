@@ -87,7 +87,7 @@ See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration pat
 
 ### Worktree + Agent Teams
 
-When both `--worktree` and agent teams are enabled, each teammate operates in its own worktree. This provides the strongest isolation — each teammate has its own branch, working directory, and `.context/`. This is the recommended configuration for milestone parallel execution when token budget allows.
+Each teammate operates in its own worktree — each has its own branch, working directory, and `.context/`. This is the standard configuration for milestone parallel execution; worktree isolation is always active.
 
 > Project configs and auto-memory are automatically shared across all git worktrees of the same repo. No per-worktree configuration duplication needed.
 

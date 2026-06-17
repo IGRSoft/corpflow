@@ -1,18 +1,6 @@
 # Git Integration
 
-## Legacy Mode
-
-```bash
-# Workspace initialization (sequential — one branch at a time)
-git checkout {base_branch}
-git checkout -b feature/{issue#}-{slug}
-
-# PR creation (FN stage)
-git push -u origin feature/{issue#}-{slug}
-gh pr create --base {base_branch} --body "Closes #{issue#}"
-```
-
-## Worktree Mode
+## Workspace Setup
 
 ```bash
 # Workspace initialization (parallel — each issue gets own worktree)
@@ -46,13 +34,11 @@ git worktree prune
 |-------|--------|
 | PR Created | Archive `.context/` to `.context.archive/{timestamp}/` |
 | Issue Complete | Preserve workspace.json and handoff.md |
-| Milestone Complete | Archive to `.workspaces/archive/` |
+| Milestone Complete | `git worktree prune` to remove all stale worktree entries |
 
 Fresh agent context per issue - orchestrator delegates via Task tool, each subagent starts clean.
 
 ## Worktree Lifecycle
-
-Applies when `--worktree` flag is used with `--milestone:N`.
 
 ### Creation
 

@@ -4,6 +4,7 @@ description: Worktask system expert for task management, stage transitions, Task
 model: sonnet
 color: green
 effort: medium
+version: 0.1.0
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -41,16 +42,11 @@ Before executing any milestone worktask, validate:
 
 ### Pre-Execution Checks
 
-- [ ] orchestrator.json exists or will be created
+- [ ] orchestrator.json exists or will be created at `.worktrees/orchestrator.json`
 - [ ] Each issue checked for existing PRs (skip if found)
 - [ ] Each issue has unique branch name
 - [ ] Base branch is clean (no uncommitted changes)
 - [ ] No branch naming conflicts
-
-### Pre-Execution Checks (Worktree Mode)
-
-When `--worktree` flag is present, add these checks:
-
 - [ ] Git version >= 2.15 (worktree support)
 - [ ] `.worktrees/` directory is writable
 - [ ] No existing worktree for the same branch (`git worktree list`)
@@ -130,7 +126,7 @@ When `--worktree` flag is present, add these checks:
 
 **Solutions**:
 1. Verify `--milestone:N` flag was used
-2. Check `.workspaces/orchestrator.json` exists
+2. Check `.worktrees/orchestrator.json` exists
 3. Verify GitHub CLI auth: `gh auth status`
 4. Check milestone has open issues
 
@@ -248,17 +244,17 @@ from the filesystem. Diagnose by comparing `git worktree list` to
 3. Re-create missing worktrees: `git worktree add -b {branch} {path} origin/{base}`
 4. Update orchestrator.json to reflect actual state
 
-### Legacy vs Worktree Mode Detection
+### Worktree Mode (Always Active)
 
-**How to Detect**:
+All milestone worktasks use worktree isolation. Expected state:
 
-| Check | Legacy Mode | Worktree Mode |
-|-------|-------------|---------------|
-| orchestrator.json version | `"2.0"` | `"3.0"` |
-| `configuration.isolation` | absent or `null` | `"worktree"` |
-| workspace.json `isolation` | absent | `"worktree"` |
-| Issue directory location | `.workspaces/milestone-{N}/{issue#}/` | `.worktrees/milestone-{N}/{issue#}/` |
-| Source files in issue dir | No (only `.context/`) | Yes (full worktree copy) |
+| Check | Expected Value |
+|-------|----------------|
+| orchestrator.json version | `"3.0"` |
+| `configuration.isolation` | `"worktree"` |
+| workspace.json `isolation` | `"worktree"` |
+| Issue directory location | `.worktrees/milestone-{N}/{issue#}/` |
+| Source files in issue dir | Yes (full worktree copy) |
 
 ## Worktask Operations
 
@@ -271,7 +267,7 @@ from the filesystem. Diagnose by comparing `git worktree list` to
 
 ### Stage Transition
 1. Complete: `TaskUpdate({ taskId: "X", status: "completed" })`
-2. Check approval gates
+2. Verify `blockedBy` resolved (no approval gate — execution is unattended)
 3. Start next: `TaskUpdate({ taskId: "Y", status: "in_progress", owner: "..." })`
 
 ### Handle Error

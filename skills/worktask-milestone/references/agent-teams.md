@@ -41,30 +41,6 @@ Lead Session (workflow-engineer):
 
 ## Teammate Spawn Prompt Template
 
-### Legacy Mode
-
-```
-You are working on Issue #{issue_number}: {issue_title}
-
-Workspace: .workspaces/milestone-{N}/{issue_number}
-Branch: feature/{issue_number}-{slug}
-Base: {base_branch}
-
-Execute the worktask for this issue:
-1. Create .context/ directory in your workspace
-2. PL: Plan requirements from the issue body
-3. DV: Implement the solution
-4. QA: Test the implementation
-5. FN: Commit, push, and create PR with "Closes #{issue_number}"
-
-Write all artifacts to your workspace .context/ directory.
-
-Issue body:
-{issue_body}
-```
-
-### Worktree Mode
-
 ```
 You are working on Issue #{issue_number}: {issue_title}
 
@@ -90,7 +66,7 @@ Issue body:
 
 ## Worktree + Agent Teams
 
-When both `--worktree` and agent teams are enabled, each teammate operates in its own worktree. This provides the strongest isolation:
+Each teammate operates in its own worktree. This provides the strongest isolation:
 
 - Each teammate has its own git branch checked out in a separate directory
 - No branch-switching conflicts between teammates

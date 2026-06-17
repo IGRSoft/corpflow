@@ -140,27 +140,31 @@ function initializeWorkspace(
   milestoneNumber: number,
   issue: Issue
 ): WorkspaceState {
-  const workspacePath = `.workspaces/milestone-${milestoneNumber}/${issue.number}`;
+  const worktreePath = `.worktrees/milestone-${milestoneNumber}/${issue.number}`;
   const branchName = generateBranchName(issue);
   const baseBranch = resolveBaseBranch(issue.body);
 
-  // 1. Create directory structure
-  // mkdir -p ${workspacePath}/.context
+  // 1. Create worktree with new branch
+  // git worktree add -b ${branchName} ${worktreePath} origin/${baseBranch.branch}
 
-  // 2. Create branch from base (CRITICAL: checkout base first)
-  // git checkout ${baseBranch.branch}
-  // git checkout -b ${branchName}
+  // 2. Create .context/ inside the worktree
+  // mkdir -p ${worktreePath}/.context
 
-  // 3. Write workspace.json
+  // 3. Write workspace.json inside the worktree
   const workspace = {
-    version: '1.0',
+    version: '2.0',
+    isolation: 'worktree',
     issue: { number: issue.number, title: issue.title, labels: issue.labels },
-    git: { branch_name: branchName, base_branch: baseBranch.branch },
+    git: {
+      branch_name: branchName,
+      base_branch: baseBranch.branch,
+      worktree_path: worktreePath
+    },
     worktask: { track: null, task_prefix: null },
     execution: { current_stage: null, retry_count: 0 }
   };
 
-  writeFile(`${workspacePath}/workspace.json`, JSON.stringify(workspace, null, 2));
+  writeFile(`${worktreePath}/workspace.json`, JSON.stringify(workspace, null, 2));
 
   return workspace;
 }
@@ -173,15 +177,15 @@ function completeIssue(
   milestoneNumber: number,
   issueNumber: number
 ): void {
-  const workspacePath = `.workspaces/milestone-${milestoneNumber}/${issueNumber}`;
-  const workspace = JSON.parse(readFile(`${workspacePath}/workspace.json`));
+  const worktreePath = `.worktrees/milestone-${milestoneNumber}/${issueNumber}`;
+  const workspace = JSON.parse(readFile(`${worktreePath}/workspace.json`));
 
-  // 1. Commit all changes
-  // git add -A
-  // git commit -m "#${issueNumber} feat: ${workspace.issue.title}"
+  // 1. Commit all changes (from inside worktree)
+  // git -C ${worktreePath} add -A
+  // git -C ${worktreePath} commit -m "#${issueNumber} feat: ${workspace.issue.title}"
 
   // 2. Push branch
-  // git push -u origin ${workspace.git.branch_name}
+  // git -C ${worktreePath} push -u origin ${workspace.git.branch_name}
 
   // 3. Create PR
   // gh pr create --base ${workspace.git.base_branch} \
@@ -189,7 +193,7 @@ function completeIssue(
   //   --body "Closes #${issueNumber}"
 
   // 4. Update orchestrator
-  updateOrchestratorIssue('.workspaces/orchestrator.json', issueNumber, {
+  updateOrchestratorIssue('.worktrees/orchestrator.json', issueNumber, {
     status: 'completed',
     track: null
   });
@@ -198,24 +202,9 @@ function completeIssue(
 
 ## Worktree Operations
 
-Git worktree isolation for milestone worktasks. Requires Claude Code 2.1.51+ and `--worktree` flag.
-
-> **When to use**: `--worktree` enables true parallel issue execution by giving each issue its own working directory and branch. Without it, issues share a single worktree and must be processed sequentially via `git checkout`.
+Git worktree isolation for milestone worktasks. Requires Claude Code 2.1.51+.
 
 > **Shared configuration (2.1.63+)**: Project configs and auto-memory are automatically shared across all git worktrees of the same repo. No per-worktree configuration duplication needed.
-
-### isWorktreeEnabled
-
-```typescript
-function isWorktreeEnabled(options: WorktaskOptions): boolean {
-  if (!options.worktree) return false;
-
-  // Verify git supports worktrees (git 2.5+)
-  // Use: git worktree list --porcelain
-  const result = execFileNoThrow('git', ['worktree', 'list', '--porcelain']);
-  return result.status === 0;
-}
-```
 
 ### createIssueWorktree
 
@@ -362,12 +351,13 @@ function resolveIssueWorkdir(
       isWorktree: true
     };
   }
-  // Legacy: all issues share the main repo working directory
-  const workdir = '.';
+  // Fallback: should not be reached — isolation is always 'worktree'.
+  // Treat as worktree at repo root for safety.
+  const worktreePath = `.worktrees/milestone-${milestoneNumber}/${issueNumber}`;
   return {
-    workdir,
-    contextPath: `.workspaces/milestone-${milestoneNumber}/${issueNumber}/.context`,
-    isWorktree: false
+    workdir: worktreePath,
+    contextPath: `${worktreePath}/.context`,
+    isWorktree: true
   };
 }
 ```

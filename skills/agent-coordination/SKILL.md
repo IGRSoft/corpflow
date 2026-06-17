@@ -2,6 +2,7 @@
 name: agent-coordination
 description: Patterns for multi-agent coordination, handoffs, parallel execution, and error escalation. Use when coordinating agent handoffs, debugging multi-stage execution, or managing parallel agent workflows.
 effort: medium
+version: 0.1.0
 ---
 
 # Agent Coordination
@@ -151,18 +152,18 @@ Raw captures (build/test/monitor stdout) go to `.context/logs/` per `logging-con
 | Docs + QA | DC + QA | 30-40% time savings |
 | Early Docs | DC during DV | Docs ready sooner |
 
-### Worktree-Enabled Parallelism
+### Worktree Parallelism
 
-With `--worktree` mode, additional parallelism becomes safe because each issue has its own working directory:
+All milestone issues run in isolated worktrees. Each issue has its own working directory and branch, making safe parallelism unconditional:
 
-| Pattern | Without Worktree | With Worktree |
-|---------|------------------|---------------|
-| Parallel issues in milestone | Artifact-only isolation (branch conflicts) | Full source isolation per issue |
-| QA + DC parallel | Safe (mostly read-only) | Safe (each has own copy) |
-| Multiple DV stages across issues | **NOT SAFE** (shared source tree) | **SAFE** (separate worktrees) |
-| Agent teams + milestone issues | Risky (branch switching conflicts) | **Recommended** |
+| Pattern | Isolation | Safety |
+|---------|-----------|--------|
+| Parallel issues in milestone | Full source isolation per issue | Always safe |
+| QA + DC parallel | Each has own copy | Always safe |
+| Multiple DV stages across issues | Separate worktrees per issue | **SAFE** |
+| Agent teams + milestone issues | Each teammate's own worktree | **Recommended** |
 
-> When two agents need to modify source files simultaneously (e.g., parallel DV stages for different milestone issues), worktree mode prevents conflicts by giving each a separate working directory and branch.
+> Worktree isolation is always active — each DV stage and each milestone issue gets a separate working directory and branch, eliminating source-tree conflicts.
 
 ### Native Workflow Fan-Out (`--dynamic` mode)
 
@@ -172,7 +173,7 @@ worktree-split above. The two are distinct mechanisms with the same isolation gu
 
 | | Manual worktree-split (default) | Native Workflow fan-out (`--dynamic`) |
 |---|---|---|
-| Trigger | `--worktree` / `--milestone` | `--dynamic` (+ optional `--worktree`/`--milestone`) |
+| Trigger | `--milestone` (worktree always) | `--dynamic` (+ optional `--milestone`) |
 | Parallelism | Orchestrator delegates one `Task()` per worktree, in-context | Engine spawns children via `parallel()` / `pipeline()` |
 | Isolation | Orchestrator creates `.worktrees/…` per issue | `agent(prompt, { …, isolation: 'worktree' })` — engine provisions the worktree |
 | Decision point | Orchestrator loop (blockedBy resolution) | TL stage output drives DV `parallel()` fan-out (`dynamic-workflow.md#script-template`) |
@@ -303,7 +304,7 @@ the split and *what* the dependency shape is. Pick one pattern — do not mix.
 | Independent sub-scopes, different owners | **TL-initiated (parallel)** | DVN tasks blocked by TL0; all run concurrently; DR0 blocked by all DVN | `theme colors` + `theme switcher` + `dark assets` |
 | Sequential discovery (later work depends on earlier) | **DV-initiated (sequential)** | DVN tasks blocked by DV0; run one after another | `implement auth` then `migrate existing users` then `deprecate old endpoints` |
 | Single cohesive scope with <3 files | **No split** | DV0 handles entirely | `fix null check in login validator` |
-| Cross-cutting refactor spanning many modules | **TL-initiated (parallel)** with `track` metadata | Each stream gets own worktree (if `--worktree`) | `rename User → Account across auth/api/db` |
+| Cross-cutting refactor spanning many modules | **TL-initiated (parallel)** with `track` metadata | Each stream gets own worktree | `rename User → Account across auth/api/db` |
 | Stage already failed and retry needs narrower scope | **DV-initiated (sequential)** | DV1 creates focused retry; retry_count resets | DV0 failed on full feature → DV1 focused on auth module only |
 
 See `worktask/references/initialization-patterns.md § Stage Sub-Task Splitting`
@@ -355,7 +356,7 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 
 > Named subagents appear in `@`-mention typeahead suggestions, making it easier to reference and communicate with running agents via `SendMessage`.
 
-> **SendMessage authority hardening**: a relayed `SendMessage` does not carry the originating user's authority. Receivers **refuse relayed permission requests**, and auto mode blocks them outright. A reattach can *nudge* a parked agent (re-prompt, supply an awaited answer) but cannot *authorize* a permission escalation or stand in for a human gate. The PL0 and FN approval gates therefore stay operator-owned — never satisfy them via a relayed message.
+> **SendMessage authority hardening**: a relayed `SendMessage` does not carry the originating user's authority. Receivers **refuse relayed permission requests**, and auto mode blocks them outright. A reattach can *nudge* a parked agent (re-prompt, supply an awaited answer) but cannot *authorize* a permission escalation. Permission escalations remain operator-owned — never satisfy them via a relayed message. (Worktasks are unattended; there are no PL0/FN human approval gates. This caveat covers permission escalations only.)
 
 > Subagents discover project + user + plugin skills natively. Orchestrators do not need to inline-load skill instructions before delegation — the child can resolve `Skill("name")` from any source the parent could. This holds at every nesting depth (CC ≥ 2.1.172): a Level-3 child resolves skills the same way a Level-1 child does.
 
@@ -471,7 +472,7 @@ PL → DV → DR → QA
 
 ### Micro Execution
 ```
-[Figma capture if URL provided] → Present plan → Approval gate → DV only
+[Figma capture if URL provided] → Present plan → DV only
 ```
 
 ## Handoff Message Format
@@ -625,19 +626,19 @@ Claude Code ships a native `/workflows` command and Workflow tool for **dynamic 
 | Dimension | Native dynamic workflows (`/workflows`) | igrsoft staged worktask |
 |---|---|---|
 | **Scale** | Tens–hundreds of parallel agents | 11 governed sequential/parallel stages |
-| **Governance** | Ad-hoc, minimal overhead | Approval gates, stage contracts, artifact audit trail |
-| **Use case** | One-off fan-out (e.g. scan 500 files in parallel) | Full feature development with DR/SR/QA gates |
+| **Governance** | Ad-hoc, minimal overhead | Stage contracts, artifact audit trail, DR/SR/QA quality gates |
+| **Use case** | One-off fan-out (e.g. scan 500 files in parallel) | Full feature development with DR/SR/QA quality gates |
 | **State management** | Orchestrator-in-context | `.context/state.json`, Task System, audit.jsonl |
 | **Resume / rollback** | Manual | Resume Procedure, state.checkpoint-*.json |
 
 **When to reach for each:**
 
 - Reach for native dynamic workflows when you need quick parallelism without governance overhead (e.g., batch linting, parallel research, one-off data transforms).
-- Reach for the igrsoft worktask when work requires planning approval, security review, QA sign-off, documentation, or any multi-stage handoff contract.
+- Reach for the igrsoft worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks are fully unattended (no human approval gates).
 
 They can compose: a DV agent inside an igrsoft worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
 
-> Claude reserves multiple-choice / AskUserQuestion prompts for genuine decisions. This reinforces the existing text-approval-gate design in worktask stages — the orchestrator's approval gate (after PL0) is a real decision checkpoint, not a procedural confirmation.
+> Claude reserves multiple-choice / AskUserQuestion prompts for genuine decisions that require user input. Worktask execution is unattended — stage transitions are automatic, not gated on user confirmation.
 
 ## Related
 
