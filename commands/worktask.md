@@ -93,6 +93,9 @@ See `skills/shared/stage-codes.md` for stage details.
 3a. **Initialize state.json (handoff-protocol)**: Atomic-write `.context/state.json` seed using temp+fsync+rename per `skills/worktask/references/handoff-protocol.md#atomic-write`. PL0 stage marked `in_progress`. Schema per `handoff-protocol.md#state-json-schema`. **Re-run aware**: the seed MUST compute the next free planning index from any pre-existing `.context/planning-*.md` (NOT hard-code `0`) — on a re-run in a populated `.context/`, hard-coding `planning-0.md` would pin the old plan and cause PL0 to overwrite it. Backward-compat: if creation fails (e.g. read-only filesystem), log a warning and continue — F1 fallback (legacy `metadata.context_files` mode) keeps the worktask operational.
    ```bash
    # Re-run aware: next free planning index (0 on a fresh .context/)
+   # nullglob: empty glob expands to nothing instead of erroring under zsh
+   # ("no matches found") or staying literal under bash.
+   setopt null_glob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
    N=0
    for f in .context/planning-*.md; do
      [ -e "$f" ] || continue

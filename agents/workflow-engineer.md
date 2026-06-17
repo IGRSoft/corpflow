@@ -162,6 +162,9 @@ When `--worktree` flag is present, add these checks:
 2. **Verify settings registration**: Check `.claude-plugin/plugin.json` contains a `SubagentStop` hook entry pointing to `state-merge.sh`
 3. **Manual repair** — run the hook for each stage artifact:
    ```bash
+   # nullglob: unmatched globs expand to nothing instead of erroring under zsh
+   # ("no matches found") or staying literal under bash.
+   setopt null_glob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
    for artifact in .context/{planning,analyzing,coordination,development,developer-review,security-review,testing,documentation,release,complete-summary,retrospective,incident,ethics-review}-*.md; do
      [[ -f "$artifact" ]] || continue
      stage=$(awk '/^[[:space:]]*stage:/ { sub(/.*stage:[[:space:]]*/, ""); gsub(/[[:space:]"]+/, ""); print; exit }' "$artifact")
