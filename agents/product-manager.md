@@ -5,7 +5,7 @@ model: opus
 color: blue
 effort: high
 maxTurns: 40
-version: 0.5.0
+version: 0.5.1
 # tools: Bash(curl:*) is NARROWLY scoped to curl only (NOT bare Bash) so PL0 can
 # persist Figma screenshots IN THE SAME PL TURN. get_screenshot returns a
 # short-lived image URL that expires before the post-approval Phase 2 window
@@ -667,6 +667,25 @@ TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] });
 When writing grep-based verification steps in `<plan_file>` (e.g., AC validation commands):
 
 - DO NOT use substring grep patterns in verification checklists; always use word-boundary anchors (`\b`) or full filename matches to avoid false positives against legitimate canonical names.
+
+#### Per-theme residual-grep completeness gate (REQUIRED)
+
+An enumerated edit-file list goes stale: the repo evolves between plan authoring and DV execution, so files matching a theme's pattern can appear that the list never named. Treat every enumerated file list as a **starting set**, not the known universe — the completeness gate is a repo-wide grep, not the list.
+
+For **each edit theme** in `<plan_file>`, the acceptance criteria MUST include at least one repo-wide grep/verification command (a residual-grep) that finds every live occurrence the theme must cover, listed as an **AC verification command** so DV can self-verify completeness without orchestrator rescue:
+
+- Author the command so a clean diff yields **zero residuals** (`grep` returns no unhandled matches) once the theme is fully applied.
+- Use word-boundary anchors (`\b`) or full-filename matches per the rule above.
+- Pair each residual-grep with its theme; one theme may need more than one pattern.
+
+Example AC verification command (theme: rename `requires_ui_tests` → `test_mode`):
+
+```bash
+# Completeness gate — MUST return no unhandled matches after the theme is applied.
+grep -rn '\brequires_ui_tests\b' --include='*.md' --include='*.sh' . || echo "clean: no residuals"
+```
+
+DV runs each theme's residual-grep before yielding (see `agents/workflow-engineer.md § Batch-Completion Discipline`); a non-empty result means the theme is incomplete regardless of how many enumerated files were edited.
 
 Before marking PL0 complete, verify:
 - [ ] `<plan_file>` written to `.context/planning-N.md` with the next free N (per Plan File Naming)
