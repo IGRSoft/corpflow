@@ -19,14 +19,12 @@ This file is referenced by:
 - `skills/worktask/references/handoff-protocol.md` — optional `workflow` state.json object + fallback F5.
 
 > **NON-NEGOTIABLE INVARIANTS (the orchestrator owns these even in dynamic mode):**
-> 1. **PL0 gate** — the post-planning HUMAN approval gate runs BEFORE any workflow is launched. The
->    `Workflow` tool is never dispatched until the human approves the plan.
-> 2. **FN gate** — the pre-finalization HUMAN approval gate runs AFTER the workflow returns. The workflow
->    span STOPS before FN; commit/push/PR is never inside the workflow.
-> 3. **No self-commit** — the workflow span never commits, pushes, or opens a PR. That is the
->    orchestrator-owned, human-gated FN stage.
-> 4. The two **APPROVAL PROTOCOL** blocks in `commands/worktask.md` stay byte-identical. Dynamic mode adds
->    a branch *between* the gates; it does not weaken, move, or delegate either gate.
+> 1. **PL0** — planning completes before any workflow is launched. The `Workflow` tool is never dispatched
+>    until PL0 is `completed`. No human gate — execution proceeds unattended.
+> 2. **FN ownership** — FN (commit/push/PR) is always orchestrator-owned. `fn_gate` is always `"bypass"`;
+>    the FN stage runs unattended directly after the workflow span returns.
+> 3. **No self-commit** — the workflow span never commits, pushes, or opens a PR. That belongs to FN.
+> 4. Dynamic mode adds a branch *between* PL0 and FN; it does not change the unattended, gate-free model.
 
 ---
 
@@ -35,31 +33,30 @@ This file is referenced by:
 The native Workflow owns **only the contiguous gate-free span** between the two human gates.
 
 ```
-PL0 (plan) -> PL0 GATE (HUMAN) -> publish-pl-issue.sh
+PL0 (plan) -> publish-pl-issue.sh
    -> +-- native Workflow (background, run_id) ----------------------+
       |  AR -> TL -> DV(fan-out) -> DR -> [SR] -> QA -> [DC] -> [RE]  |   (STOPS before FN)
       +-------------------------------------------------------------+   returns aggregated schema
-   -> FN GATE (HUMAN) -> FN (commit/push/PR) -> ST -> self-improvement
+   -> FN (commit/push/PR, unattended) -> ST -> self-improvement
 ```
 
 - **AR / TL run INSIDE the workflow** — they are stages, not gates. TL is where dynamic DV fan-out is
   decided (`parallel()`).
-- The workflow **never crosses a human gate**. PL0 gate is upstream (orchestrator); FN gate is downstream
-  (orchestrator). ST and self-improvement run after FN, in the orchestrator.
+- The workflow **never crosses FN**. FN is orchestrator-owned and runs unattended (fn_gate always bypass).
+  ST and self-improvement run after FN, in the orchestrator.
 
 ### #mode-span-gates — decision table
 
 | Mode | Trigger | Workflow span | PL0 gate | FN gate | Notes |
 |------|---------|---------------|----------|---------|-------|
-| Interactive | `--dynamic` (no bypass flag) | AR → … → QA/DC/RE (stops before FN) | HUMAN (orchestrator, pre-launch) | HUMAN (orchestrator, on return) | Default dynamic shape. |
-| Auto-continue | `--dynamic --auto-continue` | AR → … → ST (one workflow, no interactive gate) | bypass (`fn_gate:"bypass"`) | bypass | `fn_gate:"bypass"` already set; span extends past FN to ST. |
-| Worktree | `--dynamic --worktree` | AR → … → ST | bypass | bypass | Per-issue isolation via `isolation:'worktree'`. |
-| Milestone | `--dynamic --milestone:N` | `pipeline(issues, …)` fan-out, AR → … → ST per lane | bypass | bypass | **R1: one explicit operator confirmation stating the PR count before any lane runs.** |
+| Standard | `--dynamic` | AR → … → QA/DC/RE (stops before FN) | none (unattended) | bypass (unattended) | Default dynamic shape; FN runs immediately after workflow returns. |
+| Auto-continue | `--dynamic --auto-continue` | AR → … → QA/DC/RE (stops before FN) | none | bypass | `--auto-continue` is now a no-op (gates already removed); behavior identical to standard. |
+| Milestone | `--dynamic --milestone:N` | `pipeline(issues, …)` fan-out, AR → … → ST per lane | none | bypass | **R1: one explicit operator confirmation stating the PR count before any lane runs.** |
 
-> **Bypass modes** (`--auto-continue`/`--milestone`/`--worktree`) already set `metadata.fn_gate:"bypass"`
-> on PL0. Because there is no interactive gate, the dynamic span extends to **PL→ST as one workflow**.
-> Even so, the milestone launch requires R1 confirmation (below) — bypassing the *interactive* gate does
-> not bypass the *multi-PR* confirmation.
+> All dynamic modes are unattended. `metadata.fn_gate:"bypass"` is set unconditionally on PL0.
+> The dynamic span runs through to FN as one workflow (or to ST in milestone lane mode).
+> The milestone launch still requires R1 confirmation (below) — this is a *multi-PR safety check*,
+> not a human approval gate.
 
 ---
 

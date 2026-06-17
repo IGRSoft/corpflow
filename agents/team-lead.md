@@ -4,6 +4,7 @@ description: Engineering team leadership with team coordination, performance man
 model: sonnet
 color: cyan
 effort: medium
+version: 0.1.0
 maxTurns: 30
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:technical-lead)
 ---
@@ -179,14 +180,14 @@ When stages can run independently, coordinate parallel execution:
 | Docs + QA Parallel | W + Q | Documentation doesn't depend on test results | ~30-40% |
 | Early Documentation | W starts during D | Core API is stable | Docs ready sooner |
 
-### Worktree-Enabled Parallelism
+### Worktree Parallelism
 
-With `--worktree` mode in milestone worktasks, true parallel DV stages across issues become safe:
+Worktree isolation is always active in milestone worktasks — each issue gets its own working directory and branch, making true parallel DV stages safe unconditionally:
 
-| Pattern | Without Worktree | With Worktree |
-|---------|------------------|---------------|
-| Multiple DV stages (different issues) | **Blocked** — shared working directory | **Safe** — separate worktrees |
-| Parallel issue execution | Sequential `git checkout` | Concurrent worktrees |
+| Pattern | Result |
+|---------|--------|
+| Multiple DV stages (different issues) | **Safe** — separate worktrees per issue |
+| Parallel issue execution | Concurrent worktrees (no `git checkout` switching) |
 
 **Capacity consideration**: Each worktree duplicates the working tree. For large repos, use `worktree.sparsePaths` or factor disk space into parallel track allocation (`--parallel:N`).
 

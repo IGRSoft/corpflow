@@ -1,6 +1,7 @@
 ---
 name: task-system
 description: Task System tools reference (Create/Update/Get/List) with metadata fields and status values. Use when working with TaskCreate, TaskUpdate, or managing task state.
+version: 0.1.0
 ---
 
 # Task System Reference
@@ -48,9 +49,8 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 | `issue_number` | GitHub issue being worked |
 | `workspace_path` | Workspace directory (milestone mode) or worktree path |
 | `track` | Parallel track number 1–5 |
-| `isolation` | `"worktree"` when using git worktree isolation (--worktree flag) |
-| `worktree_branch` | Branch name in worktree (convenience field, worktree mode only) |
-| `approved` | `"user"` after explicit post-PL0 approval, `"auto"` for `--auto-continue`, absent otherwise |
+| `isolation` | Always `"worktree"` on file-writing tasks (DV and milestone per-issue AR/DR/QA). PL0 stamps this unconditionally; developer.md § D0.0, technical-lead.md DR check, SKILL.md 4.8, and workspace-modes.md all treat it as always `"worktree"`. |
+| `worktree_branch` | Branch name in worktree (convenience field) |
 
 ### Dispatch metadata (optional)
 
@@ -125,7 +125,8 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
       "maximum": 5
     },
     "isolation": {
-      "enum": ["worktree"]
+      "enum": ["worktree"],
+      "description": "Always 'worktree' on file-writing tasks. PL0 stamps unconditionally; no other value is valid."
     },
     "priority": {
       "enum": ["high", "medium", "low"]

@@ -2,6 +2,7 @@
 name: milestone-worktask
 description: GitHub milestone integration with isolated workspaces for multi-issue tracking. Use when running milestone-based worktasks with --milestone flag or managing parallel issue tracks.
 effort: high
+version: 0.1.0
 ---
 
 # Milestone Worktask
@@ -14,28 +15,11 @@ GitHub milestone integration with isolated workspaces for each ticket.
 --milestone:N              # Execute all open issues by priority
 --milestone:N:ISSUE        # Execute specific issue
 --parallel:N               # Run N issues in parallel (max 5)
---auto-continue            # Skip per-issue approval gates
 ```
 
 ## Workspace Architecture
 
-Each ticket executes in its own isolated workspace.
-
-### Legacy Mode (default)
-
-```
-.workspaces/
-├── orchestrator.json              # Root orchestrator state
-└── milestone-{N}/
-    └── {issue#}/
-        ├── .context/              # Standard worktask artifacts
-        ├── workspace.json         # Workspace metadata and state
-        └── handoff.md             # Compressed context for orchestrator
-```
-
-### Worktree Mode (`--worktree`)
-
-Each issue gets a dedicated git worktree with full source isolation:
+Each ticket executes in its own isolated git worktree.
 
 ```
 .worktrees/
@@ -50,7 +34,7 @@ Each issue gets a dedicated git worktree with full source isolation:
         └── ...                    # All project files
 ```
 
-**Key difference**: In worktree mode, the entire source tree exists inside each issue directory. Each worktree has its own branch checked out independently — no `git checkout` switching needed. Multiple issues can execute truly in parallel.
+Each worktree has its own branch checked out independently — no `git checkout` switching needed. Multiple issues can execute truly in parallel.
 
 > Add `.worktrees/` to `.gitignore` to prevent worktree contents from appearing as untracked files.
 
@@ -68,13 +52,13 @@ For large monorepos, configure `worktree.sparsePaths` in project `settings.json`
 
 This reduces disk usage per worktree and speeds up initialization.
 
-> `--worktree` startup reads git refs directly and skips redundant fetch, significantly faster for repos with many branches.
+> Milestone worktask startup reads git refs directly and skips redundant fetch, significantly faster for repos with many branches.
 
 > Sub-agents executing in isolated worktrees automatically receive Read/Edit access to their own worktree directory — no explicit `tools:` grant needed in agent frontmatter.
 
-### FN Gate Bypass in Milestone Mode
+### Unattended Execution in Milestone Mode
 
-Milestone orchestration processes N issues sequentially (or in parallel tracks) without intervening user input. To prevent each per-issue worktask from stalling at the FN approval gate defined in `skills/worktask/SKILL.md § FN Gate`, every per-issue PL0 task is created with `metadata.fn_gate = "bypass"`. The orchestrator's gate check honors this field and proceeds directly to commit/push/PR for each issue. The same bypass applies under `--worktree` (where issue isolation already serves the review purpose) and `--auto-continue`. If you need to review each commit before push, use standard mode (`/worktask "..."`) instead of `--milestone`.
+Milestone orchestration processes N issues sequentially (or in parallel tracks) without intervening user input. All worktasks run unattended: `fn_gate = "bypass"` is set unconditionally on every per-issue PL0 task. The orchestrator proceeds directly to commit/push/PR for each issue via the FN stage without stopping. Changes are reviewable as per-issue PRs.
 
 > For headless `-p` mode runs, set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait entirely. Combined with `--mcp-config`, server connections are bounded at 5s instead of blocking on the slowest server.
 
@@ -139,8 +123,9 @@ TaskCreate({
   metadata: {
     stage: "PL", agent: "igrsoft:product-manager",
     issue_number: issueNumber, track: track,
-    workspace_path: `.workspaces/milestone-${milestone}/${issueNumber}`,
-    fn_gate: "bypass"  // milestone runs unattended; skip per-issue FN gate
+    workspace_path: `.worktrees/milestone-${milestone}/${issueNumber}`,
+    isolation: "worktree",
+    fn_gate: "bypass"  // always bypass — worktasks are unattended
   }
 });
 ```
@@ -149,7 +134,7 @@ TaskCreate({
 
 ### Initialization
 
-1. Create `.workspaces/milestone-{N}/` directory
+1. Create `.worktrees/milestone-{N}/` directory
 2. Fetch milestone and issues from GitHub
 3. Sort issues by priority, create orchestrator.json
 4. Initialize first N workspaces (N = parallel_tracks)

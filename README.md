@@ -1,6 +1,6 @@
 # Company Worktask Plugin
 
-A comprehensive 9-stage worktask system for Claude Code with Task System integration, stage transitions, approval gates, and structured task management.
+A comprehensive 9-stage worktask system for Claude Code with Task System integration, worktree-isolated unattended execution, stage transitions, and structured task management.
 
 claude-code min version: "2.1.169"
 
@@ -18,6 +18,7 @@ claude-code min version: "2.1.169"
 
 ## Features
 
+- **Always worktree-isolated + unattended (v3.23.0)**: every worktask runs in a dedicated git worktree and proceeds end-to-end without human approval gates — changes are reviewable as PRs.
 - **9-Stage Worktask**: Planning → Architecture → Team Lead → Development → Developer Review → QA → Documentation → Finalization → Stakeholder
 - **Task System Integration**: Native `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` tools
 - **Native Dependencies**: `blockedBy` arrays for explicit dependency management

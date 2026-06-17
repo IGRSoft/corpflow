@@ -2,7 +2,7 @@
 name: worktask
 description: Complete staged worktask system with dynamic sizing, task initialization, and stage management. Use when executing multi-stage worktasks, initializing tasks, or managing worktask state.
 effort: high
-version: 0.1.3
+version: 0.2.0
 ---
 
 # Worktask System
@@ -24,19 +24,14 @@ Single source of truth for task worktask management using the Task System.
 stateDiagram-v2
     [*] --> Initialized: /worktask <task>
     Initialized --> Planning: PL0 spawned
-    Planning --> ApprovalWaiting: PL0 completed
+    Planning --> Executing: PL0 completed (unattended — no approval gate)
     Planning --> ErrorRetry: PL0 failed
-    ApprovalWaiting --> Executing: user approves OR --auto-continue
-    ApprovalWaiting --> [*]: user rejects
-    Executing --> WorktreeCheckout: --worktree mode
+    Executing --> WorktreeCheckout: DV stage, always isolated
     Executing --> MilestoneTrack: --milestone mode
     Executing --> StageActive: standard mode
     WorktreeCheckout --> StageActive
     MilestoneTrack --> StageActive
     StageActive --> StageActive: next stage (blockedBy resolved)
-    StageActive --> FNGateWaiting: next task stage==FN AND fn_gate==required
-    FNGateWaiting --> StageActive: user approves OR fn_gate==bypass
-    FNGateWaiting --> [*]: user rejects
     StageActive --> ErrorRetry: stage failure
     ErrorRetry --> StageActive: retry_count < 3, fix applied
     ErrorRetry --> Escalated: retry_count == 3 OR hard_constraint
@@ -98,8 +93,7 @@ Dynamic mode only: PL0 emits a per-stage budget estimate at `state.json.workflow
 
 | Mode | `.context/` base |
 |------|------------------|
-| Standard | `.context/` |
-| Workspace (legacy) | `.workspaces/milestone-{N}/{issue#}/.context/` |
+| Standard | `.context/` (main checkout — orchestrator + non-isolated stages) |
 | Worktree | `.worktrees/milestone-{N}/{issue#}/.context/` |
 
 **WHEN in milestone/worktree mode, inside a Conductor workspace clone, or on any cwd↔workspace_path mismatch: Read `references/workspace-modes.md`** (detection snippet, Conductor sibling-repo rule, task-ID namespacing). Binding enforcement (workspace-root cross-check + `WORKSPACE_ROOT` banner injection) lives in `commands/worktask.md` Phase 2. Full milestone docs: `../worktask-milestone/SKILL.md`.
@@ -240,9 +234,9 @@ If validation fails:
 > **Figma asset persistence is NOT an orchestrator step.** Figma screenshots are captured AND persisted to
 > the canonical `.context/designs/` directory entirely within the PL turn (Phase 1) by the product-manager
 > via its narrowly-scoped `Bash(curl:*)` tool — `get_screenshot` returns a short-lived URL that must be
-> fetched while still valid, before the post-approval Bash window opens. The orchestrator MUST NOT add a
-> post-PL0/pre-approval download step (it would collide with the Phase-1 Bash prohibition in
-> `commands/worktask.md` and race the expiring URL). See `agents/product-manager.md § Capture Workflow`.
+> fetched while still valid, during the PL turn. The orchestrator MUST NOT add a post-PL0 download step
+> (it would collide with the Phase-1 Bash prohibition in `commands/worktask.md` and race the expiring URL).
+> See `agents/product-manager.md § Capture Workflow`.
 
 ### Cache-Friendly Prompt Layout & state.json (handoff-protocol)
 
@@ -338,20 +332,16 @@ The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: ti
 The orchestrator NEVER writes implementation code directly. ALL stage work is delegated to stage agents via the Agent tool. Using Edit/Write on source files, running build commands, or marking tasks completed without first delegating to an agent are all violations. The orchestrator's job is to manage the loop — read tasks, resolve agents, delegate, track status. If you find yourself editing source code, STOP — delegate to the stage agent instead.
 
 ### PRECONDITION CHECK
-Before entering this loop, verify BOTH signals:
+Before entering this loop, verify:
 - **Signal 1 (TaskList audit)**: Call `TaskList()`, find the PL0 task, verify its status is `completed`. If PL0 does not exist or is not completed, STOP — worktask not initialized or planning incomplete.
-- **Signal 2 (Human approval)**: The HUMAN USER has sent an explicit approval message ("approve", "proceed", "go", "yes", "continue") AFTER PL0 was marked completed. PL0 completion alone is NOT approval. A subagent returning results is NOT approval. A tool succeeding is NOT approval. Only the human user's explicit text message qualifies.
-If either signal is missing, DO NOT enter this loop.
+
+Worktasks are unattended — there is no human approval gate. PL0 completion alone is sufficient to enter the loop.
 
 After PL0 completes and creates stage tasks, the orchestrator MUST:
 
-1. **Present PL0 results** to the user: complexity score, stages created (with agents), dependency chain, and key planning decisions
-2. **STOP IMMEDIATELY**. Do NOT call Write, Edit, Task, or Bash with any file-modifying commands. STOP generating your response entirely.
-3. **Wait for EXPLICIT user approval**. Silence is NOT approval. Asking a question is NOT approval.
-4. The user may adjust stages, re-prioritize, or skip stages before approving
-5. Only after the user explicitly confirms, execute the stage loop below:
-6. **Re-validate before executing**: Call `TaskList()` to get all stage tasks. For each task, verify `metadata.agent` and `metadata.model` are set. This checkpoint prevents drift — the orchestrator re-grounds itself in the delegation rules before touching any stage.
-6.5. **Publish approved plan to GitHub** (after approval, before stage loop). Run:
+1. **Present PL0 results** to the user: complexity score, stages created (with agents), dependency chain, and key planning decisions (informational — execution proceeds automatically).
+2. **Re-validate before executing**: Call `TaskList()` to get all stage tasks. For each task, verify `metadata.agent` and `metadata.model` are set. This checkpoint prevents drift — the orchestrator re-grounds itself in the delegation rules before touching any stage.
+3. **Publish plan to GitHub** (before stage loop). Run:
      ```bash
      HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/references/publish-pl-issue.sh"
      if [ -f "$HELPER" ]; then
@@ -367,7 +357,6 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
      ```
      The trailing `; true` masks the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error, etc.) MUST NEVER propagate as orchestrator failure. Skip entirely when `--no-gh-issue` was supplied on the CLI (PL0 sets `task.metadata.no_gh_issue: true`; the helper short-circuits internally and audits `deferred`/`opted_out`). Under milestone mode (`--milestone:N`, `state.json:metadata.milestone` set, or `workspace.json` present), the helper exits `0` immediately with `reason: "milestone_mode"` — no `gh` API call of any kind is made. See `### PL Issue Publish` below for sanitiser rules and the non-blocking guarantee.
 
-Unless `--auto-continue` flag was provided — in that case, skip the approval gate and proceed directly.
 
 ```typescript
 // 1. Get all tasks for this worktask
@@ -482,81 +471,41 @@ while (tasks.some(t => t.status !== "completed")) {
       }
     }
 
-    // 4.8. DV worktree-isolation enforcement — inject the isolation pre-condition.
-    //       When `--worktree` is set (task.metadata.isolation === "worktree") OR the
-    //       worktask complexity is ≥ 30, DV must run in an isolated worktree before
-    //       writing files (see agents/developer.md § D0.0). Carry that requirement into
-    //       the DV prompt so the agent confirms isolation, creates a worktree, or flags
+    // 4.8. DV worktree-isolation enforcement — isolation is ALWAYS expected.
+    //       Every DV stage runs in an isolated worktree before writing files
+    //       (see agents/developer.md § D0.0). Carry that requirement into the DV
+    //       prompt so the agent confirms isolation, creates a worktree, or flags
     //       the deviation and returns — instead of silently editing the shared checkout.
     //       Friction precedent: tokamak-reconciler-unification (#14, decision dv6) ran DV
     //       in the main baton-rouge workspace, risking cross-contamination and weakening
     //       branch-exclusion constraints. DR rejects a DV handoff carrying `worktree:false`
-    //       when isolation was expected, unless the orchestrator explicitly waives it.
+    //       (isolation is always expected) unless an explicit waiver exists
+    //       (`worktree_isolation_waived` audit / task.metadata.worktree_waived).
     if (full.metadata.stage === "DV") {
-      const complexity = full.metadata.complexity
-        ?? state.stages?.PL?.complexity ?? 0;
-      const worktreeExpected =
-        full.metadata.isolation === "worktree" || complexity >= 30;
-      if (worktreeExpected) {
-        const enforce =
-          `WORKTREE ISOLATION REQUIRED (--worktree set or complexity ${complexity} ≥ 30): ` +
-          `confirm you are in an isolated worktree before any Edit/Write (D0.0). ` +
-          `If not, EnterWorktree and proceed, or flag worktree_isolation_missing and ` +
-          `return verdict:blocked. Set handoff frontmatter \`worktree: true|false\` truthfully.`;
-        full.description = full.description + "\n\n" + enforce;
-        appendAudit({
-          actor: "orchestrator",
-          action: "dv_worktree_enforced",
-          subject: "DV",
-          result: "ok",
-          metadata: { complexity, isolation: full.metadata.isolation ?? null }
-        });
-      }
+      const enforce =
+        `WORKTREE ISOLATION REQUIRED (always): ` +
+        `confirm you are in an isolated worktree before any Edit/Write (D0.0). ` +
+        `If not, EnterWorktree and proceed, or flag worktree_isolation_missing and ` +
+        `return verdict:blocked. Set handoff frontmatter \`worktree: true\` (false is a hard DR fail).`;
+      full.description = full.description + "\n\n" + enforce;
+      appendAudit({
+        actor: "orchestrator",
+        action: "dv_worktree_enforced",
+        subject: "DV",
+        result: "ok",
+        metadata: { isolation: "worktree" }
+      });
     }
 
-    // 4.9. FN approval gate — STOP before any FN-stage task unless bypassed
-    //      See § FN Gate stub below — Read references/fn-gate.md at gate time
-    //      for the 6-step procedure and the pre-FN summary template.
+    // 4.9. FN stage — gate is ALWAYS bypassed (unattended). PL0 stamps
+    //      fn_gate:"bypass" unconditionally; the orchestrator never stops before FN.
+    //      See § FN Gate stub below — Read references/fn-gate.md at FN time for the
+    //      Conductor-attachments writer (still run so later sessions inherit context).
     if (full.metadata.stage === "FN") {
-      const pl0 = tasks.find(t => t.metadata?.stage === "PL");
-      const gateModeRaw = pl0?.metadata?.fn_gate;
-      const gateMode = gateModeRaw ?? "required";  // default safe (fail-closed)
-      // Validate gate value. Anything outside the closed set falls through
-      // to required behaviour (the `!== "bypass"` branch), but silent
-      // fall-through masks misconfiguration. Audit unrecognized values so
-      // PL0 writer drift surfaces in cost-report / incident review.
-      if (gateModeRaw !== undefined && gateModeRaw !== "required" && gateModeRaw !== "bypass") {
-        appendAudit({
-          actor: "orchestrator",
-          action: "fn_gate_invalid_value",
-          subject: "FN0",
-          result: "fallback_required",
-          metadata: {
-            observed: String(gateModeRaw).slice(0, 64),
-            pl0_task_id: pl0?.id ?? null,
-            note: "PL0.metadata.fn_gate must be 'required' or 'bypass' (see commands/worktask.md Phase 1 step 4). Treating as 'required'."
-          }
-        });
-      }
-      if (gateMode !== "bypass") {
-        // (a) Build pre-FN summary from the resolved plan file
-        //     (`task.metadata.plan_file`; fallback: newest `.context/planning-*.md`),
-        //     .context/developer-review-N.md, .context/testing-N.md.
-        // (b) Print summary to user. Do NOT call TaskUpdate.
-        //     Do NOT delegate. FN task stays `pending`.
-        // (c) Write `fn_gate_waiting` audit line.
-
-        // 4.9.1. Pre-gate Conductor-attachments writer
-        //        Imperative checklist: references/fn-gate.md § Pre-gate
-        //        Conductor-attachments writer (Read at gate time, step 1 of 6).
-
-        // (d) End the orchestrator turn — wait for HUMAN approval.
-        return;  // exits the entire execution loop; resume happens in a fresh turn
-      }
-      // bypass branch:
-      // (a) Write `fn_gate_bypass` audit line with reason derived from
-      //     PL0.metadata (auto-continue | milestone | worktree).
-      // (b) Fall through to normal delegation.
+      // (a) Run the Pre-gate Conductor-attachments writer
+      //     (references/fn-gate.md § Pre-gate Conductor-attachments writer).
+      // (b) Write `fn_gate_bypass` audit line (reason: "unattended").
+      // (c) Fall through to normal delegation — FN commits/pushes/PRs unattended.
     }
 
     // 5. Mark in_progress
@@ -730,7 +679,7 @@ while (tasks.some(t => t.status !== "completed")) {
 
 ### PL Issue Publish
 
-Step 6.5 invokes `skills/worktask/references/publish-pl-issue.sh` between the PL approval gate and the stage-loop entry. The helper is **non-blocking by contract** (default): orchestrator wraps it in a `; true` so a non-zero exit is never propagated, and the helper itself returns `0` for every operational outcome (success, deferred, network error, sanitiser abort) — only catastrophic bugs (`jq` missing, `audit_dir_unwritable`, `state_corrupt`, `plan_unreadable`) raise `1`. Each outcome is recorded as one `github_issue_created` row in `.context/logs/audit.jsonl` with `result ∈ {ok, deferred, failed, error}` and `metadata.reason ∈ {gh_not_installed, auth_missing, no_remote, network_error, sanitiser_aborted, already_published, opted_out, milestone_mode, helper_not_found, label_create_failed, gh_api_error, gh_timeout, permission_denied, repo_not_found}` (mode is always implicit `create` on success — comment-mode was removed in favour of milestone-mode skip). The `helper_not_found` reason is not raised by the helper itself — the orchestrator emits this directly when the helper file is unreachable. The `network_error` reason is reserved for genuine transport-failure stderr (`could not resolve host`, `connection refused`, `timeout`); label/auth/api failures are mapped to their specific reason instead of being bucketed as network errors. Dedupe-key shape: `<worktask_id>:<run_index>:gh_issue`.
+Step 6.5 invokes `skills/worktask/references/publish-pl-issue.sh` between PL0 completion and the stage-loop entry. The helper is **non-blocking by contract** (default): orchestrator wraps it in a `; true` so a non-zero exit is never propagated, and the helper itself returns `0` for every operational outcome (success, deferred, network error, sanitiser abort) — only catastrophic bugs (`jq` missing, `audit_dir_unwritable`, `state_corrupt`, `plan_unreadable`) raise `1`. Each outcome is recorded as one `github_issue_created` row in `.context/logs/audit.jsonl` with `result ∈ {ok, deferred, failed, error}` and `metadata.reason ∈ {gh_not_installed, auth_missing, no_remote, network_error, sanitiser_aborted, already_published, opted_out, milestone_mode, helper_not_found, label_create_failed, gh_api_error, gh_timeout, permission_denied, repo_not_found}` (mode is always implicit `create` on success — comment-mode was removed in favour of milestone-mode skip). The `helper_not_found` reason is not raised by the helper itself — the orchestrator emits this directly when the helper file is unreachable. The `network_error` reason is reserved for genuine transport-failure stderr (`could not resolve host`, `connection refused`, `timeout`); label/auth/api failures are mapped to their specific reason instead of being bucketed as network errors. Dedupe-key shape: `<worktask_id>:<run_index>:gh_issue`.
 
 **Strict mode opt-in.** Passing `--strict` to the helper, or stamping `metadata.gh_issue.strict: true` on the state.json, flips operational failures from non-blocking `result: "deferred"` to blocking `result: "failed"` with `exit 1`. Use when an unpublished issue is unacceptable (e.g., compliance-tracked runs). Default behaviour stays unchanged so the existing fixture corpus and casual runs are unaffected.
 
@@ -790,9 +739,9 @@ new trigger block when introducing one (e.g., Pencil, Sosumi).
 
 ## FN Gate
 
-A second human-in-the-loop checkpoint immediately before any FN-stage task: present the pre-FN summary and STOP unless `PL0.metadata.fn_gate == "bypass"` (default `required`, fail-closed; bypass set by `--auto-continue` / `--milestone:N` / `--worktree`). Detection + bypass-audit logic is complete in loop step 4.9 above; in dynamic mode the gate fires on workflow return with identical ownership, bypass semantics, and template.
+The FN gate is **always bypassed** — worktasks run unattended. PL0 stamps `PL0.metadata.fn_gate == "bypass"` unconditionally, so the orchestrator never stops before FN. Loop step 4.9 above runs the Conductor-attachments writer and the `fn_gate_bypass` audit line, then proceeds directly into the FN stage (commit, push, PR). In dynamic mode the same unattended path applies on workflow return.
 
-**WHEN the gate fires — Read `references/fn-gate.md` BEFORE printing anything** and follow its 6-step "Effect, in order" list (pre-gate attachments writer → verify pre-seed → summary precondition → pre-FN summary → `fn_gate_waiting` → re-verify + `return`). The same file covers the Pre-gate Conductor-attachments writer, `return` vs `continue`, resume-after-approval, user amendment, and gate audit lines.
+**At the FN stage — Read `references/fn-gate.md`** for the Pre-gate Conductor-attachments writer (still run so Conductor's *Create PR* / *Request Review* actions inherit worktask context) and the `fn_gate_bypass` audit line. There is no pre-FN human summary or wait.
 
 ## Post-capture issue update (Visual evidence)
 
@@ -842,11 +791,9 @@ After the execution loop exits (all tasks completed, including ST): if `.context
 
 The orchestrator loop is restartable. **WHEN reattaching** (PostCompact, session crash, `--resume`, or stale `in_progress` tasks found at session start): **Read `references/resume.md` FIRST** — it maps TaskList shape + audit tail → exact action, including the live-agent `claude agents --json --all` pre-check that forbids blind re-delegation of a live, busy, or parked subagent. Never re-delegate before consulting it. Compaction-specific flow: `context-compression.md § PostCompact Recovery`.
 
-## Approval Gate Hook
+## Unattended Execution
 
-Both gates (PL0, FN) are honor-system; optional `PreToolUse` hooks can warn on / deny gate violations. **WHEN installing or troubleshooting gate hooks** (`approval-gate.sh`, warn→deny rollout, hook predicates): Read `references/approval-gate-hook.md`.
-
-Operative regardless of hooks: `--auto-continue` sets PL0 `{approved: "auto", fn_gate: "bypass"}` via `TaskUpdate` and writes an `approval_received` audit line (`subject: "PL0"`, `result: "auto"`); the same bypass flag is set by `--milestone:N` and `--worktree` so per-issue or unattended runs do not stall at FN. When bypass fires at FN, the orchestrator writes `fn_gate_bypass` with the triggering reason (see § FN Gate).
+Worktasks run fully unattended: there is no PL0 or FN human approval gate. PL0 stamps `metadata.fn_gate = "bypass"` unconditionally and the orchestrator proceeds from planning straight through FN without stopping. All file-writing work is worktree-isolated, so the unattended FN finalization (commit, push, PR) is reviewable as a PR. When the FN stage runs, the orchestrator writes a single `fn_gate_bypass` audit line (`reason: "unattended"`; see § FN Gate).
 
 ## Related
 

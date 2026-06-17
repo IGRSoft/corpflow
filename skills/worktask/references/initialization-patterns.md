@@ -138,19 +138,6 @@ If count > 0, mark issue as `skipped_has_pr` and exclude from worktask.
 
 For each issue in priority order:
 
-#### Legacy Mode (default)
-
-```bash
-# Create isolated workspace
-mkdir -p .workspaces/milestone-{N}/{issue#}/.context
-
-# CRITICAL: Create branch from base (using remote to avoid conflicts)
-git fetch origin develop  # or base branch from issue body
-git checkout -b feature/{issue#}-{slug} origin/develop
-```
-
-#### Worktree Mode (`--worktree`)
-
 ```bash
 # Create worktree with dedicated branch (no checkout switching needed)
 git fetch origin develop
@@ -161,39 +148,11 @@ git worktree add -b feature/{issue#}-{slug} \
 mkdir -p .worktrees/milestone-{N}/{issue#}/.context
 ```
 
-**Key difference**: No `git checkout` needed. Each worktree has its own branch checked out independently. Multiple issues can run truly in parallel without branch conflicts.
+Each worktree has its own branch checked out independently. Multiple issues can run truly in parallel without branch conflicts.
 
 ### 5. Initialize Orchestrator
 
 Create orchestrator.json to track all issues.
-
-#### Legacy Mode
-
-Location: `.workspaces/orchestrator.json`
-
-```json
-{
-  "version": "2.0",
-  "milestone_number": 1,
-  "milestone_title": "Sprint 2025-W05",
-  "parallel_tracks": 2,
-  "base_branch": "develop",
-  "created_at": "2026-01-31T10:00:00Z",
-  "issues": [
-    {
-      "number": 27,
-      "title": "feat: Add watermark support",
-      "priority": "P0",
-      "status": "pending",
-      "track": null,
-      "branch": "feature/27-watermark-support",
-      "workspace": ".workspaces/milestone-1/27"
-    }
-  ]
-}
-```
-
-#### Worktree Mode
 
 Location: `.worktrees/orchestrator.json`
 

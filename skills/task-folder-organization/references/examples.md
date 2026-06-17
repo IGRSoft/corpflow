@@ -217,9 +217,9 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 └── images/
 ```
 
-### Example 7: Worktree-Based Milestone Worktask
+### Example 7: Milestone Worktask (Worktree-Isolated)
 
-When using `--worktree` with milestones, `.context/` lives inside each worktree:
+In milestone mode, `.context/` lives inside each worktree (always):
 
 ```
 .worktrees/milestone-1/42/              # Git worktree root (full source copy)

@@ -4,6 +4,7 @@ description: Worktask system expert for task management, stage transitions, Task
 model: sonnet
 color: green
 effort: medium
+version: 0.1.1
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -41,16 +42,11 @@ Before executing any milestone worktask, validate:
 
 ### Pre-Execution Checks
 
-- [ ] orchestrator.json exists or will be created
+- [ ] orchestrator.json exists or will be created at `.worktrees/orchestrator.json`
 - [ ] Each issue checked for existing PRs (skip if found)
 - [ ] Each issue has unique branch name
 - [ ] Base branch is clean (no uncommitted changes)
 - [ ] No branch naming conflicts
-
-### Pre-Execution Checks (Worktree Mode)
-
-When `--worktree` flag is present, add these checks:
-
 - [ ] Git version >= 2.15 (worktree support)
 - [ ] `.worktrees/` directory is writable
 - [ ] No existing worktree for the same branch (`git worktree list`)
@@ -130,7 +126,7 @@ When `--worktree` flag is present, add these checks:
 
 **Solutions**:
 1. Verify `--milestone:N` flag was used
-2. Check `.workspaces/orchestrator.json` exists
+2. Check `.worktrees/orchestrator.json` exists
 3. Verify GitHub CLI auth: `gh auth status`
 4. Check milestone has open issues
 
@@ -248,17 +244,17 @@ from the filesystem. Diagnose by comparing `git worktree list` to
 3. Re-create missing worktrees: `git worktree add -b {branch} {path} origin/{base}`
 4. Update orchestrator.json to reflect actual state
 
-### Legacy vs Worktree Mode Detection
+### Worktree Mode (Always Active)
 
-**How to Detect**:
+All milestone worktasks use worktree isolation. Expected state:
 
-| Check | Legacy Mode | Worktree Mode |
-|-------|-------------|---------------|
-| orchestrator.json version | `"2.0"` | `"3.0"` |
-| `configuration.isolation` | absent or `null` | `"worktree"` |
-| workspace.json `isolation` | absent | `"worktree"` |
-| Issue directory location | `.workspaces/milestone-{N}/{issue#}/` | `.worktrees/milestone-{N}/{issue#}/` |
-| Source files in issue dir | No (only `.context/`) | Yes (full worktree copy) |
+| Check | Expected Value |
+|-------|----------------|
+| orchestrator.json version | `"3.0"` |
+| `configuration.isolation` | `"worktree"` |
+| workspace.json `isolation` | `"worktree"` |
+| Issue directory location | `.worktrees/milestone-{N}/{issue#}/` |
+| Source files in issue dir | Yes (full worktree copy) |
 
 ## Worktask Operations
 
@@ -271,7 +267,7 @@ from the filesystem. Diagnose by comparing `git worktree list` to
 
 ### Stage Transition
 1. Complete: `TaskUpdate({ taskId: "X", status: "completed" })`
-2. Check approval gates
+2. Verify `blockedBy` resolved (no approval gate — execution is unattended)
 3. Start next: `TaskUpdate({ taskId: "Y", status: "in_progress", owner: "..." })`
 
 ### Handle Error
@@ -279,4 +275,15 @@ from the filesystem. Diagnose by comparing `git worktree list` to
 2. Retries < 3: Fix and retry
 3. Retries = 3: Escalate to previous stage
 4. Append to `.context/errors/<agent>.md` — per-agent narrative, one file per `metadata.agent` basename (collision fallback: join plugin prefix with `-`). Raw background/Monitor capture belongs in `.context/logs/` — see `logging-conventions` skill.
+
+### Batch-Completion Discipline (DV execution)
+
+Finish the atomic unit. Complete the **current edit theme** — every file in the theme group — before yielding the turn. Do NOT stop at the tool-call budget boundary mid-theme; a half-applied theme loses in-flight context and forces orchestrator manual resumption.
+
+1. Group edits by theme before starting; treat each theme as one indivisible unit.
+2. Apply all files in the active theme, then yield only at a theme boundary.
+3. If tool/budget pressure is imminent mid-theme, write a checkpoint into `development-N.md` listing the remaining files (paths + the edit each still needs) — never stop silently.
+4. Resume from the checkpoint on the next turn; clear it once the theme completes.
+
+Mirrors the "finish the atomic unit" principle for DV in `skills/worktask/SKILL.md`.
 

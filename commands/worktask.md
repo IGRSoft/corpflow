@@ -1,31 +1,22 @@
 ---
 name: worktask
 description: Initialize a new worktask task with proper folder structure and Task System integration
-argument-hint: '<task description> [--milestone:N] [--secure] [--worktree] [--parallel:N]'
+argument-hint: '<task description> [--milestone:N] [--secure] [--parallel:N]'
+version: 0.1.0
 model: opus
 allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager)
 ---
 
-> **ORCHESTRATOR APPROVAL PROTOCOL (BINDING)**
-> The orchestrator has TWO approval gates that each require explicit HUMAN approval:
+> **UNATTENDED EXECUTION (BINDING)**
+> Worktasks run **fully unattended end-to-end** — there is no human approval gate.
+> PL0 stamps `metadata.fn_gate = "bypass"` unconditionally; the orchestrator proceeds
+> from PL0 straight through DV/DR/.../FN/ST without stopping for user input. FN commits,
+> pushes, and opens PRs without a human approval step. This is the intended behavior:
+> every worktask is worktree-isolated, so all file-writing work lands on an isolated
+> branch and the unattended FN finalization is reviewable as a PR.
 >
-> **Gate 1 — After PL0 (planning) completes:**
-> 1. Present the plan summary (complexity score, stages, agents)
-> 2. STOP. Do NOT call Write, Edit, Task, or Bash with any file-modifying command
-> 3. Wait for the user to explicitly say "approve", "proceed", "go", "yes", or "continue"
-> 4. Only then begin DV or any subsequent stage
->
-> **Gate 2 — Before FN (finalization) starts:**
-> 1. Present the pre-FN summary (planned commits, branch, PR target, QA/DR verdicts) — see `skills/worktask/SKILL.md § FN Gate`
-> 2. STOP. Do NOT mark FN `in_progress`; do NOT delegate to the FN agent
-> 3. Wait for explicit human approval as above
-> 4. Only then let FN run commits, push, and PR creation
->
-> **Bypass flags** (skip BOTH gates): `--auto-continue`, `--milestone:N`, `--worktree`. These modes set `metadata.fn_gate = "bypass"` on PL0; the orchestrator's gate check honors that field.
->
-> Receiving results from a subagent is NEVER approval. Only the HUMAN user's explicit text message qualifies.
->
-> **TODO**: `/emergency` worktasks currently fall through to the standard PL0-gate path; FN-gate bypass for `/emergency` will be wired when the emergency trigger is formalized.
+> **TODO**: `/emergency` worktasks share this unattended path; any future emergency-specific
+> FN handling will be wired when the emergency trigger is formalized.
 
 # Worktask Command
 
@@ -61,21 +52,19 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--milestone:N` | Execute GitHub milestone N issues |
 | `--milestone:N:ISSUE` | Execute specific issue |
 | `--parallel:N` | N concurrent tracks (max 5) |
-| `--auto-continue` | Skip approval gates |
+| `--auto-continue` | **No-op** (deprecated). Worktasks are always unattended; there are no approval gates left to skip. Retained only for backward compatibility; recommend removal. |
 | `--dynamic` | Run the autonomous span (AR→…→QA/DC/RE, between the two human gates) on the native Workflow engine (`ultracode` tool). Both gates and the no-self-commit rule stay orchestrator-owned; degrades to the manual loop when the tool is absent. See `skills/worktask/references/dynamic-workflow.md`. |
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 11-stage worktask |
-| `--worktree` | Use git worktrees for issue isolation (requires --milestone). Configure `worktree.sparsePaths` in settings.json for large repos |
 | `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish step. Sets `metadata.no_gh_issue: true` on the PL0 task; `skills/worktask/references/publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues as normal. |
 
 ## Examples
 
 ```bash
 /worktask --milestone:1                  # Milestone mode (compose with --parallel:N, :ISSUE)
-/worktask --milestone:1 --worktree       # Worktree mode (true parallel isolation)
 /worktask "Add dark mode support"        # Standard mode (compose with --priority, --secure)
 /emergency "Production login failing"    # Emergency
 ```
@@ -83,9 +72,8 @@ See `skills/shared/stage-codes.md` for stage details.
 ## Phase 1: Planning (execute immediately)
 
 > **BINDING CONSTRAINTS FOR PHASE 1**
-> 1. After PL0 completes: STOP. Do NOT call Write, Edit, Bash, or any file-modifying tool.
-> 2. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/images .context/errors` and TaskCreate/TaskUpdate calls are permitted. ALL file modifications belong to DV stage or later.
-> 3. **Context-Interruption Recovery**: If worktask execution is interrupted (auth flows, user clarifications, tool failures), upon resumption MUST verify: (a) PL0 task exists with status `completed`, (b) HUMAN USER sent explicit approval AFTER PL0 completed. If either is false, restart from appropriate phase.
+> 1. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/images .context/errors` and TaskCreate/TaskUpdate calls are permitted. ALL file modifications belong to DV stage or later.
+> 2. **Context-Interruption Recovery**: If worktask execution is interrupted (auth flows, tool failures), upon resumption MUST verify that the PL0 task exists with status `completed`. If not, restart from the appropriate phase. (No human approval gate exists — execution is unattended.)
 
 1. **Parse** task description and flags (`--milestone`, `--secure`, `--auto-continue`, etc.). See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:code-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
@@ -129,27 +117,17 @@ See `skills/shared/stage-codes.md` for stage details.
    fi
    ```
    **Regression guard**: If neither the plugin-registered hook NOR the project-local copy exist, emit a warning: `"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge (Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."` Do NOT block the worktask.
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", fn_gate: "<required|bypass>", execution_mode: "<manual|dynamic>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). Set `fn_gate: "bypass"` when invoked with `--auto-continue`, `--milestone:N`, or `--worktree`; otherwise `"required"`. Set `execution_mode: "dynamic"` when invoked with `--dynamic`; otherwise `"manual"` (the default). `execution_mode` only selects HOW the autonomous span runs (native Workflow engine vs the manual stage loop) — it does NOT change either approval gate.
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", fn_gate: "bypass", isolation: "worktree", execution_mode: "<manual|dynamic>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). `fn_gate` is **always** `"bypass"` (worktasks run unattended; no approval gate). Set `execution_mode: "dynamic"` when invoked with `--dynamic`; otherwise `"manual"` (the default). `execution_mode` only selects HOW the autonomous span runs (native Workflow engine vs the manual stage loop).
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative.
 7. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
-8. **Present plan summary**: Show complexity score, stages created (with agents), dependency chain, and key decisions
+8. **Present plan summary**: Show complexity score, stages created (with agents), dependency chain, and key decisions, then proceed directly into Phase 2 (no stop).
 
-## ════════════════════════════════════════════════════════════
-## STOP HERE. YOUR RESPONSE ENDS NOW.
-## ════════════════════════════════════════════════════════════
-## Do NOT proceed. Do NOT call any tools. WAIT for user input.
-## The user must type "approve" / "proceed" / "continue" / "go" / "yes" / "y".
-## EXCEPTION: `--auto-continue`, `--milestone:N`, or `--worktree`.
-## (These flags also bypass the FN gate via metadata.fn_gate = "bypass".)
-## ════════════════════════════════════════════════════════════
+## Phase 2: Execute Stages (proceeds automatically)
 
-## Phase 2: Execute Stages (only after user approval)
+Worktasks run unattended: continue directly from Phase 1 into the stage loop. There is no human approval gate.
 
-Before proceeding, re-verify: did the HUMAN USER type an approval message? PL0 completing is NOT approval. The product-manager returning results is NOT approval.
-
-**Step A — Publish approved plan to GitHub** (run BEFORE the stage loop, after
-approval is confirmed):
+**Step A — Publish plan to GitHub** (run BEFORE the stage loop):
 
     HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/references/publish-pl-issue.sh"
     if [ -f "$HELPER" ]; then
@@ -177,17 +155,14 @@ Read `PL0.metadata.execution_mode` (default `"manual"` when absent).
 
 - **Dynamic** (`execution_mode == "dynamic"` AND the `ultracode` tool present): dispatch the autonomous
   span (AR→…→QA/DC/RE, stopping before FN) per `skills/worktask/references/dynamic-workflow.md`
-  (`#script-template`; `#milestone-template` + R1 one-confirmation multi-PR guard for `--milestone:N`).
+  (`#script-template`; `#milestone-template` for `--milestone:N`).
   Audit `workflow_launched`; on return run `#boundary-reconciliation` + audit `workflow_returned`;
-  **then evaluate the FN gate exactly as in the manual loop** — the span never crosses FN.
+  the span runs through to FN unattended.
 - **Otherwise** run the manual loop below unchanged; if `--dynamic` was requested but the tool is absent,
   write a `dynamic_fallback` audit row first. Crashed dynamic runs resume in manual mode
   (`dynamic-workflow.md#resume`).
 
-Both gates are **orchestrator-owned in both modes**; the APPROVAL PROTOCOL blocks at the top of this
-file are unaffected.
-
-Execute the orchestrator execution loop from `skills/worktask/SKILL.md § Orchestrator Execution Loop`. The loop enforces a second approval gate immediately before any FN-stage task — see `skills/worktask/SKILL.md § FN Gate` for the pre-FN summary template and bypass semantics.
+Execute the orchestrator execution loop from `skills/worktask/SKILL.md § Orchestrator Execution Loop`. The FN stage runs unattended (`fn_gate: "bypass"` is always set) — see `skills/worktask/SKILL.md § FN Gate`.
 
 **BINDING: Workspace-root cross-check before every `Task()` delegation** — Conductor-managed sessions spawn the orchestrator inside a workspace clone whose `pwd` differs from the canonical plugin source repo. Before every `Task()` call in the stage loop, the orchestrator MUST verify that the working tree matches the task's declared workspace, and MUST inject the resolved root into the stage prompt so the subagent targets the right directory:
 

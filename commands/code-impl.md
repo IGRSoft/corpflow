@@ -2,6 +2,7 @@
 name: code-impl
 description: Implement code changes using the appropriate platform developer with automatic agent routing
 argument-hint: '<feature description> [--platform apple|android|web]'
+version: 0.1.0
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash
 ---
@@ -25,7 +26,8 @@ Implement code changes using the appropriate platform developer. Automatically r
 - `--task <description>` - Task description (alternative to positional arg)
 - `--tests` - Generate tests alongside implementation
 - `--dry-run` - Show plan without implementing
-- `--worktree` - Run implementation in isolated git worktree (auto-creates and removes)
+
+> Implementation always runs in an isolated git worktree (auto-created and removed). This is unconditional per `agents/developer.md § D0.0` — no flag required.
 
 ## Examples
 

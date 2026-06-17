@@ -1,6 +1,12 @@
 # Approval Gate Hook — installation & rollout
 
-Read when installing or troubleshooting gate-enforcement hooks (from `skills/worktask/SKILL.md § Approval Gate Hook` stub). The approval gates (PL0 and FN) are honor-system — the orchestrator is expected to `STOP IMMEDIATELY` and wait for the user. `PreToolUse` hooks can enforce each gate programmatically. Each hook scopes its grep by `subject` so that PL0 approval does not satisfy the FN predicate (and vice versa).
+> **DEPRECATED (v3.23.0)** — The PL0 and FN human approval gates have been removed. Worktasks run fully
+> unattended; `metadata.fn_gate = "bypass"` is stamped unconditionally on PL0. The hooks documented below
+> enforced gates that no longer exist. This file is retained for historical reference only — do NOT install
+> these hooks on new worktask runs. See `skills/worktask/SKILL.md § Unattended Execution` and
+> `commands/worktask.md § UNATTENDED EXECUTION (BINDING)` for the current model.
+
+Read when troubleshooting legacy gate-enforcement hooks (historical reference). The approval gates (PL0 and FN) were honor-system — the orchestrator was expected to `STOP IMMEDIATELY` and wait for the user. `PreToolUse` hooks enforced each gate programmatically. Each hook scoped its grep by `subject` so that PL0 approval did not satisfy the FN predicate (and vice versa). **None of this applies to worktasks running plugin v3.23.0+.**
 
 ## Advisory Rollout (Phase 1)
 
@@ -33,7 +39,7 @@ Change `mode: "warn"` to `mode: "deny"`. The hook returns `defer` with guidance:
 
 ## Interaction with `--auto-continue` bypass
 
-The orchestrator-side bypass behavior (PL0 `{approved: "auto", fn_gate: "bypass"}` + `approval_received` / `fn_gate_bypass` audit lines) is operative regardless of hooks and lives in `skills/worktask/SKILL.md § Approval Gate Hook`. Hook-side consequence: those audit lines make both `if` predicates evaluate false, so bypassed runs proceed without hook interference.
+The orchestrator-side bypass behavior (PL0 `{approved: "auto", fn_gate: "bypass"}` + `approval_received` / `fn_gate_bypass` audit lines) is operative regardless of hooks and lives in `skills/worktask/SKILL.md § Unattended Execution`. Hook-side consequence: those audit lines make both `if` predicates evaluate false, so bypassed runs proceed without hook interference.
 
 ## Safety Valve
 
