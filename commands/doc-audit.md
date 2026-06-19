@@ -200,12 +200,10 @@ Owner: Technical Writer
 ## Integration
 
 This command works with:
-- `/api-docs` - Generate missing API docs
 - `/readme-update` - Fix README issues
 - `/worktask` DC stage - Documentation phase
 
 ## Related
 
 - [technical-writer](../agents/technical-writer.md) - Documentation expertise
-- [api-docs](./api-docs.md) - API documentation
 - [readme-update](./readme-update.md) - README maintenance

@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Comprehensive 11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with developer review, security review, release engineering, and incident response",
-    "version": "3.8.3"
+    "version": "3.23.2"
   },
   "plugins": [
     {
       "name": "igrsoft",
       "source": "./",
       "description": "11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) with Task System integration, developer review, security review, release engineering, incident response, and cross-plugin handoffs",
-      "version": "3.9.0",
+      "version": "3.23.2",
       "author": {
         "name": "igrsoft",
         "url": "https://github.com/igrsoft"
@@ -45,7 +45,6 @@
       "strict": true,
       "commands": [
         "./commands/accessibility-audit.md",
-        "./commands/api-docs.md",
         "./commands/appstore-iap.md",
         "./commands/appstore-info.md",
         "./commands/appstore-screenshots.md",
@@ -67,7 +66,6 @@
         "./commands/executive-summary.md",
         "./commands/export-estimate.md",
         "./commands/harm-assessment.md",
-        "./commands/onboard-task.md",
         "./commands/optimize-agent.md",
         "./commands/optimize-command.md",
         "./commands/pm-milestone.md",

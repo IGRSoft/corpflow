@@ -171,6 +171,5 @@ Use this command:
 
 - [designer](../agents/designer.md) - Designer agent
 - [design-review](design-review.md) - Review existing designs
-- [api-docs](api-docs.md) - API documentation generation
 
 Target: $ARGUMENTS
