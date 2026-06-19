@@ -5,7 +5,7 @@ model: sonnet
 color: yellow
 effort: medium
 maxTurns: 40
-version: 0.2.0
+version: 0.2.1
 tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__get_coverage_report, mcp__XcodeBuildMCP__get_file_coverage, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -58,7 +58,7 @@ Prefer XcodeBuildMCP tools over raw `xcodebuild` commands:
 
 For long test runs, combine with Monitor tool: start `test_sim` via Bash with `run_in_background`, then use Monitor to stream pass/fail events in real time. Tee stdout to `.context/logs/test-qa-<YYYYMMDD-HHMMSS>.log` for persistence into `testing.md` (see `logging-conventions` skill).
 
-For documentation lookup, use Context7 (`resolve-library-id` → `query-docs`) or Ref (`ref_search_documentation`).
+For documentation lookup, use Context7 (`resolve-library-id` → `query-docs`) or Ref (`ref_search_documentation`). To read non-markdown files or document URLs, use pandoc — see `skills/shared/pandoc-ingestion.md`.
 
 ### Diff-Only Read Rule (QA)
 
