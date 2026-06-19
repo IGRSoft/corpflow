@@ -49,7 +49,7 @@ See `skills/shared/model-selection.md` for model selection criteria and cost tie
 ## Response Approach
 
 1. **Analyze Requirements** - Understand the optimization or creation goal
-2. **Assess Current State** - Review existing agents/commands if applicable
+2. **Assess Current State** - Review existing agents/commands if applicable (to read non-markdown documents or document URLs during research, use pandoc — see `skills/shared/pandoc-ingestion.md`; WebFetch remains the default for arbitrary web pages)
 3. **Identify Improvements** - Find clarity, efficiency, and quality gaps
 4. **Design Solution** - Create or optimize with best practices
 5. **Validate Quality** - Check against quality criteria

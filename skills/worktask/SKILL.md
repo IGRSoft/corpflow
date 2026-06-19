@@ -373,6 +373,24 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 // 1. Get all tasks for this worktask
 let tasks = TaskList();
 
+// Typed-return schemas keyed by stage code (verbatim from handoff-protocol.md#handoff-schemas).
+// A missing key leaves stageSchema undefined → schema param omitted → today's frontmatter path.
+const HANDOFF_SCHEMA: Record<string, object> = {
+  PL: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "PLHandoff", type: "object", required: ["verdict", "summary", "key_decisions", "next_stage_focus"], properties: { verdict: { type: "string", enum: ["ok", "blocked", "escalate"] }, summary: { type: "string", maxLength: 200 }, complexity: { type: "integer", minimum: 0, maximum: 50 }, key_decisions: { type: "array", items: { type: "string" } }, next_stage_focus: { type: "string" }, open_questions: { type: "array", items: { type: "string" } } } },
+  AR: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "ARHandoff", type: "object", required: ["verdict", "summary", "key_decisions", "next_stage_focus"], properties: { verdict: { type: "string", enum: ["ok", "blocked", "escalate"] }, summary: { type: "string", maxLength: 200 }, key_decisions: { type: "array", items: { type: "string" } }, next_stage_focus: { type: "string" }, open_questions: { type: "array", items: { type: "string" } } } },
+  TL: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "TLHandoff", type: "object", required: ["verdict", "summary", "next_stage_focus"], properties: { verdict: { type: "string", enum: ["ok", "blocked", "escalate"] }, summary: { type: "string", maxLength: 200 }, next_stage_focus: { type: "string" }, fanout: { type: "array", items: { type: "string" } } } },
+  DV: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "DVHandoff", type: "object", required: ["verdict", "files_modified", "build_status"], properties: { verdict: { type: "string", enum: ["ok", "blocked", "escalate"] }, files_modified: { type: "array", items: { type: "string" } }, tests_added: { type: "array", items: { type: "string" } }, build_status: { type: "string", enum: ["pass", "fail", "skipped"] }, decisions: { type: "array", items: { type: "string" } } } },
+  DR: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "DRHandoff", type: "object", required: ["verdict", "findings", "blockers"], properties: { verdict: { type: "string", enum: ["pass", "fail"] }, findings: { type: "array", items: { type: "string" } }, blockers: { type: "array", items: { type: "string" } }, p2_only: { type: "boolean" } } },
+  SR: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "SRHandoff", type: "object", required: ["verdict", "findings", "blockers"], properties: { verdict: { type: "string", enum: ["pass", "fail"] }, findings: { type: "array", items: { type: "string" } }, blockers: { type: "array", items: { type: "string" } }, threat_model: { type: "string" } } },
+  QA: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "QAHandoff", type: "object", required: ["verdict", "tests_passed", "tests_failed"], properties: { verdict: { type: "string", enum: ["go", "no-go"] }, tests_passed: { type: "integer", minimum: 0 }, tests_failed: { type: "integer", minimum: 0 }, blocking_defects: { type: "array", items: { type: "string" } } } },
+  DC: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "DCHandoff", type: "object", required: ["verdict", "files_modified"], properties: { verdict: { type: "string", enum: ["ok", "blocked", "escalate"] }, files_modified: { type: "array", items: { type: "string" } }, cross_references: { type: "array", items: { type: "string" } } } },
+  RE: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "REHandoff", type: "object", required: ["verdict", "version", "files_modified"], properties: { verdict: { type: "string", enum: ["ok", "blocked"] }, version: { type: "string" }, files_modified: { type: "array", items: { type: "string" } }, changelog: { type: "array", items: { type: "string" } } } },
+  FN: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "FNHandoff", type: "object", required: ["verdict", "summary", "next_stage_focus"], properties: { verdict: { type: "string", enum: ["ok", "blocked"] }, summary: { type: "string", maxLength: 200 }, next_stage_focus: { type: "string" }, files_modified: { type: "array", items: { type: "string" } }, pr_url: { type: "string" } } },
+  ST: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "STHandoff", type: "object", required: ["verdict", "key_decisions"], properties: { verdict: { type: "string", enum: ["approve", "reject"] }, key_decisions: { type: "array", items: { type: "string" } }, follow_ups: { type: "array", items: { type: "string" } } } },
+  IR: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "IRHandoff", type: "object", required: ["verdict", "root_cause", "next_stage_focus"], properties: { verdict: { type: "string", enum: ["ok", "escalate"] }, root_cause: { type: "string" }, next_stage_focus: { type: "string" }, blast_radius: { type: "string" } } },
+  ET: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "ETHandoff", type: "object", required: ["verdict", "findings"], properties: { verdict: { type: "string", enum: ["pass", "fail"] }, findings: { type: "array", items: { type: "string" } }, mitigations: { type: "array", items: { type: "string" } } } },
+};
+
 // 2. Loop until all tasks are completed
 while (tasks.some(t => t.status !== "completed")) {
   // 3. Find unblocked pending tasks
@@ -647,8 +665,32 @@ while (tasks.some(t => t.status !== "completed")) {
       });
     }
 
-    // 6. Delegate to stage agent
-    Task({ subagent_type: subagentType, model: model, prompt: full.description });
+    // 6. Delegate to stage agent.
+    //     Typed-schema dispatch (P0-1): the orchestrator SHOULD pass the stage's typed-return
+    //     schema (the `<CODE>Handoff` schema from
+    //     `skills/worktask/references/handoff-protocol.md#handoff-schemas`) as a Task() ARGUMENT.
+    //     When the runtime honors it, the validated typed return is mapped onto state.json via
+    //     `handoff-protocol.md#schema-to-state-map` and SUPERSEDES the post-hoc frontmatter grep
+    //     (stage-contracts.md § Validation Protocol step 2 + Step 6.5 below).
+    //
+    //     STRICT-SUPERSET / DEGRADE (binding): the `schema` is OPTIONAL on the wire. When the
+    //     runtime Task() primitive does NOT accept a `schema` param, behavior degrades to EXACTLY
+    //     today's: the agent still writes its artifact with `handoff:` frontmatter, the Step-6.5
+    //     frontmatter scrape runs, and F3 remains the fallback — no migration, no breakage. The
+    //     artifact + frontmatter are ALWAYS written either way (on-disk durability/compression +
+    //     F4/F5 source); the typed return never replaces them.
+    //
+    //     CACHE-PREFIX (binding, PRESERVE §4.1): `schema` is a Task() ARGUMENT, NOT preamble text.
+    //     It is NOT inserted into sections [1][2][4] (nor anywhere in `full.description`), so the
+    //     cache-prefix byte-identity of [1][2][4] is untouched and no per-call varying token is
+    //     introduced into the cacheable prefix.
+    const stageSchema = HANDOFF_SCHEMA[full.metadata.stage];  // from handoff-protocol.md#handoff-schemas; may be undefined
+    Task({
+      subagent_type: subagentType,
+      model: model,
+      prompt: full.description,
+      ...(stageSchema ? { schema: stageSchema } : {}),  // omitted entirely when the runtime lacks schema support → exactly today's path
+    });
 
     // 6.5. handoff-protocol: patch state.json from artifact frontmatter if the
     //      agent didn't already do so. Belt-and-suspenders layer #3 (after
