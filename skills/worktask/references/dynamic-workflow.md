@@ -11,6 +11,11 @@ absent the orchestrator falls back to the manual loop unchanged.
 > user reaches for the native trigger, it is `ultracode` (not `workflow`); the `--dynamic` flag, the
 > `metadata.execution_mode == "dynamic"` value, and the `Workflow` tool name are all unchanged.
 
+> **Workflow auto-engage scoping (v2.1.178).** Separately from the keyword rename above, the workflow
+> engine now auto-engages **only on explicit "run a workflow" / "workflow:" phrasing** — incidental
+> mentions of the word "workflow" no longer trip it. This narrows accidental activation but does not
+> affect the plugin's own `--dynamic` opt-in, which remains the canonical way worktasks enter dynamic mode.
+
 This file is referenced by:
 
 - `commands/worktask.md` — Phase 1 writes `metadata.execution_mode`; Phase 2 post-PL0-gate dispatch branch.

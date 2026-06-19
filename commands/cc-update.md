@@ -202,15 +202,16 @@ How changelog entries are categorized and routed to affected files:
 
 | Category | Keywords | Affected File Types |
 |----------|----------|---------------------|
-| **Hooks** | hook, PostToolUse, SubagentStart, PreToolUse, PostCompact, Elicitation, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate, conditional if | agents with hook docs, agent-coordination skill |
-| **Tools** | new tool, ExitWorktree, EnterWorktree, TaskCreate, worktree, SendMessage | agents with tool in `tools:` frontmatter |
-| **Model** | model alias, Opus/Sonnet/Haiku version, effort level | stage-codes skill, agents with full model IDs |
-| **Context** | compaction, context window, sparsePaths, worktree, circuit breaker | context-compression skill, agent-coordination skill |
-| **Subagents** | subagent, background agent, teammate, partial result, resume removed | agent-coordination skill, developer/project-manager agents |
-| **MCP** | MCP, elicitation, server deduplication, deferred tools, description cap | agent-coordination skill, cross-plugin-handoff skill |
+| **Hooks** | hook, PostToolUse, SubagentStart, PreToolUse, PostCompact, Elicitation, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate, conditional if, scheduled task, webhook, trigger delivery, task notification | agents with hook docs, agent-coordination skill, worktask resume reference |
+| **Tools** | new tool, ExitWorktree, EnterWorktree, TaskCreate, worktree, SendMessage, TeamCreate/TeamDelete removed, implicit team, Agent(name:) spawn, team_name ignored | agents with tool in `tools:` frontmatter, task-system + agent-teams skills |
+| **Model** | model alias, Opus/Sonnet/Haiku version, effort level, availableModels, /fast allowlist, model-deprecation | stage-codes skill, agents with full model IDs, model-selection skill |
+| **Context** | compaction, context window, sparsePaths, worktree, circuit breaker, --fallback-model | context-compression skill, agent-coordination skill |
+| **Subagents** | subagent, background agent, teammate, partial result, resume removed, implicit team, Agent(name:) spawn, pre-launch spawn classification, fg/bg nesting depth | agent-coordination skill, developer/project-manager agents, task-system + agent-teams skills |
+| **MCP** | MCP, elicitation, server deduplication, deferred tools, description cap, server-level disallowedTools, auth-stub tools | agent-coordination skill, cross-plugin-handoff skill |
 | **Cost** | token, cache, prompt cache, cost reduction | cost-optimization skill |
-| **Frontmatter** | effort, maxTurns, disallowedTools, initialPrompt, paths YAML, description cap | stage-codes skill, prompt-engineer agent |
-| **Commands** | slash command, /clear, /reload-plugins | worktask command, relevant command files |
+| **Frontmatter** | effort, maxTurns, disallowedTools, initialPrompt, paths YAML, description cap, Tool(param:value) permission syntax, model: deprecation | stage-codes skill, prompt-engineer agent, model-selection skill |
+| **Commands** | slash command, /clear, /reload-plugins, Tool(param:value) permission syntax | worktask command, relevant command files, agent-coordination skill |
+| **Security** | auto mode, destructive git block, commit --amend guard, IaC destroy block, trigger delivery can't auto-approve, attribution.sessionUrl, auth-stub tools headless | git-conventions skill, create-pr command, resume reference, security-reviewer agent |
 
 ## Integration
 
@@ -239,6 +240,7 @@ PL0 must set `metadata.agent: "igrsoft:prompt-engineer"` on the implementation t
 | `--scope` yields zero changes | Report clean scan; skip MEMORY.md update |
 | MEMORY.md missing or malformed | Recreate the lean skeleton (Version Tracking + CC Feature Band Index + Release History) from scratch |
 | Plugin version bump suggested | 3.2.0 → 3.3.0 |
+| Team-tool removed by a band (e.g. TeamCreate/TeamDelete → implicit team) | Rewrite the team/coordination docs to the new model (`Agent(name: …)` spawn, `team_name` ignored). Bump **Minor**, not Major, when the removed tools were never in any agent's `tools:` frontmatter — no breaking change to plugin agents, only reference-doc corrections. |
 
 ## Related
 

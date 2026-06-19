@@ -245,16 +245,13 @@ See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration exa
 
 ## Agent Teams Integration
 
-When agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), additional tools become available:
+With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, every session has **one implicit team** — spawn teammates via the **Agent tool's `name` parameter**; `team_name` is accepted but ignored. `SendMessage` remains the inter-teammate channel.
 
 | Tool | Purpose |
 |------|---------|
-| `TeamCreate` | Create a new team for multi-agent coordination |
-| `TeamDelete` | Remove team (requires all teammates stopped first) |
-| `Teammate` | Spawn a teammate session |
+| `Agent(name: …)` | Spawn a teammate into the session's implicit team |
 | `SendMessage` | Send messages between teammates |
 
-Team storage: `~/.claude/teams/{team-name}/config.json`
 Task storage: `~/.claude/tasks/{team-name}/`
 
 ### Custom Auto-Memory Directory

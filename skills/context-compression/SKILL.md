@@ -248,6 +248,8 @@ When running on Opus 4.6/4.7/4.8 with Max/Team/Enterprise plans — or on **Fabl
 > Use extended budgets only when complexity warrants it — standard budgets are still preferred for cost efficiency. Compression remains a best practice regardless of window size.
 >
 > **WARNING (v2.1.172)**: a 1M session on an account **without 1M usage credits** auto-compacts back under the standard limit — extended handoff budgets are NOT guaranteed just because the model nominally has a 1M window (Fable 5 always does). Plan stage handoffs against the **standard** column unless the account's 1M credits are confirmed; fable-tier *dispatch* on such accounts fails outright (see `skills/shared/model-selection.md`).
+>
+> **`--fallback-model` (v2.1.178)**: compaction now honors the session `--fallback-model`. A credit-gated 1M Fable compaction falls back to the configured fallback model instead of failing — the degrade above becomes a graceful fallback rather than an error, provided a `--fallback-model` (e.g. `claude-sonnet-4-6`) is set on the session.
 
 ## Exploration Cache Budget
 

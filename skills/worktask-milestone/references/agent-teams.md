@@ -2,6 +2,8 @@
 
 When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, milestone worktasks can use agent teams for true parallel issue execution instead of sequential Task-based orchestration.
 
+> The session **is** the team (CC ≥ 2.1.178): there is one implicit per-session team, so teammates are spawned via `Agent(name: …)` — there is no separate team to create or tear down.
+
 ## Architecture Comparison
 
 | Aspect | Task-Based Orchestrator | Agent Teams |
@@ -31,12 +33,12 @@ When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, milestone worktasks ca
 ```
 Lead Session (workflow-engineer):
   1. Fetch milestone issues
-  2. Create agent team with one teammate per issue (max 5)
+  2. Spawn one teammate per issue (max 5) via `Agent(name: …)` within the session's implicit team — no explicit team-creation step (the session is the team)
   3. Each teammate: issue context, workspace path, branch name
   4. Teammates execute independently: PL→DV→DR→QA→FN
   5. Lead monitors via shared task list
   6. Each teammate creates its own PR
-  7. Lead synthesizes results and cleans up team
+  7. Lead synthesizes results; stop idle teammates via the `TeammateIdle`/`TaskCompleted` stop signal — no explicit team-teardown call
 ```
 
 ## Teammate Spawn Prompt Template
@@ -83,5 +85,7 @@ This is the **recommended configuration** for milestone parallel execution when 
 | `TaskCompleted` | Update orchestrator.json, check milestone progress | `agent_id`, `agent_type` |
 
 Handlers can return `{"continue": false, "stopReason": "..."}` to stop a teammate when its issue is complete or when milestone budget is exhausted.
+
+> Background tasks launched by a teammate (e.g. long test runs) survive the teammate finishing its turn (CC ≥ 2.1.183) — a lane teammate can kick off long-running work without it dying at the turn boundary.
 
 Background completion notifications include `worktreePath` and `worktreeBranch` fields, enabling the orchestrator to locate the correct worktree for each teammate.

@@ -65,11 +65,22 @@ Use git trailer format (`token: value` or `token #value`). Hyphens replace space
 - Always prefix with issue code (#PROJ-123)
 - Body must be separated from summary by a blank line
 - Never add "Generated with" or "Co-Authored-By" footers
+- Set `attribution.sessionUrl` to omit the claude.ai session link from commits/PRs (CC ≥ 2.1.183) — keeps the no-AI-footer rule above enforced at the tooling layer
 
 ## Git Safety (beyond CC defaults)
 
 - Never push directly to main/master without PR
 - Never delete branches without explicit user instruction
+
+### Auto-mode Git Safety (CC ≥ 2.1.183)
+
+In auto mode the runtime enforces these guards independently of the rules above:
+
+- **Destructive git is blocked unless discard is explicitly requested** — `git reset --hard`, `git checkout -- .`, `git clean -fd`, and `git stash drop` are refused unless the prompt explicitly asks to discard those changes.
+- **`commit --amend` is blocked unless the commit was made by the agent this session** — a pre-existing commit cannot be rewritten. This enforces the plugin's existing "prefer new commits over `--amend`" rule with a runtime rationale: after a failed hook the commit did not happen, so amend would destroy prior work.
+- **IaC `destroy` is blocked unless the specific stack is named** — a bare `destroy` is refused; the target stack must be specified.
+
+FN-stage commit/cleanup and `create-pr` therefore run under this guard. None of the worktask flows rely on amending a non-agent commit, so the guard is documentation-forward (it reinforces, rather than changes, current behavior).
 
 ## Pull Request Format
 

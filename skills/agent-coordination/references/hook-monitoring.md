@@ -136,7 +136,7 @@ Hooks also support HTTP endpoints for external monitoring:
 
 ## Conditional Hook Execution (v2.1.85+)
 
-Hooks support an `if` field using permission rule syntax to avoid unnecessary process spawning. The `if` matcher correctly handles compound commands (`ls && git push`) and commands with env-var prefixes (`FOO=bar git push`) as of v2.1.89.
+Hooks support an `if` field using permission rule syntax to avoid unnecessary process spawning. The `if` matcher correctly handles compound commands (`ls && git push`) and commands with env-var prefixes (`FOO=bar git push`) as of v2.1.89, and path-conditional `if` matchers on `Read`/`Edit`/`Write` tool calls now match against the target file path correctly as of v2.1.176.
 
 ```json
 {
@@ -304,18 +304,20 @@ These hooks enable event-driven orchestration in milestone mode, where the lead 
 
 Use cases: stop teammate when its issue is complete, when milestone budget is exhausted, or when a blocking error requires lead intervention.
 
+> Background tasks a teammate launches survive the teammate finishing its turn (CC ≥ 2.1.183) — a `TeammateIdle` event does not imply the teammate's background work has stopped.
+
 ## Agent Teams vs Subagents
 
 ### Comparison for igrsoft Worktasks
 
-| Aspect | Subagents (Task tool) | Agent Teams (Teammate) |
+| Aspect | Subagents (Task tool) | Agent Teams (`Agent(name: …)`) |
 |--------|----------------------|------------------------|
 | Context | Own window, results return to caller | Fully independent sessions |
 | Communication | Report back to parent only | Direct inter-teammate messaging |
 | Coordination | Task dependencies (blockedBy) | Shared task list + messaging |
 | Tool restrictions | `tools` frontmatter per agent | Inherits lead's permissions |
 | Token cost | Lower (results summarized) | Higher (N context windows) |
-| Nesting | Up to 5 levels deep (CC ≥ 2.1.172; previously could not spawn sub-subagents) | Cannot spawn sub-teams |
+| Nesting | Up to 5 levels deep, foreground and background sharing one depth budget (CC ≥ 2.1.181; nesting itself since 2.1.172) | Cannot spawn sub-teams |
 | Source isolation | None by default; `isolation: worktree` in frontmatter | None by default; worktree mode recommended for milestone |
 
 ### When to Use Each
@@ -331,8 +333,8 @@ Use cases: stop teammate when its issue is complete, when milestone budget is ex
 
 ### Limitations
 
-- Teammates cannot spawn their own teams (runtime-enforced). Task-tool sub-agents nest up to 5 levels deep as of CC 2.1.172; whether the teammate runtime inherits that nesting is unverified — treat teammate→sub-agent spawning as unsupported until observed
-- One team per session; clean up before starting another
+- Teammates cannot spawn their own teams (runtime-enforced). Foreground and background subagents share one 5-level nesting depth budget (CC ≥ 2.1.181; nesting since 2.1.172); whether the teammate runtime inherits that nesting is unverified — treat teammate→sub-agent spawning as unsupported until observed
+- One implicit team per session — no create/teardown; spawn teammates with `Agent(name: …)` (`team_name` accepted but ignored)
 - No session resumption for in-process teammates
 - Higher token cost (~Nx for N teammates)
 - `/clear` does not kill background agents — safe to clear main session during long runs

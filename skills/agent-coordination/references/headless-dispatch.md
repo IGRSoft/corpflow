@@ -97,6 +97,8 @@ Rows additionally render a `done/total` progress count (v2.1.161) in the human-r
 
 > **`--tools` Grep/Glob (v2.1.162)**: when a headless dispatch passes `--tools` and explicitly lists `Grep`/`Glob`, native builds now wire up dedicated search tools for them (rather than falling back to shelling out). No plugin change needed — relevant only when an external runner hand-builds the `--tools` set; the in-process `Task()` path inherits agent-frontmatter `tools:` unchanged.
 
+> **Subagent tool enforcement (v2.1.178 / 2.1.183)**: a subagent's `disallowedTools` now honors MCP **server-level** specs (`mcp__server`, `mcp__*`), so a headless cross-plugin dispatch can deny an entire MCP server to a child rather than enumerating each tool (v2.1.178). `WebSearch` is fixed inside subagents — a child can rely on it (v2.1.178). And auth-capable MCP servers no longer expose their auth-stub tools to headless / SDK runs (v2.1.183), so a `--print`/`agents run` child does not see stub auth tools it cannot complete. These let server-level MCP denials and child `WebSearch` be relied upon in cross-plugin dispatch.
+
 ## Permission-Mode Pinning (in-process)
 
 When the orchestrator reads `task.metadata.permission_mode === "default"` for a stage, it MUST NOT propagate `--dangerously-skip-permissions` or any equivalent shorthand into descendant `Task()` calls or nested `Bash` invocations for that stage, and MUST append one `audit.jsonl` line:
