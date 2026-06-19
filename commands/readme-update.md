@@ -192,7 +192,6 @@ MIT
 
 This command works with:
 - `/doc-audit` - Find README issues
-- `/api-docs` - Link API documentation
 - `/release-notes` - Update for releases
 
 ## Related

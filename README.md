@@ -6,6 +6,8 @@ claude-code min version: "2.1.169"
 
 > **Claude Code feature bands**: latest integrated band is **2.1.171→2.1.175** (latest known CC: **2.1.175**; 2.1.171 was never published). Plugin **3.17.0** headline: **sub-agents now spawn their own sub-agents, up to 5 levels deep** (v2.1.172) — nested Tier-1→Tier-2 delegation chains are native and `/cost-report`'s `dispatch_depth` activates — plus **Fable 5 includes 1M context by default** (v2.1.173): on accounts without 1M usage credits, fable-tier dispatch fails (`Usage credits required for 1M context`) — see `skills/shared/model-selection.md` for the degrade path. Prior band (2.1.166→2.1.170, plugin 3.13.0) routed the 6 highest-reasoning agents — software-architector (AR), technical-lead (DR/TC), developer (DV), prompt-engineer (PE), security-reviewer (SR), ethics-reviewer (ET) — onto the `fable` tier (product-manager/PL and incident-responder/IR stay `opus`). **Alias caveat**: the `fable` alias resolves only on **CC ≥ 2.1.170**; on the minimum (2.1.169) it degrades to the provider default until you update.
 
+> **3.23.2 — recall-first DR review gate**: rewrites the DR-stage review command (`commands/code-review-dev.md`) around recall — decoupled **Phase 1 DETECTION / Phase 2 VERIFICATION+FILTERING / Phase 3 completeness**, a 12-class bug checklist, **mandatory read-beyond-the-diff** context gathering (callers/consumers, dynamic/string-literal refs, type definitions, acceptance-criteria intent check), a BLOCKED-verification keep rule, **P0/P1/P2** severity routing, and an explicit decision+coverage output — so confirmed correctness/security/concurrency/regression risks stop slipping past DR to QA. Adapts the source's Conductor review tools to the plugin's real mechanism (read-only `git diff origin/master...HEAD` acquisition + findings to `developer-review-N.md`; `allowed-tools` now declares read-only `git diff`/`log`/`show`). Adds an **Escalation to DV** loop — a read-confirmed *sound* P0/P1 sets `verdict: fail`, which re-dispatches DV to remediate, then DR re-reviews. Also fixes a routing bug in `agents/technical-lead.md` §DR3.5 + visual-evidence: the escalation classification was `ambiguous_requirements` (which the retry/escalate matrix routes to **PL**) while the intent is **DV** — corrected to `missing_input` (matrix → previous stage = DV). Also retires two unused commands — `/api-docs` and `/onboard-task` (deleted from `commands/` and the marketplace manifest; 45→43 commands).
+
 > **3.23.1 — OV-131 worktask guardrails**: hardens the worktask trigger/resume machinery from the OV-131 prompt audit. Adds the canonical **`skills/shared/worktask-triggers.md`** — a single source of truth carrying the **§BLOCKING** first-action rule (a `/worktask`/`worktask:`/`fworktask:`/`quick:`/`micro:` message must launch the pipeline via its canonical entry point before any reads, exploration, or delegation) plus the per-trigger stage / unattended-vs-checkpoint table — repairing the dangling references in `skills/SKILL.md` and `skills/worktask/SKILL.md`. Adds an **INVOCATION GATE** banner to the worktask skill so a directly-delegated read surfaces the violation. PL0 dynamic sizing now records **`metadata.skipped_stages`** (`{stage, reason}`) so `state.json` self-documents which of the 9 standard stages were dropped and why. Introduces the **`metadata.plan_gate`** carrier (`bypass` for the unattended triggers, `checkpoint` for `micro:`/`quick:`, mirroring `fn_gate`) so resume-after-interruption honors the `micro:`/`quick:` post-plan human checkpoint instead of silently dispatching stages. All edits are additive docs/prompt changes — no behavior change for the always-unattended main pipeline.
 
 > **3.21.0 — android-developer wired into the DV router**: the `developer` (DV) router now routes native Android work to the **android-developer** plugin (Kotlin, Jetpack Compose, Gradle, Hilt, Room, Retrofit, Coroutines, Material 3, plus architecture, test-generation, and code-fix specialists) instead of letting the `android` Detection-Rules row dead-end at a "kotlin patterns" placeholder. Adds `Task(android-developer:*)` targets, retargets the `android` Detection row to `android-developer:android-developer` (now keyed on `AndroidManifest.xml` + Gradle module markers, distinct from the JVM-backend `build.gradle` collision), an Android Platform Specialization table (phone/tablet, kotlin-architector, test-generator, code-fixer), android rows in Direct Platform Specialist Routing, a cross-plugin-handoff android-developer protocol table + `error_file` rule, and reuses the existing `android_adapter` screenshot path (`requires_screenshots: true` by default — `adb exec-out screencap -p` captures plus Gradle build/test transcripts as Build Evidence). There is no Android build MCP, so builds run through scoped `Bash(gradle:*|./gradlew|adb:*)`. Requires the android-developer plugin installed alongside igrsoft.
@@ -259,7 +261,6 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 #### Team Lead
 | Command | Description |
 |---------|-------------|
-| `/onboard-task` | Onboarding documentation |
 | `/standup` | Standup summary |
 | `/senior-review` | Senior developer code review |
 | `/code-review-dev` | Development-focused code review |
@@ -269,7 +270,6 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | Command | Description |
 |---------|-------------|
 | `/doc-audit` | Documentation audit |
-| `/api-docs` | API documentation |
 | `/readme-update` | README maintenance |
 
 #### Stakeholder
@@ -363,7 +363,6 @@ ST → FN → QA → DV → TL → AR → PL → USER
 ### During Documentation
 ```
 /doc-audit                          # Find doc gaps
-/api-docs                           # Generate API docs
 /readme-update                      # Update README
 ```
 
