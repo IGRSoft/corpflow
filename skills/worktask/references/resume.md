@@ -7,10 +7,10 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 | TaskList Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | No tasks | — | Worktask never initialized. Start over with `/worktask <task>` |
-| PL0 only, `pending` | — | PL0 not started. Delegate PL0 and wait for approval |
+| PL0 only, `pending` | — | PL0 not started. Delegate PL0; proceed unattended into the stage loop (no approval gate) |
 | PL0 only, `in_progress` | no `subagent_stopped` for PL0 | PL0 crashed mid-stage. Re-delegate PL0 (idempotent) |
 | PL0 `completed`, no stage tasks | — | PL0 did not create stages. Re-run PL0 |
-| PL0 `completed`, stage tasks `pending`, no `approval_received` line | — | Awaiting user approval. STOP and prompt user |
+| PL0 `completed`, stage tasks `pending`, no stage `in_progress` | No `approval_received` audit line for PL0 | If `PL0.metadata.plan_gate == "bypass"` (unattended `/worktask`/`worktask:`/`fworktask:`): stages not yet dispatched — re-enter the stage loop and delegate the first unblocked stage; do NOT stop. If `PL0.metadata.plan_gate == "checkpoint"` (`micro:`/`quick:`): parked at the post-plan human checkpoint — STOP and prompt for approval; proceed only once `approval_received` is logged. |
 | PL0 `completed`, `approval_received` present, some stages `in_progress` | most recent `subagent_stopped` `result: error` | Mid-stage failure. Read `.context/errors/<agent>.md`, honor `retry_count` |
 | PL0 `completed`, all stages `completed` except FN, FN `pending`, audit tail has `fn_gate_waiting` for FN | — | At FN gate. Re-present pre-FN summary (`references/fn-gate.md`); STOP and wait for human approval (unless `PL0.metadata.fn_gate == "bypass"`) |
 | PL0 `completed`, all stages `completed` except FN | — | Near-done. Re-enter loop; FN gate check decides whether to STOP or proceed |

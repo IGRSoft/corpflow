@@ -4,7 +4,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **3.23.0** (worktask always worktree-isolated + fully unattended: removed `--worktree` flag, complexity-30 gate, legacy `.workspaces/` mode, and both human approval gates; `metadata.isolation:"worktree"` + `fn_gate:"bypass"` stamped unconditionally by PL0; ~20 files updated)
+- Plugin version: **3.23.1** (OV-131 worktask guardrails: new canonical `skills/shared/worktask-triggers.md` §BLOCKING trigger rule + table repairing dangling refs; INVOCATION GATE in worktask SKILL.md; PL0 records `metadata.skipped_stages` {stage,reason} on dynamic-sizing drops; new `metadata.plan_gate` carrier (`bypass`|`checkpoint`, mirrors `fn_gate`) so resume honors the micro:/quick: post-plan checkpoint)
 - Claude Code min required: **2.1.169** (README.md is authoritative; Fable alias resolves only on CC ≥ 2.1.170, degrades to provider default on 2.1.169)
 - Claude Code latest integrated band: **2.1.171→2.1.175** (2.1.171 never published)
 
@@ -31,6 +31,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-06-19: v3.23.1 — OV-131 worktask guardrails (#164/#165): new canonical `skills/shared/worktask-triggers.md` (§BLOCKING first-action rule + trigger table) repairing dangling refs in `skills/SKILL.md` + `skills/worktask/SKILL.md`; INVOCATION GATE banner in worktask SKILL.md; PL0 stamps `metadata.skipped_stages` [{stage,reason}] when dynamic sizing drops standard stages (state.json self-documents); new `metadata.plan_gate` carrier (`bypass` for /worktask|worktask:|fworktask:, `checkpoint` for micro:|quick:, mirrors `fn_gate`) so `resume.md` honors the post-plan human checkpoint on interruption.
 - 2026-06-17: v3.23.0 — worktask always worktree-isolated + fully unattended: removed `--worktree` flag, complexity-30 isolation gate, and legacy `.workspaces/` milestone mode; dropped both human approval gates (post-PL0 and pre-FN); PL0 now stamps `metadata.isolation:"worktree"` and `fn_gate:"bypass"` unconditionally; ~20 files updated across agents/, commands/, skills/.
 - 2026-06-15: v3.22.1 — PL plan-file overwrite fix: on a worktask re-run in a populated `.context/`, `commands/worktask.md` step 3a hard-coded `planning-0.md`/`run_index:0`, colliding with PL0's increment algorithm → PL sometimes overwrote `planning-0.md`. Seed is now re-run aware (bash glob+increment to next free `planning-N`); product-manager.md marks PL0 the authoritative writer (recompute N, never overwrite existing); handoff-protocol.md + initialization-patterns.md seeds reconciled (`run_index` restored — was schema-required but omitted). Related: v3.12.1.
 - 2026-06-15: v3.22.0 — request-plan skill + /request-plan command: lightweight context-aware plan-from-request bridge (goal/scope/P0-P1-P2 phases/rough effort/risks) → worktask trigger handoff; reuses estimation tier-selection + three-stage-planning phasing instead of duplicating /pm-requirements or /estimate. Registered in marketplace.json + skills index.
@@ -42,8 +43,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-06-09: v3.14.0 — sub-2.1.169 compat retirement (resume degrade tiers collapsed to baseline, legacy artifact-grace retired, Fable tier reconciled).
 - 2026-06-09: v3.13.0 — CC 2.1.166→2.1.170 band + Fable 5 routing (6 agents opus→fable; min CC 2.1.114→2.1.169).
 - 2026-06-05: v3.12.1 — state-merge numbered-artifact resolution (`resolve_artifact` exact→highest-N→legacy→empty; +3 self-tests).
-- 2026-06-05: v3.12.0 — CC 2.1.157→2.1.165 band + self-healing gates (`additionalContext` remediation) + precise resume (`waitingFor` 3-way branch).
-- 2026-06-05: v3.11.4 — design↔result image-diff join (QA joins DV images via registry ID; RMSE pre-pass before multimodal vision).
 
 ## Token Baselines
 

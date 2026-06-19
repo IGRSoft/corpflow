@@ -5,6 +5,12 @@ effort: high
 version: 0.2.0
 ---
 
+> **INVOCATION GATE**: If you are reading this skill because the orchestrator delegated directly
+> (e.g., a Read/Task/Grep on this file) instead of launching via `Skill({skill:"igrsoft:worktask"})`
+> or the `/worktask` command, the BLOCKING rule in `../shared/worktask-triggers.md § BLOCKING` was
+> violated. Do NOT silently continue — surface the error to the user, then restart through the
+> canonical entry point.
+
 # Worktask System
 
 Single source of truth for task worktask management using the Task System.
@@ -76,6 +82,11 @@ PL0 assesses complexity and creates only the stages needed. No pre-creation or d
 | 21-30 | Moderate | AR0, TL0, DV0, DR0, QA0 |
 | 31-40 | High | AR0, TL0, DV0, DR0, QA0, DC0, FN0, ST0 |
 | 41-50 | Critical | AR0, TL0, DV0, DR0, SR0, QA0, DC0, RE0, FN0, ST0 |
+
+**Record dropped stages**: whenever the chosen tier omits any stage from the full 9-stage pipeline
+(`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PL0 MUST stamp its own `metadata.skipped_stages` — a list of
+`{ "stage": "<CODE>", "reason": "<short reason>" }` — so `state.json` is self-documenting about
+which standard stages were dropped and why.
 
 **Security-sensitive features** auto-include SR0:
 - Authentication/authorization, payment processing, PII handling
