@@ -33,6 +33,11 @@ surface (see `../worktask/references/fn-gate.md` and `../../commands/worktask.md
 a deprecated no-op (`../../commands/worktask.md` Options table). Dynamic sizing (PL0) selects which
 of the 9 stages actually run — see `../worktask/SKILL.md § Dynamic Worktask Sizing`.
 
+The `micro:`/`quick:` post-plan checkpoint is carried by `PL0.metadata.plan_gate == "checkpoint"`
+(unattended triggers stamp `"bypass"`). On resume after interruption, this carrier tells the
+orchestrator whether to re-enter the stage loop immediately or stop for user approval —
+see `../worktask/references/resume.md § State → Action Table`.
+
 ## See also
 
 - `../worktask/references/fn-gate.md` — FN gate is always bypassed (unattended finalization).
