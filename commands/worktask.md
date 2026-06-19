@@ -120,6 +120,11 @@ See `skills/shared/stage-codes.md` for stage details.
 4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", fn_gate: "bypass", isolation: "worktree", execution_mode: "<manual|dynamic>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). `fn_gate` is **always** `"bypass"` (worktasks run unattended; no approval gate). Set `execution_mode: "dynamic"` when invoked with `--dynamic`; otherwise `"manual"` (the default). `execution_mode` only selects HOW the autonomous span runs (native Workflow engine vs the manual stage loop).
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative.
+   - **Record dropped stages**: when PL0's dynamic sizing omits any stage from the full 9-stage
+     pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PM MUST stamp the PL0 task's
+     `metadata.skipped_stages` — a list of `{ "stage": "<CODE>", "reason": "<short reason>" }` —
+     so `state.json` self-documents which standard stages were dropped and why. See
+     `agents/product-manager.md § Dynamic Worktask Sizing (PL0 Stage)`.
 7. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
 8. **Present plan summary**: Show complexity score, stages created (with agents), dependency chain, and key decisions, then proceed directly into Phase 2 (no stop).
 

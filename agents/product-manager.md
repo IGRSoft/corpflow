@@ -347,6 +347,10 @@ Use the **Unified Complexity Assessment** from `skills/worktask/SKILL.md § Dyna
    - Score 21-30 (Moderate): Create AR0, TL0, DV0, DR0, QA0
    - Score 31-40 (High): Create AR0, TL0, DV0, DR0, QA0, DC0, FN0, ST0
    - Score 41-50 (Critical): Create AR0, TL0, DV0, DR0, SR0, QA0, DC0, RE0, FN0, ST0
+   - **Record dropped stages**: stamp the PL0 task's `metadata.skipped_stages` with a list of
+     `{ "stage": "<CODE>", "reason": "<short reason>" }` for every stage in the full 9-stage
+     pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`) that the chosen tier did NOT create — so `state.json`
+     self-documents which standard stages were dropped and why.
 
 4. **Set dependency chain** between created tasks using `TaskUpdate({ addBlockedBy })`
 5. **Mark PL0 completed** after creating all stage tasks
