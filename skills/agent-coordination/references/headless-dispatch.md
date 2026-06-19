@@ -28,18 +28,16 @@ The minimum recommended flag set per stage when dispatching from a headless runn
 
 | Stage | Canonical headless one-liner |
 |---|---|
-| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` † |
+| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` |
 | **DR** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort high --permission-mode acceptEdits -- igrsoft:technical-lead < dr-prompt.txt` |
-| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-fable-5 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` † |
+| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` |
 | **QA** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort high --permission-mode acceptEdits -- igrsoft:qa-engineer < qa-prompt.txt` |
 | **FN** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:project-manager < fn-prompt.txt` |
 | **RE** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:release-engineer < re-prompt.txt` |
 | **ST** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode acceptEdits -- igrsoft:stakeholder < st-prompt.txt` |
 
-The model/effort defaults track `skills/shared/model-selection.md`. Override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **sonnet** (stage override per `skills/shared/stage-codes.md`); the agent's `model: fable` frontmatter default applies only to direct TC consults.
+The model/effort defaults track `skills/shared/model-selection.md`. Override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **sonnet** (stage override per `skills/shared/stage-codes.md`); the agent's `model: opus` frontmatter default applies only to direct TC consults.
 
-> † **Fable-tier degrade (v2.1.173)**: Fable 5 includes **1M context by default** (`[1m]` suffix normalized). On accounts without 1M usage credits, a fable dispatch fails with `API Error: Usage credits required for 1M context` (observed live, 2026-06-12). Mitigation: pass `--fallback-model claude-sonnet-4-6` (v2.1.166) or pin the row's `--model` to `claude-sonnet-4-6`/`claude-opus-4-8` for that account. Interactive 1M sessions without credits auto-compact back under the standard limit (v2.1.172) — headless dispatch fails instead; plan for it.
->
 > **Background-worker reliability (v2.1.172/2.1.174)**: fixed — pre-warmed workers leaking another directory's project settings, `EAUTH` on attach after daemon auto-update and on claim-after-idle, stuck-`active` state after a nested child stopped, and background sessions inheriting another session's `ANTHROPIC_*` provider env. No plugin workaround needed on CC ≥ 2.1.174; on older CC, restart the daemon when attach fails with `EAUTH`.
 
 ## Live Session Discovery (v2.1.145–146)

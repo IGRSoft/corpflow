@@ -16,7 +16,7 @@ Single source of truth for worktask stage codes.
 | TL | Team Lead | team-lead | sonnet |
 | DV | Development | developer | opus |
 | DR | Developer Review | technical-lead | sonnet |
-| SR | Security Review | security-reviewer | fable |
+| SR | Security Review | security-reviewer | opus |
 | QA | QA Testing | qa-engineer | sonnet |
 | DC | Documentation | technical-writer | haiku |
 | RE | Release Engineering | release-engineer | haiku |
@@ -32,8 +32,7 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 
 | Model | Stages |
 |-------|--------|
-| fable | SR, ET |
-| opus | PL, AR, TC, DV, PE, FN |
+| opus | PL, AR, TC, DV, PE, SR, ET, FN |
 | sonnet | TL, DR, QA, ST, IR, DS, WE |
 | haiku | DC, RE |
 
@@ -43,13 +42,13 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 |------|-------|-------|------------|
 | DS | designer | sonnet | PL, AR, DV, QA |
 | TC | technical-lead | opus | AR, TL, DV, QA |
-| ET | ethics-reviewer | fable | Any stage |
+| ET | ethics-reviewer | opus | Any stage |
 | PE | prompt-engineer | opus | Agent optimization |
 | WE | workflow-engineer | sonnet | Worktask troubleshooting |
 
 Support agents don't own worktask stages but can be invoked on-demand via Task tool.
 
-> Model column uses aliases (`fable`, `opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-8`) are also supported in agent frontmatter. Use aliases for portability across providers. **Fable 5** = `claude-fable-5`, the Mythos-class top reasoning model (v2.1.170+) — the `fable` alias resolves only on CC ≥ 2.1.170 and degrades to the provider default below that; it ships **1M context by default** (v2.1.173), which fails dispatch on accounts without 1M credits (degrade guidance: `skills/shared/model-selection.md`). Under a managed `availableModels` allowlist (applied to subagent overrides since v2.1.172; `enforceAvailableModels` since v2.1.175) any alias here may silently resolve to a different model. **Opus 4.8** is the prior top Claude model; Opus 4.6 and Opus 4.7 remain supported. Auto mode is available for Max subscribers on Opus 4.8 and does not require `--enable-auto-mode`.
+> Model column uses aliases (`opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-8`) are also supported in agent frontmatter. Use aliases for portability across providers. **Fable 5** = `claude-fable-5`, the Mythos-class top reasoning model (v2.1.170+) — the `fable` alias resolves only on CC ≥ 2.1.170 and degrades to the provider default below that; it ships **1M context by default** (v2.1.173), which fails dispatch on accounts without 1M credits (degrade guidance: `skills/shared/model-selection.md`). Under a managed `availableModels` allowlist (applied to subagent overrides since v2.1.172; `enforceAvailableModels` since v2.1.175) any alias here may silently resolve to a different model. **Opus 4.8** is the prior top Claude model; Opus 4.6 and Opus 4.7 remain supported. Auto mode is available for Max subscribers on Opus 4.8 and does not require `--enable-auto-mode`.
 
 > **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans. Only Pro plan retains medium default. Agents with explicit `effort:` frontmatter are unaffected.
 

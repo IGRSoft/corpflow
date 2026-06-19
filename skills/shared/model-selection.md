@@ -13,9 +13,8 @@ effort: low
 | **haiku** | 1x (baseline) | ~$0.25 | Formatting, routing, checklists, status checks |
 | **sonnet** | ~10x haiku | ~$3.00 | Implementation, analysis, code review, coordination |
 | **opus** | ~50x haiku | ~$15.00 | Architecture decisions, complex reasoning, meta-optimization |
-| **fable** | premium (see `/model`) | premium (see `/model`) | Max-reasoning stages: architecture, security/ethics review, agent optimization, complex development |
 
-> **Fable 5** (`claude-fable-5`) is the Mythos-class top reasoning model (v2.1.170). It sits above `opus` as the new top tier and is the default for the highest-reasoning stages (AR, DR/TC, DV, SR, PE, ET). The `fable` alias only resolves on **CC ≥ 2.1.170**; on CC 2.1.169 (the current plugin minimum) the alias degrades to the provider default until the operator updates. Pull the exact `$/1M` pricing from `/model` (or the `claude-api` skill) when filling the Cost/1M cell.
+> **Fable 5** (`claude-fable-5`) is the Mythos-class top reasoning model (v2.1.170). The `fable` alias only resolves on **CC ≥ 2.1.170**; on CC 2.1.169 (the current plugin minimum) the alias degrades to the provider default until the operator updates. This plugin defaults its highest-reasoning stages (AR, DV, SR, ET, PE) to `opus`; `fable` remains a valid CC model alias for operators who choose to override. Pull the exact `$/1M` pricing from `/model` (or the `claude-api` skill) when needed.
 >
 > **Fable 5 = 1M context by default** (v2.1.173 — `[1m]`-suffixed model names normalized into the base id). On accounts **without 1M usage credits**, a fable-tier *dispatch* fails hard with `API Error: Usage credits required for 1M context` (observed live 2026-06-12); an *interactive* 1M session without credits instead auto-compacts back under the standard limit (v2.1.172). Degrade path: set a session `fallbackModel` (`--fallback-model`, v2.1.166) or pin the stage via a direct `Task({ model })` / `metadata.model` override — do **not** rely on the Workflow tool's per-`agent()` `opts.model` de-escalation, which was observed not to rescue dispatch under credit gating (see `skills/worktask/references/dynamic-workflow.md` risk R8).
 >
@@ -45,8 +44,7 @@ effort: low
 |------------|-------|-----------|
 | Simple | haiku | Formatting, routing, checklists, status tracking |
 | Moderate | sonnet | Implementation, analysis, coordination, reviews |
-| Complex | opus | Planning (PL), Architecture (AR), complex development (DV), incident response (IR), general high-complexity reasoning (DR/TC, PE) |
-| Max-reasoning | fable | high-stakes review gates, meta-optimization (DR/TC, SR, PE, ET) |
+| Complex | opus | Planning (PL), Architecture (AR), complex development (DV), incident response (IR), high-stakes review gates (SR, ET), general high-complexity reasoning (DR/TC, PE) |
 
 **Use haiku when**:
 - Task is procedural with clear steps
@@ -63,14 +61,11 @@ effort: low
 - Standard analysis and reviews
 
 **Use opus when**:
-- Complex multi-step reasoning below the max-reasoning bar
+- Complex multi-step reasoning
 - Planning and product scoping (PL) or incident response (IR)
 - Novel problem solving
-- General high-complexity work where `fable` is not warranted
-
-**Use fable when** (top tier — the `fable` alias resolves on **CC ≥ 2.1.170** and degrades to opus/provider default below that; caveat applies to every `fable` row in this file):
 - Architectural decisions with tradeoffs (AR)
-- High-stakes review gates: code review (DR/TC), security (SR), ethics (ET)
+- High-stakes review gates: security (SR), ethics (ET)
 - Meta-level optimization, agents about agents (PE)
 - Complex development stages (DV)
 
@@ -86,9 +81,9 @@ effort: low
 | Code review | sonnet | Analysis + suggestions |
 | Test design | sonnet | Coverage analysis |
 | Team coordination | sonnet | Multi-factor decisions |
-| Architecture design | fable | Complex tradeoffs |
-| System analysis | fable | Deep reasoning |
-| Prompt optimization | fable | Meta-level thinking |
+| Architecture design | opus | Complex tradeoffs |
+| System analysis | opus | Deep reasoning |
+| Prompt optimization | opus | Meta-level thinking |
 
 ## Per-Invocation Override
 

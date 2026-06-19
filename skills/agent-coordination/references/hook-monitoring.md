@@ -82,7 +82,7 @@ Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved. With ne
 
 - `tool_decision` telemetry events now carry a `tool_parameters` field (v2.1.157) — the decision span records *which* tool args were classified, not just the tool name. Lets cost/audit dashboards distinguish e.g. a `Bash git push` decision from a `Bash ls`.
 - `OTEL_RESOURCE_ATTRIBUTES` values now surface as **metric-datapoint labels** (v2.1.161), not only on spans. Tag `worktask_id` / `stage` there to slice collector dashboards (Honeycomb/Datadog) per-stage without parsing span attributes.
-- `claude_code.lines_of_code.count` carries a `model` attribute (v2.1.172) — per-model LoC attribution lands in collector dashboards for free; pairs with the fable/opus/sonnet stage split in `skills/shared/stage-codes.md` to show which tier wrote the code.
+- `claude_code.lines_of_code.count` carries a `model` attribute (v2.1.172) — per-model LoC attribution lands in collector dashboards for free; pairs with the opus/sonnet/haiku stage split in `skills/shared/stage-codes.md` to show which tier wrote the code.
 
 **BG-Task ID Schema Watch**: the ID extraction uses a defensive coalesce `(.id // .task_id // "unknown")` / `(.id // .cron_id // "unknown")` because the canonical key name is not yet confirmed in CC docs. Any `"unknown"` value appearing in `background_task_ids` or `session_cron_ids` is a signal that CC has begun populating the arrays with payloads whose ID field name is neither `id` nor `task_id`/`cron_id`. When that happens, the next `/cc-update` should pin the canonical key (remove the coalesce) and update both hook scripts. Until then the coalesce keeps the capture working across whichever name CC chooses.
 
