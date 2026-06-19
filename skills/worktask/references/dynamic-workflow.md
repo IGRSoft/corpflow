@@ -184,88 +184,24 @@ fully-qualified `igrsoft:<agent>` form matching a real file in `agents/`.
 
 ## #handoff-schemas
 
+> **MOVED (v3.23.3).** The typed-return JSON-Schemas (`SCHEMA.PL/AR/TL/DV/DR/SR/QA/DC/RE/FN/ST/IR/ET`)
+> and the `#schema-to-state-map` table are now **canonical in
+> `skills/worktask/references/handoff-protocol.md#handoff-schemas`** (and `#schema-to-state-map` there).
+> They are a both-path contract — referenced by the manual loop AND this engine path — so they live in the
+> canonical handoff spec, not in this dynamic-only reference. There is no duplicated schema body here; this
+> section is a back-reference only.
+
+**Dynamic-mode usage.** The workflow script's `agent(prompt, { …, schema: SCHEMA.<CODE> })` calls
+(`#script-template`, `#milestone-template`) resolve `SCHEMA.<CODE>` from the canonical
+`handoff-protocol.md#handoff-schemas` definitions — the `SCHEMA` literals authored alongside the workflow
+template are a verbatim transcription of that canonical set (no I/O, no clock, no RNG, per the cache-prefix
+determinism rule in `#script-template`). On each phase boundary the script atomic-merges the typed return
+into `state.json` per `handoff-protocol.md#schema-to-state-map`; see `#boundary-reconciliation` and
+`#schema-merge-net` for the dynamic-mode merge semantics.
+
 Typed `schema` returns replace prose-frontmatter scraping on the typed path, but each stage STILL mirrors
 its result to `state.json facts` and writes its `.context/<stage>-N.md` artifact (durability, human
-readability, F4/F5 regeneration). Schemas are JSON Schema (draft 2020-12).
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "DVHandoff",
-  "type": "object",
-  "required": ["verdict", "files_modified", "build_status"],
-  "properties": {
-    "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
-    "files_modified": { "type": "array", "items": { "type": "string" } },
-    "tests_added": { "type": "array", "items": { "type": "string" } },
-    "build_status": { "type": "string", "enum": ["pass", "fail", "skipped"] },
-    "decisions": { "type": "array", "items": { "type": "string" } }
-  }
-}
-```
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "DRHandoff",
-  "type": "object",
-  "required": ["verdict", "findings", "blockers"],
-  "properties": {
-    "verdict": { "type": "string", "enum": ["pass", "fail"] },
-    "findings": { "type": "array", "items": { "type": "string" } },
-    "blockers": { "type": "array", "items": { "type": "string" } },
-    "p2_only": { "type": "boolean" }
-  }
-}
-```
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "QAHandoff",
-  "type": "object",
-  "required": ["verdict", "tests_passed", "tests_failed"],
-  "properties": {
-    "verdict": { "type": "string", "enum": ["go", "no-go"] },
-    "tests_passed": { "type": "integer", "minimum": 0 },
-    "tests_failed": { "type": "integer", "minimum": 0 },
-    "blocking_defects": { "type": "array", "items": { "type": "string" } }
-  }
-}
-```
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "SRHandoff",
-  "type": "object",
-  "required": ["verdict", "findings", "blockers"],
-  "properties": {
-    "verdict": { "type": "string", "enum": ["pass", "fail"] },
-    "findings": { "type": "array", "items": { "type": "string" } },
-    "blockers": { "type": "array", "items": { "type": "string" } },
-    "threat_model": { "type": "string" }
-  }
-}
-```
-
-### #schema-to-state-map
-
-Each schema field maps onto the canonical `state.json` ledger (`handoff-protocol.md#state-json-schema`) and
-the artifact anchor (`handoff-protocol.md#anchor-allow-list`):
-
-| Schema field | state.json target | Artifact anchor |
-|--------------|-------------------|-----------------|
-| `DV.verdict` | `stages.DV.verdict` | development-N.md `## deviations` (summary line) |
-| `DV.files_modified` | `facts.files_modified` (union) | development-N.md `## files-changed` |
-| `DV.tests_added` | `facts.tests_added` (union) | development-N.md `## tests-added` |
-| `DV.build_status` | `stages.DV.status` derivation | development-N.md `## deviations` |
-| `DV.decisions` | `facts.decisions[]` | development-N.md (inline) |
-| `DR.verdict` | `stages.DR.verdict` + `facts.verdicts.DR` | developer-review-N.md `## verdict` |
-| `DR.findings`/`blockers` | `facts.decisions[]` (= findings) | developer-review-N.md `## findings`/`## blockers` |
-| `QA.verdict` | `stages.QA.verdict` + `facts.verdicts.QA` | testing-N.md `## verdict` |
-| `QA.tests_passed`/`failed` | `facts.verdicts.QA` (count string) | testing-N.md `## results` |
-| `SR.*` | mirrors DR targets | security-review-N.md |
+readability, F4/F5 regeneration) — the canonical rule stated in `handoff-protocol.md#handoff-schemas`.
 
 ---
 

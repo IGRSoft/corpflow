@@ -647,8 +647,32 @@ while (tasks.some(t => t.status !== "completed")) {
       });
     }
 
-    // 6. Delegate to stage agent
-    Task({ subagent_type: subagentType, model: model, prompt: full.description });
+    // 6. Delegate to stage agent.
+    //     Typed-schema dispatch (P0-1): the orchestrator SHOULD pass the stage's typed-return
+    //     schema (the `<CODE>Handoff` schema from
+    //     `skills/worktask/references/handoff-protocol.md#handoff-schemas`) as a Task() ARGUMENT.
+    //     When the runtime honors it, the validated typed return is mapped onto state.json via
+    //     `handoff-protocol.md#schema-to-state-map` and SUPERSEDES the post-hoc frontmatter grep
+    //     (stage-contracts.md § Validation Protocol step 2 + Step 6.5 below).
+    //
+    //     STRICT-SUPERSET / DEGRADE (binding): the `schema` is OPTIONAL on the wire. When the
+    //     runtime Task() primitive does NOT accept a `schema` param, behavior degrades to EXACTLY
+    //     today's: the agent still writes its artifact with `handoff:` frontmatter, the Step-6.5
+    //     frontmatter scrape runs, and F3 remains the fallback — no migration, no breakage. The
+    //     artifact + frontmatter are ALWAYS written either way (on-disk durability/compression +
+    //     F4/F5 source); the typed return never replaces them.
+    //
+    //     CACHE-PREFIX (binding, PRESERVE §4.1): `schema` is a Task() ARGUMENT, NOT preamble text.
+    //     It is NOT inserted into sections [1][2][4] (nor anywhere in `full.description`), so the
+    //     cache-prefix byte-identity of [1][2][4] is untouched and no per-call varying token is
+    //     introduced into the cacheable prefix.
+    const stageSchema = HANDOFF_SCHEMA[full.metadata.stage];  // from handoff-protocol.md#handoff-schemas; may be undefined
+    Task({
+      subagent_type: subagentType,
+      model: model,
+      prompt: full.description,
+      ...(stageSchema ? { schema: stageSchema } : {}),  // omitted entirely when the runtime lacks schema support → exactly today's path
+    });
 
     // 6.5. handoff-protocol: patch state.json from artifact frontmatter if the
     //      agent didn't already do so. Belt-and-suspenders layer #3 (after

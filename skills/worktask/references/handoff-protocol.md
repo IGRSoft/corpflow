@@ -134,6 +134,253 @@ Frontmatter is the canonical compression form: every downstream stage reads this
 
 ---
 
+## Handoff Schemas {#handoff-schemas}
+
+Canonical, **both-path** typed-return schemas. These are the single source of truth for the structured object a stage agent returns from its `Task()`/`agent()` dispatch. They were promoted here from `dynamic-workflow.md#handoff-schemas` (v3.23.3) so that *both* the manual loop (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6) and the `--dynamic` engine path reference one definition.
+
+Typed `schema` returns replace prose-frontmatter scraping **on the typed path**, but each stage STILL mirrors its result to `state.json facts` and writes its `.context/<stage>-N.md` artifact with `handoff:` frontmatter (durability, human readability, F4/F5 regeneration — see `#frontmatter-schema`, `#fallback-paths`). The typed return is a *parallel, validated* channel; the frontmatter is the *cache-friendly compressed on-disk* channel. Neither replaces the other.
+
+Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST match that stage's row in `#frontmatter-schema § Per-stage required-field matrix`** — the typed return and the frontmatter share one verdict vocabulary per stage. The `required` field set is the typed superset of that stage's frontmatter required fields (e.g. DR's `key_decisions (= findings)` becomes the typed `findings`/`blockers` arrays).
+
+> **Cache-prefix note (binding, PRESERVE §4.1).** The schema is passed as a `Task()`/`agent()` **argument**, never inserted into preamble sections [1][2][4]. Adding schema dispatch therefore does NOT touch cache-prefix byte-identity (`#cache-prefix`).
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PLHandoff",
+  "type": "object",
+  "required": ["verdict", "summary", "key_decisions", "next_stage_focus"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
+    "summary": { "type": "string", "maxLength": 200 },
+    "complexity": { "type": "integer", "minimum": 0, "maximum": 50 },
+    "key_decisions": { "type": "array", "items": { "type": "string" } },
+    "next_stage_focus": { "type": "string" },
+    "open_questions": { "type": "array", "items": { "type": "string" } }
+  }
+}
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ARHandoff",
+  "type": "object",
+  "required": ["verdict", "summary", "key_decisions", "next_stage_focus"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
+    "summary": { "type": "string", "maxLength": 200 },
+    "key_decisions": { "type": "array", "items": { "type": "string" } },
+    "next_stage_focus": { "type": "string" },
+    "open_questions": { "type": "array", "items": { "type": "string" } }
+  }
+}
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TLHandoff",
+  "type": "object",
+  "required": ["verdict", "summary", "next_stage_focus"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
+    "summary": { "type": "string", "maxLength": 200 },
+    "next_stage_focus": { "type": "string" },
+    "fanout": { "type": "array", "items": { "type": "string" } }
+  }
+}
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DVHandoff",
+  "type": "object",
+  "required": ["verdict", "files_modified", "build_status"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
+    "files_modified": { "type": "array", "items": { "type": "string" } },
+    "tests_added": { "type": "array", "items": { "type": "string" } },
+    "build_status": { "type": "string", "enum": ["pass", "fail", "skipped"] },
+    "decisions": { "type": "array", "items": { "type": "string" } }
+  }
+}
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DRHandoff",
+  "type": "object",
+  "required": ["verdict", "findings", "blockers"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["pass", "fail"] },
+    "findings": { "type": "array", "items": { "type": "string" } },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "p2_only": { "type": "boolean" }
+  }
+}
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SRHandoff",
+  "type": "object",
+  "required": ["verdict", "findings", "blockers"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["pass", "fail"] },
+    "findings": { "type": "array", "items": { "type": "string" } },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "threat_model": { "type": "string" }
+  }
+}
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QAHandoff",
+  "type": "object",
+  "required": ["verdict", "tests_passed", "tests_failed"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["go", "no-go"] },
+    "tests_passed": { "type": "integer", "minimum": 0 },
+    "tests_failed": { "type": "integer", "minimum": 0 },
+    "blocking_defects": { "type": "array", "items": { "type": "string" } }
+  }
+}
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DCHandoff",
+  "type": "object",
+  "required": ["verdict", "files_modified"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
+    "files_modified": { "type": "array", "items": { "type": "string" } },
+    "cross_references": { "type": "array", "items": { "type": "string" } }
+  }
+}
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "REHandoff",
+  "type": "object",
+  "required": ["verdict", "version", "files_modified"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["ok", "blocked"] },
+    "version": { "type": "string" },
+    "files_modified": { "type": "array", "items": { "type": "string" } },
+    "changelog": { "type": "array", "items": { "type": "string" } }
+  }
+}
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FNHandoff",
+  "type": "object",
+  "required": ["verdict", "summary", "next_stage_focus"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["ok", "blocked"] },
+    "summary": { "type": "string", "maxLength": 200 },
+    "next_stage_focus": { "type": "string" },
+    "files_modified": { "type": "array", "items": { "type": "string" } },
+    "pr_url": { "type": "string" }
+  }
+}
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "STHandoff",
+  "type": "object",
+  "required": ["verdict", "key_decisions"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["approve", "reject"] },
+    "key_decisions": { "type": "array", "items": { "type": "string" } },
+    "follow_ups": { "type": "array", "items": { "type": "string" } }
+  }
+}
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IRHandoff",
+  "type": "object",
+  "required": ["verdict", "root_cause", "next_stage_focus"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["ok", "escalate"] },
+    "root_cause": { "type": "string" },
+    "next_stage_focus": { "type": "string" },
+    "blast_radius": { "type": "string" }
+  }
+}
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ETHandoff",
+  "type": "object",
+  "required": ["verdict", "findings"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["pass", "fail"] },
+    "findings": { "type": "array", "items": { "type": "string" } },
+    "mitigations": { "type": "array", "items": { "type": "string" } }
+  }
+}
+```
+
+### #schema-to-state-map
+
+Each schema field maps onto the canonical `state.json` ledger (`#state-json-schema`) and the
+artifact anchor (`#anchor-allow-list`). The orchestrator applies this map when a typed return is
+present (manual path: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6; dynamic path:
+`dynamic-workflow.md#boundary-reconciliation`). When no typed return is present, the same targets are
+populated from the artifact's `handoff:` frontmatter instead (F2/F3) — the map is channel-agnostic.
+
+| Schema field | state.json target | Artifact anchor |
+|--------------|-------------------|-----------------|
+| `PL.verdict` | `stages.PL.verdict` | planning-N.md (frontmatter) |
+| `PL.complexity` | `stages.PL.complexity` | planning-N.md `## complexity` |
+| `PL.key_decisions` | `facts.decisions[]` | planning-N.md `## stages` |
+| `AR.verdict` | `stages.AR.verdict` | analyzing-N.md `## decisions` |
+| `AR.key_decisions` | `facts.decisions[]` | analyzing-N.md `## decisions` |
+| `TL.verdict` | `stages.TL.verdict` | coordination-N.md `## fan-out` |
+| `TL.fanout` | (DV sub-task prompts; not a ledger field) | coordination-N.md `## fan-out` |
+| `DV.verdict` | `stages.DV.verdict` | development-N.md `## deviations` (summary line) |
+| `DV.files_modified` | `facts.files_modified` (union) | development-N.md `## files-changed` |
+| `DV.tests_added` | `facts.tests_added` (union) | development-N.md `## tests-added` |
+| `DV.build_status` | `stages.DV.status` derivation | development-N.md `## deviations` |
+| `DV.decisions` | `facts.decisions[]` | development-N.md (inline) |
+| `DR.verdict` | `stages.DR.verdict` + `facts.verdicts.DR` | developer-review-N.md `## verdict` |
+| `DR.findings`/`blockers` | `facts.decisions[]` (= findings) | developer-review-N.md `## findings`/`## blockers` |
+| `SR.*` | mirrors DR targets (`facts.verdicts.SR`) | security-review-N.md |
+| `QA.verdict` | `stages.QA.verdict` + `facts.verdicts.QA` | testing-N.md `## verdict` |
+| `QA.tests_passed`/`failed` | `facts.verdicts.QA` (count string) | testing-N.md `## results` |
+| `DC.verdict` | `stages.DC.verdict` | documentation-N.md `## files-changed` |
+| `DC.files_modified` | `facts.files_modified` (union) | documentation-N.md `## files-changed` |
+| `RE.verdict` | `stages.RE.verdict` | release-N.md `## version` |
+| `RE.version` | `facts.decisions[]` (version) | release-N.md `## version` |
+| `FN.verdict` | `stages.FN.verdict` | complete-summary-N.md `## summary` |
+| `FN.pr_url` | `handoffs["RE→FN"]`/`DC→FN` (ref pointer) | complete-summary-N.md `## artifacts` |
+| `ST.verdict` | `stages.ST.verdict` + `facts.verdicts.ST` | retrospective-N.md `## decision` |
+| `IR.verdict` | `stages.IR.verdict` | incident-N.md `## root-cause` |
+| `IR.root_cause` | `facts.decisions[]` | incident-N.md `## root-cause` |
+| `ET.verdict` | `stages.ET.verdict` + `facts.verdicts.ET` | ethics-review-N.md `## verdict` |
+
+---
+
 ## #state-json-schema
 
 `.context/state.json` is the worktask ledger. Created by PL0; patched by every stage on completion; read by orchestrator before each delegation; embedded in the preamble as section [3]. Token budget ≤500.
@@ -453,22 +700,19 @@ All stage artifacts MUST contain exactly the H2 headings (kebab-case, no undersc
 
 ### Anchor Pre-Flight (PostToolUse hook)
 
-By default, anchor-lint runs at the DR gate. That is post-hoc — a missing anchor in `planning-N.md` only surfaces after AR/TL/DV have already paid the full-file re-read cost. To catch omissions at the producing stage, register a PostToolUse hook on `Write`/`Edit` of `.context/*-N.md` artifacts:
+Anchor-lint also runs at the DR gate, but that is post-hoc — a missing anchor in `planning-N.md` only surfaces after AR/TL/DV have already paid the full-file re-read cost. To catch omissions at the producing stage, anchor-lint runs as a **managed plugin hook (shipped in `.claude-plugin/plugin.json`, default-on)** — it is no longer an optional, opt-in registration. The managed PostToolUse `Write|Edit` entry invokes `${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh`, which gates on the `.context/*-N.md` artifact regex below and delegates matching writes to `skills/worktask/references/cache-lint.sh --anchor-lint`:
 
-```json
+```jsonc
+// .claude-plugin/plugin.json → hooks.PostToolUse (managed entry, alongside audit-tooluse)
 {
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "command": "if [[ \"$CLAUDE_TOOL_INPUT_FILE_PATH\" =~ \\.context/(planning|analyzing|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+\\.md$ ]]; then skills/worktask/references/cache-lint.sh --anchor-lint \"$CLAUDE_TOOL_INPUT_FILE_PATH\"; fi"
-      }
-    ]
-  }
+  "matcher": "Write|Edit",
+  "hooks": [
+    { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh", "continueOnBlock": true }
+  ]
 }
 ```
 
-When the hook fails (non-zero exit), the agent that produced the artifact sees the diagnostic and amends the file before continuing — no downstream stages incur the cost. The DR-gate lint remains as a CI safety net for non-hook environments.
+`anchor-preflight.sh` matches only the canonical artifact regex (`.context/(planning|analyzing|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+.md$`); any other Write/Edit is a no-op. When the lint fails (non-zero exit), the agent that produced the artifact sees the diagnostic and amends the file before continuing — no downstream stages incur the cost. `continueOnBlock` follows the same managed-hook discipline as the other entries (the diagnostic is surfaced; an unrelated write is never blocked). The DR-gate lint plus the CI lint (PRs touching `skills/` or `agents/`) remain as the safety net for non-hook environments.
 
 **Cost**: lint runs in O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit; net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
 

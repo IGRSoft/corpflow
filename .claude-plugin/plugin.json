@@ -119,6 +119,16 @@
             "continueOnBlock": true
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh",
+            "continueOnBlock": true
+          }
+        ]
       }
     ],
     "SubagentStop": [
