@@ -252,7 +252,7 @@ With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, every session has **one implicit 
 | `Agent(name: …)` | Spawn a teammate into the session's implicit team |
 | `SendMessage` | Send messages between teammates |
 
-Task storage: `~/.claude/tasks/{team-name}/`
+Task storage: `~/.claude/tasks/` (session-scoped subdirectory; no explicit team name — `team_name` is accepted but ignored in the implicit team model)
 
 ### Custom Auto-Memory Directory
 
