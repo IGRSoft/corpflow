@@ -37,6 +37,10 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
    **Reliability note (CC ≥ 2.1.172)**: the `state` signal got more trustworthy — CC 2.1.172 fixed background sub-agents staying stuck as `active` after a nested child they spawned was stopped, and removed the up-to-30s busy-spinner lag in the agents view. With nested spawning live (5 levels), only match **top-level** dispatched agents from `facts.dispatched_agents[]`; rows whose `parent_agent_id` points at another live row are the stage agent's own children — never reattach or re-delegate those directly. Nothing here is retired; the branch table above is unchanged.
 
    **Authority caveat**: a `SendMessage` reattach may *nudge* a parked agent (supply an awaited answer, re-prompt) but **cannot authorize** anything — a relayed `SendMessage` does not carry the operator's permission authority (the receiver refuses relayed permission requests; auto mode blocks them). Permission escalations remain operator-owned and cannot be satisfied via a relayed message. (Note: worktasks are unattended — there are no PL0 or FN human approval gates to satisfy; this caveat applies to permission escalations only.)
+
+   **Trigger-delivery caveat (CC ≥ 2.1.183)**: scheduled-task and webhook trigger deliveries are classified as **task notifications** — in auto mode they can no longer approve a pending action or set a session title. A trigger-delivered event therefore does **not** satisfy a `waitingFor = approval` park (treat it like a relayed message, not operator authority): keep the stage parked and resolve the approval through the operator-owned path. This extends the SendMessage-authority caveat above to trigger deliveries.
+
+   **Reattach reliability (CC ≥ 2.1.183)**: subagent messages sent while the subagent is finishing its turn are no longer dropped, and `ctrl+b` no longer restarts the session on reattach — a mid-turn reattach is now reliable and will not lose the awaited answer.
 1. `tail -n 50 .context/logs/audit.jsonl | jq .` — last 50 audit lines
 2. `TaskList()` — current Task System state
 3. Cross-reference with `stage-contracts.md` — identify first incomplete stage

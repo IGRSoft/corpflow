@@ -4,9 +4,9 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **3.23.2** (recall-first DR review gate: `code-review-dev.md` v0.1.2 — decoupled Phase 1 DETECTION / Phase 2 VERIFY+FILTER / Phase 3 completeness, 12-class bug checklist, mandatory read-beyond-the-diff, BLOCKED-keep rule, P0/P1/P2 routing, explicit decision+coverage, read-only git diff acquisition (`git diff origin/master...HEAD`; `allowed-tools` declares read-only `git diff`/`log`/`show`), Escalation-to-DV loop via `verdict: fail`→DV; `technical-lead.md` v0.2.1 — DR cross-ref + escalation classification fix `ambiguous_requirements`(→PL)→`missing_input`(→previous stage=DV) so DV-owned escalations route to DV; retired unused `/api-docs` + `/onboard-task` commands, 45→43)
-- Claude Code min required: **2.1.169** (README.md is authoritative; Fable alias resolves only on CC ≥ 2.1.170, degrades to provider default on 2.1.169)
-- Claude Code latest integrated band: **2.1.171→2.1.175** (2.1.171 never published)
+- Plugin version: **3.24.0** (CC 2.1.176→2.1.183 band — agent-teams API change: `TeamCreate`/`TeamDelete` removed, implicit per-session team, spawn via `Agent(name: …)`; plus auto-mode git/dispatch guardrails. Docs/metadata only — narrative in the commit body)
+- Claude Code min required: **2.1.183** (README.md is authoritative; Fable alias resolves only on CC ≥ 2.1.170)
+- Claude Code latest integrated band: **2.1.176→2.1.183**
 
 ## CC Feature Band Index
 
@@ -14,6 +14,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 | Band | Canonical file | Plugin release |
 |------|----------------|----------------|
+| 2.1.176→2.1.183 | cc-features-2.1.176-183.md | v3.24.0 (agent-teams API) |
 | 2.1.171→2.1.175 | cc-features-2.1.171-175.md | v3.17.0 (nested sub-agents) |
 | 2.1.166→2.1.170 | cc-features-2.1.166-170.md | v3.13.0 (Fable 5) |
 | 2.1.157→2.1.165 | cc-features-2.1.157-165.md | v3.12.0 |
@@ -31,6 +32,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-06-19: v3.24.0 — CC 2.1.176→2.1.183 band (agent-teams API + auto-mode guardrails): `TeamCreate`/`TeamDelete` removed → implicit per-session team, spawn via `Agent(name: …)`, `team_name` ignored (v2.1.178) — rewritten across `task-system.md`, `worktask-milestone/references/agent-teams.md`, `agent-coordination/*`, `worktask/references/stage-details.md`; auto-mode git safety (destructive-git / non-agent `--amend` / IaC `destroy` blocks) + `attribution.sessionUrl` in `git-conventions.md` + `create-pr.md`; scheduled/webhook trigger deliveries can't satisfy an approval park (`resume.md`); pre-launch spawn classification + fg/bg 5-level depth parity + `Tool(param:value)` syntax (`agent-coordination/SKILL.md`); subagent MCP server-level `disallowedTools` + WebSearch (`headless-dispatch.md`, `plugin-protocols.md`); compaction `--fallback-model` (`context-compression/SKILL.md`); model-governance (`model-selection.md`); workflow auto-engage scoping (`dynamic-workflow.md`); `cc-update.md` mapping refresh. Min CC 2.1.169→2.1.183. Docs/metadata only.
 - 2026-06-19: v3.23.2 — recall-first DR review gate: `commands/code-review-dev.md` (v0.1.2) rewritten around recall — decoupled Phase 1 DETECTION / Phase 2 VERIFY+FILTER / Phase 3 completeness, 12-class bug checklist, mandatory read-beyond-the-diff, BLOCKED-keep rule, P0/P1/P2 severity routing, explicit decision+coverage output; Conductor review tools adapted → read-only git (`git diff origin/master...HEAD`) + findings to `developer-review-N.md` (`allowed-tools` declares read-only `git diff`/`log`/`show`); added Escalation-to-DV loop (read-confirmed sound P0/P1 → `verdict: fail` re-dispatches DV, then DR re-review). `agents/technical-lead.md` (v0.2.1): DR cross-ref + routing fix — DR3.5/visual-evidence escalation classification `ambiguous_requirements` (matrix→PL) → `missing_input` (matrix→previous stage=DV), correcting a mis-route of DV-owned escalations to PL. Also retired two unused commands (`/api-docs`, `/onboard-task`) — deleted from `commands/` + `.claude-plugin/marketplace.json` (45→43 commands).
 - 2026-06-19: v3.23.1 — OV-131 worktask guardrails (#164/#165): new canonical `skills/shared/worktask-triggers.md` (§BLOCKING first-action rule + trigger table) repairing dangling refs in `skills/SKILL.md` + `skills/worktask/SKILL.md`; INVOCATION GATE banner in worktask SKILL.md; PL0 stamps `metadata.skipped_stages` [{stage,reason}] when dynamic sizing drops standard stages (state.json self-documents); new `metadata.plan_gate` carrier (`bypass` for /worktask|worktask:|fworktask:, `checkpoint` for micro:|quick:, mirrors `fn_gate`) so `resume.md` honors the post-plan human checkpoint on interruption.
 - 2026-06-17: v3.23.0 — worktask always worktree-isolated + fully unattended: removed `--worktree` flag, complexity-30 isolation gate, and legacy `.workspaces/` milestone mode; dropped both human approval gates (post-PL0 and pre-FN); PL0 now stamps `metadata.isolation:"worktree"` and `fn_gate:"bypass"` unconditionally; ~20 files updated across agents/, commands/, skills/.
@@ -42,7 +44,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-06-12: v3.16.0 — screenshot-attachment wiring (#150): PL stamps `requires_screenshots` (detect-ui-change.sh S1–S4, fail-safe-true), PR `## Visual evidence` embed + marker-deduped issue comment via attach-visual-evidence.sh (PUBLISH_LIB_ONLY host-tier reuse; UI change ⇒ screenshots on BOTH issue and PR).
 - 2026-06-10: v3.15.0 — token optimization: worktask SKILL split into trigger-read references (−32%), lean MEMORY.md (−95%), description cap, command thinning, desc-lint.sh.
 - 2026-06-09: v3.14.0 — sub-2.1.169 compat retirement (resume degrade tiers collapsed to baseline, legacy artifact-grace retired, Fable tier reconciled).
-- 2026-06-09: v3.13.0 — CC 2.1.166→2.1.170 band + Fable 5 routing (6 agents opus→fable; min CC 2.1.114→2.1.169).
 ## Token Baselines
 
 Authoritative per-surface baselines: `skills/cost-optimization/references/token-baselines.md`. This file no longer mirrors them.

@@ -49,7 +49,7 @@ See `claude-constitution.md` for full principles.
 
 ## Agent Teams Integration (Experimental)
 
-When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, the worktask system can leverage agent teams for milestone mode parallel execution.
+When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, the worktask system can leverage agent teams for milestone mode parallel execution. Each session has **one implicit team** (CC ≥ 2.1.178) — spawn teammates via `Agent(name: …)`; `team_name` is accepted but ignored, and there is no separate team to create or delete.
 
 ### Enabling
 
@@ -83,7 +83,7 @@ See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration pat
 - Teammates cannot spawn sub-agents or teams (runtime-enforced)
 - No session resumption for in-process teammates
 - Higher token cost than Task-based orchestration
-- Maximum one team per session
+- One implicit team per session — spawned via `Agent(name: …)`, no create/teardown
 
 ### Worktree + Agent Teams
 

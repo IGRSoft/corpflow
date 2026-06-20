@@ -167,6 +167,7 @@ Print the resulting PR URL.
 - Never commit `.env`, credentials, or `*.key` files
 - If merge conflicts detected (`git status` shows "both modified"), stop and report
 - Confirm commit message with user before committing (unless `--auto`)
+- **Auto-mode git guardrails (CC ≥ 2.1.183)**: in auto mode the runtime blocks destructive git and refuses `commit --amend` on any commit not made by the agent this session — this command commits fresh and does not use `--amend`, so it is unaffected, but a rewrite attempt would be refused. Set `attribution.sessionUrl` to omit the claude.ai session link from generated commits/PRs. See `skills/shared/git-conventions.md § Auto-mode Git Safety`.
 
 ## Related
 

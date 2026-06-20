@@ -82,6 +82,8 @@ IF external_agent_fails:
      - Agent: {name}, Error: {error}, Impact: {impact}
 ```
 
+> **Child tool restrictions (CC ≥ 2.1.178 / 2.1.183)**: when handing off to an external-plugin agent, a `disallowedTools` entry may now use MCP **server-level** specs (`mcp__server`, `mcp__*`) and is honored on the child — deny a whole MCP server in one rule instead of enumerating tools (v2.1.178). `WebSearch` works in subagents, so a delegated agent can rely on it (v2.1.178). Auth-capable MCP servers no longer leak auth-stub tools to headless / SDK children (v2.1.183). See `skills/agent-coordination/references/headless-dispatch.md`.
+
 ### Context Overflow
 
 If handoff exceeds token budget:

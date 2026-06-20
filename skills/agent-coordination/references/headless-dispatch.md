@@ -28,18 +28,16 @@ The minimum recommended flag set per stage when dispatching from a headless runn
 
 | Stage | Canonical headless one-liner |
 |---|---|
-| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` † |
+| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` |
 | **DR** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort high --permission-mode acceptEdits -- igrsoft:technical-lead < dr-prompt.txt` |
-| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-fable-5 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` † |
+| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` |
 | **QA** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort high --permission-mode acceptEdits -- igrsoft:qa-engineer < qa-prompt.txt` |
 | **FN** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:project-manager < fn-prompt.txt` |
 | **RE** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:release-engineer < re-prompt.txt` |
 | **ST** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode acceptEdits -- igrsoft:stakeholder < st-prompt.txt` |
 
-The model/effort defaults track `skills/shared/model-selection.md`. Override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **sonnet** (stage override per `skills/shared/stage-codes.md`); the agent's `model: fable` frontmatter default applies only to direct TC consults.
+The model/effort defaults track `skills/shared/model-selection.md`. Override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **sonnet** (stage override per `skills/shared/stage-codes.md`); the agent's `model: opus` frontmatter default applies only to direct TC consults.
 
-> † **Fable-tier degrade (v2.1.173)**: Fable 5 includes **1M context by default** (`[1m]` suffix normalized). On accounts without 1M usage credits, a fable dispatch fails with `API Error: Usage credits required for 1M context` (observed live, 2026-06-12). Mitigation: pass `--fallback-model claude-sonnet-4-6` (v2.1.166) or pin the row's `--model` to `claude-sonnet-4-6`/`claude-opus-4-8` for that account. Interactive 1M sessions without credits auto-compact back under the standard limit (v2.1.172) — headless dispatch fails instead; plan for it.
->
 > **Background-worker reliability (v2.1.172/2.1.174)**: fixed — pre-warmed workers leaking another directory's project settings, `EAUTH` on attach after daemon auto-update and on claim-after-idle, stuck-`active` state after a nested child stopped, and background sessions inheriting another session's `ANTHROPIC_*` provider env. No plugin workaround needed on CC ≥ 2.1.174; on older CC, restart the daemon when attach fails with `EAUTH`.
 
 ## Live Session Discovery (v2.1.145–146)
@@ -96,6 +94,8 @@ Rows additionally render a `done/total` progress count (v2.1.161) in the human-r
 **If the baseline shifts** (new required field, renamed field, type change), the next cc-update MUST bump min CC version and add a migration note to the relevant `cc-features-<from>-<to>.md` band file.
 
 > **`--tools` Grep/Glob (v2.1.162)**: when a headless dispatch passes `--tools` and explicitly lists `Grep`/`Glob`, native builds now wire up dedicated search tools for them (rather than falling back to shelling out). No plugin change needed — relevant only when an external runner hand-builds the `--tools` set; the in-process `Task()` path inherits agent-frontmatter `tools:` unchanged.
+
+> **Subagent tool enforcement (v2.1.178 / 2.1.183)**: a subagent's `disallowedTools` now honors MCP **server-level** specs (`mcp__server`, `mcp__*`), so a headless cross-plugin dispatch can deny an entire MCP server to a child rather than enumerating each tool (v2.1.178). `WebSearch` is fixed inside subagents — a child can rely on it (v2.1.178). And auth-capable MCP servers no longer expose their auth-stub tools to headless / SDK runs (v2.1.183), so a `--print`/`agents run` child does not see stub auth tools it cannot complete. These let server-level MCP denials and child `WebSearch` be relied upon in cross-plugin dispatch.
 
 ## Permission-Mode Pinning (in-process)
 
