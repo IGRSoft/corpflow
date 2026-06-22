@@ -6,6 +6,8 @@ claude-code min version: "2.1.183"
 
 > **Claude Code feature bands**: latest integrated band is **2.1.176→2.1.183** (latest known CC: **2.1.183**), plugin **3.25.0**. Headline: the **agent-teams API changed** (v2.1.178) — `TeamCreate`/`TeamDelete` were removed; every session now has **one implicit team** and teammates are spawned via the **Agent tool's `name` parameter** (`team_name` accepted but ignored). The band also adds **auto-mode git safety** (destructive git, non-agent `commit --amend`, and IaC `destroy` are blocked unless explicitly requested — v2.1.183), **pre-launch subagent spawn classification** with foreground/background sharing the 5-level nesting cap (v2.1.178/2.1.181), compaction honoring `--fallback-model` (v2.1.178), and model-governance refinements (`availableModels` alias-redirect hardening + `/fast` allowlist refusal, Fable-5 auto-mode fallback to best Opus — v2.1.176; frontmatter model-deprecation warnings — v2.1.183). The prior integrated band (2.1.171→2.1.175, plugin 3.17.0) brought **5-level nested sub-agent delegation** (v2.1.172) and **Fable 5 1M-context-by-default** (v2.1.173). **Alias caveat**: the `fable` alias resolves only on **CC ≥ 2.1.170**.
 
+> **3.26.0 — extract milestone orchestration into `/megatask` (dependency-DAG batch runner)**: removes the `--milestone:N` / `--milestone:N:ISSUE` surface from **`/worktask`** entirely — `worktask` is now strictly **single-issue and milestone-agnostic**. All milestone/array orchestration moves to a new **`/megatask`** command: `/megatask N` (a GitHub milestone) or `/megatask --issues 12,15,18` (an explicit issue array). Megatask parses **`Depends on: #N` / `Blocks: #M`** from issue bodies plus **P0–P3** labels, builds a **dependency/blocker DAG**, and executes issues in **topological + priority order** — never starting an issue whose blockers are unmerged. The milestone skill is **renamed `skills/worktask-milestone` → `skills/megatask`** (slug `milestone-worktask` → `megatask`, v0.2.0) with a new `references/dependency-graph.md` (Kahn cycle-detection + levelled schedule) and an orchestrator schema bumped to **v3.1** (`blocked_by`/`blocks`/`level`/`topological_order`). New managed hook **`hooks/megatask-monitor.sh`** (SubagentStop, `continueOnBlock`) reconciles each per-issue completion: marks it done, **unblocks dependents**, frees the track, and emits a `megatask_progress` audit row + terminal notification — self-skips when no `orchestrator.json` is present. Megatask keeps a single **R1 batch-confirmation** gate and stamps `plan_gate`/`fn_gate: "bypass"` directly on each per-issue PL0 (so the gate-bypass triples in `worktask.md` lose `--milestone:N`). `/pm-milestone` now points downstream at `/megatask`. Plugin **3.25.0 → 3.26.0**; ~20 files across `commands/`, `skills/`, `agents/`, `hooks/`, manifests, README/MEMORY.
+
 > **3.25.0 — remove `--parallel:N`; milestone tracks orchestrator-derived; TL = canonical intra-issue async owner**: removes the user-facing **`--parallel:N`** flag (7 literal sites — argument-hint, options table, example comment, milestone parameter block, agent-coordination scale row, headless-dispatch note, team-lead parenthetical) and reframes milestone **cross-issue concurrency** as orchestrator-derived rather than a manual knob. `parallel_tracks` is now **computed at milestone init** (`min(count(open issues in scope), 5)`, reduced by available disk capacity; single-issue `--milestone:N:ISSUE` ⇒ `1`) and recorded in `orchestrator.json` — never a flag or fixed default (the lone `default: 2` assertion in `agents/workflow-engineer.md` is replaced; the field itself is **retained** as a runtime value, its schema/example literals kept and annotated). Formalizes the **TL (team-lead) stage** as the **canonical and sole owner** of the **intra-issue** async decision — whether one issue's DV0 splits into concurrent DV0/DV1/DV2 streams per the DV Task Splitting Protocol — explicitly orthogonal to the orchestrator-owned cross-issue track count, so the two parallelism axes never conflate. No new `state.json` fields or artifact anchors; per-file `version:` frontmatter is not bumped. Docs/prompt-only — ~12 files across `commands/`, `skills/`, `agents/`, plus README/MEMORY and version metadata.
 
 > **3.24.0 — Claude Code 2.1.176→2.1.183 band (agent-teams API + auto-mode guardrails)**: integrates the agent-teams API change (implicit per-session team; spawn via `Agent(name: …)`; `team_name` ignored — v2.1.178) across the team/coordination docs (`skills/shared/task-system.md`, `skills/worktask-milestone/references/agent-teams.md`, `skills/agent-coordination/*`, `skills/worktask/references/stage-details.md`), plus the auto-mode behavioral guardrails: destructive-git / non-agent-`--amend` / IaC-`destroy` blocks and `attribution.sessionUrl` (`skills/shared/git-conventions.md`, `commands/create-pr.md`); scheduled/webhook trigger deliveries can't satisfy an approval park (`skills/worktask/references/resume.md`); pre-launch spawn classification + fg/bg depth parity + `Tool(param:value)` permission syntax (`skills/agent-coordination/SKILL.md`); subagent MCP server-level `disallowedTools` + WebSearch (`skills/agent-coordination/references/headless-dispatch.md`, `skills/cross-plugin-handoff/references/plugin-protocols.md`); compaction `--fallback-model` (`skills/context-compression/SKILL.md`); model-governance refinements (`skills/shared/model-selection.md`); workflow auto-engage scoping (`skills/worktask/references/dynamic-workflow.md`); and a `commands/cc-update.md` Feature Category Mapping refresh. Min CC raised **2.1.169 → 2.1.183**; pure docs/metadata, no source changes.
@@ -24,7 +26,8 @@ claude-code min version: "2.1.183"
 
 ## Features
 
-- **Worktree-isolated + two approval gates (plan + finalization) (v3.25.0)**: every worktask runs in a dedicated git worktree and STOPs twice — once after planning to approve the plan (`plan_gate: "checkpoint"`; skipped by `--auto-plan` / `--milestone:N` / `--emergency`) and once before finalization to approve commit/push/PR (`fn_gate: "checkpoint"`; skipped by `--auto-finalization` / `--milestone:N` / `--emergency`). By default FN STOPs before any commit/push/PR; `--auto-finalization` finalizes unattended. `--auto-plan` is orthogonal — it skips only the plan gate, never the FN gate. Changes are reviewable as PRs.
+- **Worktree-isolated + two approval gates (plan + finalization) (v3.26.0)**: every worktask runs in a dedicated git worktree and STOPs twice — once after planning to approve the plan (`plan_gate: "checkpoint"`; skipped by `--auto-plan` / `--emergency`) and once before finalization to approve commit/push/PR (`fn_gate: "checkpoint"`; skipped by `--auto-finalization` / `--emergency`). By default FN STOPs before any commit/push/PR; `--auto-finalization` finalizes unattended. `--auto-plan` is orthogonal — it skips only the plan gate, never the FN gate. Changes are reviewable as PRs. (Batch runs via **`/megatask`** stamp both gates `"bypass"` directly per issue — see the Megatask feature below.)
+- **`/megatask` — dependency-DAG batch orchestration (v3.26.0)**: run many worktasks across a GitHub milestone (`/megatask N`) or an explicit issue array (`/megatask --issues 12,15,18`). Parses `Depends on:` / `Blocks:` + P0–P3 labels into a DAG, executes in topological + priority order (never starting an issue whose blockers are unmerged), isolates each issue in its own worktree, and drives completion via the `megatask-monitor` hook (unblock-dependents + progress). One human checkpoint: the R1 batch confirmation.
 - **9-Stage Worktask**: Planning → Architecture → Team Lead → Development → Developer Review → QA → Documentation → Finalization → Stakeholder
 - **Task System Integration**: Native `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` tools
 - **Native Dependencies**: `blockedBy` arrays for explicit dependency management
@@ -96,7 +99,7 @@ Run the worktask command:
 /worktask "[task description]"   # The worktask pipeline — PL0 dynamic sizing picks stages
 ```
 
-There is one entry point. PL0 sizes the pipeline by complexity (dropping AR/TL/DC for small tasks). Use `--auto-plan` to skip the plan-approval stop; `--auto-finalization` to skip the finalization-approval stop (auto commit/push/PR); `--milestone:N` for unattended batches (skips both gates); `--emergency` for the incident pipeline (skips both gates). You can also launch via `Skill({skill:"igrsoft:worktask"})`.
+`/worktask` is the single-issue entry point. PL0 sizes the pipeline by complexity (dropping AR/TL/DC for small tasks). Use `--auto-plan` to skip the plan-approval stop; `--auto-finalization` to skip the finalization-approval stop (auto commit/push/PR); `--emergency` for the incident pipeline (skips both gates). You can also launch via `Skill({skill:"igrsoft:worktask"})`. For **multi-issue batches**, use **`/megatask N`** (a milestone) or **`/megatask --issues 12,15,18`** (an array) — it orders by a dependency/blocker DAG and runs each issue unattended.
 
 `/worktask` sets up the worktask context, Task System integration, and stage management.
 
@@ -218,7 +221,8 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 #### Core Worktask
 | Command | Description |
 |---------|-------------|
-| `/worktask` | Initialize a new worktask task |
+| `/worktask` | Initialize a single staged worktask (milestone-agnostic) |
+| `/megatask` | Orchestrate many worktasks across a milestone or issue array, ordered by a dependency/blocker DAG |
 | `/estimate` | Estimate task complexity and effort |
 | `/export-estimate` | Export estimates to CSV |
 | `/context-status` | Check context and worktask state |
@@ -306,7 +310,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 - `cost-optimization.md` - Token and cost management
 - `csv-export-templates.md` - Export format templates
 - `estimation/SKILL.md` - Complexity estimation methods
-- `worktask-milestone/SKILL.md` - Milestone-based worktask tracking
+- `megatask/SKILL.md` - Megatask: dependency-DAG orchestration of many worktasks across a milestone or issue array (the `/megatask` command)
 - `review/SKILL.md` - Senior review guidelines
 - `self-improvement/SKILL.md` - ST-stage retrospective: diff-based learning from user edits; writes `.context/learnings.md` with per-proposal approval checklist, scoped to in-context agents/skills/commands only
 - `worktask-testing-strategy.md` - Worktask-integrated testing planning for PL/AR stages
@@ -348,7 +352,9 @@ ST → FN → QA → DV → TL → AR → PL → USER
 
 ### During Development
 ```
-/worktask "Task"                    # Start worktask
+/worktask "Task"                    # Start a single worktask
+/megatask 7                         # Orchestrate a whole milestone (DAG-ordered)
+/megatask --issues 12,15,18         # …or an explicit issue array
 /arch-review                        # Review architecture
 /tech-debt --path src/              # Check tech debt
 ```

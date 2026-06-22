@@ -185,7 +185,7 @@ For each extracted feature, score it against the worktask **leverage axes** and 
 - **Gates** — DV/DR/QA/SR feedback & hook blocks (e.g., `hookSpecificOutput.additionalContext`, screenshot-gate, gate-feedback contract).
 - **Handoffs** — stage→stage compression, schema returns, cache-prefix prompt layout.
 - **Resume/recovery** — session discovery, reattach vs re-dispatch (`claude agents --json`, `waitingFor`, PostCompact).
-- **Parallelism** — worktree isolation, native Workflow fan-out, milestone lanes.
+- **Parallelism** — worktree isolation, native Workflow fan-out, megatask lanes.
 - **Dispatch** — headless CLI flags, permission/model/effort metadata.
 - **Observability/Cost** — OTEL, audit rows, token baselines.
 

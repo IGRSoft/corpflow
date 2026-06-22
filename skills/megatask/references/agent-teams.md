@@ -1,6 +1,6 @@
 # Agent Teams Mode (Experimental)
 
-When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, milestone worktasks can use agent teams for true parallel issue execution instead of sequential Task-based orchestration.
+When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, megatask runs can use agent teams for true parallel issue execution instead of sequential Task-based orchestration. (`milestone-{N}` in the paths below is the `<group>` token — `milestone-{N}` in milestone mode, `issues-{shortid}` in array mode.)
 
 > The session **is** the team (CC ≥ 2.1.178): there is one implicit per-session team, so teammates are spawned via `Agent(name: …)` — there is no separate team to create or tear down.
 

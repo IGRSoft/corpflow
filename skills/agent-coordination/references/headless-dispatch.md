@@ -13,7 +13,7 @@ External orchestrators (CI runners, batch schedulers, the user's own shell) that
 | `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-4-8`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6`. Caveat: a managed `availableModels` allowlist now also constrains subagent model overrides (v2.1.172), and `enforceAvailableModels` (v2.1.175) constrains the Default model too — a requested id may silently down-resolve; audit, don't assume |
 | `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN/RE→`medium` |
 | `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` | **Yes — audited** (see § Permission-Mode Pinning below) | SR/FN→`default`; DV under `--auto-plan`→`bypassPermissions` |
-| `workspace_path` | `--cwd <path>` | string | N/A (in-process inherits parent cwd) | milestone tracks → per-issue worktree |
+| `workspace_path` | `--cwd <path>` | string | N/A (in-process inherits parent cwd) | megatask tracks → per-issue worktree |
 | `add_dirs` (array) | repeated `--add-dir <path>` | string[] | N/A | cross-repo work, monorepo siblings |
 | `mcp_config_path` | `--mcp-config <path>` | string | N/A | scoped MCP set per dispatch |
 | `plugin_dir_overrides` (array) | repeated `--plugin-dir <path>` | string[] | N/A | local plugin development |
@@ -54,7 +54,7 @@ claude agents --json | jq -r --arg track "$TRACK_ID" '
 Three usage patterns:
 
 - **Resume pre-check** — before respawning a subagent during worktask resume, query live sessions; if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` still appears, prefer `SendMessage` reattach over re-delegation. Eliminates the "blind respawn of an already-working subagent" token-waste class. See `skills/worktask/SKILL.md § Resume Procedure` step 0.
-- **Parallel track health** — for milestone runs, periodic `claude agents --json | jq '[.[] | select(.tag=="igrsoft-track")] | length'` should equal the orchestrator-derived `parallel_tracks`. Less = stalled track.
+- **Parallel track health** — for megatask runs, periodic `claude agents --json | jq '[.[] | select(.tag=="igrsoft-track")] | length'` should equal the orchestrator-derived `parallel_tracks`. Less = stalled track.
 - **Status-line integration** — drives tmux / shell-status-bar widgets showing the active worktask stage without polluting `.context/`.
 
 Caveat: the CLI is stable but the JSON schema is not formally versioned — guard every read with defensive jq (`.parent_agent_id // "none"`). See § Schema Versioning Watch below.

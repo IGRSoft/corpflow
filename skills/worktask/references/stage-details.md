@@ -49,7 +49,7 @@ See `claude-constitution.md` for full principles.
 
 ## Agent Teams Integration (Experimental)
 
-When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, the worktask system can leverage agent teams for milestone mode parallel execution. Each session has **one implicit team** (CC ≥ 2.1.178) — spawn teammates via `Agent(name: …)`; `team_name` is accepted but ignored, and there is no separate team to create or delete.
+When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, the worktask system can leverage agent teams for megatask mode parallel execution. Each session has **one implicit team** (CC ≥ 2.1.178) — spawn teammates via `Agent(name: …)`; `team_name` is accepted but ignored, and there is no separate team to create or delete.
 
 ### Enabling
 
@@ -87,9 +87,9 @@ See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration pat
 
 ### Worktree + Agent Teams
 
-Each teammate operates in its own worktree — each has its own branch, working directory, and `.context/`. This is the standard configuration for milestone parallel execution; worktree isolation is always active.
+Each teammate operates in its own worktree — each has its own branch, working directory, and `.context/`. This is the standard configuration for megatask parallel execution; worktree isolation is always active.
 
 > Project configs and auto-memory are automatically shared across all git worktrees of the same repo. No per-worktree configuration duplication needed.
 
-See `../../worktask-milestone/SKILL.md § Agent Teams Mode` for parallel execution patterns.
+See `../../megatask/references/agent-teams.md` for parallel execution patterns.
 See `agent-coordination.md § Agent Teams vs Subagents` for comparison.

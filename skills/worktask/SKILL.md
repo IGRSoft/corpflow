@@ -33,10 +33,10 @@ stateDiagram-v2
     Planning --> Executing: PL0 completed + plan gate cleared
     Planning --> ErrorRetry: PL0 failed
     Executing --> WorktreeCheckout: DV stage, always isolated
-    Executing --> MilestoneTrack: --milestone mode
+    Executing --> MegataskTrack: /megatask
     Executing --> StageActive: standard mode
     WorktreeCheckout --> StageActive
-    MilestoneTrack --> StageActive
+    MegataskTrack --> StageActive
     StageActive --> StageActive: next stage (blockedBy resolved)
     StageActive --> ErrorRetry: stage failure
     ErrorRetry --> StageActive: retry_count < 3, fix applied
@@ -100,14 +100,14 @@ Dynamic mode only: PL0 emits a per-stage budget estimate at `state.json.workflow
 
 ## Workspace Mode
 
-`--milestone:N` tickets run in isolated workspaces. `.context/` base path by mode (resolve via `task.metadata.workspace_path` + `metadata.isolation`):
+Megatask (per-issue) tickets run in isolated workspaces. `.context/` base path by mode (resolve via `task.metadata.workspace_path` + `metadata.isolation`):
 
 | Mode | `.context/` base |
 |------|------------------|
 | Standard | `.context/` (main checkout — orchestrator + non-isolated stages) |
 | Worktree | `.worktrees/milestone-{N}/{issue#}/.context/` |
 
-**WHEN in milestone/worktree mode, inside a Conductor workspace clone, or on any cwd↔workspace_path mismatch: Read `references/workspace-modes.md`** (detection snippet, Conductor sibling-repo rule, task-ID namespacing). Binding enforcement (workspace-root cross-check + `WORKSPACE_ROOT` banner injection) lives in `commands/worktask.md` Phase 2. Full milestone docs: `../worktask-milestone/SKILL.md`.
+**WHEN in megatask per-issue/worktree mode, inside a Conductor workspace clone, or on any cwd↔workspace_path mismatch: Read `references/workspace-modes.md`** (detection snippet, Conductor sibling-repo rule, task-ID namespacing). Binding enforcement (workspace-root cross-check + `WORKSPACE_ROOT` banner injection) lives in `commands/worktask.md` Phase 2. Full megatask docs: `../megatask/SKILL.md`.
 
 ## Parallel Execution
 
@@ -221,7 +221,7 @@ Before executing any worktask stage, the orchestrator MUST validate:
 4. **Stage contract check**: Verify upstream outputs match the next stage's Required Inputs per `shared/stage-contracts.md` (file exists + required sections present)
 5. **Metadata schema check**: Validate next task's metadata against `shared/task-system.md` § JSON Schema (non-PL tasks require `stage`, `agent`, `model`, `error_file`)
 6. **Model alias check**: `metadata.model ∈ {fable, opus, sonnet, haiku}` — reject unknown aliases before `Task()` delegation. Caveat (CC ≥ 2.1.172/2.1.175): under a managed `availableModels` allowlist (now applied to subagent model overrides too) or `enforceAvailableModels`, a *valid* alias may silently resolve to a different model at dispatch — emit a `model_resolution_constrained` audit row when a managed allowlist is in effect; do NOT hard-block
-7. **Workspace existence** (milestone/worktree mode only): verify `metadata.workspace_path` directory exists and `workspace.json` is readable
+7. **Workspace existence** (megatask per-issue/worktree mode only): verify `metadata.workspace_path` directory exists and `workspace.json` is readable
 8. **Artifact path resolution check** (non-blocking): for the next task's `metadata.run_index`, resolve the upstream artifact via the `stageArtifactPath()` helper below. Emit one `artifact_path_resolved` audit row with `result ∈ {ok, fallback_glob, fallback_legacy, miss}` and `metadata.resolved_path`. A `miss` result means the upstream stage produced no artifact and is treated by F3 in `references/handoff-protocol.md#fallback-paths` — warn but proceed. Catches run_index drift early (off-by-one between PL0 and stage tasks) before downstream stages burn tokens on fallback reads.
 9. **Hook installation check** (first stage only): Verify `state-merge.sh` SubagentStop hook is operational. Check: (a) `.claude/hooks/state-merge.sh` exists and is executable, OR (b) the plugin's `plugin.json` registers the SubagentStop hook entry. If neither is true, emit a warning: `"⚠ state-merge.sh hook not installed — run hook-install.sh"`. Do NOT block — the orchestrator's Step 6.5 provides Layer 3 coverage. See `references/initialization-patterns.md#hook-installation`.
 
@@ -350,9 +350,9 @@ Before entering this loop, verify:
 - `"checkpoint"` (default): require BOTH PL0 `completed` AND an `approval_received` audit line with
   `subject:"PL<run_index>"` in `.context/logs/audit.jsonl` before loop entry. If the line is
   absent, STOP — return to `commands/worktask.md § Step A.5` to fulfil the gate.
-- `"bypass"` (`--auto-plan` / `--milestone:N` / `--emergency`): PL0 `completed` alone is sufficient; no approval line.
+- `"bypass"` (`--auto-plan` / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator): PL0 `completed` alone is sufficient; no approval line.
 
-**Signal 3 (FN gate)**: FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`). The orchestrator STOPs immediately before the FN `Task()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto-finalization` / `--milestone:N` / `--emergency`). See loop step 4.9 and § FN Gate.
+**Signal 3 (FN gate)**: FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`). The orchestrator STOPs immediately before the FN `Task()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto-finalization` / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator). See loop step 4.9 and § FN Gate.
 
 After PL0 completes and creates stage tasks, the orchestrator MUST:
 
@@ -372,7 +372,7 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
          >> "$LOG_DIR/audit.jsonl"; true
      fi
      ```
-     The trailing `; true` masks the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error, etc.) MUST NEVER propagate as orchestrator failure. Skip entirely when `--no-gh-issue` was supplied on the CLI (PL0 sets `task.metadata.no_gh_issue: true`; the helper short-circuits internally and audits `deferred`/`opted_out`). Under milestone mode (`--milestone:N`, `state.json:metadata.milestone` set, or `workspace.json` present), the helper exits `0` immediately with `reason: "milestone_mode"` — no `gh` API call of any kind is made. See `### PL Issue Publish` below for sanitiser rules and the non-blocking guarantee.
+     The trailing `; true` masks the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error, etc.) MUST NEVER propagate as orchestrator failure. Skip entirely when `--no-gh-issue` was supplied on the CLI (PL0 sets `task.metadata.no_gh_issue: true`; the helper short-circuits internally and audits `deferred`/`opted_out`). Under megatask per-issue mode (`state.json:metadata.milestone` set, or `workspace.json` present), the helper exits `0` immediately with `reason: "milestone_mode"` — no `gh` API call of any kind is made. See `### PL Issue Publish` below for sanitiser rules and the non-blocking guarantee.
 
 
 ```typescript
@@ -557,7 +557,7 @@ while (tasks.some(t => t.status !== "completed")) {
         //     (do NOT delegate FN; surface feedback).
         // appendAudit({ ...action:"approval_received", subject:`FN${N}`, result:"ok" });
         // appendAudit({ ...action:"approval_rejected", subject:`FN${N}`, result:"rejected" }); // STOP
-      } else {  // "bypass" — stamped by --auto-finalization / --milestone:N / --emergency
+      } else {  // "bypass" — stamped by --auto-finalization / --emergency, or directly per-issue by /megatask
         // (e) Emit `fn_gate_bypass subject:"FN<N>"` (reason: "unattended") and
         //     fall through to delegate FN — commit/push/PR unattended.
         appendAudit({ actor: "orchestrator", action: "fn_gate_bypass",
@@ -772,7 +772,7 @@ Step 6.5 invokes `skills/worktask/references/publish-pl-issue.sh` between PL0 co
 
 **Opt-out: `--no-gh-issue`.** When the CLI invocation carries `--no-gh-issue`, PL0 stamps `metadata.no_gh_issue: true` on its own task and propagates the field through. The helper exits `0` immediately with `result: "deferred"`, `reason: "opted_out"` — no `gh` API call is issued. The state-loop entry proceeds unchanged.
 
-**Milestone-mode skip.** When the worktask runs under `--milestone:N` (state.json `metadata.milestone` set, or a `workspace.json` exists at `$PWD`/`$WORKSPACE_ROOT`), the helper exits `0` immediately with `result: "deferred"`, `reason: "milestone_mode"` — **no `gh issue create`, no `gh issue comment`, no API call of any kind**. Rationale: the parent milestone issue is the canonical record; auto-posting plan-approval comments fragments the review surface. PR linkage (FN stage or manual) ties the implementation back to the milestone. Detection signals (highest priority first): `MILESTONE_MODE=1` env override (tests), `state.json:metadata.milestone` non-empty, `workspace.json` present at either discovery path.
+**Megatask per-issue skip.** When the worktask runs under a `/megatask` batch (state.json `metadata.milestone` set, or a `workspace.json` exists at `$PWD`/`$WORKSPACE_ROOT`), the helper exits `0` immediately with `result: "deferred"`, `reason: "milestone_mode"` — **no `gh issue create`, no `gh issue comment`, no API call of any kind**. Rationale: the parent milestone issue is the canonical record; auto-posting plan-approval comments fragments the review surface. PR linkage (FN stage or manual) ties the implementation back to the milestone. Detection signals (highest priority first): `MILESTONE_MODE=1` env override (tests), `state.json:metadata.milestone` non-empty, `workspace.json` present at either discovery path.
 
 **HARD GUARANTEE** — the published GitHub issue contains **no local-file paths**, no `.context/` references, no `planning-N.md` or any other artifact filename, no absolute or relative source paths, no Conductor workspace IDs, and no `workspace_path`/`plan_file`/`run_index`/`artifact_path` literals are EVER written to the published GitHub issue body, under any circumstances. The sanitiser is defence-in-depth: PL0 authoring hygiene is the primary defence (see `agents/product-manager.md § Anchor-content hygiene`), the two-pass sanitiser is the runtime safety net, and the >50% strip-ratio abort is the final brake when both fail.
 
@@ -823,7 +823,7 @@ new trigger block when introducing one (e.g., Pencil, Sosumi).
 The FN gate is the **pre-finalization human checkpoint**. Carried by `PL0.metadata.fn_gate`, default `"checkpoint"`. It sits **before the FN `Task()` delegation**, so nothing remote (commit/push/PR) happens before approval. `N = state.json.run_index` (default `0`).
 
 - **`checkpoint`** (default): loop step 4.9 runs the Pre-gate Conductor-attachments writer (local-only), emits `fn_gate_waiting subject:"FN<N>"`, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. On approval → append `approval_received subject:"FN<N>"` then delegate FN (commit/push/PR). On reject → append `approval_rejected subject:"FN<N>"` and STOP (do NOT delegate FN).
-- **`bypass`** (stamped only by `--auto-finalization`, `--milestone:N`, or `--emergency`): loop step 4.9 runs the writer, emits `fn_gate_bypass subject:"FN<N>"` (`reason: "unattended"`), then delegates FN unattended. In dynamic mode the same bypass path applies on workflow return.
+- **`bypass`** (stamped only by `--auto-finalization` or `--emergency`, or directly per-issue by the `/megatask` batch orchestrator): loop step 4.9 runs the writer, emits `fn_gate_bypass subject:"FN<N>"` (`reason: "unattended"`), then delegates FN unattended. In dynamic mode the same bypass path applies on workflow return.
 
 **At the FN stage — Read `references/fn-gate.md`** for the full procedure: the Pre-gate Conductor-attachments writer (run on both paths so Conductor's *Create PR* / *Request Review* actions inherit worktask context) and the four audit lines.
 
@@ -845,7 +845,7 @@ else
 fi
 ```
 
-The helper self-gates: it skips silently when `metadata.requires_screenshots == false` or no captures exist, defers when `metadata.github_issue_url` is absent (publish deferred / failed at Step 6.5) or under milestone mode, and dedupes on the HTML marker `<!-- visual-evidence:<worktask_id>:<run_index> -->` so a retry never double-posts. Each outcome is one `visual_evidence_issue_commented` audit row (`result ∈ {ok, skipped, deferred}`). The PR-body counterpart (`--emit pr`) is owned by the FN stage during PR composition, not here — see `agents/project-manager.md` and `references/conductor-attachments.md`.
+The helper self-gates: it skips silently when `metadata.requires_screenshots == false` or no captures exist, defers when `metadata.github_issue_url` is absent (publish deferred / failed at Step 6.5) or under megatask per-issue mode, and dedupes on the HTML marker `<!-- visual-evidence:<worktask_id>:<run_index> -->` so a retry never double-posts. Each outcome is one `visual_evidence_issue_commented` audit row (`result ∈ {ok, skipped, deferred}`). The PR-body counterpart (`--emit pr`) is owned by the FN stage during PR composition, not here — see `agents/project-manager.md` and `references/conductor-attachments.md`.
 
 ## Post-merge completion comment
 
@@ -865,7 +865,7 @@ else
 fi
 ```
 
-The helper resolves related issues from PR-body keywords (`Closes`/`Fixes`/`Resolves #N`, case-insensitive) unioned with `gh pr view --json closingIssuesReferences`, deduped to integers (so no untrusted PR-body text reaches a `gh` argv). It posts one comment per issue carrying the work summary (sourced from `.context/complete-summary-<run_index>.md`, else `state.json` `facts.goal`, else PR title+body — sanitised) plus the visual-evidence block when `requires_screenshots == true` and captures exist (summary-only otherwise). Per-issue HTML-marker dedup (`<!-- completion-summary:<worktask_id>:<run_index>:<issue_n> -->`) means a retry never double-posts; a partially-failed prior run re-posts only the missing issues. It defers under milestone mode (parent milestone issue is canonical) and audits `no_related_issues` when the PR closes nothing. Each issue yields one `completion_summary_commented` audit row (`result ∈ {ok, skipped, deferred}`); a single `gh` failure on one issue is audited and the loop continues to the rest (overall exit 0). The `FN` agent is NOT modified — it continues to own only `--emit pr` for the PR body. Timing note: at post-loop time the PR is created with its closing refs (populated at PR creation from the body keywords) even if the merge is a local fast-forward/push — so the resolver works; a later real merge re-running this step is a marker no-op.
+The helper resolves related issues from PR-body keywords (`Closes`/`Fixes`/`Resolves #N`, case-insensitive) unioned with `gh pr view --json closingIssuesReferences`, deduped to integers (so no untrusted PR-body text reaches a `gh` argv). It posts one comment per issue carrying the work summary (sourced from `.context/complete-summary-<run_index>.md`, else `state.json` `facts.goal`, else PR title+body — sanitised) plus the visual-evidence block when `requires_screenshots == true` and captures exist (summary-only otherwise). Per-issue HTML-marker dedup (`<!-- completion-summary:<worktask_id>:<run_index>:<issue_n> -->`) means a retry never double-posts; a partially-failed prior run re-posts only the missing issues. It defers under megatask per-issue mode (parent milestone issue is canonical) and audits `no_related_issues` when the PR closes nothing. Each issue yields one `completion_summary_commented` audit row (`result ∈ {ok, skipped, deferred}`); a single `gh` failure on one issue is audited and the loop continues to the rest (overall exit 0). The `FN` agent is NOT modified — it continues to own only `--emit pr` for the PR body. Timing note: at post-loop time the PR is created with its closing refs (populated at PR creation from the body keywords) even if the merge is a local fast-forward/push — so the resolver works; a later real merge re-running this step is a marker no-op.
 
 ## Post-Worktask Self-Improvement
 
@@ -877,14 +877,14 @@ The orchestrator loop is restartable. **WHEN reattaching** (PostCompact, session
 
 ## FN Finalization Gate
 
-The FN gate defaults to `"checkpoint"` (see § FN Gate): PL0 stamps `metadata.fn_gate = "checkpoint"`, so the orchestrator STOPs before the FN delegation, presents the pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. The two human checkpoints are the PL gate (`commands/worktask.md § Step A.5` and § PRECONDITION CHECK Signal 2) and this FN gate (Signal 3). `--auto-finalization`, `--milestone:N`, and `--emergency` stamp `fn_gate: "bypass"` to finalize unattended (`--auto-plan` never bypasses FN — it is orthogonal to the plan gate). All file-writing work is worktree-isolated, so finalization is reviewable as a PR. On the checkpoint path the orchestrator writes `fn_gate_waiting` then `approval_received`/`approval_rejected`; on bypass it writes a single `fn_gate_bypass` audit line (`reason: "unattended"`) — all with `subject:"FN<run_index>"` (see § FN Gate).
+The FN gate defaults to `"checkpoint"` (see § FN Gate): PL0 stamps `metadata.fn_gate = "checkpoint"`, so the orchestrator STOPs before the FN delegation, presents the pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. The two human checkpoints are the PL gate (`commands/worktask.md § Step A.5` and § PRECONDITION CHECK Signal 2) and this FN gate (Signal 3). `--auto-finalization` and `--emergency` (and the `/megatask` batch orchestrator, per-issue) stamp `fn_gate: "bypass"` to finalize unattended (`--auto-plan` never bypasses FN — it is orthogonal to the plan gate). All file-writing work is worktree-isolated, so finalization is reviewable as a PR. On the checkpoint path the orchestrator writes `fn_gate_waiting` then `approval_received`/`approval_rejected`; on bypass it writes a single `fn_gate_bypass` audit line (`reason: "unattended"`) — all with `subject:"FN<run_index>"` (see § FN Gate).
 
 ## Related
 
 - `references/fn-gate.md` - FN gate full procedure + post-worktask self-improvement (Read at gate time)
 - `references/resume.md` - Resume-after-interruption state table + procedure (Read on reattach)
-- `references/workspace-modes.md` - Milestone/worktree/Conductor workspace rules (Read in workspace modes)
-- `../worktask-milestone/SKILL.md` - GitHub milestone integration
+- `references/workspace-modes.md` - Megatask per-issue/worktree/Conductor workspace rules (Read in workspace modes)
+- `../megatask/SKILL.md` - GitHub milestone batch execution
 - `agent-coordination.md` - Multi-agent coordination
 - `cost-optimization.md` - Budget management
 - `context-compression.md` - Context compression

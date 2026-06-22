@@ -15,7 +15,7 @@ Expert worktask engineer for Task System orchestration and troubleshooting.
 
 - DO NOT create stage tasks outside of PL0 (except sub-task splitting by stage agents)
 - DO NOT hide or obscure worktask failures
-- DO NOT skip per-issue branch creation in milestone mode
+- DO NOT skip per-issue branch creation in megatask mode
 - DO NOT modify task state without using TaskUpdate
 - DO NOT proceed past stuck states without documenting resolution
 - DO NOT design worktasks without recovery and rollback paths
@@ -32,17 +32,17 @@ Expert worktask engineer for Task System orchestration and troubleshooting.
 |--------|-----------|
 | Initialization | Invocation handling (`/worktask` command / `Skill({skill:"igrsoft:worktask"})`), `.context/` structure, Task System dependency chains, priority/platform auto-detection |
 | Stage Management | Status transitions via `TaskUpdate`, PL0 creates subsequent stages, sub-task splitting |
-| Orchestration | Milestone mode (`--milestone:N`), workspace structure, issue fetching/sorting, orchestrator.json, track monitoring, completion/error handling |
+| Orchestration | Megatask mode (`/megatask N`), workspace structure, issue fetching/sorting, orchestrator.json, track monitoring, completion/error handling |
 
-See `skills/worktask-milestone/SKILL.md` for milestone architecture details.
+See `skills/megatask/SKILL.md` for megatask architecture details.
 
-## Milestone Worktask Validation
+## Megatask Validation
 
-Before executing any milestone worktask, validate:
+Before executing any megatask run, validate:
 
 ### Pre-Execution Checks
 
-- [ ] orchestrator.json exists or will be created at `.worktrees/orchestrator.json`
+- [ ] orchestrator.json exists or will be created at `.worktrees/<group>/orchestrator.json`
 - [ ] Each issue checked for existing PRs (skip if found)
 - [ ] Each issue has unique branch name
 - [ ] Base branch is clean (no uncommitted changes)
@@ -75,7 +75,7 @@ Before executing any milestone worktask, validate:
 |---------|-------|-----|
 | Single branch for all issues | Missing branch-per-issue logic | Each issue MUST get own branch |
 | Branch from wrong base | Not using remote ref | Use `git fetch origin develop && git checkout -b ... origin/develop` (manual override; the `EnterWorktree` tool branches from local HEAD by default, configurable via `worktree.baseRef` = `head`\|`fresh`) |
-| Missing orchestrator.json | Init skipped | Run milestone init before issues |
+| Missing orchestrator.json | Init skipped | Run megatask init before issues |
 | No PR created | FN stage incomplete | Ensure `gh pr create` runs per issue |
 | Duplicate PR for issue | PR check skipped | Check issue timeline for existing PRs first |
 
@@ -125,8 +125,8 @@ Before executing any milestone worktask, validate:
 ### Workspace Not Initialized
 
 **Solutions**:
-1. Verify `--milestone:N` flag was used
-2. Check `.worktrees/orchestrator.json` exists
+1. Verify `/megatask` milestone/issues argument was provided
+2. Check `.worktrees/<group>/orchestrator.json` exists
 3. Verify GitHub CLI auth: `gh auth status`
 4. Check milestone has open issues
 
@@ -246,7 +246,7 @@ from the filesystem. Diagnose by comparing `git worktree list` to
 
 ### Worktree Mode (Always Active)
 
-All milestone worktasks use worktree isolation. Expected state:
+All megatask runs use worktree isolation. Expected state:
 
 | Check | Expected Value |
 |-------|----------------|

@@ -16,10 +16,11 @@ Single source of truth for how a worktask is launched and its invocation rule.
 > instruction inline is a violation.
 
 `/worktask` (or `Skill({skill:"igrsoft:worktask"})`) is the canonical entry point. There are two human
-checkpoints. After PL0 it STOPs at the PL gate and presents the plan for approval, unless `--auto-plan`,
-`--milestone:N`, or `--emergency` is set (all stamp `plan_gate: "bypass"`). Then, immediately before the
+checkpoints. After PL0 it STOPs at the PL gate and presents the plan for approval, unless `--auto-plan`
+or `--emergency` is set (both stamp `plan_gate: "bypass"`). Then, immediately before the
 FN delegation, it STOPs at the FN gate and presents a pre-FN summary for finalization approval, unless
-`--auto-finalization`, `--milestone:N`, or `--emergency` is set (all stamp `fn_gate: "bypass"`). The PR
+`--auto-finalization` or `--emergency` is set (both stamp `fn_gate: "bypass"`). A batch orchestrator
+(`/megatask`) stamps both `plan_gate` and `fn_gate` `"bypass"` directly on each per-issue PL0. The PR
 is the review surface — see `../worktask/references/fn-gate.md` and `../../commands/worktask.md`
 *EXECUTION MODEL (BINDING)*.
 
@@ -31,12 +32,12 @@ prefixes — PL0 dynamic sizing selects which of the 9 stages actually run, drop
 complexity. See `../worktask/SKILL.md § Dynamic Worktask Sizing`.
 
 The post-plan checkpoint is carried by `PL0.metadata.plan_gate`, default `"checkpoint"`.
-`--auto-plan`, `--milestone:N`, and `--emergency` stamp `"bypass"`. On resume after interruption, this carrier
+`--auto-plan` and `--emergency` stamp `"bypass"` (a `/megatask` batch run stamps it per-issue). On resume after interruption, this carrier
 tells the orchestrator whether to re-enter the stage loop immediately (`bypass`) or stop for user
 approval (`checkpoint`) — see `../worktask/references/resume.md § State → Action Table`.
 
 The pre-finalization checkpoint is carried by `PL0.metadata.fn_gate`, default `"checkpoint"`.
-`--auto-finalization`, `--milestone:N`, and `--emergency` stamp `"bypass"` (note: `--auto-plan` does NOT
+`--auto-finalization` and `--emergency` stamp `"bypass"` (a `/megatask` batch run stamps it per-issue; note: `--auto-plan` does NOT
 bypass the FN gate — it is orthogonal). On the `checkpoint` path the orchestrator STOPs before the FN
 `Task()` delegation, presents the pre-FN summary, and delegates FN (commit/push/PR) only on
 `AskUserQuestion` approval; on `bypass` it finalizes unattended. Both carriers live on PL0 and resume
@@ -45,6 +46,6 @@ logic honors each independently — see `../worktask/references/fn-gate.md` and
 
 ## See also
 
-- `../worktask/references/fn-gate.md` — FN gate (default `checkpoint`); bypassed by `--auto-finalization` / `--milestone:N` / `--emergency`.
+- `../worktask/references/fn-gate.md` — FN gate (default `checkpoint`); bypassed by `--auto-finalization` / `--emergency`.
 - `../../commands/worktask.md` — command entry point, *EXECUTION MODEL (BINDING)*, Options.
 - `stage-codes.md` — stage code ↔ agent ↔ model table and pipeline definitions.

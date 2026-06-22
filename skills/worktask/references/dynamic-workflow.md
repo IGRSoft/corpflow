@@ -26,10 +26,10 @@ This file is referenced by:
 > **NON-NEGOTIABLE INVARIANTS (the orchestrator owns these even in dynamic mode):**
 > 1. **PL0** — planning completes before any workflow is launched. The `Workflow` tool is never dispatched
 >    until PL0 is `completed`. The PL gate (Step A.5) is evaluated before the workflow is launched; on a
->    `checkpoint` gate the orchestrator obtains plan approval first. `--auto-plan` / `--milestone:N` bypass it.
+>    `checkpoint` gate the orchestrator obtains plan approval first. `--auto-plan` / `--emergency` bypass it (under `/megatask`, the per-issue PL0 is stamped `bypass` directly).
 > 2. **FN ownership** — FN (commit/push/PR) is always orchestrator-owned. When the workflow span returns,
 >    the orchestrator applies the FN gate (`PL0.metadata.fn_gate`, default `"checkpoint"`): on `checkpoint`
->    it STOPs for finalization approval; on `bypass` (`--auto-finalization` / `--milestone:N` / `--emergency`)
+>    it STOPs for finalization approval; on `bypass` (`--auto-finalization` / `--emergency`, or a gate stamped by `/megatask`)
 >    it finalizes unattended.
 > 3. **No self-commit** — the workflow span never commits, pushes, or opens a PR. That belongs to FN.
 > 4. Dynamic mode adds a branch *between* PL0 and FN; it does not change the gate model: the PL gate (if
@@ -61,14 +61,18 @@ PL0 (plan) -> [PL gate] -> publish-pl-issue.sh
 | Mode | Trigger | Workflow span | PL0 gate | FN gate | Notes |
 |------|---------|---------------|----------|---------|-------|
 | Standard | `--dynamic` | AR → … → QA/DC/RE (stops before FN) | checkpoint (plan approval) unless --auto-plan | checkpoint (finalization approval) unless --auto-finalization | Default dynamic shape; on span return the orchestrator applies the FN gate before FN. |
-| Milestone | `--dynamic --milestone:N` | `pipeline(issues, …)` fan-out, AR → … → ST per lane | bypass (unattended batch) | bypass | **R1: one explicit operator confirmation stating the PR count before any lane runs.** |
+
+> **Multi-issue lanes moved to `/megatask`.** The former `--dynamic --milestone:N` row (issue fan-out
+> onto engine lanes) is now owned by megatask — see `../../megatask/references/dynamic-megatask.md`.
+> This file covers only the **single-issue** `--dynamic` span.
 
 > Dynamic mode runs the autonomous span between the two gates; the PL gate (if `checkpoint`) is cleared
 > before the span launches, and when the span returns the orchestrator applies the FN gate (STOP on
 > `checkpoint`, the default; proceed on `bypass`). `metadata.fn_gate` defaults to `"checkpoint"` on PL0 and
-> is stamped `"bypass"` only by `--auto-finalization` / `--milestone:N` / `--emergency`. The dynamic span
-> runs up to the FN gate (or to ST in milestone lane mode, which bypasses both gates). The milestone
-> launch still requires R1 confirmation (below) — this is a *multi-PR safety check*, not a human approval gate.
+> is stamped `"bypass"` only by `--auto-finalization` / `--emergency` (or directly by `/megatask` per issue). The dynamic span
+> runs up to the FN gate. Multi-issue (megatask) lane mode runs each lane to ST with both gates bypassed and
+> still requires megatask's R1 confirmation — a *multi-PR safety check*, not a human approval gate — see
+> `../../megatask/references/dynamic-megatask.md`.
 
 ---
 
@@ -142,29 +146,12 @@ return { ar, tl, dv, dr, qa };
 template (no I/O, no clock, no RNG). `code-review-dev` stays invoked **inside the DR agent** (the DR prompt
 carries the `Skill("code-review-dev")` instruction exactly as the manual loop's section [7] suffix does).
 
-### #milestone-template — `pipeline()`
+### #milestone-template — moved to `/megatask`
 
-Milestone mode maps N issues onto lanes; each lane runs in its own worktree
-(`.worktrees/milestone-{N}/{issue#}/`).
-
-```js
-export const meta = { name: "igrsoft-milestone-span", description: "per-issue worktree lanes", version: 1 };
-
-const { issues, models, milestone } = args;  // issues: [{ number, prompt, plan_file, run_index }]
-// R1 GUARD: the orchestrator has ALREADY obtained one explicit operator confirmation that states
-// exactly issues.length PRs will be opened. This script assumes that confirmation happened upstream.
-return pipeline(
-  issues,
-  (issue)    => agent(issue.prompt, { agentType: "igrsoft:software-architector", model: models.AR, schema: SCHEMA.AR, isolation: "worktree" }),
-  (_, issue) => agent(issue.prompt, { agentType: "igrsoft:developer",            model: models.DV, schema: SCHEMA.DV, isolation: "worktree" }),
-  (_, issue) => agent(issue.prompt, { agentType: "igrsoft:technical-lead",       model: models.DR, schema: SCHEMA.DR, isolation: "worktree" }),
-  (_, issue) => agent(issue.prompt, { agentType: "igrsoft:qa-engineer",          model: models.QA, schema: SCHEMA.QA, isolation: "worktree" }),
-);
-```
-
-Each lane writes `.worktrees/milestone-{N}/{issue#}/.context/<stage>-N.md` and merges into that worktree's
-`state.json`. PR creation per issue is STILL the human-gated FN stage (bypass mode runs FN per lane only
-after the single R1 confirmation; see #risk-register R1).
+The multi-issue `pipeline()` lane fan-out (one worktree lane per issue) is a **megatask** concern and
+now lives in **`../../megatask/references/dynamic-megatask.md#milestone-template`**. `/worktask` is
+single-issue, so this file keeps only the `#script-template` single-issue span above. The megatask lane
+template reuses the same `SCHEMA.<CODE>` (`#handoff-schemas`) and the same per-stage agent map below.
 
 ---
 
@@ -204,7 +191,7 @@ fully-qualified `igrsoft:<agent>` form matching a real file in `agents/`.
 > section is a back-reference only.
 
 **Dynamic-mode usage.** The workflow script's `agent(prompt, { …, schema: SCHEMA.<CODE> })` calls
-(`#script-template`, `#milestone-template`) resolve `SCHEMA.<CODE>` from the canonical
+(`#script-template`; the megatask lane template in `../../megatask/references/dynamic-megatask.md`) resolve `SCHEMA.<CODE>` from the canonical
 `handoff-protocol.md#handoff-schemas` definitions — the `SCHEMA` literals authored alongside the workflow
 template are a verbatim transcription of that canonical set (no I/O, no clock, no RNG, per the cache-prefix
 determinism rule in `#script-template`). On each phase boundary the script atomic-merges the typed return
@@ -326,11 +313,11 @@ silent kill). Budget is **best-effort** — it bounds spend, it does not guarant
 
 | ID | Risk | Mitigation (binding) |
 |----|------|----------------------|
-| **R1** | **Dynamic-milestone opens N PRs autonomously**, bypassing per-issue human review. | The dynamic-milestone launch **requires one explicit operator confirmation that states the exact PR count** before any lane runs. Per-lane `fn_gate` policy MUST be explicit. The launch banner reads: `"Dynamic milestone N will open <count> PRs across <count> issues autonomously. Confirm to proceed."` No lane runs until the operator confirms. |
+| **R1** | A multi-issue dynamic batch opens **N PRs autonomously**, bypassing per-issue human review. | **Owned by `/megatask`** (single-issue `--dynamic` opens exactly one PR via the FN gate). Megatask's **R1 batch confirmation** requires one explicit operator confirmation stating the exact PR count before any lane runs — see `../../megatask/references/dynamic-megatask.md` (R1) and `../../commands/megatask.md` Phase 1. |
 | **R2** | Unknown whether `SubagentStop` fires for workflow-spawned `agent()` children (so `state-merge.sh`/`audit-subagent.sh` may not run). | **Pessimistic design**: the script does its own schema-merge + emits advisory `workflow_agent_stopped` rows, so it is correct either way. If the hook fires, merges are idempotent no-ops. Recorded as open question q1 (build-time verification). **Verify-then-retire**: v2.1.174 fixed `agent()` children missing per-agent attribution headers — child lifecycle is now first-class in the engine, so the hook likely fires; confirm on the next dynamic run and retire this row if `subagent_stopped` hook rows appear for `agent()` children. |
 | **R3** | `agent()` has no `effort` param → per-stage effort cannot be passed explicitly. | Falls back to agent **frontmatter `effort:`** (#stage-agent-map). Documented; retire when the param lands. |
 | **R4** | Budget ceiling is best-effort, not a hard cap. | `ceiling_usd` bounds spend and pauses (not kills) the run; operator is surfaced the pause. Budget never guarantees completion. |
 | **R5** | Lost live-reattach + DR-iteration efficiency: a resumed dynamic run degrades to manual rather than rejoining the live engine run; DR fix/re-review iterations inside the span re-run full stages rather than incremental. | Resume is "replay-or-degrade", never "rejoin" (#resume). DR adversarial fan-out is bounded to complexity ≥ 25 (#script-template) to limit iteration cost. |
-| **R6** | The engine's ~1000-agent cap can be exceeded by very large milestones (each issue spends multiple lanes). | **Shard milestones larger than ~200 issues** into multiple dynamic runs (4-5 lanes/issue × 200 ≈ the cap). The orchestrator computes `lanes × issues` before launch and refuses a single run that would exceed the cap, prompting the operator to shard. |
+| **R6** | The engine's ~1000-agent cap can be exceeded by very large multi-issue batches (each issue spends multiple lanes). | **Owned by `/megatask`** — shard batches larger than ~200 issues into multiple runs (4-5 lanes/issue × 200 ≈ the cap). Megatask computes `lanes × ready-issues` before launch and refuses a single run that would exceed the cap. See `../../megatask/references/dynamic-megatask.md` (R6). |
 | ~~**R7**~~ | ~~Workflow `agent()` calls with `isolation:'worktree'` were silently blocked from editing their own worktree.~~ | **RESOLVED upstream (v2.1.161).** The CC fix lets `isolation:'worktree'` `agent()` children edit their worktree reliably; the prior silent edit-block is gone. The plugin's `parallel()` + `isolation:'worktree'` fan-out (#stage-agent-map, #script-template) now executes as documented — no workaround needed. Retained as a struck-through row so future reconciles do not re-chase it. |
 | **R8** | `agent()` per-call `opts.model` override is NOT honored when the session model requires 1M usage credits the account lacks: children die at dispatch with `API Error: Usage credits required for 1M context` even with `{model:'sonnet'}` (observed live 2026-06-12 on a Fable 5 session — Fable is 1M-by-default per v2.1.173; the direct Agent-tool `model:` pin DID work). | Do **not** rely on per-`agent()` model de-escalation in credit-gated environments. Mitigation: set a session `fallbackModel` (`--fallback-model`, v2.1.166) before launching the span, or skip dynamic mode (`dynamic_fallback` → manual loop, where direct `Task({model})` pins are honored). Re-test on each CC upgrade; retire if a future release resolves override-at-dispatch. |

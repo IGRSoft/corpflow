@@ -168,7 +168,7 @@ Then [expected result]
 - Estimated stages: {e.g., PL → DV → DR → QA → FN}
 ```
 
-The `Agent Assignments` table uses pipe-delimited markdown — parseable by `milestone-worktask` skill with regex `/\| Implementation \| `(.+?)` \|/`.
+The `Agent Assignments` table uses pipe-delimited markdown — parseable by the `megatask` skill with regex `/\| Implementation \| `(.+?)` \|/`.
 
 The `Metadata` section uses `key: value` format consistent with existing `base_branch: <branch>` parsing.
 
@@ -211,7 +211,7 @@ Milestone: #{N} "{title}"
 
 Dependencies: #43 → #42
 
-Next: `/worktask --milestone:{N}` to execute all tickets
+Next: `/megatask {N}` to execute all tickets
 ```
 
 ## Examples
@@ -243,9 +243,9 @@ Next: `/worktask --milestone:{N}` to execute all tickets
 
 ### Downstream (pm-milestone feeds into)
 
-- `/worktask --milestone:N` — executes created tickets
-- `skills/milestone-worktask` — reads ticket body for agent assignments and metadata
-- Priority labels (`P0`–`P3`) parsed by milestone-worktask priority sorting
+- `/megatask N` — executes created tickets
+- `skills/megatask` — reads ticket body for agent assignments and metadata
+- Priority labels (`P0`–`P3`) parsed by megatask priority sorting
 
 ## Related
 

@@ -45,11 +45,11 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 | `error_escalated_to` | Stage code the failure escalated to when `retry_count` reached 3 |
 | `worktask_id` | Links task to worktask instance |
 | `priority` | high, medium, low |
-| `milestone_number` | GitHub milestone (--milestone mode) |
+| `milestone_number` | GitHub milestone (megatask mode) |
 | `issue_number` | GitHub issue being worked |
-| `workspace_path` | Workspace directory (milestone mode) or worktree path |
+| `workspace_path` | Workspace directory (megatask mode) or worktree path |
 | `track` | Parallel track number 1–5 |
-| `isolation` | Always `"worktree"` on file-writing tasks (DV and milestone per-issue AR/DR/QA). PL0 stamps this unconditionally; developer.md § D0.0, technical-lead.md DR check, SKILL.md 4.8, and workspace-modes.md all treat it as always `"worktree"`. |
+| `isolation` | Always `"worktree"` on file-writing tasks (DV and megatask per-issue AR/DR/QA). PL0 stamps this unconditionally; developer.md § D0.0, technical-lead.md DR check, SKILL.md 4.8, and workspace-modes.md all treat it as always `"worktree"`. |
 | `worktree_branch` | Branch name in worktree (convenience field) |
 
 ### Dispatch metadata (optional)
@@ -266,4 +266,4 @@ Configure a custom directory for worktask-specific auto-memory:
 
 Allows worktask-specific memory separate from the default `~/.claude/` location.
 
-Teammates share a task list and can self-claim available work. See `../worktask-milestone/SKILL.md § Agent Teams Mode` for milestone patterns.
+Teammates share a task list and can self-claim available work. See `../megatask/references/agent-teams.md` for megatask patterns.

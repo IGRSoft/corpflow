@@ -14,7 +14,7 @@ Two artifacts — two purposes — two locations.
 
 | Artifact | Location | Author | Purpose |
 |----------|----------|--------|---------|
-| `errors/<agent>.md` | `.context/errors/<agent>.md` | Owning agent, narrative | Escalation story per agent: what went wrong, retry count, handoff context. One file per agent — parallel-safe for TL-split DVN, milestone tracks, and QA+DC parallel patterns. |
+| `errors/<agent>.md` | `.context/errors/<agent>.md` | Owning agent, narrative | Escalation story per agent: what went wrong, retry count, handoff context. One file per agent — parallel-safe for TL-split DVN, megatask tracks, and QA+DC parallel patterns. |
 | `*.log` | `.context/logs/` | Machine-written stdout/stderr | Raw runtime capture for post-hoc inspection |
 
 
