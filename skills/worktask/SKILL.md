@@ -7,7 +7,7 @@ version: 0.2.0
 
 > **INVOCATION GATE**: If you are reading this skill because the orchestrator delegated directly
 > (e.g., a Read/Task/Grep on this file) instead of launching via `Skill({skill:"igrsoft:worktask"})`
-> or the `/worktask` command, the BLOCKING rule in `../shared/worktask-triggers.md § BLOCKING` was
+> or the `/worktask` command, the BLOCKING rule in `../shared/worktask-invocation.md § BLOCKING` was
 > violated. Do NOT silently continue — surface the error to the user, then restart through the
 > canonical entry point.
 
@@ -30,7 +30,7 @@ Single source of truth for task worktask management using the Task System.
 stateDiagram-v2
     [*] --> Initialized: /worktask <task>
     Initialized --> Planning: PL0 spawned
-    Planning --> Executing: PL0 completed (unattended — no approval gate)
+    Planning --> Executing: PL0 completed + plan gate cleared
     Planning --> ErrorRetry: PL0 failed
     Executing --> WorktreeCheckout: DV stage, always isolated
     Executing --> MilestoneTrack: --milestone mode
@@ -53,7 +53,7 @@ stateDiagram-v2
     PostCompactRecovery --> StageActive: was mid-stage
 ```
 
-**Stage codes and triggers**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md` and `${CLAUDE_SKILL_DIR}/../shared/worktask-triggers.md`
+**Stage codes and invocation**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md` and `${CLAUDE_SKILL_DIR}/../shared/worktask-invocation.md`
 
 **Task System integration**: See `${CLAUDE_SKILL_DIR}/../shared/task-system.md`
 
@@ -346,11 +346,15 @@ The orchestrator NEVER writes implementation code directly. ALL stage work is de
 Before entering this loop, verify:
 - **Signal 1 (TaskList audit)**: Call `TaskList()`, find the PL0 task, verify its status is `completed`. If PL0 does not exist or is not completed, STOP — worktask not initialized or planning incomplete.
 
-Worktasks are unattended — there is no human approval gate. PL0 completion alone is sufficient to enter the loop.
+**Signal 2 (plan gate)**: Read `PL0.metadata.plan_gate` (via `TaskGet`; default `"checkpoint"`).
+- `"checkpoint"` (default): require BOTH PL0 `completed` AND an `approval_received` audit line with
+  `subject:"PL<run_index>"` in `.context/logs/audit.jsonl` before loop entry. If the line is
+  absent, STOP — return to `commands/worktask.md § Step A.5` to fulfil the gate.
+- `"bypass"` (`--auto-plan` / `--milestone:N`): PL0 `completed` alone is sufficient; no approval line.
 
 After PL0 completes and creates stage tasks, the orchestrator MUST:
 
-1. **Present PL0 results** to the user: complexity score, stages created (with agents), dependency chain, and key planning decisions (informational — execution proceeds automatically).
+1. **Present PL0 results** to the user: complexity score, stages created (with agents), dependency chain, and key planning decisions (presented at the Step A.5 plan gate; on a `checkpoint` gate execution proceeds only after approval).
 2. **Re-validate before executing**: Call `TaskList()` to get all stage tasks. For each task, verify `metadata.agent` and `metadata.model` are set. This checkpoint prevents drift — the orchestrator re-grounds itself in the delegation rules before touching any stage.
 3. **Publish plan to GitHub** (before stage loop). Run:
      ```bash
@@ -650,7 +654,7 @@ while (tasks.some(t => t.status !== "completed")) {
 
     // 5e. Permission-Mode Pinning (in-process honour of task.metadata.permission_mode)
     //     When PL0 set `permission_mode: "default"` on this task (typically SR/FN under
-    //     --secure/--full/fworktask), the orchestrator MUST NOT propagate
+    //     --secure/--full), the orchestrator MUST NOT propagate
     //     --dangerously-skip-permissions or equivalent shorthand into descendant Task()
     //     calls or nested Bash invocations for this stage, and MUST audit the boundary.
     //     The Task() tool has no permission-mode parameter today — this is a procedural
@@ -844,16 +848,15 @@ After the execution loop exits (all tasks completed, including ST): if `.context
 
 The orchestrator loop is restartable. **WHEN reattaching** (PostCompact, session crash, `--resume`, or stale `in_progress` tasks found at session start): **Read `references/resume.md` FIRST** — it maps TaskList shape + audit tail → exact action, including the live-agent `claude agents --json --all` pre-check that forbids blind re-delegation of a live, busy, or parked subagent. Never re-delegate before consulting it. Compaction-specific flow: `context-compression.md § PostCompact Recovery`.
 
-## Unattended Execution
+## Unattended FN Finalization
 
-Worktasks run fully unattended: there is no PL0 or FN human approval gate. PL0 stamps `metadata.fn_gate = "bypass"` unconditionally and the orchestrator proceeds from planning straight through FN without stopping. All file-writing work is worktree-isolated, so the unattended FN finalization (commit, push, PR) is reviewable as a PR. When the FN stage runs, the orchestrator writes a single `fn_gate_bypass` audit line (`reason: "unattended"`; see § FN Gate).
+The FN gate runs fully unattended: PL0 stamps `metadata.fn_gate = "bypass"` unconditionally and the orchestrator commits, pushes, and opens the PR without stopping. (The PL gate is the one human checkpoint — see `commands/worktask.md § Step A.5` and § PRECONDITION CHECK.) All file-writing work is worktree-isolated, so the unattended FN finalization is reviewable as a PR. When the FN stage runs, the orchestrator writes a single `fn_gate_bypass` audit line (`reason: "unattended"`; see § FN Gate).
 
 ## Related
 
 - `references/fn-gate.md` - FN gate full procedure + post-worktask self-improvement (Read at gate time)
 - `references/resume.md` - Resume-after-interruption state table + procedure (Read on reattach)
 - `references/workspace-modes.md` - Milestone/worktree/Conductor workspace rules (Read in workspace modes)
-- `references/approval-gate-hook.md` - Optional gate-enforcement hooks (Read when installing hooks)
 - `../worktask-milestone/SKILL.md` - GitHub milestone integration
 - `agent-coordination.md` - Multi-agent coordination
 - `cost-optimization.md` - Budget management

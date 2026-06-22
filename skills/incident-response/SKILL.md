@@ -48,7 +48,7 @@ Guidelines for incident triage, hotfix coordination, and post-mortem facilitatio
 ### Flow Diagram
 
 ```
-emergency: [description]
+/worktask --emergency [description]
      │
      ▼
 ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
@@ -97,8 +97,9 @@ the phrase:
 > Radius, STOP and escalate back to IR via `error_escalated_to: "IR"` — do
 > NOT expand scope unilaterally.
 
-This language is mandatory, not a suggestion — the prompt template in
-`commands/emergency.md` enforces it.
+This language is mandatory, not a suggestion — the IR→DV delegation prompt above
+enforces it (emergency worktasks run via `/worktask --emergency`; see
+`commands/worktask.md` Options).
 
 ## Decision Framework
 

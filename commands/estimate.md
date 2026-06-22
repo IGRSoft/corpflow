@@ -46,7 +46,7 @@ Estimate task complexity, effort, and resources before starting a worktask. Help
 ## Quick Estimate: Add dark mode support
 
 **Size**: M (Medium)
-**Recommended Worktask**: `worktask:` (Standard)
+**Recommended Worktask**: `/worktask` (Standard)
 **Estimated Effort**: 2-3 days
 ```
 
@@ -73,11 +73,11 @@ If `--dev-rate` is omitted, the Budget row is replaced by
 ```markdown
 ## Comparison: Auth implementation options
 
-| Option | Size | SP Range | Hours Range | Complexity | Worktask |
-|--------|------|----------|-------------|------------|----------|
-| OAuth2 | L    | 6–10     | 36–60       | 14         | `worktask:` |
-| Magic-link | M | 4–5    | 24–30       | 9          | `worktask:` |
-| Password+TOTP | M | 4–5 | 24–30       | 11         | `worktask:` |
+| Option | Size | SP Range | Hours Range | Complexity | Entry point |
+|--------|------|----------|-------------|------------|-------------|
+| OAuth2 | L    | 6–10     | 36–60       | 14         | `/worktask` |
+| Magic-link | M | 4–5    | 24–30       | 9          | `/worktask` |
+| Password+TOTP | M | 4–5 | 24–30       | 11         | `/worktask` |
 ```
 
 ### Stages Output (`--stages`)
@@ -102,13 +102,15 @@ See `skills/estimation/SKILL.md § T-Shirt Sizing → Story Points (Range) and �
 
 Worked-example header (canonical values live in the skill):
 
-| Size | SP Min | SP Max | Hours Min | Hours Max | Worktask |
-|------|--------|--------|-----------|-----------|----------|
-| XS | 1 | 1 | 6 | 6 | `micro:` |
-| S | 2 | 3 | 12 | 18 | `quick:` |
-| M | 4 | 5 | 24 | 30 | `worktask:` |
-| L | 6 | 10 | 36 | 60 | `worktask:` |
+| Size | SP Min | SP Max | Hours Min | Hours Max | Entry point |
+|------|--------|--------|-----------|-----------|-------------|
+| XS | 1 | 1 | 6 | 6 | `/worktask` |
+| S | 2 | 3 | 12 | 18 | `/worktask` |
+| M | 4 | 5 | 24 | 30 | `/worktask` |
+| L | 6 | 10 | 36 | 60 | `/worktask` |
 | XL | 13 | 21 | 78 | 126 | split first |
+
+All sizes use the single `/worktask` entry point; PL0 dynamic sizing drops stages for low-complexity work.
 
 ### Complexity Factors
 - **Technical Complexity**: Algorithm difficulty, new technologies
@@ -156,16 +158,11 @@ delimiter, and validation rules. Do not redefine the export shape here.
 ```
 size       = T-shirt size from sizing table
 complexity = sum of 5 factors (0–25)
-security   = true if Risk Level ≥ 4 OR feature touches auth/PII/payments
 
 IF size == XL:
-  → split before worktask tier selection
-ELSE IF size == XS AND complexity ≤ 5 AND NOT security:
-  → micro:
-ELSE IF size == S AND NOT security:
-  → quick:
-ELSE IF size ∈ {M, L} OR security:
-  → worktask:
+  → split into ≤ L sub-tasks before recommending a worktask
+ELSE:
+  → /worktask   (PL0 dynamic sizing drops stages for low-complexity work)
 ```
 
 See `skills/estimation/SKILL.md § Worktask Tier Selection` for the canonical definition.

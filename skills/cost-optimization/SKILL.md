@@ -152,16 +152,14 @@ Read(file_path: "path/to/large.swift", offset: 340, limit: 40)
 |----------|--------|
 | Simple bug fix | Skip AR stage, minimal TL stage |
 | Documentation-only | Skip DV stage, minimal QA stage |
-| Hotfix | Use `quick:` worktask (PL→DV→DR→QA only) |
-| Trivial change | Use `micro:` (plan → approve → execute) |
+| Hotfix / trivial change | Use `/worktask` — PL0 dynamic sizing drops AR/TL/DC for low complexity |
 
 **Worktask Selection Guide**:
 ```
-Complexity → Worktask → Stages → Est. Cost
-Trivial    → micro:   → 1      → $0.01-0.02
-Simple     → quick:   → 4      → $0.05-0.10
-Standard   → worktask:→ 9      → $0.20-0.40
-Complex    → worktask:→ 9+iter → $0.50-1.00+
+Complexity → Stages (PL0-sized) → Est. Cost
+Trivial    → ~1-4   → $0.01-0.10
+Standard   → 9      → $0.20-0.40
+Complex    → 9+iter → $0.50-1.00+
 ```
 
 ## Per-Stage Tracking
@@ -319,7 +317,7 @@ Where:
 ## Optimization Checklist
 
 Before starting worktask:
-- [ ] Select appropriate worktask type (micro/quick/standard)
+- [ ] Confirm PL0 dynamic sizing dropped unneeded stages for low-complexity work
 - [ ] Set budget limit if applicable
 - [ ] Verify model assignments per stage
 
@@ -353,7 +351,7 @@ After worktask:
 | Opus for simple tasks | 50x cost increase | Use haiku/sonnet |
 | Separate API calls for each file | Overhead tokens | Batch reads |
 | Retrying without context compression | Compounds cost | Compress first |
-| Full worktask for trivial changes | Unnecessary stages | Use micro/quick |
+| Full pipeline for trivial changes | Unnecessary stages | Trust PL0 dynamic sizing to drop stages (no manual tier needed) |
 | Reading entire large files | Wastes context on irrelevant code | Use offset/limit after Grep (§4c) |
 | Sequential git log/show/diff | 4 commands for 1 answer | Single combined git command (§4a) |
 | Separate greps for related symbols | Multiplies round-trips | Use `\|` alternation (§4b) |

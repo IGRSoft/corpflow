@@ -10,12 +10,12 @@ Standardized project estimation for Claude Code worktasks.
 
 ## T-Shirt Sizing → Story Points (Range)
 
-| Size | SP Min | SP Max | Hours Min | Hours Max | Worktask |
-|------|--------|--------|-----------|-----------|----------|
-| XS | 1 | 1 | 6 | 6 | `micro:` |
-| S | 2 | 3 | 12 | 18 | `quick:` |
-| M | 4 | 5 | 24 | 30 | `worktask:` |
-| L | 6 | 10 | 36 | 60 | `worktask:` |
+| Size | SP Min | SP Max | Hours Min | Hours Max | Entry point |
+|------|--------|--------|-----------|-----------|-------------|
+| XS | 1 | 1 | 6 | 6 | `/worktask` |
+| S | 2 | 3 | 12 | 18 | `/worktask` |
+| M | 4 | 5 | 24 | 30 | `/worktask` |
+| L | 6 | 10 | 36 | 60 | `/worktask` |
 | XL | 13 | 21 | 78 | 126 | Split first |
 
 ## Story Points to Hours
@@ -113,24 +113,17 @@ Phase % Min = Phase Hours Min / Total Hours Min × 100  |  Phase % Max = Phase H
 Canonical tier-selection logic. `commands/estimate.md` cites this section instead of duplicating it.
 
 ```
-size       = T-shirt size from sizing table
-complexity = sum of 5 factors (0–25)
-security   = true if Risk Level ≥ 4 OR feature touches auth/PII/payments
+size = T-shirt size from sizing table
 
 IF size == XL:
-  → split before worktask tier selection
-ELSE IF size == XS AND complexity ≤ 5 AND NOT security:
-  → micro:
-ELSE IF size == S AND NOT security:
-  → quick:
-ELSE IF size ∈ {M, L} OR security:
-  → worktask:
+  → split into ≤ L sub-tasks first
+ELSE:
+  → /worktask   (PL0 dynamic sizing selects which of the 9 stages run)
 ```
 
 Notes:
 - XL must be split into ≤ L sub-tasks before tier selection runs.
-- Any security-sensitive task (auth, PII, payments, Risk ≥ 4) routes to `worktask:` regardless of size.
-- M never routes to `quick:` — the prior overlap with S has been resolved by the SP boundary fix above.
+- Security-sensitive work still routes through the full pipeline — request `--secure` for the 11-stage worktask.
 
 ## Re-estimation Triggers
 
@@ -149,11 +142,11 @@ Until `/estimate --update` exists, re-running `/estimate --detailed` against the
 
 | Task Type | Typical Tokens | Model Mix | Est. AI Cost |
 |-----------|----------------|-----------|--------------|
-| Trivial (micro:) | 5,000-10,000 | haiku/sonnet | $0.01-0.03 |
-| Simple (quick:) | 15,000-30,000 | sonnet | $0.05-0.10 |
-| Standard (worktask:) | 60,000-120,000 | mixed | $0.20-0.50 |
-| Complex (worktask:) | 150,000-300,000 | mixed | $0.50-1.50 |
-| Large (worktask:) | 300,000+ | mixed | $1.50+ |
+| Trivial | 5,000-10,000 | haiku/sonnet | $0.01-0.03 |
+| Simple | 15,000-30,000 | sonnet | $0.05-0.10 |
+| Standard | 60,000-120,000 | mixed | $0.20-0.50 |
+| Complex | 150,000-300,000 | mixed | $0.50-1.50 |
+| Large | 300,000+ | mixed | $1.50+ |
 
 ### Cost Factors
 
@@ -176,7 +169,7 @@ The factor values (Model Rate, Retry Factor, Complexity Multiplier) are defined 
 
 ### Combined Estimate Example
 
-For a medium feature (`worktask:`, SP 3-5):
+For a medium feature (`/worktask`, SP 3-5):
 ```
 Human Development: 18-30 hours × $150/hr = $2,700-$4,500
 AI Agent Cost: ~100K tokens × mixed = $0.35

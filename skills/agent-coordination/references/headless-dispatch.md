@@ -12,7 +12,7 @@ External orchestrators (CI runners, batch schedulers, the user's own shell) that
 | `--all` (listing flag, not a `metadata` key) | `claude agents --all` | bool | N/A (listing only) | includes **completed** sessions in `claude agents [--json]` output (v2.1.169); pair with `state` to tell `done` apart from `running`/`blocked` |
 | `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-4-8`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6`. Caveat: a managed `availableModels` allowlist now also constrains subagent model overrides (v2.1.172), and `enforceAvailableModels` (v2.1.175) constrains the Default model too — a requested id may silently down-resolve; audit, don't assume |
 | `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN/RE→`medium` |
-| `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` | **Yes — audited** (see § Permission-Mode Pinning below) | SR/FN→`default`; DV under `--auto-continue`→`bypassPermissions` |
+| `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` | **Yes — audited** (see § Permission-Mode Pinning below) | SR/FN→`default`; DV under `--auto-plan`→`bypassPermissions` |
 | `workspace_path` | `--cwd <path>` | string | N/A (in-process inherits parent cwd) | milestone tracks → per-issue worktree |
 | `add_dirs` (array) | repeated `--add-dir <path>` | string[] | N/A | cross-repo work, monorepo siblings |
 | `mcp_config_path` | `--mcp-config <path>` | string | N/A | scoped MCP set per dispatch |

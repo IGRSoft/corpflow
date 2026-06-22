@@ -219,7 +219,7 @@ Hooks can invoke MCP tools directly via `type: "mcp_tool"` (previously `command`
 }
 ```
 
-**Plugin v3.10.0 historical note:** `plugin.json` shipped an `mcp_tool` hook on `Stop` matching `igrsoft:product-manager|igrsoft:project-manager` that fired `conductor.PushNotification` at the PL and FN stages. As of v3.23.0 the approval gates are removed (worktasks are unattended); the hook still fires at stage completion for observability, but no human approval step follows. Gracefully no-ops if the conductor MCP server is unavailable.
+**Plugin v3.10.0 historical note:** `plugin.json` shipped an `mcp_tool` hook on `Stop` matching `igrsoft:product-manager|igrsoft:project-manager` that fired `conductor.PushNotification` at the PL and FN stages. The hook still fires at stage completion for observability (PushNotification). The PL stage is followed by a human plan-approval gate (Step A.5); the FN stage runs unattended. Gracefully no-ops if the conductor MCP server is unavailable.
 
 ### PostToolUse duration_ms (v2.1.119+)
 

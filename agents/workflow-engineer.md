@@ -30,7 +30,7 @@ Expert worktask engineer for Task System orchestration and troubleshooting.
 
 | Domain | Expertise |
 |--------|-----------|
-| Initialization | Trigger detection (`worktask:`/`fworktask:`), `.context/` structure, Task System dependency chains, priority/platform auto-detection |
+| Initialization | Invocation handling (`/worktask` command / `Skill({skill:"igrsoft:worktask"})`), `.context/` structure, Task System dependency chains, priority/platform auto-detection |
 | Stage Management | Status transitions via `TaskUpdate`, PL0 creates subsequent stages, sub-task splitting |
 | Orchestration | Milestone mode (`--milestone:N`), workspace structure, issue fetching/sorting, orchestrator.json, track monitoring, completion/error handling |
 
@@ -267,7 +267,7 @@ All milestone worktasks use worktree isolation. Expected state:
 
 ### Stage Transition
 1. Complete: `TaskUpdate({ taskId: "X", status: "completed" })`
-2. Verify `blockedBy` resolved (no approval gate — execution is unattended)
+2. Verify `blockedBy` resolved (the PL gate is handled once at Step A.5 before the loop; intra-loop transitions are unattended)
 3. Start next: `TaskUpdate({ taskId: "Y", status: "in_progress", owner: "..." })`
 
 ### Handle Error

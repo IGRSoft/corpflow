@@ -1,22 +1,23 @@
 ---
 name: worktask
 description: Initialize a new worktask task with proper folder structure and Task System integration
-argument-hint: '<task description> [--milestone:N] [--secure] [--parallel:N]'
+argument-hint: '<task description> [--milestone:N] [--secure] [--emergency] [--parallel:N]'
 version: 0.1.0
 model: opus
 allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager)
 ---
 
-> **UNATTENDED EXECUTION (BINDING)**
-> Worktasks run **fully unattended end-to-end** — there is no human approval gate.
-> PL0 stamps `metadata.fn_gate = "bypass"` unconditionally; the orchestrator proceeds
-> from PL0 straight through DV/DR/.../FN/ST without stopping for user input. FN commits,
-> pushes, and opens PRs without a human approval step. This is the intended behavior:
-> every worktask is worktree-isolated, so all file-writing work lands on an isolated
-> branch and the unattended FN finalization is reviewable as a PR.
+> **EXECUTION MODEL (BINDING)** — two gates, one human checkpoint.
+> The **PL gate** is the single mandatory human checkpoint: after PL0 completes, the orchestrator
+> presents the generated plan and waits for explicit user approval (`AskUserQuestion`) before
+> dispatching any implementation stage (AR/DV/...). It is carried by `PL0.metadata.plan_gate`, which
+> defaults to `"checkpoint"`; only `--auto-plan` and `--milestone:N` stamp `"bypass"` to auto-proceed.
+> The **FN gate** is always unattended: `PL0.metadata.fn_gate` is stamped `"bypass"` unconditionally,
+> so the orchestrator commits, pushes, and opens the PR without stopping. Every worktask is
+> worktree-isolated, so the PR is the review surface for the implementation.
 >
-> **TODO**: `/emergency` worktasks share this unattended path; any future emergency-specific
-> FN handling will be wired when the emergency trigger is formalized.
+> **TODO**: `/worktask --emergency` worktasks share this unattended path; any future
+> emergency-specific FN handling remains to be wired.
 
 # Worktask Command
 
@@ -37,11 +38,11 @@ Initialize a new worktask task with proper folder structure and Task System inte
 
 ## Worktask Types
 
-| Type | Stages | Trigger |
-|------|--------|---------|
+| Type | Stages | Entry point |
+|------|--------|-------------|
 | Standard | PL→AR→TL→DV→DR→QA→DC→FN→ST | `/worktask` |
-| Secure | PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST | `--secure` |
-| Emergency | IR→DV→DR→QA→RE→FN | `/emergency` |
+| Secure | PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST | `/worktask --secure` |
+| Emergency | IR→DV→DR→QA→RE→FN | `/worktask --emergency` |
 
 See `skills/shared/stage-codes.md` for stage details.
 
@@ -52,13 +53,14 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--milestone:N` | Execute GitHub milestone N issues |
 | `--milestone:N:ISSUE` | Execute specific issue |
 | `--parallel:N` | N concurrent tracks (max 5) |
-| `--auto-continue` | **No-op** (deprecated). Worktasks are always unattended; there are no approval gates left to skip. Retained only for backward compatibility; recommend removal. |
+| `--auto-plan` | Stamp `plan_gate: "bypass"` — skip the post-PL plan-approval STOP and auto-proceed into the stage loop (trusted fast-path). FN still runs unattended. |
 | `--dynamic` | Run the autonomous span (AR→…→QA/DC/RE, between the two human gates) on the native Workflow engine (`ultracode` tool). Both gates and the no-self-commit rule stay orchestrator-owned; degrades to the manual loop when the tool is absent. See `skills/worktask/references/dynamic-workflow.md`. |
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 11-stage worktask |
+| `--emergency` | Run the incident pipeline (IR→DV→DR→QA→RE→FN) instead of the standard PL-first pipeline; IR stage owned by `incident-responder`. Replaces the former `emergency:` prefix. |
 | `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish step. Sets `metadata.no_gh_issue: true` on the PL0 task; `skills/worktask/references/publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues as normal. |
 
 ## Examples
@@ -66,16 +68,16 @@ See `skills/shared/stage-codes.md` for stage details.
 ```bash
 /worktask --milestone:1                  # Milestone mode (compose with --parallel:N, :ISSUE)
 /worktask "Add dark mode support"        # Standard mode (compose with --priority, --secure)
-/emergency "Production login failing"    # Emergency
+/worktask --emergency "Production login failing"   # Emergency (incident pipeline)
 ```
 
 ## Phase 1: Planning (execute immediately)
 
 > **BINDING CONSTRAINTS FOR PHASE 1**
 > 1. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/images .context/errors` and TaskCreate/TaskUpdate calls are permitted. ALL file modifications belong to DV stage or later.
-> 2. **Context-Interruption Recovery**: If worktask execution is interrupted (auth flows, tool failures), upon resumption MUST verify that the PL0 task exists with status `completed`. If not, restart from the appropriate phase. (No human approval gate exists — execution is unattended.)
+> 2. **Context-Interruption Recovery**: If worktask execution is interrupted (auth flows, tool failures), upon resumption MUST verify that the PL0 task exists with status `completed`. If not, restart from the appropriate phase. (The PL gate is the one human checkpoint — see Step A.5; FN runs unattended.)
 
-1. **Parse** task description and flags (`--milestone`, `--secure`, `--auto-continue`, etc.). See **Embedded Command Detection** below.
+1. **Parse** task description and flags (`--milestone`, `--secure`, `--auto-plan`, etc.). See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:code-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
 3. **Create context folders**: `mkdir -p .context/images .context/errors .context/logs`
 3a. **Initialize state.json (handoff-protocol)**: Atomic-write `.context/state.json` seed using temp+fsync+rename per `skills/worktask/references/handoff-protocol.md#atomic-write`. PL0 stage marked `in_progress`. Schema per `handoff-protocol.md#state-json-schema`. **Re-run aware**: the seed MUST compute the next free planning index from any pre-existing `.context/planning-*.md` (NOT hard-code `0`) — on a re-run in a populated `.context/`, hard-coding `planning-0.md` would pin the old plan and cause PL0 to overwrite it. Backward-compat: if creation fails (e.g. read-only filesystem), log a warning and continue — F1 fallback (legacy `metadata.context_files` mode) keeps the worktask operational.
@@ -117,7 +119,7 @@ See `skills/shared/stage-codes.md` for stage details.
    fi
    ```
    **Regression guard**: If neither the plugin-registered hook NOR the project-local copy exist, emit a warning: `"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge (Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."` Do NOT block the worktask.
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", fn_gate: "bypass", isolation: "worktree", execution_mode: "<manual|dynamic>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). `fn_gate` is **always** `"bypass"` (worktasks run unattended; no approval gate). Set `execution_mode: "dynamic"` when invoked with `--dynamic`; otherwise `"manual"` (the default). `execution_mode` only selects HOW the autonomous span runs (native Workflow engine vs the manual stage loop). Also stamp `plan_gate`: set `plan_gate: "bypass"` for `/worktask`, `worktask:`, and `fworktask:` triggers (fully unattended — no post-plan checkpoint); set `plan_gate: "checkpoint"` for `micro:` and `quick:` triggers (human checkpoint required after the plan before stages are dispatched). `plan_gate` mirrors the `fn_gate` pattern and is the carrier that lets resume logic distinguish the post-plan checkpoint on interruption — see `skills/worktask/references/resume.md § State → Action Table`.
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", fn_gate: "bypass", isolation: "worktree", execution_mode: "<manual|dynamic>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). `fn_gate` is **always** `"bypass"` (FN finalization runs unattended — the PL gate is the one human checkpoint, handled at Step A.5). Set `execution_mode: "dynamic"` when invoked with `--dynamic`; otherwise `"manual"` (the default). `execution_mode` only selects HOW the autonomous span runs (native Workflow engine vs the manual stage loop). Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOPs after PL0 and asks for plan approval before dispatching stages). Stamp `plan_gate: "bypass"` ONLY when `--auto-plan` is present, when running `--milestone:N` (milestone batches run unattended), OR when `--emergency` is set (emergency pipeline runs unattended from IR — no plan approval gate). `plan_gate` mirrors the `fn_gate` pattern and is the carrier that lets resume logic distinguish the post-plan checkpoint on interruption — see `skills/worktask/references/resume.md § State → Action Table`.
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative.
    - **Record dropped stages**: when PL0's dynamic sizing omits any stage from the full 9-stage
@@ -126,11 +128,36 @@ See `skills/shared/stage-codes.md` for stage details.
      so `state.json` self-documents which standard stages were dropped and why. See
      `agents/product-manager.md § Dynamic Worktask Sizing (PL0 Stage)`.
 7. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
-8. **Present plan summary**: Show complexity score, stages created (with agents), dependency chain, and key decisions, then proceed directly into Phase 2 (no stop).
+8. **Present plan summary**: Show complexity score, stages created (with agents), dependency chain, and key decisions, then continue to Phase 2, which runs the Plan Gate Check (Step A.5) before the stage loop.
 
 ## Phase 2: Execute Stages (proceeds automatically)
 
-Worktasks run unattended: continue directly from Phase 1 into the stage loop. There is no human approval gate.
+Phase 2 begins with the Plan Gate Check (Step A.5): on a `checkpoint` plan gate the orchestrator presents the plan and waits for user approval before the stage loop; on `bypass` (`--auto-plan` / `--milestone:N` / `--emergency`) it proceeds directly.
+
+**Step A.5 — Plan Gate Check** (runs FIRST in Phase 2, before Step A publish):
+
+Read `PL0.metadata.plan_gate` via `TaskGet` (default `"checkpoint"` when absent). Resolve the run
+index `N` from `state.json.run_index` (default `0`).
+
+**If `plan_gate == "checkpoint"`** (default — plain `worktask` with no bypass flag):
+1. Read `state.json.plan_file` to locate the planning document.
+2. Present the plan summary to the user: complexity score, stages created (with agents),
+   dependency chain, and key decisions.
+3. Call `AskUserQuestion`:
+   *"Here is the generated plan for your worktask. Approve to begin implementation, or describe
+   any changes you want first."*
+4. **On approval**, append one line to `.context/logs/audit.jsonl`, then proceed to Step A:
+   ```json
+   {"ts":"<ISO>","actor":"orchestrator","action":"approval_received","subject":"PL<N>","result":"ok"}
+   ```
+5. **On rejection / revision request**, append:
+   ```json
+   {"ts":"<ISO>","actor":"orchestrator","action":"approval_rejected","subject":"PL<N>","result":"rejected"}
+   ```
+   STOP — do NOT enter the stage loop. Surface the user's feedback; re-run PL0 if revisions are needed.
+
+**If `plan_gate == "bypass"`** (stamped by `--auto-plan`, `--milestone:N`, or `--emergency`): proceed directly to
+Step A. No prompt, no approval line.
 
 **Step A — Publish plan to GitHub** (run BEFORE the stage loop):
 

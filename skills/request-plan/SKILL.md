@@ -1,6 +1,6 @@
 ---
 name: request-plan
-description: Turn a free-form request into a lightweight, context-aware plan (goal, scope, phases, rough effort, risks) and recommend the worktask trigger to execute it. Use whenever the user asks for a plan, an approach, a breakdown, "how would you tackle this", "what's the plan for X", or scoping of a task — even when they don't say the word "plan". Prefer this over the heavier /pm-requirements or /estimate when the user wants a fast, grounded plan that reads the current repo context before answering.
+description: Turn a free-form request into a lightweight, context-aware plan (goal, scope, phases, rough effort, risks) and recommend the `/worktask` command to execute it. Use whenever the user asks for a plan, an approach, a breakdown, "how would you tackle this", "what's the plan for X", or scoping of a task — even when they don't say the word "plan". Prefer this over the heavier /pm-requirements or /estimate when the user wants a fast, grounded plan that reads the current repo context before answering.
 effort: medium
 version: 0.1.0
 ---
@@ -45,10 +45,10 @@ reinvent these:
 
 ### 4. Recommend the handoff
 
-Follow `references/handoff.md`. Map the size + complexity to a worktask trigger using the canonical
+Follow `references/handoff.md`. Map the size + complexity to the right invocation using the canonical
 **Worktask Tier Selection** logic in `skills/estimation/SKILL.md`, and emit a single, ready-to-paste
-trigger line (e.g. `worktask: <restated goal>`). Security-sensitive work (auth, PII, payments, or
-Risk ≥ 4) always routes to `worktask:` regardless of size.
+command line (e.g. `/worktask "<restated goal>"`). Security-sensitive work (auth, PII, payments, or
+Risk ≥ 4) always routes to `/worktask --secure` regardless of size.
 
 ### 5. Output
 

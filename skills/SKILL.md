@@ -40,5 +40,5 @@ Files in `shared/` are referenced by skills and agents, not loaded independently
 | [git-conventions.md](shared/git-conventions.md) | Conventional Commits format, PR template, git safety rules |
 | [stage-codes.md](shared/stage-codes.md) | Worktask stage code definitions |
 | [task-system.md](shared/task-system.md) | Task System integration patterns |
-| [worktask-triggers.md](shared/worktask-triggers.md) | Worktask trigger patterns |
+| [worktask-invocation.md](shared/worktask-invocation.md) | Worktask invocation rule + execution model |
 | [milestone-helpers/](shared/milestone-helpers/) | Milestone worktask helper utilities |
