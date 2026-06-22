@@ -5,7 +5,7 @@ model: opus
 color: blue
 effort: high
 maxTurns: 40
-version: 0.5.1
+version: 0.5.2
 # tools: Bash(curl:*) is NARROWLY scoped to curl only (NOT bare Bash) so PL0 can
 # persist Figma screenshots IN THE SAME PL TURN. get_screenshot returns a
 # short-lived image URL that expires before the post-approval Phase 2 window
@@ -175,7 +175,7 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 | `metadata.plan_file` | `"planning-${N}.md"` | Pin active plan |
 | `metadata.run_index` | `N` (integer) | Resolve `<basename>-${N}.md` artifacts |
 | `metadata.isolation` | `"worktree"` | File-writing stages (DV; milestone per-issue AR/DR/QA) always run in an isolated worktree. Consumed by developer.md § D0.0, technical-lead.md DR check, SKILL.md 4.8, and workspace-modes.md. |
-| `metadata.fn_gate` | `"bypass"` | Always bypass — worktasks run unattended. Stamp on PL0; cascades to FN gate check. |
+| `metadata.fn_gate` | `"checkpoint"` (default) | Pre-finalization human checkpoint. Default `"checkpoint"` (orchestrator STOPs before the FN delegation for approval); stamp `"bypass"` only for `--auto-finalization` / `--milestone:N` / `--emergency`. `--auto-plan` never bypasses FN. Stamp on PL0; the orchestrator reads it at the mid-loop FN gate check. |
 | `metadata.skip_exploration` | `true` if `.context/exploration.md` exists | Suppress redundant Glob/Grep in AR/TL/DV |
 | `metadata.exploration_anchors` | `["exploration.md#facts", "exploration.md#refs", "planning-${N}.md#requirements"]` (when `skip_exploration: true`) | Authoritative pre-explored set |
 | `metadata.requires_screenshots` | the detector value from the plan frontmatter (boolean) | Drive DV capture + gate; consumed by DV (capture), QA (Q1.5), and `attach-visual-evidence.sh`. Stamp on DV and QA tasks. |
@@ -664,6 +664,22 @@ TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] });
 - `Decision: conditional` → AR0 unblocks with ethics constraints injected into prompt
 - `Decision: block` → AR0 remains blocked, worktask halts, user notified
 
+## Version Bump Planning
+
+When a worktask includes a version bump (release, tag, or `version:`/`CHANGELOG`/`MEMORY.md` change), PL0 MUST run a **version-ordering check** before recommending a version string in `<plan_file>`:
+
+1. **Read the highest existing release marker**:
+   - Highest git tag: `git tag --list --sort=-v:refname | head -n1` (strip any `v` prefix before comparing).
+   - The release-history entries in `MEMORY.md` (when present) — take the maximum version recorded there.
+   - Let `max_released_version` = the greater of the two.
+2. **Compare** the proposed version against `max_released_version` using semver ordering.
+3. **If `proposed_version < max_released_version`** (a version-ordering regression — the proposed bump sits numerically below an already-released version):
+   - Surface a **"Version ordering regression"** item in the `## risks` anchor of `<plan_file>`, naming both versions (e.g. `proposed 3.24.2 < released 3.25.0`).
+   - **Ask the user to confirm the intent** before downstream stages begin. Quote the confirmation in the plan rationale if the user proceeds.
+   - This is a non-blocking surface-and-confirm: the user may consciously accept an out-of-order bump, but the regression MUST be visible at plan time rather than discovered after DV commits it.
+
+> Rationale: a silently-accepted out-of-order bump (e.g. proposing 3.24.2 when 3.25.0 is already released) is a semantic regression in the version sequence. Catching it at PL0, before DV, is far cheaper than reverting a committed bump. DC's verification (`agents/technical-writer.md`) repeats this check as a second gate before FN commits.
+
 ## Completion Verification
 
 ### Verification Checklist Authoring
@@ -692,6 +708,7 @@ grep -rn '\brequires_ui_tests\b' --include='*.md' --include='*.sh' . || echo "cl
 DV runs each theme's residual-grep before yielding (see `agents/workflow-engineer.md § Batch-Completion Discipline`); a non-empty result means the theme is incomplete regardless of how many enumerated files were edited.
 
 Before marking PL0 complete, verify:
+- [ ] If a version bump is in scope, the version-ordering check ran; any `proposed_version < max_released_version` regression is surfaced in `## risks` and user-confirmed (per Version Bump Planning)
 - [ ] `<plan_file>` written to `.context/planning-N.md` with the next free N (per Plan File Naming)
 - [ ] `<plan_file>` contains all acceptance criteria
 - [ ] Test strategy section present with specific test scenarios and file paths

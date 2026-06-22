@@ -15,11 +15,13 @@ Single source of truth for how a worktask is launched and its invocation rule.
 > exploration, and no agent delegation before that launch. Handling the request as a freeform
 > instruction inline is a violation.
 
-`/worktask` (or `Skill({skill:"igrsoft:worktask"})`) is the canonical entry point. After PL0 it STOPs
-at the PL gate (the one human checkpoint) and presents the plan for approval, unless `--auto-plan`,
-`--milestone:N`, or `--emergency` is set (all stamp `plan_gate: "bypass"`). The FN gate always runs unattended
-(`fn_gate: "bypass"`) and the PR is the review surface — see `../worktask/references/fn-gate.md` and
-`../../commands/worktask.md` *EXECUTION MODEL (BINDING)*.
+`/worktask` (or `Skill({skill:"igrsoft:worktask"})`) is the canonical entry point. There are two human
+checkpoints. After PL0 it STOPs at the PL gate and presents the plan for approval, unless `--auto-plan`,
+`--milestone:N`, or `--emergency` is set (all stamp `plan_gate: "bypass"`). Then, immediately before the
+FN delegation, it STOPs at the FN gate and presents a pre-FN summary for finalization approval, unless
+`--auto-finalization`, `--milestone:N`, or `--emergency` is set (all stamp `fn_gate: "bypass"`). The PR
+is the review surface — see `../worktask/references/fn-gate.md` and `../../commands/worktask.md`
+*EXECUTION MODEL (BINDING)*.
 
 ## Invocation
 
@@ -33,8 +35,16 @@ The post-plan checkpoint is carried by `PL0.metadata.plan_gate`, default `"check
 tells the orchestrator whether to re-enter the stage loop immediately (`bypass`) or stop for user
 approval (`checkpoint`) — see `../worktask/references/resume.md § State → Action Table`.
 
+The pre-finalization checkpoint is carried by `PL0.metadata.fn_gate`, default `"checkpoint"`.
+`--auto-finalization`, `--milestone:N`, and `--emergency` stamp `"bypass"` (note: `--auto-plan` does NOT
+bypass the FN gate — it is orthogonal). On the `checkpoint` path the orchestrator STOPs before the FN
+`Task()` delegation, presents the pre-FN summary, and delegates FN (commit/push/PR) only on
+`AskUserQuestion` approval; on `bypass` it finalizes unattended. Both carriers live on PL0 and resume
+logic honors each independently — see `../worktask/references/fn-gate.md` and
+`../worktask/references/resume.md § State → Action Table`.
+
 ## See also
 
-- `../worktask/references/fn-gate.md` — FN gate is always bypassed (unattended finalization).
+- `../worktask/references/fn-gate.md` — FN gate (default `checkpoint`); bypassed by `--auto-finalization` / `--milestone:N` / `--emergency`.
 - `../../commands/worktask.md` — command entry point, *EXECUTION MODEL (BINDING)*, Options.
 - `stage-codes.md` — stage code ↔ agent ↔ model table and pipeline definitions.

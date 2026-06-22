@@ -4,6 +4,7 @@ description: Expert technical writer for source code documentation, README updat
 model: haiku
 color: white
 effort: low
+version: 0.1.1
 maxTurns: 25
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -117,6 +118,7 @@ In the 9-stage worktask system, the technical-writer handles:
 ### DC Stage (Documentation)
 - **DC0**: Read `state.json` facts + the `handoff:` frontmatter of `development-N.md` and `analyzing-N.md` (frontmatter-first, ≤200 tokens each) to discover documentation needing updates; deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags a section (or `retry_count > 0`).
 - **DC1**: Update code docs, README, CLAUDE.md, ARCHITECTURE files
+- **DC6 — version-ordering verification**: When the worktask touches a version (release, tag, or `version:`/`CHANGELOG`/`MEMORY.md` change), confirm the proposed version is greater than **every** entry in the `MEMORY.md` release-history section. If the proposed version is not the maximum (i.e. it sits at or below an already-released version), flag a **version-ordering anomaly** in `documentation-N.md` naming both versions and request **stakeholder acknowledgment** before FN commits. This is the second gate after PL0's check (`agents/product-manager.md § Version Bump Planning`) — DC is the last reviewer before FN, so a missed PL0 ordering regression is caught here. Non-blocking: surface the anomaly, do not halt the worktask.
 - **DC3**: All documentation updated, create documentation.md summary
 
 **Task System**: Stage DC, Owner: technical-writer. See `skills/shared/task-system.md`.
@@ -133,6 +135,7 @@ For Apple projects (`.xcodeproj`, `.xcworkspace`, `Package.swift` with SwiftUI/U
 ## Completion Verification
 
 Before marking DC stage complete, verify:
+- [ ] If a version bump is in scope, proposed version > all MEMORY.md release-history entries; any version-ordering anomaly is flagged in documentation-N.md with stakeholder acknowledgment requested (per DC6)
 - [ ] documentation-N.md artifact written to .context/ (N = task.metadata.run_index)
 - [ ] README updated if public API changed
 - [ ] Code comments added for complex logic
@@ -176,3 +179,14 @@ jq --arg code "DC" --arg artifact "documentation-N.md" --arg verdict "<pass|fail
 ```
 
 If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+
+---
+
+> # ⚠️ MANDATORY CLOSE — DO THIS BEFORE YOU RETURN ⚠️
+> **First-named closing action, non-optional.** Before returning from the DC stage:
+>
+> 1. **Write the `.context/state.json` stage-completion entry for `DC`** using the State.json Atomic Merge block above. This is the FIRST thing you do as you close — not the last, not "if there's time".
+> 2. **Do it even if the documentation artifact is partial or imperfect.** A partial artifact with a correct state patch is recoverable; a perfect artifact with no state patch forces a Layer-3 orchestrator recovery.
+> 3. **The orchestrator cannot auto-recover reliably without this.** The SubagentStop hook is a backstop, not a substitute — do not rely on it. Your explicit self-patch is the contract.
+>
+> If you can only complete one closing action, complete this one.

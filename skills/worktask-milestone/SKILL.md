@@ -58,7 +58,7 @@ This reduces disk usage per worktree and speeds up initialization.
 
 ### Unattended Execution in Milestone Mode
 
-Milestone orchestration processes N issues sequentially (or in parallel tracks) without intervening user input. All worktasks run unattended: both `fn_gate = "bypass"` and `plan_gate = "bypass"` are set unconditionally on every per-issue PL0 task (milestone batches bypass both gates). The orchestrator proceeds directly to commit/push/PR for each issue via the FN stage without stopping. Changes are reviewable as per-issue PRs.
+Milestone orchestration processes N issues sequentially (or in parallel tracks) without intervening user input. Milestone mode **deliberately bypasses both gates** that are otherwise human checkpoints by default: it sets `plan_gate = "bypass"` (default `"checkpoint"`) and `fn_gate = "bypass"` (default `"checkpoint"`) on every per-issue PL0 task, because batch runs cannot stop for per-issue plan or finalization approval. The orchestrator therefore proceeds directly to commit/push/PR for each issue via the FN stage without stopping. Changes are reviewable as per-issue PRs.
 
 > For headless `-p` mode runs, set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait entirely. Combined with `--mcp-config`, server connections are bounded at 5s instead of blocking on the slowest server.
 
@@ -125,7 +125,7 @@ TaskCreate({
     issue_number: issueNumber, track: track,
     workspace_path: `.worktrees/milestone-${milestone}/${issueNumber}`,
     isolation: "worktree",
-    fn_gate: "bypass", plan_gate: "bypass"  // milestone batches bypass both gates
+    fn_gate: "bypass", plan_gate: "bypass"  // milestone deliberately bypasses both default-checkpoint gates
   }
 });
 ```

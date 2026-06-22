@@ -638,7 +638,7 @@ Claude Code ships a native `/workflows` command and Workflow tool for **dynamic 
 **When to reach for each:**
 
 - Reach for native dynamic workflows when you need quick parallelism without governance overhead (e.g., batch linting, parallel research, one-off data transforms).
-- Reach for the igrsoft worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks have one human checkpoint — the PL gate (plan approval after PL0); the rest of the pipeline including FN runs unattended.
+- Reach for the igrsoft worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks have two human checkpoints — the PL gate (plan approval after PL0) and the FN gate (finalization approval, which STOPs before commit/push/PR by default); both are bypassed by `--milestone:N` / `--emergency`, the PL gate also by `--auto-plan` and the FN gate also by `--auto-finalization`.
 
 They can compose: a DV agent inside an igrsoft worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
 

@@ -267,7 +267,7 @@ All milestone worktasks use worktree isolation. Expected state:
 
 ### Stage Transition
 1. Complete: `TaskUpdate({ taskId: "X", status: "completed" })`
-2. Verify `blockedBy` resolved (the PL gate is handled once at Step A.5 before the loop; intra-loop transitions are unattended)
+2. Verify `blockedBy` resolved (the PL gate is handled once at Step A.5 before the loop; the FN gate is handled mid-loop at loop step 4.9 before the FN delegation; all other intra-loop transitions are unattended)
 3. Start next: `TaskUpdate({ taskId: "Y", status: "in_progress", owner: "..." })`
 
 ### Handle Error
