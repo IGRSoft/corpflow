@@ -10,7 +10,6 @@
   "milestone": { "number": 1, "title": "Sprint 1" },
   "configuration": {
     "parallel_tracks": 3,
-    "auto_continue": false,
     "isolation": "worktree"
   },
   "base_branch": "develop",

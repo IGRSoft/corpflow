@@ -1,12 +1,14 @@
 # Company Worktask Plugin
 
-A comprehensive 9-stage worktask system for Claude Code with Task System integration, worktree-isolated unattended execution, stage transitions, and structured task management.
+A comprehensive 11-stage worktask system for Claude Code with Task System integration, worktree-isolated execution with a single post-plan human approval gate, stage transitions, and structured task management.
 
 claude-code min version: "2.1.183"
 
 > **Claude Code feature bands**: latest integrated band is **2.1.176→2.1.183** (latest known CC: **2.1.183**), plugin **3.24.0**. Headline: the **agent-teams API changed** (v2.1.178) — `TeamCreate`/`TeamDelete` were removed; every session now has **one implicit team** and teammates are spawned via the **Agent tool's `name` parameter** (`team_name` accepted but ignored). The band also adds **auto-mode git safety** (destructive git, non-agent `commit --amend`, and IaC `destroy` are blocked unless explicitly requested — v2.1.183), **pre-launch subagent spawn classification** with foreground/background sharing the 5-level nesting cap (v2.1.178/2.1.181), compaction honoring `--fallback-model` (v2.1.178), and model-governance refinements (`availableModels` alias-redirect hardening + `/fast` allowlist refusal, Fable-5 auto-mode fallback to best Opus — v2.1.176; frontmatter model-deprecation warnings — v2.1.183). The prior integrated band (2.1.171→2.1.175, plugin 3.17.0) brought **5-level nested sub-agent delegation** (v2.1.172) and **Fable 5 1M-context-by-default** (v2.1.173). **Alias caveat**: the `fable` alias resolves only on **CC ≥ 2.1.170**.
 
 > **3.24.0 — Claude Code 2.1.176→2.1.183 band (agent-teams API + auto-mode guardrails)**: integrates the agent-teams API change (implicit per-session team; spawn via `Agent(name: …)`; `team_name` ignored — v2.1.178) across the team/coordination docs (`skills/shared/task-system.md`, `skills/worktask-milestone/references/agent-teams.md`, `skills/agent-coordination/*`, `skills/worktask/references/stage-details.md`), plus the auto-mode behavioral guardrails: destructive-git / non-agent-`--amend` / IaC-`destroy` blocks and `attribution.sessionUrl` (`skills/shared/git-conventions.md`, `commands/create-pr.md`); scheduled/webhook trigger deliveries can't satisfy an approval park (`skills/worktask/references/resume.md`); pre-launch spawn classification + fg/bg depth parity + `Tool(param:value)` permission syntax (`skills/agent-coordination/SKILL.md`); subagent MCP server-level `disallowedTools` + WebSearch (`skills/agent-coordination/references/headless-dispatch.md`, `skills/cross-plugin-handoff/references/plugin-protocols.md`); compaction `--fallback-model` (`skills/context-compression/SKILL.md`); model-governance refinements (`skills/shared/model-selection.md`); workflow auto-engage scoping (`skills/worktask/references/dynamic-workflow.md`); and a `commands/cc-update.md` Feature Category Mapping refresh. Min CC raised **2.1.169 → 2.1.183**; pure docs/metadata, no source changes.
+
+> **3.25.0 — restored PL plan-approval gate + single `worktask` trigger**: re-introduces the one human checkpoint after planning — `PL0.metadata.plan_gate` now defaults to `"checkpoint"`, so plain `worktask` STOPs after PL0, presents the plan, and waits for `AskUserQuestion` approval before dispatching implementation stages (enforced by the new `commands/worktask.md § Step A.5` and the `skills/worktask/SKILL.md` PRECONDITION CHECK). The approval audit line uses `subject:"PL<run_index>"` so a re-run cannot reuse a stale approval. New **`--auto-plan`** flag stamps `plan_gate: "bypass"` for a trusted fast-path; **`--milestone:N`** bypasses both gates for unattended batches (keeping its R1 multi-PR confirmation). The FN gate is unchanged (`fn_gate: "bypass"`, unattended). Collapses the trigger set to a **single `worktask`** trigger — `micro:`, `quick:`, and `fworktask:` are removed (PL0 dynamic sizing subsumes the old "small task" shortcuts by dropping stages); the deprecated `--auto-continue` flag and the legacy `approval-gate-hook.md` reference are deleted. ~17 files reconciled across `commands/`, `skills/`, `agents/`, plus README/MEMORY.
 
 > **3.23.2 — recall-first DR review gate**: rewrites the DR-stage review command (`commands/code-review-dev.md`) around recall — decoupled **Phase 1 DETECTION / Phase 2 VERIFICATION+FILTERING / Phase 3 completeness**, a 12-class bug checklist, **mandatory read-beyond-the-diff** context gathering (callers/consumers, dynamic/string-literal refs, type definitions, acceptance-criteria intent check), a BLOCKED-verification keep rule, **P0/P1/P2** severity routing, and an explicit decision+coverage output — so confirmed correctness/security/concurrency/regression risks stop slipping past DR to QA. Adapts the source's Conductor review tools to the plugin's real mechanism (read-only `git diff origin/master...HEAD` acquisition + findings to `developer-review-N.md`; `allowed-tools` now declares read-only `git diff`/`log`/`show`). Adds an **Escalation to DV** loop — a read-confirmed *sound* P0/P1 sets `verdict: fail`, which re-dispatches DV to remediate, then DR re-reviews. Also fixes a routing bug in `agents/technical-lead.md` §DR3.5 + visual-evidence: the escalation classification was `ambiguous_requirements` (which the retry/escalate matrix routes to **PL**) while the intent is **DV** — corrected to `missing_input` (matrix → previous stage = DV). Also retires two unused commands — `/api-docs` and `/onboard-task` (deleted from `commands/` and the marketplace manifest; 45→43 commands).
 
@@ -18,7 +20,7 @@ claude-code min version: "2.1.183"
 
 ## Features
 
-- **Always worktree-isolated + unattended (v3.23.0)**: every worktask runs in a dedicated git worktree and proceeds end-to-end without human approval gates — changes are reviewable as PRs.
+- **Worktree-isolated + one plan-approval gate (v3.25.0)**: every worktask runs in a dedicated git worktree and STOPs once after planning for the user to approve the plan (`plan_gate: "checkpoint"`); `--auto-plan` / `--milestone:N` skip the stop. FN finalization (commit/push/PR) remains unattended — changes are reviewable as PRs.
 - **9-Stage Worktask**: Planning → Architecture → Team Lead → Development → Developer Review → QA → Documentation → Finalization → Stakeholder
 - **Task System Integration**: Native `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` tools
 - **Native Dependencies**: `blockedBy` arrays for explicit dependency management
@@ -87,11 +89,10 @@ claude plugins add /path/to/company-worktask
 Simply prefix your task with one of these triggers:
 
 ```
-worktask: [task description]   # Standard - PL0 creates stages after planning
-fworktask: [task description]  # Fast - auto-continues through all stages
-quick: [task description]      # 4-stage worktask: PL → DV → DR → QA
-micro: [task description]      # Lightweight: plan → approve → execute
+worktask: [task description]   # The worktask pipeline — PL0 dynamic sizing picks stages
 ```
+
+There is one trigger. PL0 sizes the pipeline by complexity (dropping AR/TL/DC for small tasks). Use `--auto-plan` to skip the plan-approval stop; `--milestone:N` for unattended batches.
 
 When Claude detects these prefixes, it automatically invokes `/worktask` to set up the worktask context, Task System integration, and stage management.
 
@@ -99,10 +100,8 @@ When Claude detects these prefixes, it automatically invokes `/worktask` to set 
 
 ```
 worktask: Add dark mode to settings
-fworktask: Fix login button typo
 worktask: /apple-developer:code-legacy-modernize migrate @StateObject to @Environment
 worktask: /system-developer:code-modernize . --target cpp23
-quick: Add validation to login form
 ```
 
 ### Combining with Other Commands
@@ -117,17 +116,18 @@ Embedded commands are detected by matching `/<name>` or `/<plugin:name>` pattern
 
 ```
 worktask: /apple-developer:code-refactor src/Views/SettingsView.swift
-fworktask: /code-review PR #123
+worktask: /code-review PR #123
 ```
 
-## Worktask Tiers
+## Pipeline Sizing
 
-| Trigger | Stages | Use For |
-|---------|--------|---------|
-| `micro: [task]` | Plan → approve → edit | Single-file fixes, typos |
-| `quick: [task]` | PL → DV → DR → QA | Small features, bug fixes |
-| `worktask: [task]` | Full 9 stages | Multi-file features, architectural changes |
-| `fworktask: [task]` | Full 9 stages (auto-continue) | Trusted full worktasks |
+One trigger (`worktask:`). PL0 dynamic sizing selects the stage set by complexity score:
+
+| Complexity | Typical stages | For |
+|---|---|---|
+| Low | PL → DV → DR → QA (AR/TL/DC dropped) | Single-file fixes, small bug fixes |
+| Standard | Full 9 stages | Multi-file features, architectural changes |
+| Secure (`--secure`) | 11 stages (adds SR, RE) | Security-sensitive work |
 
 ## 9-Stage Worktask
 

@@ -94,7 +94,6 @@ paths:
 9-stage:   PL → AR → TL → DV → DR → QA → DC → FN → ST
 11-stage:  PL → AR → TL → DV → DR → SR → QA → DC → RE → FN → ST
 Emergency: IR → DV → DR → QA → RE → FN
-quick:     PL → DV → DR → QA
 ```
 
 ## Subject Numbering

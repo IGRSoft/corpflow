@@ -25,11 +25,13 @@ This file is referenced by:
 
 > **NON-NEGOTIABLE INVARIANTS (the orchestrator owns these even in dynamic mode):**
 > 1. **PL0** — planning completes before any workflow is launched. The `Workflow` tool is never dispatched
->    until PL0 is `completed`. No human gate — execution proceeds unattended.
+>    until PL0 is `completed`. The PL gate (Step A.5) is evaluated before the workflow is launched; on a
+>    `checkpoint` gate the orchestrator obtains plan approval first. `--auto-plan` / `--milestone:N` bypass it.
 > 2. **FN ownership** — FN (commit/push/PR) is always orchestrator-owned. `fn_gate` is always `"bypass"`;
 >    the FN stage runs unattended directly after the workflow span returns.
 > 3. **No self-commit** — the workflow span never commits, pushes, or opens a PR. That belongs to FN.
-> 4. Dynamic mode adds a branch *between* PL0 and FN; it does not change the unattended, gate-free model.
+> 4. Dynamic mode adds a branch *between* PL0 and FN; it does not change the gate model: the PL gate (if
+>    `checkpoint`) is cleared before launch and FN stays orchestrator-owned and unattended.
 
 ---
 
@@ -38,7 +40,7 @@ This file is referenced by:
 The native Workflow owns **only the contiguous gate-free span** between the two human gates.
 
 ```
-PL0 (plan) -> publish-pl-issue.sh
+PL0 (plan) -> [PL gate] -> publish-pl-issue.sh
    -> +-- native Workflow (background, run_id) ----------------------+
       |  AR -> TL -> DV(fan-out) -> DR -> [SR] -> QA -> [DC] -> [RE]  |   (STOPS before FN)
       +-------------------------------------------------------------+   returns aggregated schema
@@ -54,11 +56,11 @@ PL0 (plan) -> publish-pl-issue.sh
 
 | Mode | Trigger | Workflow span | PL0 gate | FN gate | Notes |
 |------|---------|---------------|----------|---------|-------|
-| Standard | `--dynamic` | AR → … → QA/DC/RE (stops before FN) | none (unattended) | bypass (unattended) | Default dynamic shape; FN runs immediately after workflow returns. |
-| Auto-continue | `--dynamic --auto-continue` | AR → … → QA/DC/RE (stops before FN) | none | bypass | `--auto-continue` is now a no-op (gates already removed); behavior identical to standard. |
-| Milestone | `--dynamic --milestone:N` | `pipeline(issues, …)` fan-out, AR → … → ST per lane | none | bypass | **R1: one explicit operator confirmation stating the PR count before any lane runs.** |
+| Standard | `--dynamic` | AR → … → QA/DC/RE (stops before FN) | checkpoint (plan approval) unless --auto-plan | bypass (unattended) | Default dynamic shape; FN runs immediately after workflow returns. |
+| Milestone | `--dynamic --milestone:N` | `pipeline(issues, …)` fan-out, AR → … → ST per lane | bypass (unattended batch) | bypass | **R1: one explicit operator confirmation stating the PR count before any lane runs.** |
 
-> All dynamic modes are unattended. `metadata.fn_gate:"bypass"` is set unconditionally on PL0.
+> Dynamic mode runs the autonomous span unattended; the PL gate (if `checkpoint`) is cleared before
+> the span launches and FN stays unattended. `metadata.fn_gate:"bypass"` is set unconditionally on PL0.
 > The dynamic span runs through to FN as one workflow (or to ST in milestone lane mode).
 > The milestone launch still requires R1 confirmation (below) — this is a *multi-PR safety check*,
 > not a human approval gate.

@@ -192,7 +192,7 @@ Default writer rules (apply when the trigger matches; leave unset otherwise so d
 
 | Field | Set when | Value |
 |---|---|---|
-| `permission_mode` | Stage is `SR` or `FN` AND worktask flags include `--secure`/`--full`/`fworktask:` | `"default"` |
+| `permission_mode` | Stage is `SR` or `FN` AND worktask flags include `--secure`/`--full` | `"default"` |
 | `effort` | Stage is `DV` AND complexity score ≥ 35 | `"xhigh"` |
 | `effort` | Stage is `DR` AND complexity score ≥ 35 | `"high"` |
 | `dangerously_skip_permissions` | NEVER on `PL`/`SR`/`FN` tasks | (refuse) |
@@ -238,7 +238,7 @@ Every stage (AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) writes its artifact
 
 #### `--no-gh-issue` opt-out
 
-When the orchestrator's `/worktask` (or `/quick`, `/fworktask`) invocation carries `--no-gh-issue`, PL0 MUST stamp `metadata.no_gh_issue: true` on its own PL0 task and propagate the field through every downstream task it creates. The orchestrator's Step 6.5 reads the field via `skills/worktask/references/publish-pl-issue.sh`; the helper exits 0 immediately without any `gh` API call, auditing `result: "deferred"`, `reason: "opted_out"`. Worktask execution is unaffected — the stage loop proceeds as normal.
+When the orchestrator's `/worktask` invocation carries `--no-gh-issue`, PL0 MUST stamp `metadata.no_gh_issue: true` on its own PL0 task and propagate the field through every downstream task it creates. The orchestrator's Step 6.5 reads the field via `skills/worktask/references/publish-pl-issue.sh`; the helper exits 0 immediately without any `gh` API call, auditing `result: "deferred"`, `reason: "opted_out"`. Worktask execution is unaffected — the stage loop proceeds as normal.
 
 When the flag is **absent** (default), PL0 leaves the field unset and the helper runs the full publish pipeline (sanitise → `gh issue create` → state.json write → audit row). See `commands/worktask.md` for the canonical flag list and `skills/worktask/SKILL.md § PL Issue Publish` for the runtime semantics.
 

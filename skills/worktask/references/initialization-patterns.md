@@ -221,8 +221,7 @@ performed codebase exploration. This prevents stage agents from re-reading the s
 - User provided Figma URLs or external context
   - When Figma URLs are provided, PL0 captures screenshots to `.context/designs/figma-*.png` and summarizes design context here
 
-> **Note**: Figma screenshot capture applies to ALL worktask triggers including `micro:`.
-> For `micro:`, create `.context/designs/` and save screenshots even though no `.context/planning-N.md` is generated.
+> **Note**: Figma screenshot capture applies to ALL worktasks, including low-complexity runs where PL0 drops stages. For a run with no `.context/planning-N.md`, create `.context/designs/` and save screenshots anyway.
 - Task involves modifying existing code (not greenfield)
 
 ### Template
