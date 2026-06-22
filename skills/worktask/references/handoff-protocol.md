@@ -136,9 +136,9 @@ Frontmatter is the canonical compression form: every downstream stage reads this
 
 ## Handoff Schemas {#handoff-schemas}
 
-Canonical, **both-path** typed-return schemas. These are the single source of truth for the structured object a stage agent returns from its `Task()`/`agent()` dispatch. They were promoted here from `dynamic-workflow.md#handoff-schemas` (v3.23.3) so that *both* the manual loop (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6) and the `--dynamic` engine path reference one definition.
+Canonical typed-return schemas. These are the single source of truth for the structured object a stage agent returns from its `Task()` dispatch in the manual orchestrator loop (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6).
 
-Typed `schema` returns replace prose-frontmatter scraping **on the typed path**, but each stage STILL mirrors its result to `state.json facts` and writes its `.context/<stage>-N.md` artifact with `handoff:` frontmatter (durability, human readability, F4/F5 regeneration — see `#frontmatter-schema`, `#fallback-paths`). The typed return is a *parallel, validated* channel; the frontmatter is the *cache-friendly compressed on-disk* channel. Neither replaces the other.
+Typed `schema` returns replace prose-frontmatter scraping **on the typed path**, but each stage STILL mirrors its result to `state.json facts` and writes its `.context/<stage>-N.md` artifact with `handoff:` frontmatter (durability, human readability, F4 regeneration — see `#frontmatter-schema`, `#fallback-paths`). The typed return is a *parallel, validated* channel; the frontmatter is the *cache-friendly compressed on-disk* channel. Neither replaces the other.
 
 Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST match that stage's row in `#frontmatter-schema § Per-stage required-field matrix`** — the typed return and the frontmatter share one verdict vocabulary per stage. The `required` field set is the typed superset of that stage's frontmatter required fields (e.g. DR's `key_decisions (= findings)` becomes the typed `findings`/`blockers` arrays).
 
@@ -345,8 +345,7 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
 
 Each schema field maps onto the canonical `state.json` ledger (`#state-json-schema`) and the
 artifact anchor (`#anchor-allow-list`). The orchestrator applies this map when a typed return is
-present (manual path: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6; dynamic path:
-`dynamic-workflow.md#boundary-reconciliation`). When no typed return is present, the same targets are
+present (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6). When no typed return is present, the same targets are
 populated from the artifact's `handoff:` frontmatter instead (F2/F3) — the map is channel-agnostic.
 
 | Schema field | state.json target | Artifact anchor |
@@ -494,26 +493,6 @@ properties:
       type: string
       maxLength: 300
       pattern: '.*ref:.*'
-  workflow:
-    type: object
-    description: |
-      OPTIONAL. Present only in `--dynamic` execution mode (CC native Workflow engine).
-      Additive and version-1-compatible: absent in manual mode and ignored by readers that predate it,
-      so adding it never breaks an existing reader. The native `run_id` is a RESUME POINTER only —
-      `state.json` + the Task System remain the source of truth. Written by the orchestrator at launch
-      and on return; mutated mid-span only by the workflow script (single writer at phase boundaries).
-      Full semantics: `skills/worktask/references/dynamic-workflow.md#state-workflow-block`.
-    properties:
-      run_id: { type: string, description: "Native Workflow runId; maps to resumeFromRunId on resume" }
-      mode: { type: string, enum: [dynamic] }
-      launched_at_stage: { type: string, enum: [PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET] }
-      stops_before: { type: string, enum: [FN, ST], description: "FN in interactive mode; ST in bypass modes" }
-      budget:
-        type: object
-        properties:
-          estimate_usd: { type: number, minimum: 0, description: "PL0-emitted span estimate" }
-          ceiling_usd: { type: number, minimum: 0, description: "operator-tunable headroom ceiling passed to the engine" }
-      status: { type: string, enum: [running, returned] }
 ```
 
 ### Eviction order on overflow
@@ -567,7 +546,7 @@ data lives in the on-disk `<stage>-N.md` artifacts, not in state.json.
 
 ## #fallback-paths
 
-Five documented degradation paths. Worktask MUST complete in all five (AC-16, AC-17).
+Four documented degradation paths. Worktask MUST complete in all four (AC-16, AC-17).
 
 | Path | Trigger | Behavior |
 |------|---------|----------|
@@ -575,7 +554,6 @@ Five documented degradation paths. Worktask MUST complete in all five (AC-16, AC
 | F2 | state.json **present**, agent ignores it | No penalty. Agent reads listed files and writes its artifact. Orchestrator's hook patches state.json from frontmatter (or return text on F3). |
 | F3 | Agent writes artifact **without frontmatter** | Orchestrator logs WARN `frontmatter missing in <artifact>`. Derives minimal handoff: `{stage, verdict: ok, summary: <first 200 chars of return>, refs: {artifact: <path>}}`. Worktask proceeds. |
 | F4 | state.json **corrupt** (invalid JSON or schema mismatch) | Quarantine to `.context/state.json.bad.<unix-ts>`. Regenerate from PL0 + completed-stage frontmatter walk. Audit log to `.context/logs/state-recovery.log`. Continue. |
-| F5 | **Dynamic mode**: the workflow script cannot patch state.json mid-span (e.g. the script crashed before merging a stage return, or `SubagentStop` did not fire for an `agent()` child and no script merge ran) | On workflow **return**, the orchestrator reconciles from the typed `schema` returns the script *did* produce; for any stage still missing from the ledger, fall through to the **F4 frontmatter walk** over `.context/<stage>-N.md`. Reconciliation is idempotent (re-applying an identical patch is a no-op). Manual-mode resume is always available if the run crashed entirely. See `dynamic-workflow.md#boundary-reconciliation` and `#fallback`. |
 
 ### F4 regeneration walk
 

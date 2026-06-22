@@ -165,27 +165,6 @@ All megatask issues run in isolated worktrees. Each issue has its own working di
 
 > Worktree isolation is always active — each DV stage and each megatask issue gets a separate working directory and branch, eliminating source-tree conflicts.
 
-### Native Workflow Fan-Out (`--dynamic` mode)
-
-In the opt-in `--dynamic` execution mode the autonomous span runs on Claude Code's native Workflow engine
-(`Workflow` tool), which provides **engine-managed parallelism** instead of the manual
-worktree-split above. The two are distinct mechanisms with the same isolation guarantee:
-
-| | Manual worktree-split (default) | Native Workflow fan-out (`--dynamic`) |
-|---|---|---|
-| Trigger | `/megatask` (worktree always) | `--dynamic` (+ optional `/megatask`) |
-| Parallelism | Orchestrator delegates one `Task()` per worktree, in-context | Engine spawns children via `parallel()` / `pipeline()` |
-| Isolation | Orchestrator creates `.worktrees/…` per issue | `agent(prompt, { …, isolation: 'worktree' })` — engine provisions the worktree |
-| Decision point | Orchestrator loop (blockedBy resolution) | TL stage output drives DV `parallel()` fan-out (`dynamic-workflow.md#script-template`) |
-| Scale | Bounded by the orchestrator-derived track count (max 5) — that bound is **breadth** (sibling tracks); delegation **depth** is separate: sub-agents nest up to 5 levels (CC ≥ 2.1.172) | Tens–hundreds of children (engine ~1000-agent cap; shard >~200-issue milestones) |
-| Gates | PL0 + FN orchestrator-owned | **PL0 + FN STILL orchestrator-owned** — the span runs strictly between them |
-
-The `isolation: 'worktree'` setting maps onto the same `.worktrees/milestone-{N}/{issue#}/` topology as
-manual mode (see `skills/worktask/SKILL.md § Path Resolution`). Full mechanics, the script/pipeline
-templates, the R1 multi-PR confirmation guard, and the fallback-to-manual path are in
-`skills/worktask/references/dynamic-workflow.md`. The orchestrator NEVER launches the workflow before the
-PL0 human gate and ALWAYS returns to the FN human gate after it.
-
 ### Parallel Tool Call Safety
 
 Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool calls. Failing read-only `Bash` calls (`grep`, `git diff`, `ls`, etc.) likewise don't cancel siblings — only mutating `Bash` errors cascade. This makes parallel reads, searches, and shell probes more reliable within agents.
@@ -207,9 +186,8 @@ review, the audit tail is the single source of truth for what happened.
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned`, `github_issue_created`, `workflow_launched`, `workflow_returned`, `dynamic_fallback` (the last three only in `--dynamic` mode — see `skills/worktask/references/dynamic-workflow.md#audit-vocabulary`) |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned`, `github_issue_created` |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation` |
-| `workflow-script` (`--dynamic` mode, **advisory**) | `workflow_agent_stopped` — one row per native `agent()` child completion. Mirrors `subagent_stopped`; deduped against the `hook:audit-subagent` row when `SubagentStop` also fires (pessimistic design — correct whether or not the hook fires for workflow-spawned children, see `dynamic-workflow.md#risk-register` R2). Authority: orchestrator reconciliation rows outrank these advisory rows. |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
 | `hook:audit-subagent` (SubagentStop, plugin) **(authoritative)** | `subagent_stopped` (paired with cost-*.jsonl entry) — v3.10.0+. v3.10.6+ rows additionally carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`, and `dedupe_key_extended` (see § Dedupe Key Migration below). |
 | `hook:audit-tooluse` (PostToolUse, plugin) **(authoritative)** | `tool_invoked` for `TaskUpdate\|TaskCreate\|Write\|Edit` with `duration_ms` + `effort` — v3.10.0+ |

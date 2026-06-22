@@ -201,7 +201,6 @@ schedule live in `skills/megatask/references/dependency-graph.md`.
 - `skills/megatask/SKILL.md` — milestone/array orchestration, worktree topology, monitoring loop
 - `skills/megatask/references/dependency-graph.md` — DAG construction, cycle detection, levelled schedule
 - `skills/megatask/references/schemas.md` — orchestrator.json (v3.1) + workspace.json schemas
-- `skills/megatask/references/dynamic-megatask.md` — per-issue lanes on the native Workflow engine
 - `skills/shared/milestone-helpers/SKILL.md` — branch naming, PR detection, worktree helpers
 - `hooks/megatask-monitor.sh` — completion → unblock-dependents → progress monitor
 - `commands/worktask.md` — single-issue staged pipeline (milestone-agnostic)
