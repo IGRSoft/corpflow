@@ -1,7 +1,7 @@
 ---
 name: worktask
 description: Initialize a new worktask task with proper folder structure and Task System integration
-argument-hint: '<task description> [--milestone:N] [--secure] [--parallel:N]'
+argument-hint: '<task description> [--milestone:N] [--secure] [--emergency] [--parallel:N]'
 version: 0.1.0
 model: opus
 allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager)
@@ -16,8 +16,8 @@ allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCre
 > so the orchestrator commits, pushes, and opens the PR without stopping. Every worktask is
 > worktree-isolated, so the PR is the review surface for the implementation.
 >
-> **TODO**: `/emergency` worktasks share this unattended path; any future emergency-specific
-> FN handling will be wired when the emergency trigger is formalized.
+> **TODO**: `/worktask --emergency` worktasks share this unattended path; any future
+> emergency-specific FN handling remains to be wired.
 
 # Worktask Command
 
@@ -38,11 +38,11 @@ Initialize a new worktask task with proper folder structure and Task System inte
 
 ## Worktask Types
 
-| Type | Stages | Trigger |
-|------|--------|---------|
+| Type | Stages | Entry point |
+|------|--------|-------------|
 | Standard | PL→AR→TL→DV→DR→QA→DC→FN→ST | `/worktask` |
-| Secure | PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST | `--secure` |
-| Emergency | IR→DV→DR→QA→RE→FN | `/emergency` |
+| Secure | PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST | `/worktask --secure` |
+| Emergency | IR→DV→DR→QA→RE→FN | `/worktask --emergency` |
 
 See `skills/shared/stage-codes.md` for stage details.
 
@@ -60,6 +60,7 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--ethics-review` | Add ET checkpoint after PL |
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 11-stage worktask |
+| `--emergency` | Run the incident pipeline (IR→DV→DR→QA→RE→FN) instead of the standard PL-first pipeline; IR stage owned by `incident-responder`. Replaces the former `emergency:` prefix. |
 | `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish step. Sets `metadata.no_gh_issue: true` on the PL0 task; `skills/worktask/references/publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues as normal. |
 
 ## Examples
@@ -67,7 +68,7 @@ See `skills/shared/stage-codes.md` for stage details.
 ```bash
 /worktask --milestone:1                  # Milestone mode (compose with --parallel:N, :ISSUE)
 /worktask "Add dark mode support"        # Standard mode (compose with --priority, --secure)
-/emergency "Production login failing"    # Emergency
+/worktask --emergency "Production login failing"   # Emergency (incident pipeline)
 ```
 
 ## Phase 1: Planning (execute immediately)

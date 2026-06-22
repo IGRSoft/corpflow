@@ -96,13 +96,12 @@ Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver:
 - [ ] Remediation plan documented for deferred items
 ```
 
-### Invocation Triggers
+### Invocation
 
-| Trigger | SR Stage Behavior |
-|---------|-------------------|
-| `secure-worktask:` | SR stage mandatory |
-| `full-worktask:` | SR stage mandatory |
-| `worktask:` | SR stage skipped (backward compatible) |
+| Invocation | SR Stage Behavior |
+|------------|-------------------|
+| `/worktask --secure` / `--full` | SR stage mandatory |
+| `/worktask` (standard) | SR stage skipped unless security-sensitive |
 | Security-sensitive feature | SR auto-included regardless of complexity |
 
 ### Security-Sensitive Detection

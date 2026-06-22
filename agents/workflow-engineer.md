@@ -30,7 +30,7 @@ Expert worktask engineer for Task System orchestration and troubleshooting.
 
 | Domain | Expertise |
 |--------|-----------|
-| Initialization | Trigger detection (`worktask:` / `/worktask`), `.context/` structure, Task System dependency chains, priority/platform auto-detection |
+| Initialization | Invocation handling (`/worktask` command / `Skill({skill:"igrsoft:worktask"})`), `.context/` structure, Task System dependency chains, priority/platform auto-detection |
 | Stage Management | Status transitions via `TaskUpdate`, PL0 creates subsequent stages, sub-task splitting |
 | Orchestration | Milestone mode (`--milestone:N`), workspace structure, issue fetching/sorting, orchestrator.json, track monitoring, completion/error handling |
 

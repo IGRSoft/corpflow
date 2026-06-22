@@ -7,7 +7,7 @@ version: 0.2.0
 
 > **INVOCATION GATE**: If you are reading this skill because the orchestrator delegated directly
 > (e.g., a Read/Task/Grep on this file) instead of launching via `Skill({skill:"igrsoft:worktask"})`
-> or the `/worktask` command, the BLOCKING rule in `../shared/worktask-triggers.md § BLOCKING` was
+> or the `/worktask` command, the BLOCKING rule in `../shared/worktask-invocation.md § BLOCKING` was
 > violated. Do NOT silently continue — surface the error to the user, then restart through the
 > canonical entry point.
 
@@ -53,7 +53,7 @@ stateDiagram-v2
     PostCompactRecovery --> StageActive: was mid-stage
 ```
 
-**Stage codes and triggers**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md` and `${CLAUDE_SKILL_DIR}/../shared/worktask-triggers.md`
+**Stage codes and invocation**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md` and `${CLAUDE_SKILL_DIR}/../shared/worktask-invocation.md`
 
 **Task System integration**: See `${CLAUDE_SKILL_DIR}/../shared/task-system.md`
 

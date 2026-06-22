@@ -10,12 +10,12 @@ Standardized project estimation for Claude Code worktasks.
 
 ## T-Shirt Sizing → Story Points (Range)
 
-| Size | SP Min | SP Max | Hours Min | Hours Max | Worktask |
-|------|--------|--------|-----------|-----------|----------|
-| XS | 1 | 1 | 6 | 6 | `worktask:` |
-| S | 2 | 3 | 12 | 18 | `worktask:` |
-| M | 4 | 5 | 24 | 30 | `worktask:` |
-| L | 6 | 10 | 36 | 60 | `worktask:` |
+| Size | SP Min | SP Max | Hours Min | Hours Max | Entry point |
+|------|--------|--------|-----------|-----------|-------------|
+| XS | 1 | 1 | 6 | 6 | `/worktask` |
+| S | 2 | 3 | 12 | 18 | `/worktask` |
+| M | 4 | 5 | 24 | 30 | `/worktask` |
+| L | 6 | 10 | 36 | 60 | `/worktask` |
 | XL | 13 | 21 | 78 | 126 | Split first |
 
 ## Story Points to Hours
@@ -118,7 +118,7 @@ size = T-shirt size from sizing table
 IF size == XL:
   → split into ≤ L sub-tasks first
 ELSE:
-  → worktask:   (single trigger; PL0 dynamic sizing selects which of the 9 stages run)
+  → /worktask   (PL0 dynamic sizing selects which of the 9 stages run)
 ```
 
 Notes:
@@ -169,7 +169,7 @@ The factor values (Model Rate, Retry Factor, Complexity Multiplier) are defined 
 
 ### Combined Estimate Example
 
-For a medium feature (`worktask:`, SP 3-5):
+For a medium feature (`/worktask`, SP 3-5):
 ```
 Human Development: 18-30 hours × $150/hr = $2,700-$4,500
 AI Agent Cost: ~100K tokens × mixed = $0.35

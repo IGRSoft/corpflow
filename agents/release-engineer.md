@@ -106,14 +106,13 @@ Create `.context/release-N.md` (N = `task.metadata.run_index`; resolver: metadat
 - [ ] Privacy policy current
 ```
 
-### Invocation Triggers
+### Invocation
 
-| Trigger | RE Stage Behavior |
-|---------|-------------------|
-| `secure-worktask:` | RE stage mandatory |
-| `full-worktask:` | RE stage mandatory |
-| `worktask:` | RE stage skipped (backward compatible) |
-| `emergency:` | RE stage included (hotfix release) |
+| Invocation | RE Stage Behavior |
+|------------|-------------------|
+| `/worktask --secure` / `--full` | RE stage mandatory |
+| `/worktask` (standard) | RE stage skipped unless complexity routes it in |
+| `/worktask --emergency` | RE stage included (hotfix release) |
 
 ## Semantic Versioning Rules
 
@@ -190,7 +189,7 @@ Create `.context/release-N.md` (N = `task.metadata.run_index`; resolver: metadat
 - [ ] TestFlight build uploaded for beta validation
 ```
 
-For Apple platform releases (secure-worktask or full-worktask), consult `.context/security-review-N.md` for Apple security review findings from the SR stage. For expedited review (P0/P1 hotfixes), request via App Store Connect — typical turnaround 24-48 hours.
+For Apple platform releases (`/worktask --secure` or `--full`), consult `.context/security-review-N.md` for Apple security review findings from the SR stage. For expedited review (P0/P1 hotfixes), request via App Store Connect — typical turnaround 24-48 hours.
 
 ### Android Play Store
 
@@ -218,7 +217,7 @@ For Apple platform releases (secure-worktask or full-worktask), consult `.contex
 
 ## Emergency Worktask (Hotfix)
 
-In `emergency:` worktask, RE stage handles:
+In `/worktask --emergency` worktasks, RE stage handles:
 
 ```
 IR → DV → DR → QA → [RE] → FN

@@ -152,7 +152,7 @@ Read(file_path: "path/to/large.swift", offset: 340, limit: 40)
 |----------|--------|
 | Simple bug fix | Skip AR stage, minimal TL stage |
 | Documentation-only | Skip DV stage, minimal QA stage |
-| Hotfix / trivial change | Use `worktask:` — PL0 dynamic sizing drops AR/TL/DC for low complexity |
+| Hotfix / trivial change | Use `/worktask` — PL0 dynamic sizing drops AR/TL/DC for low complexity |
 
 **Worktask Selection Guide**:
 ```

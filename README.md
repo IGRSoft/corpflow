@@ -8,6 +8,8 @@ claude-code min version: "2.1.183"
 
 > **3.24.0 — Claude Code 2.1.176→2.1.183 band (agent-teams API + auto-mode guardrails)**: integrates the agent-teams API change (implicit per-session team; spawn via `Agent(name: …)`; `team_name` ignored — v2.1.178) across the team/coordination docs (`skills/shared/task-system.md`, `skills/worktask-milestone/references/agent-teams.md`, `skills/agent-coordination/*`, `skills/worktask/references/stage-details.md`), plus the auto-mode behavioral guardrails: destructive-git / non-agent-`--amend` / IaC-`destroy` blocks and `attribution.sessionUrl` (`skills/shared/git-conventions.md`, `commands/create-pr.md`); scheduled/webhook trigger deliveries can't satisfy an approval park (`skills/worktask/references/resume.md`); pre-launch spawn classification + fg/bg depth parity + `Tool(param:value)` permission syntax (`skills/agent-coordination/SKILL.md`); subagent MCP server-level `disallowedTools` + WebSearch (`skills/agent-coordination/references/headless-dispatch.md`, `skills/cross-plugin-handoff/references/plugin-protocols.md`); compaction `--fallback-model` (`skills/context-compression/SKILL.md`); model-governance refinements (`skills/shared/model-selection.md`); workflow auto-engage scoping (`skills/worktask/references/dynamic-workflow.md`); and a `commands/cc-update.md` Feature Category Mapping refresh. Min CC raised **2.1.169 → 2.1.183**; pure docs/metadata, no source changes.
 
+> **3.24.1 — remove worktask prefix-trigger convention**: retires the natural-language message-prefix triggers (`worktask:`, `emergency:`) entirely. The pipeline is now launched only via the **`/worktask`** slash command (with **`--emergency`** for the incident pipeline, `--secure`/`--full` for the 11-stage pipeline) or `Skill({skill:"igrsoft:worktask"})`. The prefixes were pure documentation convention — no hook or `settings.json` ever parsed them — so this is a docs/metadata change with no pipeline behavior change. Repurposes `skills/shared/worktask-triggers.md` → **`skills/shared/worktask-invocation.md`** (the §BLOCKING first-action rule + INVOCATION GATE are kept, rekeyed to the command/skill; dynamic-sizing and plan_gate/fn_gate model preserved) and fixes the three inbound links. Reframes the Quick Start, the request-plan/estimation handoff emitters (now emit `/worktask "<goal>"`), the estimate/cost-optimization sizing tables, and the incident-responder/release-engineer/security-reviewer/incident-response emergency docs (the dead `secure-worktask:`/`full-worktask:` prefixes and the dangling `commands/emergency.md` reference are cleaned up too). ~19 files across `commands/`, `skills/`, `agents/`, plus README/MEMORY and version metadata.
+
 > **3.25.0 — restored PL plan-approval gate + single `worktask` trigger**: re-introduces the one human checkpoint after planning — `PL0.metadata.plan_gate` now defaults to `"checkpoint"`, so plain `worktask` STOPs after PL0, presents the plan, and waits for `AskUserQuestion` approval before dispatching implementation stages (enforced by the new `commands/worktask.md § Step A.5` and the `skills/worktask/SKILL.md` PRECONDITION CHECK). The approval audit line uses `subject:"PL<run_index>"` so a re-run cannot reuse a stale approval. New **`--auto-plan`** flag stamps `plan_gate: "bypass"` for a trusted fast-path; **`--milestone:N`** bypasses both gates for unattended batches (keeping its R1 multi-PR confirmation). The FN gate is unchanged (`fn_gate: "bypass"`, unattended). Collapses the trigger set to a **single `worktask`** trigger — `micro:`, `quick:`, and `fworktask:` are removed (PL0 dynamic sizing subsumes the old "small task" shortcuts by dropping stages); the deprecated `--auto-continue` flag and the legacy `approval-gate-hook.md` reference are deleted. ~17 files reconciled across `commands/`, `skills/`, `agents/`, plus README/MEMORY.
 
 > **3.23.2 — recall-first DR review gate**: rewrites the DR-stage review command (`commands/code-review-dev.md`) around recall — decoupled **Phase 1 DETECTION / Phase 2 VERIFICATION+FILTERING / Phase 3 completeness**, a 12-class bug checklist, **mandatory read-beyond-the-diff** context gathering (callers/consumers, dynamic/string-literal refs, type definitions, acceptance-criteria intent check), a BLOCKED-verification keep rule, **P0/P1/P2** severity routing, and an explicit decision+coverage output — so confirmed correctness/security/concurrency/regression risks stop slipping past DR to QA. Adapts the source's Conductor review tools to the plugin's real mechanism (read-only `git diff origin/master...HEAD` acquisition + findings to `developer-review-N.md`; `allowed-tools` now declares read-only `git diff`/`log`/`show`). Adds an **Escalation to DV** loop — a read-confirmed *sound* P0/P1 sets `verdict: fail`, which re-dispatches DV to remediate, then DR re-reviews. Also fixes a routing bug in `agents/technical-lead.md` §DR3.5 + visual-evidence: the escalation classification was `ambiguous_requirements` (which the retry/escalate matrix routes to **PL**) while the intent is **DV** — corrected to `missing_input` (matrix → previous stage = DV). Also retires two unused commands — `/api-docs` and `/onboard-task` (deleted from `commands/` and the marketplace manifest; 45→43 commands).
@@ -84,29 +86,29 @@ claude plugins add /path/to/company-worktask
 
 ## Quick Start
 
-### Worktask Triggers
+### Launching a Worktask
 
-Simply prefix your task with one of these triggers:
+Run the worktask command:
 
 ```
-worktask: [task description]   # The worktask pipeline — PL0 dynamic sizing picks stages
+/worktask "[task description]"   # The worktask pipeline — PL0 dynamic sizing picks stages
 ```
 
-There is one trigger. PL0 sizes the pipeline by complexity (dropping AR/TL/DC for small tasks). Use `--auto-plan` to skip the plan-approval stop; `--milestone:N` for unattended batches.
+There is one entry point. PL0 sizes the pipeline by complexity (dropping AR/TL/DC for small tasks). Use `--auto-plan` to skip the plan-approval stop; `--milestone:N` for unattended batches; `--emergency` for the incident pipeline. You can also launch via `Skill({skill:"igrsoft:worktask"})`.
 
-When Claude detects these prefixes, it automatically invokes `/worktask` to set up the worktask context, Task System integration, and stage management.
+`/worktask` sets up the worktask context, Task System integration, and stage management.
 
 ### Examples
 
 ```
-worktask: Add dark mode to settings
-worktask: /apple-developer:code-legacy-modernize migrate @StateObject to @Environment
-worktask: /system-developer:code-modernize . --target cpp23
+/worktask "Add dark mode to settings"
+/worktask "/apple-developer:code-legacy-modernize migrate @StateObject to @Environment"
+/worktask "/system-developer:code-modernize . --target cpp23"
 ```
 
 ### Combining with Other Commands
 
-You can embed slash commands within worktask triggers. The orchestrator will:
+You can embed slash commands within the worktask payload. The orchestrator will:
 1. Set up the context and planning
 2. Detect the embedded `/command` pattern and store it in `metadata.embedded_commands`
 3. Pass the command to the DV stage agent, which invokes it via the `Skill` tool
@@ -115,13 +117,13 @@ You can embed slash commands within worktask triggers. The orchestrator will:
 Embedded commands are detected by matching `/<name>` or `/<plugin:name>` patterns against available skills. The command arguments are preserved and passed through.
 
 ```
-worktask: /apple-developer:code-refactor src/Views/SettingsView.swift
-worktask: /code-review PR #123
+/worktask "/apple-developer:code-refactor src/Views/SettingsView.swift"
+/worktask "/code-review PR #123"
 ```
 
 ## Pipeline Sizing
 
-One trigger (`worktask:`). PL0 dynamic sizing selects the stage set by complexity score:
+Single entry point (`/worktask`). PL0 dynamic sizing selects the stage set by complexity score:
 
 | Complexity | Typical stages | For |
 |---|---|---|
