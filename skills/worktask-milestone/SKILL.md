@@ -14,8 +14,9 @@ GitHub milestone integration with isolated workspaces for each ticket.
 ```
 --milestone:N              # Execute all open issues by priority
 --milestone:N:ISSUE        # Execute specific issue
---parallel:N               # Run N issues in parallel (max 5)
 ```
+
+> Cross-issue concurrency is orchestrator-derived, not a flag (see Orchestrator Pattern § Initialization).
 
 ## Workspace Architecture
 
@@ -58,7 +59,7 @@ This reduces disk usage per worktree and speeds up initialization.
 
 ### Unattended Execution in Milestone Mode
 
-Milestone orchestration processes N issues sequentially (or in parallel tracks) without intervening user input. Milestone mode **deliberately bypasses both gates** that are otherwise human checkpoints by default: it sets `plan_gate = "bypass"` (default `"checkpoint"`) and `fn_gate = "bypass"` (default `"checkpoint"`) on every per-issue PL0 task, because batch runs cannot stop for per-issue plan or finalization approval. The orchestrator therefore proceeds directly to commit/push/PR for each issue via the FN stage without stopping. Changes are reviewable as per-issue PRs.
+Milestone orchestration processes N issues sequentially (or in parallel tracks — count auto-derived, max 5) without intervening user input. Milestone mode **deliberately bypasses both gates** that are otherwise human checkpoints by default: it sets `plan_gate = "bypass"` (default `"checkpoint"`) and `fn_gate = "bypass"` (default `"checkpoint"`) on every per-issue PL0 task, because batch runs cannot stop for per-issue plan or finalization approval. The orchestrator therefore proceeds directly to commit/push/PR for each issue via the FN stage without stopping. Changes are reviewable as per-issue PRs.
 
 > For headless `-p` mode runs, set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait entirely. Combined with `--mcp-config`, server connections are bounded at 5s instead of blocking on the slowest server.
 
@@ -137,7 +138,7 @@ TaskCreate({
 1. Create `.worktrees/milestone-{N}/` directory
 2. Fetch milestone and issues from GitHub
 3. Sort issues by priority, create orchestrator.json
-4. Initialize first N workspaces (N = parallel_tracks)
+4. **Derive** `parallel_tracks` (orchestrator-derived, never a flag/default): `min(count(open issues in scope), 5)`, reduced by available disk capacity (each worktree duplicates the working tree); single-issue runs (`--milestone:N:ISSUE`) ⇒ `1`. Record the computed value in `orchestrator.json` → `configuration.parallel_tracks`, then initialize that many workspaces.
 5. Create track-prefixed tasks, start PL stage
 
 ### Monitoring Loop
@@ -153,7 +154,7 @@ TaskCreate({
 
 1. Fetch milestone and issues from GitHub
 2. Create orchestrator with sorted issues
-3. Initialize first N workspaces in parallel
+3. Initialize first `parallel_tracks` workspaces in parallel (count auto-derived per § Initialization)
 4. Each workspace executes independently
 5. On completion: PR created, track freed, next issue assigned
 
@@ -165,6 +166,8 @@ TaskCreate({
 4. Create PR with "Closes #ISSUE"
 
 ### Multi-Issue Parallelism
+
+Track count is orchestrator-derived (max 5), not user-configured.
 
 | Tracks | 5 issues | Time | Savings |
 |--------|----------|------|---------|

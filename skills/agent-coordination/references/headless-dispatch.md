@@ -54,7 +54,7 @@ claude agents --json | jq -r --arg track "$TRACK_ID" '
 Three usage patterns:
 
 - **Resume pre-check** — before respawning a subagent during worktask resume, query live sessions; if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` still appears, prefer `SendMessage` reattach over re-delegation. Eliminates the "blind respawn of an already-working subagent" token-waste class. See `skills/worktask/SKILL.md § Resume Procedure` step 0.
-- **Parallel track health** — for `--parallel:N` milestone runs, periodic `claude agents --json | jq '[.[] | select(.tag=="igrsoft-track")] | length'` should equal N. Less = stalled track.
+- **Parallel track health** — for milestone runs, periodic `claude agents --json | jq '[.[] | select(.tag=="igrsoft-track")] | length'` should equal the orchestrator-derived `parallel_tracks`. Less = stalled track.
 - **Status-line integration** — drives tmux / shell-status-bar widgets showing the active worktask stage without polluting `.context/`.
 
 Caveat: the CLI is stable but the JSON schema is not formally versioned — guard every read with defensive jq (`.parent_agent_id // "none"`). See § Schema Versioning Watch below.
