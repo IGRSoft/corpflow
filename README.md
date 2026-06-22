@@ -1,33 +1,13 @@
 # Company Worktask Plugin
 
-A comprehensive 11-stage worktask system for Claude Code with Task System integration, worktree-isolated execution with two human approval gates (plan + finalization), stage transitions, and structured task management.
+A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with Task System integration, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-claude-code min version: "2.1.183"
-
-> **Claude Code feature bands**: latest integrated band is **2.1.176→2.1.183** (latest known CC: **2.1.183**), plugin **3.25.0**. Headline: the **agent-teams API changed** (v2.1.178) — `TeamCreate`/`TeamDelete` were removed; every session now has **one implicit team** and teammates are spawned via the **Agent tool's `name` parameter** (`team_name` accepted but ignored). The band also adds **auto-mode git safety** (destructive git, non-agent `commit --amend`, and IaC `destroy` are blocked unless explicitly requested — v2.1.183), **pre-launch subagent spawn classification** with foreground/background sharing the 5-level nesting cap (v2.1.178/2.1.181), compaction honoring `--fallback-model` (v2.1.178), and model-governance refinements (`availableModels` alias-redirect hardening + `/fast` allowlist refusal, Fable-5 auto-mode fallback to best Opus — v2.1.176; frontmatter model-deprecation warnings — v2.1.183). The prior integrated band (2.1.171→2.1.175, plugin 3.17.0) brought **5-level nested sub-agent delegation** (v2.1.172) and **Fable 5 1M-context-by-default** (v2.1.173). **Alias caveat**: the `fable` alias resolves only on **CC ≥ 2.1.170**.
-
-> **3.26.0 — extract milestone orchestration into `/megatask` (dependency-DAG batch runner)**: removes the `--milestone:N` / `--milestone:N:ISSUE` surface from **`/worktask`** entirely — `worktask` is now strictly **single-issue and milestone-agnostic**. All milestone/array orchestration moves to a new **`/megatask`** command: `/megatask N` (a GitHub milestone) or `/megatask --issues 12,15,18` (an explicit issue array). Megatask parses **`Depends on: #N` / `Blocks: #M`** from issue bodies plus **P0–P3** labels, builds a **dependency/blocker DAG**, and executes issues in **topological + priority order** — never starting an issue whose blockers are unmerged. The milestone skill is **renamed `skills/worktask-milestone` → `skills/megatask`** (slug `milestone-worktask` → `megatask`, v0.2.0) with a new `references/dependency-graph.md` (Kahn cycle-detection + levelled schedule) and an orchestrator schema bumped to **v3.1** (`blocked_by`/`blocks`/`level`/`topological_order`). New managed hook **`hooks/megatask-monitor.sh`** (SubagentStop, `continueOnBlock`) reconciles each per-issue completion: marks it done, **unblocks dependents**, frees the track, and emits a `megatask_progress` audit row + terminal notification — self-skips when no `orchestrator.json` is present. Megatask keeps a single **R1 batch-confirmation** gate and stamps `plan_gate`/`fn_gate: "bypass"` directly on each per-issue PL0 (so the gate-bypass triples in `worktask.md` lose `--milestone:N`). `/pm-milestone` now points downstream at `/megatask`. Plugin **3.25.0 → 3.26.0**; ~20 files across `commands/`, `skills/`, `agents/`, `hooks/`, manifests, README/MEMORY.
-
-> **3.25.0 — remove `--parallel:N`; milestone tracks orchestrator-derived; TL = canonical intra-issue async owner**: removes the user-facing **`--parallel:N`** flag (7 literal sites — argument-hint, options table, example comment, milestone parameter block, agent-coordination scale row, headless-dispatch note, team-lead parenthetical) and reframes milestone **cross-issue concurrency** as orchestrator-derived rather than a manual knob. `parallel_tracks` is now **computed at milestone init** (`min(count(open issues in scope), 5)`, reduced by available disk capacity; single-issue `--milestone:N:ISSUE` ⇒ `1`) and recorded in `orchestrator.json` — never a flag or fixed default (the lone `default: 2` assertion in `agents/workflow-engineer.md` is replaced; the field itself is **retained** as a runtime value, its schema/example literals kept and annotated). Formalizes the **TL (team-lead) stage** as the **canonical and sole owner** of the **intra-issue** async decision — whether one issue's DV0 splits into concurrent DV0/DV1/DV2 streams per the DV Task Splitting Protocol — explicitly orthogonal to the orchestrator-owned cross-issue track count, so the two parallelism axes never conflate. No new `state.json` fields or artifact anchors; per-file `version:` frontmatter is not bumped. Docs/prompt-only — ~12 files across `commands/`, `skills/`, `agents/`, plus README/MEMORY and version metadata.
-
-> **3.24.0 — Claude Code 2.1.176→2.1.183 band (agent-teams API + auto-mode guardrails)**: integrates the agent-teams API change (implicit per-session team; spawn via `Agent(name: …)`; `team_name` ignored — v2.1.178) across the team/coordination docs (`skills/shared/task-system.md`, `skills/worktask-milestone/references/agent-teams.md`, `skills/agent-coordination/*`, `skills/worktask/references/stage-details.md`), plus the auto-mode behavioral guardrails: destructive-git / non-agent-`--amend` / IaC-`destroy` blocks and `attribution.sessionUrl` (`skills/shared/git-conventions.md`, `commands/create-pr.md`); scheduled/webhook trigger deliveries can't satisfy an approval park (`skills/worktask/references/resume.md`); pre-launch spawn classification + fg/bg depth parity + `Tool(param:value)` permission syntax (`skills/agent-coordination/SKILL.md`); subagent MCP server-level `disallowedTools` + WebSearch (`skills/agent-coordination/references/headless-dispatch.md`, `skills/cross-plugin-handoff/references/plugin-protocols.md`); compaction `--fallback-model` (`skills/context-compression/SKILL.md`); model-governance refinements (`skills/shared/model-selection.md`); workflow auto-engage scoping (`skills/worktask/references/dynamic-workflow.md`); and a `commands/cc-update.md` Feature Category Mapping refresh. Min CC raised **2.1.169 → 2.1.183**; pure docs/metadata, no source changes.
-
-> **3.24.1 — remove worktask prefix-trigger convention**: retires the natural-language message-prefix triggers (`worktask:`, `emergency:`) entirely. The pipeline is now launched only via the **`/worktask`** slash command (with **`--emergency`** for the incident pipeline, `--secure`/`--full` for the 11-stage pipeline) or `Skill({skill:"igrsoft:worktask"})`. The prefixes were pure documentation convention — no hook or `settings.json` ever parsed them — so this is a docs/metadata change with no pipeline behavior change. Repurposes `skills/shared/worktask-triggers.md` → **`skills/shared/worktask-invocation.md`** (the §BLOCKING first-action rule + INVOCATION GATE are kept, rekeyed to the command/skill; dynamic-sizing and plan_gate/fn_gate model preserved) and fixes the three inbound links. Reframes the Quick Start, the request-plan/estimation handoff emitters (now emit `/worktask "<goal>"`), the estimate/cost-optimization sizing tables, and the incident-responder/release-engineer/security-reviewer/incident-response emergency docs (the dead `secure-worktask:`/`full-worktask:` prefixes and the dangling `commands/emergency.md` reference are cleaned up too). ~19 files across `commands/`, `skills/`, `agents/`, plus README/MEMORY and version metadata.
-
-> **3.24.0 — restored PL plan-approval gate + single `worktask` trigger**: re-introduces the one human checkpoint after planning — `PL0.metadata.plan_gate` now defaults to `"checkpoint"`, so plain `worktask` STOPs after PL0, presents the plan, and waits for `AskUserQuestion` approval before dispatching implementation stages (enforced by the new `commands/worktask.md § Step A.5` and the `skills/worktask/SKILL.md` PRECONDITION CHECK). The approval audit line uses `subject:"PL<run_index>"` so a re-run cannot reuse a stale approval. New **`--auto-plan`** flag stamps `plan_gate: "bypass"` for a trusted fast-path; **`--milestone:N`** bypasses both gates for unattended batches (keeping its R1 multi-PR confirmation). The FN gate is unchanged (`fn_gate: "bypass"`, unattended). Collapses the trigger set to a **single `worktask`** trigger — `micro:`, `quick:`, and `fworktask:` are removed (PL0 dynamic sizing subsumes the old "small task" shortcuts by dropping stages); the deprecated `--auto-continue` flag and the legacy `approval-gate-hook.md` reference are deleted. ~17 files reconciled across `commands/`, `skills/`, `agents/`, plus README/MEMORY.
-
-> **3.23.2 — recall-first DR review gate**: rewrites the DR-stage review command (`commands/code-review-dev.md`) around recall — decoupled **Phase 1 DETECTION / Phase 2 VERIFICATION+FILTERING / Phase 3 completeness**, a 12-class bug checklist, **mandatory read-beyond-the-diff** context gathering (callers/consumers, dynamic/string-literal refs, type definitions, acceptance-criteria intent check), a BLOCKED-verification keep rule, **P0/P1/P2** severity routing, and an explicit decision+coverage output — so confirmed correctness/security/concurrency/regression risks stop slipping past DR to QA. Adapts the source's Conductor review tools to the plugin's real mechanism (read-only `git diff origin/master...HEAD` acquisition + findings to `developer-review-N.md`; `allowed-tools` now declares read-only `git diff`/`log`/`show`). Adds an **Escalation to DV** loop — a read-confirmed *sound* P0/P1 sets `verdict: fail`, which re-dispatches DV to remediate, then DR re-reviews. Also fixes a routing bug in `agents/technical-lead.md` §DR3.5 + visual-evidence: the escalation classification was `ambiguous_requirements` (which the retry/escalate matrix routes to **PL**) while the intent is **DV** — corrected to `missing_input` (matrix → previous stage = DV). Also retires two unused commands — `/api-docs` and `/onboard-task` (deleted from `commands/` and the marketplace manifest; 45→43 commands).
-
-> **3.23.1 — OV-131 worktask guardrails**: hardens the worktask trigger/resume machinery from the OV-131 prompt audit. Adds the canonical **`skills/shared/worktask-triggers.md`** — a single source of truth carrying the **§BLOCKING** first-action rule (a `/worktask`/`worktask:`/`fworktask:`/`quick:`/`micro:` message must launch the pipeline via its canonical entry point before any reads, exploration, or delegation) plus the per-trigger stage / unattended-vs-checkpoint table — repairing the dangling references in `skills/SKILL.md` and `skills/worktask/SKILL.md`. Adds an **INVOCATION GATE** banner to the worktask skill so a directly-delegated read surfaces the violation. PL0 dynamic sizing now records **`metadata.skipped_stages`** (`{stage, reason}`) so `state.json` self-documents which of the 9 standard stages were dropped and why. Introduces the **`metadata.plan_gate`** carrier (`bypass` for the unattended triggers, `checkpoint` for `micro:`/`quick:`, mirroring `fn_gate`) so resume-after-interruption honors the `micro:`/`quick:` post-plan human checkpoint instead of silently dispatching stages. All edits are additive docs/prompt changes — no behavior change for the always-unattended main pipeline.
-
-> **3.14.0 maintenance note**: plugin **3.14.0** retires the sub-2.1.169 backward-compat layer — the resume degrade tiers, dead "(v2.1.XXX+)" gates in operational guidance, and the legacy *unnumbered* artifact-name grace are gone (min CC stays **2.1.169**; integrated band stays **2.1.166→2.1.170**). **Resume caveat**: a worktask interrupted under plugin ≤3.13.0 that wrote unnumbered `.context/<basename>.md` artifacts will no longer resume-resolve them — finish in-flight worktasks before upgrading. Numbered `<basename>-N.md` artifacts (the default for many releases) are unaffected.
-
-> **Managed version gating (optional, v2.1.163+)**: organizations can hard-gate the Claude Code version this plugin runs on via the `requiredMinimumVersion` / `requiredMaximumVersion` managed-settings keys (enterprise/team managed `settings.json`). Use these keys if your org needs to pin CC within a tested window. Related model governance: a managed `availableModels` allowlist constrains subagent model overrides too (v2.1.172), and `enforceAvailableModels` (v2.1.175) extends it to the Default model — under management, the plugin's per-stage `metadata.model` aliases may silently resolve to a different model (the orchestrator audits this; see `skills/worktask/SKILL.md § Pre-Stage Validation`).
+**Plugin v3.26.0 · Requires Claude Code 2.1.183+**
 
 ## Features
 
-- **Worktree-isolated + two approval gates (plan + finalization) (v3.26.0)**: every worktask runs in a dedicated git worktree and STOPs twice — once after planning to approve the plan (`plan_gate: "checkpoint"`; skipped by `--auto-plan` / `--emergency`) and once before finalization to approve commit/push/PR (`fn_gate: "checkpoint"`; skipped by `--auto-finalization` / `--emergency`). By default FN STOPs before any commit/push/PR; `--auto-finalization` finalizes unattended. `--auto-plan` is orthogonal — it skips only the plan gate, never the FN gate. Changes are reviewable as PRs. (Batch runs via **`/megatask`** stamp both gates `"bypass"` directly per issue — see the Megatask feature below.)
-- **`/megatask` — dependency-DAG batch orchestration (v3.26.0)**: run many worktasks across a GitHub milestone (`/megatask N`) or an explicit issue array (`/megatask --issues 12,15,18`). Parses `Depends on:` / `Blocks:` + P0–P3 labels into a DAG, executes in topological + priority order (never starting an issue whose blockers are unmerged), isolates each issue in its own worktree, and drives completion via the `megatask-monitor` hook (unblock-dependents + progress). One human checkpoint: the R1 batch confirmation.
+- **Worktree-isolated + two approval gates (plan + finalization)**: every worktask runs in a dedicated git worktree and STOPs twice — once after planning to approve the plan (`plan_gate: "checkpoint"`; skipped by `--auto-plan` / `--emergency`) and once before finalization to approve commit/push/PR (`fn_gate: "checkpoint"`; skipped by `--auto-finalization` / `--emergency`). By default FN STOPs before any commit/push/PR; `--auto-finalization` finalizes unattended. `--auto-plan` is orthogonal — it skips only the plan gate, never the FN gate. Changes are reviewable as PRs. (Batch runs via **`/megatask`** stamp both gates `"bypass"` directly per issue — see the Megatask feature below.)
+- **`/megatask` — dependency-DAG batch orchestration**: run many worktasks across a GitHub milestone (`/megatask N`) or an explicit issue array (`/megatask --issues 12,15,18`). Parses `Depends on:` / `Blocks:` + P0–P3 labels into a DAG, executes in topological + priority order (never starting an issue whose blockers are unmerged), isolates each issue in its own worktree, and drives completion via the `megatask-monitor` hook (unblock-dependents + progress). One human checkpoint: the R1 batch confirmation.
 - **9-Stage Worktask**: Planning → Architecture → Team Lead → Development → Developer Review → QA → Documentation → Finalization → Stakeholder
 - **Task System Integration**: Native `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` tools
 - **Native Dependencies**: `blockedBy` arrays for explicit dependency management
@@ -86,7 +66,7 @@ Add to your Claude Code configuration:
 git clone https://github.com/igrsoft/company-workflow.git
 
 # Or add as a plugin
-claude plugins add /path/to/company-worktask
+claude plugins add /path/to/company-workflow
 ```
 
 ## Quick Start
@@ -128,13 +108,17 @@ Embedded commands are detected by matching `/<name>` or `/<plugin:name>` pattern
 
 ## Pipeline Sizing
 
-Single entry point (`/worktask`). PL0 dynamic sizing selects the stage set by complexity score:
+Single entry point (`/worktask`). PL always runs; PL0 dynamic sizing scores complexity (0–50) and creates only the stages the work needs:
 
-| Complexity | Typical stages | For |
-|---|---|---|
-| Low | PL → DV → DR → QA (AR/TL/DC dropped) | Single-file fixes, small bug fixes |
-| Standard | Full 9 stages | Multi-file features, architectural changes |
-| Secure (`--secure`) | 11 stages (adds SR, RE) | Security-sensitive work |
+| Score | Tier | Stages created (PL always runs) |
+|-------|------|---------------------------------|
+| 0–10 | Low | DV → DR → QA |
+| 11–20 | Medium | AR → DV → DR → QA |
+| 21–30 | Moderate | AR → TL → DV → DR → QA |
+| 31–40 | High | AR → TL → DV → DR → QA → DC → FN → ST (full 9 stages) |
+| 41–50 | Critical | AR → TL → DV → DR → SR → QA → DC → RE → FN → ST (11 stages, adds SR + RE) |
+
+`--secure` / `--full` forces the 11-stage path (SR after DR, RE before FN). Security-sensitive features auto-include SR regardless of score.
 
 ## 9-Stage Worktask
 
@@ -205,12 +189,16 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 |-------|-------------|----------------|
 | `product-manager` | Product strategy, requirements | PL (Planning) |
 | `software-architector` | Architecture, design patterns | AR (Architecture) |
-| `team-lead` | Team coordination, code reviews | TL (Team Lead) |
+| `team-lead` | Team coordination, sprint planning | TL (Team Lead) |
 | `developer` | Dynamic platform developer routing | DV (Development) |
+| `technical-lead` | Code quality, technical review | DR (Developer Review) |
 | `qa-engineer` | Testing, quality assurance | QA (QA) |
 | `technical-writer` | Documentation | DC (Documentation) |
 | `project-manager` | Sprint management, releases | FN (Finalization) |
 | `stakeholder` | Business approval, ROI | ST (Stakeholder) |
+| `security-reviewer` | OWASP compliance, vulnerability review | SR (Security Review, secure/full) |
+| `release-engineer` | Versioning, changelog, deployment readiness | RE (Release Engineering, secure/full) |
+| `incident-responder` | Production triage, hotfix coordination | IR (Incident Response, emergency) |
 | `designer` | UI/UX strategy, design systems | PL (Planning) |
 | `ethics-reviewer` | Constitutional compliance, harm assessment | Support |
 | `prompt-engineer` | Agent/command optimization | Support |
@@ -226,13 +214,15 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/estimate` | Estimate task complexity and effort |
 | `/export-estimate` | Export estimates to CSV |
 | `/context-status` | Check context and worktask state |
+| `/request-plan` | Turn a free-form request into a lightweight, context-aware plan |
+| `/improve-yourself` | Retrospective: propose agent/skill/command updates from user edits |
 
 #### Designer
 | Command | Description |
 |---------|-------------|
 | `/design-specs` | Generate design specifications |
 | `/design-review` | Review design decisions |
-| `/a11y-audit` | Accessibility audit (WCAG) |
+| `/accessibility-audit` | Accessibility audit (WCAG) |
 
 #### Product Manager
 | Command | Description |
@@ -240,6 +230,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/pm-prioritize` | RICE/WSJF prioritization |
 | `/pm-requirements` | Generate PRD |
 | `/pm-roadmap` | Product roadmap planning |
+| `/pm-milestone` | Generate milestone tickets with agent assignments |
 
 #### Software Architect
 | Command | Description |
@@ -247,6 +238,8 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/arch-review` | Architecture review |
 | `/arch-decision` | Create ADRs |
 | `/tech-debt` | Technical debt analysis |
+| `/tech-decision` | Create TDRs (technology decision records) |
+| `/tech-review` | Deep technical review (quality, performance, security) |
 
 #### QA Engineer
 | Command | Description |
@@ -260,12 +253,12 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 |---------|-------------|
 | `/sprint-plan` | Sprint planning |
 | `/risk-assess` | Risk assessment |
-| `/release-notes` | Generate release notes |
+| `/create-release-notes` | Generate release notes |
+| `/create-pr` | Commit and open a pull request to the parent branch |
 
 #### Team Lead
 | Command | Description |
 |---------|-------------|
-| `/standup` | Standup summary |
 | `/senior-review` | Senior developer code review |
 | `/code-review-dev` | Development-focused code review |
 | `/code-impl` | Code implementation guidance |
@@ -275,6 +268,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 |---------|-------------|
 | `/doc-audit` | Documentation audit |
 | `/readme-update` | README maintenance |
+| `/cc-update` | Update plugin agents/commands/skills for new Claude Code features |
 
 #### Stakeholder
 | Command | Description |
@@ -299,24 +293,37 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/harm-assessment` | Harm assessment analysis |
 | `/transparency-check` | Verify output transparency |
 
-### Skills (27 total)
-- `dv-screenshot-capture/SKILL.md` - DV stage screenshot capture with platform adapters (apple/web/android/cli-fallback)
-- `worktask.md` - Complete worktask system documentation
-- `task-folder-organization.md` - Task folder structure
-- `shared/five-whys.md` - Root cause analysis technique
-- `claude-constitution.md` - Constitutional principles and ethics framework
-- `agent-coordination.md` - Multi-agent coordination patterns
-- `context-compression.md` - Context optimization techniques
-- `cost-optimization.md` - Token and cost management
-- `csv-export-templates.md` - Export format templates
-- `estimation/SKILL.md` - Complexity estimation methods
-- `megatask/SKILL.md` - Megatask: dependency-DAG orchestration of many worktasks across a milestone or issue array (the `/megatask` command)
-- `review/SKILL.md` - Senior review guidelines
-- `self-improvement/SKILL.md` - ST-stage retrospective: diff-based learning from user edits; writes `.context/learnings.md` with per-proposal approval checklist, scoped to in-context agents/skills/commands only
-- `worktask-testing-strategy.md` - Worktask-integrated testing planning for PL/AR stages
-- `worktask/references/handoff-protocol.md` - Inter-stage handoff schema: state.json ledger, frontmatter contract, cache-friendly prompt layout
+#### App Store / Publishing
+| Command | Description |
+|---------|-------------|
+| `/appstore-info` | Scaffold App Store listing content from README |
+| `/appstore-iap` | Set up App Store Connect in-app purchases |
+| `/appstore-screenshots` | Generate App Store screenshots |
 
-### Tools
+### Skills (23 total)
+- `agent-coordination` — Multi-agent coordination, handoffs, parallel execution, error escalation
+- `appstore-screenshots` — App Store screenshot generation (device specs, layout, Pencil MCP)
+- `claude-constitution` — Constitutional principles and ethics framework
+- `context-compression` — Context compression between agent handoffs
+- `cost-optimization` — Token and cost tracking/optimization
+- `cross-plugin-handoff` — Handoff protocol to external plugins (apple-developer, system-developer, …)
+- `csv-export-templates` — CSV export structure for Google Sheets import
+- `dv-screenshot-capture` — DV-stage screenshot capture, attached to the PR as visual evidence
+- `estimation` — Complexity scoring (0–50) and T-shirt sizing
+- `incident-response` — Incident classification, hotfix worktask, rollback, post-mortem (IR)
+- `logging-conventions` — Route runtime log capture to `.context/logs/`
+- `megatask` — Dependency-DAG orchestration of many worktasks (the `/megatask` command)
+- `pencil-design` — Design mockup generation via Pencil MCP (Designer)
+- `preview-ensurer` — Auto-add `#Preview` to modified SwiftUI views before snapshotting
+- `release-engineering` — Semantic versioning, changelog, deployment readiness (RE)
+- `request-plan` — Turn a free-form request into a lightweight, context-aware plan
+- `review` — Senior technical review framework for estimates
+- `security-review-process` — OWASP Top 10 checklist and secure-coding patterns (SR)
+- `self-improvement` — ST-stage retrospective: propose scoped updates from user edits
+- `shared/milestone-helpers` — Helper patterns for milestone/megatask operations
+- `task-folder-organization` — `.context/` folder structure and artifact naming
+- `worktask` — Complete staged worktask system (dynamic sizing, init, stage management)
+- `worktask-testing-strategy` — Test-strategy planning for PL/AR stages
 
 ## Error Handling
 
@@ -330,9 +337,11 @@ Each stage can retry up to 3 times before escalation. Error narrative tracked pe
 **retry_count**: 2
 ```
 
-### Escalation Chain
+### Escalation Chains
 ```
-ST → FN → QA → DV → TL → AR → PL → USER
+9-stage:   ST → FN → DC → QA → DR → DV → TL → AR → PL → USER
+11-stage:  ST → FN → RE → DC → QA → SR → DR → DV → TL → AR → PL → USER
+Emergency: FN → RE → QA → DR → DV → IR → USER
 ```
 
 ## Command Quick Reference
@@ -374,14 +383,13 @@ ST → FN → QA → DV → TL → AR → PL → USER
 
 ### During Release
 ```
-/release-notes                      # Generate release notes
+/create-release-notes               # Generate release notes
 /executive-summary                  # Stakeholder summary
 /sprint-plan                        # Plan next sprint
 ```
 
 ### Troubleshooting
 ```
-/standup                            # Check progress
 /context-status                     # Context analysis
 ```
 
