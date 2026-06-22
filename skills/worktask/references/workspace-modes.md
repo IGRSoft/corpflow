@@ -1,6 +1,6 @@
 # Workspace Modes — detection & isolation rules
 
-Read when running in milestone/worktree mode, inside a Conductor workspace clone, or on any cwd↔workspace_path mismatch (from `skills/worktask/SKILL.md § Workspace Mode` stub). When using `--milestone:N`, each ticket executes in an isolated workspace.
+Read when running in megatask/worktree mode, inside a Conductor workspace clone, or on any cwd↔workspace_path mismatch (from `skills/worktask/SKILL.md § Workspace Mode` stub). In a megatask run (`/megatask N`), each ticket executes in an isolated workspace.
 
 ## Workspace Detection
 
@@ -51,4 +51,4 @@ Failure mode: edits in the sibling repo land on the wrong branch, are not visibl
 | Track 1 | `t1-1`, `t1-2`, ... |
 | Track N | `t{N}-1`, `t{N}-2`, ... |
 
-See `skills/worktask-milestone/SKILL.md` for full workspace documentation.
+See `../../megatask/SKILL.md` (§ Workspace Architecture) for full workspace documentation.

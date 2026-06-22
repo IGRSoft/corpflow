@@ -219,7 +219,7 @@ Hooks can invoke MCP tools directly via `type: "mcp_tool"` (previously `command`
 }
 ```
 
-**Plugin v3.10.0 historical note:** `plugin.json` shipped an `mcp_tool` hook on `Stop` matching `igrsoft:product-manager|igrsoft:project-manager` that fired `conductor.PushNotification` at the PL and FN stages. The hook still fires at stage completion for observability (PushNotification). The PL stage is followed by a human plan-approval gate (Step A.5); the FN stage is now gated by a finalization checkpoint (`fn_gate`, default `"checkpoint"`) that STOPs before commit/push/PR unless bypassed by `--auto-finalization` / `--milestone:N` / `--emergency`. Gracefully no-ops if the conductor MCP server is unavailable.
+**Plugin v3.10.0 historical note:** `plugin.json` shipped an `mcp_tool` hook on `Stop` matching `igrsoft:product-manager|igrsoft:project-manager` that fired `conductor.PushNotification` at the PL and FN stages. The hook still fires at stage completion for observability (PushNotification). The PL stage is followed by a human plan-approval gate (Step A.5); the FN stage is now gated by a finalization checkpoint (`fn_gate`, default `"checkpoint"`) that STOPs before commit/push/PR unless bypassed by `--auto-finalization` / `--emergency` (a `/megatask` batch stamps `fn_gate: "bypass"` directly on each per-issue PL0). Gracefully no-ops if the conductor MCP server is unavailable.
 
 ### PostToolUse duration_ms (v2.1.119+)
 
@@ -292,7 +292,7 @@ When agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), additio
 | `TeammateIdle` | Teammate finishes work and becomes idle | `agent_id`, `agent_type` | Assign next task, reassign work |
 | `TaskCompleted` | A task in the shared task list is completed | `agent_id`, `agent_type` | Trigger dependent stages, update orchestrator |
 
-These hooks enable event-driven orchestration in milestone mode, where the lead session can react to teammate progress automatically.
+These hooks enable event-driven orchestration in megatask mode, where the lead session can react to teammate progress automatically.
 
 ### Stopping Teammates Programmatically
 
@@ -302,7 +302,7 @@ These hooks enable event-driven orchestration in milestone mode, where the lead 
 { "continue": false, "stopReason": "Issue completed — PR created" }
 ```
 
-Use cases: stop teammate when its issue is complete, when milestone budget is exhausted, or when a blocking error requires lead intervention.
+Use cases: stop teammate when its issue is complete, when megatask budget is exhausted, or when a blocking error requires lead intervention.
 
 > Background tasks a teammate launches survive the teammate finishing its turn (CC ≥ 2.1.183) — a `TeammateIdle` event does not imply the teammate's background work has stopped.
 
@@ -318,7 +318,7 @@ Use cases: stop teammate when its issue is complete, when milestone budget is ex
 | Tool restrictions | `tools` frontmatter per agent | Inherits lead's permissions |
 | Token cost | Lower (results summarized) | Higher (N context windows) |
 | Nesting | Up to 5 levels deep, foreground and background sharing one depth budget (CC ≥ 2.1.181; nesting itself since 2.1.172) | Cannot spawn sub-teams |
-| Source isolation | None by default; `isolation: worktree` in frontmatter | None by default; worktree mode recommended for milestone |
+| Source isolation | None by default; `isolation: worktree` in frontmatter | None by default; worktree mode recommended for megatask |
 
 ### When to Use Each
 
@@ -326,8 +326,8 @@ Use cases: stop teammate when its issue is complete, when milestone budget is ex
 |-----------------|-----------|-------------|
 | Standard 9/11-stage | Default | Not recommended |
 | Cross-plugin handoff (DV→apple-developer) | Default | Not applicable |
-| Milestone sequential issues | Default (orchestrator) | Not recommended |
-| Milestone parallel independent issues | Task-based tracks | Optional (experimental) |
+| Megatask sequential issues | Default (orchestrator) | Not recommended |
+| Megatask parallel independent issues | Task-based tracks | Optional (experimental) |
 | Cross-cutting research / competing hypotheses | Possible | Preferred |
 | Code review from multiple perspectives | Possible | Preferred |
 

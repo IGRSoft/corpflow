@@ -634,8 +634,8 @@ find_workspace_json() {
 }
 
 # ---------- milestone-mode detector -----------------------------------------
-# Returns 0 (true) if the worktask is running under --milestone:N or inside a
-# milestone-worktask workspace. Detection signals (highest priority first):
+# Returns 0 (true) if the worktask is running under a batch orchestrator (/megatask)
+# or inside a megatask per-issue workspace. Detection signals (highest priority first):
 #   1. MILESTONE_MODE=1 env override (used by tests).
 #   2. state.json:metadata.milestone non-empty.
 #   3. workspace.json present at $WORKSPACE_ROOT or $PWD.

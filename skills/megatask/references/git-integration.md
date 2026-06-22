@@ -1,5 +1,8 @@
 # Git Integration
 
+> Paths below use `milestone-{N}` as the worktree `<group>` token. In array mode
+> (`/megatask --issues …`) the group is `issues-{shortid}` instead; substitute accordingly.
+
 ## Workspace Setup
 
 ```bash

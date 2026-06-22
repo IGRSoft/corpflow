@@ -154,16 +154,16 @@ Raw captures (build/test/monitor stdout) go to `.context/logs/` per `logging-con
 
 ### Worktree Parallelism
 
-All milestone issues run in isolated worktrees. Each issue has its own working directory and branch, making safe parallelism unconditional:
+All megatask issues run in isolated worktrees. Each issue has its own working directory and branch, making safe parallelism unconditional:
 
 | Pattern | Isolation | Safety |
 |---------|-----------|--------|
-| Parallel issues in milestone | Full source isolation per issue | Always safe |
+| Parallel issues in megatask | Full source isolation per issue | Always safe |
 | QA + DC parallel | Each has own copy | Always safe |
 | Multiple DV stages across issues | Separate worktrees per issue | **SAFE** |
-| Agent teams + milestone issues | Each teammate's own worktree | **Recommended** |
+| Agent teams + megatask issues | Each teammate's own worktree | **Recommended** |
 
-> Worktree isolation is always active — each DV stage and each milestone issue gets a separate working directory and branch, eliminating source-tree conflicts.
+> Worktree isolation is always active — each DV stage and each megatask issue gets a separate working directory and branch, eliminating source-tree conflicts.
 
 ### Native Workflow Fan-Out (`--dynamic` mode)
 
@@ -173,7 +173,7 @@ worktree-split above. The two are distinct mechanisms with the same isolation gu
 
 | | Manual worktree-split (default) | Native Workflow fan-out (`--dynamic`) |
 |---|---|---|
-| Trigger | `--milestone` (worktree always) | `--dynamic` (+ optional `--milestone`) |
+| Trigger | `/megatask` (worktree always) | `--dynamic` (+ optional `/megatask`) |
 | Parallelism | Orchestrator delegates one `Task()` per worktree, in-context | Engine spawns children via `parallel()` / `pipeline()` |
 | Isolation | Orchestrator creates `.worktrees/…` per issue | `agent(prompt, { …, isolation: 'worktree' })` — engine provisions the worktree |
 | Decision point | Orchestrator loop (blockedBy resolution) | TL stage output drives DV `parallel()` fan-out (`dynamic-workflow.md#script-template`) |
@@ -638,7 +638,7 @@ Claude Code ships a native `/workflows` command and Workflow tool for **dynamic 
 **When to reach for each:**
 
 - Reach for native dynamic workflows when you need quick parallelism without governance overhead (e.g., batch linting, parallel research, one-off data transforms).
-- Reach for the igrsoft worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks have two human checkpoints — the PL gate (plan approval after PL0) and the FN gate (finalization approval, which STOPs before commit/push/PR by default); both are bypassed by `--milestone:N` / `--emergency`, the PL gate also by `--auto-plan` and the FN gate also by `--auto-finalization`.
+- Reach for the igrsoft worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks have two human checkpoints — the PL gate (plan approval after PL0) and the FN gate (finalization approval, which STOPs before commit/push/PR by default); both are bypassed by `--emergency`, the PL gate also by `--auto-plan` and the FN gate also by `--auto-finalization`. A batch orchestrator (`/megatask`) stamps `plan_gate`/`fn_gate: "bypass"` directly on each per-issue PL0.
 
 They can compose: a DV agent inside an igrsoft worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
 

@@ -53,7 +53,7 @@ In the 9-stage worktask system, the project-manager handles:
 
   Resolve issue number from ranked sources (first-match-wins):
   1. `state.json` → `.metadata.github_issue_url` — extract trailing integer from `/issues/<N>`. (Canonical location; written by `publish-pl-issue.sh`. NOT `facts.github_issue_url`.)
-  2. PL0 task `metadata.github_issue_number` (milestone mode — worktask milestone issue ID).
+  2. PL0 task `metadata.github_issue_number` (megatask per-issue mode — megatask issue ID).
   3. Branch parse: `feature/<slug>-<NNN>` last 3-digit token, OR first `#NNN` token in `git log --oneline -n 5`.
 
   Validate composed PR body via regex `(?im)^(?:Closes|Fixes|Resolves)\s+#\d+\s*$`. Branching:
@@ -130,7 +130,7 @@ absent, omit the table and note "cost hook not configured".
 Generated from `.context/logs/cost-*.jsonl` via `/cost-report --format md`.
 ```
 
-**Workspace Mode**: Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. See `skills/worktask-milestone/SKILL.md § Workspace-Aware FN Stage`.
+**Workspace Mode**: Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. **Megatask completion contract**: under a `/megatask` per-issue run (`workspace.json` present), after the PR is created the FN stage MUST write `execution.status: "completed"` and `execution.pr: "<PR URL>"` into that issue's `workspace.json` (on unrecoverable failure write `execution.status: "failed"`). `hooks/megatask-monitor.sh` reads this to mark the orchestrator issue done and unblock its dependents — see `skills/megatask/references/schemas.md § Completion contract`. See `skills/megatask/SKILL.md § Orchestrator Pattern`.
 
 **PR Creation**: Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode (use `EnterWorktree` with `path` parameter to target the correct worktree when multiple exist — `EnterWorktree` can switch between Claude-managed worktrees mid-session without an intervening `ExitWorktree`; honors `worktree.baseRef` = `head`\|`fresh` setting — plugin assumes `head`). Stale worktrees are auto-cleaned.
 

@@ -65,7 +65,7 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 ├── retrospective-0.md       # Stakeholder sign-off (ST stage, run 0)
 ├── incident-0.md            # Incident triage, RCA (IR stage - emergency, run 0)
 ├── ethics-review-0.md       # Ethics compliance review (ET stage, run 0)
-├── milestone.json           # GitHub milestone context (when --milestone used)
+├── milestone.json           # GitHub milestone context (when run under /megatask)
 ├── deployment.md            # Deployment plan (if applicable)
 ├── state.json               # Worktask ledger (shared across runs)
 ├── designs/                 # CANONICAL Figma asset dir: figma-*.png + figma-registry.md + Pencil .pen mockups
@@ -141,14 +141,14 @@ Product Manager's planning document containing:
 - **complete-summary-N.md**: Emergency deployment (FN stage)
 
 **Always Optional:**
-- **milestone.json**: GitHub milestone context (when `--milestone` used)
+- **milestone.json**: GitHub milestone context (when run under `/megatask`)
 - **deployment.md**: Deployment plan (if applicable)
 - **errors/**: Per-agent escalation narratives (see below)
 - **logs/**: Runtime capture logs (see `logging-conventions` skill)
 
 ### Per-Agent Error Files (`errors/`)
 
-`errors/` holds **per-agent escalation narratives** — one file per agent, created on failure. One file per agent prevents parallel stages (QA+DC, TL-split DVN streams, milestone tracks) from clobbering each other and preserves per-agent failure history.
+`errors/` holds **per-agent escalation narratives** — one file per agent, created on failure. One file per agent prevents parallel stages (QA+DC, TL-split DVN streams, megatask tracks) from clobbering each other and preserves per-agent failure history.
 
 - Filename: `.context/errors/<agent-basename>.md`
 - Basename = last `:`-separated segment of `metadata.agent` (e.g., `developer`, `qa-engineer`, `ios-developer` for `apple-developer:ios-developer`)
@@ -164,14 +164,14 @@ The canonical `errors/<agent>.md` vs `logs/*.log` split table, filename grammar 
 
 ### Milestone Context File (`milestone.json`)
 
-Created when `/worktask --milestone:N` is used. Contains:
+Created when run under `/megatask`. Contains:
 
 - **milestone**: GitHub milestone metadata (number, title, due date)
 - **issues**: Array of issues sorted by priority with branch names
 - **execution**: Current issue, completed/pending arrays
 - **summary**: Issue counts and progress
 
-See [Milestone Worktask](../worktask-milestone/SKILL.md) for full schema.
+See [Megatask](../megatask/SKILL.md) for full schema.
 
 ## File Organization Guidelines
 

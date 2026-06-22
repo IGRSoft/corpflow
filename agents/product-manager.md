@@ -174,8 +174,8 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 |---|---|---|
 | `metadata.plan_file` | `"planning-${N}.md"` | Pin active plan |
 | `metadata.run_index` | `N` (integer) | Resolve `<basename>-${N}.md` artifacts |
-| `metadata.isolation` | `"worktree"` | File-writing stages (DV; milestone per-issue AR/DR/QA) always run in an isolated worktree. Consumed by developer.md § D0.0, technical-lead.md DR check, SKILL.md 4.8, and workspace-modes.md. |
-| `metadata.fn_gate` | `"checkpoint"` (default) | Pre-finalization human checkpoint. Default `"checkpoint"` (orchestrator STOPs before the FN delegation for approval); stamp `"bypass"` only for `--auto-finalization` / `--milestone:N` / `--emergency`. `--auto-plan` never bypasses FN. Stamp on PL0; the orchestrator reads it at the mid-loop FN gate check. |
+| `metadata.isolation` | `"worktree"` | File-writing stages (DV; megatask per-issue AR/DR/QA) always run in an isolated worktree. Consumed by developer.md § D0.0, technical-lead.md DR check, SKILL.md 4.8, and workspace-modes.md. |
+| `metadata.fn_gate` | `"checkpoint"` (default) | Pre-finalization human checkpoint. Default `"checkpoint"` (orchestrator STOPs before the FN delegation for approval); stamp `"bypass"` only for `--auto-finalization` / `--emergency`. `--auto-plan` never bypasses FN. A batch orchestrator (`/megatask`) stamps `"bypass"` directly on each per-issue PL0. Stamp on PL0; the orchestrator reads it at the mid-loop FN gate check. |
 | `metadata.skip_exploration` | `true` if `.context/exploration.md` exists | Suppress redundant Glob/Grep in AR/TL/DV |
 | `metadata.exploration_anchors` | `["exploration.md#facts", "exploration.md#refs", "planning-${N}.md#requirements"]` (when `skip_exploration: true`) | Authoritative pre-explored set |
 | `metadata.requires_screenshots` | the detector value from the plan frontmatter (boolean) | Drive DV capture + gate; consumed by DV (capture), QA (Q1.5), and `attach-visual-evidence.sh`. Stamp on DV and QA tasks. |
@@ -229,7 +229,7 @@ Every stage (AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) writes its artifact
 ### PL0 Stage (Planning)
 - **Detect workspace context** from task metadata
 - **If workspace mode**: Read issue from `workspace.json`, write artifacts to workspace's `.context/`
-- **If standard mode**: Create `.context/` folder, read from `milestone.json` if exists
+- **If standard mode**: Create `.context/` folder, read per-issue context from `milestone.json` if exists (set by `/megatask` per-issue runs)
 - Compute `<plan_file>` per **Plan File Naming** above
 - Write `.context/<plan_file>` with requirements and acceptance criteria
 - **Define test strategy** (what needs to be tested, existing tests to update)
@@ -242,7 +242,7 @@ When the orchestrator's `/worktask` invocation carries `--no-gh-issue`, PL0 MUST
 
 When the flag is **absent** (default), PL0 leaves the field unset and the helper runs the full publish pipeline (sanitise → `gh issue create` → state.json write → audit row). See `commands/worktask.md` for the canonical flag list and `skills/worktask/SKILL.md § PL Issue Publish` for the runtime semantics.
 
-- `--milestone:N` (CLI) implicitly opts out of GH publish — no additional flag needed; the helper detects milestone mode via `state.json:metadata.milestone` or `workspace.json` presence and exits `0` with `reason: "milestone_mode"` before any `gh` call (no create, no comment).
+- Per-issue `/megatask` runs implicitly opt out of GH publish — no additional flag needed; the helper detects the batch per-issue context via `state.json:metadata.milestone` or `workspace.json` presence and exits `0` with `reason: "milestone_mode"` before any `gh` call (no create, no comment).
 
 #### Anchor-content hygiene (GitHub publish safety)
 
@@ -333,7 +333,7 @@ Required anchors (kebab-case, no underscores, no spaces):
 
 PostToolUse anchor-lint (when configured per `handoff-protocol.md § Anchor Pre-Flight`) fires after the write and signals the agent to amend the artifact if any anchor is missing. Without the hook, validation falls through to DR-stage `cache-lint.sh --anchor-lint`; the cost is the same but discovered late — prefer the proactive check.
 
-**Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For milestone mode, read issue from `.context/milestone.json`. See `skills/worktask-milestone/SKILL.md § Workspace-Aware Stages`.
+**Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For megatask per-issue mode, read issue from `.context/milestone.json`. See `skills/megatask/SKILL.md § Orchestrator Pattern`.
 
 ### Dynamic Worktask Sizing (PL0 Stage)
 

@@ -433,7 +433,7 @@ properties:
         maxLength: 240
         description: |
           One-sentence statement of the worktask's intent, populated by PL0 from the user-supplied task
-          description (or the issue title in `--milestone:N` mode). Read by stage agents that need the
+          description (or the issue title under a `/megatask` per-issue run). Read by stage agents that need the
           original intent without re-reading the plan file (e.g. AR sanity-checking architecture against
           requirements, FN composing the PR title). Supersedes the `/goal` slash directive — the directive
           would have been a second, drift-prone surface for the same value (v3.10.1).

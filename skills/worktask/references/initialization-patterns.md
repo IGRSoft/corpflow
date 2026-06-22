@@ -1,4 +1,4 @@
-# Milestone Initialization & Worktask Setup
+# Worktask Initialization & Setup
 
 ## Conventions used in this document
 
@@ -99,99 +99,19 @@ const ar0 = TaskCreate({
 });
 ```
 
-## Milestone Initialization
+## Multi-Issue Initialization → `/megatask`
 
-When `--milestone:N` is specified:
+Single-issue setup is the only initialization this skill owns. **Multi-issue batches across a GitHub
+milestone or an explicit issue array are orchestrated by `/megatask`**, not by `/worktask` — including
+issue fetching, PR-skip detection, priority + dependency/blocker ordering, orchestrator.json, and
+per-issue worktree creation. `/megatask` launches one `/worktask` per ready issue (gates pre-bypassed),
+so the per-issue setup above still applies inside each worktree.
 
-### 1. Fetch Milestone Issues
-
-```bash
-# Get milestone info
-gh api repos/:owner/:repo/milestones/{N} --jq '.title'
-
-# Get all open issues
-gh issue list --milestone "{title}" --json number,title,labels,body
-```
-
-### 2. Filter Issues with Existing PRs
-
-Skip issues that already have linked PRs:
-
-```bash
-# Check for linked PRs on each issue
-gh api /repos/:owner/:repo/issues/{issue#}/timeline --jq '[.[] | select(.event == "cross-referenced" and .source.issue.pull_request)] | length'
-```
-
-If count > 0, mark issue as `skipped_has_pr` and exclude from worktask.
-
-### 3. Sort by Priority
-
-| Priority | Label | Order |
-|----------|-------|-------|
-| Critical | P0, priority:critical | 1 |
-| High | P1, priority:high | 2 |
-| Medium | P2, priority:medium | 3 |
-| Low | P3, priority:low | 4 |
-| None | (unlabeled) | 5 |
-
-### 4. Per-Issue Workspace Setup
-
-For each issue in priority order:
-
-```bash
-# Create worktree with dedicated branch (no checkout switching needed)
-git fetch origin develop
-git worktree add -b feature/{issue#}-{slug} \
-  .worktrees/milestone-{N}/{issue#} origin/develop
-
-# Create .context/ inside worktree
-mkdir -p .worktrees/milestone-{N}/{issue#}/.context
-```
-
-Each worktree has its own branch checked out independently. Multiple issues can run truly in parallel without branch conflicts.
-
-### 5. Initialize Orchestrator
-
-Create orchestrator.json to track all issues.
-
-Location: `.worktrees/orchestrator.json`
-
-> `parallel_tracks` is computed at milestone init (orchestrator-derived, `min(open issues, 5)` reduced by disk capacity; single-issue ⇒ 1), not configured — the literal below is an illustrative recorded value.
-
-```json
-{
-  "version": "3.0",
-  "milestone_number": 1,
-  "milestone_title": "Sprint 2025-W05",
-  "parallel_tracks": 3,
-  "isolation": "worktree",
-  "base_branch": "develop",
-  "created_at": "2026-02-23T10:00:00Z",
-  "issues": [
-    {
-      "number": 27,
-      "title": "feat: Add watermark support",
-      "priority": "P0",
-      "status": "pending",
-      "track": null,
-      "branch": "feature/27-watermark-support",
-      "workspace": ".worktrees/milestone-1/27",
-      "isolation": "worktree"
-    }
-  ]
-}
-```
-
-### 6. Execute Per-Issue Worktask
-
-Each issue runs the full staged worktask independently:
-
-```
-Issue #27 → feature/27-watermark → PL→AR→TL→DV→DR→QA→DC→FN→ST → PR → complete
-Issue #26 → feature/26-font-family → PL→AR→TL→DV→DR→QA→DC→FN→ST → PR → complete
-```
-
-See `shared/milestone-helpers.md` for helper functions.
+See:
+- `../../megatask/SKILL.md` — orchestrator pattern, worktree topology, monitoring loop
+- `../../megatask/references/dependency-graph.md` — DAG construction, cycle detection, levelled schedule
+- `../../megatask/references/schemas.md` — orchestrator.json (v3.1) + workspace.json schemas
+- `../../shared/milestone-helpers/SKILL.md` — branch naming, PR detection, worktree helpers
 
 ## Worktask Initialization
 

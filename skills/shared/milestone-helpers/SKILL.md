@@ -18,7 +18,7 @@ Reusable patterns for milestone worktask operations.
 | `generateBranchName(issue)` | Create `feature/{issue#}-{slug}` branch names |
 | `hasExistingPR(issueNumber)` | Check if issue already has linked PR via timeline |
 | `filterIssuesWithPRs(issues)` | Split issues into toProcess/skipped arrays |
-| `getPriorityScore(labels)` / `sortByPriority(issues)` | Sort issues by priority labels (see worktask-milestone §Priority Sorting) |
+| `getPriorityScore(labels)` / `sortByPriority(issues)` | Sort issues by priority labels (see megatask §Priority Sorting) |
 | `updateOrchestratorIssue(path, number, updates)` | Update issue state in orchestrator.json |
 | `resolveBaseBranch(issueBody)` | Resolve base branch: issue body → develop → master |
 | `initializeWorkspace(milestone, issue)` | Create legacy workspace with .context/ |
@@ -33,7 +33,7 @@ Reusable patterns for milestone worktask operations.
 
 See references/ for full implementations with code examples.
 
-> **Constants are canonical in `worktask-milestone`.** Branch-name format (`feature/{issue#}-{slug}`), priority labels (P0–P3 + none), and the base-branch resolution chain (issue body → develop → master) are defined there. This skill applies them; do not redefine — reference worktask-milestone to avoid drift.
+> **Constants are canonical in `megatask`.** Branch-name format (`feature/{issue#}-{slug}`), priority labels (P0–P3 + none), and the base-branch resolution chain (issue body → develop → master) are defined there. This skill applies them; do not redefine — reference the `megatask` skill to avoid drift.
 
 ## Git Commands Reference
 
@@ -50,6 +50,6 @@ See references/ for full implementations with code examples.
 
 ## Related
 
-- `../../worktask-milestone/SKILL.md` - Full worktask documentation
-- `worktask.md` - Core worktask system
-- `stage-codes.md` - Stage code reference
+- `../../megatask/SKILL.md` - Full megatask (milestone/array) orchestration
+- `../../../commands/worktask.md` - Core single-issue worktask system
+- `../stage-codes.md` - Stage code reference
