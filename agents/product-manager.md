@@ -175,7 +175,7 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 | `metadata.plan_file` | `"planning-${N}.md"` | Pin active plan |
 | `metadata.run_index` | `N` (integer) | Resolve `<basename>-${N}.md` artifacts |
 | `metadata.isolation` | `"worktree"` | File-writing stages (DV; milestone per-issue AR/DR/QA) always run in an isolated worktree. Consumed by developer.md § D0.0, technical-lead.md DR check, SKILL.md 4.8, and workspace-modes.md. |
-| `metadata.fn_gate` | `"bypass"` | Always bypass — worktasks run unattended. Stamp on PL0; cascades to FN gate check. |
+| `metadata.fn_gate` | `"checkpoint"` (default) | Pre-finalization human checkpoint. Default `"checkpoint"` (orchestrator STOPs before the FN delegation for approval); stamp `"bypass"` only for `--auto-finalization` / `--milestone:N` / `--emergency`. `--auto-plan` never bypasses FN. Stamp on PL0; the orchestrator reads it at the mid-loop FN gate check. |
 | `metadata.skip_exploration` | `true` if `.context/exploration.md` exists | Suppress redundant Glob/Grep in AR/TL/DV |
 | `metadata.exploration_anchors` | `["exploration.md#facts", "exploration.md#refs", "planning-${N}.md#requirements"]` (when `skip_exploration: true`) | Authoritative pre-explored set |
 | `metadata.requires_screenshots` | the detector value from the plan frontmatter (boolean) | Drive DV capture + gate; consumed by DV (capture), QA (Q1.5), and `attach-visual-evidence.sh`. Stamp on DV and QA tasks. |

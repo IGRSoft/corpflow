@@ -1,23 +1,22 @@
 ---
 name: worktask
 description: Initialize a new worktask task with proper folder structure and Task System integration
-argument-hint: '<task description> [--milestone:N] [--secure] [--emergency] [--parallel:N]'
+argument-hint: '<task description> [--milestone:N] [--secure] [--emergency] [--auto-plan] [--auto-finalization] [--parallel:N]'
 version: 0.1.0
 model: opus
 allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager)
 ---
 
-> **EXECUTION MODEL (BINDING)** — two gates, one human checkpoint.
-> The **PL gate** is the single mandatory human checkpoint: after PL0 completes, the orchestrator
+> **EXECUTION MODEL (BINDING)** — two gates, two human checkpoints.
+> The **PL gate** is the post-plan human checkpoint: after PL0 completes, the orchestrator
 > presents the generated plan and waits for explicit user approval (`AskUserQuestion`) before
 > dispatching any implementation stage (AR/DV/...). It is carried by `PL0.metadata.plan_gate`, which
-> defaults to `"checkpoint"`; only `--auto-plan` and `--milestone:N` stamp `"bypass"` to auto-proceed.
-> The **FN gate** is always unattended: `PL0.metadata.fn_gate` is stamped `"bypass"` unconditionally,
-> so the orchestrator commits, pushes, and opens the PR without stopping. Every worktask is
-> worktree-isolated, so the PR is the review surface for the implementation.
->
-> **TODO**: `/worktask --emergency` worktasks share this unattended path; any future
-> emergency-specific FN handling remains to be wired.
+> defaults to `"checkpoint"`; `--auto-plan`, `--milestone:N`, and `--emergency` stamp `"bypass"` to auto-proceed.
+> The **FN gate** is the pre-finalization human checkpoint: `PL0.metadata.fn_gate` defaults to
+> `"checkpoint"`, so the orchestrator STOPs immediately before the FN `Task()` delegation, presents a
+> pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. It is stamped
+> `"bypass"` only by `--auto-finalization`, `--milestone:N`, or `--emergency` (unattended fast-path).
+> Every worktask is worktree-isolated, so the PR is the review surface for the implementation.
 
 # Worktask Command
 
@@ -53,7 +52,8 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--milestone:N` | Execute GitHub milestone N issues |
 | `--milestone:N:ISSUE` | Execute specific issue |
 | `--parallel:N` | N concurrent tracks (max 5) |
-| `--auto-plan` | Stamp `plan_gate: "bypass"` — skip the post-PL plan-approval STOP and auto-proceed into the stage loop (trusted fast-path). FN still runs unattended. |
+| `--auto-plan` | Stamp `plan_gate: "bypass"` — skip the post-PL plan-approval STOP and auto-proceed into the stage loop (trusted fast-path). FN gate is independent — still checkpoints unless `--auto-finalization`. |
+| `--auto-finalization` | Stamp `fn_gate: "bypass"` — skip the pre-FN finalization-approval STOP; auto commit/push/PR (trusted fast-path). Plan gate still applies unless `--auto-plan`. |
 | `--dynamic` | Run the autonomous span (AR→…→QA/DC/RE, between the two human gates) on the native Workflow engine (`ultracode` tool). Both gates and the no-self-commit rule stay orchestrator-owned; degrades to the manual loop when the tool is absent. See `skills/worktask/references/dynamic-workflow.md`. |
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|all>` | Target platform |
@@ -75,7 +75,7 @@ See `skills/shared/stage-codes.md` for stage details.
 
 > **BINDING CONSTRAINTS FOR PHASE 1**
 > 1. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/images .context/errors` and TaskCreate/TaskUpdate calls are permitted. ALL file modifications belong to DV stage or later.
-> 2. **Context-Interruption Recovery**: If worktask execution is interrupted (auth flows, tool failures), upon resumption MUST verify that the PL0 task exists with status `completed`. If not, restart from the appropriate phase. (The PL gate is the one human checkpoint — see Step A.5; FN runs unattended.)
+> 2. **Context-Interruption Recovery**: If worktask execution is interrupted (auth flows, tool failures), upon resumption MUST verify that the PL0 task exists with status `completed`. If not, restart from the appropriate phase. (There are two human checkpoints — the PL gate at Step A.5 and the FN gate before finalization; the FN gate check applies (STOP on `checkpoint`, proceed on `bypass`) — `skills/worktask/SKILL.md § FN Gate`.)
 
 1. **Parse** task description and flags (`--milestone`, `--secure`, `--auto-plan`, etc.). See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:code-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
@@ -119,7 +119,7 @@ See `skills/shared/stage-codes.md` for stage details.
    fi
    ```
    **Regression guard**: If neither the plugin-registered hook NOR the project-local copy exist, emit a warning: `"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge (Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."` Do NOT block the worktask.
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", fn_gate: "bypass", isolation: "worktree", execution_mode: "<manual|dynamic>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). `fn_gate` is **always** `"bypass"` (FN finalization runs unattended — the PL gate is the one human checkpoint, handled at Step A.5). Set `execution_mode: "dynamic"` when invoked with `--dynamic`; otherwise `"manual"` (the default). `execution_mode` only selects HOW the autonomous span runs (native Workflow engine vs the manual stage loop). Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOPs after PL0 and asks for plan approval before dispatching stages). Stamp `plan_gate: "bypass"` ONLY when `--auto-plan` is present, when running `--milestone:N` (milestone batches run unattended), OR when `--emergency` is set (emergency pipeline runs unattended from IR — no plan approval gate). `plan_gate` mirrors the `fn_gate` pattern and is the carrier that lets resume logic distinguish the post-plan checkpoint on interruption — see `skills/worktask/references/resume.md § State → Action Table`.
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", plan_gate: "checkpoint", fn_gate: "checkpoint", isolation: "worktree", execution_mode: "<manual|dynamic>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). Stamp `fn_gate`: default `fn_gate: "checkpoint"` (the orchestrator STOPs immediately before the FN `Task()` delegation and asks for finalization approval before any commit/push/PR — handled at SKILL.md loop step 4.9). Stamp `fn_gate: "bypass"` ONLY when `--auto-finalization` is present, when running `--milestone:N` (milestone batches finalize unattended), OR when `--emergency` is set (incident pipeline finalizes unattended). `--auto-plan` MUST NEVER stamp `fn_gate: "bypass"` — it is orthogonal and bypasses only the plan gate. Set `execution_mode: "dynamic"` when invoked with `--dynamic`; otherwise `"manual"` (the default). `execution_mode` only selects HOW the autonomous span runs (native Workflow engine vs the manual stage loop). Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOPs after PL0 and asks for plan approval before dispatching stages). Stamp `plan_gate: "bypass"` ONLY when `--auto-plan` is present, when running `--milestone:N` (milestone batches run unattended), OR when `--emergency` is set (emergency pipeline runs unattended from IR — no plan approval gate). `plan_gate` and `fn_gate` are the two carriers that let resume logic distinguish the post-plan and pre-FN checkpoints on interruption — see `skills/worktask/references/resume.md § State → Action Table`.
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative.
    - **Record dropped stages**: when PL0's dynamic sizing omits any stage from the full 9-stage
@@ -189,12 +189,13 @@ Read `PL0.metadata.execution_mode` (default `"manual"` when absent).
   span (AR→…→QA/DC/RE, stopping before FN) per `skills/worktask/references/dynamic-workflow.md`
   (`#script-template`; `#milestone-template` for `--milestone:N`).
   Audit `workflow_launched`; on return run `#boundary-reconciliation` + audit `workflow_returned`;
-  the span runs through to FN unattended.
+  the dynamic span stops before FN and returns to the orchestrator-owned FN gate check (STOP on
+  `checkpoint`, proceed on `bypass`) — `skills/worktask/SKILL.md § FN Gate`.
 - **Otherwise** run the manual loop below unchanged; if `--dynamic` was requested but the tool is absent,
   write a `dynamic_fallback` audit row first. Crashed dynamic runs resume in manual mode
   (`dynamic-workflow.md#resume`).
 
-Execute the orchestrator execution loop from `skills/worktask/SKILL.md § Orchestrator Execution Loop`. The FN stage runs unattended (`fn_gate: "bypass"` is always set) — see `skills/worktask/SKILL.md § FN Gate`.
+Execute the orchestrator execution loop from `skills/worktask/SKILL.md § Orchestrator Execution Loop`. Before the FN `Task()` delegation the orchestrator applies the FN gate check (STOP on `checkpoint`, proceed on `bypass`) — see `skills/worktask/SKILL.md § FN Gate`.
 
 **BINDING: Workspace-root cross-check before every `Task()` delegation** — Conductor-managed sessions spawn the orchestrator inside a workspace clone whose `pwd` differs from the canonical plugin source repo. Before every `Task()` call in the stage loop, the orchestrator MUST verify that the working tree matches the task's declared workspace, and MUST inject the resolved root into the stage prompt so the subagent targets the right directory:
 

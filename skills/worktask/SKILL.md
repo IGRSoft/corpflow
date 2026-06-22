@@ -350,7 +350,9 @@ Before entering this loop, verify:
 - `"checkpoint"` (default): require BOTH PL0 `completed` AND an `approval_received` audit line with
   `subject:"PL<run_index>"` in `.context/logs/audit.jsonl` before loop entry. If the line is
   absent, STOP — return to `commands/worktask.md § Step A.5` to fulfil the gate.
-- `"bypass"` (`--auto-plan` / `--milestone:N`): PL0 `completed` alone is sufficient; no approval line.
+- `"bypass"` (`--auto-plan` / `--milestone:N` / `--emergency`): PL0 `completed` alone is sufficient; no approval line.
+
+**Signal 3 (FN gate)**: FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`). The orchestrator STOPs immediately before the FN `Task()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto-finalization` / `--milestone:N` / `--emergency`). See loop step 4.9 and § FN Gate.
 
 After PL0 completes and creates stage tasks, the orchestrator MUST:
 
@@ -530,15 +532,36 @@ while (tasks.some(t => t.status !== "completed")) {
       });
     }
 
-    // 4.9. FN stage — gate is ALWAYS bypassed (unattended). PL0 stamps
-    //      fn_gate:"bypass" unconditionally; the orchestrator never stops before FN.
-    //      See § FN Gate stub below — Read references/fn-gate.md at FN time for the
-    //      Conductor-attachments writer (still run so later sessions inherit context).
+    // 4.9. FN gate — read PL0.metadata.fn_gate (default "checkpoint"). The gate
+    //      sits BEFORE the FN Task() delegation so nothing remote happens pre-approval.
+    //      N = state.json.run_index (default 0). See § FN Gate below — Read
+    //      references/fn-gate.md at FN time for the full procedure.
     if (full.metadata.stage === "FN") {
-      // (a) Run the Pre-gate Conductor-attachments writer
-      //     (references/fn-gate.md § Pre-gate Conductor-attachments writer).
-      // (b) Write `fn_gate_bypass` audit line (reason: "unattended").
-      // (c) Fall through to normal delegation — FN commits/pushes/PRs unattended.
+      const fnGate = pl0.metadata.fn_gate ?? "checkpoint";  // TaskGet PL0
+      const N = state.run_index ?? 0;
+
+      // (a) Run the Pre-gate Conductor-attachments writer on BOTH paths
+      //     (references/fn-gate.md § Pre-gate Conductor-attachments writer) —
+      //     local-only writes, no remote ops.
+      if (fnGate === "checkpoint") {
+        // (b) Emit `fn_gate_waiting subject:"FN<N>"`.
+        appendAudit({ actor: "orchestrator", action: "fn_gate_waiting",
+                      subject: `FN${N}`, result: "ok" });
+        // (c) Present the pre-FN summary: branch, resolved base branch, commit
+        //     type, changed-file count, DR/QA verdicts, PR target + Closes #<issue>.
+        // (d) AskUserQuestion: approve to finalize (commit/push/PR), or stop.
+        //     On approval → append `approval_received subject:"FN<N>"`, then
+        //     fall through to delegate FN.
+        //     On reject → append `approval_rejected subject:"FN<N>"` and STOP
+        //     (do NOT delegate FN; surface feedback).
+        // appendAudit({ ...action:"approval_received", subject:`FN${N}`, result:"ok" });
+        // appendAudit({ ...action:"approval_rejected", subject:`FN${N}`, result:"rejected" }); // STOP
+      } else {  // "bypass" — stamped by --auto-finalization / --milestone:N / --emergency
+        // (e) Emit `fn_gate_bypass subject:"FN<N>"` (reason: "unattended") and
+        //     fall through to delegate FN — commit/push/PR unattended.
+        appendAudit({ actor: "orchestrator", action: "fn_gate_bypass",
+                      subject: `FN${N}`, result: "ok", reason: "unattended" });
+      }
     }
 
     // 5. Mark in_progress
@@ -796,9 +819,12 @@ new trigger block when introducing one (e.g., Pencil, Sosumi).
 
 ## FN Gate
 
-The FN gate is **always bypassed** — worktasks run unattended. PL0 stamps `PL0.metadata.fn_gate == "bypass"` unconditionally, so the orchestrator never stops before FN. Loop step 4.9 above runs the Conductor-attachments writer and the `fn_gate_bypass` audit line, then proceeds directly into the FN stage (commit, push, PR). In dynamic mode the same unattended path applies on workflow return.
+The FN gate is the **pre-finalization human checkpoint**. Carried by `PL0.metadata.fn_gate`, default `"checkpoint"`. It sits **before the FN `Task()` delegation**, so nothing remote (commit/push/PR) happens before approval. `N = state.json.run_index` (default `0`).
 
-**At the FN stage — Read `references/fn-gate.md`** for the Pre-gate Conductor-attachments writer (still run so Conductor's *Create PR* / *Request Review* actions inherit worktask context) and the `fn_gate_bypass` audit line. There is no pre-FN human summary or wait.
+- **`checkpoint`** (default): loop step 4.9 runs the Pre-gate Conductor-attachments writer (local-only), emits `fn_gate_waiting subject:"FN<N>"`, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. On approval → append `approval_received subject:"FN<N>"` then delegate FN (commit/push/PR). On reject → append `approval_rejected subject:"FN<N>"` and STOP (do NOT delegate FN).
+- **`bypass`** (stamped only by `--auto-finalization`, `--milestone:N`, or `--emergency`): loop step 4.9 runs the writer, emits `fn_gate_bypass subject:"FN<N>"` (`reason: "unattended"`), then delegates FN unattended. In dynamic mode the same bypass path applies on workflow return.
+
+**At the FN stage — Read `references/fn-gate.md`** for the full procedure: the Pre-gate Conductor-attachments writer (run on both paths so Conductor's *Create PR* / *Request Review* actions inherit worktask context) and the four audit lines.
 
 ## Post-capture issue update (Visual evidence)
 
@@ -848,9 +874,9 @@ After the execution loop exits (all tasks completed, including ST): if `.context
 
 The orchestrator loop is restartable. **WHEN reattaching** (PostCompact, session crash, `--resume`, or stale `in_progress` tasks found at session start): **Read `references/resume.md` FIRST** — it maps TaskList shape + audit tail → exact action, including the live-agent `claude agents --json --all` pre-check that forbids blind re-delegation of a live, busy, or parked subagent. Never re-delegate before consulting it. Compaction-specific flow: `context-compression.md § PostCompact Recovery`.
 
-## Unattended FN Finalization
+## FN Finalization Gate
 
-The FN gate runs fully unattended: PL0 stamps `metadata.fn_gate = "bypass"` unconditionally and the orchestrator commits, pushes, and opens the PR without stopping. (The PL gate is the one human checkpoint — see `commands/worktask.md § Step A.5` and § PRECONDITION CHECK.) All file-writing work is worktree-isolated, so the unattended FN finalization is reviewable as a PR. When the FN stage runs, the orchestrator writes a single `fn_gate_bypass` audit line (`reason: "unattended"`; see § FN Gate).
+The FN gate defaults to `"checkpoint"` (see § FN Gate): PL0 stamps `metadata.fn_gate = "checkpoint"`, so the orchestrator STOPs before the FN delegation, presents the pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. The two human checkpoints are the PL gate (`commands/worktask.md § Step A.5` and § PRECONDITION CHECK Signal 2) and this FN gate (Signal 3). `--auto-finalization`, `--milestone:N`, and `--emergency` stamp `fn_gate: "bypass"` to finalize unattended (`--auto-plan` never bypasses FN — it is orthogonal to the plan gate). All file-writing work is worktree-isolated, so finalization is reviewable as a PR. On the checkpoint path the orchestrator writes `fn_gate_waiting` then `approval_received`/`approval_rejected`; on bypass it writes a single `fn_gate_bypass` audit line (`reason: "unattended"`) — all with `subject:"FN<run_index>"` (see § FN Gate).
 
 ## Related
 

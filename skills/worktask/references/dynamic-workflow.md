@@ -27,11 +27,14 @@ This file is referenced by:
 > 1. **PL0** — planning completes before any workflow is launched. The `Workflow` tool is never dispatched
 >    until PL0 is `completed`. The PL gate (Step A.5) is evaluated before the workflow is launched; on a
 >    `checkpoint` gate the orchestrator obtains plan approval first. `--auto-plan` / `--milestone:N` bypass it.
-> 2. **FN ownership** — FN (commit/push/PR) is always orchestrator-owned. `fn_gate` is always `"bypass"`;
->    the FN stage runs unattended directly after the workflow span returns.
+> 2. **FN ownership** — FN (commit/push/PR) is always orchestrator-owned. When the workflow span returns,
+>    the orchestrator applies the FN gate (`PL0.metadata.fn_gate`, default `"checkpoint"`): on `checkpoint`
+>    it STOPs for finalization approval; on `bypass` (`--auto-finalization` / `--milestone:N` / `--emergency`)
+>    it finalizes unattended.
 > 3. **No self-commit** — the workflow span never commits, pushes, or opens a PR. That belongs to FN.
 > 4. Dynamic mode adds a branch *between* PL0 and FN; it does not change the gate model: the PL gate (if
->    `checkpoint`) is cleared before launch and FN stays orchestrator-owned and unattended.
+>    `checkpoint`) is cleared before launch, and FN stays orchestrator-owned, subject to the FN gate check
+>    (STOP on `checkpoint`, proceed on `bypass`) when the span returns.
 
 ---
 
@@ -44,26 +47,28 @@ PL0 (plan) -> [PL gate] -> publish-pl-issue.sh
    -> +-- native Workflow (background, run_id) ----------------------+
       |  AR -> TL -> DV(fan-out) -> DR -> [SR] -> QA -> [DC] -> [RE]  |   (STOPS before FN)
       +-------------------------------------------------------------+   returns aggregated schema
-   -> FN (commit/push/PR, unattended) -> ST -> self-improvement
+   -> [FN gate] -> FN (commit/push/PR) -> ST -> self-improvement
 ```
 
 - **AR / TL run INSIDE the workflow** — they are stages, not gates. TL is where dynamic DV fan-out is
   decided (`parallel()`).
-- The workflow **never crosses FN**. FN is orchestrator-owned and runs unattended (fn_gate always bypass).
-  ST and self-improvement run after FN, in the orchestrator.
+- The workflow **never crosses FN**. FN is orchestrator-owned; on span return the orchestrator applies the
+  FN gate (STOP on `checkpoint`, proceed on `bypass`). ST and self-improvement run after FN, in the
+  orchestrator.
 
 ### #mode-span-gates — decision table
 
 | Mode | Trigger | Workflow span | PL0 gate | FN gate | Notes |
 |------|---------|---------------|----------|---------|-------|
-| Standard | `--dynamic` | AR → … → QA/DC/RE (stops before FN) | checkpoint (plan approval) unless --auto-plan | bypass (unattended) | Default dynamic shape; FN runs immediately after workflow returns. |
+| Standard | `--dynamic` | AR → … → QA/DC/RE (stops before FN) | checkpoint (plan approval) unless --auto-plan | checkpoint (finalization approval) unless --auto-finalization | Default dynamic shape; on span return the orchestrator applies the FN gate before FN. |
 | Milestone | `--dynamic --milestone:N` | `pipeline(issues, …)` fan-out, AR → … → ST per lane | bypass (unattended batch) | bypass | **R1: one explicit operator confirmation stating the PR count before any lane runs.** |
 
-> Dynamic mode runs the autonomous span unattended; the PL gate (if `checkpoint`) is cleared before
-> the span launches and FN stays unattended. `metadata.fn_gate:"bypass"` is set unconditionally on PL0.
-> The dynamic span runs through to FN as one workflow (or to ST in milestone lane mode).
-> The milestone launch still requires R1 confirmation (below) — this is a *multi-PR safety check*,
-> not a human approval gate.
+> Dynamic mode runs the autonomous span between the two gates; the PL gate (if `checkpoint`) is cleared
+> before the span launches, and when the span returns the orchestrator applies the FN gate (STOP on
+> `checkpoint`, the default; proceed on `bypass`). `metadata.fn_gate` defaults to `"checkpoint"` on PL0 and
+> is stamped `"bypass"` only by `--auto-finalization` / `--milestone:N` / `--emergency`. The dynamic span
+> runs up to the FN gate (or to ST in milestone lane mode, which bypasses both gates). The milestone
+> launch still requires R1 confirmation (below) — this is a *multi-PR safety check*, not a human approval gate.
 
 ---
 

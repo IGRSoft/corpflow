@@ -2,21 +2,22 @@
 
 Read at gate time from `skills/worktask/SKILL.md § FN Gate` (stub). This file is the imperative procedure for the FN stage.
 
-**The FN gate is always bypassed.** Worktasks run fully unattended: there is no human approval checkpoint before FN. PL0 stamps `metadata.fn_gate = "bypass"` unconditionally, so the orchestrator proceeds straight into the FN stage. The only FN-stage work that survives is the **Pre-gate Conductor-attachments writer** below (still run so Conductor's *Create PR* / *Request Review* actions inherit worktask context) and the post-FN audit line. All file-writing work is worktree-isolated and the unattended FN finalization is reviewable as a PR.
+**The FN gate is the pre-finalization human checkpoint.** It defaults to `"checkpoint"`: the orchestrator STOPs immediately before the FN `Task()` delegation, presents a pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. PL0 stamps `metadata.fn_gate = "bypass"` only for `--auto-finalization` / `--milestone:N` / `--emergency`. The **Pre-gate Conductor-attachments writer** below runs on BOTH paths (so Conductor's *Create PR* / *Request Review* actions inherit worktask context). All file-writing work is worktree-isolated and the FN finalization is reviewable as a PR. `N` = `state.json.run_index` (default `0`).
 
-> **Dynamic mode**: when `PL0.metadata.execution_mode == "dynamic"`, the native Workflow span runs through to FN unattended. The Conductor-attachments writer is built from the **reconciled `state.json`** (`dynamic-workflow.md#boundary-reconciliation`) exactly as in manual mode.
+> **Dynamic mode**: when `PL0.metadata.execution_mode == "dynamic"`, the native Workflow span stops before FN and returns to the orchestrator-owned FN gate (the gate check then STOPs on `checkpoint` or proceeds on `bypass`). The Conductor-attachments writer is built from the **reconciled `state.json`** (`dynamic-workflow.md#boundary-reconciliation`) exactly as in manual mode.
 
 ## Gate semantics
 
-- **Carrier**: `PL0.metadata.fn_gate` is always `"bypass"`. PL0 sets it unconditionally at worktask init (see `commands/worktask.md` Phase 1, step 4).
-- **Effect**: the orchestrator does NOT stop before FN. It runs the **Pre-gate Conductor-attachments writer** (below), appends the `fn_gate_bypass` audit line, then proceeds directly into the FN stage (commit, push, PR — unattended).
-- The Conductor-attachments writer is unconditional on the FN path so later sessions inherit worktask context. Run it directly — do not delegate to a subagent.
+- **Carrier**: `PL0.metadata.fn_gate`, default `"checkpoint"`. PL0 stamps `"bypass"` ONLY when `--auto-finalization`, `--milestone:N`, or `--emergency` is present (see `commands/worktask.md` Phase 1, step 4). `--auto-plan` NEVER bypasses the FN gate — it is orthogonal and bypasses only the plan gate.
+- **Effect (checkpoint — the gated path)** — when `fn_gate == "checkpoint"`: the orchestrator runs the **Pre-gate Conductor-attachments writer** (below), appends the `fn_gate_waiting` audit line, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. On approval → append `approval_received` then delegate FN (commit, push, PR). On reject → append `approval_rejected` and STOP — do NOT delegate FN; surface the user's feedback.
+- **Effect (bypass)**: the orchestrator runs the Pre-gate Conductor-attachments writer (or, on the bypass path, FN-agent Writer 2 in `agents/project-manager.md § FN Stage`), appends the `fn_gate_bypass` audit line, then proceeds directly into the FN stage (commit, push, PR — unattended).
+- The Conductor-attachments writer runs on the gated path so later sessions inherit worktask context. Run it directly — do not delegate to a subagent.
 
 ## Pre-gate Conductor-attachments writer
 
 **Why this exists.** The two files this writer produces are how Conductor's *Create PR* / *Request Review* actions inherit worktask context in later sessions — DR/QA verdicts, resolved base branch, conventional-commit type, link to `complete-summary-N.md`. If they are absent, Conductor falls back to generic built-in templates and the FN agent (running post-approval) has no canonical script to follow. **Skipping this writer silently breaks the handoff — there is no recovery once the gate has returned**, because Conductor will cache the absent state for the duration of the next session. That is why the *Effect, in order* list above wraps this writer in three separate `test -f` checks (steps 2, 3, 6).
 
-The writer is unconditional on the gated path; bypass path falls through to FN-agent Writer 2 (in `agents/project-manager.md § FN Stage`). It is idempotent: every FN-gate entry overwrites both files from scratch. Run it directly — do not delegate to a subagent.
+The writer is unconditional on the gated (`checkpoint`) path; the bypass path falls through to FN-agent Writer 2 (in `agents/project-manager.md § FN Stage`). It is idempotent: every FN-gate entry overwrites both files from scratch. Run it directly — do not delegate to a subagent.
 
 Steps:
 
@@ -48,10 +49,20 @@ Verification is owned by the *Effect, in order* list (step 2 immediately after t
 
 ## Audit
 
-The bypassed FN path writes a single audit line before the FN stage runs:
+All four FN-gate audit lines use `subject:"FN<run_index>"` (`N` = `state.json.run_index`), mirroring the PL-gate `subject:"PL<run_index>"` scheme. `resume.md` row 15 reads the `fn_gate_waiting` / `approval_received` lines to decide whether to STOP or proceed.
+
+**Checkpoint path** (default) — park, then approve OR reject:
 
 ```json
-{"actor":"orchestrator","action":"fn_gate_bypass","subject":"FN0","result":"ok","reason":"unattended"}
+{"actor":"orchestrator","action":"fn_gate_waiting","subject":"FN<N>","result":"ok"}
+{"actor":"orchestrator","action":"approval_received","subject":"FN<N>","result":"ok"}
+{"actor":"orchestrator","action":"approval_rejected","subject":"FN<N>","result":"rejected"}
+```
+
+**Bypass path** (`--auto-finalization` / `--milestone:N` / `--emergency`) — a single line before the FN stage runs:
+
+```json
+{"actor":"orchestrator","action":"fn_gate_bypass","subject":"FN<N>","result":"ok","reason":"unattended"}
 ```
 
 # Post-Worktask Self-Improvement
