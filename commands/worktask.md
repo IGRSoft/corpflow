@@ -119,7 +119,7 @@ See `skills/shared/stage-codes.md` for stage details.
    fi
    ```
    **Regression guard**: If neither the plugin-registered hook NOR the project-local copy exist, emit a warning: `"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge (Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."` Do NOT block the worktask.
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", fn_gate: "bypass", isolation: "worktree", execution_mode: "<manual|dynamic>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). `fn_gate` is **always** `"bypass"` (FN finalization runs unattended — the PL gate is the one human checkpoint, handled at Step A.5). Set `execution_mode: "dynamic"` when invoked with `--dynamic`; otherwise `"manual"` (the default). `execution_mode` only selects HOW the autonomous span runs (native Workflow engine vs the manual stage loop). Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOPs after PL0 and asks for plan approval before dispatching stages). Stamp `plan_gate: "bypass"` ONLY when `--auto-plan` is present OR when running `--milestone:N` (milestone batches run unattended). `plan_gate` mirrors the `fn_gate` pattern and is the carrier that lets resume logic distinguish the post-plan checkpoint on interruption — see `skills/worktask/references/resume.md § State → Action Table`.
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", fn_gate: "bypass", isolation: "worktree", execution_mode: "<manual|dynamic>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). `fn_gate` is **always** `"bypass"` (FN finalization runs unattended — the PL gate is the one human checkpoint, handled at Step A.5). Set `execution_mode: "dynamic"` when invoked with `--dynamic`; otherwise `"manual"` (the default). `execution_mode` only selects HOW the autonomous span runs (native Workflow engine vs the manual stage loop). Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOPs after PL0 and asks for plan approval before dispatching stages). Stamp `plan_gate: "bypass"` ONLY when `--auto-plan` is present, when running `--milestone:N` (milestone batches run unattended), OR when `--emergency` is set (emergency pipeline runs unattended from IR — no plan approval gate). `plan_gate` mirrors the `fn_gate` pattern and is the carrier that lets resume logic distinguish the post-plan checkpoint on interruption — see `skills/worktask/references/resume.md § State → Action Table`.
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative.
    - **Record dropped stages**: when PL0's dynamic sizing omits any stage from the full 9-stage
@@ -132,7 +132,7 @@ See `skills/shared/stage-codes.md` for stage details.
 
 ## Phase 2: Execute Stages (proceeds automatically)
 
-Phase 2 begins with the Plan Gate Check (Step A.5): on a `checkpoint` plan gate the orchestrator presents the plan and waits for user approval before the stage loop; on `bypass` (`--auto-plan` / `--milestone:N`) it proceeds directly.
+Phase 2 begins with the Plan Gate Check (Step A.5): on a `checkpoint` plan gate the orchestrator presents the plan and waits for user approval before the stage loop; on `bypass` (`--auto-plan` / `--milestone:N` / `--emergency`) it proceeds directly.
 
 **Step A.5 — Plan Gate Check** (runs FIRST in Phase 2, before Step A publish):
 
@@ -156,7 +156,7 @@ index `N` from `state.json.run_index` (default `0`).
    ```
    STOP — do NOT enter the stage loop. Surface the user's feedback; re-run PL0 if revisions are needed.
 
-**If `plan_gate == "bypass"`** (stamped by `--auto-plan` or `--milestone:N`): proceed directly to
+**If `plan_gate == "bypass"`** (stamped by `--auto-plan`, `--milestone:N`, or `--emergency`): proceed directly to
 Step A. No prompt, no approval line.
 
 **Step A — Publish plan to GitHub** (run BEFORE the stage loop):

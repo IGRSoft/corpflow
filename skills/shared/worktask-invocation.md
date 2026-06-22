@@ -16,8 +16,8 @@ Single source of truth for how a worktask is launched and its invocation rule.
 > instruction inline is a violation.
 
 `/worktask` (or `Skill({skill:"igrsoft:worktask"})`) is the canonical entry point. After PL0 it STOPs
-at the PL gate (the one human checkpoint) and presents the plan for approval, unless `--auto-plan` or
-`--milestone:N` is set (both stamp `plan_gate: "bypass"`). The FN gate always runs unattended
+at the PL gate (the one human checkpoint) and presents the plan for approval, unless `--auto-plan`,
+`--milestone:N`, or `--emergency` is set (all stamp `plan_gate: "bypass"`). The FN gate always runs unattended
 (`fn_gate: "bypass"`) and the PR is the review surface — see `../worktask/references/fn-gate.md` and
 `../../commands/worktask.md` *EXECUTION MODEL (BINDING)*.
 
@@ -29,7 +29,7 @@ prefixes — PL0 dynamic sizing selects which of the 9 stages actually run, drop
 complexity. See `../worktask/SKILL.md § Dynamic Worktask Sizing`.
 
 The post-plan checkpoint is carried by `PL0.metadata.plan_gate`, default `"checkpoint"`.
-`--auto-plan` and `--milestone:N` stamp `"bypass"`. On resume after interruption, this carrier
+`--auto-plan`, `--milestone:N`, and `--emergency` stamp `"bypass"`. On resume after interruption, this carrier
 tells the orchestrator whether to re-enter the stage loop immediately (`bypass`) or stop for user
 approval (`checkpoint`) — see `../worktask/references/resume.md § State → Action Table`.
 
