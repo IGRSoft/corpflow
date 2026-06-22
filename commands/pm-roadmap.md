@@ -4,6 +4,10 @@ description: Create or update product roadmap with timeline, milestones, and dep
 argument-hint: '[--quarter Q1-Q4] [--format timeline|list]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/product-manager.md
+  - commands/pm-prioritize.md
+  - commands/pm-requirements.md
 ---
 
 # PM Roadmap Command
@@ -203,8 +207,3 @@ This command works with:
 - `/pm-requirements` - Detail features on roadmap
 - `/sprint-plan` - Break roadmap into sprints
 
-## Related
-
-- [product-manager](../agents/product-manager.md) - Product expertise
-- [pm-prioritize](./pm-prioritize.md) - Prioritization
-- [pm-requirements](./pm-requirements.md) - Requirements

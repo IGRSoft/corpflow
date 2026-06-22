@@ -2,6 +2,12 @@
 name: worktask-testing-strategy
 description: Test strategy planning guidance for PL and AR worktask stages. Use when planning test strategy during Planning or Architecture stages before implementation.
 effort: medium
+related:
+  - agents/product-manager.md
+  - agents/software-architector.md
+  - agents/qa-engineer.md
+  - commands/test-plan.md
+  - skills/estimation/SKILL.md
 ---
 
 # Worktask Testing Strategy Skill
@@ -86,10 +92,3 @@ Test effort is embedded in subtask estimates:
 | Implement login | 4 | 6 |
 | Write login tests | 1 | 2 |
 
-## Related
-
-- `agents/product-manager.md` - PL stage owner
-- `agents/software-architector.md` - AR stage owner
-- `agents/qa-engineer.md` - QA stage owner
-- `commands/test-plan.md` - Detailed test plan generation
-- `${CLAUDE_SKILL_DIR}/../estimation/SKILL.md` - Test effort estimation

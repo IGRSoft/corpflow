@@ -216,16 +216,7 @@ QA reads this section verbatim. If QA adds new tests during Q-stage edge-case re
 
 ### Backward compatibility (deprecated `requires_ui_tests` flag)
 
-If `<plan_file>` has the legacy `requires_ui_tests` flag and no `test_mode`:
-
-| Legacy | Mapped to | Rationale |
-|--------|-----------|-----------|
-| `requires_ui_tests: true` | `test_mode: full`, `ui_visual_check: true` | Preserves today's "run everything including UI bundles + visual compare" |
-| `requires_ui_tests: false` (or absent) | `test_mode: scoped`, `ui_visual_check: false` | Preserves today's "DV scoped tests, QA full unit+integration with UI skipped". **Does NOT map to `build-only`** — that would silently drop unit-test execution at QA on legacy plans. |
-
-PL/DV/QA emit one deprecation note in their artifact's `§ Notes`:
-
-> `requires_ui_tests` is deprecated; use `test_mode` + `ui_visual_check`. See `skills/shared/testing-strategy.md § Test Selection Gate`. Removed next minor release.
+Legacy `requires_ui_tests` (one-release-cycle compat alias; removed next minor release). When a `<plan_file>` has `requires_ui_tests` and no `test_mode`, map: `true` → `test_mode: full` + `ui_visual_check: true`; `false`/absent → `test_mode: scoped` + `ui_visual_check: false` (NOT `build-only` — that would silently drop QA unit-test execution on legacy plans). PL/DV/QA emit one deprecation note in their artifact `§ Notes` when it fires.
 
 ### Design↔result image comparison (wired flow)
 

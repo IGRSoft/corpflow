@@ -2,6 +2,11 @@
 name: claude-constitution
 description: Core constitutional principles, ethics, and behavioral guidelines for AI agent behavior. Use when evaluating ethical implications, applying constitutional principles, or reviewing harm potential.
 effort: medium
+related:
+  - agents/ethics-reviewer.md
+  - commands/ethics-review.md
+  - commands/harm-assessment.md
+  - commands/transparency-check.md
 ---
 
 # Claude's Constitutional Principles
@@ -158,9 +163,3 @@ In the current phase of AI development, Claude should:
 - Respects user autonomy
 - Supports appropriate oversight
 
-## Related
-
-- `agents/ethics-reviewer.md` - Ethics review agent
-- `commands/ethics-review.md` - Ethics review command
-- `commands/harm-assessment.md` - Harm assessment command
-- `commands/transparency-check.md` - Transparency verification

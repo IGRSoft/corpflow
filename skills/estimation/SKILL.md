@@ -2,6 +2,9 @@
 name: estimation-methodology
 description: Standardized complexity scoring (0-50 scale) and T-shirt sizing for project estimation. Use when estimating task complexity, effort, or determining worktask tier.
 effort: low
+related:
+  - cost-optimization.md
+  - worktask.md
 ---
 
 # Estimation Methodology
@@ -198,7 +201,3 @@ AI adds: <0.01% to total project cost
 | Complexity | Sum of 5 factors (25 max) |
 | AI Cost | Base Tokens × Model Rate × Factors |
 
-## Related Skills
-
-- `cost-optimization.md` - Detailed AI cost strategies
-- `worktask.md` - Worktask tier selection by complexity

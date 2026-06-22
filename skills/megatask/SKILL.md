@@ -1,8 +1,19 @@
 ---
 name: megatask
-description: Meta-orchestration of many worktasks across a GitHub milestone or an explicit issue array — dependency/blocker DAG, priority ordering, isolated per-issue worktrees, and a completion-driven monitoring hook. Use for /megatask, multi-issue batches, or any dependency-ordered fan-out of worktasks.
+description: Meta-orchestration of many worktasks across a GitHub milestone or explicit issue array — dependency/blocker DAG, priority ordering, isolated per-issue worktrees. Use for /megatask, multi-issue batches, or any dependency-ordered fan-out of worktasks.
 effort: high
 version: 0.2.0
+related:
+  - ../../commands/megatask.md
+  - references/dependency-graph.md
+  - references/schemas.md
+  - references/git-integration.md
+  - references/agent-teams.md
+  - ../shared/milestone-helpers/SKILL.md
+  - ../../hooks/megatask-monitor.sh
+  - ../../commands/worktask.md
+  - ../shared/stage-codes.md
+  - ../shared/task-system.md
 ---
 
 # Megatask
@@ -269,15 +280,3 @@ gh issue view {ISSUE} --json number,title,labels,body,state
 See `references/` for the DAG algorithm, orchestrator/workspace schemas, git integration, and the
 agent-teams pattern.
 
-## Related
-
-- `../../commands/megatask.md` — the command surface
-- `references/dependency-graph.md` — DAG construction, cycle detection, levelled schedule
-- `references/schemas.md` — orchestrator.json (v3.1) + workspace.json
-- `references/git-integration.md` — worktree git commands and lifecycle
-- `references/agent-teams.md` — experimental agent-teams parallelism
-- `../shared/milestone-helpers/SKILL.md` — branch naming, PR detection, worktree helpers (canonical constants live here + this skill)
-- `../../hooks/megatask-monitor.sh` — completion → unblock → progress monitor
-- `../../commands/worktask.md` — single-issue staged pipeline (milestone-agnostic)
-- `../shared/stage-codes.md` — stage codes
-- `../shared/task-system.md` — Task System integration

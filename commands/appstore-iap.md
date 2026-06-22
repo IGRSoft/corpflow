@@ -4,6 +4,11 @@ description: Set up App Store Connect in-app purchases and subscriptions for a n
 argument-hint: <bundle ID>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - commands/appstore-info.md
+  - commands/release-notes.md
+  - agents/release-engineer.md
+  - commands/worktask.md
 ---
 
 # App Store IAP Setup Command
@@ -318,9 +323,3 @@ Used by:
 - `release-engineer` agent at the **RE (Release Engineering)** stage
 - When launching any new app that needs IAP or subscription monetization
 
-## Related
-
-- [appstore-info](./appstore-info.md) — Generate App Store listing metadata
-- [release-notes](./release-notes.md) — Generate "What's New" content
-- [release-engineer](../agents/release-engineer.md) — Release Engineering agent
-- [worktask](./worktask.md) — RE stage in the release worktask

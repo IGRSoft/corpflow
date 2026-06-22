@@ -40,9 +40,9 @@ The model/effort defaults track `skills/shared/model-selection.md`. Override per
 
 > **Background-worker reliability (v2.1.172/2.1.174)**: fixed — pre-warmed workers leaking another directory's project settings, `EAUTH` on attach after daemon auto-update and on claim-after-idle, stuck-`active` state after a nested child stopped, and background sessions inheriting another session's `ANTHROPIC_*` provider env. No plugin workaround needed on CC ≥ 2.1.174; on older CC, restart the daemon when attach fails with `EAUTH`.
 
-## Live Session Discovery (v2.1.145–146)
+## Live Session Discovery
 
-`claude agents --json` (CC v2.1.145+, refined in v2.1.146) returns a JSON array of currently-live Claude sessions. The orchestrator and external runners can poll this to discover *what is already running* — complementing the dispatch table above which covers *how to start* something headlessly.
+Current: `claude agents --json` returns a JSON array of currently-live Claude sessions (requires CC ≥ 2.1.145). The orchestrator and external runners can poll this to discover *what is already running* — complementing the dispatch table above which covers *how to start* something headlessly.
 
 Canonical orchestrator shell-out, scoped to one worktask track:
 
@@ -171,10 +171,3 @@ Useful for CI/cron jobs that need Claude's tool environment but don't require an
 
 Both mechanisms are additive to the existing `claude agents run … < prompt.txt` headless pattern above; choose based on whether you need full agent reasoning (`agents run`) or a shell side-effect (`! <cmd>` / `--bg --exec`).
 
-## Related
-
-- `skills/shared/task-system.md § Dispatch metadata` — schema for the new optional fields.
-- `skills/agent-coordination/SKILL.md § Audit Trail` — schema for `permission_mode_pinned` and `external_dispatch` actions.
-- `skills/shared/model-selection.md` — model/effort tier defaults the table above tracks.
-- `agents/product-manager.md § Optional dispatch metadata` — PL0's writer rules for these fields.
-- `commands/worktask.md § Headless dispatch` — canonical headless one-liner using `jq` to read the metadata.

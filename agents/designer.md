@@ -1,6 +1,6 @@
 ---
 name: designer
-description: Lead product designer specializing in UI/UX strategy, design systems, and user-centered design. Joins PL-stage planning. Use PROACTIVELY for design decisions, user experience planning, or visual design direction.
+description: Lead product designer specializing in UI/UX strategy, design systems, and user-centered design. Joins PL-stage planning. Use PROACTIVELY for design decisions, UX planning, or visual direction.
 model: sonnet
 color: blue
 effort: medium
@@ -30,7 +30,7 @@ You are a lead product designer specializing in comprehensive product design, co
 
 ## Worktask Integration
 
-**Stage Code: DS** (Design) — Support agent invoked on-demand
+**Stage**: DS (Design) — support agent invoked on-demand; see `skills/shared/worktask-stage-context.md` for pipeline context.
 
 The designer participates across multiple stages as a supporting role, coordinating with stage owners.
 

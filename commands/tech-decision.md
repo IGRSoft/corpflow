@@ -4,6 +4,11 @@ description: Create or update Technology Decision Records (TDRs) for implementat
 argument-hint: <technology choice or question>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - ../agents/technical-lead.md
+  - ./arch-decision.md
+  - ./tech-review.md
+  - ./tech-debt.md
 ---
 
 # Technology Decision Record Command
@@ -237,9 +242,3 @@ This command is used:
 - When introducing new libraries or tools
 - For standardizing patterns across the codebase
 
-## Related
-
-- [technical-lead](../agents/technical-lead.md) - Technical excellence expertise
-- [arch-decision](./arch-decision.md) - Architecture Decision Records
-- [tech-review](./tech-review.md) - Technical review
-- [tech-debt](./tech-debt.md) - Technical debt analysis

@@ -7,6 +7,10 @@ description: >
 argument-hint: '[--draft] [--base <branch>]'
 allowed-tools: Read, Glob, Grep, Bash(git *), Bash(gh *)
 model: sonnet
+related:
+  - skills/shared/git-conventions.md
+  - agents/project-manager.md
+  - commands/create-release-notes.md
 ---
 
 # Create PR
@@ -169,8 +173,3 @@ Print the resulting PR URL.
 - Confirm commit message with user before committing (unless `--auto`)
 - **Auto-mode git guardrails (CC ≥ 2.1.183)**: in auto mode the runtime blocks destructive git and refuses `commit --amend` on any commit not made by the agent this session — this command commits fresh and does not use `--amend`, so it is unaffected, but a rewrite attempt would be refused. Set `attribution.sessionUrl` to omit the claude.ai session link from generated commits/PRs. See `skills/shared/git-conventions.md § Auto-mode Git Safety`.
 
-## Related
-
-- `skills/shared/git-conventions.md` — Commit format reference
-- `agents/project-manager.md` — FN stage PR creation (full worktask)
-- `create-release-notes.md` — Post-PR release notes

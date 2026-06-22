@@ -4,6 +4,10 @@ description: Analyze, document, and prioritize technical debt in the codebase
 argument-hint: '[--path dir] [--severity critical|high|medium|low]'
 model: sonnet
 allowed-tools: Read, Glob, Grep
+related:
+  - ../agents/software-architector.md
+  - ./arch-review.md
+  - ./sprint-plan.md
 ---
 
 # Technical Debt Command
@@ -159,8 +163,3 @@ This command supports:
 - Architecture reviews - Identify new debt
 - Prioritization - Balance features vs debt
 
-## Related
-
-- [software-architector](../agents/software-architector.md) - Architecture expertise
-- [arch-review](./arch-review.md) - Find architectural debt
-- [sprint-plan](./sprint-plan.md) - Plan debt reduction

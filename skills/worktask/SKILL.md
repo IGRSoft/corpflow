@@ -402,14 +402,10 @@ while (tasks.some(t => t.status !== "completed")) {
     const agentType = full.metadata.agent;
     const model = full.metadata.model;
 
-    // Resolve plugin:
-    //   bare (no `:`)        e.g. "developer"                 → "igrsoft:developer"
-    //   2-part ("plugin:name") e.g. "apple-developer:ios-developer" → used as-is
-    //   3-part ("a:b:c")     → UNSUPPORTED. Orchestrator MUST error out:
-    //     "Invalid agent reference '{agentType}': only bare or plugin-qualified names supported."
-    //   The basename for .context/errors/<basename>.md is the last `:`-separated segment.
-    //   This validator applies at EVERY nesting depth (CC ≥ 2.1.172 allows sub-agents to
-    //   spawn sub-agents, 5 levels deep) — depth never legitimizes a 3-part name.
+    // Resolve plugin: bare → "igrsoft:<name>"; 2-part "plugin:name" → as-is;
+    //   3-part "a:b:c" → UNSUPPORTED, throw (message below). The .context/errors/<basename>.md
+    //   basename is the last `:`-segment. Applies at every nesting depth (CC ≥ 2.1.172 allows
+    //   5-deep sub-agent spawning) — depth never legitimizes a 3-part name.
     const colonCount = (agentType.match(/:/g) ?? []).length;
     if (colonCount > 1) {
       throw new Error(`Invalid agent reference '${agentType}': only bare or plugin-qualified names supported.`);
@@ -576,15 +572,11 @@ while (tasks.some(t => t.status !== "completed")) {
       full.description = full.description + "\n\n" + reviewInvocation;
     }
 
-    // 5c. Pre-warm XcodeBuildMCP for Apple DV/DR/QA stages
-    //     XcodeBuildMCP is registered globally as `npx -y xcodebuildmcp@latest mcp`
-    //     (stdio, lazy-spawn). Subagents only inherit MCP servers that are
-    //     ALREADY RUNNING in the parent session at delegation time. If we
-    //     delegate before the parent has issued any XcodeBuildMCP call, the
-    //     child (especially in worktree isolation) inherits an unstarted
-    //     reference and the first tool call fails with "tool not available".
-    //     Warm the server in the parent ONCE per worktask before the first
-    //     Apple-platform stage that needs it.
+    // 5c. Pre-warm XcodeBuildMCP for Apple DV/DR/QA stages.
+    //     XcodeBuildMCP (`npx -y xcodebuildmcp@latest mcp`, stdio lazy-spawn) is only
+    //     inherited by subagents if ALREADY RUNNING in the parent at delegation time;
+    //     otherwise the child's first tool call fails with "tool not available". Warm it
+    //     in the parent ONCE per worktask before the first Apple-platform stage.
     const APPLE_STAGES = new Set(["DV","DR","QA"]);
     const APPLE_AGENTS = /^(developer|technical-lead|qa-engineer)$/;
     const isAppleStage =
@@ -649,10 +641,9 @@ while (tasks.some(t => t.status !== "completed")) {
       // warmup succeeded → child inherits a live XcodeBuildMCP server.
     }
 
-    // 5d. Inject Conductor-attachments requirement for FN stages
-    //     Ensures project-manager always creates .context/attachments/ files
-    //     regardless of how PL0 described the FN task. Mirrors 5b (DR injection).
-    //     Templates: skills/worktask/references/conductor-attachments.md
+    // 5d. Inject Conductor-attachments requirement for FN stages — ensures
+    //     project-manager always creates .context/attachments/ files regardless of
+    //     PL0's FN-task wording. Mirrors 5b. Templates: skills/worktask/references/conductor-attachments.md
     if (full.metadata.stage === "FN") {
       const fnInjection = [
         "IMPORTANT — Conductor attachments (FN-stage requirement, non-optional):",
@@ -667,13 +658,11 @@ while (tasks.some(t => t.status !== "completed")) {
       full.description = full.description + "\n\n" + fnInjection;
     }
 
-    // 5e. Permission-Mode Pinning (in-process honour of task.metadata.permission_mode)
-    //     When PL0 set `permission_mode: "default"` on this task (typically SR/FN under
-    //     --secure/--full), the orchestrator MUST NOT propagate
-    //     --dangerously-skip-permissions or equivalent shorthand into descendant Task()
-    //     calls or nested Bash invocations for this stage, and MUST audit the boundary.
-    //     The Task() tool has no permission-mode parameter today — this is a procedural
-    //     constraint backed by audit, not a runtime enforcement. See
+    // 5e. Permission-Mode Pinning (honour task.metadata.permission_mode).
+    //     When PL0 set `permission_mode: "default"` (typically SR/FN under --secure/--full),
+    //     the orchestrator MUST NOT propagate --dangerously-skip-permissions into descendant
+    //     Task()/Bash calls for this stage, and MUST audit the boundary. Procedural constraint
+    //     backed by audit (Task() has no permission-mode param), not runtime enforcement. See
     //     skills/agent-coordination/references/headless-dispatch.md § Permission-Mode Pinning.
     if (full.metadata.permission_mode === "default") {
       appendAudit({
@@ -741,12 +730,11 @@ while (tasks.some(t => t.status !== "completed")) {
 **Key rules**:
 - NEVER skip TaskUpdate calls (both in_progress and completed)
 - NEVER execute a stage without checking blockedBy dependencies are completed
-- ALWAYS pass `model` from task metadata to the Agent tool — if task has `model: opus`, the Agent call MUST include `model: "opus"`. Omitting or mismatching is a violation. Do NOT rely on agent frontmatter inheritance
-- `metadata.agent` accepts bare names (`"developer"` → `igrsoft:developer`) or fully-qualified plugin names (`"apple-developer:ios-developer"` → used as-is). Detection: presence of `:`
+- ALWAYS pass `model` from task metadata to the Agent tool (e.g. `model: opus` → `model: "opus"`); omitting/mismatching is a violation. Do NOT rely on frontmatter inheritance
+- `metadata.agent`: bare names → `igrsoft:<name>`, plugin-qualified (`apple-developer:ios-developer`) used as-is. Detection: presence of `:`
 - If a stage agent fails after 3 retries, escalate per the error handling chain
-- NEVER mark a task `completed` without first delegating to an agent and receiving its results — completion without delegation is the most common violation
-- The orchestrator uses ONLY TaskCreate, TaskUpdate, TaskGet, TaskList, and Agent tools. Edit/Write/Bash on source files belong to stage agents, not the orchestrator
-- The orchestrator owns the loop; stage agents own their stage's work
+- NEVER mark a task `completed` without first delegating and receiving results — the most common violation
+- The orchestrator uses ONLY TaskCreate, TaskUpdate, TaskGet, TaskList, and Agent tools — Edit/Write/Bash on source files belong to stage agents. It owns the loop; stage agents own their stage's work
 - Prefer in-memory task tracking over `TaskList()` polling. Call `TaskList()` only on first loop entry, after TL/DV stages (which may create sub-tasks), and every 3rd iteration as a consistency check. For linear pipelines, update the local task array from `TaskUpdate` results instead of re-fetching all tasks
 
 ### PL Issue Publish

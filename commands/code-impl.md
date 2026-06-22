@@ -5,6 +5,10 @@ argument-hint: '<feature description> [--platform apple|android|web]'
 version: 0.1.0
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash
+related:
+  - agents/developer.md
+  - commands/code-review-dev.md
+  - commands/test-plan.md
 ---
 
 # Code Implementation Command
@@ -108,8 +112,3 @@ This command is used:
 - For standalone implementation tasks
 - With `/code-review-dev` for review after implementation
 
-## Related
-
-- [developer](../agents/developer.md) - Platform developer agent
-- [code-review-dev](./code-review-dev.md) - Code review command
-- [test-plan](./test-plan.md) - Test planning

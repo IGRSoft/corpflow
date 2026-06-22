@@ -4,6 +4,12 @@ description: Analyze and optimize existing agent definitions for clarity, effici
 argument-hint: <agent name or path>
 model: opus
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/prompt-engineer.md
+  - commands/create-agent.md
+  - commands/create-command.md
+  - commands/create-skill.md
+  - commands/prompt-audit.md
 ---
 
 # Optimize Agent Command
@@ -172,9 +178,7 @@ You are a QA engineer specializing in test strategy, test case design, and quali
 - Efficient examples
 
 ### Model Selection
-- haiku: Procedural, checklist-based, formatting tasks
-- sonnet: Analysis, implementation, coordination tasks
-- opus: Architecture, strategy, complex reasoning tasks
+Evaluate model fit against the canonical cost tiers and stage→model mapping: see `skills/shared/model-selection.md` and `skills/shared/stage-codes.md` (canonical).
 
 ### Frontmatter Audit (CC 2.1.86+)
 
@@ -220,10 +224,3 @@ This command is used by:
 - During agent ecosystem maintenance
 - After worktask changes require agent updates
 
-## Related
-
-- [prompt-engineer](../agents/prompt-engineer.md) - Prompt engineering agent
-- [create-agent](./create-agent.md) - Create new agents
-- [create-command](./create-command.md) - Create new commands
-- [create-skill](./create-skill.md) - Create new skills
-- [prompt-audit](./prompt-audit.md) - Audit all prompts

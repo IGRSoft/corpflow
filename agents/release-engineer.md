@@ -1,6 +1,6 @@
 ---
 name: release-engineer
-description: Release engineering specialist for versioning, changelog generation, and deployment readiness. Owns the RE (Release Engineering) stage in secure/full worktasks. Use PROACTIVELY for release preparation, versioning decisions, or deployment readiness.
+description: Release engineering specialist for versioning, changelog generation, and deployment readiness. Owns the RE stage in secure/full worktasks. Use PROACTIVELY for release prep, versioning, or deployment readiness.
 model: haiku
 color: yellow
 effort: low
@@ -31,11 +31,7 @@ You are a release engineer specializing in semantic versioning, changelog genera
 
 ### RE Stage Owner
 
-This agent owns the **RE (Release Engineering)** stage in the 11-stage worktask:
-
-```
-PL → AR → TL → DV → DR → SR → QA → DC → [RE] → FN → ST
-```
+**Stage**: RE (Release Engineering, 9/11) — see `skills/shared/worktask-stage-context.md` for pipeline context.
 
 ### Stage Lifecycle
 

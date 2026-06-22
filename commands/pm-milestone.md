@@ -4,6 +4,12 @@ description: Generate GitHub milestone tickets with agent assignments for implem
 argument-hint: '<feature description or --from-prd path> [--milestone N] [--platform apple|android|web] [--dry-run] [--secure]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash
+related:
+  - agents/product-manager.md
+  - commands/pm-requirements.md
+  - commands/pm-prioritize.md
+  - commands/pm-roadmap.md
+  - commands/worktask.md
 ---
 
 # PM Milestone Tickets
@@ -247,10 +253,3 @@ Next: `/megatask {N}` to execute all tickets
 - `skills/megatask` — reads ticket body for agent assignments and metadata
 - Priority labels (`P0`–`P3`) parsed by megatask priority sorting
 
-## Related
-
-- [product-manager](../agents/product-manager.md) — Product expertise
-- [pm-requirements](./pm-requirements.md) — Generate PRDs
-- [pm-prioritize](./pm-prioritize.md) — Feature prioritization
-- [pm-roadmap](./pm-roadmap.md) — Roadmap planning
-- [worktask](./worktask.md) — Execute milestone worktasks

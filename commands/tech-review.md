@@ -4,6 +4,11 @@ description: Perform deep technical review evaluating code quality, performance,
 argument-hint: '[--pr N | --path dir] [--depth surface|deep]'
 model: sonnet
 allowed-tools: Read, Glob, Grep
+related:
+  - ../agents/technical-lead.md
+  - ./code-review-dev.md
+  - ./tech-debt.md
+  - ./senior-review.md
 ---
 
 # Technical Review Command
@@ -225,9 +230,3 @@ This command is used:
 - Before merging complex PRs
 - When evaluating technical debt
 
-## Related
-
-- [technical-lead](../agents/technical-lead.md) - Technical excellence expertise
-- [code-review-dev](./code-review-dev.md) - Standard code review
-- [tech-debt](./tech-debt.md) - Technical debt analysis
-- [senior-review](./senior-review.md) - Senior developer review

@@ -4,6 +4,12 @@ description: Create new agent definitions with proper structure, model selection
 argument-hint: <agent name and purpose>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/prompt-engineer.md
+  - commands/optimize-agent.md
+  - commands/create-command.md
+  - commands/create-skill.md
+  - commands/prompt-audit.md
 ---
 
 # Create Agent Command
@@ -124,13 +130,9 @@ You are a database administration specialist focused on schema design, query opt
 
 ## Model Auto-Selection
 
-When `--model` is not specified, selection based on purpose analysis:
+When `--model` is not specified, selection is based on purpose analysis: procedural keywords (format, convert, validate) map to the lowest tier, balanced keywords (implement, review, design) to the mid tier, and complex-reasoning keywords (architect, optimize, research) to the top tier.
 
-| Purpose Keywords | Model | Rationale |
-|-----------------|-------|-----------|
-| format, convert, check, validate | haiku | Procedural tasks |
-| implement, review, analyze, design | sonnet | Balanced reasoning |
-| architect, strategize, optimize, research | opus | Complex reasoning |
+Model tiers and stage→model mapping: see `skills/shared/model-selection.md` and `skills/shared/stage-codes.md` (canonical).
 
 ## Tool Presets
 
@@ -198,10 +200,3 @@ This command is used by:
 - When expanding the agent ecosystem
 - For specialized domain agents
 
-## Related
-
-- [prompt-engineer](../agents/prompt-engineer.md) - Prompt engineering agent
-- [optimize-agent](./optimize-agent.md) - Optimize existing agents
-- [create-command](./create-command.md) - Create new commands
-- [create-skill](./create-skill.md) - Create new skills
-- [prompt-audit](./prompt-audit.md) - Audit agent quality

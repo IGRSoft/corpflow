@@ -4,6 +4,14 @@ description: Update plugin agents, commands, and skills with new Claude Code fea
 argument-hint: '<version> [--notes <url|text>] [--dry-run]'
 allowed-tools: Read, Glob, Grep, Write, Edit, WebFetch
 model: sonnet
+related:
+  - agents/prompt-engineer.md
+  - commands/optimize-agent.md
+  - commands/optimize-command.md
+  - commands/prompt-audit.md
+  - skills/agent-coordination.md
+  - skills/shared/stage-codes.md
+  - skills/agent-coordination/references/hook-monitoring.md
 ---
 
 # Claude Code Plugin Update Command
@@ -242,12 +250,3 @@ PL0 must set `metadata.agent: "igrsoft:prompt-engineer"` on the implementation t
 | Plugin version bump suggested | 3.2.0 → 3.3.0 |
 | Team-tool removed by a band (e.g. TeamCreate/TeamDelete → implicit team) | Rewrite the team/coordination docs to the new model (`Agent(name: …)` spawn, `team_name` ignored). Bump **Minor**, not Major, when the removed tools were never in any agent's `tools:` frontmatter — no breaking change to plugin agents, only reference-doc corrections. |
 
-## Related
-
-- [prompt-engineer](../agents/prompt-engineer.md) - Prompt engineering agent (primary user)
-- [optimize-agent](./optimize-agent.md) - Optimize individual agents post-update
-- [optimize-command](./optimize-command.md) - Optimize individual commands post-update
-- [prompt-audit](./prompt-audit.md) - Audit ecosystem after updates are applied
-- [agent-coordination](../skills/agent-coordination.md) - Hook and subagent patterns updated by this command
-- [stage-codes](../skills/shared/stage-codes.md) - Frontmatter fields and model references updated by this command
-- [hook-monitoring](../skills/agent-coordination/references/hook-monitoring.md) - Hook lifecycle patterns updated by this command

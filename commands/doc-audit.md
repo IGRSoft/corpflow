@@ -4,6 +4,9 @@ description: Audit documentation for gaps, outdated content, and quality issues
 argument-hint: '[--path dir] [--scope full|section]'
 allowed-tools: Read, Glob, Grep
 model: haiku
+related:
+  - agents/technical-writer.md
+  - commands/readme-update.md
 ---
 
 # Documentation Audit Command
@@ -203,7 +206,3 @@ This command works with:
 - `/readme-update` - Fix README issues
 - `/worktask` DC stage - Documentation phase
 
-## Related
-
-- [technical-writer](../agents/technical-writer.md) - Documentation expertise
-- [readme-update](./readme-update.md) - README maintenance

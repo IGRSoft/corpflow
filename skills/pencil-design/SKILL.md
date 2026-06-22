@@ -5,6 +5,9 @@ effort: high
 keep-coding-instructions: true
 paths:
   - "**/*.pen"
+related:
+  - agents/designer.md
+  - skills/task-folder-organization/SKILL.md
 ---
 
 # Pencil Design Worktask
@@ -197,7 +200,3 @@ If Pencil MCP tools fail to load or calls error (e.g., Pencil.app not running):
 3. Note in documentation that visual mockups were not generated
 4. Report the issue so it can be resolved for future tasks
 
-## Related
-
-- `agents/designer.md` - Designer agent definition
-- `${CLAUDE_SKILL_DIR}/../task-folder-organization/SKILL.md` - `.context/designs/` directory structure and context folder organization

@@ -4,6 +4,10 @@ description: Estimate task complexity, effort, and resources to determine approp
 argument-hint: '<task description> [--quick|--detailed]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - skills/worktask.md
+  - agents/product-manager.md
+  - agents/project-manager.md
 ---
 
 # Estimate Command
@@ -176,8 +180,3 @@ This command works well with:
 - `/export-estimate` - Generate CSVs from estimation
 - `/senior-review` - Platform-specific review adjustments
 
-## Related
-
-- [Worktask System](../skills/worktask.md) - Worktask tier selection
-- [product-manager](../agents/product-manager.md) - RICE prioritization
-- [project-manager](../agents/project-manager.md) - Sprint planning

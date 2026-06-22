@@ -4,6 +4,10 @@ description: Generate a comprehensive QA summary report with test results, cover
 argument-hint: '[--worktask-id ID]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, TaskList
+related:
+  - agents/qa-engineer.md
+  - commands/test-plan.md
+  - commands/test-coverage.md
 ---
 
 # QA Report Command
@@ -180,8 +184,3 @@ This command is typically used:
 - Before FN stage - Quality gate check
 - For stakeholder review - ST stage input
 
-## Related
-
-- [qa-engineer](../agents/qa-engineer.md) - QA expertise
-- [test-plan](./test-plan.md) - Test planning
-- [test-coverage](./test-coverage.md) - Coverage analysis

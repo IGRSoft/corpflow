@@ -4,6 +4,13 @@ description: Analyze and optimize existing command definitions for usability, co
 argument-hint: <command name or path>
 model: opus
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/prompt-engineer.md
+  - commands/create-agent.md
+  - commands/create-command.md
+  - commands/create-skill.md
+  - commands/optimize-agent.md
+  - commands/prompt-audit.md
 ---
 
 # Optimize Command
@@ -220,11 +227,3 @@ This command is used by:
 - During command ecosystem maintenance
 - After worktask changes require command updates
 
-## Related
-
-- [prompt-engineer](../agents/prompt-engineer.md) - Prompt engineering agent
-- [create-agent](./create-agent.md) - Create new agents
-- [create-command](./create-command.md) - Create new commands
-- [create-skill](./create-skill.md) - Create new skills
-- [optimize-agent](./optimize-agent.md) - Optimize agents
-- [prompt-audit](./prompt-audit.md) - Audit all prompts

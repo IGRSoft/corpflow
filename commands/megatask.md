@@ -5,6 +5,15 @@ argument-hint: '<milestone-N> | --issues N,N,N [--secure] [--platform apple|andr
 version: 0.1.0
 model: opus
 allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager), Task(igrsoft:workflow-engineer), Task(igrsoft:project-manager)
+related:
+  - skills/megatask/SKILL.md
+  - skills/megatask/references/dependency-graph.md
+  - skills/megatask/references/schemas.md
+  - skills/shared/milestone-helpers/SKILL.md
+  - hooks/megatask-monitor.sh
+  - commands/worktask.md
+  - commands/pm-milestone.md
+  - agents/workflow-engineer.md
 ---
 
 > **EXECUTION MODEL (BINDING)** — megatask is the **meta-orchestrator**: it owns the issue set,
@@ -196,13 +205,3 @@ schedule live in `skills/megatask/references/dependency-graph.md`.
 - `/megatask` owns everything multi-issue: issue-set resolution, the DAG, track derivation, the
   monitoring hook, and per-issue gate-bypass. `/worktask` stays a single-issue stage runner.
 
-## See Also
-
-- `skills/megatask/SKILL.md` — milestone/array orchestration, worktree topology, monitoring loop
-- `skills/megatask/references/dependency-graph.md` — DAG construction, cycle detection, levelled schedule
-- `skills/megatask/references/schemas.md` — orchestrator.json (v3.1) + workspace.json schemas
-- `skills/shared/milestone-helpers/SKILL.md` — branch naming, PR detection, worktree helpers
-- `hooks/megatask-monitor.sh` — completion → unblock-dependents → progress monitor
-- `commands/worktask.md` — single-issue staged pipeline (milestone-agnostic)
-- `commands/pm-milestone.md` — upstream ticket generation (writes the Depends on / Blocks / P labels)
-- `agents/workflow-engineer.md` — orchestration troubleshooting

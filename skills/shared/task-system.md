@@ -164,7 +164,7 @@ the orchestrator ensures `metadata.error_file` appears in `metadata.context_file
 agent receives its own error history in its reading scope — on retry, it can
 see what it tried before and why it failed.
 
-**context_refs vs context_files (handoff-protocol mode)**: When `metadata.context_refs` is set, the stage agent reads `state_file` + only the listed anchors (preferred mode, ≥30% input-token reduction). When absent or `state_file` does not exist on disk, the agent falls back to reading every path in `context_files` in full (legacy mode, fallback path F1). Both fields MAY be set simultaneously — `context_refs` wins when state.json is present; `context_files` is the safety net. See `skills/worktask/references/handoff-protocol.md#fallback-paths`.
+**context_refs vs context_files (handoff-protocol mode)**: When `metadata.context_refs` is set, the stage agent reads `state_file` + only the listed anchors; when absent or `state_file` is missing on disk, it falls back to reading every `context_files` path in full. `context_refs` wins when state.json is present; `context_files` is the safety net. F1-fallback rationale: see `skills/shared/legacy-fallback-f1.md`. F1..F4 matrix: `skills/worktask/references/handoff-protocol.md#fallback-paths`.
 
 ```typescript
 // Orchestrator normalization (runs before Task() delegation)

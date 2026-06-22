@@ -3,6 +3,12 @@ name: agent-coordination
 description: Patterns for multi-agent coordination, handoffs, parallel execution, and error escalation. Use when coordinating agent handoffs, debugging multi-stage execution, or managing parallel agent workflows.
 effort: medium
 version: 0.1.0
+related:
+  - worktask.md
+  - claude-constitution.md
+  - security-review-process.md
+  - release-engineering.md
+  - incident-response.md
 ---
 
 # Agent Coordination
@@ -622,10 +628,3 @@ They can compose: a DV agent inside an igrsoft worktask may itself spin up a nat
 
 > Claude reserves multiple-choice / AskUserQuestion prompts for genuine decisions that require user input. After the PL plan-approval gate, stage transitions are automatic — the PL gate itself is the one `AskUserQuestion` checkpoint; intra-loop transitions proceed without user confirmation.
 
-## Related
-
-- `worktask.md` - Worktask system
-- `claude-constitution.md` - Constitutional principles
-- `security-review-process.md` - Security checklists
-- `release-engineering.md` - Versioning
-- `incident-response.md` - Incident triage

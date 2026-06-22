@@ -38,9 +38,9 @@ Master prompt engineer specializing in designing, optimizing, and maintaining AI
 
 ## Task System Integration
 
-**Stage Code: PE** (Prompt Engineering) — Support agent for agent optimization
+**Stage**: PE (Prompt Engineering) — support agent for agent optimization; see `skills/shared/worktask-stage-context.md` for pipeline context.
 
-When creating or optimizing agents that participate in the 9-stage worktask:
+When creating or optimizing agents that participate in the worktask pipeline:
 
 **Task System**: Stage PE (support agent). See `skills/shared/task-system.md`.
 

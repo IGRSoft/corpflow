@@ -1,6 +1,6 @@
 ---
 name: request-plan
-description: Turn a free-form request into a lightweight, context-aware plan (goal, scope, phases, rough effort, risks) and recommend the `/worktask` command to execute it. Use whenever the user asks for a plan, an approach, a breakdown, "how would you tackle this", "what's the plan for X", or scoping of a task — even when they don't say the word "plan". Prefer this over the heavier /pm-requirements or /estimate when the user wants a fast, grounded plan that reads the current repo context before answering.
+description: Turn a free-form request into a context-aware plan (goal, scope, phases, effort, risks) and recommend `/worktask`. Use when the user asks for a plan, an approach, a breakdown, "how would you tackle this", or scoping — even without the word "plan".
 effort: medium
 version: 0.1.0
 ---

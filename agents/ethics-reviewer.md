@@ -162,7 +162,7 @@ Ethics review completed: [timestamp]
 
 ## Worktask Integration
 
-**Stage Code: ET** (Ethics Review) — Support agent invoked on-demand
+**Stage**: ET (Ethics Review) — support agent invoked on-demand; see `skills/shared/worktask-stage-context.md` for pipeline context.
 
 **Task System**: Stage ET (support agent). See `skills/shared/task-system.md`.
 

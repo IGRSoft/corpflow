@@ -23,6 +23,8 @@ Expert worktask engineer for Task System orchestration and troubleshooting.
 
 ## Stage Code: WE (Support Agent)
 
+**Stage**: WE (Workflow Engineering) — support agent for worktask troubleshooting; see `skills/shared/worktask-stage-context.md` for pipeline context.
+
 **Task System**: See `skills/shared/task-system.md`
 **Stage Codes**: See `skills/shared/stage-codes.md`
 

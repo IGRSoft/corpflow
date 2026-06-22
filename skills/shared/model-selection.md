@@ -32,7 +32,7 @@ effort: low
 
 > **Hook Effort Visibility**: hooks observe the active effort tier via `effort.level` (JSON payload) and the `$CLAUDE_EFFORT` env var. Cost/audit hooks can attribute spend per tier without parsing model metadata. See `skills/agent-coordination/references/hook-monitoring.md § Hook Effort Visibility`.
 
-> **Fast Mode on Opus 4.8**: fast mode on Opus 4.8 delivers **2x rate for 2.5x speed**; pin fast mode via `/model` selection (the `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE` env var has been removed). Plugin agents that rely on `xhigh` effort require **Opus 4.8 or Fable 5** — and Fable 5 carries the 1M-credit dispatch caveat above; on credit-gated accounts route `xhigh` work to Opus 4.8.
+> **Fast Mode on Opus 4.8**: fast mode on Opus 4.8 delivers **2x rate for 2.5x speed**; pin fast mode via `/model` selection. Plugin agents that rely on `xhigh` effort require **Opus 4.8 or Fable 5** — and Fable 5 carries the 1M-credit dispatch caveat above; on credit-gated accounts route `xhigh` work to Opus 4.8.
 
 > **Auto mode on Bedrock/Vertex/Foundry**: `CLAUDE_CODE_ENABLE_AUTO_MODE=1` enables auto model/effort selection for Opus 4.7/4.8 on Bedrock, Vertex, and Foundry providers. Opt-in; leaves explicit `--model`/`--effort` (and `metadata.model`) overrides authoritative when set. Bedrock also resolves its region from `~/.aws` config when `AWS_REGION` is unset (v2.1.172), and GovCloud inference profiles get the correct `us-gov` prefix (v2.1.174) — headless runners no longer need to export region env explicitly on configured machines.
 

@@ -4,6 +4,11 @@ description: Generate cost analysis for worktasks with token usage breakdown and
 argument-hint: '[--worktask-id ID] [--format table|csv]'
 allowed-tools: Read, TaskList
 model: sonnet
+related:
+  - skills/cost-optimization.md
+  - skills/context-compression.md
+  - commands/estimate.md
+  - commands/context-status.md
 ---
 
 # Cost Report
@@ -226,9 +231,3 @@ This command is used:
 - At worktask completion for final analysis
 - By project-manager (FN stage) for budget reporting and timing recap
 
-## Related
-
-- `skills/cost-optimization.md` - Cost optimization strategies
-- `skills/context-compression.md` - Context compression techniques
-- `/estimate` - Pre-worktask cost estimation
-- `/context-status` - Context window analysis

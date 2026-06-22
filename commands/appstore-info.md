@@ -4,6 +4,12 @@ description: Scaffold App Store publishing folder and generate bilingual EN/UA l
 argument-hint: <app name or bundle ID>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/release-engineer.md
+  - agents/technical-writer.md
+  - commands/release-notes.md
+  - commands/readme-update.md
+  - commands/worktask.md
 ---
 
 # App Store Info Command
@@ -178,10 +184,3 @@ This command is used:
 - When adding Ukrainian localisation to an existing App Store listing
 - Alongside `/release-notes` to populate the "What's New" field
 
-## Related
-
-- [release-engineer](../agents/release-engineer.md) - Release Engineering stage
-- [technical-writer](../agents/technical-writer.md) - Documentation
-- [release-notes](./release-notes.md) - Generate "What's New" content
-- [readme-update](./readme-update.md) - Keep README in sync
-- [worktask](./worktask.md) - RE stage in release worktask

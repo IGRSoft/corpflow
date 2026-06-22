@@ -4,6 +4,14 @@ description: Identify, assess, and document project risks with mitigation strate
 argument-hint: <project or feature description>
 allowed-tools: Read, Glob, Grep
 model: sonnet
+related:
+  - agents/project-manager.md
+  - commands/sprint-plan.md
+  - agents/stakeholder.md
+  - agents/ethics-reviewer.md
+  - commands/ethics-review.md
+  - commands/harm-assessment.md
+  - skills/claude-constitution/SKILL.md
 ---
 
 # Risk Assessment Command
@@ -293,12 +301,3 @@ This command works with:
 - `/ethics-review` - Deep ethical analysis
 - `/harm-assessment` - Detailed harm evaluation
 
-## Related
-
-- [project-manager](../agents/project-manager.md) - Project management
-- [sprint-plan](./sprint-plan.md) - Sprint planning
-- [stakeholder](../agents/stakeholder.md) - Risk escalation
-- [ethics-reviewer](../agents/ethics-reviewer.md) - Ethics review agent
-- [ethics-review](./ethics-review.md) - Ethics review command
-- [harm-assessment](./harm-assessment.md) - Harm assessment command
-- [claude-constitution](../skills/claude-constitution/SKILL.md) - Constitutional principles

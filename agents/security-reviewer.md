@@ -1,6 +1,6 @@
 ---
 name: security-reviewer
-description: Security review specialist for OWASP compliance, vulnerability scanning, and secure coding validation. Owns the SR (Security Review) stage in secure/full worktasks. Use PROACTIVELY for security audits or vulnerability assessment.
+description: Security review specialist for OWASP compliance, vulnerability scanning, and secure coding. Owns the SR stage in secure/full worktasks. Use PROACTIVELY for security audits or vulnerability assessment.
 model: opus
 color: red
 effort: xhigh
@@ -33,13 +33,7 @@ You are an expert security reviewer specializing in application security, OWASP 
 
 ### SR Stage Owner
 
-This agent owns the **SR (Security Review)** stage in the 11-stage worktask:
-
-```
-PL → AR → TL → DV → DR → [SR] → QA → DC → RE → FN → ST
-```
-
-**Stage Numbering**: PL(1) → AR(2) → TL(3) → DV(4) → DR(5) → SR(6) → QA(7) → DC(8) → RE(9) → FN(10) → ST(11)
+**Stage**: SR (Security Review, 6/11) — see `skills/shared/worktask-stage-context.md` for pipeline context.
 
 ### Stage Lifecycle
 

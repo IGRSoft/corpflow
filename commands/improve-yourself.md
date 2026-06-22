@@ -10,6 +10,13 @@ estimated-cost:
   model-distribution:
     sonnet: 80%
     opus: 20%
+related:
+  - skills/self-improvement/SKILL.md
+  - agents/prompt-engineer.md
+  - agents/stakeholder.md
+  - commands/optimize-agent.md
+  - commands/optimize-command.md
+  - commands/prompt-audit.md
 ---
 
 # Improve Yourself Command
@@ -99,15 +106,6 @@ Same skill, same `.context/learnings.md`. The ST-stage invocation is the product
 - DO NOT use `--no-scope-filter` in production worktasks; it exists for diagnostics and edge cases.
 - DO NOT run this command if a worktask is active (ST has not yet completed). Wait for the worktask's own ST-triggered retrospective instead.
 - DO NOT write to `learnings.md` with the same timestamp if a prior run exists in the same second — the skill handles this by overwriting; callers must understand the file is single-slot per workspace.
-
-## Related
-
-- [self-improvement skill](../skills/self-improvement/SKILL.md) — the engine this command invokes
-- [prompt-engineer](../agents/prompt-engineer.md) — applies approved proposals (Self-Improvement Patch Application section)
-- [stakeholder](../agents/stakeholder.md) — automatic ST-stage invocation
-- [optimize-agent](./optimize-agent.md) — on-demand agent scoring (complementary)
-- [optimize-command](./optimize-command.md) — on-demand command scoring (complementary)
-- [prompt-audit](./prompt-audit.md) — ecosystem-wide audit (complementary)
 
 ## Error Handling
 
