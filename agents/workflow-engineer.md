@@ -134,7 +134,7 @@ Before executing any milestone worktask, validate:
 
 **Solutions**:
 1. Check `orchestrator.json` for available tracks
-2. Verify parallel_tracks config (default: 2, max: 5)
+2. Verify orchestrator-derived parallel_tracks in orchestrator.json (= min(open issues in scope, 5), reduced by disk capacity; single-issue ⇒ 1) — never a flag/default
 3. Wait for track completion or manually free
 
 ### Orchestrator Out of Sync

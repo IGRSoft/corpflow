@@ -177,7 +177,7 @@ worktree-split above. The two are distinct mechanisms with the same isolation gu
 | Parallelism | Orchestrator delegates one `Task()` per worktree, in-context | Engine spawns children via `parallel()` / `pipeline()` |
 | Isolation | Orchestrator creates `.worktrees/…` per issue | `agent(prompt, { …, isolation: 'worktree' })` — engine provisions the worktree |
 | Decision point | Orchestrator loop (blockedBy resolution) | TL stage output drives DV `parallel()` fan-out (`dynamic-workflow.md#script-template`) |
-| Scale | Bounded by `--parallel:N` (max 5) — that bound is **breadth** (sibling tracks); delegation **depth** is separate: sub-agents nest up to 5 levels (CC ≥ 2.1.172) | Tens–hundreds of children (engine ~1000-agent cap; shard >~200-issue milestones) |
+| Scale | Bounded by the orchestrator-derived track count (max 5) — that bound is **breadth** (sibling tracks); delegation **depth** is separate: sub-agents nest up to 5 levels (CC ≥ 2.1.172) | Tens–hundreds of children (engine ~1000-agent cap; shard >~200-issue milestones) |
 | Gates | PL0 + FN orchestrator-owned | **PL0 + FN STILL orchestrator-owned** — the span runs strictly between them |
 
 The `isolation: 'worktree'` setting maps onto the same `.worktrees/milestone-{N}/{issue#}/` topology as

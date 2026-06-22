@@ -4,6 +4,8 @@
 
 ### Orchestrator (version 3.0)
 
+> `configuration.parallel_tracks` is orchestrator-derived at milestone init (`min(open issues in scope, 5)`, reduced by disk capacity; single-issue ⇒ 1), not user-supplied. The literal below is an illustrative recorded runtime value.
+
 ```json
 {
   "version": "3.0",

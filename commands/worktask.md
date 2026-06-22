@@ -1,7 +1,7 @@
 ---
 name: worktask
 description: Initialize a new worktask task with proper folder structure and Task System integration
-argument-hint: '<task description> [--milestone:N] [--secure] [--emergency] [--auto-plan] [--auto-finalization] [--parallel:N]'
+argument-hint: '<task description> [--milestone:N] [--secure] [--emergency] [--auto-plan] [--auto-finalization]'
 version: 0.1.0
 model: opus
 allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager)
@@ -51,7 +51,6 @@ See `skills/shared/stage-codes.md` for stage details.
 |--------|--------|
 | `--milestone:N` | Execute GitHub milestone N issues |
 | `--milestone:N:ISSUE` | Execute specific issue |
-| `--parallel:N` | N concurrent tracks (max 5) |
 | `--auto-plan` | Stamp `plan_gate: "bypass"` — skip the post-PL plan-approval STOP and auto-proceed into the stage loop (trusted fast-path). FN gate is independent — still checkpoints unless `--auto-finalization`. |
 | `--auto-finalization` | Stamp `fn_gate: "bypass"` — skip the pre-FN finalization-approval STOP; auto commit/push/PR (trusted fast-path). Plan gate still applies unless `--auto-plan`. |
 | `--dynamic` | Run the autonomous span (AR→…→QA/DC/RE, between the two human gates) on the native Workflow engine (`ultracode` tool). Both gates and the no-self-commit rule stay orchestrator-owned; degrades to the manual loop when the tool is absent. See `skills/worktask/references/dynamic-workflow.md`. |
@@ -66,7 +65,7 @@ See `skills/shared/stage-codes.md` for stage details.
 ## Examples
 
 ```bash
-/worktask --milestone:1                  # Milestone mode (compose with --parallel:N, :ISSUE)
+/worktask --milestone:1                  # Milestone mode (concurrency auto-derived; compose with :ISSUE)
 /worktask "Add dark mode support"        # Standard mode (compose with --priority, --secure)
 /worktask --emergency "Production login failing"   # Emergency (incident pipeline)
 ```

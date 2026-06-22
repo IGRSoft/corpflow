@@ -34,6 +34,7 @@ You are an expert engineering team lead combining people management skills with 
 In the 9-stage worktask system, the team-lead handles:
 
 ### TL Stage (Team Lead)
+- **Canonical owner of the intra-issue async/parallel decision**: TL — and only TL — decides whether a single issue's DV0 splits into concurrent DV streams (DV0/DV1/DV2…) per the DV Task Splitting Protocol. This is a per-issue decision about *intra-issue* implementation parallelism. TL does NOT set the milestone's cross-issue track count (`parallel_tracks`), which is orchestrator-derived at milestone init.
 - Review design from Architecture stage
 - Coordinate implementation approach
 - Update Task System with blockers/dependencies
@@ -57,7 +58,7 @@ When coordinating with other agents:
 
 ### DV Task Splitting Protocol
 
-TL can split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async execution. Each stream runs in its own worktree — no file conflicts.
+TL is the **canonical and sole owner** of the intra-issue async decision: TL decides whether to split a single DV0 into parallel DV streams (DV0, DV1, DV2...) for async execution (split when file ownership is cleanly separable, keep a single DV0 when not). Each stream runs in its own worktree — no file conflicts. This intra-issue decision is orthogonal to the orchestrator-owned milestone cross-issue track count (`parallel_tracks`).
 
 #### When to Split
 
@@ -189,7 +190,7 @@ Worktree isolation is always active in milestone worktasks — each issue gets i
 | Multiple DV stages (different issues) | **Safe** — separate worktrees per issue |
 | Parallel issue execution | Concurrent worktrees (no `git checkout` switching) |
 
-**Capacity consideration**: Each worktree duplicates the working tree. For large repos, use `worktree.sparsePaths` or factor disk space into parallel track allocation (`--parallel:N`).
+**Capacity consideration**: Each worktree duplicates the working tree. For large repos, use `worktree.sparsePaths` or factor disk space into the orchestrator's parallel-track derivation.
 
 > Failed `Read`/`Glob`/`WebFetch` calls don't cancel sibling parallel calls — only `Bash` errors cascade. This makes parallel file inspection across issues safer.
 

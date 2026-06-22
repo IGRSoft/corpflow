@@ -156,6 +156,8 @@ Create orchestrator.json to track all issues.
 
 Location: `.worktrees/orchestrator.json`
 
+> `parallel_tracks` is computed at milestone init (orchestrator-derived, `min(open issues, 5)` reduced by disk capacity; single-issue ⇒ 1), not configured — the literal below is an illustrative recorded value.
+
 ```json
 {
   "version": "3.0",
