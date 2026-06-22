@@ -4,8 +4,6 @@ Read at gate time from `skills/worktask/SKILL.md § FN Gate` (stub). This file i
 
 **The FN gate is the pre-finalization human checkpoint.** It defaults to `"checkpoint"`: the orchestrator STOPs immediately before the FN `Task()` delegation, presents a pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. PL0 stamps `metadata.fn_gate = "bypass"` only for `--auto-finalization` / `--emergency` (a batch orchestrator such as `/megatask` stamps it directly on each per-issue PL0). The **Pre-gate Conductor-attachments writer** below runs on the checkpoint path (so Conductor's *Create PR* / *Request Review* actions inherit worktask context); on bypass, FN-agent Writer 2 (`agents/project-manager.md § FN Stage`) covers this. All file-writing work is worktree-isolated and the FN finalization is reviewable as a PR. `N` = `state.json.run_index` (default `0`).
 
-> **Dynamic mode**: when `PL0.metadata.execution_mode == "dynamic"`, the native Workflow span stops before FN and returns to the orchestrator-owned FN gate (the gate check then STOPs on `checkpoint` or proceeds on `bypass`). The Conductor-attachments writer is built from the **reconciled `state.json`** (`dynamic-workflow.md#boundary-reconciliation`) exactly as in manual mode.
-
 ## Gate semantics
 
 - **Carrier**: `PL0.metadata.fn_gate`, default `"checkpoint"`. PL0 stamps `"bypass"` ONLY when `--auto-finalization` or `--emergency` is present (see `commands/worktask.md` Phase 1, step 4); a batch orchestrator such as `/megatask` stamps it directly on each per-issue PL0. `--auto-plan` NEVER bypasses the FN gate — it is orthogonal and bypasses only the plan gate.

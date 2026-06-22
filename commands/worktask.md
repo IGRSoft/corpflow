@@ -54,7 +54,6 @@ See `skills/shared/stage-codes.md` for stage details.
 |--------|--------|
 | `--auto-plan` | Stamp `plan_gate: "bypass"` — skip the post-PL plan-approval STOP and auto-proceed into the stage loop (trusted fast-path). FN gate is independent — still checkpoints unless `--auto-finalization`. |
 | `--auto-finalization` | Stamp `fn_gate: "bypass"` — skip the pre-FN finalization-approval STOP; auto commit/push/PR (trusted fast-path). Plan gate still applies unless `--auto-plan`. |
-| `--dynamic` | Run the autonomous span (AR→…→QA/DC/RE, between the two human gates) on the native Workflow engine (`ultracode` tool). Both gates and the no-self-commit rule stay orchestrator-owned; degrades to the manual loop when the tool is absent. See `skills/worktask/references/dynamic-workflow.md`. |
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
@@ -119,7 +118,7 @@ See `skills/shared/stage-codes.md` for stage details.
    fi
    ```
    **Regression guard**: If neither the plugin-registered hook NOR the project-local copy exist, emit a warning: `"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge (Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."` Do NOT block the worktask.
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", plan_gate: "checkpoint", fn_gate: "checkpoint", isolation: "worktree", execution_mode: "<manual|dynamic>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). Stamp `fn_gate`: default `fn_gate: "checkpoint"` (the orchestrator STOPs immediately before the FN `Task()` delegation and asks for finalization approval before any commit/push/PR — handled at SKILL.md loop step 4.9). Stamp `fn_gate: "bypass"` ONLY when `--auto-finalization` is present OR when `--emergency` is set (incident pipeline finalizes unattended). `--auto-plan` MUST NEVER stamp `fn_gate: "bypass"` — it is orthogonal and bypasses only the plan gate. (A batch orchestrator such as `/megatask` stamps `fn_gate: "bypass"` directly on each per-issue PL0 — `/worktask` itself has no batch flag.) Set `execution_mode: "dynamic"` when invoked with `--dynamic`; otherwise `"manual"` (the default). `execution_mode` only selects HOW the autonomous span runs (native Workflow engine vs the manual stage loop). Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOPs after PL0 and asks for plan approval before dispatching stages). Stamp `plan_gate: "bypass"` ONLY when `--auto-plan` is present OR when `--emergency` is set (emergency pipeline runs unattended from IR — no plan approval gate). (A batch orchestrator such as `/megatask` stamps `plan_gate: "bypass"` directly on each per-issue PL0.) `plan_gate` and `fn_gate` are the two carriers that let resume logic distinguish the post-plan and pre-FN checkpoints on interruption — see `skills/worktask/references/resume.md § State → Action Table`.
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", plan_gate: "checkpoint", fn_gate: "checkpoint", isolation: "worktree" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.). Stamp `fn_gate`: default `fn_gate: "checkpoint"` (the orchestrator STOPs immediately before the FN `Task()` delegation and asks for finalization approval before any commit/push/PR — handled at SKILL.md loop step 4.9). Stamp `fn_gate: "bypass"` ONLY when `--auto-finalization` is present OR when `--emergency` is set (incident pipeline finalizes unattended). `--auto-plan` MUST NEVER stamp `fn_gate: "bypass"` — it is orthogonal and bypasses only the plan gate. (A batch orchestrator such as `/megatask` stamps `fn_gate: "bypass"` directly on each per-issue PL0 — `/worktask` itself has no batch flag.) Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOPs after PL0 and asks for plan approval before dispatching stages). Stamp `plan_gate: "bypass"` ONLY when `--auto-plan` is present OR when `--emergency` is set (emergency pipeline runs unattended from IR — no plan approval gate). (A batch orchestrator such as `/megatask` stamps `plan_gate: "bypass"` directly on each per-issue PL0.) `plan_gate` and `fn_gate` are the two carriers that let resume logic distinguish the post-plan and pre-FN checkpoints on interruption — see `skills/worktask/references/resume.md § State → Action Table`.
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative.
    - **Record dropped stages**: when PL0's dynamic sizing omits any stage from the full 9-stage
@@ -181,20 +180,6 @@ Step A. No prompt, no approval line.
   Sanitiser rules + non-blocking guarantee: `skills/worktask/SKILL.md § PL Issue Publish`.
 - This step is NOT optional. Do not skip it because SKILL.md describes it —
   the orchestrator MUST run the command above as written.
-
-**Step B — Select execution mode** (after Step A, before/around the stage loop):
-
-Read `PL0.metadata.execution_mode` (default `"manual"` when absent).
-
-- **Dynamic** (`execution_mode == "dynamic"` AND the `ultracode` tool present): dispatch the autonomous
-  span (AR→…→QA/DC/RE, stopping before FN) per `skills/worktask/references/dynamic-workflow.md`
-  (`#script-template`). Multi-issue batches are orchestrated by `/megatask`, not by this single-issue command.
-  Audit `workflow_launched`; on return run `#boundary-reconciliation` + audit `workflow_returned`;
-  the dynamic span stops before FN and returns to the orchestrator-owned FN gate check (STOP on
-  `checkpoint`, proceed on `bypass`) — `skills/worktask/SKILL.md § FN Gate`.
-- **Otherwise** run the manual loop below unchanged; if `--dynamic` was requested but the tool is absent,
-  write a `dynamic_fallback` audit row first. Crashed dynamic runs resume in manual mode
-  (`dynamic-workflow.md#resume`).
 
 Execute the orchestrator execution loop from `skills/worktask/SKILL.md § Orchestrator Execution Loop`. Before the FN `Task()` delegation the orchestrator applies the FN gate check (STOP on `checkpoint`, proceed on `bypass`) — see `skills/worktask/SKILL.md § FN Gate`.
 
@@ -330,7 +315,6 @@ The runner MUST append one `audit.jsonl` line `action: "external_dispatch"` per 
 ## See Also
 
 - `skills/worktask/SKILL.md` — execution loop, dynamic sizing, worktask modes
-- `skills/worktask/references/dynamic-workflow.md` — `--dynamic` native Workflow-engine execution mode
 - `commands/megatask.md` / `skills/megatask/SKILL.md` — multi-issue milestone/array orchestration (the former `--milestone` surface)
 - `skills/shared/stage-codes.md` — stage codes and track IDs
 - `skills/agent-coordination/references/headless-dispatch.md` — `task.metadata` → `claude agents` flag bridge

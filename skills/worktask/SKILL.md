@@ -94,10 +94,6 @@ which standard stages were dropped and why.
 
 Each task includes `metadata.agent` for executor resolution. See `initialization-patterns.md § PL Creates Subsequent Tasks`.
 
-### Budget estimate (dynamic mode)
-
-Dynamic mode only: PL0 emits a per-stage budget estimate at `state.json.workflow.budget.estimate_usd`; the orchestrator derives a `ceiling_usd` headroom for the engine (reaching it pauses, not kills, the run). Best-effort — bounds spend, does not guarantee completion. Detail: `references/dynamic-workflow.md#budget`. Unused in manual mode.
-
 ## Workspace Mode
 
 Megatask (per-issue) tickets run in isolated workspaces. `.context/` base path by mode (resolve via `task.metadata.workspace_path` + `metadata.isolation`):
@@ -233,14 +229,9 @@ If validation fails:
 
 ## Orchestrator Execution Loop
 
-> **This loop is the MANUAL execution mode** — the default. It dispatches one `Task()` per ready stage
-> in-process. When the worktask was started with `--dynamic` AND the native `Workflow` tool is present
-> (`PL0.metadata.execution_mode == "dynamic"`), the autonomous span (AR→…→QA/DC/RE) runs on the native
-> Workflow engine instead — see `skills/worktask/references/dynamic-workflow.md`. In dynamic mode the
-> AR→DC/RE stage execution is delegated to that reference, but the **PL0 precondition (below), the FN gate
-> (§ FN Gate), and the on-return boundary reconciliation stay orchestrator-owned**. If `--dynamic` was
-> requested but the `Workflow` tool is absent, the orchestrator writes a `dynamic_fallback` audit row and
-> runs this manual loop unchanged. Everything else in this section is mode-agnostic.
+> **This loop dispatches one `Task()` per ready stage in-process.** It runs the full pipeline from the
+> PL0 precondition (below) through the FN gate (§ FN Gate), advancing stages as their `blockedBy`
+> dependencies resolve.
 
 > **Figma asset persistence is NOT an orchestrator step.** Figma screenshots are captured AND persisted to
 > the canonical `.context/designs/` directory entirely within the PL turn (Phase 1) by the product-manager
@@ -706,7 +697,7 @@ while (tasks.some(t => t.status !== "completed")) {
     //     today's: the agent still writes its artifact with `handoff:` frontmatter, the Step-6.5
     //     frontmatter scrape runs, and F3 remains the fallback — no migration, no breakage. The
     //     artifact + frontmatter are ALWAYS written either way (on-disk durability/compression +
-    //     F4/F5 source); the typed return never replaces them.
+    //     F4 source); the typed return never replaces them.
     //
     //     CACHE-PREFIX (binding, PRESERVE §4.1): `schema` is a Task() ARGUMENT, NOT preamble text.
     //     It is NOT inserted into sections [1][2][4] (nor anywhere in `full.description`), so the

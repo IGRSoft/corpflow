@@ -20,9 +20,6 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 | Live `agent_id` matching that stage AND `waitingFor` = null/empty (mid-work) | — | Agent busy. **Leave it** — poll/await; do **not** double-dispatch or nudge |
 | `agent_id` for an `in_progress` stage shows `state: blocked` | — | Alive but parked. Reattach via `SendMessage` — do not re-delegate |
 | `agent_id` absent from `claude agents --json --all` (or `state: done`) for an `in_progress` stage | — | Agent gone. Re-delegate from the first incomplete stage |
-| `state.json.workflow.run_id` present, `workflow.status:"running"`, `Workflow` tool available | audit tail has `workflow_launched`, no `workflow_returned` | Dynamic span still in flight. `resumeFromRunId = workflow.run_id` — the engine replays the cached prefix and continues from the first incomplete stage (`dynamic-workflow.md#resume`). |
-| `state.json.workflow.run_id` present, `Workflow` tool **absent** (cold resume in headless `claude agents run`, SDK / `--print`) | `workflow_launched` present, no live engine run | Degrade to manual mode: write `dynamic_fallback`, rebuild the ledger via F4 frontmatter walk if needed, continue the manual loop from the first incomplete stage. Resume is replay-or-degrade, never rejoin. |
-| `state.json.workflow.run_id` present, `workflow.status:"returned"` | audit tail has `workflow_returned` | Span complete — re-enter at the FN gate (orchestrator-owned). Build the pre-FN summary from reconciled `state.json`. |
 
 ## Resume Procedure
 

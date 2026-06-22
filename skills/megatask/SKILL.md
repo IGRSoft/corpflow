@@ -276,7 +276,6 @@ agent-teams pattern.
 - `references/schemas.md` — orchestrator.json (v3.1) + workspace.json
 - `references/git-integration.md` — worktree git commands and lifecycle
 - `references/agent-teams.md` — experimental agent-teams parallelism
-- `references/dynamic-megatask.md` — running per-issue lanes on the native Workflow engine
 - `../shared/milestone-helpers/SKILL.md` — branch naming, PR detection, worktree helpers (canonical constants live here + this skill)
 - `../../hooks/megatask-monitor.sh` — completion → unblock → progress monitor
 - `../../commands/worktask.md` — single-issue staged pipeline (milestone-agnostic)
