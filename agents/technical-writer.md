@@ -4,7 +4,7 @@ description: Expert technical writer for source code documentation, README updat
 model: haiku
 color: white
 effort: low
-version: 0.1.0
+version: 0.1.1
 maxTurns: 25
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -179,3 +179,14 @@ jq --arg code "DC" --arg artifact "documentation-N.md" --arg verdict "<pass|fail
 ```
 
 If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+
+---
+
+> # ⚠️ MANDATORY CLOSE — DO THIS BEFORE YOU RETURN ⚠️
+> **First-named closing action, non-optional.** Before returning from the DC stage:
+>
+> 1. **Write the `.context/state.json` stage-completion entry for `DC`** using the State.json Atomic Merge block above. This is the FIRST thing you do as you close — not the last, not "if there's time".
+> 2. **Do it even if the documentation artifact is partial or imperfect.** A partial artifact with a correct state patch is recoverable; a perfect artifact with no state patch forces a Layer-3 orchestrator recovery.
+> 3. **The orchestrator cannot auto-recover reliably without this.** The SubagentStop hook is a backstop, not a substitute — do not rely on it. Your explicit self-patch is the contract.
+>
+> If you can only complete one closing action, complete this one.
