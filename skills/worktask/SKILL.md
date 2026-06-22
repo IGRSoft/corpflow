@@ -540,9 +540,10 @@ while (tasks.some(t => t.status !== "completed")) {
       const fnGate = pl0.metadata.fn_gate ?? "checkpoint";  // TaskGet PL0
       const N = state.run_index ?? 0;
 
-      // (a) Run the Pre-gate Conductor-attachments writer on BOTH paths
+      // (a) Run the Pre-gate Conductor-attachments writer (checkpoint path only).
       //     (references/fn-gate.md § Pre-gate Conductor-attachments writer) —
-      //     local-only writes, no remote ops.
+      //     local-only writes, no remote ops. Bypass path falls through to
+      //     FN-agent Writer 2 inside the FN stage.
       if (fnGate === "checkpoint") {
         // (b) Emit `fn_gate_waiting subject:"FN<N>"`.
         appendAudit({ actor: "orchestrator", action: "fn_gate_waiting",
