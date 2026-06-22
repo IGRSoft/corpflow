@@ -42,7 +42,7 @@ Before executing any megatask run, validate:
 
 ### Pre-Execution Checks
 
-- [ ] orchestrator.json exists or will be created at `.worktrees/orchestrator.json`
+- [ ] orchestrator.json exists or will be created at `.worktrees/<group>/orchestrator.json`
 - [ ] Each issue checked for existing PRs (skip if found)
 - [ ] Each issue has unique branch name
 - [ ] Base branch is clean (no uncommitted changes)
@@ -126,7 +126,7 @@ Before executing any megatask run, validate:
 
 **Solutions**:
 1. Verify `/megatask` milestone/issues argument was provided
-2. Check `.worktrees/orchestrator.json` exists
+2. Check `.worktrees/<group>/orchestrator.json` exists
 3. Verify GitHub CLI auth: `gh auth status`
 4. Check milestone has open issues
 
