@@ -152,9 +152,3 @@ The DAG is persisted on each issue and at the top level — see `schemas.md` (or
 `issues[].blocked_by`, `issues[].blocks`, `issues[].level`, `issues[].external_dependencies`,
 `topological_order`, and `dependency_warnings`.
 
-## Related
-
-- `../SKILL.md` — megatask orchestration (§ Dependency & Blocker Resolution)
-- `schemas.md` — orchestrator.json (v3.1) DAG schema
-- `../../../commands/pm-milestone.md` — writes the `Depends on:` / `Blocks:` lines parsed here
-- `../../../hooks/megatask-monitor.sh` — runtime unblocking implementation

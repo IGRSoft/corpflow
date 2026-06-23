@@ -4,6 +4,10 @@ description: Conduct an accessibility audit for screens, components, or the enti
 argument-hint: '<screen, component, or app path>'
 model: sonnet
 allowed-tools: Read, Glob, Grep
+related:
+  - agents/designer.md
+  - commands/design-review.md
+  - commands/qa-report.md
 ---
 
 # Accessibility Audit Command
@@ -194,11 +198,5 @@ Use this command:
 - During DV stage for implementation checks
 - During QA stage for compliance verification
 - Standalone for periodic audits
-
-## Related
-
-- [designer](../agents/designer.md) - Designer agent
-- [design-review](design-review.md) - General design review
-- [qa-report](qa-report.md) - QA reporting
 
 Target: $ARGUMENTS

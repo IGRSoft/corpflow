@@ -4,6 +4,10 @@ description: Analyze test coverage gaps and generate recommendations for improvi
 argument-hint: '[--path dir] [--threshold N]'
 allowed-tools: Read, Glob, Grep, Bash(swift test:*)
 model: haiku
+related:
+  - agents/qa-engineer.md
+  - commands/test-plan.md
+  - commands/qa-report.md
 ---
 
 # Test Coverage Command
@@ -146,8 +150,3 @@ Use this command:
 - During Q stage - Verify coverage goals
 - In `/qa-report` - Include coverage metrics
 
-## Related
-
-- [qa-engineer](../agents/qa-engineer.md) - Testing expertise
-- [test-plan](./test-plan.md) - Generate test cases
-- [qa-report](./qa-report.md) - Complete QA summary

@@ -4,6 +4,9 @@ description: Technical review of estimates by platform specialist
 argument-hint: <estimate or task to review>
 model: sonnet
 allowed-tools: Read, Glob, Grep
+related:
+  - skills/review/SKILL.md
+  - skills/estimation/SKILL.md
 ---
 
 # Senior Review Command
@@ -119,7 +122,3 @@ This command works with:
 - `/export-estimate` - Updated CSV export
 - Platform agents (apple-developer, ios-developer, kotlin-pro, etc.)
 
-## Related
-
-- [senior-developer-review](../skills/review/SKILL.md) - Review guidelines
-- [estimation-methodology](../skills/estimation/SKILL.md) - Methodology

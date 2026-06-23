@@ -4,6 +4,10 @@ description: Apply RICE, WSJF, or other prioritization frameworks to rank featur
 argument-hint: <feature list or backlog items>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/product-manager.md
+  - commands/pm-requirements.md
+  - commands/pm-roadmap.md
 ---
 
 # PM Prioritize Command
@@ -179,8 +183,3 @@ This command works with:
 - `/pm-roadmap` - Update roadmap with priorities
 - `/sprint-plan` - Plan sprint based on priorities
 
-## Related
-
-- [product-manager](../agents/product-manager.md) - Product expertise
-- [pm-requirements](./pm-requirements.md) - Requirements definition
-- [pm-roadmap](./pm-roadmap.md) - Roadmap planning

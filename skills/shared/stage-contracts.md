@@ -5,14 +5,14 @@ description: Per-stage Inputs→Outputs→Validation contract for every worktask
 
 # Stage Contracts Reference
 
-Single source of truth for what each worktask stage consumes, produces, and how the orchestrator validates the handoff. Every stage agent's `## Completion Verification` section MUST link back here.
+Single source of truth for what each stage consumes, produces, and how the orchestrator validates the handoff. Every stage agent's `## Completion Verification` section MUST link back here.
 
 ## How to Read a Contract
 
-- **Inputs**: required `.context/` artifacts and metadata the stage reads before starting. Missing required inputs → `missing_input` escalation (see `agent-coordination` § Error Handling).
-- **Outputs**: artifacts the stage MUST produce before setting `status: completed`. Each lists the minimum sections. **Every output artifact MUST start with a `---\nhandoff:\n` YAML frontmatter block** conforming to the schema in `skills/worktask/references/handoff-protocol.md#frontmatter-schema`. Per-stage required fields are defined in that file's per-stage matrix.
-- **Validation**: the exact check the orchestrator runs on stage completion. If false, the stage is not considered complete.
-- **Error File**: per-agent narrative path (`metadata.error_file`). Auto-derived from `metadata.agent` basename. See `task-system` § Metadata Fields.
+- **Inputs**: `.context/` artifacts and metadata read before starting. Missing → `missing_input` escalation (see `agent-coordination` § Error Handling).
+- **Outputs**: artifacts produced before `status: completed`, each with minimum sections. **Every output MUST start with a `---\nhandoff:\n` YAML frontmatter block** per `skills/worktask/references/handoff-protocol.md#frontmatter-schema` (required fields in that file's per-stage matrix).
+- **Validation**: the exact check the orchestrator runs on completion. If false, the stage is not complete.
+- **Error File**: per-agent narrative path (`metadata.error_file`), auto-derived from `metadata.agent` basename. See `task-system` § Metadata Fields.
 
 ## Required Inputs (handoff-protocol)
 
@@ -27,7 +27,7 @@ Every stage agent reads inputs in this order, anchor-first:
 1. `task.metadata.run_index` → `<basename>-${N}.md`.
 2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
 
-**Backward-compatibility fallback (F1)**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode) and read the listed files in full. Cache benefit collapses in this mode (no cache-friendly preamble), so this is **silent cache degradation**.
+**Backward-compatibility fallback (F1)**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode), reading the listed files in full. Rationale and full F1 description: `skills/shared/legacy-fallback-f1.md`.
 
 To surface F1 entries, agents MUST emit one telemetry line:
 
@@ -48,10 +48,7 @@ Then proceed with the legacy read. The fallback log is consumed by `/cost-report
 
 ### #run-index-resolution
 
-Two-step resolver (canonical):
-
-1. `task.metadata.run_index` → `<basename>-${N}.md`.
-2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
+Two-step resolver (canonical), as in **Run Index Resolution** above: (1) `task.metadata.run_index` → `<basename>-${N}.md`; (2) newest glob `<basename>-*.md` (highest N) when metadata is absent.
 
 ### #f1-telemetry
 
@@ -67,7 +64,7 @@ Every stage's output artifact MUST:
 
 ## Contract Table
 
-All artifact paths use `<basename>-N.md` where `N = task.metadata.run_index`. Resolver: metadata → newest glob `<basename>-*.md`. See **Run Index Resolution** above.
+All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolver in **Run Index Resolution** above).
 
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
@@ -102,7 +99,7 @@ Failure at any step → do NOT transition. Append a `missing_input` entry to the
 
 ## Cross-Plugin Stages
 
-When a stage is delegated to a qualified agent (e.g., `apple-developer:ios-developer` takes over DV for Apple platform tasks):
+When a stage is delegated to a qualified agent (e.g., `apple-developer:ios-developer` takes over DV):
 
 - `metadata.agent = "apple-developer:ios-developer"` (full qualified name)
 - `metadata.error_file = ".context/errors/ios-developer.md"` (last segment)
@@ -119,9 +116,7 @@ When TL splits DV into DV0/DV1/DV2 (parallel streams):
 
 ## Per-Stage Frontmatter Templates
 
-Canonical YAML templates for the `handoff:` block at the top of every stage artifact. Each agent's `## Handoff Protocol` section pastes the matching block verbatim (with placeholder substitutions) into `.context/<artifact>-N.md`; N is the run index resolved per `#run-index-resolution`.
-
-These are the single source of truth — agents MUST NOT diverge from the field shape below. To change a template, edit this section, then re-run `cache-lint.sh --frontmatter-template-lint agents/*.md` so every agent's inline copy is validated to match.
+Canonical YAML templates for the `handoff:` block atop every stage artifact. Each agent's `## Handoff Protocol` pastes the matching block verbatim (with substitutions) into `.context/<artifact>-N.md` (N resolved per `#run-index-resolution`). These are the single source of truth — agents MUST NOT diverge from the field shape below. To change a template, edit here, then re-run `cache-lint.sh --frontmatter-template-lint agents/*.md` to revalidate every agent's inline copy.
 
 > **Typed-return equivalent.** Each frontmatter template below has a typed-return JSON-Schema counterpart
 > (`<CODE>Handoff`) in `skills/worktask/references/handoff-protocol.md#handoff-schemas`. When the runtime
@@ -385,9 +380,7 @@ Prev→this label: `<invoker>→ET` (whichever stage triggered the ethics gate).
 
 ## Completion Verification — REQUIRED before return
 
-Single source of truth for what every stage agent verifies before setting `status: completed`. Each agent's `## Handoff Protocol` section MUST reference this checklist rather than restating it. **Agents MUST repeat the numbered step outcomes verbatim in their return summary.**
-
-Before marking your stage complete, execute these steps in order:
+Single source of truth for what every stage agent verifies before `status: completed`. Each agent's `## Handoff Protocol` MUST reference this checklist, not restate it. **Agents MUST repeat the numbered step outcomes verbatim in their return summary.** Execute in order:
 
 1. **Artifact frontmatter**: Your artifact (`.context/<artifact>-N.md`) MUST start with `---\nhandoff:` YAML frontmatter conforming to the per-stage template at `stage-contracts.md#tpl-<CODE>`.
 2. **Required fields**: Frontmatter MUST include all required fields for your stage `<CODE>` per `skills/worktask/references/handoff-protocol.md#frontmatter-schema` § Per-stage required-field matrix.

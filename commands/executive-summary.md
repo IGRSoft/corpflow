@@ -4,6 +4,10 @@ description: Generate executive-level summary of projects or initiatives for sta
 argument-hint: <project or initiative>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/stakeholder.md
+  - agents/project-manager.md
+  - commands/business-case.md
 ---
 
 # Executive Summary Command
@@ -95,8 +99,3 @@ This command works with:
 - `/roi-analysis` - Financial metrics
 - `/business-case` - Strategic context
 
-## Related
-
-- [stakeholder](../agents/stakeholder.md) - Business stakeholder
-- [project-manager](../agents/project-manager.md) - Project status
-- [business-case](./business-case.md) - Business justification

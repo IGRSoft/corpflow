@@ -4,6 +4,13 @@ description: Generate professional App Store screenshots from AppStore/ folder f
 argument-hint: '[--platform ios|macos|tvos|watchos|all] [--lang en|ua]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write, Bash, mcp__pencil__open_document, mcp__pencil__batch_design, mcp__pencil__batch_get, mcp__pencil__get_screenshot, mcp__pencil__snapshot_layout, mcp__pencil__find_empty_space_on_canvas, mcp__pencil__get_variables, mcp__pencil__set_variables, mcp__pencil__get_guidelines, mcp__pencil__get_style_guide_tags, mcp__pencil__get_style_guide
+related:
+  - commands/appstore-info.md
+  - agents/release-engineer.md
+  - agents/designer.md
+  - commands/create-release-notes.md
+  - skills/appstore-screenshots/SKILL.md
+  - skills/pencil-design/SKILL.md
 ---
 
 # App Store Screenshots Command
@@ -169,14 +176,5 @@ This command is used:
 - After `/appstore-info` scaffolds the AppStore/ folder
 - When preparing a new app release or major version update
 - When adding platform support (e.g., adding macOS screenshots to an iOS app)
-
-## Related
-
-- [appstore-info](./appstore-info.md) — Scaffold AppStore/ folder and generate listing content
-- [release-engineer](../agents/release-engineer.md) — Release Engineering stage
-- [designer](../agents/designer.md) — Design review and specifications
-- [create-release-notes](./create-release-notes.md) — Generate "What's New" content
-- [appstore-screenshots skill](../skills/appstore-screenshots.md) — Device specs and layout reference
-- [pencil-design skill](../skills/pencil-design/SKILL.md) — Pencil MCP tools reference
 
 Target: $ARGUMENTS

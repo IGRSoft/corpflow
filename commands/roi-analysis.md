@@ -4,6 +4,10 @@ description: Calculate Return on Investment for initiatives with NPV, IRR, and p
 argument-hint: <initiative or investment>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/stakeholder.md
+  - commands/business-case.md
+  - commands/executive-summary.md
 ---
 
 > **When to use**: `/roi-analysis` for focused ROI metrics (NPV, IRR, payback period). `/business-case` for strategic justification and financial analysis.
@@ -226,8 +230,3 @@ This command supports:
 - `/pm-prioritize` - Business value scoring
 - `/executive-summary` - Key metrics
 
-## Related
-
-- [stakeholder](../agents/stakeholder.md) - Business decisions
-- [business-case](./business-case.md) - Full business case
-- [executive-summary](./executive-summary.md) - Summary

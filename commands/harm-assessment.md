@@ -4,6 +4,11 @@ description: Evaluate potential harms of features, decisions, or code using cons
 argument-hint: '<feature, decision, or scenario>'
 model: sonnet
 allowed-tools: Read, Glob, Grep
+related:
+  - commands/ethics-review.md
+  - commands/transparency-check.md
+  - agents/ethics-reviewer.md
+  - skills/claude-constitution/SKILL.md
 ---
 
 > **When to use**: `/harm-assessment` for stakeholder impact analysis. `/ethics-review` for constitutional compliance. `/transparency-check` for honesty properties.
@@ -237,9 +242,3 @@ These harms are NEVER acceptable regardless of benefits:
 - Escalates critical harms to stakeholder review
 - Integrates with security and safety worktasks
 
-## Related
-
-- `/ethics-review` - Full constitutional compliance review
-- `/transparency-check` - Honesty and transparency verification
-- `agents/ethics-reviewer.md` - Ethics review agent
-- `skills/claude-constitution/SKILL.md` - Constitutional principles

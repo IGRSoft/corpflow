@@ -4,6 +4,11 @@ description: Verify honesty and transparency properties in outputs, documentatio
 argument-hint: '<output, document, or code path>'
 allowed-tools: Read, Glob, Grep
 model: sonnet
+related:
+  - commands/ethics-review.md
+  - commands/harm-assessment.md
+  - agents/ethics-reviewer.md
+  - skills/claude-constitution/SKILL.md
 ---
 
 > **When to use**: `/transparency-check` for honesty properties. `/ethics-review` for constitutional compliance. `/harm-assessment` for stakeholder impact analysis.
@@ -272,9 +277,3 @@ Protects the epistemic autonomy and rational agency of users.
 - Integrates with technical-writer for documentation
 - Coordinates with designer for UI checks
 
-## Related
-
-- `/ethics-review` - Full constitutional compliance review
-- `/harm-assessment` - Harm potential evaluation
-- `agents/ethics-reviewer.md` - Ethics review agent
-- `skills/claude-constitution/SKILL.md` - Constitutional principles

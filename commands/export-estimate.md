@@ -4,6 +4,9 @@ description: Generate CSV files from estimation data for Google Sheets import
 argument-hint: <task or milestone reference>
 allowed-tools: Read, Write, Glob
 model: haiku
+related:
+  - skills/csv-export-templates/SKILL.md
+  - skills/estimation/SKILL.md
 ---
 
 # Export Estimate Command
@@ -108,7 +111,3 @@ This command works with:
 - `/risk-assess` - Risk register
 - `/senior-review` - Adjustment data
 
-## Related
-
-- [csv-export-templates](../skills/csv-export-templates/SKILL.md) - Template definitions
-- [estimation-methodology](../skills/estimation/SKILL.md) - Methodology rules

@@ -4,6 +4,10 @@ description: Plan sprint with capacity analysis, task breakdown, and resource al
 argument-hint: <sprint name or number>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/project-manager.md
+  - commands/risk-assess.md
+  - commands/create-release-notes.md
 ---
 
 # Sprint Plan Command
@@ -214,8 +218,3 @@ This command works with:
 - `/pm-prioritize` - Prioritize sprint items
 - `/estimate` - Estimate story points
 
-## Related
-
-- [project-manager](../agents/project-manager.md) - Project management expertise
-- [risk-assess](./risk-assess.md) - Risk assessment
-- [release-notes](./release-notes.md) - Release documentation

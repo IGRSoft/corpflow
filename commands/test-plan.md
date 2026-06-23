@@ -4,6 +4,9 @@ description: Generate a comprehensive test plan from requirements or code change
 argument-hint: <feature or module description>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/qa-engineer.md
+  - skills/worktask/SKILL.md
 ---
 
 # Test Plan Command
@@ -167,7 +170,3 @@ This command is typically used:
 - Before `/worktask` Q stage - Prepare test strategy
 - With `/test-coverage` - Identify gaps
 
-## Related
-
-- [qa-engineer](../agents/qa-engineer.md) - QA expertise
-- [Worktask System](../skills/worktask.md) - Q stage details

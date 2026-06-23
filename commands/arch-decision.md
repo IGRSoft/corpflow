@@ -4,6 +4,10 @@ description: Create or update Architecture Decision Records (ADRs) to document s
 argument-hint: <decision topic or context>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/software-architector.md
+  - commands/arch-review.md
+  - commands/tech-debt.md
 ---
 
 # Architecture Decision Record Command
@@ -165,10 +169,3 @@ This command is used:
 - For significant technical choices
 - For Apple platform architecture pattern selection (with apple-architector consultation)
 
-## Related
-
-- [software-architector](../agents/software-architector.md) - Architecture expertise
-- [apple-architector](apple-developer:apple-architector) - Swift app architecture (consulted for Apple ADRs)
-- [arch-review](./arch-review.md) - Architecture review
-- [arch-apple-select](apple-developer:arch-apple-select) - Standalone Swift pattern selection
-- [tech-debt](./tech-debt.md) - Technical debt tracking

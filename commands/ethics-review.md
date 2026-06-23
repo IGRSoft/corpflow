@@ -4,6 +4,12 @@ description: Review tasks, features, or architecture for constitutional complian
 argument-hint: <feature or decision to review>
 model: sonnet
 allowed-tools: Read, Glob, Grep
+related:
+  - commands/harm-assessment.md
+  - commands/transparency-check.md
+  - commands/risk-assess.md
+  - agents/ethics-reviewer.md
+  - skills/claude-constitution/SKILL.md
 ---
 
 > **When to use**: `/ethics-review` for constitutional compliance. `/harm-assessment` for stakeholder impact analysis. `/transparency-check` for honesty properties.
@@ -184,10 +190,3 @@ Can be invoked at any worktask stage:
 - Can escalate to human review for complex cases
 - Integrates with risk assessment worktasks
 
-## Related
-
-- `/harm-assessment` - Deep dive into harm potential
-- `/transparency-check` - Verify honesty properties
-- `/risk-assess` - General risk assessment
-- `agents/ethics-reviewer.md` - Ethics review agent
-- `skills/claude-constitution/SKILL.md` - Constitutional principles

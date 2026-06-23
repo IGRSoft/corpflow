@@ -4,6 +4,10 @@ description: Conduct a comprehensive design review for screens, components, or f
 argument-hint: '<screen, component, or feature>'
 model: sonnet
 allowed-tools: Read, Glob, Grep
+related:
+  - agents/designer.md
+  - commands/design-specs.md
+  - commands/accessibility-audit.md
 ---
 
 # Design Review Command
@@ -118,11 +122,5 @@ This command can be used:
 - During DV stage for implementation review
 - During QA stage for visual QA
 - Standalone for periodic design audits
-
-## Related
-
-- [designer](../agents/designer.md) - Designer agent
-- [design-specs](design-specs.md) - Generate design specifications
-- [a11y-audit](a11y-audit.md) - Accessibility-focused audit
 
 Target: $ARGUMENTS

@@ -1,6 +1,6 @@
 ---
 name: software-architector
-description: Master software architect specializing in modern architecture patterns, clean architecture, microservices, event-driven systems, and DDD. Use PROACTIVELY for architectural decisions, system design, or code architecture review.
+description: Master software architect specializing in clean architecture, microservices, event-driven systems, and DDD. Use PROACTIVELY for architectural decisions, system design, or architecture review.
 model: opus
 color: green
 effort: xhigh
@@ -129,7 +129,7 @@ Before completing AR stage:
 
 ## Worktask Integration
 
-In the 9-stage worktask system, the software-architector handles:
+**Stage**: AR (Architecture, 2/11) — see `skills/shared/worktask-stage-context.md` for pipeline context. The software-architector handles:
 
 ### A Stage (Architecture)
 - **AR0**: Read `state.json` facts first, then anchor-read `planning-N.md#requirements` + `planning-N.md#acceptance-criteria` (N = `task.metadata.run_index`; plan path: `.context/${task.metadata.plan_file}`, fallback: newest `.context/planning-*.md`). Analyze requirements + test strategy from those anchors. Full-read the plan file only if an anchor is absent or `retry_count > 0`.

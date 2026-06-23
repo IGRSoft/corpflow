@@ -4,6 +4,10 @@ description: Generate a Product Requirements Document (PRD) from task descriptio
 argument-hint: <feature or task description>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/product-manager.md
+  - commands/pm-prioritize.md
+  - commands/pm-roadmap.md
 ---
 
 # PM Requirements Command
@@ -92,8 +96,3 @@ This command feeds into:
 - `/test-plan` - Test cases from acceptance criteria
 - `/worktask` - Requirements for PL stage
 
-## Related
-
-- [product-manager](../agents/product-manager.md) - Product expertise
-- [pm-prioritize](./pm-prioritize.md) - Feature prioritization
-- [pm-roadmap](./pm-roadmap.md) - Roadmap planning

@@ -226,11 +226,3 @@ Steps (matches the failure cascade above):
 
 Logs land in `.context/logs/build-developer-<ts>.log` and `.context/logs/canvas-render-<ts>.log` (per logging-conventions).
 
-## Related references
-
-- `references/preview-ensurer.md` — heuristics summary (mock-arg derivation, fixtures expected, A4 invariant)
-- `references/cli-fallback.md` — terminal of the cascade
-- `examples/SnapshotHost-template/Package.swift` — template referenced by step 2 of the cascade
-- `examples/canvas-render-host.swift` — reference `main.swift` content
-- `scripts/apple-canvas.sh` — adapter driver
-- `scripts/visual-diff.sh` — QA RMSE diff wrapper

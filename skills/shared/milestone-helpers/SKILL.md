@@ -2,6 +2,10 @@
 name: milestone-helpers
 description: Reusable helper function patterns for milestone worktask operations. Use when implementing milestone workspace initialization, PR detection, or worktree management.
 effort: low
+related:
+  - ../../megatask/SKILL.md
+  - ../../../commands/worktask.md
+  - ../stage-codes.md
 ---
 
 # Milestone Helper Functions
@@ -48,8 +52,3 @@ See references/ for full implementations with code examples.
 | Create PR | `gh pr create --base develop --body "Closes #{issue}"` | `gh pr create --base develop --body "Closes #{issue}"` |
 | Cleanup | `git checkout develop` | `git worktree remove .worktrees/milestone-{N}/{issue#} && git worktree prune` |
 
-## Related
-
-- `../../megatask/SKILL.md` - Full megatask (milestone/array) orchestration
-- `../../../commands/worktask.md` - Core single-issue worktask system
-- `../stage-codes.md` - Stage code reference

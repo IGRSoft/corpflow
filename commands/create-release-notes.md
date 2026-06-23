@@ -4,6 +4,10 @@ description: Generate release notes from completed work, git history, or worktas
 argument-hint: '[--from tag] [--to tag|HEAD]'
 allowed-tools: Read, Glob, Grep, Bash(git log:*)
 model: haiku
+related:
+  - agents/project-manager.md
+  - agents/technical-writer.md
+  - commands/sprint-plan.md
 ---
 
 # Release Notes Command
@@ -254,8 +258,3 @@ This command is used:
 - For stakeholder communication
 - For customer announcements
 
-## Related
-
-- [project-manager](../agents/project-manager.md) - Release coordination
-- [technical-writer](../agents/technical-writer.md) - Documentation
-- [sprint-plan](./sprint-plan.md) - Sprint tracking

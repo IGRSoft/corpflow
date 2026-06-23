@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with Task System integration, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin v3.26.0 · Requires Claude Code 2.1.183+**
+**Plugin 3.27.0 · Requires Claude Code 2.1.183+**
 
 ## Features
 
@@ -346,60 +346,7 @@ Emergency: FN → RE → QA → DR → DV → IR → USER
 
 ## Command Quick Reference
 
-### Before Starting Work
-```
-/estimate "Task description"        # Understand complexity
-/pm-prioritize "Feature"            # Prioritize in backlog
-```
-
-### During Planning
-```
-/pm-requirements "Feature"          # Generate PRD
-/pm-roadmap --add "Feature"         # Add to roadmap
-/arch-decision "Decision"           # Document decisions
-```
-
-### During Development
-```
-/worktask "Task"                    # Start a single worktask
-/megatask 7                         # Orchestrate a whole milestone (DAG-ordered)
-/megatask --issues 12,15,18         # …or an explicit issue array
-/arch-review                        # Review architecture
-/tech-debt --path src/              # Check tech debt
-```
-
-### During Testing
-```
-/test-plan "Feature"                # Generate test plan
-/test-coverage                      # Check coverage
-/qa-report                          # Generate QA report
-```
-
-### During Documentation
-```
-/doc-audit                          # Find doc gaps
-/readme-update                      # Update README
-```
-
-### During Release
-```
-/create-release-notes               # Generate release notes
-/executive-summary                  # Stakeholder summary
-/sprint-plan                        # Plan next sprint
-```
-
-### Troubleshooting
-```
-/context-status                     # Context analysis
-```
-
-### Post-Worktask Learning
-```
-/improve-yourself                   # Retrospective: propose agent/skill/command updates from user edits
-/improve-yourself --since <ref>     # Explicit baseline (default: last agent commit)
-/improve-yourself --dry-run         # Inspect proposals without applying
-/improve-yourself --apply           # Apply user-checked proposals via prompt-engineer
-```
+> Per-command usage (grouped by role/phase) lives in the **Commands** tables above (§ Commands). Every command — planning, development, testing, docs, release, troubleshooting, and `/improve-yourself` retrospective flags — is documented there.
 
 ## License
 

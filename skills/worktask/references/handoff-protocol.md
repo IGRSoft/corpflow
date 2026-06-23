@@ -555,6 +555,8 @@ Four documented degradation paths. Worktask MUST complete in all four (AC-16, AC
 | F3 | Agent writes artifact **without frontmatter** | Orchestrator logs WARN `frontmatter missing in <artifact>`. Derives minimal handoff: `{stage, verdict: ok, summary: <first 200 chars of return>, refs: {artifact: <path>}}`. Worktask proceeds. |
 | F4 | state.json **corrupt** (invalid JSON or schema mismatch) | Quarantine to `.context/state.json.bad.<unix-ts>`. Regenerate from PL0 + completed-stage frontmatter walk. Audit log to `.context/logs/state-recovery.log`. Continue. |
 
+> F1 rationale (legacy `context_files` mode, cache-degradation tradeoff): see `skills/shared/legacy-fallback-f1.md`. This matrix is the canonical operational spec.
+
 ### F4 regeneration walk
 
 1. Glob `.context/{planning-*,analyzing-*,coordination-*,development-*,developer-review-*,security-review-*,testing-*,documentation-*,release-*,complete-summary-*,retrospective-*,incident-*,ethics-review-*}.md`.

@@ -4,6 +4,11 @@ description: Comprehensive audit of agents, commands, and prompts for quality, c
 argument-hint: '[--scope agents|commands|all]'
 allowed-tools: Read, Glob, Grep
 model: sonnet
+related:
+  - agents/prompt-engineer.md
+  - commands/optimize-agent.md
+  - commands/optimize-command.md
+  - commands/create-agent.md
 ---
 
 # Prompt Audit Command
@@ -216,11 +221,3 @@ This command is used:
 - After adding new agents/commands
 - During prompt engineering reviews
 
-## Related
-
-- [prompt-engineer](../agents/prompt-engineer.md) - Prompt engineering agent
-- [optimize-agent](./optimize-agent.md) - Optimize agents
-- [optimize-command](./optimize-command.md) - Optimize commands
-- [create-agent](./create-agent.md) - Create new agents
-- [create-command](./create-command.md) - Create new commands
-- [create-skill](./create-skill.md) - Create new skills

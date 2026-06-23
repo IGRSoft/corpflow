@@ -5,6 +5,17 @@ argument-hint: '[--pr N | --path dir]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*)
 version: 0.1.2
+related:
+  - agents/developer.md
+  - agents/technical-lead.md
+  - commands/code-impl.md
+  - commands/senior-review.md
+  - commands/arch-review.md
+  - commands/ethics-review.md
+  - commands/transparency-check.md
+  - skills/claude-constitution/SKILL.md
+  - skills/shared/stage-contracts.md
+  - skills/agent-coordination/SKILL.md
 ---
 
 # Developer Code Review Command
@@ -291,15 +302,3 @@ This command is used:
 - Before merging PRs.
 - For periodic codebase health checks.
 
-## Related
-
-- [developer](../agents/developer.md) - Platform developer agent
-- [technical-lead](../agents/technical-lead.md) - DR stage owner who invokes this command
-- [code-impl](./code-impl.md) - Implementation command
-- [senior-review](./senior-review.md) - Senior developer review
-- [arch-review](./arch-review.md) - Architecture review
-- [ethics-review](./ethics-review.md) - Ethics review command
-- [transparency-check](./transparency-check.md) - Transparency verification
-- [claude-constitution](../skills/claude-constitution/SKILL.md) - Constitutional principles
-- [stage-contracts](../skills/shared/stage-contracts.md) - Handoff/run-index/atomic-write contracts
-- [agent-coordination](../skills/agent-coordination/SKILL.md) - Retry/escalate matrix (Error Handling)

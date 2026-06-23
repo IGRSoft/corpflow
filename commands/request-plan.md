@@ -4,6 +4,10 @@ description: Turn a free-form request into a lightweight, context-aware plan (go
 argument-hint: '<request> [--save]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write, Task
+related:
+  - skills/request-plan/SKILL.md
+  - skills/estimation/SKILL.md
+  - skills/shared/three-stage-planning.md
 ---
 
 # Request Plan Command
@@ -60,8 +64,3 @@ The plan follows `skills/request-plan/references/plan-template.md`:
 - `/estimate` — when hours, budget, or CSV export are needed instead of a rough cut
 - `/pm-requirements` — when a full PRD is needed instead of a lightweight plan
 
-## Related
-
-- [request-plan skill](../skills/request-plan/SKILL.md) — full workflow and templates
-- [estimation](../skills/estimation/SKILL.md) — complexity scoring and tier selection
-- [three-stage-planning](../skills/shared/three-stage-planning.md) — P0/P1/P2 phasing

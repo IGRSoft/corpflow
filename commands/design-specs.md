@@ -4,6 +4,9 @@ description: Generate developer-ready design specifications for components, scre
 argument-hint: <component or screen name>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/designer.md
+  - commands/design-review.md
 ---
 
 # Design Specifications Command
@@ -166,10 +169,5 @@ Use this command:
 - Before DV stage implementation
 - For design-to-code handoff
 - When updating existing components
-
-## Related
-
-- [designer](../agents/designer.md) - Designer agent
-- [design-review](design-review.md) - Review existing designs
 
 Target: $ARGUMENTS

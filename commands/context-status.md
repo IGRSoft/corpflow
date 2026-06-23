@@ -4,6 +4,10 @@ description: Check context window utilization, analyze token distribution, and t
 argument-hint: ''
 allowed-tools: Read, Glob, TaskList
 model: haiku
+related:
+  - skills/context-compression/SKILL.md
+  - skills/cost-optimization/SKILL.md
+  - commands/cost-report.md
 ---
 
 # Context Status
@@ -233,9 +237,3 @@ This command is used:
 - When response quality degrades
 - By workflow-engineer for diagnostics
 
-## Related
-
-- `skills/context-compression.md` - Compression techniques
-- `skills/cost-optimization.md` - Cost management
-- `/cost-report` - Token cost analysis
-- `/context` (built-in) - Enhanced with actionable suggestions for context optimization

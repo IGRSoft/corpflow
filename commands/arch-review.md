@@ -4,6 +4,10 @@ description: Perform architecture review evaluating architectural integrity, sca
 argument-hint: '[--pr N | --path dir] [--scope full|focused]'
 model: sonnet
 allowed-tools: Read, Glob, Grep
+related:
+  - agents/software-architector.md
+  - commands/arch-decision.md
+  - commands/tech-debt.md
 ---
 
 # Architecture Review Command
@@ -176,10 +180,3 @@ This command is used:
 - Before merging large PRs
 - When introducing new patterns
 
-## Related
-
-- [software-architector](../agents/software-architector.md) - Architecture expertise
-- [apple-architector](apple-developer:apple-architector) - Swift app architecture (consulted for Apple projects)
-- [arch-decision](./arch-decision.md) - Create ADRs
-- [arch-apple-review](apple-developer:arch-apple-review) - Standalone Swift architecture review
-- [tech-debt](./tech-debt.md) - Technical debt analysis

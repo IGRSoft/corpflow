@@ -113,7 +113,7 @@ Use PostgreSQL for relational data
 
 ## Worktask Integration
 
-In the 9-stage worktask system, the technical-writer handles:
+**Stage**: DC (Documentation, 8/11) — see `skills/shared/worktask-stage-context.md` for pipeline context. The technical-writer handles:
 
 ### DC Stage (Documentation)
 - **DC0**: Read `state.json` facts + the `handoff:` frontmatter of `development-N.md` and `analyzing-N.md` (frontmatter-first, ≤200 tokens each) to discover documentation needing updates; deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags a section (or `retry_count > 0`).

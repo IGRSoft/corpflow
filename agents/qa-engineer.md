@@ -71,7 +71,7 @@ If `facts.files_read` is absent (legacy worktask), fall back to normal reads.
 
 ## Worktask Integration
 
-In the 9-stage worktask system, the qa-engineer handles:
+**Stage**: QA (QA Testing, 7/11) — see `skills/shared/worktask-stage-context.md` for pipeline context. The qa-engineer handles:
 
 ### Q Stage (QA Testing)
 - **Q0**: Analyze requirements, review DV's unit tests, identify coverage gaps

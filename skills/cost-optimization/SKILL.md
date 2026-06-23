@@ -2,6 +2,10 @@
 name: cost-optimization
 description: Cost tracking and optimization strategies for AI agent worktasks. Apply for budget management, model selection, and efficiency analysis.
 effort: medium
+related:
+  - skills/worktask/SKILL.md
+  - skills/agent-coordination/SKILL.md
+  - skills/claude-constitution/SKILL.md
 ---
 
 # Cost Optimization
@@ -356,8 +360,3 @@ After worktask:
 | Sequential git log/show/diff | 4 commands for 1 answer | Single combined git command (§4a) |
 | Separate greps for related symbols | Multiplies round-trips | Use `\|` alternation (§4b) |
 
-## Related Skills
-
-- `${CLAUDE_SKILL_DIR}/../worktask/SKILL.md` - Worktask system documentation
-- `${CLAUDE_SKILL_DIR}/../agent-coordination/SKILL.md` - Multi-agent coordination patterns
-- `${CLAUDE_SKILL_DIR}/../claude-constitution/SKILL.md` - Constitutional principles and ethics framework

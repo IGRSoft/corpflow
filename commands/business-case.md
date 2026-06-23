@@ -4,6 +4,10 @@ description: Generate business case documentation with financial analysis and st
 argument-hint: <initiative description>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
+related:
+  - agents/stakeholder.md
+  - commands/roi-analysis.md
+  - commands/executive-summary.md
 ---
 
 > **When to use**: `/business-case` for strategic justification and financial analysis. `/roi-analysis` for focused ROI metrics (NPV, IRR, payback period).
@@ -92,8 +96,3 @@ This command supports:
 - `/pm-prioritize` - Business value input
 - `/executive-summary` - Summary generation
 
-## Related
-
-- [stakeholder](../agents/stakeholder.md) - Business stakeholder
-- [roi-analysis](./roi-analysis.md) - ROI calculation
-- [executive-summary](./executive-summary.md) - Summary generation

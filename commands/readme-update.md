@@ -4,6 +4,10 @@ description: Update README files based on code changes, keeping documentation in
 argument-hint: '[--path README.md]'
 model: haiku
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash(git log:*)
+related:
+  - agents/technical-writer.md
+  - commands/doc-audit.md
+  - commands/worktask.md
 ---
 
 # README Update Command
@@ -194,8 +198,3 @@ This command works with:
 - `/doc-audit` - Find README issues
 - `/release-notes` - Update for releases
 
-## Related
-
-- [technical-writer](../agents/technical-writer.md) - Documentation expertise
-- [doc-audit](./doc-audit.md) - Documentation audit
-- [worktask](./worktask.md) - DC stage documentation
