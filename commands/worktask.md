@@ -73,12 +73,12 @@ See `skills/shared/stage-codes.md` for stage details.
 ## Phase 1: Planning (execute immediately)
 
 > **BINDING CONSTRAINTS FOR PHASE 1**
-> 1. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/images .context/errors` and TaskCreate/TaskUpdate calls are permitted. ALL file modifications belong to DV stage or later.
+> 1. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/designs .context/images .context/errors` and TaskCreate/TaskUpdate calls are permitted. ALL file modifications belong to DV stage or later.
 > 2. **Context-Interruption Recovery**: If worktask execution is interrupted (auth flows, tool failures), upon resumption MUST verify that the PL0 task exists with status `completed`. If not, restart from the appropriate phase. (There are two human checkpoints — the PL gate at Step A.5 and the FN gate before finalization; the FN gate check applies (STOP on `checkpoint`, proceed on `bypass`) — `skills/worktask/SKILL.md § FN Gate`.)
 
 1. **Parse** task description and flags (`--secure`, `--auto-plan`, `--auto-finalization`, `--emergency`, etc.). See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:code-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
-3. **Create context folders**: `mkdir -p .context/images .context/errors .context/logs`
+3. **Create context folders**: `mkdir -p .context/designs .context/images .context/errors .context/logs`
 3a. **Initialize state.json (handoff-protocol)**: Atomic-write `.context/state.json` seed using temp+fsync+rename per `skills/worktask/references/handoff-protocol.md#atomic-write`. PL0 stage marked `in_progress`. Schema per `handoff-protocol.md#state-json-schema`. **Re-run aware**: the seed MUST compute the next free planning index from any pre-existing `.context/planning-*.md` (NOT hard-code `0`) — on a re-run in a populated `.context/`, hard-coding `planning-0.md` would pin the old plan and cause PL0 to overwrite it. Backward-compat: if creation fails (e.g. read-only filesystem), log a warning and continue — F1 fallback (legacy `metadata.context_files` mode) keeps the worktask operational.
    ```bash
    # Re-run aware: next free planning index (0 on a fresh .context/)

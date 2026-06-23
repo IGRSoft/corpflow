@@ -5,13 +5,14 @@ model: opus
 color: blue
 effort: high
 maxTurns: 40
-version: 0.5.2
+version: 0.5.3
 # tools: Bash(curl:*) is NARROWLY scoped to curl only (NOT bare Bash) so PL0 can
 # persist Figma screenshots IN THE SAME PL TURN. get_screenshot returns a
 # short-lived image URL that expires before the post-approval Phase 2 window
 # (commands/worktask.md:99-102 forbid Bash pre-approval), so the PM is the only
 # actor that can fetch the bytes while the URL is still valid. See `skills/shared/figma-capture.md § Capture Workflow`.
-tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:designer), Task(igrsoft:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
+# Bash(mkdir:*) is granted so PL0 can create `.context/designs/` before persisting Figma frames — `curl -o` cannot create parent directories, and `mkdir -p` is benign (creates directories only; documented minimal expansion per the security rule).
+tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), Bash(mkdir:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:designer), Task(igrsoft:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
 hooks:
   Stop:
     - type: command

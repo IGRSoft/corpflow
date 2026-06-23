@@ -50,6 +50,8 @@ Run **Auth Probe** first; on success, proceed with the steps below; on auth fail
 
 The canonical screenshot directory is `.context/designs/` (see `skills/task-folder-organization/SKILL.md § Canonical Figma Asset Directory`). All persisted PNGs land there.
 
+**Ensure the canonical dir exists first** — run `mkdir -p .context/designs` **once per turn** before any `curl` below. `curl -o` cannot create parent directories, so without this the first download would fail and frames could fall back to `.context/images/`. This step keeps this doc self-contained on a standalone Read: do **not** assume the `commands/worktask.md` Phase-1 init mkdir has already run.
+
 This workflow is **container-aware**: it classifies each referenced node via metadata first and, when the node is a container of multiple frames, captures the overview **and** each child frame individually. The PM persists every screenshot to disk in this same turn via `Bash(curl:*)` (see frontmatter note) — `get_screenshot` returns a short-lived URL that would expire before any post-approval step, so the PM must fetch it now. The PM never claims a file is saved that it has not verified on disk.
 
 For each Figma URL (state defaults to `default`):
