@@ -6,7 +6,7 @@ model: sonnet
 allowed-tools: Read, Glob, Grep, Write
 related:
   - commands/appstore-info.md
-  - commands/release-notes.md
+  - commands/create-release-notes.md
   - agents/release-engineer.md
   - commands/worktask.md
 ---

@@ -5,9 +5,9 @@ argument-hint: '[--path dir] [--threshold N]'
 allowed-tools: Read, Glob, Grep, Bash(swift test:*)
 model: haiku
 related:
-  - ../agents/qa-engineer.md
-  - ./test-plan.md
-  - ./qa-report.md
+  - agents/qa-engineer.md
+  - commands/test-plan.md
+  - commands/qa-report.md
 ---
 
 # Test Coverage Command

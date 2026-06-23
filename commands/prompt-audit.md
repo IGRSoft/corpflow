@@ -9,8 +9,6 @@ related:
   - commands/optimize-agent.md
   - commands/optimize-command.md
   - commands/create-agent.md
-  - commands/create-command.md
-  - commands/create-skill.md
 ---
 
 # Prompt Audit Command

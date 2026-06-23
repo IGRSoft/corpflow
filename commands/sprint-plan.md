@@ -7,7 +7,7 @@ allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/project-manager.md
   - commands/risk-assess.md
-  - commands/release-notes.md
+  - commands/create-release-notes.md
 ---
 
 # Sprint Plan Command

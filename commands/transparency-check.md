@@ -5,8 +5,8 @@ argument-hint: '<output, document, or code path>'
 allowed-tools: Read, Glob, Grep
 model: sonnet
 related:
-  - ./ethics-review.md
-  - ./harm-assessment.md
+  - commands/ethics-review.md
+  - commands/harm-assessment.md
   - agents/ethics-reviewer.md
   - skills/claude-constitution/SKILL.md
 ---

@@ -5,8 +5,8 @@ argument-hint: <feature or module description>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
 related:
-  - ../agents/qa-engineer.md
-  - ../skills/worktask.md
+  - agents/qa-engineer.md
+  - skills/worktask/SKILL.md
 ---
 
 # Test Plan Command

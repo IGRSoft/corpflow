@@ -5,9 +5,9 @@ argument-hint: '[--path dir] [--severity critical|high|medium|low]'
 model: sonnet
 allowed-tools: Read, Glob, Grep
 related:
-  - ../agents/software-architector.md
-  - ./arch-review.md
-  - ./sprint-plan.md
+  - agents/software-architector.md
+  - commands/arch-review.md
+  - commands/sprint-plan.md
 ---
 
 # Technical Debt Command

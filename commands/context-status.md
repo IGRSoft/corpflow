@@ -5,8 +5,8 @@ argument-hint: ''
 allowed-tools: Read, Glob, TaskList
 model: haiku
 related:
-  - skills/context-compression.md
-  - skills/cost-optimization.md
+  - skills/context-compression/SKILL.md
+  - skills/cost-optimization/SKILL.md
   - commands/cost-report.md
 ---
 

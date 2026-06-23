@@ -7,8 +7,6 @@ allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/prompt-engineer.md
   - commands/create-agent.md
-  - commands/create-command.md
-  - commands/create-skill.md
   - commands/optimize-agent.md
   - commands/prompt-audit.md
 ---

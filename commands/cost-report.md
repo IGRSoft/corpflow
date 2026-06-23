@@ -5,8 +5,8 @@ argument-hint: '[--worktask-id ID] [--format table|csv]'
 allowed-tools: Read, TaskList
 model: sonnet
 related:
-  - skills/cost-optimization.md
-  - skills/context-compression.md
+  - skills/cost-optimization/SKILL.md
+  - skills/context-compression/SKILL.md
   - commands/estimate.md
   - commands/context-status.md
 ---

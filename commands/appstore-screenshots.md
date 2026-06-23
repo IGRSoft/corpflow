@@ -9,7 +9,7 @@ related:
   - agents/release-engineer.md
   - agents/designer.md
   - commands/create-release-notes.md
-  - skills/appstore-screenshots.md
+  - skills/appstore-screenshots/SKILL.md
   - skills/pencil-design/SKILL.md
 ---
 

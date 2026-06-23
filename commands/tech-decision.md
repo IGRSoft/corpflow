@@ -5,10 +5,10 @@ argument-hint: <technology choice or question>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
 related:
-  - ../agents/technical-lead.md
-  - ./arch-decision.md
-  - ./tech-review.md
-  - ./tech-debt.md
+  - agents/technical-lead.md
+  - commands/arch-decision.md
+  - commands/tech-review.md
+  - commands/tech-debt.md
 ---
 
 # Technology Decision Record Command

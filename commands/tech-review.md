@@ -5,10 +5,10 @@ argument-hint: '[--pr N | --path dir] [--depth surface|deep]'
 model: sonnet
 allowed-tools: Read, Glob, Grep
 related:
-  - ../agents/technical-lead.md
-  - ./code-review-dev.md
-  - ./tech-debt.md
-  - ./senior-review.md
+  - agents/technical-lead.md
+  - commands/code-review-dev.md
+  - commands/tech-debt.md
+  - commands/senior-review.md
 ---
 
 # Technical Review Command

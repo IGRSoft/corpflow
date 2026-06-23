@@ -5,7 +5,7 @@ argument-hint: '<task description> [--quick|--detailed]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
 related:
-  - skills/worktask.md
+  - skills/worktask/SKILL.md
   - agents/product-manager.md
   - agents/project-manager.md
 ---

@@ -9,7 +9,7 @@ related:
   - commands/optimize-agent.md
   - commands/optimize-command.md
   - commands/prompt-audit.md
-  - skills/agent-coordination.md
+  - skills/agent-coordination/SKILL.md
   - skills/shared/stage-codes.md
   - skills/agent-coordination/references/hook-monitoring.md
 ---
