@@ -14,12 +14,12 @@ When platform is `apple`, further route based on context:
 
 | Context | Agent | Use Case |
 |---------|-------|----------|
-| Swift language, concurrency, general | apple-developer | Swift 6+, async/await, actors (routes internally) |
-| iOS/iPadOS specific, UIKit | ios-developer | iOS features, App Store |
-| macOS specific, AppKit | macos-developer | macOS features, desktop |
-| watchOS specific | watchos-developer | Apple Watch, complications |
-| tvOS specific | tvos-developer | Apple TV, Focus Engine |
-| visionOS specific | visionos-developer | Vision Pro, spatial |
+| Swift language, concurrency, general | `apple-developer:apple-developer` | Swift 6+, async/await, actors (routes internally) |
+| iOS/iPadOS specific, UIKit | `apple-developer:ios-developer` | iOS features, App Store |
+| macOS specific, AppKit | `apple-developer:macos-developer` | macOS features, desktop |
+| watchOS specific | `apple-developer:watchos-developer` | Apple Watch, complications |
+| tvOS specific | `apple-developer:tvos-developer` | Apple TV, Focus Engine |
+| visionOS specific | `apple-developer:visionos-developer` | Vision Pro, spatial |
 
 ## Android Platform Specialization
 

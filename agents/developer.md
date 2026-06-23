@@ -82,7 +82,7 @@ After the platform is decided, route to the specialist. The most-common targets:
 
 | Platform | Default specialist | Common alternate |
 |----------|--------------------|------------------|
-| apple | apple-developer (Swift, concurrency; routes internally) | ios-developer (iOS/UIKit) |
+| apple | `apple-developer:apple-developer` (Swift, concurrency; routes internally) | `apple-developer:ios-developer` (iOS/UIKit) |
 | android | `android-developer:android-developer` (router) | `android-developer:android-phone-developer` (Compose UI) |
 | web | `frontend-developer:frontend-developer` (router, plain HTML/CSS/TS) | `frontend-developer:react-developer` (React/Next.js) |
 | systems | `system-developer:system-developer` (router, FFI/mixed) | `system-developer:python-developer` / `system-developer:cpp-developer` |
