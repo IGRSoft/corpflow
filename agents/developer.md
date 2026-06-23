@@ -425,11 +425,12 @@ When routing to specialized agents, use the Task tool with appropriate subagent_
 
 ### Direct Platform Specialist Routing
 
-The `subagent_type` for every platform → specialist target is the qualified agent ID already
-listed in the **Detection Rules** table (§ Detection Rules, primary marker → route map) and the
-per-platform **Specialization** tables above (Apple / Android / Systems / Web). Use those tables
-as the single source of routing targets — pass the chosen qualified ID (e.g.
-`frontend-developer:react-developer`, `backend-developer:go-developer`) as the Task
+The `subagent_type` for every platform → specialist target is the qualified agent ID listed in the
+**Detection Rules** table (§ Detection Rules, primary marker → route map) and the per-platform
+Specialization tables in `skills/shared/platform-detection.md` (the full Apple / Android / Systems
+/ Web tables). The common-rows table above covers the most-frequent targets; read
+`platform-detection.md` when you need a specialist outside those rows. Pass the chosen qualified ID
+(e.g. `frontend-developer:react-developer`, `backend-developer:go-developer`) as the Task
 `subagent_type`. Do not maintain a second copy of the platform→agent map here.
 
 ### Context Passing
