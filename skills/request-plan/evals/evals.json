@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "we keep getting duplicate push notifications on the macOS app when it wakes from sleep. help me plan a fix before i dive in.",
-      "expected_output": "Lightweight grounded plan: restated goal, context referencing the repo, scope in/out, P0/P1/P2 phases, T-shirt + complexity effort, risks, and a single worktask trigger line (likely quick: or worktask:).",
+      "expected_output": "Lightweight grounded plan: restated goal, context referencing the repo, scope in/out, P0/P1/P2 phases, T-shirt + complexity effort, risks, and a single `/worktask` trigger line.",
       "files": []
     },
     {
@@ -16,7 +16,7 @@
     {
       "id": 3,
       "prompt": "plan out migrating our settings storage from UserDefaults to Keychain",
-      "expected_output": "Plan flagging this as security-sensitive (credential storage), phasing the migration, sizing it, and routing to worktask: regardless of size per the security rule. Tests included inside phases.",
+      "expected_output": "Plan flagging this as security-sensitive (credential storage), phasing the migration, sizing it, and routing to `/worktask` regardless of size per the security rule. Tests included inside phases.",
       "files": []
     }
   ]
