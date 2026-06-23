@@ -68,7 +68,7 @@ Target comment-to-code density well below 1:1. A file that is ~half prose is ove
 
 ## Example (BEFORE → AFTER)
 
-BEFORE — a 9-line doc block on the gradient property:
+BEFORE — a 7-line doc block on the gradient property:
 
 ```swift
 /// Top-lit lavender gradient stroked on every over-camera control (OV-140).
