@@ -4,10 +4,11 @@ description: Perform platform-aware code review using specialized developer expe
 argument-hint: '[--pr N | --path dir]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*)
-version: 0.1.2
+version: 0.1.3
 related:
   - agents/developer.md
   - agents/technical-lead.md
+  - skills/shared/code-documentation.md
   - commands/code-impl.md
   - commands/senior-review.md
   - commands/arch-review.md
@@ -142,7 +143,7 @@ If verification is **BLOCKED** — the caller/consumer/threading-model is not re
   - **Route to P1 (blocking)** an uncertain concern when (a) you are *somewhat sure or more* it is a real defect AND (b) it is of a class a normal test run rarely exercises — **concurrency races, rare-edge nil/unwrap crashes, regressions to untouched paths, indirect-dispatch contract breaks**. These cannot be rescued downstream by "the tests will catch it," so a non-blocking note would launder a likely-real bug into a guaranteed miss. Do this when you have a **read-confirmed trigger** OR a **directly-cited contradiction** in the caller/contract you read.
   - **Route to P2 `[verify-later]`** (non-blocking) when EITHER a normal test run genuinely WOULD exercise it (so testing is a real backstop), OR it is an unproven located suspicion you could not confirm by reading (BLOCKED, or read-but-inconclusive). **An unproven cross-file/ripple suspicion stays P2 — promote to P1 only after reading the cited code confirms the break.** This keeps recall (the suspicion is reported and located) while preventing an unconfirmed guess from blocking.
 - **KEEP** a clearly-reasoned cross-file / integration / ripple risk even if you cannot *prove* the break, **provided you name the specific other code you suspect and why**. Hedge the wording; do not silently drop it.
-- **RAISE THE BAR** only for low-severity style / maintainability / preference items: apply a strict "would a competent reviewer clearly endorse this" test, and skip trivial style unless it obscures meaning or violates a documented standard.
+- **RAISE THE BAR** only for low-severity style / maintainability / preference items: apply a strict "would a competent reviewer clearly endorse this" test, and skip trivial style unless it obscures meaning or violates a documented standard. Over-documentation that violates the compact code-documentation standard (`skills/shared/code-documentation.md`) — doc-comment essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, or call-site enumerations — is a flaggable **P2** maintainability finding.
 - A finding may rely on a **reasonable, stated inference** about intent ("this is presumably meant to return a sorted list") — say the inference out loud and flag it; do not veto it for being inferential.
 - **Pre-existing-weakness cap (Class 12):** a pre-existing weakness blocks (P0/P1) ONLY if THIS diff makes the broken path newly reachable/activated AND you can name the new entry point. Otherwise record it as **P2 `[verify-later]` noted "pre-existing, exposed by this change."** Do not expand blocking scope to latent defects the change merely sits adjacent to.
 - Systemic / multi-edit defects (a bug spanning several hunks) ARE in scope — report them as one finding describing the pattern.
