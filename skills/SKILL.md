@@ -31,7 +31,7 @@ All available skills for the igrsoft worktask plugin.
 
 ## Shared Utilities
 
-Files in `shared/` are referenced by skills and agents, not loaded independently.
+Files in `shared/` are referenced by skills and agents, not loaded independently — **except `milestone-helpers/`**, which ships its own `SKILL.md` and loads as the `igrsoft:milestone-helpers` skill.
 
 | File | Purpose |
 |------|---------|
