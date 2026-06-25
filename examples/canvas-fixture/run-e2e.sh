@@ -19,11 +19,12 @@ cd "$REPO_ROOT"
 
 WORKTASK_ID="canvas-fixture-smoke"
 SLUG="canvas-fixture"
-IMAGES_DIR=".context/images/${WORKTASK_ID}"
+IMAGES_DIR=".context/images/${WORKTASK_ID}"     # DV implementation screenshots (the RMSE candidate)
+DESIGNS_DIR=".context/designs/${WORKTASK_ID}"   # design reference (the RMSE reference) — mirrors production split
 LOGS_DIR=".context/logs"
 AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
 
-mkdir -p "$IMAGES_DIR" "$LOGS_DIR"
+mkdir -p "$IMAGES_DIR" "$DESIGNS_DIR" "$LOGS_DIR"
 
 # Record audit-log size before for "since" filtering
 PRE_LINES=$(wc -l < "$AUDIT_LOG" 2>/dev/null | tr -d ' ' || echo 0)
@@ -58,8 +59,10 @@ set -e
 
 echo "[run-e2e] apple-canvas.sh exit=$ADAPTER_EXIT"
 
-# Optional: if a design-ref.png exists, run the visual-diff
-DESIGN_REF="${IMAGES_DIR}/design-ref.png"
+# Optional: if a design-ref.png exists, run the visual-diff. The reference lives
+# under .context/designs/ (design reference); the candidate is the DV render under
+# .context/images/ — same designs/=reference, images/=candidate split QA uses.
+DESIGN_REF="${DESIGNS_DIR}/design-ref.png"
 if [[ -f "$DESIGN_REF" ]]; then
     # Find the most recent canvas PNG produced for this worktask
     CANDIDATE=$(find "$IMAGES_DIR" -maxdepth 1 -name 'dv-*-canvas-*.png' -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -n1 || true)

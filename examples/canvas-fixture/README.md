@@ -44,10 +44,11 @@ cd <repo-root>
 ./examples/canvas-fixture/run-e2e.sh
 ```
 
-The harness creates a temporary `.context/images/canvas-fixture-smoke/` directory,
-copies the fixture's `SimpleView.swift` to a working location, invokes the
-apple-canvas adapter (via `skills/dv-screenshot-capture/scripts/apple-canvas.sh`),
-and asserts on the audit log.
+The harness creates temporary `.context/images/canvas-fixture-smoke/` (DV render
+output — the RMSE candidate) and `.context/designs/canvas-fixture-smoke/` (the
+optional design reference) directories, copies the fixture's `SimpleView.swift` to
+a working location, invokes the apple-canvas adapter (via
+`skills/dv-screenshot-capture/scripts/apple-canvas.sh`), and asserts on the audit log.
 
 ## What gets mutated
 
@@ -61,7 +62,7 @@ Resetting between runs:
 
 ```bash
 git checkout -- examples/canvas-fixture/Sources/FixtureApp/Views/SimpleView.swift
-rm -rf .context/images/canvas-fixture-smoke
+rm -rf .context/images/canvas-fixture-smoke .context/designs/canvas-fixture-smoke
 ```
 
 ## Design-ref.png (optional, for A3)
@@ -69,11 +70,14 @@ rm -rf .context/images/canvas-fixture-smoke
 To enable RMSE verdict in the smoke, drop a reference PNG at:
 
 ```
-.context/images/canvas-fixture-smoke/design-ref.png
+.context/designs/canvas-fixture-smoke/design-ref.png
 ```
 
-The harness will then invoke `scripts/visual-diff.sh`. Without `design-ref.png`,
-the harness skips the diff step.
+The reference lives under `.context/designs/` (design reference) and is diffed
+against the DV render in `.context/images/` (candidate) — the same
+`designs/`=reference, `images/`=candidate split QA uses in production. The harness
+will then invoke `scripts/visual-diff.sh`. Without `design-ref.png`, the harness
+skips the diff step.
 
 ## Limitations (v1)
 

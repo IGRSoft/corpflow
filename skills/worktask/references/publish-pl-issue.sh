@@ -76,9 +76,10 @@
 #   render-verification is the shipped cure (it fixes the broken-image symptom by
 #   degrading instead of emitting a dead raw URL).
 #
-#   Disk lookup: <basename> resolves to .context/designs/<basename> (canonical per
-#   skills/task-folder-organization/SKILL.md); .context/images/<basename> accepted
-#   as a legacy fallback location.
+#   Disk lookup: <basename> resolves ONLY to .context/designs/<basename> (canonical
+#   per skills/task-folder-organization/SKILL.md). {{asset:...}} tokens carry Figma
+#   design-preview frames, which live exclusively in .context/designs/. .context/images/
+#   is reserved for DV implementation screenshots and is NEVER a Figma asset source.
 #   raw path: the PNG is copied to ASSET_DIR_REL =
 #     ".worktask-assets/<worktask_id>/<basename>" on the worktask branch, referenced
 #     via https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>.
@@ -132,8 +133,8 @@ AUDIT_FILE="$LOG_DIR/audit.jsonl"
 # Derived from WORKSPACE_ROOT (falls back to CLAUDE_PROJECT_DIR / cwd) so the
 # helper works both in-worktree and in self-test sandboxes.
 ASSET_ROOT="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}"
-ASSET_DESIGNS_DIR="$ASSET_ROOT/.context/designs"     # canonical Figma dir
-ASSET_IMAGES_DIR="$ASSET_ROOT/.context/images"        # legacy fallback location
+ASSET_DESIGNS_DIR="$ASSET_ROOT/.context/designs"     # canonical (and only) Figma asset source
+ASSET_IMAGES_DIR="$ASSET_ROOT/.context/images"        # DV implementation screenshots — NEVER a Figma {{asset:...}} source
 # Test hooks (unset in production → real git/gh probes drive tier selection):
 ASSET_HOST_MODE="${ASSET_HOST_MODE:-}"                # user-attachments|raw|gist|none force
 ASSET_OWNER_REPO="${ASSET_OWNER_REPO:-}"              # mock "owner/repo"
@@ -332,15 +333,15 @@ parse_owner_repo() {
   printf '%s' "$path" | awk -F'/' 'NF>=2 { printf "%s/%s", $(NF-1), $NF }'
 }
 
-# Resolve a {{asset:<basename>}} basename to an on-disk path. Echoes the path
-# (canonical designs dir first, then legacy images dir) or empty if not found.
+# Resolve a {{asset:<basename>}} basename to an on-disk path. {{asset:...}} tokens
+# carry Figma design-preview frames, which live ONLY under .context/designs/ (the
+# canonical design-reference dir). .context/images/ is reserved for DV implementation
+# screenshots and is NEVER a design-asset source — do not fall back to it. Echoes the
+# resolved designs/ path, or empty if not found.
 resolve_asset_path() {
   local base="$1"
   if [ -f "$ASSET_DESIGNS_DIR/$base" ]; then
     printf '%s' "$ASSET_DESIGNS_DIR/$base"; return 0
-  fi
-  if [ -f "$ASSET_IMAGES_DIR/$base" ]; then
-    printf '%s' "$ASSET_IMAGES_DIR/$base"; return 0
   fi
   return 1
 }
