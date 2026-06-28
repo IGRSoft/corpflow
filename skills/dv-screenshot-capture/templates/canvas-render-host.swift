@@ -102,7 +102,7 @@ enum SnapshotHostMain {
     static func renderPNG(args: CLIArgs) -> Int32 {
         // PreviewBridge is the scaffolded sibling file that exposes
         // `viewRegistry: [String: AnyView]`. See:
-        //   examples/SnapshotHost-template/Sources/SnapshotHost/PreviewBridge.swift
+        //   templates/SnapshotHost-template/Sources/SnapshotHost/PreviewBridge.swift
         //
         // In a free-floating analysis context (no SPM module), the symbol is
         // unresolved — that is expected. The scaffolder builds them together.

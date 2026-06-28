@@ -21,7 +21,7 @@
 //   References analyzing-0.md § Source layout / § @testable import boundary rules.
 //   The viewRegistry shape is: [String: AnyView] where keys are "ModuleName.TypeName".
 //
-// This template version (committed under skills/dv-screenshot-capture/examples/)
+// This template version (committed under skills/dv-screenshot-capture/templates/)
 // ships an empty registry. Real projects will see this file populated by the
 // scaffolder on first run, e.g.:
 //

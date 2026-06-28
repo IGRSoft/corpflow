@@ -160,7 +160,7 @@ Story Points: X-Y (Min-Max) | Complexity: [Low/Medium/High]
 
 ## Estimation & Budget Integration
 
-Use `skills/estimation/SKILL.md` for complexity scoring. Track costs via `/cost-report` command.
+Use `skills/estimation-methodology/SKILL.md` for complexity scoring. Track costs via `/cost-report` command.
 
 Key artifacts: roadmap_milestones.csv, budget_estimate.csv, phase_summary.csv, risk_assessment.csv
 

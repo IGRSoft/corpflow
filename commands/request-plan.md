@@ -6,7 +6,7 @@ model: sonnet
 allowed-tools: Read, Glob, Grep, Write, Task
 related:
   - skills/request-plan/SKILL.md
-  - skills/estimation/SKILL.md
+  - skills/estimation-methodology/SKILL.md
   - skills/shared/three-stage-planning.md
 ---
 

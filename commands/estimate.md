@@ -67,7 +67,7 @@ Emit `## Detailed Estimate: <task>` with these sections, in order:
 | `### Breakdown` | Per-component table: Component, Size, SP Min, SP Max, Notes — tests included per component |
 | `### Risk Assessment` | Risk, Probability, Impact, Mitigation |
 | `### Budget Calculation` | Base Hours (SP × multiplier), Buffer (15%), Total Hours, Budget = Total × `--dev-rate` |
-| `### AI Cost` | Est. tokens, AI cost, % of total budget — formula + per-task-type token bands: `skills/estimation/SKILL.md § AI Agent Cost Estimation` |
+| `### AI Cost` | Est. tokens, AI cost, % of total budget — formula + per-task-type token bands: `skills/estimation-methodology/SKILL.md § AI Agent Cost Estimation` |
 
 If `--dev-rate` is omitted, the Budget row is replaced by
 `[budget skipped: --dev-rate not set]` and only Base/Buffer/Total Hours are emitted.
@@ -102,7 +102,7 @@ See `skills/shared/three-stage-planning.md § Stage Budget Template` for column 
 
 ### T-Shirt Sizes
 
-See `skills/estimation/SKILL.md § T-Shirt Sizing → Story Points (Range) and § Story Points to Hours.`
+See `skills/estimation-methodology/SKILL.md § T-Shirt Sizing → Story Points (Range) and § Story Points to Hours.`
 
 Worked-example header (canonical values live in the skill):
 
@@ -125,7 +125,7 @@ All sizes use the single `/worktask` entry point; PL0 dynamic sizing drops stage
 
 ### Story Points to Hours
 
-See `skills/estimation/SKILL.md § Story Points to Hours` for the canonical formula and multiplier variants (Junior/Mid/Senior/Expert). Do not redefine here.
+See `skills/estimation-methodology/SKILL.md § Story Points to Hours` for the canonical formula and multiplier variants (Junior/Mid/Senior/Expert). Do not redefine here.
 
 ### Phase Constraints
 
@@ -169,7 +169,7 @@ ELSE:
   → /worktask   (PL0 dynamic sizing drops stages for low-complexity work)
 ```
 
-See `skills/estimation/SKILL.md § Worktask Tier Selection` for the canonical definition.
+See `skills/estimation-methodology/SKILL.md § Worktask Tier Selection` for the canonical definition.
 
 ## Integration
 

@@ -118,7 +118,7 @@ Three-tier cascade per ad6. Each transition emits its own audit row.
 
 ```
 [1] SnapshotHost missing on disk
-      → scaffold from skills/dv-screenshot-capture/examples/SnapshotHost-template/
+      → scaffold from skills/dv-screenshot-capture/templates/SnapshotHost-template/
       → write tools/SnapshotHost/.canvas-scaffold-version marker
       → retry render step
       → emit canvas_render, phase: "scaffold"
@@ -172,7 +172,7 @@ After scaffolding (and committed afterward for CI reproducibility):
 
 ```
 tools/SnapshotHost/
-  Package.swift                 # template from examples/SnapshotHost-template/Package.swift
+  Package.swift                 # template from templates/SnapshotHost-template/Package.swift
   Sources/SnapshotHost/
     main.swift                  # CLI: --view --output --size --scheme
     PreviewBridge.swift         # @testable import of leaf View modules; rewritten idempotently
@@ -217,7 +217,7 @@ Exit codes:
 Steps (matches the failure cascade above):
 
 1. Resolve outputs path: `.context/images/<worktask_id>/dv-NN-canvas-<slug>.png` (NN per existing storage layout rules).
-2. Scaffold-if-missing: copy `examples/SnapshotHost-template/` if `tools/SnapshotHost/Package.swift` absent.
+2. Scaffold-if-missing: copy `templates/SnapshotHost-template/` if `tools/SnapshotHost/Package.swift` absent.
 3. Invoke preview-ensurer; abort on errors with `missing_input`.
 4. Update `PreviewBridge.swift` viewRegistry (idempotent).
 5. `swift run --package-path tools/SnapshotHost SnapshotHost --view <…> --output <…> --size <…> --scheme <…>`.

@@ -7,7 +7,7 @@ related:
   - agents/software-architector.md
   - agents/qa-engineer.md
   - commands/test-plan.md
-  - skills/estimation/SKILL.md
+  - skills/estimation-methodology/SKILL.md
 ---
 
 # Worktask Testing Strategy Skill

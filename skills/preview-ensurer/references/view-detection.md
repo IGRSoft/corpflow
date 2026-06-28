@@ -1,6 +1,6 @@
 # view-detection.md — SwiftSyntax patterns for View detection
 
-This reference documents the SwiftSyntax tree walks that `preview-ensurer` uses to identify SwiftUI View types and existing `#Preview` macros. Implementation lives in `examples/PreviewEnsurer.swift`.
+This reference documents the SwiftSyntax tree walks that `preview-ensurer` uses to identify SwiftUI View types and existing `#Preview` macros. Implementation lives in `references/reference-impl/Sources/PreviewEnsurer/PreviewEnsurer.swift`.
 
 ## SwiftSyntax visitor pattern
 

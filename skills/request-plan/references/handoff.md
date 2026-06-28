@@ -5,7 +5,7 @@ ready-to-paste `/worktask` command line so the user can execute immediately.
 
 ## Tier selection (canonical)
 
-Use the **Worktask Tier Selection** logic from `skills/estimation/SKILL.md` — do not invent a
+Use the **Worktask Tier Selection** logic from `skills/estimation-methodology/SKILL.md` — do not invent a
 parallel ruleset. Summarized:
 
 ```

@@ -6,7 +6,7 @@ allowed-tools: Read, Write, Glob
 model: haiku
 related:
   - skills/csv-export-templates/SKILL.md
-  - skills/estimation/SKILL.md
+  - skills/estimation-methodology/SKILL.md
 ---
 
 # Export Estimate Command

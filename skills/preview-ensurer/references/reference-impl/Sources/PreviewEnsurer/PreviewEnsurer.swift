@@ -3,7 +3,7 @@
 // Reference implementation of the preview-ensurer Swift executable.
 // Invoked by the apple-canvas adapter via:
 //
-//   swift run --package-path skills/preview-ensurer/examples PreviewEnsurer \
+//   swift run --package-path skills/preview-ensurer/references/reference-impl PreviewEnsurer \
 //     --modified-files <newline-list-via-stdin-or-arg> \
 //     [--auto-add true|false] \
 //     [--view ModuleType]
