@@ -318,7 +318,7 @@ func generatePreviewBlock(
 
 // MARK: - File processing
 
-func ensureFile(_ path: String, autoAdd: Bool, projectRoot: URL) -> (ViewResult, lines: Int) {
+func ensureFile(_ path: String, autoAdd: Bool, view: String?, projectRoot: URL) -> (ViewResult, lines: Int) {
     let url = URL(fileURLWithPath: path)
     let typeFallback = url.deletingPathExtension().lastPathComponent
 
@@ -341,14 +341,20 @@ func ensureFile(_ path: String, autoAdd: Bool, projectRoot: URL) -> (ViewResult,
                            action: "found", reason: nil, mock_strategy: nil, lines_added: nil), lines: 0)
     }
 
-    // Ambiguous (3+ top-level Views, no disambiguating --view)
+    // Select target view, disambiguating with --view when 3+ types are detected.
+    let target: ViewDetector.Detected
     if detector.viewTypes.count >= 3 {
-        return (ViewResult(file: path, type: detector.viewTypes.first?.typeName ?? typeFallback,
-                           has_preview: false, action: "skipped",
-                           reason: "ambiguous_view_target", mock_strategy: nil, lines_added: nil), lines: 0)
-    }
-
-    guard let target = detector.viewTypes.first else {
+        if let viewName = view,
+           let match = detector.viewTypes.first(where: { $0.typeName == viewName }) {
+            target = match
+        } else {
+            return (ViewResult(file: path, type: detector.viewTypes.first?.typeName ?? typeFallback,
+                               has_preview: false, action: "skipped",
+                               reason: "ambiguous_view_target", mock_strategy: nil, lines_added: nil), lines: 0)
+        }
+    } else if let first = detector.viewTypes.first {
+        target = first
+    } else {
         return (ViewResult(file: path, type: typeFallback, has_preview: false,
                            action: "skipped", reason: "no_view_type_detected",
                            mock_strategy: nil, lines_added: nil), lines: 0)
@@ -487,7 +493,7 @@ let candidateFiles = cli.modifiedFiles.filter {
 }
 
 for file in candidateFiles {
-    let (result, _) = ensureFile(file, autoAdd: cli.autoAdd, projectRoot: cli.projectRoot)
+    let (result, _) = ensureFile(file, autoAdd: cli.autoAdd, view: cli.view, projectRoot: cli.projectRoot)
     views.append(result)
     if let reason = result.reason,
        reason.hasPrefix("parse_failed_after_preview_add") ||

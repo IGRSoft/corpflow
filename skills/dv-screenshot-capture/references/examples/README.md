@@ -2,7 +2,7 @@
 
 These three PNGs are the inaugural output of this skill, captured during the worktask that introduced it (issue #114, run 0). They serve a dual purpose: they prove the contract works end-to-end (the skill captured the diff that defines the skill itself), and they document the expected shape of a manifest entry so future DV stages have a concrete reference.
 
-All three were produced by the `cli_fallback` adapter using `silicon` (Dracula theme), downscaled to ≤200 KB per AR ad7 size budget. Platform was `all` (plugin meta-work has no UI); the adapter selection is deterministic per the routing table in `../SKILL.md § Platform Routing`.
+All three were produced by the `cli_fallback` adapter using `silicon` (Dracula theme), downscaled to ≤200 KB per AR ad7 size budget. Platform was `all` (plugin meta-work has no UI); the adapter selection is deterministic per the routing table in `../../SKILL.md § Platform Routing`.
 
 ## Manifest
 
