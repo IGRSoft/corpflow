@@ -66,8 +66,8 @@ Emit `## Detailed Estimate: <task>` with these sections, in order:
 | `### Resource Requirements` | Skills needed, dependencies, blockers |
 | `### Breakdown` | Per-component table: Component, Size, SP Min, SP Max, Notes — tests included per component |
 | `### Risk Assessment` | Risk, Probability, Impact, Mitigation |
-| `### Budget Calculation` | Base Hours (SP × multiplier), Buffer (15%), Total Hours, Budget = Total × `--dev-rate` |
-| `### AI Cost` | Est. tokens, AI cost, % of total budget — formula + per-task-type token bands: `skills/estimation-methodology/SKILL.md § AI Agent Cost Estimation` |
+| `### Budget Calculation` | Base Hours (SP × multiplier), Buffer (15%), Total Hours, Budget = Total × `--dev-rate`. **Canonical math**: invoke `skills/estimation-methodology/scripts/estimate-calc.py --size <S> --rate <R>` and read `total_hours` + `budget` from the JSON output. |
+| `### AI Cost` | Est. tokens, AI cost, % of total budget. **Canonical math**: pass `--tokens <n> --model <m>` to `skills/estimation-methodology/scripts/estimate-calc.py` and read `ai_cost.usd`. Formula + token bands: `skills/estimation-methodology/SKILL.md § AI Agent Cost Estimation`. |
 
 If `--dev-rate` is omitted, the Budget row is replaced by
 `[budget skipped: --dev-rate not set]` and only Base/Buffer/Total Hours are emitted.

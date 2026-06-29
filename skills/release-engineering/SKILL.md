@@ -91,7 +91,26 @@ Use /api/v2/auth instead.
 
 ## Changelog Generation
 
-### Keep a Changelog Format
+**Canonical tool**: `scripts/changelog-from-git.sh`
+
+One-line invocation contract:
+
+```bash
+# From a git range (writes Keep-a-Changelog markdown to stdout)
+bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" "v1.1.0..HEAD" --version "1.2.0"
+
+# From a pre-fetched subjects file (untrusted / offline / testable)
+bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" --file subjects.txt --version "1.2.0"
+
+# Against a specific repo directory
+bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" "v1.1.0..HEAD" --repo /path/to/repo --version "1.2.0"
+```
+
+The script classifies all 10 conventional-commit types (feat, fix, docs, style, refactor, perf, test, chore, ci, build) into Keep-a-Changelog sections (Added / Changed / Fixed / Other). Non-conventional commits are bucketed under "Other" — never dropped. Breaking changes (`!` suffix) are prefixed with `**BREAKING**` in Added. Silent types (docs, style, test, chore, ci, build) are suppressed. Output is always compact markdown — no large echoes.
+
+The spec below (Keep a Changelog Format + Commit-to-Section mapping) is retained as reference for the model and for human review; the happy path is the script above.
+
+### Keep a Changelog Format (spec / reference)
 
 ```markdown
 # Changelog
@@ -127,18 +146,22 @@ All notable changes to this project will be documented in this file.
 ...
 ```
 
-### Commit to Changelog Mapping
+### Commit-to-Section Mapping (spec / reference)
 
-```bash
-# Parse commits since last tag
-git log v1.1.0..HEAD --pretty=format:"%s" | while read commit; do
-  case "$commit" in
-    feat:*) echo "### Added\n- ${commit#feat: }" ;;
-    fix:*)  echo "### Fixed\n- ${commit#fix: }" ;;
-    # ... etc
-  esac
-done
-```
+| Type | KCL Section | Notes |
+|------|-------------|-------|
+| `feat` | Added | MINOR bump |
+| `feat!` / `BREAKING CHANGE` | Added (BREAKING prefix) | MAJOR bump |
+| `fix` | Fixed | PATCH bump |
+| `refactor` | Changed | PATCH bump |
+| `perf` | Changed | PATCH bump |
+| `docs` | — (suppressed) | no bump |
+| `style` | — (suppressed) | no bump |
+| `test` | — (suppressed) | no bump |
+| `chore` | — (suppressed) | no bump |
+| `ci` | — (suppressed) | no bump |
+| `build` | — (suppressed) | no bump |
+| _(non-conventional)_ | Other | never dropped |
 
 ## Integration Points
 

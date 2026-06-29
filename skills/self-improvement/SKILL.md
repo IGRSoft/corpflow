@@ -85,7 +85,18 @@ commands/worktask.md
 
 **Goal:** every classified change gets mapped to exactly one owning agent/skill/command file, **then filtered** against the used-in-context set from Step 1.
 
-**Mapping rules (apply first match):** full table in `references/target-mapping.md`.
+**Canonical script:** `scripts/map-and-filter.sh`
+
+```
+LOG_OUT=<log_path> bash scripts/map-and-filter.sh \
+  --changes=<step2-tsv> \
+  --context-set=<step1-out> \
+  [--dv-agent=<resolved-dv-agent-path>]
+```
+
+Output: TSV rows `<path>\t<rule_num>\t<target>\t<lines_added>\t<lines_removed>` for every KEPT change. Discards are appended to `$LOG_OUT` under `## Out-of-Context Discards`. The `rule_num` column (1–17) provides auditability — matches the row numbers in `references/target-mapping.md`. For rows that need TaskList/stage-gate inputs the script cannot reach (rules 5, 13, 16), pass the resolved DV agent via `--dv-agent`; if omitted, the script defaults to `agents/developer.md`.
+
+**Mapping rules (apply first match):** full table in `references/target-mapping.md` (spec; the happy path no longer requires reading it directly).
 
 1. **Direct edit to a prompt file** (`agents/*.md`, `skills/**/SKILL.md`, `commands/*.md`) → target is that file itself (self-edit signal).
 2. **Edit to `.context/<stage-artifact>-N.md`** → target is the agent that produced that artifact (look up via stage-contracts.md: any `planning-N.md` → product-manager, `development-N.md` → developer, etc.).

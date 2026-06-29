@@ -123,7 +123,18 @@ Trigger inputs for `force_canvas`: `metadata.requires_canvas_screenshot` (plan-l
 | `android` | `adb exec-out screencap -p` | Verify device via `adb devices`, then `adb exec-out screencap -p > <path>`. | `adb` not on PATH → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "adb_unavailable"`. |
 | `cli/fallback` (also `platform: "all"`) | `silicon` → ImageMagick → `.txt` | **Step 1**: `git diff <base>...HEAD -- <files> \| silicon --language diff --output <path>`. **Step 2** (silicon absent): `magick -background white -fill black -size 1200x800 caption:"<slug>\n\n<first 60 lines of diff>" <path>`. **Step 3** (neither available): write `<path>.txt` (still recorded in screenshots.md; `ok: false`, `error: "tool_missing"`). | None — this IS the fallback. `.txt` is the floor. |
 
-See `references/cli-fallback.md` for silicon command examples, magick template, and `.txt` placeholder schema. See `references/apple-canvas.md` for the canvas adapter contract (scaffold/preview-ensurer/render/diff) and `references/preview-ensurer.md` for the cross-skill heuristics summary.
+## Scripts (canonical executables)
+
+| Script | Invocation | Purpose |
+|--------|-----------|---------|
+| `scripts/cli-fallback.sh` | `bash scripts/cli-fallback.sh --worktask-id <id> --slug <kebab> [--base-ref <ref>] [--platform <p>] [--run-index <N>] [--files <path>]` | Runs the silicon→magick→.txt chain; emits `path=… bytes=… ok=… error=…` to stdout. Replaces the happy-path need to read `references/cli-fallback.md`. |
+| `scripts/size-budget.sh` | `bash scripts/size-budget.sh --path <file> --worktask-id <id> [--slug <kebab>] [--project-root <dir>]` | Enforces the 5-step size budget (stat→pngquant→oversize/→warn→audit). Emits `size_audit: path=… bytes=… verdict=…` to stdout. |
+
+Both scripts implement `--self-test` (no network, no git required). Exit codes and stdout contract are documented in each script's shdoc header.
+
+`references/cli-fallback.md` remains as the spec (silicon/magick command examples, `.txt` schema, redaction recipe) but is **no longer needed in the happy path** — `scripts/cli-fallback.sh` is the canonical implementation. Similarly, the size-budget prose in `## Size budget` below is the authoritative spec; `scripts/size-budget.sh` is its executable form.
+
+See `references/apple-canvas.md` for the canvas adapter contract (scaffold/preview-ensurer/render/diff) and `references/preview-ensurer.md` for the cross-skill heuristics summary.
 
 ## Attachment
 

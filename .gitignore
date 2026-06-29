@@ -4,3 +4,4 @@
 .build/
 .swiftpm/
 Package.resolved
+__pycache__

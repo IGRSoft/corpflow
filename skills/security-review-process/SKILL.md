@@ -12,27 +12,45 @@ For the full OWASP Top 10 checklist, see `${CLAUDE_SKILL_DIR}/references/owasp-c
 
 For the security review output template, see `${CLAUDE_SKILL_DIR}/references/review-template.md`
 
-## Secrets Detection Patterns
+## Secrets Scanner (canonical tool)
 
-### Common Secrets to Find
+**Script**: `scripts/scan-secrets.sh`
+
+**Invocation contract** (one line):
+```
+bash scripts/scan-secrets.sh --path <repo-root>
+```
+
+Output: `file:line:severity:pattern` — one finding per line, no surrounding code excerpt.
+Exit 0 = no Critical/High findings. Exit 1 = one or more Critical/High findings (triage required). Exit 2 = usage error.
+
+**This is a first-pass FILTER feeding model triage, not an authoritative finding.**
+False positives are expected; the model must verify each line before acting.
+
+Optional flags:
+- `--format json` — emit newline-delimited JSON objects instead
+- `--self-test`   — run built-in fixture tests (no network, no external deps)
+
+**Engine selection**: prefers `gitleaks detect --no-git` when `gitleaks` is on `PATH`; otherwise falls back to the six built-in regexes below (ERE, grep-based). The gitleaks path maps RuleID → severity heuristically; the regex fallback maps directly.
+
+### Secrets Detection Patterns (spec — implemented in scan-secrets.sh)
+
+The table below is the authoritative specification. In the happy path, invoke the script instead of reasoning through these regexes manually.
 
 | Pattern | Regex Example | Severity |
 |---------|---------------|----------|
 | AWS Keys | `AKIA[0-9A-Z]{16}` | Critical |
-| Private Keys | `-----BEGIN.*PRIVATE KEY-----` | Critical |
-| JWT Secrets | `eyJ[A-Za-z0-9-_=]+\.eyJ` | High |
-| API Keys | `[a-zA-Z0-9_-]{32,45}` in config | High |
-| Passwords | `password\s*=\s*['"][^'"]+['"]` | Critical |
-| Database URLs | `(mysql\|postgres\|mongodb):\/\/[^@]+@` | Critical |
+| Private Keys | `-----BEGIN [A-Z ]*PRIVATE KEY-----` | Critical |
+| JWT Secrets | `eyJ[A-Za-z0-9_-]{10,}\.[Ee][Yy][Jj]` | High |
+| API Keys | `[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]\s*=\s*[A-Za-z0-9_-]{32,45}` in config | High |
+| Passwords | `password[[:space:]]*=[[:space:]]*['"][^'"]{3,}['"]` | Critical |
+| Database URLs | `(mysql\|postgres\|mongodb)://[^@[:space:]]{3,}@` | Critical |
 
 ### Where to Check
 
-- Source code files
-- Configuration files (.env, config.json)
-- Docker files and compose
-- CI/CD configurations
-- Documentation (accidental exposure)
-- Test fixtures
+Scanned automatically by the script: source files (`*.swift *.go *.py *.js *.ts …`), config files (`.env`, `*.json`, `*.yaml`, `*.toml`, `*.ini`, `*.conf`), Docker files, CI/CD configs (`Jenkinsfile`, `.travis.yml`, `*.gitlab-ci.yml`), shell scripts.
+
+Manual check still warranted for: documentation (accidental exposure), binary assets, and any file type not in the glob list.
 
 ## Secure Coding Patterns
 
@@ -90,7 +108,7 @@ func getResource(id: String, requestingUser: User) throws -> Resource {
 
 | Phase | Security Activity | Tools |
 |-------|-------------------|-------|
-| Code | SAST scanning, secrets detection | Semgrep, CodeQL, gitleaks |
+| Code | SAST scanning, secrets detection | Semgrep, CodeQL, `scripts/scan-secrets.sh` (wraps gitleaks or built-in regex) |
 | Build | Dependency scanning, SBOM generation | Snyk, OWASP Dependency-Check |
 | Container | Image scanning, runtime policies | Trivy, Aqua, Docker Scout |
 | Deploy | Config validation, IaC scanning | Checkov, tfsec |

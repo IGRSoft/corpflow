@@ -12,9 +12,40 @@ paths:
 
 Device specifications, layout patterns, typography tables, and Pencil MCP worktask for generating professional App Store screenshots as `.pen` files.
 
-For device dimensions and font sizes, see `${CLAUDE_SKILL_DIR}/references/device-specs.md`
+## Layout Calculator (canonical — use this instead of reading reference files)
 
-For layout formulas and composition rules, see `${CLAUDE_SKILL_DIR}/references/layout-patterns.md`
+`scripts/layout-calc.py` encodes the full 22-device matrix and all proportional/centering formulas from the two reference files below.  One call returns paste-ready JSON for `batch_design`; the model is responsible only for op-string assembly, copy, and color.
+
+```bash
+# By device key (preferred)
+python3 ${CLAUDE_SKILL_DIR}/scripts/layout-calc.py iphone-6.9-1320x2868 --layout A
+
+# By explicit dimensions
+python3 ${CLAUDE_SKILL_DIR}/scripts/layout-calc.py --w 1320 --h 2868 --platform ios --layout B
+
+# List all 22 device keys
+python3 ${CLAUDE_SKILL_DIR}/scripts/layout-calc.py --list-devices
+
+# Full-bleed platforms (tvOS/watchOS) — returns canvas-fill passthrough
+python3 ${CLAUDE_SKILL_DIR}/scripts/layout-calc.py appletv-4k-3840x2160 --layout A
+```
+
+Output schema (compact JSON, suitable for direct interpolation into batch_design params):
+```
+{
+  "device":     {"name": str, "w": int, "h": int},
+  "headline":   {"x": int, "y": int, "w": int, "fontSize": int, "textAlign": str},
+  "subtitle":   {"x": int, "y": int, "w": int, "fontSize": int, "opacity": float, "textAlign": str},
+  "screenshot": {"x": int, "y": int, "w": int, "h": int, "cornerRadius": int}
+}
+# full-bleed devices additionally include: "full_bleed": true
+```
+
+Layouts available: **A** (text top / screenshot bottom-center hero), **B** (text top-left), **C** (screenshot top / text bottom), **D** (text top / large screenshot).  Op-string construction, copy, gradient stops, and color selection stay with the model.
+
+Reference files (`references/device-specs.md`, `references/layout-patterns.md`) remain as the authoritative spec for the formulas encoded above — read them only when you need to verify a formula or extend the device matrix, not in the screenshot-generation happy path.
+
+---
 
 ## Philosophy: Screenshots Are Ads
 
@@ -104,14 +135,12 @@ G(bg, "file", "/absolute/path/to/AppStore/images/bg.png")
 
 **Add screenshot image (centered, with padding for device-like look):**
 
-```typescript
-// For phone screenshots: compute centered position
-// screenshot_h = H * 0.74, screenshot_w = screenshot_h / (19.5/9)
-// screenshot_x = (W - screenshot_w) / 2, screenshot_y = H * 0.24
+Geometry values below come from `layout-calc.py iphone-6.9-1320x2868 --layout A` — use the script; do not hand-compute.
 
+```typescript
 mcp__pencil__batch_design({
   operations: `
-ss=I("slide1-id", {type: "image", name: "Screenshot", x: 171, y: 688, width: 979, height: 2122, cornerRadius: 32, imageFill: "fill"})
+ss=I("slide1-id", {type: "image", name: "Screenshot", x: 170, y: 688, width: 979, height: 2122, cornerRadius: 32, imageFill: "fill"})
 G(ss, "file", "/absolute/path/to/AppStore/images/01-home.png")
 `
 })

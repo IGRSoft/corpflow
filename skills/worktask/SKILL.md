@@ -195,6 +195,7 @@ fi
 - **Hard halt** (< `DISK_MIN_GB`, default 5): do NOT delegate; surface the remediation and return — a halted run is recoverable, an ENOSPC-killed harness mid-stage is not.
 - **Warn** (< `DISK_WARN_GB`, default 8): proceed, but run `swift package clean` as a pre-DV hygiene step to reclaim `.build/` first.
 - `df -Pg` (`-g` = whole GiB blocks; `-P` = portable single-line rows) is POSIX-portable on macOS and Linux; the guard degrades to a no-op (skips the check, proceeds) if `df` output is unparseable, so it never blocks a run on a measurement failure.
+- **Canonical implementation**: this guard is folded into `scripts/state-patch.sh --disk-check <root>`. The shell snippet above is the spec; invoke the script for the executable form.
 
 ### Post-Stage
 
@@ -306,9 +307,11 @@ const runIndex = full.metadata.run_index ?? 0;
 const artifactPath = stageArtifactPath(code, runIndex);
 
 if (statePost.stages?.[code]?.status !== "completed") {
-  // Layer 1 (agent self-patch) missed. Invoke Layer 2 (state-merge hook) synchronously.
+  // Layer 1 (agent self-patch) missed. Invoke Layer 2 synchronously via the canonical script.
   // This fires even if the SubagentStop hook event was not delivered.
-  // Uses Bash tool: CLAUDE_ARTIFACT_PATH=<path> CLAUDE_TASK_METADATA_STAGE=<code> bash .claude/hooks/state-merge.sh
+  // Canonical Layer 2: bash skills/worktask/scripts/state-patch.sh --stage <code> --artifact <path>
+  //   (the script is the single implementation; .claude/hooks/state-merge.sh is a thin wrapper that
+  //    delegates to it — invoke state-patch.sh directly here for the synchronous Step-6.5 path.)
   runStateMergeHook(artifactPath, code);
 
   // Re-read after hook.
@@ -857,6 +860,16 @@ The orchestrator loop is restartable. **WHEN reattaching** (PostCompact, session
 ## FN Finalization Gate
 
 The FN gate defaults to `"checkpoint"` (see § FN Gate): PL0 stamps `metadata.fn_gate = "checkpoint"`, so the orchestrator STOPs before the FN delegation, presents the pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. The two human checkpoints are the PL gate (`commands/worktask.md § Step A.5` and § PRECONDITION CHECK Signal 2) and this FN gate (Signal 3). `--auto-finalization` and `--emergency` (and the `/megatask` batch orchestrator, per-issue) stamp `fn_gate: "bypass"` to finalize unattended (`--auto-plan` never bypasses FN — it is orthogonal to the plan gate). All file-writing work is worktree-isolated, so finalization is reviewable as a PR. On the checkpoint path the orchestrator writes `fn_gate_waiting` then `approval_received`/`approval_rejected`; on bypass it writes a single `fn_gate_bypass` audit line (`reason: "unattended"`) — all with `subject:"FN<run_index>"` (see § FN Gate).
+
+## Scripts
+
+Executable helpers (never read into context — invoke via `bash`):
+
+| Script | One-line invocation | Purpose |
+|--------|---------------------|---------|
+| `scripts/state-patch.sh` | `bash skills/worktask/scripts/state-patch.sh --stage <CODE> [--artifact <path>]` | **Canonical** Step-6.5 state.json patch: resolve artifact, parse `handoff:` frontmatter, atomic-merge. Also owns the ENOSPC/DISK_MIN_GB guard. `.claude/hooks/state-merge.sh` is a thin wrapper that delegates here — all logic lives in this one file. Self-test: `bash scripts/state-patch.sh --self-test`. |
+
+`references/handoff-protocol.md` remains the spec for the handoff schema, fallback paths, and the `#atomic-write` contract. The script is the **executable form** of those rules — callers invoke the script instead of re-implementing the merge.
 
 ## Related
 

@@ -12,32 +12,46 @@ related:
 
 Reusable patterns for milestone worktask operations.
 
-> **Note**: Code examples below are pseudocode for conceptual clarity.
-> In production, use secure command execution (e.g., `execFile` instead of shell).
+## Canonical Dispatcher
 
-## Function Index
+**`scripts/milestone-helpers.sh`** is the single executable home for all slug/branch/priority/base-branch logic. Megatask scripts MUST invoke it rather than reimplementing these operations.
 
-| Function | Purpose |
-|----------|---------|
-| `generateBranchName(issue)` | Create `feature/{issue#}-{slug}` branch names |
-| `hasExistingPR(issueNumber)` | Check if issue already has linked PR via timeline |
-| `filterIssuesWithPRs(issues)` | Split issues into toProcess/skipped arrays |
-| `getPriorityScore(labels)` / `sortByPriority(issues)` | Sort issues by priority labels (see megatask §Priority Sorting) |
-| `updateOrchestratorIssue(path, number, updates)` | Update issue state in orchestrator.json |
-| `resolveBaseBranch(issueBody)` | Resolve base branch: issue body → develop → master |
-| `initializeWorkspace(milestone, issue)` | Create legacy workspace with .context/ |
-| `completeIssue(milestone, issueNumber)` | Commit, push, create PR, update orchestrator |
-| `isWorktreeEnabled(options)` | Check if git worktree support is available |
-| `createIssueWorktree(milestone, issue, baseBranch)` | Create worktree with branch and .context/ |
-| `removeIssueWorktree(milestone, issueNumber, force?)` | Remove worktree with uncommitted change check |
-| `createSparseWorktree(milestone, issue, baseBranch, sparsePaths)` | Create worktree with sparse checkout |
-| `listMilestoneWorktrees(milestoneNumber)` | List all worktrees for a milestone |
-| `resolveIssueWorkdir(milestone, issueNumber, options)` | Abstract workdir path for legacy/worktree modes |
-| `completeIssueWorktree(milestone, issueNumber)` | Complete issue worktask in worktree mode |
+```
+bash scripts/milestone-helpers.sh <subcommand> [args...]
+```
 
-See references/ for full implementations with code examples.
+| Subcommand | Invocation | Output |
+|---|---|---|
+| `branch-name` | `bash milestone-helpers.sh branch-name 42 "Add login flow"` | `feature/42-add-login-flow` |
+| `priority-score` | `bash milestone-helpers.sh priority-score P1 bug` | `1` |
+| `base-branch` | `bash milestone-helpers.sh base-branch --file issue.json` | `develop` |
+| `has-pr` | `bash milestone-helpers.sh has-pr 42 --file timeline.json` | `yes` or `no` |
+| `filter-prs` | `bash milestone-helpers.sh filter-prs --file issues.json` | TSV: `<number> <status>` |
+| `orchestrator-update` | `bash milestone-helpers.sh orchestrator-update --file in.json --path out.json --issue 42 status=completed` | writes updated JSON atomically |
+| `workspace-init` | `bash milestone-helpers.sh workspace-init 42 "Add login flow"` | `branch=…` `worktree_path=…` `context_path=…` key=value lines |
 
-> **Constants are canonical in `megatask`.** Branch-name format (`feature/{issue#}-{slug}`), priority labels (P0–P3 + none), and the base-branch resolution chain (issue body → develop → master) are defined there. This skill applies them; do not redefine — reference the `megatask` skill to avoid drift.
+All subcommands accept pre-fetched JSON via `--file` so they are network-free and testable. Run `--self-test` to verify (26 checks, no network required).
+
+### Slug-length canon: **50 characters**
+
+`implementations.md` previously stated 30 chars; `megatask/SKILL.md §Branch Naming` states 50. The dispatcher implements **50** as the single source of truth. Both files now agree.
+
+> **Constants are canonical in `megatask`.** Branch-name format (`feature/{issue#}-{slug}`), priority labels (P0–P3 + none), and the base-branch resolution chain (issue body → develop → master) are defined there. This skill applies them via `scripts/milestone-helpers.sh`; do not redefine — reference the `megatask` skill to avoid drift.
+
+## Function Index (pseudocode spec — implemented in scripts/milestone-helpers.sh)
+
+`references/implementations.md` is the **specification** for each function. The dispatcher is the executable implementation — the happy path no longer requires reading the reference file.
+
+| Function | Dispatcher subcommand |
+|----------|----------------------|
+| `generateBranchName(issue)` | `branch-name` |
+| `hasExistingPR(issueNumber)` | `has-pr` |
+| `filterIssuesWithPRs(issues)` | `filter-prs` |
+| `getPriorityScore(labels)` | `priority-score` |
+| `updateOrchestratorIssue(path, number, updates)` | `orchestrator-update` |
+| `resolveBaseBranch(issueBody)` | `base-branch` |
+| `initializeWorkspace(milestone, issue)` | `workspace-init` (paths only; no side effects) |
+| Worktree operations | Not in dispatcher (git commands — run directly per git-integration.md) |
 
 ## Git Commands Reference
 

@@ -53,6 +53,23 @@ Files 10 and 11 are platform-specific. The exact filename and column schema depe
 
 File 12 (`integration_specifics.csv`) keeps a stable filename across platforms but its rows enumerate platform-relevant SDKs/APIs (Apple SDKs for `apple`, Android/Jetpack APIs for `android`, web SDKs for `web`).
 
+## Validator Script
+
+**Canonical path**: `scripts/validate-export.sh`
+
+**One-line invocation**:
+```sh
+bash scripts/validate-export.sh --dir <export-dir> [--out <report.csv>]
+```
+
+- Emits `<export-dir>/validation_report.csv` (columns: `check;status;detail`).
+- Exits `0` on full pass, `1` on any violation, `2` on usage/missing-file error.
+- Columns are keyed by **header name**, not position — safe against column reordering.
+- Semicolon-delimited CSVs with quoted semicolons are parsed correctly via an embedded `python3 csv` heredoc.
+- Run `--self-test` for a no-network fixture verification (matching set exits 0; mismatched set exits 1).
+
+The validation rules below are the **spec** this script implements. In the happy path, invoke the script rather than re-reading them manually.
+
 ## Validation Rules
 
 After export, verify:

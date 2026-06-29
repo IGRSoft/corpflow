@@ -2,7 +2,7 @@
 name: megatask
 description: Meta-orchestration of many worktasks across a GitHub milestone or explicit issue array — dependency/blocker DAG, priority ordering, isolated per-issue worktrees. Use for /megatask, multi-issue batches, or any dependency-ordered fan-out of worktasks.
 effort: high
-version: 0.2.0
+version: 0.3.0
 related:
   - ../../commands/megatask.md
   - references/dependency-graph.md
@@ -14,6 +14,9 @@ related:
   - ../../commands/worktask.md
   - ../shared/stage-codes.md
   - ../shared/task-system.md
+scripts:
+  - scripts/build-orchestrator.sh
+  - scripts/init-worktree.sh
 ---
 
 # Megatask
@@ -26,6 +29,70 @@ It launches one `/worktask` per issue; it never runs stages itself.
 > **Separation of concerns.** `/worktask` runs ONE issue's staged pipeline (PL→…→ST) and is
 > milestone-agnostic. `/megatask` sequences many worktasks. All milestone/array/DAG/track logic
 > lives here — not in `worktask.md`.
+
+## Canonical Scripts
+
+Two executable INIT scripts in `scripts/` drive the two heavy init operations. Invoke them
+instead of reading the reference files when doing real work — the references remain the
+authoritative spec but are no longer needed in the happy path.
+
+### `scripts/build-orchestrator.sh` — DAG builder
+
+Reads pre-fetched issue JSON, extracts dependency edges, runs Kahn cycle detection, assigns
+levels, computes `parallel_tracks`, and emits `orchestrator.json v3.1`.
+
+```bash
+# One-line contract (no network required — pass pre-fetched JSON):
+bash scripts/build-orchestrator.sh \
+  --file issues.json \
+  --out  .worktrees/milestone-1/orchestrator.json \
+  --group milestone-1 --milestone-num 1 --milestone-title "Sprint 1" \
+  --base-branch develop
+
+# Self-test (no network, no side effects):
+bash scripts/build-orchestrator.sh --self-test
+```
+
+Input schema: `[{ "issue": <int>, "title": "<str>", "labels": ["P0",...], "body": "<str>" }]`
+Output: `orchestrator.json v3.1` — see `references/schemas.md` for the full field contract.
+
+The reference file `references/dependency-graph.md` is the algorithm spec; this script is its
+executable implementation. On cycle detection the script exits 1 and names the participating
+issues on stderr — never silently invents an order.
+
+### `scripts/init-worktree.sh` — per-issue worktree initialiser
+
+For one issue: resolves base branch (delegates to `milestone-helpers.sh`), creates the git
+worktree at `.worktrees/<group>/<issue#>`, makes `.context/`, and stamps `workspace.json v2.0`.
+
+```bash
+# One-line contract:
+bash scripts/init-worktree.sh \
+  --issue 42 --title "Add login flow" --group milestone-1 \
+  --track 1 --blocked-by 41 --blocks 60 --labels "P1,feature" \
+  [--file issue-42.json]   # pre-fetched JSON for base-branch + labels
+
+# Dry-run (prints planned actions, no mutations):
+bash scripts/init-worktree.sh --issue 42 --title "..." --group milestone-1 --dry-run
+
+# Self-test (spins up a temp git repo, no network beyond local git):
+bash scripts/init-worktree.sh --self-test
+```
+
+`--file` accepts pre-fetched `gh issue view … --json body,labels` output for offline/testable
+use. Without `--file`, base-branch resolution calls git ls-remote (thin, optional). Idempotent:
+re-running on an existing worktree path is a no-op (safe on retry).
+
+The reference file `references/git-integration.md` is the lifecycle spec; this script is its
+executable implementation. Branch naming and base-branch resolution are fully delegated to
+`../shared/milestone-helpers/scripts/milestone-helpers.sh` — no slug or branch logic is
+duplicated here.
+
+> **Runtime twin.** `hooks/megatask-monitor.sh` (the SubagentStop/Stop hook) handles the
+> *completion* side of the lifecycle — reconciling workspace.json outcomes back into
+> orchestrator.json. These INIT scripts handle the *creation* side only. The two sides agree on
+> the same `workspace.json v2.0` schema and `orchestrator.json v3.1` schema defined in
+> `references/schemas.md`.
 
 ## Inputs
 

@@ -11,6 +11,39 @@ related:
 
 Standardized project estimation for Claude Code worktasks.
 
+## Calculator Script (canonical math path)
+
+`scripts/estimate-calc.py` implements the complete fixed arithmetic chain. Use it instead of
+reasoning through the formulas manually — the model supplies judgment inputs (T-shirt size,
+factor scores); the script does all arithmetic and emits compact JSON.
+
+**One-line invocation contract:**
+
+```
+python3 skills/estimation-methodology/scripts/estimate-calc.py \
+  --size <XS|S|M|L|XL> [--level <junior|mid|senior|expert>] [--multiplier <h>] \
+  [--rate <hourly>] \
+  [--factors <f1> <f2> <f3> <f4> <f5>] \
+  [--tokens <n>] [--model <haiku|sonnet|opus>] \
+  [--retry-complexity <low|medium|high>] [--codebase-type <standard|large|novel>] \
+  [--phase-hours <min> <max>]
+```
+
+Outputs a single-line JSON object with keys: `sp`, `multiplier_h`, `base_hours`,
+`buffer_pct`, `total_hours`, `budget` (if `--rate`), `phase`, `ai_cost` (if `--tokens`),
+`complexity` (if `--factors`). No large text blocks — just the numbers.
+
+Self-test (no network, no external deps):
+```
+python3 skills/estimation-methodology/scripts/estimate-calc.py --self-test
+```
+
+The reference sections below remain as the authoritative specification the script
+implements. They are no longer needed in the happy path — read the script output instead.
+
+Note: `commands/estimate.md` should cite this script as the canonical math path for its
+`### Budget Calculation` and `### AI Cost` sections.
+
 ## T-Shirt Sizing → Story Points (Range)
 
 | Size | SP Min | SP Max | Hours Min | Hours Max | Entry point |
