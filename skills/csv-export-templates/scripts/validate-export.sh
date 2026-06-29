@@ -474,7 +474,6 @@ for pair in "01:${F01}" "04:${F04}" "07:${F07}" "13:${F13}"; do
   local_file="${pair#*:}"
   if [[ -z "${local_file}" ]]; then
     _check "format/file-${local_num}" "FAIL" "file ${local_num}_*.csv not found in ${DIR}"
-    FAILURES=$((FAILURES + 1))
   else
     fmt_issues=$(_py check-format --file "${local_file}")
     if [[ -n "${fmt_issues}" ]]; then

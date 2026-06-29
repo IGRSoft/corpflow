@@ -45,30 +45,31 @@ log() {
 # ---------- Legacy inline fallback ----------
 # Used only when state-patch.sh is absent (e.g. transitional period / plugin update).
 # Defined before main flow so shellcheck sees it as reachable.
+
+_basename_for_stage() {
+  case "$1" in
+    PL) printf 'planning' ;;
+    AR) printf 'analyzing' ;;
+    TL) printf 'coordination' ;;
+    DV) printf 'development' ;;
+    DR) printf 'developer-review' ;;
+    SR) printf 'security-review' ;;
+    QA) printf 'testing' ;;
+    DC) printf 'documentation' ;;
+    RE) printf 'release' ;;
+    FN) printf 'complete-summary' ;;
+    ST) printf 'retrospective' ;;
+    IR) printf 'incident' ;;
+    ET) printf 'ethics-review' ;;
+    *) printf '' ;;
+  esac
+}
+
 _inline_merge() {
   local ART="${CLAUDE_ARTIFACT_PATH:-}"
   local STAGE="${CLAUDE_TASK_METADATA_STAGE:-}"
   local AGENT="${CLAUDE_AGENT_NAME:-}"
   local STATE_JSON=".context/state.json"
-
-  _basename_for_stage() {
-    case "$1" in
-      PL) printf 'planning' ;;
-      AR) printf 'analyzing' ;;
-      TL) printf 'coordination' ;;
-      DV) printf 'development' ;;
-      DR) printf 'developer-review' ;;
-      SR) printf 'security-review' ;;
-      QA) printf 'testing' ;;
-      DC) printf 'documentation' ;;
-      RE) printf 'release' ;;
-      FN) printf 'complete-summary' ;;
-      ST) printf 'retrospective' ;;
-      IR) printf 'incident' ;;
-      ET) printf 'ethics-review' ;;
-      *) printf '' ;;
-    esac
-  }
 
   _resolve_artifact_inline() {
     local base="$1" ri="" newest=""

@@ -52,11 +52,7 @@ section_append() {
 # Prints the KCL section name, or empty string for silent types.
 # ---------------------------------------------------------------------------
 classify_type() {
-  local type="$1" breaking="$2"
-  if [[ "$breaking" == "1" ]]; then
-    printf 'Added'
-    return
-  fi
+  local type="$1"
   case "$type" in
     feat) printf 'Added' ;;
     fix) printf 'Fixed' ;;

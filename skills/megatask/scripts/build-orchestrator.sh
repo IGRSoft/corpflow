@@ -73,7 +73,7 @@ build_orchestrator() {
     local tmp_input
     tmp_input=$(mktemp -t build-orch-input.XXXXXX)
     # shellcheck disable=SC2064
-    trap "rm -f '$tmp_input'" EXIT
+    trap "rm -f '$tmp_input'" RETURN
     cat > "$tmp_input"
     json_src="$tmp_input"
   fi

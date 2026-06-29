@@ -415,8 +415,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --disk-check)
-      shift
-      DISK_CHECK_ROOT="${1:-.}"
+      DISK_CHECK_ROOT="."
       shift
       ;;
     --self-test) run_self_test ;;
