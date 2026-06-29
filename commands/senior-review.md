@@ -5,8 +5,8 @@ argument-hint: <estimate or task to review>
 model: sonnet
 allowed-tools: Read, Glob, Grep
 related:
-  - skills/review/SKILL.md
-  - skills/estimation/SKILL.md
+  - skills/senior-developer-review/SKILL.md
+  - skills/estimation-methodology/SKILL.md
 ---
 
 # Senior Review Command

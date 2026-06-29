@@ -60,7 +60,7 @@ You are an expert product manager specializing in product strategy, user-centric
 
 ## Estimation Integration
 
-Use `skills/estimation/SKILL.md` for complexity scoring (0-50 scale). Key output: complexity score, worktask tier recommendation, stage assignments.
+Use `skills/estimation-methodology/SKILL.md` for complexity scoring (0-50 scale). Key output: complexity score, worktask tier recommendation, stage assignments.
 
 ## Test Strategy Definition
 
@@ -92,7 +92,7 @@ metadata:
 | `scoped` (effective default if omitted) | Bug fixes, small features, anything touching a known set of modules. Default for untagged or partially-tagged repos. | DV + QA run Selected Tests + tests in any module the diff touches. |
 | `full` | Release candidate, multi-module feature, post-major-dep-upgrade, stakeholder-requested full regression. | DV runs Selected Tests; QA runs the entire project test suite. |
 
-**Heuristic** (combine with complexity score from `skills/estimation/SKILL.md`):
+**Heuristic** (combine with complexity score from `skills/estimation-methodology/SKILL.md`):
 
 | Complexity score | Default `test_mode` | Override conditions |
 |------------------|---------------------|---------------------|

@@ -5,7 +5,7 @@
 # routes to `apple-canvas` (state.platform=apple AND (args.force_canvas OR
 # sim_unavailable(state))). Orchestrates:
 #
-#   1. Scaffold-if-missing  → tools/SnapshotHost/ from examples/SnapshotHost-template/
+#   1. Scaffold-if-missing  → tools/SnapshotHost/ from templates/SnapshotHost-template/
 #   2. Invoke preview-ensurer (Swift executable) on modified files
 #   3. Rewrite PreviewBridge.swift viewRegistry (idempotent)
 #   4. swift run --package-path tools/SnapshotHost SnapshotHost --view ... --output ...
@@ -118,7 +118,7 @@ audit() {
 # Step 1 — Scaffold-if-missing
 # -----------------------------------------------------------------------------
 SCAFFOLD_DIR="tools/SnapshotHost"
-TEMPLATE_DIR="${PLUGIN_DIR}/skills/dv-screenshot-capture/examples/SnapshotHost-template"
+TEMPLATE_DIR="${PLUGIN_DIR}/skills/dv-screenshot-capture/templates/SnapshotHost-template"
 
 if [[ ! -f "${SCAFFOLD_DIR}/Package.swift" ]]; then
     echo "[apple-canvas] scaffolding ${SCAFFOLD_DIR}/ from template" | tee -a "$BUILD_LOG"
@@ -133,7 +133,7 @@ if [[ ! -f "${SCAFFOLD_DIR}/Package.swift" ]]; then
     mkdir -p "$SCAFFOLD_DIR/Sources/SnapshotHost"
     cp "$TEMPLATE_DIR/Package.swift" "$SCAFFOLD_DIR/Package.swift"
     # canvas-render-host.swift becomes main.swift inside the scaffold
-    cp "${PLUGIN_DIR}/skills/dv-screenshot-capture/examples/canvas-render-host.swift" \
+    cp "${PLUGIN_DIR}/skills/dv-screenshot-capture/templates/canvas-render-host.swift" \
        "$SCAFFOLD_DIR/Sources/SnapshotHost/main.swift"
     cp "$TEMPLATE_DIR/Sources/SnapshotHost/PreviewBridge.swift" \
        "$SCAFFOLD_DIR/Sources/SnapshotHost/PreviewBridge.swift"
@@ -154,7 +154,7 @@ fi
 # -----------------------------------------------------------------------------
 # Step 2 — Invoke preview-ensurer
 # -----------------------------------------------------------------------------
-ENSURER_DIR="${PLUGIN_DIR}/skills/preview-ensurer/examples"
+ENSURER_DIR="${PLUGIN_DIR}/skills/preview-ensurer/references/reference-impl"
 ENSURER_JSON_LOG="${LOGS_DIR}/preview-ensurer-${TS}.json"
 
 if [[ -d "$ENSURER_DIR" ]] && command -v swift >/dev/null 2>&1; then
@@ -195,7 +195,7 @@ if [[ -d "$ENSURER_DIR" ]] && command -v swift >/dev/null 2>&1; then
         done
     fi
 else
-    echo "[apple-canvas] preview-ensurer skipped (Swift toolchain or examples/ unavailable)" | tee -a "$BUILD_LOG"
+    echo "[apple-canvas] preview-ensurer skipped (Swift toolchain or preview-ensurer impl unavailable)" | tee -a "$BUILD_LOG"
 fi
 
 # -----------------------------------------------------------------------------

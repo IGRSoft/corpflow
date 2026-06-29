@@ -172,7 +172,7 @@ Array max bounded by `modified_files.length`. Eviction at worktask archival.
 
 - `references/view-detection.md` — SwiftSyntax patterns for View detection
 - `references/mock-data-strategy.md` — full mock derivation tree
-- `examples/PreviewEnsurer.swift` — reference Swift implementation (executable)
+- `references/reference-impl/Sources/PreviewEnsurer/PreviewEnsurer.swift` — reference Swift implementation (executable)
 - `tests/ensurer-tests.md` — fixture test matrix
 - `../dv-screenshot-capture/references/apple-canvas.md` — caller contract (canonical)
 - `../dv-screenshot-capture/references/preview-ensurer.md` — caller-side summary

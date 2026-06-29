@@ -2,8 +2,8 @@
 //
 // preview-ensurer — SPM package for the `PreviewEnsurer` executable.
 //
-// Build:  swift build --package-path skills/preview-ensurer/examples
-// Run:    swift run --package-path skills/preview-ensurer/examples PreviewEnsurer \
+// Build:  swift build --package-path skills/preview-ensurer/references/reference-impl
+// Run:    swift run --package-path skills/preview-ensurer/references/reference-impl PreviewEnsurer \
 //           --modified-files <newline-list> [--auto-add true|false]
 //
 // AR decision ad2: swift-syntax pinned `.upToNextMajor(from: "510.0.0")`.

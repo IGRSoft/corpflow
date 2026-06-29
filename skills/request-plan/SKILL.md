@@ -40,13 +40,13 @@ reinvent these:
 - **Phases** use the P0 Required / P1 Nice-to-have / P2 v1.1 model from
   `skills/shared/three-stage-planning.md`. Keep each phase independently deliverable.
 - **Effort** is a T-shirt size plus the 5-factor complexity score (0–25) from
-  `skills/estimation/SKILL.md`. Give a range, not false precision — this is a rough cut, not a budget.
+  `skills/estimation-methodology/SKILL.md`. Give a range, not false precision — this is a rough cut, not a budget.
 - **Tests live inside each phase's scope**, never as a separate phase (per the estimation skill).
 
 ### 4. Recommend the handoff
 
 Follow `references/handoff.md`. Map the size + complexity to the right invocation using the canonical
-**Worktask Tier Selection** logic in `skills/estimation/SKILL.md`, and emit a single, ready-to-paste
+**Worktask Tier Selection** logic in `skills/estimation-methodology/SKILL.md`, and emit a single, ready-to-paste
 command line (e.g. `/worktask "<restated goal>"`). Security-sensitive work (auth, PII, payments, or
 Risk ≥ 4) always routes to `/worktask --secure` regardless of size.
 

@@ -5,7 +5,7 @@ Documents the expected behavior of `PreviewEnsurer.swift` against the fixture co
 Test runner alignment:
 
 ```
-swift run --package-path skills/preview-ensurer/examples PreviewEnsurer \
+swift run --package-path skills/preview-ensurer/references/reference-impl PreviewEnsurer \
   --modified-files skills/preview-ensurer/tests/Fixtures/SimpleView.swift \
   --auto-add true \
   --project-root <repo-root>

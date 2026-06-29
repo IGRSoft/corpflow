@@ -30,7 +30,7 @@ tests included inside the phase, not split out.
 | P2 — v1.1 | … | … |
 
 ## Effort (rough)
-T-shirt size + 5-factor complexity (0–25) per `skills/estimation/SKILL.md`. A range, not a point.
+T-shirt size + 5-factor complexity (0–25) per `skills/estimation-methodology/SKILL.md`. A range, not a point.
 
 | Size | Complexity (0–25) | Notes |
 |------|-------------------|-------|

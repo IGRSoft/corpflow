@@ -14,15 +14,15 @@ All available skills for the igrsoft worktask plugin.
 | [cost-optimization](cost-optimization/SKILL.md) | Cost tracking and optimization strategies for AI agent worktasks | medium |
 | [cross-plugin-handoff](cross-plugin-handoff/SKILL.md) | Protocol for handoffs between igrsoft worktask and external plugins | medium |
 | [csv-export-templates](csv-export-templates/SKILL.md) | 13-category CSV export structure for Google Sheets import | low |
-| [estimation](estimation/SKILL.md) | Complexity scoring (0-50 scale) and T-shirt sizing for project estimation | low |
+| [estimation-methodology](estimation-methodology/SKILL.md) | Complexity scoring (0-50 scale) and T-shirt sizing for project estimation | low |
 | [incident-response](incident-response/SKILL.md) | Incident classification, hotfix worktask, rollback procedures, and post-mortem templates | high |
 | [logging-conventions](logging-conventions/SKILL.md) | Route runtime log capture to `.context/logs/` with filename conventions and cleanup patterns | low |
 | [megatask](megatask/SKILL.md) | Meta-orchestration of many worktasks across a GitHub milestone or issue array — dependency/blocker DAG, priority ordering, isolated per-issue worktrees, completion-driven monitor hook (the `/megatask` command) | high |
-| [pencil-design](pencil-design/SKILL.md) | Design mockup generation worktask using Pencil MCP tools | high |
+| [pencil-design-worktask](pencil-design-worktask/SKILL.md) | Design mockup generation worktask using Pencil MCP tools | high |
 | [preview-ensurer](preview-ensurer/SKILL.md) | Detect SwiftUI View files without previews and auto-add minimal `#Preview` blocks | medium |
 | [release-engineering](release-engineering/SKILL.md) | Semantic versioning, changelog generation, and deployment readiness patterns | high |
 | [request-plan](request-plan/SKILL.md) | Lightweight context-aware plan (goal, scope, phases, rough effort, risks) from a free-form request, with a worktask-trigger handoff | medium |
-| [review](review/SKILL.md) | Technical review framework for estimates by platform specialists | low |
+| [senior-developer-review](senior-developer-review/SKILL.md) | Technical review framework for estimates by platform specialists | low |
 | [security-review-process](security-review-process/SKILL.md) | OWASP Top 10 security review checklist and secure coding patterns | medium |
 | [self-improvement](self-improvement/SKILL.md) | ST-stage retrospective: diff-based learning from user edits; writes `.context/learnings.md` with per-proposal approval checklist | medium |
 | [task-folder-organization](task-folder-organization/SKILL.md) | Context folder structure (.context/) with artifact naming and path resolution | medium |
