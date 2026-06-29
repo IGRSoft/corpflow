@@ -323,7 +323,7 @@ The `PreCompact` hook fires **before** automatic context compaction begins. Retu
     "PostCompact": [
       {
         "hooks": [
-          { "type": "command", "command": "./tools/post-compact-recovery.sh" }
+          { "type": "command", "command": "bash skills/context-compression/scripts/post-compact-recovery.sh" }
         ]
       }
     ]
@@ -333,55 +333,32 @@ The `PreCompact` hook fires **before** automatic context compaction begins. Retu
 
 Use cases: gate compaction during critical multi-stage handoffs (PreCompact), re-inject critical task state, log compression metrics, recover worktask context in long multi-stage sessions (PostCompact).
 
-#### Example: `tools/post-compact-recovery.sh`
+#### `scripts/post-compact-recovery.sh` — canonical implementation
 
-Minimal recovery script that re-injects the audit tail, the in-progress task
-ID, and a pointer to `stage-contracts.md` so the orchestrator can resume.
+Parses the `audit.jsonl` tail (non-advisory `subagent_stopped` entries only — NOT
+mtime/ls ordering, which is unreliable) to resolve the interrupted stage, its Task
+System handle, and its per-agent error file, then writes a compact JSON pointer to
+`.context/logs/post-compact-<ts>.json`. The body of that file is never echoed to
+stdout — only the file path is reported on stderr to keep the hook's token footprint
+near zero.
 
-```bash
-#!/usr/bin/env bash
-# PostCompact recovery: emit a JSON blob that the orchestrator can read on
-# first turn after compaction. Written to .context/logs/post-compact-<ts>.json.
-
-set -euo pipefail
-mkdir -p .context/logs
-TS=$(date -u +%Y%m%d-%H%M%S)
-OUT=".context/logs/post-compact-${TS}.json"
-
-# 1. Audit tail — last 20 lines are enough to reconstruct stage transitions
-AUDIT_TAIL=$(tail -n 20 .context/logs/audit.jsonl 2>/dev/null | jq -sc '.' || echo '[]')
-
-# 2. In-progress task (if any)
-# NOTE: mtime ordering of error files is unreliable — file timestamps do not
-# correlate with task state. Correct approach: query the Task System via
-# TaskList for status=in_progress, or parse the tail of audit.jsonl to find
-# the most recent `subagent_stopped` entry without a matching `completed`.
-# Then derive the owning agent/stage and read `.context/errors/<agent>.md`.
-# The line below is a best-effort fallback for reference only.
-IN_PROGRESS=$(ls -t .context/errors/*.md 2>/dev/null | head -n 1 || echo "")
-
-# 3. Emit recovery blob
-jq -n \
-  --argjson audit "$AUDIT_TAIL" \
-  --arg active_error "$IN_PROGRESS" \
-  --arg contracts "skills/shared/stage-contracts.md" \
-  --arg resume_guide "skills/worktask/SKILL.md#resume-after-interruption" \
-  '{
-    recovery: {
-      audit_tail: $audit,
-      active_error_file: $active_error,
-      stage_contracts_ref: $contracts,
-      resume_guide_ref: $resume_guide,
-      instruction: "Read active_error_file and audit_tail, then resume per resume_guide_ref. Do NOT replay completed stages."
-    }
-  }' > "$OUT"
-
-echo "PostCompact recovery written to $OUT" >&2
+```
+bash skills/context-compression/scripts/post-compact-recovery.sh
+# Optional overrides:
+#   --audit-file <path>   (default: .context/logs/audit.jsonl)
+#   --out-dir    <path>   (default: .context/logs)
+#   --tail-lines <N>      (default: 20)
+#   --dry-run             print JSON to stdout instead of writing file
+#   --self-test           run fixture tests; exit 0 on pass
 ```
 
 After compaction, the orchestrator's next turn reads the most recent
 `post-compact-*.json`, follows the `resume_guide_ref`, and continues the
 execution loop from the first incomplete stage.
+
+> **Spec for this script** (implementation detail, not needed at runtime): the
+> original inline bash block above has been superseded by `scripts/post-compact-recovery.sh`
+> and is kept in `references/compression-examples.md` for historical reference.
 
 See `skills/worktask/references/resume.md` for the full state table and
 procedure (stub: `skills/worktask/SKILL.md § Resume After Interruption`).

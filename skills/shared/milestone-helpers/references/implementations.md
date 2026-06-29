@@ -1,5 +1,10 @@
 # Milestone Helper Implementations
 
+> **This file is a specification.** The executable implementation lives in
+> `scripts/milestone-helpers.sh`. Invoke that script; do not re-implement from this pseudocode.
+> Slug max length is **50 characters** (was incorrectly stated as 30 here; resolved in favour of
+> `megatask/SKILL.md §Branch Naming` which states 50).
+
 Full TypeScript pseudocode implementations for all milestone helper functions.
 
 ## Branch Name Generation
@@ -10,7 +15,7 @@ function generateBranchName(issue: { number: number; title: string }): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')  // Replace non-alphanumeric with hyphens
     .replace(/^-|-$/g, '')         // Trim leading/trailing hyphens
-    .substring(0, 30);             // Max 30 chars for slug
+    .substring(0, 50);             // Max 50 chars for slug (canonical; see scripts/milestone-helpers.sh)
 
   return `feature/${issue.number}-${slug}`;
 }
