@@ -1,5 +1,5 @@
 ---
-name: a11y-audit
+name: accessibility-audit
 description: Conduct an accessibility audit for screens, components, or the entire application
 argument-hint: '<screen, component, or app path>'
 model: sonnet
@@ -17,7 +17,7 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 ## Usage
 
 ```
-/a11y-audit [target] [options]
+/accessibility-audit [target] [options]
 ```
 
 ## Options
@@ -29,9 +29,9 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 ## Examples
 
 ```
-/a11y-audit LoginScreen
-/a11y-audit "Navigation component" --level AAA
-/a11y-audit --scope comprehensive --platform apple
+/accessibility-audit LoginScreen
+/accessibility-audit "Navigation component" --level AAA
+/accessibility-audit --scope comprehensive --platform apple
 ```
 
 ## What This Command Does
