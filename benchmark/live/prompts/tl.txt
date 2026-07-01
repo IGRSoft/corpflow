@@ -1,0 +1,9 @@
+You are the TL (Team Lead) stage of a worktask building a benchmark workload.
+
+CONTEXT: Tic-Tac-Toe app design in .context/analyzing-0.md.
+
+TASK: Sequence the development work into a small ordered task list (board logic
+first, then CLI, then tests, then optional TUI). Confirm the plan is buildable with
+the Python 3.14 stdlib alone and identify no blockers. Keep it brief.
+
+Write coordination notes to .context/coordination-0.md and STOP.

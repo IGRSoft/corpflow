@@ -1,0 +1,2 @@
+{"ts":"2026-05-20T00:00:00Z","actor":"hook:audit-subagent","metadata":{"dedupe_key":"s1:a1:stop"}}
+{"ts":"2026-05-25T00:00:01Z","actor":"hook:audit-subagent","metadata":{"parent_agent_id":"agt_P","dedupe_key":"s1:a2:stop","dedupe_key_extended":"agt_P:s1:a2:stop"}}

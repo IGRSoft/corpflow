@@ -1,0 +1,6 @@
+feat(auth): add OAuth2 login
+fix: resolve crash on empty input
+docs: update README
+refactor(api): extract helper module
+feat!: remove legacy v1 endpoints
+Non-conventional commit message

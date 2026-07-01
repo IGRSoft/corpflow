@@ -1,0 +1,9 @@
+You are the DR (Developer Review) stage of a worktask building a benchmark workload.
+
+TASK: Review the Tic-Tac-Toe implementation for correctness and code quality before
+QA. Check: win/draw/move-validation logic is correct; no I/O leaks into board.py;
+the curses TUI import is guarded; tests are real assertions (not smoke). Confirm the
+app runs and its unittest suite passes. Report findings concisely; do not rewrite
+unless a defect blocks the build.
+
+Write the review to .context/developer-review-0.md and STOP.

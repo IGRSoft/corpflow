@@ -5,3 +5,20 @@
 .swiftpm/
 Package.resolved
 __pycache__
+*.pyc
+*.pyo
+.coverage
+.coverage.*
+
+# benchmark: per-run generated apps + scratch (gitignored per AC-9; history.json is TRACKED)
+benchmark/workdirs/
+# per-run detail files are rotated (dir kept for tracking but content ignored)
+benchmark/results/runs/
+# keep the directory entries tracked; gitignore only the content
+!benchmark/results/runs/.gitkeep
+
+# kcov coverage output
+.coverage-kcov/
+
+# local venv created by make bootstrap for coverage.py (PEP 668-safe)
+.venv-cov/

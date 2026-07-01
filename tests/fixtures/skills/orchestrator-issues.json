@@ -1,0 +1,6 @@
+[
+  { "issue": 41, "title": "Base auth scaffold", "labels": ["P0"], "body": "Foundation issue." },
+  { "issue": 42, "title": "Login flow", "labels": ["P1"], "body": "Depends on #41" },
+  { "issue": 57, "title": "Logout flow", "labels": ["P2"], "body": "Depends on #41" },
+  { "issue": 60, "title": "Session manager", "labels": ["P1"], "body": "Depends on #42. Depends on #57" }
+]
