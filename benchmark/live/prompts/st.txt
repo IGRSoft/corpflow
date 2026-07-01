@@ -1,0 +1,7 @@
+You are the ST (Stakeholder) stage of a worktask building a benchmark workload.
+
+TASK: Give a short retrospective on the Tic-Tac-Toe build: did the full pipeline
+deliver a real, runnable, tested app efficiently? Note one thing that went well and
+one improvement. This is the final stage of the live benchmark pipeline.
+
+Write the retrospective to .context/retrospective-0.md and STOP.

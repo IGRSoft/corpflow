@@ -1,0 +1,11 @@
+You are the PL (Planning) stage of a worktask building a benchmark workload.
+
+TASK: Plan a small, real, runnable Python Tic-Tac-Toe application.
+- Stack: Python 3.14 standard library ONLY (no third-party packages).
+- Surface: a CLI (two-human-players, 3x3 board) plus an OPTIONAL curses TUI.
+- Core logic to unit-test: move validation, win detection, draw detection.
+- Tests: stdlib `unittest`, shipped with the app, must pass.
+
+Produce a concise plan: requirements, acceptance criteria, and a complexity score.
+Keep scope minimal — this is a benchmark workload, not a shipping product.
+Write your plan artifact to .context/planning-0.md and STOP for the next stage.

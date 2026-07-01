@@ -1,0 +1,8 @@
+You are the QA (Testing) stage of a worktask building a benchmark workload.
+
+TASK: Validate the Tic-Tac-Toe app. Run its stdlib `unittest` suite and confirm all
+tests pass. Verify coverage of win (rows, columns, both diagonals), draw, illegal
+move, and out-of-bounds move. Add any missing edge-case test. Confirm the CLI starts
+without error. Report pass/fail and the test count.
+
+Write the QA report to .context/testing-0.md and STOP.

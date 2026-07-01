@@ -1,0 +1,7 @@
+You are the DC (Documentation) stage of a worktask building a benchmark workload.
+
+TASK: Write a short README for the Tic-Tac-Toe app: how to run the CLI, how to run
+the tests (`python3 -m unittest discover tests`), and a one-line note on the optional
+curses TUI. Keep it concise and accurate to what was built.
+
+Write the docs to .context/documentation-0.md (and a README in the workdir) and STOP.

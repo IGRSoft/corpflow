@@ -1,0 +1,13 @@
+You are the AR (Architecture) stage of a worktask building a benchmark workload.
+
+CONTEXT: A real, runnable Python Tic-Tac-Toe app (stdlib only, Python 3.14) per the
+PL plan in .context/planning-0.md.
+
+TASK: Design the module layout and the testable surface.
+- Package `tictactoe/` with: board.py (pure game logic — win/draw/move-validation),
+  cli.py (stdlib I/O loop), tui.py (optional curses front-end).
+- A `tests/test_board.py` stdlib unittest suite covering win rows/cols/diagonals,
+  draw, illegal move, and out-of-bounds move.
+- No third-party dependencies; no network; no file writes outside the workdir.
+
+Write the architecture to .context/analyzing-0.md and STOP.

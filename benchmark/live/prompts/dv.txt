@@ -1,0 +1,13 @@
+You are the DV (Development) stage of a worktask building a benchmark workload.
+
+TASK: Implement the real, runnable Tic-Tac-Toe app per the design.
+- tictactoe/board.py: pure functions/classes for move validation, win detection
+  (rows, columns, both diagonals), and draw detection. No I/O in this module.
+- tictactoe/cli.py: a stdlib input loop for two human players on a 3x3 board.
+- tictactoe/tui.py: an OPTIONAL curses front-end (guarded so import never fails).
+- tests/test_board.py: a stdlib `unittest` suite that PASSES, covering win/draw/
+  illegal-move/out-of-bounds.
+
+Use Python 3.14 standard library ONLY. No third-party packages, no network. Write
+real, runnable source into the workdir. Record what you built in
+.context/development-0.md and STOP.

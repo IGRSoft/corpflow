@@ -1,0 +1,4 @@
+[
+  { "issue": 1, "title": "A", "labels": ["P0"], "body": "Depends on #2" },
+  { "issue": 2, "title": "B", "labels": ["P0"], "body": "Depends on #1" }
+]

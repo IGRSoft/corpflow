@@ -1,0 +1,9 @@
+You are the SR (Security Review) stage of a worktask building a benchmark workload.
+
+TASK: Security-review the Tic-Tac-Toe app. It is a local stdlib program, so the
+surface is small: confirm there is no use of eval/exec on input, no shelling out to
+the OS with unsanitized input, no network calls, no file writes outside the workdir,
+and no secrets/credentials embedded anywhere. Confirm input parsing (board
+coordinates) is bounds-checked.
+
+Write the security review to .context/security-review-0.md and STOP.
