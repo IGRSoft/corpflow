@@ -133,21 +133,24 @@ benchmark/
     rotation.py                     # Per-mode latest-3 atomic rotation (tmp→fsync→rename)
     deterministic_run.py            # Deterministic orchestration (no live path)
   live/
-    dispatch.py                     # Live pipeline adapter: claude agents run PL→AR→…→ST
-    credentials.py                  # API key probe (fail-fast)
+    preamble.py                     # assemble_stage_prompt() — builds [1][2][3][4][5] cache-prefix layout
+    dispatch.py                     # Live pipeline adapter: headless claude -p PL→AR→…→ST with per-stage JSON capture
+    credentials.py                  # Credential probe (API key or machine claude login, fail-fast)
     budget.py                       # Pre-flight + running-tally enforcement
     prompts/
-      pl.txt, ar.txt, …, st.txt    # Per-stage prompts (10 total, deterministic)
+      pl.txt, ar.txt, …, st.txt    # Per-stage prompts (10 total, section [5] only; [1–4] prepended by preamble)
       README.md
   tests/
     with-plugin/
       test_metrics_schema.py        # AC-6: metric schema validity (26 tests)
       test_generators.py            # AC-5: real app generation + tests pass (13 tests)
       test_rotation_per_mode.py     # AC-7: latest-3 per-mode rotation (21 tests)
+      test_stage_table_ssot.py      # AC-6 SSOT: STAGE_TABLE model tier vs stage-codes.md (3 tests)
     live/
-      test_live_gate.py             # AC-8: default deterministic never touches live (tripwire)
-      test_budget_enforcement.py    # Budget pre-flight decline + running-tally abort
-      test_credential_probe.py      # Missing/empty key fast-exit with frozen message
+      test_live_gate.py             # AC-8: default deterministic never touches live (tripwire), argv shape
+      test_budget_enforcement.py    # Budget pre-flight decline + running-tally abort scenarios
+      test_credential_probe.py      # Credential probe (CLI login + env-key short-circuit, no identity leak)
+      test_prompt_assembly.py       # AC-1: cache-prefix marker order, byte-identity, dispatcher wiring
 ```
 
 ## Metric Schema
@@ -246,14 +249,30 @@ Benchmark (deterministic)
 
 ### Live
 
+**Credentials — machine `claude` login is the PREFERRED source; `ANTHROPIC_API_KEY`
+is an optional override.** The credential gate (`benchmark/live/credentials.py`)
+accepts EITHER: (1) an active `claude` login on the machine (checked via
+`claude auth status --json`, cheap and non-interactive — no key export needed),
+or (2) `ANTHROPIC_API_KEY` in the environment, checked FIRST when present. **Pitfall:**
+an `ANTHROPIC_API_KEY` that is actually an OAuth-token-shaped value (not a real
+`sk-ant-api…` key) will 401 when used as an API key AND overrides a working
+machine login if exported — do NOT `export`/source such a value. If you rely on
+the machine login, leave `ANTHROPIC_API_KEY` unset in the invoking shell.
+
 ```bash
-export ANTHROPIC_API_KEY="sk-…"
+# Preferred: rely on the machine's existing `claude login` — no export needed.
+claude auth status   # confirm you're logged in first
 
 # Default budget (5.00 USD)
 make benchmark-live
 
 # Custom budget
 ./benchmark/run-benchmark.sh --live --budget 2.50
+
+# Override: force API-key auth instead of the machine login (only if you have
+# a real sk-ant-api… key, not an OAuth token — see pitfall above).
+export ANTHROPIC_API_KEY="sk-ant-api…"
+make benchmark-live
 
 # Inspect live record
 cat benchmark/results/runs/live/$(ls -t benchmark/results/runs/live/ | head -1)
@@ -262,12 +281,12 @@ cat benchmark/results/runs/live/$(ls -t benchmark/results/runs/live/ | head -1)
 **Exit codes:**
 - 0 — success
 - 2 — pre-flight budget decline (record not written)
-- 3 — missing/empty credential (record not written)
+- 3 — no credential found (neither machine login nor `ANTHROPIC_API_KEY`; record not written)
 - 4 — running-tally budget breach (partial record written)
 - non-zero — dispatch/app gen/test failure
 
 **Environment variables** (live only):
-- `ANTHROPIC_API_KEY` — required (fail-fast if missing)
+- `ANTHROPIC_API_KEY` — optional override; when unset, the machine `claude` login is used instead (fail-fast only if BOTH are absent)
 - `CLAUDE_BUDGET` — optional, overrides `--budget` arg (for CI integration)
 
 ## Coverage Story
@@ -287,18 +306,23 @@ The benchmark measures its own quality via test harness coverage:
 
 **Reference:** `tests/COVERAGE.md` for the full test suite's 94%/92% Python coverage and bash assertion-density proxy.
 
-## Known Issues
-
-### F5 (P2) — Live STAGE_TABLE Model Drift
-
-`benchmark/live/dispatch.py` line ~71 pins `DR` stage to `claude-sonnet-4-6` (sonnet tier), but the canonical spec (`CLAUDE.md`, `stage-codes.md`, `headless-dispatch.md`) specifies DR=`claude-opus-4-8` (opus tier, xhigh effort). This is a **benchmark fidelity issue only** (no security/budget impact) — live WITH-path will measure DR via sonnet instead of opus, making cost/stage-latency deltas artificially lower than production. **Reconciliation needed for live fidelity**, but non-blocking for deterministic mode.
-
 ## References
 
+**Worktask documents:**
 - `planning-0.md#scope` — benchmark requirements (REQ-4 through REQ-7)
 - `analyzing-0.md` — dual-path + live dispatch architecture
-- `coordination-0.md` — 5-track DV partition (DV0d owns benchmark harness)
-- `development-0.md#DV0d-Handoff` — delivered files + verification results
+- `coordination-0.md` — 5-track DV partition
+- `development-0.md#baseline-measurement` — first live baseline with assembled cache-prefix
+- `development-0.md#post-measurement` — live A/B result + honest measurement conclusion
 - `testing-0.md` — AC-5/6/7/8 test results
+
+**Findings & evidence:**
+- `benchmark/results/token-findings-1.md` — foundational findings (cache_read dominance, ~74%)
+- `benchmark/results/token-findings-2.md` — live A/B measurement (baseline vs post-trim, n=1, mixed result)
+- `benchmark/results/runs/live/` — raw per-stage live records (JSON with token attribution)
+
+**Implementation references:**
 - `benchmark/lib/metrics.py` — BenchmarkRecord schema (frozen dataclass)
 - `benchmark/lib/rotation.py` — per-mode latest-3 atomic rotation implementation
+- `benchmark/live/preamble.py` — cache-prefix assembly (sections [1–4])
+- `benchmark/live/dispatch.py` — headless `claude -p` dispatcher, per-stage JSON capture

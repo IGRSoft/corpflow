@@ -59,7 +59,7 @@ class TripwireDispatcher:
     def __init__(self) -> None:
         self.called = False
 
-    def __call__(self, argv, *, prompt_path):  # noqa: ANN001
+    def __call__(self, argv, *, prompt_text):  # noqa: ANN001
         self.called = True
         raise AssertionError(
             "TRIPWIRE: real dispatcher was invoked — no LLM call may happen in tests"
@@ -77,8 +77,10 @@ class RecordingFakeDispatcher:
         self.outputs = list(outputs or [])
         self.calls = []
 
-    def __call__(self, argv, *, prompt_path):  # noqa: ANN001
-        self.calls.append((list(argv), prompt_path))
+    def __call__(self, argv, *, prompt_text):  # noqa: ANN001
+        # Record the fully-assembled prompt so AC-1 tests can inspect the
+        # [1][2][3][4][5] markers + cross-stage byte-identity of [1]+[2].
+        self.calls.append((list(argv), prompt_text))
         if self.outputs:
             return self.outputs.pop(0)
         return "{}"

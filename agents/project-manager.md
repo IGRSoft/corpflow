@@ -5,7 +5,7 @@ model: sonnet
 color: cyan
 effort: medium
 maxTurns: 40
-version: 0.1.0
+version: 0.2.0
 tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 hooks:
   Stop:
@@ -183,28 +183,9 @@ Before marking FN stage complete, verify:
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-fn`. Prev→this label: `RE→FN` (or `DC→FN` when RE is absent).
 
-### Frontmatter for this stage (FN)
-
-Paste at the top of `.context/complete-summary-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
-
-```yaml
----
-handoff:
-  stage: FN
-  verdict: ok                  # ok / blocked
-  summary: "All artifacts aggregated. complete-summary-N.md ready for ST approval."
-  files_touched:
-    - .context/complete-summary-N.md
-  next_stage_focus: "ST approves merge and confirms MEMORY.md version bump"
-  refs:
-    summary: .context/complete-summary-N.md
-    ledger: .context/state.json
----
-```
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-fn`.
 
 ### State.json Atomic Merge — REQUIRED before return
-
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
 
 ```bash
 _sf=".context/state.json"
@@ -216,4 +197,4 @@ jq --arg code "FN" --arg artifact "complete-summary-N.md" --arg verdict "<pass|f
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.

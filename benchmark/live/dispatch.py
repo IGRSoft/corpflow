@@ -3,9 +3,9 @@
 
 Reached ONLY via `benchmark/run-benchmark.sh --live` (AC-8). Runs the full worktask
 pipeline PL -> AR -> TL -> DV -> DR -> SR -> QA -> DC -> FN -> ST on the generated
-TTT app, one stage per `claude agents run`, summing REAL tokens/cost, budget-gated,
-credential-gated. Writes a full `BenchmarkRecord` (frozen schema, mode="live") to
-the `--record <path>` given by the frozen seam.
+TTT app, one stage per headless `claude -p` dispatch, summing REAL tokens/cost,
+budget-gated, credential-gated. Writes a full `BenchmarkRecord` (frozen schema,
+mode="live") to the `--record <path>` given by the frozen seam.
 
 FROZEN seam argv (DV0d):
     python3 benchmark/live/dispatch.py --workdir <run_id> --budget <usd> --record <path>
@@ -22,10 +22,14 @@ Budget enforcement:
   (b) running-tally abort before each stage — spent + next_estimate > budget ->
       abort, write a partial record (pass_fail="fail", live_partial=True).
 
-Credential probe: ANTHROPIC_API_KEY checked before stage 1; absent -> fast exit with
-the frozen message; the key value is NEVER printed/logged/echoed.
+Credential probe: checked before stage 1 via EITHER source — a non-empty
+ANTHROPIC_API_KEY (checked first, cheap short-circuit) OR an active `claude`
+CLI login (`claude auth status --json`, machine-login PREFERRED source; see
+`credentials.py` module docstring for the OAuth-token/env-override pitfall).
+Absent both -> fast exit with the frozen message; neither the key value nor
+any CLI-login identity detail is EVER printed/logged/echoed.
 
-DEPENDENCY INJECTION: the real `claude agents run` call is wrapped behind a
+DEPENDENCY INJECTION: the real headless `claude -p` call is wrapped behind a
 `dispatcher` callable. Production uses `subprocess_dispatcher`. AC-8 tests inject a
 fake dispatcher (and a tripwire) so NO real LLM call / spend ever happens in tests.
 """
@@ -33,6 +37,7 @@ fake dispatcher (and a tripwire) so NO real LLM call / spend ever happens in tes
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import subprocess
@@ -50,6 +55,7 @@ if os.path.join(_BENCH_DIR, "lib") not in sys.path:
 
 import metrics  # noqa: E402  (frozen DV0d schema)
 
+import preamble  # noqa: E402  (REQ-1 production-faithful prompt assembly)
 from credentials import require_credential, CredentialError  # noqa: E402
 from budget import (  # noqa: E402
     RunningTally,
@@ -102,20 +108,31 @@ class StageUsage:
 def build_stage_argv(
     stage: str, *, workdir: str, prompt_path: str
 ) -> list[str]:
-    """Construct the exact `claude agents run` argv for one stage.
+    """Construct the exact headless `claude -p` argv for one stage.
 
-    Shape (frozen, mandate):
-      claude agents run --cwd <wd> --model <m> --effort <e>
-                        --permission-mode default -- <agent>
-    The stage prompt is fed on stdin (`< prompts/<stage>.txt`) by the dispatcher.
+    Shape (RECONCILED q4-residual, was DV0e mandate — see deviations in
+    development-0.md): `claude agents run` has NO `--output-format` option on
+    this CLI build (verified directly: `claude agents run --help` lists only
+    --add-dir/--agent/--all/--cwd/--effort/--json/--mcp-config/--model/
+    --permission-mode/--plugin-dir/--settings/--setting-sources/
+    --strict-mcp-config — `--json` there means "list active sessions", not a
+    per-run output format). Layer-1 JSON `usage` capture is therefore
+    UNAVAILABLE on `agents run`.
+
+    Switched to the headless PRINT form, which DOES support the full flag
+    surface needed for fidelity + Layer-1 capture:
+      claude -p --model <m> --effort <e> --permission-mode default
+             --output-format json --agent <agent>
+    `--cwd` has no equivalent flag on `-p`; the dispatcher sets the subprocess
+    working directory via `subprocess.run(cwd=workdir)` instead (see
+    subprocess_dispatcher). `--agent <plugin:name>` resolves the same
+    plugin-prefixed agent id `claude agents run -- <agent>` used positionally.
+    The stage prompt is fed on stdin (assembled [1][2][3][4][5], REQ-1).
     """
     agent, model, effort = STAGE_TABLE[stage]
     return [
         "claude",
-        "agents",
-        "run",
-        "--cwd",
-        workdir,
+        "-p",
         "--model",
         model,
         "--effort",
@@ -124,27 +141,34 @@ def build_stage_argv(
         "default",
         "--output-format",
         "json",
-        "--",
+        "--agent",
         agent,
     ]
 
 
-def subprocess_dispatcher(argv: list[str], *, prompt_path: str) -> str:
-    """Production dispatcher: shell out to `claude agents run`, prompt on stdin.
+def subprocess_dispatcher(argv: list[str], *, prompt_text: str, workdir: str | None = None) -> str:
+    """Production dispatcher: shell out to headless `claude -p`, prompt on stdin.
 
-    Returns the process stdout (expected JSON when --output-format json is honoured;
-    may be anything on older CLIs — Layer 1 parsing is defensive). This is the ONLY
-    place a real LLM call happens, and it is NEVER invoked by the AC-8 tests (they
-    inject a fake/tripwire dispatcher).
+    `prompt_text` is the FULLY ASSEMBLED [1][2][3][4][5] stage prompt (REQ-1,
+    built by `preamble.assemble_stage_prompt` at the run_pipeline read site) —
+    NOT a bare `prompts/<stage>.txt` body. Feeding the assembled string here (a
+    pure change at the caller) is what makes the live A/B exercise the
+    production cache-prefix layout. `workdir`, when given, is passed as the
+    subprocess `cwd` — `claude -p` has no `--cwd` flag (q4 remediation).
+
+    Returns the process stdout (`--output-format json` is a real, documented
+    flag on `-p`, so Layer 1 parsing is no longer defensive-only for this
+    path — Layer 2 audit.jsonl remains the fallback for any CLI variance).
+    This is the ONLY place a real LLM call happens, and it is NEVER invoked by
+    the AC-8 tests (they inject a fake/tripwire dispatcher).
     """
-    with open(prompt_path, "r", encoding="utf-8") as f:
-        prompt = f.read()
     completed = subprocess.run(
-        argv, input=prompt, capture_output=True, text=True, check=False
+        argv, input=prompt_text, capture_output=True, text=True, check=False,
+        cwd=workdir,
     )
     if completed.returncode != 0:
         raise RuntimeError(
-            f"claude agents run failed (rc={completed.returncode}) for argv "
+            f"claude -p failed (rc={completed.returncode}) for argv "
             f"{argv[:6]}…"  # never echo the full prompt or any credential
         )
     return completed.stdout
@@ -271,6 +295,29 @@ def _sum_opt(values: list[int | None]) -> int | None:
     return sum(real) if real else None
 
 
+def _read_task_text(task_path: str) -> str:
+    """Read a prompts/<stage>.txt body (preamble section [5], the dynamic task
+    text). Isolated helper so the assembled-prompt dispatch replaces the old
+    bare-flat-prompt path (AC-1 completeness gate)."""
+    with open(task_path, "r", encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _read_state_json_text(workdir_path: str) -> str:
+    """Read the workdir's .context/state.json verbatim for preamble section [3].
+
+    Matches production Step 0 (SKILL.md:261-270): the state blob is inlined into
+    the prompt as-is. Missing/unreadable -> empty string (F1 legacy fallback: the
+    within-stage prefix is still [1]+[2]+[4], just with an empty [3] body).
+    """
+    state_path = os.path.join(workdir_path, ".context", "state.json")
+    try:
+        with open(state_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
 def run_pipeline(
     *,
     workdir_path: str,
@@ -280,14 +327,19 @@ def run_pipeline(
     dispatcher,
     estimate_runner=None,
     stages: tuple[str, ...] = PIPELINE_STAGES,
+    worktask_id: str = "benchmark-ttt",
+    plan_file: str = ".context/planning-0.md",
 ) -> tuple[list[tuple[str, StageUsage]], bool, int]:
     """Dispatch stages under the running-tally gate.
 
     Returns (per_stage_usages, live_partial, stages_dispatched), where per_stage_usages
     is a list of (stage_name, StageUsage) so build_live_record can emit per-stage
     attribution (record.stages) with the correct stage labels.
-    `dispatcher(argv, prompt_path=...)` -> stdout string (injected). `estimate_runner`
-    is forwarded to the budget estimator (injected in tests).
+    `dispatcher(argv, prompt_text=...)` -> stdout string (injected). The stage prompt
+    is ASSEMBLED (REQ-1) via `preamble.assemble_stage_prompt` from the [1][2][3][4]
+    preamble + the prompts/<stage>.txt body ([5]) so the live A/B measures the real
+    cache-prefix layout, not a bare flat prompt. `estimate_runner` is forwarded to the
+    budget estimator (injected in tests).
 
     Running-tally gate (b): before each stage, if spent + next_estimate > budget,
     ABORT (do not dispatch the breaching stage) and return what completed so far,
@@ -297,6 +349,11 @@ def run_pipeline(
     usages: list[tuple[str, StageUsage]] = []
     live_partial = False
     dispatched = 0
+
+    # Section [3] is read once per pipeline from the workdir; production re-reads
+    # before each delegation, but within one benchmark run the workdir state blob
+    # is the app-under-build's state.json (stable across the dispatch loop here).
+    state_json_text = _read_state_json_text(workdir_path)
 
     for stage in stages:
         next_estimate = estimate_stage_cost(
@@ -308,10 +365,18 @@ def run_pipeline(
             break
 
         prompt_path = os.path.join(prompts_dir, f"{stage.lower()}.txt")
+        task_text = _read_task_text(prompt_path)  # section [5] — dynamic body only
+        prompt_text = preamble.assemble_stage_prompt(
+            stage,
+            worktask_id=worktask_id,
+            plan_file=plan_file,
+            state_json_text=state_json_text,
+            task_text=task_text,
+        )
         argv = build_stage_argv(
             stage, workdir=workdir_path, prompt_path=prompt_path
         )
-        stdout = dispatcher(argv, prompt_path=prompt_path)
+        stdout = dispatcher(argv, prompt_text=prompt_text)
         usage = capture_stage_usage(stdout, audit_path=audit_path, stage=stage)
         usages.append((stage, usage))
         dispatched += 1
@@ -423,16 +488,20 @@ def dispatch(
     estimate_runner=None,
     prompts_dir: str | None = None,
     stages: tuple[str, ...] = PIPELINE_STAGES,
+    cli_login_runner=None,
 ) -> int:
     """Run the full live pipeline end-to-end and write the BenchmarkRecord.
 
     Returns a process exit code (0 = ok, non-zero = declined/failed). Order:
-      1. credential probe (fast-exit, never logs key)
+      1. credential probe (fast-exit, never logs key or CLI-login identity)
       2. pre-flight budget gate (dispatch nothing on breach)
       3. per-stage running-tally dispatch (partial record on abort/degradation)
       4. write the record JSON to record_path
 
     All external effects (LLM call) go through `dispatcher`, which tests replace.
+    `cli_login_runner` (Batch 1c) is forwarded to the credential probe's second
+    source (`claude auth status --json`); tests inject a fake so the suite never
+    shells out even for that read-only status query.
     """
     workdir_path = os.path.join(_BENCH_DIR, "workdirs", workdir)
     audit_path = os.path.join(workdir_path, ".context", "logs", "audit.jsonl")
@@ -443,9 +512,16 @@ def dispatch(
     timestamp_utc = _now_iso()
     git_sha = _git_sha()
 
-    # 1. Credential probe — before ANY dispatch. Never reveals the key.
+    # When the caller did not inject a fake, bind the real subprocess dispatcher
+    # to this run's workdir (claude -p has no --cwd flag; cwd is a subprocess
+    # kwarg — q4 remediation). Injected fakes are left untouched (2-arg contract).
+    if dispatcher is subprocess_dispatcher:
+        dispatcher = functools.partial(subprocess_dispatcher, workdir=workdir_path)
+
+    # 1. Credential probe — before ANY dispatch. Never reveals the key or any
+    #    CLI-login identity field (email/org) — only presence is ever checked.
     try:
-        require_credential(env)
+        require_credential(env, cli_login_runner=cli_login_runner)
     except CredentialError as exc:
         print(str(exc), file=sys.stderr)
         return 3

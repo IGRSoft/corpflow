@@ -4,6 +4,7 @@ description: Master software architect specializing in clean architecture, micro
 model: opus
 color: green
 effort: xhigh
+version: 0.1.0
 maxTurns: 60
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-architector)
 ---
@@ -183,30 +184,11 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 
 **Skip-exploration short-circuit**: If `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` (list of `<file>#<anchor>` refs) as the authoritative pre-explored set. Do NOT re-Glob/Grep the source tree for files already covered. Read only the listed anchors and start architecture work from those facts. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
 
-### Frontmatter for this stage (AR)
-
-Paste at the top of `.context/analyzing-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
-
-```yaml
----
-handoff:
-  stage: AR
-  verdict: ok                  # ok / blocked / escalate
-  summary: "<one-line summary ≤200 chars>"
-  key_decisions:
-    - { id: ad1, summary: "<decision>", anchor: "analyzing-N.md#decisions" }
-  next_stage_focus: "<imperative: what TL must fan-out — enumerate the work streams and the requirement(s) each covers, so TL can skip a redundant planning read>"
-  open_questions:
-    - "q3: <question text> (TL to decide)"
-  refs:
-    plan: .context/planning-N.md#requirements
-    decisions: analyzing-N.md#decisions
----
-```
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-ar`.
+`next_stage_focus` should enumerate the work streams and the requirement(s) each
+covers, so TL can skip a redundant planning read.
 
 ### State.json Atomic Merge — REQUIRED before return
-
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
 
 ```bash
 _sf=".context/state.json"
@@ -218,4 +200,4 @@ jq --arg code "AR" --arg artifact "analyzing-N.md" --arg verdict "<pass|fail>" \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.

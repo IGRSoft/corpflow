@@ -4,7 +4,7 @@ description: Engineering team leadership with team coordination, performance man
 model: sonnet
 color: cyan
 effort: medium
-version: 0.1.0
+version: 0.2.0
 maxTurns: 30
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:technical-lead)
 ---
@@ -251,27 +251,9 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 
 **Skip-exploration short-circuit**: If `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` as authoritative and rely on the AR-stage `analyzing-N.md` anchors for fan-out planning. Do NOT re-Glob/Grep files PL/AR already explored. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
 
-### Frontmatter for this stage (TL)
-
-Paste at the top of `.context/coordination-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
-
-```yaml
----
-handoff:
-  stage: TL
-  verdict: ok                  # ok / blocked / escalate
-  summary: "<one-line coordination summary ≤200 chars>"
-  next_stage_focus: "<imperative: DV batch order + parallelization>"
-  refs:
-    plan: .context/planning-N.md#requirements
-    arch: .context/analyzing-N.md#decisions
-    fan_out: coordination-N.md#fan-out
----
-```
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-tl`.
 
 ### State.json Atomic Merge — REQUIRED before return
-
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
 
 ```bash
 _sf=".context/state.json"
@@ -283,4 +265,4 @@ jq --arg code "TL" --arg artifact "coordination-N.md" --arg verdict "<pass|fail>
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.

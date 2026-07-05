@@ -4,6 +4,7 @@ description: Incident response specialist for production triage, hotfix coordina
 model: opus
 color: red
 effort: high
+version: 0.1.0
 maxTurns: 50
 tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(debugging-toolkit:debugger)
 ---
@@ -245,28 +246,9 @@ Conduct post-mortem when:
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-ir`. Prev→this label: `USER→IR`.
 
-### Frontmatter for this stage (IR)
-
-Paste at the top of `.context/incident-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
-
-```yaml
----
-handoff:
-  stage: IR
-  verdict: ok                  # ok / escalate
-  summary: "Root cause: <X>. Fix plan: <Y>. Blast radius: <Z>"
-  key_decisions:
-    - { id: ir1, summary: "Root cause identified", anchor: "incident-N.md#root-cause" }
-  next_stage_focus: "DV implements fix; QA runs regression"
-  refs:
-    root_cause: incident-N.md#root-cause
-    fix_plan: incident-N.md#fix-plan
----
-```
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-ir`.
 
 ### State.json Atomic Merge — REQUIRED before return
-
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
 
 ```bash
 _sf=".context/state.json"
@@ -278,4 +260,4 @@ jq --arg code "IR" --arg artifact "incident-N.md" --arg verdict "<pass|fail>" \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.

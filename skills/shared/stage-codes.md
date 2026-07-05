@@ -15,7 +15,7 @@ Single source of truth for worktask stage codes.
 | AR | Architecture | software-architector | opus |
 | TL | Team Lead | team-lead | sonnet |
 | DV | Development | developer | opus |
-| DR | Developer Review | technical-lead | sonnet |
+| DR | Developer Review | technical-lead | opus |
 | SR | Security Review | security-reviewer | opus |
 | QA | QA Testing | qa-engineer | sonnet |
 | DC | Documentation | technical-writer | haiku |
@@ -32,8 +32,8 @@ Orchestrator MUST pass `model` parameter when spawning stage agents:
 
 | Model | Stages |
 |-------|--------|
-| opus | PL, AR, DV, SR, FN |
-| sonnet | TL, DR, QA, ST, IR |
+| opus | PL, AR, DV, SR, FN, DR |
+| sonnet | TL, QA, ST, IR |
 | haiku | DC, RE |
 
 Support-agent model assignments live in the Support Agents table below.

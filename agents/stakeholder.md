@@ -4,6 +4,7 @@ description: Business stakeholder providing strategic direction, budget approval
 model: sonnet
 color: white
 effort: medium
+version: 0.1.0
 maxTurns: 20
 tools: Read, Glob, Grep, Write, TaskCreate, TaskUpdate, TaskGet, TaskList
 hooks:
@@ -143,26 +144,9 @@ Before marking ST stage complete, verify:
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-st`. Prev→this label: `FN→ST`.
 
-### Frontmatter for this stage (ST)
-
-Paste at the top of `.context/retrospective-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
-
-```yaml
----
-handoff:
-  stage: ST
-  verdict: approve             # approve / reject
-  summary: "Approved. <N follow-ups filed or 'No follow-ups'>."
-  key_decisions:
-    - { id: st1, summary: "Approve merge", anchor: "complete-summary-N.md#decision" }
-  refs:
-    summary: .context/complete-summary-N.md
----
-```
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-st`.
 
 ### State.json Atomic Merge — REQUIRED before return
-
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
 
 ```bash
 _sf=".context/state.json"
@@ -174,4 +158,4 @@ jq --arg code "ST" --arg artifact "retrospective-N.md" --arg verdict "<pass|fail
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.

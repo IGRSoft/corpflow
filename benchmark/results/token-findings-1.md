@@ -81,3 +81,10 @@ n=1, directional. A single 3-stage WITH capture; no statistical rigor beyond one
 The direction (cache_read dominates, climbs per stage, paid input is ~1/4 of the raw
 count) is unambiguous in the data, but the exact percentages should be re-measured before
 being used for cost projection.
+
+---
+
+**Follow-up:** See token-findings-2.md for the live A/B baseline-vs-post measurement
+(run 2, full 10-stage pipeline with cache-prefix fidelity fixes and token-trim levers
+applied). Mixed result reported honestly, with measurement limits and proposed N-run
+variance study as the credible next step.

@@ -125,9 +125,12 @@ class TestLiveAdapterOnlyDispatchesViaSeam(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertTrue(os.path.isfile(record))
             self.assertEqual(len(fake.calls), 1)
-            # The argv targets `claude agents run` but was never executed (fake).
+            # The argv targets headless `claude -p` but was never executed (fake).
+            # (q4 remediation: `claude agents run` has no --output-format flag on
+            # this CLI build; --output-format json is real only on `-p`.)
             argv = fake.calls[0][0]
-            self.assertEqual(argv[:3], ["claude", "agents", "run"])
+            self.assertEqual(argv[:2], ["claude", "-p"])
+            self.assertIn("--output-format", argv)
             self.assertIn("--permission-mode", argv)
             self.assertIn("default", argv)
 

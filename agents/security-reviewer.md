@@ -4,6 +4,7 @@ description: Security review specialist for OWASP compliance, vulnerability scan
 model: opus
 color: red
 effort: xhigh
+version: 0.1.0
 maxTurns: 50
 tools: Read, Glob, Grep, Bash, Write, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:security-auditor)
 ---
@@ -204,27 +205,9 @@ When reviewing CC-managed worktasks, check for: bash bypass patterns, compound-c
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-sr`. Prev→this label: `DR→SR`.
 
-### Frontmatter for this stage (SR)
-
-Paste at the top of `.context/security-review-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
-
-```yaml
----
-handoff:
-  stage: SR
-  verdict: pass                # pass / fail
-  summary: "<N files reviewed. M security findings>"
-  key_decisions:
-    - { id: sr1, summary: "<security finding>", anchor: "security-review-N.md#findings" }
-  refs:
-    dev: development-N.md#files-changed
-    findings: security-review-N.md#findings
----
-```
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-sr`.
 
 ### State.json Atomic Merge — REQUIRED before return
-
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
 
 ```bash
 _sf=".context/state.json"
@@ -236,4 +219,4 @@ jq --arg code "SR" --arg artifact "security-review-N.md" --arg verdict "<pass|fa
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.

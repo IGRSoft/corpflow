@@ -40,6 +40,19 @@ EOF
 {"worktask_id":"wt2","stage":"DV","prompt":"<<<contract-reminder>>>\noriginal reminder\n<<<contract-reminder>>>\n<<<worktask-header>>>\nheader\n<<<worktask-header>>>\n<<<stage-contract>>>\nDV\n<<<stage-contract>>>"}
 {"worktask_id":"wt2","stage":"DR","prompt":"<<<contract-reminder>>>\nDRIFTED reminder\n<<<contract-reminder>>>\n<<<worktask-header>>>\nheader\n<<<worktask-header>>>\n<<<stage-contract>>>\nDR\n<<<stage-contract>>>"}
 EOF
+  # L1 forbidden-token fixtures (REQ-3/AC-4): a previously-uncaught class — an
+  # ISO-8601 timestamp baked into section [2] worktask-header. Byte-identical
+  # across every stage of THIS worktask (so the drift check alone misses it),
+  # but a live/production run would regenerate a NEW timestamp on the NEXT
+  # worktask_id, breaking cross-worktask cache-prefix reuse. Only ONE line —
+  # forbidden-token-lint is an intrinsic per-section check, not cross-line.
+  cat > "$WD/forbidden-timestamp.jsonl" <<'EOF'
+{"worktask_id":"wt3","stage":"PL","prompt":"<<<contract-reminder>>>\nstable reminder\n<<<contract-reminder>>>\n<<<worktask-header>>>\nworktask_id=wt3\ngenerated_at=2026-07-05T15:15:39Z\n<<<worktask-header>>>\n<<<stage-contract>>>\nPL contract\n<<<stage-contract>>>"}
+EOF
+  # Happy-path counterpart: same shape, no forbidden token — must still pass.
+  cat > "$WD/forbidden-clean.jsonl" <<'EOF'
+{"worktask_id":"wt4","stage":"PL","prompt":"<<<contract-reminder>>>\nstable reminder\n<<<contract-reminder>>>\n<<<worktask-header>>>\nworktask_id=wt4\nplan_file=planning-0.md\n<<<worktask-header>>>\n<<<stage-contract>>>\nPL contract\n<<<stage-contract>>>"}
+EOF
 }
 
 @test "happy: --anchor-lint on a complete DV artifact passes (exit 0, 'ok')" {
@@ -65,6 +78,19 @@ EOF
   run bash "$PLUGIN_ROOT/$SCRIPT" "$WD/drift.jsonl"
   assert_failure 1
   assert_output --partial "DRIFT"
+}
+
+@test "failure: prefix-lint catches an ISO-8601 timestamp in section [2] (REQ-3/AC-4)" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" "$WD/forbidden-timestamp.jsonl"
+  assert_failure 1
+  assert_output --partial "forbidden-token-lint"
+  assert_output --partial "timestamp"
+}
+
+@test "happy: prefix-lint with no forbidden tokens still reports no drift (REQ-3/AC-4)" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" "$WD/forbidden-clean.jsonl"
+  assert_success
+  assert_output --partial "no drift"
 }
 
 @test "edge: --filename-lint on our .context dir passes (exit 0, 'canonical')" {
