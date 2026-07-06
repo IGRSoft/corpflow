@@ -1,5 +1,7 @@
 # tests/COVERAGE.md — per-file coverage report + documented exemptions (AC-3)
 
+**Migration Summary (Swift #196):** The benchmark/test suite migrated from Python to Swift during this worktask. Python suites `tests/python/` were retired; their coverage (38 unit tests, estimate/layout behavioral contracts) is now covered by `tests/swift` PluginScriptsTests (21 + 17 = 38 Swift behaviors shelling the unchanged Python skill scripts). Skill scripts (`estimate-calc.py`, `layout-calc.py`) remain Python runtime but are pinned by subprocess behavioral tests instead of in-process line coverage (the retired `coverage.py` measured 94%/92% in-process; this worktask replaces it with 1:1 CLI behavioral contracts + each script's built-in `--self-test`). Three Swift packages are now measured via `swift test --enable-code-coverage`: `benchmark/ttt-template` (48 fixture tests), `benchmark/harness` (140 harness tests), `tests/swift` (38 PluginScriptsTests), all gated at ≥85% line coverage.
+
 **Scaffolded by DV0d. QA fills per-file numbers + proxy exemptions after `make coverage` runs.**
 
 ## Coverage tooling status

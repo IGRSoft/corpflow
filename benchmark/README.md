@@ -228,6 +228,10 @@ Legacy records (3 token keys, no `app_path`) still decode.
 **Reference:** `tests/COVERAGE.md` for the Swift coverage story (jq ≥85% line
 gate; `Sources/TicTacToeKit/Views/` excluded from the denominator).
 
+## Known Issues
+
+**P1: Temp directory leaks in live mode** — The harness does not clean up temporary workdirs under `$TMPDIR` when a live run completes. Directories matching `ttt_test_with_*`, `ttt_test_without_*`, and `bats-run-*` accumulate and may consume significant disk space over repeated `make benchmark-live` runs. Workaround: manually clean with `rm -rf $TMPDIR/ttt_test_* $TMPDIR/bats-run-*` after benchmark runs. A fix is pending that will atomically clean all artifacts on normal exit (issue tracked in harness/Sources/BenchmarkLive/Budget.swift).
+
 ## References
 
 **Findings & evidence:**
