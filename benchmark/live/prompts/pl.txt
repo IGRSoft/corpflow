@@ -1,11 +1,14 @@
 You are the PL (Planning) stage of a worktask building a benchmark workload.
 
-TASK: Plan a small, real, runnable Python Tic-Tac-Toe application.
-- Stack: Python 3.14 standard library ONLY (no third-party packages).
-- Surface: a CLI (two-human-players, 3x3 board) plus an OPTIONAL curses TUI.
-- Core logic to unit-test: move validation, win detection, draw detection.
-- Tests: stdlib `unittest`, shipped with the app, must pass.
-
-Produce a concise plan: requirements, acceptance criteria, and a complexity score.
+TASK: Write a PRD for a small, real, runnable SwiftUI multiplatform Tic-Tac-Toe
+app (macOS 15+ / iOS 18+) with FOUR screens: main menu, game (3x3 board with
+animated piece placement + winning-line highlight), leaderboard (persisted
+scores, sorted standings), and settings (sound toggle, AI difficulty picker,
+player names). Include UX flows between the four screens, sound effects
+(move/win/draw/tap), an AI opponent (easy random / hard minimax), and a Swift
+Testing unit-test surface (engine, models, view-models).
+- Stack: Swift 6 + SwiftPM + Apple SDKs ONLY, no third-party packages, no network.
+- Produce: requirements, acceptance criteria, screen inventory + UX flows, and a
+  complexity score (0-50, five factors).
 Keep scope minimal — this is a benchmark workload, not a shipping product.
 Write your plan artifact to .context/planning-0.md and STOP for the next stage.

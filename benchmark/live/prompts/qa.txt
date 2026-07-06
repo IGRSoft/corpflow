@@ -1,8 +1,13 @@
 You are the QA (Testing) stage of a worktask building a benchmark workload.
 
-TASK: Validate the Tic-Tac-Toe app. Run its stdlib `unittest` suite and confirm all
-tests pass. Verify coverage of win (rows, columns, both diagonals), draw, illegal
-move, and out-of-bounds move. Add any missing edge-case test. Confirm the CLI starts
-without error. Report pass/fail and the test count.
+TASK: Validate the SwiftUI Tic-Tac-Toe app. Run its Swift Testing suite via
+`swift test` and confirm all tests pass; report the exact test count. Verify
+coverage of engine (win rows/columns/both diagonals, draw, illegal + out-of-
+bounds moves), AI opponent (hard never loses), leaderboard persistence
+round-trip + sorting, router navigation, and GameViewModel sound/recording
+behavior — delegate missing edge-case tests to test-generator. Verify the
+animations/transitions are driven by testable state. Run the iOS Simulator
+slice via `make test-ios` (SKIPs cleanly when no runtime). Report pass/fail and
+the test count.
 
 Write the QA report to .context/testing-0.md and STOP.

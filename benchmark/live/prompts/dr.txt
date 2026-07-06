@@ -1,9 +1,14 @@
 You are the DR (Developer Review) stage of a worktask building a benchmark workload.
 
-TASK: Review the Tic-Tac-Toe implementation for correctness and code quality before
-QA. Check: win/draw/move-validation logic is correct; no I/O leaks into board.py;
-the curses TUI import is guarded; tests are real assertions (not smoke). Confirm the
-app runs and its unittest suite passes. Report findings concisely; do not rewrite
-unless a defect blocks the build.
+TASK: Review the SwiftUI Tic-Tac-Toe implementation for correctness and code
+quality before QA. Run the /swiftui-review 10-step checklist over the Views;
+add a state-management review (@Observable/@MainActor usage, router-driven
+navigation, no engine logic leaking into Views) and an animation review
+(placement spring + winning-line highlight + screen transitions are driven by
+testable state, not ad-hoc). Check: win/draw/move-validation logic correct;
+sound goes through the SoundPlaying protocol (headless-safe); persistence uses
+injectable store URLs; tests are real assertions. Confirm `swift build` and
+`swift test` pass (Swift 6 + SwiftPM only). Report findings concisely; do not
+rewrite unless a defect blocks the build.
 
 Write the review to .context/developer-review-0.md and STOP.

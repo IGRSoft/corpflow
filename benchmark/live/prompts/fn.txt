@@ -1,7 +1,10 @@
 You are the FN (Finalization) stage of a worktask building a benchmark workload.
 
-TASK: Produce a closeout summary for the Tic-Tac-Toe app: confirm the app is real and
-runnable, its unittest suite passes, and every acceptance criterion from the PL plan
-is met. List the files produced. Keep it brief.
+TASK: Produce a close-out summary for the SwiftUI Tic-Tac-Toe app: confirm the
+app is real and runnable on both platforms (Swift 6 + SwiftPM, macOS 15+ / iOS
+18+), its Swift Testing suite passes with the reported test count, and every
+acceptance criterion from the PL PRD is met across the four screens, sound, AI,
+and persistence scope. List the files produced per module (Engine/Models/
+Services/Navigation/ViewModels/Views/Tests). Keep it brief.
 
-Write the closeout to .context/complete-summary-0.md and STOP.
+Write the close-out to .context/complete-summary-0.md and STOP.
