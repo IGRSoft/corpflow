@@ -1,0 +1,320 @@
+{
+  "deterministic": [
+    {
+      "run_id": "deterministic-20260705T184806Z-779a9e8",
+      "timestamp_utc": "2026-07-05T18:48:06Z",
+      "mode": "deterministic",
+      "git_sha": "779a9e8",
+      "budget_usd": null,
+      "paths": {
+        "with": {
+          "tokens": {
+            "in": null,
+            "out": null,
+            "total": null,
+            "cache_read": null,
+            "cache_creation": null
+          },
+          "cost_usd": null,
+          "wall_clock_s": 0.0322,
+          "loc_produced": 345,
+          "test_count": 20,
+          "coverage_pct": 0.0,
+          "estimate_complexity_score": 15,
+          "stage_count": 5,
+          "pass_fail": "pass",
+          "app_path": "benchmark/workdirs/deterministic-20260705T184806Z-779a9e8/with"
+        },
+        "without": {
+          "tokens": {
+            "in": null,
+            "out": null,
+            "total": null,
+            "cache_read": null,
+            "cache_creation": null
+          },
+          "cost_usd": null,
+          "wall_clock_s": 0.001,
+          "loc_produced": 345,
+          "test_count": 20,
+          "coverage_pct": 0.0,
+          "estimate_complexity_score": 0,
+          "stage_count": 1,
+          "pass_fail": "pass",
+          "app_path": "benchmark/workdirs/deterministic-20260705T184806Z-779a9e8/without"
+        }
+      },
+      "comparison": {
+        "loc_produced": {
+          "with": 345,
+          "without": 345,
+          "delta": 0
+        },
+        "test_count": {
+          "with": 20,
+          "without": 20,
+          "delta": 0
+        },
+        "coverage_pct": {
+          "with": 0.0,
+          "without": 0.0,
+          "delta": 0.0
+        },
+        "wall_clock_s": {
+          "with": 0.0322,
+          "without": 0.001,
+          "delta": 0.0312
+        },
+        "estimate_complexity_score": {
+          "with": 15,
+          "without": 0,
+          "delta": 15
+        },
+        "stage_count": {
+          "with": 5,
+          "without": 1,
+          "delta": 4
+        }
+      }
+    },
+    {
+      "run_id": "deterministic-20260705T185614Z-779a9e8",
+      "timestamp_utc": "2026-07-05T18:56:14Z",
+      "mode": "deterministic",
+      "git_sha": "779a9e8",
+      "budget_usd": null,
+      "paths": {
+        "with": {
+          "tokens": {
+            "in": null,
+            "out": null,
+            "total": null,
+            "cache_read": null,
+            "cache_creation": null
+          },
+          "cost_usd": null,
+          "wall_clock_s": 0.0334,
+          "loc_produced": 345,
+          "test_count": 20,
+          "coverage_pct": 0.0,
+          "estimate_complexity_score": 15,
+          "stage_count": 5,
+          "pass_fail": "pass",
+          "app_path": "benchmark/workdirs/deterministic-20260705T185614Z-779a9e8/with"
+        },
+        "without": {
+          "tokens": {
+            "in": null,
+            "out": null,
+            "total": null,
+            "cache_read": null,
+            "cache_creation": null
+          },
+          "cost_usd": null,
+          "wall_clock_s": 0.001,
+          "loc_produced": 345,
+          "test_count": 20,
+          "coverage_pct": 0.0,
+          "estimate_complexity_score": 0,
+          "stage_count": 1,
+          "pass_fail": "pass",
+          "app_path": "benchmark/workdirs/deterministic-20260705T185614Z-779a9e8/without"
+        }
+      },
+      "comparison": {
+        "loc_produced": {
+          "with": 345,
+          "without": 345,
+          "delta": 0
+        },
+        "test_count": {
+          "with": 20,
+          "without": 20,
+          "delta": 0
+        },
+        "coverage_pct": {
+          "with": 0.0,
+          "without": 0.0,
+          "delta": 0.0
+        },
+        "wall_clock_s": {
+          "with": 0.0334,
+          "without": 0.001,
+          "delta": 0.0324
+        },
+        "estimate_complexity_score": {
+          "with": 15,
+          "without": 0,
+          "delta": 15
+        },
+        "stage_count": {
+          "with": 5,
+          "without": 1,
+          "delta": 4
+        }
+      }
+    },
+    {
+      "run_id": "deterministic-20260705T185640Z-779a9e8",
+      "timestamp_utc": "2026-07-05T18:56:40Z",
+      "mode": "deterministic",
+      "git_sha": "779a9e8",
+      "budget_usd": null,
+      "paths": {
+        "with": {
+          "tokens": {
+            "in": null,
+            "out": null,
+            "total": null,
+            "cache_read": null,
+            "cache_creation": null
+          },
+          "cost_usd": null,
+          "wall_clock_s": 0.0366,
+          "loc_produced": 345,
+          "test_count": 20,
+          "coverage_pct": 0.0,
+          "estimate_complexity_score": 15,
+          "stage_count": 5,
+          "pass_fail": "pass",
+          "app_path": "benchmark/workdirs/deterministic-20260705T185640Z-779a9e8/with"
+        },
+        "without": {
+          "tokens": {
+            "in": null,
+            "out": null,
+            "total": null,
+            "cache_read": null,
+            "cache_creation": null
+          },
+          "cost_usd": null,
+          "wall_clock_s": 0.0011,
+          "loc_produced": 345,
+          "test_count": 20,
+          "coverage_pct": 0.0,
+          "estimate_complexity_score": 0,
+          "stage_count": 1,
+          "pass_fail": "pass",
+          "app_path": "benchmark/workdirs/deterministic-20260705T185640Z-779a9e8/without"
+        }
+      },
+      "comparison": {
+        "loc_produced": {
+          "with": 345,
+          "without": 345,
+          "delta": 0
+        },
+        "test_count": {
+          "with": 20,
+          "without": 20,
+          "delta": 0
+        },
+        "coverage_pct": {
+          "with": 0.0,
+          "without": 0.0,
+          "delta": 0.0
+        },
+        "wall_clock_s": {
+          "with": 0.0366,
+          "without": 0.0011,
+          "delta": 0.035500000000000004
+        },
+        "estimate_complexity_score": {
+          "with": 15,
+          "without": 0,
+          "delta": 15
+        },
+        "stage_count": {
+          "with": 5,
+          "without": 1,
+          "delta": 4
+        }
+      }
+    }
+  ],
+  "live": [
+    {
+      "run_id": "live-20260701T074319Z-69c430f",
+      "timestamp_utc": "2026-07-01T07:45:49Z",
+      "mode": "live",
+      "git_sha": "69c430f",
+      "budget_usd": null,
+      "paths": {
+        "with": {
+          "tokens": {
+            "in": 574557,
+            "out": 7329,
+            "total": 581886
+          },
+          "cost_usd": 1.241815,
+          "wall_clock_s": 92.191,
+          "loc_produced": 391,
+          "test_count": 0,
+          "coverage_pct": 0.0,
+          "estimate_complexity_score": 0,
+          "stage_count": 3,
+          "pass_fail": "pass",
+          "app_path": "benchmark/workdirs/live-20260701T074319Z-69c430f/with"
+        },
+        "without": {
+          "tokens": {
+            "in": 218476,
+            "out": 5745,
+            "total": 224221
+          },
+          "cost_usd": 0.561047,
+          "wall_clock_s": 57.253,
+          "loc_produced": 318,
+          "test_count": 0,
+          "coverage_pct": 0.0,
+          "estimate_complexity_score": 0,
+          "stage_count": 1,
+          "pass_fail": "pass",
+          "app_path": "benchmark/workdirs/live-20260701T074319Z-69c430f/without"
+        }
+      },
+      "comparison": {
+        "loc_produced": {
+          "with": 391,
+          "without": 318,
+          "delta": 73
+        },
+        "test_count": {
+          "with": 0,
+          "without": 0,
+          "delta": 0
+        },
+        "coverage_pct": {
+          "with": 0.0,
+          "without": 0.0,
+          "delta": 0.0
+        },
+        "wall_clock_s": {
+          "with": 92.191,
+          "without": 57.253,
+          "delta": 34.938
+        },
+        "estimate_complexity_score": {
+          "with": 0,
+          "without": 0,
+          "delta": 0
+        },
+        "stage_count": {
+          "with": 3,
+          "without": 1,
+          "delta": 2
+        },
+        "tokens_total": {
+          "with": 581886,
+          "without": 224221,
+          "delta": 357665
+        },
+        "cost_usd": {
+          "with": 1.241815,
+          "without": 0.561047,
+          "delta": 0.6807679999999999
+        }
+      }
+    }
+  ]
+}
