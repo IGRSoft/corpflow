@@ -65,7 +65,11 @@ struct DefaultPathNeverReachesLive {
     }
 }
 
-@Suite("Live adapter only dispatches via the seam")
+// `.serialized`: dispatchFailureCarriesChildStderr spawns a real child through
+// SubprocessDispatcher → Subprocess.run (a thread in waitUntilExit + two pipe
+// drains). Serialized so this suite adds at most one concurrent child, avoiding
+// the libdispatch-pool exhaustion that deadlocks a fully parallel `swift test`.
+@Suite("Live adapter only dispatches via the seam", .serialized)
 struct LiveAdapterOnlyDispatchesViaSeam {
     @Test func tripwireIsTheOnlyDispatchRoute() throws {
         let tripwire = TripwireDispatcher()
@@ -115,12 +119,38 @@ struct LiveAdapterOnlyDispatchesViaSeam {
         let stream = Dispatch.buildStageArgv(stage: "PL", captureMode: .streamJSON)
         #expect(json.contains("json") && !json.contains("stream-json"))
         #expect(stream.contains("stream-json"))
+        // stream-json REQUIRES --verbose on this CLI generation (reproduced
+        // live: "When using --print, --output-format=stream-json requires
+        // --verbose", rc=1). json mode must NOT carry it (frozen ad2 shape).
+        #expect(stream.contains("--verbose"))
+        #expect(!json.contains("--verbose"))
         // Both keep the frozen prefix/flags.
         for argv in [json, stream] {
             #expect(Array(argv.prefix(2)) == ["claude", "-p"])
             #expect(argv.contains("--model"))
             #expect(argv.contains("--effort"))
             #expect(argv.contains("--agent"))
+        }
+    }
+
+    @Test func dispatchFailureCarriesChildStderr() {
+        // QA finding 2a: a failing dispatch must surface the child's stderr
+        // (truncated) — otherwise live failures are undiagnosable. Uses a
+        // local bash child; no network, no claude.
+        let dispatcher = SubprocessDispatcher()
+        do {
+            _ = try dispatcher.run(
+                argv: ["bash", "-c", "echo BOOM-DIAGNOSTIC >&2; exit 3"],
+                promptText: "ignored")
+            Issue.record("expected DispatchFailure")
+        } catch let e as DispatchFailure {
+            #expect(e.description.contains("rc=3"))
+            #expect(e.description.contains("BOOM-DIAGNOSTIC"),
+                    "stderr snippet missing from: \(e.description)")
+            #expect(!e.description.contains("ignored"),
+                    "prompt text must never leak into dispatch errors")
+        } catch {
+            Issue.record("wrong error type: \(error)")
         }
     }
 }

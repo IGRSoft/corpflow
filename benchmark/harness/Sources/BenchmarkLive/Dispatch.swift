@@ -89,8 +89,14 @@ public struct SubprocessDispatcher: Dispatching {
     public func run(argv: [String], promptText: String) throws -> String {
         let r = Subprocess.run(argv, cwd: workdir, input: promptText)
         if r.exitCode != 0 {
+            // Surface the child's stderr (truncated) so failures are
+            // diagnosable — never the prompt, never any credential.
+            let stderrSnippet = r.stderr
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(400)
             throw DispatchFailure(description:
-                "claude -p failed (rc=\(r.exitCode)) for argv \(argv.prefix(6))…")
+                "claude -p failed (rc=\(r.exitCode)) for argv \(argv.prefix(6))…"
+                + (stderrSnippet.isEmpty ? "" : " stderr: \(stderrSnippet)"))
         }
         return r.stdout
     }
@@ -109,10 +115,14 @@ public enum Dispatch {
     /// shape, AR ad2): [claude, -p, --model, M, --effort, E, --permission-mode,
     /// default, --output-format, <mode>, --agent, A]. The prompt is fed on
     /// STDIN (assembled [1][2][3][4][5]); cwd is a subprocess kwarg.
+    /// stream-json additionally requires --verbose on this CLI generation
+    /// ("When using --print, --output-format=stream-json requires --verbose" —
+    /// reproduced live, rc=1 otherwise); appended AFTER the frozen flags so the
+    /// ported argv-shape assertions stay intact.
     public static func buildStageArgv(stage: String,
                                       captureMode: CaptureMode = .json) -> [String] {
         guard let entry = STAGE_TABLE[stage] else { return [] }
-        return [
+        var argv = [
             "claude", "-p",
             "--model", entry.model,
             "--effort", entry.effort,
@@ -120,6 +130,10 @@ public enum Dispatch {
             "--output-format", captureMode.rawValue,
             "--agent", entry.agent,
         ]
+        if captureMode == .streamJSON {
+            argv.append("--verbose")
+        }
+        return argv
     }
 
     // MARK: layered usage capture

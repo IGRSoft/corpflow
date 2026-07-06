@@ -236,7 +236,14 @@ public struct Subprocess {
         process.standardOutput = outPipe
         process.standardError = errPipe
         let inPipe = Pipe()
-        if input != nil { process.standardInput = inPipe }
+        if input != nil {
+            process.standardInput = inPipe
+        } else {
+            // Never inherit the caller's stdin: in nested/headless contexts an
+            // inherited tty/pipe stdin can block a child (claude auth status,
+            // estimate-calc.py, …) forever. No input => explicit EOF.
+            process.standardInput = FileHandle.nullDevice
+        }
 
         // Drain pipes on background queues to avoid deadlock on large output.
         // Lock-protected boxes keep the closure captures Sendable-safe.
