@@ -7,8 +7,6 @@ Package.resolved
 __pycache__
 *.pyc
 *.pyo
-.coverage
-.coverage.*
 
 # benchmark: per-run generated apps + scratch (gitignored per AC-9; history.json is TRACKED)
 benchmark/workdirs/
@@ -19,6 +17,3 @@ benchmark/results/runs/
 
 # kcov coverage output
 .coverage-kcov/
-
-# local venv created by make bootstrap for coverage.py (PEP 668-safe)
-.venv-cov/
