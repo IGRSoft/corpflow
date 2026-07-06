@@ -10,4 +10,12 @@ animations/transitions are driven by testable state. Run the iOS Simulator
 slice via `make test-ios` (SKIPs cleanly when no runtime). Report pass/fail and
 the test count.
 
+OUTPUT BUDGET (hard). Report RESULTS, not process — no test-by-test narration,
+no reproducing test source or command output, no restating what each suite
+checks. One coverage table (`area | covered? | gap`) and one results line
+(pass/fail + exact count + iOS-slice status). List only genuine gaps and any
+delegation to test-generator; if an area is fully covered, mark it covered in
+the table — do not describe it. Target the whole report under ~300 words of
+body excluding the tables.
+
 Write the QA report to .context/testing-0.md and STOP.

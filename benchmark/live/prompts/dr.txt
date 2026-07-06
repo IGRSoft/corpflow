@@ -8,7 +8,16 @@ navigation, no engine logic leaking into Views) and an animation review
 testable state, not ad-hoc). Check: win/draw/move-validation logic correct;
 sound goes through the SoundPlaying protocol (headless-safe); persistence uses
 injectable store URLs; tests are real assertions. Confirm `swift build` and
-`swift test` pass (Swift 6 + SwiftPM only). Report findings concisely; do not
-rewrite unless a defect blocks the build.
+`swift test` pass (Swift 6 + SwiftPM only). Do not rewrite unless a defect
+blocks the build.
+
+OUTPUT BUDGET (hard). Emit findings ONLY — no narrative, no restating code,
+no reproducing diffs or file bodies. Reference by `path:line`, never paste the
+code. One row per finding in a table (`severity | path:line | issue | fix`),
+severity in {P0,P1,P2,P3}. Cap each review area (10-step checklist,
+state-management, animation) at its 3 most material findings; if an area is
+clean, write one line `<area>: clean`. No per-file walkthroughs, no
+"I checked X and it was fine" prose — silence means checked-and-clean. Target
+the whole review under ~400 words of body excluding the findings table.
 
 Write the review to .context/developer-review-0.md and STOP.
