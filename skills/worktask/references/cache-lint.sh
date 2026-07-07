@@ -169,6 +169,69 @@ extract_section() {
   ' <<< "$body"
 }
 
+# ---------- Forbidden-token scanner (L1, REQ-3/AC-4) ----------
+# Scans ONE section's text for the seven forbidden-token classes named in
+# handoff-protocol.md#cache-prefix:614-624 (mirrored verbatim in
+# coordination-0.md#shared-snippets so no second taxonomy is ever invented):
+#   timestamp / ENV expansion / UUID / $RANDOM / retry-counter / mtime /
+#   agent-specific-name-beyond-worktask_id.
+# These are INTRINSIC per-section checks (unlike the byte-identity check
+# above, which only catches drift ACROSS lines) — a token that is identical
+# on every line (e.g. the same ISO timestamp baked in at generation time)
+# would pass byte-identity yet still be a latent miss on the NEXT worktask,
+# because a fresh worktask_id at a fresh instant produces a NEW timestamp,
+# breaking the cross-worktask cache-prefix reuse this scanner exists to
+# protect. Prints one line per hit to stderr; returns non-zero on any hit.
+forbidden_token_scan() {
+  local section_text="$1" label="$2"
+  local rc=0
+
+  # 1. ISO-8601 timestamp (date/now render), e.g. 2026-07-05T15:15:39Z
+  if grep -qE '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$section_text"; then
+    echo "forbidden-token-lint: $label: ISO-8601 timestamp found" >&2
+    rc=1
+  fi
+
+  # 2. ENV expansions that vary per call (unresolved $VAR / ${VAR} literals,
+  #    or a shell already substituted a per-user path under one of these).
+  if grep -qE '\$(HOSTNAME|USER|PWD|RANDOM)\b|\$\{(HOSTNAME|USER|PWD|RANDOM)\}' <<< "$section_text"; then
+    echo "forbidden-token-lint: $label: ENV expansion ($HOSTNAME/$USER/$PWD/$RANDOM) found" >&2
+    rc=1
+  fi
+
+  # 3. Random / request IDs — UUID v4 shape.
+  if grep -qiE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' <<< "$section_text"; then
+    echo "forbidden-token-lint: $label: UUID found" >&2
+    rc=1
+  fi
+
+  # 4. $RANDOM literal (bash builtin) appearing unresolved in the text.
+  if grep -qE '\$RANDOM\b' <<< "$section_text"; then
+    echo "forbidden-token-lint: $label: literal \$RANDOM found" >&2
+    rc=1
+  fi
+
+  # 5. Retry counters (belong in section [6], never [1]/[2]/[4]).
+  if grep -qiE 'retry[_-]?count[[:space:]]*[:=][[:space:]]*[0-9]+|attempt[[:space:]]*#?[0-9]+' <<< "$section_text"; then
+    echo "forbidden-token-lint: $label: retry/attempt counter found (belongs in section [6])" >&2
+    rc=1
+  fi
+
+  # 6. File mtime-shaped values (epoch seconds/millis label or "mtime:").
+  if grep -qiE 'mtime[[:space:]]*[:=][[:space:]]*[0-9]{9,13}\b' <<< "$section_text"; then
+    echo "forbidden-token-lint: $label: file mtime found" >&2
+    rc=1
+  fi
+
+  # 7. Agent-specific names beyond worktask_id (the per-stage agent identity
+  #    belongs in section [4] ONLY, never baked into [1]/[2]). Checked by the
+  #    caller passing the stage's OWN agent name as a second forbidden literal
+  #    when scanning [1]/[2] (see prefix_lint call site) — a name appearing in
+  #    its OWN [4] is expected and not scanned here.
+
+  return $rc
+}
+
 prefix_lint() {
   local log="$1"
   [[ -f "$log" ]] || { echo "prefix-lint: log not found: $log" >&2; exit 2; }
@@ -192,6 +255,18 @@ prefix_lint() {
     s1=$(extract_section "$prompt" "contract-reminder")
     s2=$(extract_section "$prompt" "worktask-header")
     s4=$(extract_section "$prompt" "stage-contract")
+
+    # L1 forbidden-token scan — runs on EVERY line (intrinsic per-section
+    # check, independent of the cross-line byte-identity comparison below).
+    if ! forbidden_token_scan "$s1" "worktask_id=$wid stage=$stage section[1]"; then
+      rc=1
+    fi
+    if ! forbidden_token_scan "$s2" "worktask_id=$wid stage=$stage section[2]"; then
+      rc=1
+    fi
+    if ! forbidden_token_scan "$s4" "worktask_id=$wid stage=$stage section[4]"; then
+      rc=1
+    fi
 
     # Sanitize wid/stage for use in filenames (allow [a-zA-Z0-9._-]).
     local widsafe stagesafe
@@ -227,7 +302,7 @@ prefix_lint() {
   if [[ $rc -eq 0 ]]; then
     local nlines
     nlines=$(wc -l < "$log" | tr -d ' ')
-    echo "prefix-lint: $nlines prompts checked, no drift"
+    echo "prefix-lint: $nlines prompts checked, no drift; forbidden-token scan clean"
   fi
   return $rc
 }
@@ -288,8 +363,21 @@ count_handoff_yaml_blocks() {
   ' "$f"
 }
 
+# Extract the Handoff Protocol section body (between the H2 and the next H2 /
+# EOF) — used by the pointer-only acceptance path (P1 dedup, Batch 5) to check
+# for a `stage-contracts.md#tpl-<CODE>` reference when no inline yaml block
+# remains.
+extract_handoff_section_body() {
+  local f="$1"
+  awk '
+    /^## Handoff Protocol[[:space:]]*$/ { in_section = 1; next }
+    in_section && /^## / { exit }
+    in_section { print }
+  ' "$f"
+}
+
 frontmatter_template_lint() {
-  local rc=0 agent base stage_expected nblocks body stage_actual nlines
+  local rc=0 agent base stage_expected nblocks body stage_actual nlines section_body
   for agent in "$@"; do
     [[ -f "$agent" ]] || { echo "frontmatter-template-lint: file not found: $agent" >&2; rc=1; continue; }
 
@@ -306,6 +394,28 @@ frontmatter_template_lint() {
     fi
 
     nblocks=$(count_handoff_yaml_blocks "$agent")
+
+    # Pointer-only acceptance path (P1 dedup, Batch 5/ad4): an agent MAY carry
+    # ZERO inline yaml blocks if its Handoff Protocol section instead cites the
+    # canonical SSOT template `stage-contracts.md#tpl-<stage_expected>`
+    # verbatim — this is the collapsed form the boilerplate-dedup pass
+    # produces (deletes the byte-duplicated YAML, keeps a one-line pointer).
+    # `developer.md` deliberately keeps its INLINE block (carries a load-
+    # bearing `worktree:` field beyond the SSOT template) — nblocks==1 there
+    # still takes the classic path below, unaffected by this branch.
+    if [[ "$nblocks" == "0" ]]; then
+      section_body=$(extract_handoff_section_body "$agent")
+      # bash 3.2 has no ${var,,} — lowercase via tr for the anchor slug.
+      local stage_lc
+      stage_lc=$(printf '%s' "$stage_expected" | tr '[:upper:]' '[:lower:]')
+      if grep -qE "stage-contracts\.md#tpl-${stage_lc}\b" <<< "$section_body"; then
+        echo "frontmatter-template-lint: $agent (stage=$stage_expected, pointer-only) ok"
+        continue
+      fi
+      echo "frontmatter-template-lint: $agent FAIL: no inline yaml block AND no stage-contracts.md#tpl-$stage_expected pointer found in Handoff Protocol" >&2
+      rc=1; continue
+    fi
+
     if [[ "$nblocks" != "1" ]]; then
       echo "frontmatter-template-lint: $agent FAIL: expected exactly 1 fenced yaml block inside Handoff Protocol, found $nblocks" >&2
       rc=1; continue
@@ -500,6 +610,67 @@ desc" '{worktask_id:"wf-self", stage:"TL", prompt:$prompt}' >> "$log"
     echo "self-test: prefix-lint drift detect: ok"
   fi
 
+  # L1 forbidden-token scanner (REQ-3/AC-4): happy path first (fresh log, no
+  # forbidden tokens — must still pass byte-identity AND the new scan).
+  local ftlog="$td/forbidden-token-log.jsonl"
+  : > "$ftlog"
+  jq -cn --arg wid wf-ft --arg stage PL --arg prompt \
+"<<<contract-reminder>>>
+contract
+<<<worktask-header>>>
+worktask_id=wf-ft
+plan_file=planning-0.md
+<<<stage-contract>>>
+stage=PL
+<<<task>>>
+desc" '{worktask_id:$wid, stage:$stage, prompt:$prompt}' >> "$ftlog"
+  if "$0" "$ftlog" >/dev/null 2>&1; then
+    echo "self-test: forbidden-token-lint happy path: ok"
+  else
+    echo "self-test: forbidden-token-lint happy path: FAIL" >&2; exit 1
+  fi
+
+  # Negative: ISO-8601 timestamp injected into section [2] (worktask-header)
+  # — a previously-uncaught class (byte-identical across every stage of THIS
+  # worktask, so the existing drift check alone would miss it; only becomes a
+  # problem cross-worktask, which the intrinsic scan catches immediately).
+  local ftlog_ts="$td/forbidden-token-log-ts.jsonl"
+  jq -cn --arg prompt \
+"<<<contract-reminder>>>
+contract
+<<<worktask-header>>>
+worktask_id=wf-ft-ts
+plan_file=planning-0.md
+generated_at=2026-07-05T15:15:39Z
+<<<stage-contract>>>
+stage=PL
+<<<task>>>
+desc" '{worktask_id:"wf-ft-ts", stage:"PL", prompt:$prompt}' > "$ftlog_ts"
+  if "$0" "$ftlog_ts" >/dev/null 2>&1; then
+    echo "self-test: forbidden-token-lint timestamp reject: FAIL (should have caught ISO-8601 timestamp)" >&2; exit 1
+  else
+    echo "self-test: forbidden-token-lint timestamp reject: ok"
+  fi
+
+  # Negative: retry counter injected into section [1] (contract-reminder) —
+  # belongs in section [6] only, never [1]/[2]/[4].
+  local ftlog_retry="$td/forbidden-token-log-retry.jsonl"
+  jq -cn --arg prompt \
+"<<<contract-reminder>>>
+contract retry_count: 2
+<<<worktask-header>>>
+worktask_id=wf-ft-retry
+plan_file=planning-0.md
+<<<stage-contract>>>
+stage=PL
+<<<task>>>
+desc" '{worktask_id:"wf-ft-retry", stage:"PL", prompt:$prompt}' > "$ftlog_retry"
+  if "$0" "$ftlog_retry" >/dev/null 2>&1; then
+    echo "self-test: forbidden-token-lint retry-counter reject: FAIL (should have caught retry_count)" >&2; exit 1
+  else
+    echo "self-test: forbidden-token-lint retry-counter reject: ok"
+  fi
+
   # Frontmatter template lint: positive fixture (stage agent shaped like
   # the post-v3.9.0 collapsed agents).
   cat > "$td/developer.md" <<'EOF'
@@ -600,6 +771,50 @@ EOF
     echo "self-test: frontmatter-template-lint reject duplicate: FAIL (should have rejected two yaml blocks)" >&2; exit 1
   else
     echo "self-test: frontmatter-template-lint reject duplicate: ok"
+  fi
+
+  # Positive: pointer-only form (P1 dedup, Batch 5/ad4) — zero inline yaml
+  # blocks, but a stage-contracts.md#tpl-<CODE> pointer is present.
+  cat > "$td/release-engineer.md" <<'EOF'
+---
+name: release-engineer
+description: dummy
+---
+
+## Handoff Protocol
+
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-re`.
+
+### State.json Atomic Merge — REQUIRED before return
+
+no yaml block here, just the pointer above
+EOF
+  if "$0" --frontmatter-template-lint "$td/release-engineer.md" >/dev/null 2>&1; then
+    echo "self-test: frontmatter-template-lint pointer-only pass: ok"
+  else
+    echo "self-test: frontmatter-template-lint pointer-only pass: FAIL" >&2; exit 1
+  fi
+
+  # Negative: zero yaml blocks AND no pointer (a botched dedup that deleted
+  # the frontmatter with no replacement reference) — must be rejected.
+  cat > "$td/stakeholder.md" <<'EOF'
+---
+name: stakeholder
+description: dummy
+---
+
+## Handoff Protocol
+
+Nothing here — no yaml block, no stage-contracts.md pointer.
+
+### State.json Atomic Merge — REQUIRED before return
+
+placeholder
+EOF
+  if "$0" --frontmatter-template-lint "$td/stakeholder.md" >/dev/null 2>&1; then
+    echo "self-test: frontmatter-template-lint reject no-pointer-no-block: FAIL (should have rejected)" >&2; exit 1
+  else
+    echo "self-test: frontmatter-template-lint reject no-pointer-no-block: ok"
   fi
 
   # Filename lint: positive — canonical names

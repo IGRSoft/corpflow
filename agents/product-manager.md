@@ -5,7 +5,7 @@ model: opus
 color: blue
 effort: high
 maxTurns: 40
-version: 0.5.3
+version: 0.6.0
 # tools: Bash(curl:*) is NARROWLY scoped to curl only (NOT bare Bash) so PL0 can
 # persist Figma screenshots IN THE SAME PL TURN. get_screenshot returns a
 # short-lived image URL that expires before the post-approval Phase 2 window
@@ -377,33 +377,17 @@ Always emit fully-qualified `plugin:agent` form. The plugin prefix follows the a
 
 **DV0 routing override — plugin worktask-infrastructure** (single source of truth;
 do NOT duplicate this decision table elsewhere): the DV0 default `igrsoft:developer`
-is a *platform app-code* router. When the DV scope is the igrsoft plugin's own
-worktask machinery rather than platform app code, set
-`metadata.agent: "igrsoft:workflow-engineer"` (model `opus`,
-error_file = `.context/errors/workflow-engineer.md`) instead. Heuristic — route DV
-to `workflow-engineer` when the change touches any of:
+is a *platform app-code* router. Route DV to `metadata.agent: "igrsoft:workflow-engineer"`
+(model `opus`, error_file = `.context/errors/workflow-engineer.md`) instead when the
+change touches any of the following — platform/app code (Swift, server, web, other
+product source) stays `igrsoft:developer` (or the `apple-developer:*` variant); when a
+worktask mixes both, split DV sub-tasks by scope and route each independently
+(`skills/shared/stage-codes.md` keeps its single unconditional DV default and points
+here for the conditional rule):
 
 - `skills/worktask/references/*.sh` (worktask reference helpers, e.g. `publish-pl-issue.sh`)
 - the worktask state-machine / stage transitions / Task-System glue under `skills/worktask/**`
 - `hooks/**` (worktask runtime hooks)
-
-Platform/app code (Swift, server, web, and other product source) stays
-`igrsoft:developer` (or the `apple-developer:*` variant). When a worktask mixes
-both, split DV sub-tasks by scope and route each independently. `skills/shared/stage-codes.md`
-keeps its single unconditional DV default and points here for the conditional rule.
-
-*Precedent*: the worktask that fixed Figma image embedding in private/internal
-GitHub issues (the `publish-pl-issue.sh` hosting-tier redesign) ran DV0 on
-`igrsoft:workflow-engineer`, because the entire change set was a worktask reference
-helper plus this very routing rule — not platform app code. That worktask is the
-reason this override exists.
-
-**Worked example** — `--platform Apple` worktask at score 25 (Moderate):
-- AR0 → `agent: "apple-developer:apple-architector"`
-- TL0 → `agent: "igrsoft:team-lead"`
-- DV0 → `agent: "apple-developer:ios-developer"` (error_file = `.context/errors/ios-developer.md`)
-- DR0 → `agent: "igrsoft:technical-lead"`
-- QA0 → `agent: "igrsoft:qa-engineer"`
 
 **Worked example** — worktask-infrastructure fix (e.g. a `publish-pl-issue.sh` change):
 - DV0 → `agent: "igrsoft:workflow-engineer"` (model `opus`, error_file = `.context/errors/workflow-engineer.md`)
@@ -576,30 +560,9 @@ Before marking PL0 complete, verify:
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-pl`. Prev→this label: `USER→PL`.
 
-### Frontmatter for this stage (PL)
-
-Paste at the top of `.context/planning-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
-
-```yaml
----
-handoff:
-  stage: PL
-  verdict: ok                  # ok / blocked / escalate
-  summary: "<one-line summary ≤200 chars>"
-  key_decisions:
-    - { id: pd1, summary: "<decision>", anchor: "planning-N.md#scope" }
-  next_stage_focus: "<imperative: what AR must grep/design>"
-  open_questions:
-    - "q1: <question text> (AR to decide)"
-  refs:
-    spec: .context/attachments/<spec-file>
-    plan: .context/planning-N.md#requirements
----
-```
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-pl`.
 
 ### State.json Atomic Merge — REQUIRED before return
-
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
 
 ```bash
 _sf=".context/state.json"
@@ -613,4 +576,4 @@ jq --arg code "PL" --arg artifact "planning-N.md" --arg verdict "<pass|fail>" \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.

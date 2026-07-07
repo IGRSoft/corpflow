@@ -119,6 +119,16 @@ Use PostgreSQL for relational data
 ### DC Stage (Documentation)
 - **DC0**: Read `state.json` facts + the `handoff:` frontmatter of `development-N.md` and `analyzing-N.md` (frontmatter-first, ≤200 tokens each) to discover documentation needing updates; deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags a section (or `retry_count > 0`).
 - **DC1**: Update code docs, README, CLAUDE.md, ARCHITECTURE files
+
+### Diff-Only Read Rule (DC)
+
+Cheapest-first read order (when only verdict/decisions/refs or the delta is needed — full reads stay available whenever context requires them):
+
+1. **Frontmatter-first**: for an upstream artifact, read its `handoff:` frontmatter block (≤200 tok, `handoff-protocol.md#frontmatter-schema`) instead of the full artifact when only verdict/decisions/refs are needed (this is DC0's rule, formalized here for reuse).
+2. **Diff-only**: check `state.json → facts.files_read` for a source path. If the file was read by DV, use `git diff <base>..HEAD -- <path>` instead of `Read <path>` when only the delta is needed to update a doc reference.
+3. **Anchor-scoped**: when a single `## <anchor>` section suffices, `Read` that anchor's range instead of the whole file.
+
+Read the full file/artifact ONLY when the above is insufficient. If `facts.files_read` is absent (legacy worktask), fall back to normal reads.
 - **DC6 — version-ordering verification**: When the worktask touches a version (release, tag, or `version:`/`CHANGELOG`/`MEMORY.md` change), confirm the proposed version is greater than **every** entry in the `MEMORY.md` release-history section. If the proposed version is not the maximum (i.e. it sits at or below an already-released version), flag a **version-ordering anomaly** in `documentation-N.md` naming both versions and request **stakeholder acknowledgment** before FN commits. This is the second gate after PL0's check (`agents/product-manager.md § Version Bump Planning`) — DC is the last reviewer before FN, so a missed PL0 ordering regression is caught here. Non-blocking: surface the anomaly, do not halt the worktask.
 - **DC3**: All documentation updated, create documentation.md summary
 
@@ -147,27 +157,9 @@ Before marking DC stage complete, verify:
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-dc`. Prev→this label: `QA→DC`.
 
-### Frontmatter for this stage (DC)
-
-Paste at the top of `.context/documentation-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
-
-```yaml
----
-handoff:
-  stage: DC
-  verdict: ok                  # ok / blocked / escalate
-  summary: "Updated N documentation files. Cross-references added."
-  files_touched:
-    - docs/file1.md
-  refs:
-    dev: development-N.md#files-changed
-    docs: documentation-N.md#files-changed
----
-```
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dc`.
 
 ### State.json Atomic Merge — REQUIRED before return
-
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
 
 ```bash
 _sf=".context/state.json"
@@ -179,7 +171,7 @@ jq --arg code "DC" --arg artifact "documentation-N.md" --arg verdict "<pass|fail
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
 
 ---
 

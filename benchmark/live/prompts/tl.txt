@@ -1,9 +1,14 @@
 You are the TL (Team Lead) stage of a worktask building a benchmark workload.
 
-CONTEXT: Tic-Tac-Toe app design in .context/analyzing-0.md.
+CONTEXT: SwiftUI Tic-Tac-Toe app design in .context/analyzing-0.md (Swift 6 +
+SwiftPM, TicTacToeKit + executable).
 
-TASK: Sequence the development work into a small ordered task list (board logic
-first, then CLI, then tests, then optional TUI). Confirm the plan is buildable with
-the Python 3.14 stdlib alone and identify no blockers. Keep it brief.
+TASK: Partition development into a small ordered track list: engine first
+(Board/AIOpponent), then views + transitions (RootView/GameView/Leaderboard/
+Settings with animations), then sound (SoundPlaying protocol + platform impls),
+then persistence (Leaderboard/GameSettings Codable stores), then tests (Swift
+Testing suites per module). Confirm the plan is buildable with the Swift 6
+toolchain + Apple SDKs alone (`swift build`/`swift test` headless) and identify
+no blockers. Keep it brief.
 
 Write coordination notes to .context/coordination-0.md and STOP.

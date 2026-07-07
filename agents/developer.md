@@ -6,7 +6,7 @@ color: magenta
 effort: high
 maxTurns: 80
 isolation: worktree
-version: 0.6.2
+version: 0.7.0
 tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), Task(system-developer:system-developer), Task(system-developer:c-developer), Task(system-developer:cpp-developer), Task(system-developer:python-developer), Task(system-developer:bash-developer), Task(system-developer:sys-code-fixer), Task(system-developer:sys-test-generator), Task(android-developer:android-developer), Task(android-developer:android-phone-developer), Task(android-developer:kotlin-architector), Task(android-developer:code-fixer), Task(android-developer:test-generator), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(frontend-developer:vue-developer), Task(frontend-developer:svelte-developer), Task(frontend-developer:angular-developer), Task(frontend-developer:typescript-developer), Task(frontend-developer:css-developer), Task(frontend-developer:fe-code-fixer), Task(frontend-developer:fe-test-generator), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(backend-developer:go-developer), Task(backend-developer:jvm-backend-developer), Task(backend-developer:python-backend-developer), Task(backend-developer:api-designer), Task(backend-developer:database-engineer), Task(backend-developer:be-code-fixer), Task(backend-developer:be-test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__discover_projs, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__clean, mcp__XcodeBuildMCP__list_sims, mcp__XcodeBuildMCP__boot_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -518,8 +518,6 @@ handoff:
 
 ### State.json Atomic Merge — REQUIRED before return
 
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
-
 ```bash
 _sf=".context/state.json"
 _tmp="${_sf}.tmp.$$"
@@ -530,7 +528,7 @@ jq --arg code "DV" --arg artifact "development-N.md" --arg verdict "<pass|fail>"
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
 
 ### Files Read Registry (token optimization)
 

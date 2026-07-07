@@ -1,20 +1,24 @@
 # Plugin Test Suite
 
-Exhaustive unit tests for all deterministic plugin scripts and hooks with measured line coverage (kcov for bash, coverage.py for Python).
+Exhaustive unit tests for all deterministic plugin scripts and hooks: bats for
+bash, **Swift Testing** for the three Swift packages (TTT fixture, benchmark
+harness, PluginScriptsTests) — with kcov (bash) + `swift test
+--enable-code-coverage` (Swift) line-coverage gating.
 
 ## Quick Start
 
 Run the full deterministic suite:
 ```bash
 make test              # All tests, offline, bootstrap as needed
-make coverage          # Plus kcov/coverage.py reporting (≥85% target per file)
-make bootstrap         # Vendors bats, provisions kcov/coverage.py (idempotent)
+make coverage          # Plus kcov + swift coverage gating (≥85% target)
+make test-ios          # TicTacToeKit on an iOS Simulator (SKIPs w/o runtime)
+make bootstrap         # Vendors bats, checks swift toolchain, probes kcov
 ```
 
-No system `bats`, `pytest`, or `kcov` required — `make bootstrap` auto-provisions via:
+No system `bats` or `kcov` required — `make bootstrap` auto-provisions via:
 - **bats**: vendored under `tests/vendor/bats-core/` (v1.11.0 + support/assert)
+- **swift**: hard host prerequisite (Swift 6 toolchain; checked, not installed)
 - **kcov**: system probe → brew → documented per-file proxy (macOS bash 3.2)
-- **coverage.py**: python3 -m pip → vendored-wheel fallback
 
 ## Organization
 
@@ -25,9 +29,11 @@ tests/
     worktask/          # 9 bats files: state-patch, publish-pl-issue, cache-lint, …
     dv-screenshot/     # 4 bats files: apple-canvas, cli-fallback, size-budget, visual-diff
     skills/            # 11 bats files: build-orchestrator, scan-secrets, build-context-set, …
-  python/
-    test_estimate_calc.py       # 94% line coverage (in-process CLI + subprocess)
-    test_layout_calc.py         # 92% line coverage (in-process CLI + subprocess)
+  swift/               # SwiftPM package "PluginScriptsTests"
+    Sources/PluginScripts/          # subprocess + JSON helpers
+    Tests/PluginScriptsTests/
+      EstimateCalcTests.swift       # 21 behaviors (estimate-calc.py via python3)
+      LayoutCalcTests.swift         # 17 behaviors (layout-calc.py via python3)
   vendor/
     bats-core/         # v1.11.0 — pinned tag, no network after vendor
     bats-support/      # v0.3.0
@@ -42,21 +48,38 @@ tests/
   COVERAGE.md          # Per-file coverage report + proxy exemptions (AC-3 gate)
 ```
 
+The two other Swift suites live with their packages:
+`benchmark/ttt-template/Tests/TicTacToeKitTests` (48 fixture tests) and
+`benchmark/harness/Tests/{BenchmarkKitTests,BenchmarkLiveTests}` (140 harness
+tests, zero LLM calls). `make test` runs all three via `run-tests.sh`.
+
 ## Test Coverage
 
-**Verdict: AC-3 MET** (Python measured, bash via assertion-density proxy).
+**Verdict: AC-3 MET** (Swift measured via llvm-cov, bash via assertion-density proxy).
 
-### Python (measured via coverage.py)
+### Skill scripts (behavioral parity via tests/swift)
 
-| Module | Coverage |
-|--------|----------|
-| `skills/estimation-methodology/scripts/estimate-calc.py` | **94%** |
-| `skills/appstore-screenshots/scripts/layout-calc.py` | **92%** |
+The plugin's skill runtime scripts STAY Python and are exercised by
+`tests/swift` PluginScriptsTests — 38 Swift Testing behaviors shelling
+`python3` at the unchanged scripts:
 
-Both exceed the ≥85% gate. Coverage measured via in-process CLI tests (not subprocess-only, which undercounted at ~23–32%). Run via:
-```bash
-python3 -m coverage run -m unittest discover -s tests/python && coverage report
-```
+| Script | Behaviors |
+|--------|-----------|
+| `skills/estimation-methodology/scripts/estimate-calc.py` | **21** (band boundaries, ai_cost arithmetic, hours, CLI shape, self-test) |
+| `skills/appstore-screenshots/scripts/layout-calc.py` | **17** (proportional geometry, full-bleed, errors, CLI shape, self-test) |
+
+The retired in-process coverage.py measurement (94%/92%) went away with the
+Python test suite; the scripts themselves are unchanged and their documented
+contracts are pinned 1:1 by the subprocess behaviors above plus each script's
+built-in `--self-test`.
+
+### Swift packages (measured via swift test --enable-code-coverage)
+
+`make coverage` runs each package with coverage enabled and gates aggregate
+line coverage at **≥85%** via jq over the llvm-cov export JSON.
+`Sources/TicTacToeKit/Views/` is excluded from the denominator (SwiftUI view
+bodies are exercised structurally, not unit-covered — see
+`tests/COVERAGE.md`).
 
 ### Bash (via assertion-density proxy)
 
@@ -73,6 +96,12 @@ High-logic-density targets (14+ scenarios):
 - `state-patch`, `build-orchestrator`, `changelog-from-git` (8 each)
 
 **Real bash line coverage** is obtainable on a **GNU/Linux host** (bash ≥4 + kcov). The `make coverage` kcov stem sed bug was fixed; on Linux it now works end-to-end.
+
+### Swift (measured, per package)
+
+- `benchmark/ttt-template` — 48 Swift Testing tests (engine, AI, models, router, view-model); the iOS slice runs via `make test-ios` (xcodebuild, iPhone simulator; SKIPs cleanly without a runtime)
+- `benchmark/harness` — 140 tests incl. schema byte-compat against the real `history.json`, AC-8 package-graph, budget/credential/prompt-assembly gates (all dispatchers injected — zero LLM calls)
+- `tests/swift` — 38 PluginScriptsTests behaviors
 
 See `tests/COVERAGE.md` for per-file details and proxy exemption policy.
 
@@ -150,17 +179,18 @@ bats tests/shell/hooks/agent-stop.bats --verbose
 
 ## Environment & Dependencies
 
-**Supported platforms:** macOS (bash 3.2), GNU/Linux (bash 4+).
+**Supported platforms:** macOS (bash 3.2), GNU/Linux (bash 4+). The Swift
+packages need macOS 15+ (or a matching Swift 6 toolchain).
 
 **Hard dependencies:**
-- Python 3.7+
+- Swift 6 toolchain (`swift test` for the three packages)
+- Python 3 (the skill runtime scripts stay Python; PluginScriptsTests shells to them)
 - `make`, `jq` (present in both platforms)
 - `git` (for hook tests + fixture sourcing)
 
 **Soft dependencies (auto-bootstrapped):**
 - bats (vendored under `tests/vendor/`)
 - kcov (brew → system → proxy)
-- coverage.py (pip → vendored wheel)
 
 **Clean-clone guarantee:** `make test` passes on a fresh checkout without manual install of bats/kcov/pytest.
 

@@ -4,7 +4,7 @@ description: Technical excellence champion for code quality, technical decisions
 model: opus
 color: magenta
 effort: high
-version: 0.2.3
+version: 0.3.0
 maxTurns: 60
 tools: Read, Glob, Grep, Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(pandoc:*), TaskCreate, TaskUpdate, TaskGet, TaskList, mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 disallowedTools: mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__test_dev, mcp__XcodeBuildMCP__test_macos, mcp__XcodeBuildMCP__test_device, mcp__XcodeBuildMCP__swift_package_test, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__build_run_dev, mcp__XcodeBuildMCP__build_run_macos, mcp__XcodeBuildMCP__build_run_device, mcp__XcodeBuildMCP__launch_app_sim, mcp__XcodeBuildMCP__launch_app_dev, mcp__XcodeBuildMCP__launch_mac_app
@@ -93,10 +93,13 @@ Any other Bash invocation — especially anything that runs tests, mutates the w
 
 ### Diff-Only Read Rule (DR)
 
-Before reading any source file, check `state.json → facts.files_read` for that path. If the file was read by DV (or any prior stage):
-- Use `git diff <base>..HEAD -- <path>` to see only the changes, NOT `Read <path>`.
-- Read the full file ONLY when the diff is insufficient (e.g., reviewing surrounding context of a complex change — document the reason in `developer-review-N.md § Findings`).
-- For files >200 lines, ALWAYS use `Read` with `offset`/`limit` targeting the changed region when a full read is needed.
+Cheapest-first read order (when only verdict/decisions/refs or the delta is needed — full reads stay available whenever context requires them):
+
+1. **Frontmatter-first**: for an upstream artifact, read its `handoff:` frontmatter block (≤200 tok, `handoff-protocol.md#frontmatter-schema`) instead of the full artifact when only verdict/decisions/refs are needed.
+2. **Diff-only**: check `state.json → facts.files_read` for a source path. If the file was read by DV (or any prior stage), use `git diff <base>..HEAD -- <path>` to see only the changes, NOT `Read <path>`.
+3. **Anchor-scoped**: when a single `## <anchor>` section suffices, `Read` that anchor's range instead of the whole file.
+
+Read the full file/artifact ONLY when the above is insufficient (e.g., reviewing surrounding context of a complex change — document the reason in `developer-review-N.md § Findings`). For files >200 lines needing a full read, ALWAYS use `Read` with `offset`/`limit` targeting the changed region.
 
 If `facts.files_read` is absent (legacy worktask without token optimization), fall back to normal reads.
 
@@ -253,27 +256,9 @@ Before marking DR stage complete, verify (supplement to `stage-contracts.md § C
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-dr`. Prev→this label: `DV→DR`.
 
-### Frontmatter for this stage (DR)
-
-Paste at the top of `.context/developer-review-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
-
-```yaml
----
-handoff:
-  stage: DR
-  verdict: pass                # pass / fail
-  summary: "<N files reviewed. M findings, all addressed / K blockers remain>"
-  key_decisions:
-    - { id: dr1, summary: "<finding or approval>", anchor: "developer-review-N.md#findings" }
-  refs:
-    dev: development-N.md#files-changed
-    findings: developer-review-N.md#findings
----
-```
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dr`.
 
 ### State.json Atomic Merge — REQUIRED before return
-
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
 
 ```bash
 _sf=".context/state.json"
@@ -285,4 +270,4 @@ jq --arg code "DR" --arg artifact "developer-review-N.md" --arg verdict "<pass|f
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.

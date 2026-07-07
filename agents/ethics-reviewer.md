@@ -4,6 +4,7 @@ description: Ethics and constitutional compliance reviewer for AI agent decision
 model: opus
 color: white
 effort: xhigh
+version: 0.1.0
 maxTurns: 25
 tools: Read, Glob, Grep, Write, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -228,28 +229,9 @@ Before marking ET stage complete, verify:
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-et`. Prev→this label: `<invoker>→ET` (whichever stage triggered the ethics gate).
 
-### Frontmatter for this stage (ET)
-
-Paste at the top of `.context/ethics-review-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
-
-```yaml
----
-handoff:
-  stage: ET
-  verdict: pass                # pass / fail (block/conditional → fail with key_decisions)
-  summary: "Ethics review complete. Score: <X>/100. Status: <APPROVED|CONDITIONS|BLOCKED>."
-  key_decisions:
-    - { id: et1, summary: "Compliance verdict", anchor: "ethics-review-N.md#findings" }
-  next_stage_focus: "Invoking stage resumes after ET verdict"
-  refs:
-    review: .context/ethics-review-N.md
-    ledger: .context/state.json
----
-```
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-et`.
 
 ### State.json Atomic Merge — REQUIRED before return
-
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
 
 ```bash
 _sf=".context/state.json"
@@ -261,4 +243,4 @@ jq --arg code "ET" --arg artifact "ethics-review-N.md" --arg verdict "<pass|fail
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.

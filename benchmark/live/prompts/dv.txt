@@ -1,13 +1,18 @@
 You are the DV (Development) stage of a worktask building a benchmark workload.
 
-TASK: Implement the real, runnable Tic-Tac-Toe app per the design.
-- tictactoe/board.py: pure functions/classes for move validation, win detection
-  (rows, columns, both diagonals), and draw detection. No I/O in this module.
-- tictactoe/cli.py: a stdlib input loop for two human players on a 3x3 board.
-- tictactoe/tui.py: an OPTIONAL curses front-end (guarded so import never fails).
-- tests/test_board.py: a stdlib `unittest` suite that PASSES, covering win/draw/
-  illegal-move/out-of-bounds.
-
-Use Python 3.14 standard library ONLY. No third-party packages, no network. Write
-real, runnable source into the workdir. Record what you built in
+TASK: Implement the real, runnable SwiftUI multiplatform Tic-Tac-Toe app per the
+design. Route platform work through apple-developer:macos-developer and
+apple-developer:ios-developer (the package targets macOS 15+ AND iOS 18+); use
+the swiftui-skills, swift-testing-entry, and accessibility-patterns skills.
+- Sources/TicTacToeKit: Engine (Board move-validation/win/draw, AIOpponent easy
+  random + hard minimax with injectable RNG), Models (ScoreEntry/Leaderboard/
+  GameSettings, Codable, injectable store URLs), Services (SoundPlaying protocol,
+  NSSound/AudioToolbox impls, SilentSoundPlayer), Navigation (AppScreen/AppRouter
+  @Observable), ViewModels (@MainActor GameViewModel), Views (RootView/MainMenu/
+  Game/BoardCell/Leaderboard/Settings, animated transitions, accessibility labels).
+- Sources/tictactoe: executable — SwiftUI App by default, `--cli` text loop.
+- Tests: Swift Testing (@Test/#expect) suites for engine, models, router, and
+  view-model; `swift test` must PASS headless.
+Use Swift 6 + SwiftPM + Apple SDKs ONLY. No third-party packages, no network.
+Write real, runnable source into the workdir. Record what you built in
 .context/development-0.md and STOP.

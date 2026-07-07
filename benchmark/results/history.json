@@ -1,65 +1,69 @@
 {
   "deterministic": [
     {
-      "run_id": "deterministic-20260701T072314Z-69c430f",
-      "timestamp_utc": "2026-07-01T07:23:14Z",
+      "run_id": "deterministic-20260706T072557Z-4a60fb6",
+      "timestamp_utc": "2026-07-06T07:25:57Z",
       "mode": "deterministic",
-      "git_sha": "69c430f",
+      "git_sha": "4a60fb6",
       "budget_usd": null,
       "paths": {
         "with": {
           "tokens": {
             "in": null,
             "out": null,
-            "total": null
+            "total": null,
+            "cache_read": null,
+            "cache_creation": null
           },
           "cost_usd": null,
-          "wall_clock_s": 0.0456,
-          "loc_produced": 345,
-          "test_count": 20,
+          "wall_clock_s": 0.1381,
+          "loc_produced": 1427,
+          "test_count": 48,
           "coverage_pct": 0.0,
           "estimate_complexity_score": 15,
-          "stage_count": 5,
+          "stage_count": 9,
           "pass_fail": "pass",
-          "app_path": "benchmark/workdirs/deterministic-20260701T072314Z-69c430f/with"
+          "app_path": "benchmark/workdirs/deterministic-20260706T072557Z-4a60fb6/with"
         },
         "without": {
           "tokens": {
             "in": null,
             "out": null,
-            "total": null
+            "total": null,
+            "cache_read": null,
+            "cache_creation": null
           },
           "cost_usd": null,
-          "wall_clock_s": 0.0015,
-          "loc_produced": 345,
-          "test_count": 20,
+          "wall_clock_s": 0.004,
+          "loc_produced": 1427,
+          "test_count": 48,
           "coverage_pct": 0.0,
           "estimate_complexity_score": 0,
           "stage_count": 1,
           "pass_fail": "pass",
-          "app_path": "benchmark/workdirs/deterministic-20260701T072314Z-69c430f/without"
+          "app_path": "benchmark/workdirs/deterministic-20260706T072557Z-4a60fb6/without"
         }
       },
       "comparison": {
         "loc_produced": {
-          "with": 345,
-          "without": 345,
+          "with": 1427,
+          "without": 1427,
           "delta": 0
         },
         "test_count": {
-          "with": 20,
-          "without": 20,
+          "with": 48,
+          "without": 48,
           "delta": 0
         },
         "coverage_pct": {
-          "with": 0.0,
-          "without": 0.0,
-          "delta": 0.0
+          "with": 0,
+          "without": 0,
+          "delta": 0
         },
         "wall_clock_s": {
-          "with": 0.0456,
-          "without": 0.0015,
-          "delta": 0.0441
+          "with": 0.1381,
+          "without": 0.004,
+          "delta": 0.1341
         },
         "estimate_complexity_score": {
           "with": 15,
@@ -67,72 +71,76 @@
           "delta": 15
         },
         "stage_count": {
-          "with": 5,
+          "with": 9,
           "without": 1,
-          "delta": 4
+          "delta": 8
         }
       }
     },
     {
-      "run_id": "deterministic-20260701T072315Z-69c430f",
-      "timestamp_utc": "2026-07-01T07:23:15Z",
+      "run_id": "deterministic-20260706T073412Z-3b46a71",
+      "timestamp_utc": "2026-07-06T07:34:12Z",
       "mode": "deterministic",
-      "git_sha": "69c430f",
+      "git_sha": "3b46a71",
       "budget_usd": null,
       "paths": {
         "with": {
           "tokens": {
             "in": null,
             "out": null,
-            "total": null
+            "total": null,
+            "cache_read": null,
+            "cache_creation": null
           },
           "cost_usd": null,
-          "wall_clock_s": 0.043,
-          "loc_produced": 345,
-          "test_count": 20,
+          "wall_clock_s": 0.1453,
+          "loc_produced": 1427,
+          "test_count": 48,
           "coverage_pct": 0.0,
           "estimate_complexity_score": 15,
-          "stage_count": 5,
+          "stage_count": 9,
           "pass_fail": "pass",
-          "app_path": "benchmark/workdirs/deterministic-20260701T072315Z-69c430f/with"
+          "app_path": "benchmark/workdirs/deterministic-20260706T073412Z-3b46a71/with"
         },
         "without": {
           "tokens": {
             "in": null,
             "out": null,
-            "total": null
+            "total": null,
+            "cache_read": null,
+            "cache_creation": null
           },
           "cost_usd": null,
           "wall_clock_s": 0.0038,
-          "loc_produced": 345,
-          "test_count": 20,
+          "loc_produced": 1427,
+          "test_count": 48,
           "coverage_pct": 0.0,
           "estimate_complexity_score": 0,
           "stage_count": 1,
           "pass_fail": "pass",
-          "app_path": "benchmark/workdirs/deterministic-20260701T072315Z-69c430f/without"
+          "app_path": "benchmark/workdirs/deterministic-20260706T073412Z-3b46a71/without"
         }
       },
       "comparison": {
         "loc_produced": {
-          "with": 345,
-          "without": 345,
+          "with": 1427,
+          "without": 1427,
           "delta": 0
         },
         "test_count": {
-          "with": 20,
-          "without": 20,
+          "with": 48,
+          "without": 48,
           "delta": 0
         },
         "coverage_pct": {
-          "with": 0.0,
-          "without": 0.0,
-          "delta": 0.0
+          "with": 0,
+          "without": 0,
+          "delta": 0
         },
         "wall_clock_s": {
-          "with": 0.043,
+          "with": 0.1453,
           "without": 0.0038,
-          "delta": 0.0392
+          "delta": 0.14150000000000001
         },
         "estimate_complexity_score": {
           "with": 15,
@@ -140,72 +148,76 @@
           "delta": 15
         },
         "stage_count": {
-          "with": 5,
+          "with": 9,
           "without": 1,
-          "delta": 4
+          "delta": 8
         }
       }
     },
     {
-      "run_id": "deterministic-20260701T072315Z-69c430f",
-      "timestamp_utc": "2026-07-01T07:23:15Z",
+      "run_id": "deterministic-20260706T075048Z-3b46a71",
+      "timestamp_utc": "2026-07-06T07:50:48Z",
       "mode": "deterministic",
-      "git_sha": "69c430f",
+      "git_sha": "3b46a71",
       "budget_usd": null,
       "paths": {
         "with": {
           "tokens": {
             "in": null,
             "out": null,
-            "total": null
+            "total": null,
+            "cache_read": null,
+            "cache_creation": null
           },
           "cost_usd": null,
-          "wall_clock_s": 0.0454,
-          "loc_produced": 345,
-          "test_count": 20,
+          "wall_clock_s": 0.1466,
+          "loc_produced": 1427,
+          "test_count": 48,
           "coverage_pct": 0.0,
           "estimate_complexity_score": 15,
-          "stage_count": 5,
+          "stage_count": 9,
           "pass_fail": "pass",
-          "app_path": "benchmark/workdirs/deterministic-20260701T072315Z-69c430f/with"
+          "app_path": "benchmark/workdirs/deterministic-20260706T075048Z-3b46a71/with"
         },
         "without": {
           "tokens": {
             "in": null,
             "out": null,
-            "total": null
+            "total": null,
+            "cache_read": null,
+            "cache_creation": null
           },
           "cost_usd": null,
-          "wall_clock_s": 0.002,
-          "loc_produced": 345,
-          "test_count": 20,
+          "wall_clock_s": 0.004,
+          "loc_produced": 1427,
+          "test_count": 48,
           "coverage_pct": 0.0,
           "estimate_complexity_score": 0,
           "stage_count": 1,
           "pass_fail": "pass",
-          "app_path": "benchmark/workdirs/deterministic-20260701T072315Z-69c430f/without"
+          "app_path": "benchmark/workdirs/deterministic-20260706T075048Z-3b46a71/without"
         }
       },
       "comparison": {
         "loc_produced": {
-          "with": 345,
-          "without": 345,
+          "with": 1427,
+          "without": 1427,
           "delta": 0
         },
         "test_count": {
-          "with": 20,
-          "without": 20,
+          "with": 48,
+          "without": 48,
           "delta": 0
         },
         "coverage_pct": {
-          "with": 0.0,
-          "without": 0.0,
-          "delta": 0.0
+          "with": 0,
+          "without": 0,
+          "delta": 0
         },
         "wall_clock_s": {
-          "with": 0.0454,
-          "without": 0.002,
-          "delta": 0.0434
+          "with": 0.1466,
+          "without": 0.004,
+          "delta": 0.1426
         },
         "estimate_complexity_score": {
           "with": 15,
@@ -213,9 +225,9 @@
           "delta": 15
         },
         "stage_count": {
-          "with": 5,
+          "with": 9,
           "without": 1,
-          "delta": 4
+          "delta": 8
         }
       }
     }

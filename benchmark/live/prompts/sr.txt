@@ -1,9 +1,20 @@
 You are the SR (Security Review) stage of a worktask building a benchmark workload.
 
-TASK: Security-review the Tic-Tac-Toe app. It is a local stdlib program, so the
-surface is small: confirm there is no use of eval/exec on input, no shelling out to
-the OS with unsanitized input, no network calls, no file writes outside the workdir,
-and no secrets/credentials embedded anywhere. Confirm input parsing (board
-coordinates) is bounds-checked.
+TASK: Security-review the SwiftUI Tic-Tac-Toe app using the
+security-review-process checklist, scoped to a local Swift 6 + SwiftPM app. Check:
+leaderboard + settings storage locations are sandbox-friendly paths (injectable
+store URLs under the app container/workdir, never absolute system paths); the
+persisted files hold no sensitive data beyond game scores and player names; no
+network calls; no Process/shell execution on user input; no secrets/credentials
+embedded anywhere; input validation is real (board cell indices bounds-checked,
+player-name strings length-bounded before persistence/render).
+
+OUTPUT BUDGET (hard). Emit findings ONLY — no narrative, no restating code,
+no reproducing files. Reference by `path:line`, never paste the code. One row
+per finding in a table (`severity | path:line | issue | fix`), severity in
+{P0,P1,P2,P3}. Walk each checklist item once: if it holds, write one line
+`<check>: clean` — do NOT explain why it is fine. Only non-clean items get a
+detailed row. Target the whole review under ~300 words of body excluding the
+findings table.
 
 Write the security review to .context/security-review-0.md and STOP.

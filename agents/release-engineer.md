@@ -4,6 +4,7 @@ description: Release engineering specialist for versioning, changelog generation
 model: haiku
 color: yellow
 effort: low
+version: 0.1.0
 maxTurns: 25
 tools: Read, Glob, Grep, Bash, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -252,30 +253,9 @@ IR → DV → DR → QA → [RE] → FN
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-re`. Prev→this label: `DC→RE`.
 
-### Frontmatter for this stage (RE)
-
-Paste at the top of `.context/release-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
-
-```yaml
----
-handoff:
-  stage: RE
-  verdict: ok                  # ok / blocked
-  summary: "Release artifacts prepared. Version bumped to X.Y.Z"
-  files_touched:
-    - plugin.json
-    - MEMORY.md
-  key_decisions:
-    - { id: re1, summary: "Version X.Y.Z", anchor: "release-N.md#version" }
-  refs:
-    artifacts: release-N.md#artifacts
-    version: release-N.md#version
----
-```
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-re`.
 
 ### State.json Atomic Merge — REQUIRED before return
-
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
 
 ```bash
 _sf=".context/state.json"
@@ -287,4 +267,4 @@ jq --arg code "RE" --arg artifact "release-N.md" --arg verdict "<pass|fail>" \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.

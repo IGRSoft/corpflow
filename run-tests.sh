@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 # run-tests.sh — single, dependency-light entrypoint for the deterministic suite.
 #
-# AC-1: on a clean clone with ONLY Python 3.14, jq, and make present (NO system
-# bats / pytest / kcov), `./run-tests.sh` self-bootstraps the vendored bats and
-# runs the full deterministic suite green. No network. No live dispatch.
+# AC-1: on a clean clone with the Swift toolchain, python3, jq, and make present
+# (NO system bats / pytest / kcov), `./run-tests.sh` self-bootstraps the vendored
+# bats and runs the full deterministic suite green. No network. No live dispatch.
+# python3 remains a prerequisite because the plugin's skill scripts
+# (skills/**/scripts/*.py) stay Python and PluginScriptsTests shells out to them.
 #
 # `make test` delegates here. A bare `./run-tests.sh` is equivalent.
 #
 # Flags:
-#   --coverage    run under coverage tooling (kcov for bash, coverage.py for
-#                 python); same as COVERAGE=1. Delegates coverage gating to make
-#                 where kcov is available, else documents the proxy.
+#   --coverage    run under coverage tooling (kcov for bash, swift
+#                 --enable-code-coverage for the packages); same as COVERAGE=1.
+#                 Delegates coverage gating to make.
 #   --quiet       less chatty bats output (bats default is already terse).
 set -euo pipefail
 
@@ -39,10 +41,12 @@ See tests/vendor/VENDOR.md."
 fi
 
 # Hard prerequisites that the host MUST provide (per AC-1 environment contract).
-command -v python3 >/dev/null 2>&1 || fail "python3 not found (required)"
+command -v swift   >/dev/null 2>&1 || fail "swift toolchain not found (required)"
+command -v python3 >/dev/null 2>&1 || fail "python3 not found (required — skill scripts stay Python)"
 command -v jq      >/dev/null 2>&1 || fail "jq not found (required)"
 
 note "vendored bats: $("$BATS" --version 2>/dev/null || echo '?')"
+note "swift:         $(swift --version 2>/dev/null | head -1)"
 note "python3:       $(python3 --version 2>&1)"
 
 # --- collect shell test files ------------------------------------------------
@@ -52,16 +56,10 @@ while IFS= read -r f; do shell_tests+=("$f"); done < <(
   find "$PLUGIN_ROOT/tests/shell" -type f -name '*.bats' 2>/dev/null | sort
 )
 
-# --- python test discovery ---------------------------------------------------
-have_python_tests=0
-if find "$PLUGIN_ROOT/tests/python" -name 'test_*.py' -type f 2>/dev/null | grep -q .; then
-  have_python_tests=1
-fi
-
 rc=0
 
 if [ "$COVERAGE" = "1" ]; then
-  note "COVERAGE=1 → delegating to 'make coverage' for kcov/coverage.py gating"
+  note "COVERAGE=1 → delegating to 'make coverage' for kcov/swift-coverage gating"
   make -C "$PLUGIN_ROOT" coverage || rc=$?
   exit "$rc"
 fi
@@ -71,16 +69,24 @@ if [ "${#shell_tests[@]}" -gt 0 ]; then
   note "running ${#shell_tests[@]} bats file(s)…"
   "$BATS" "${shell_tests[@]}" || rc=$?
 else
-  warn "no .bats files found under tests/shell — (other DV tracks not yet landed?)"
+  warn "no .bats files found under tests/shell"
 fi
 
-# --- run python tests --------------------------------------------------------
-if [ "$have_python_tests" = "1" ]; then
-  note "running python unittest discovery under tests/python…"
-  ( cd "$PLUGIN_ROOT" && python3 -m unittest discover -s tests/python -p 'test_*.py' -v ) || rc=$?
-else
-  warn "no python tests found under tests/python (DV0c not yet landed?)"
-fi
+# --- run swift test phases (ttt-template, harness, tests/swift) --------------
+swift_packages=(
+  "$PLUGIN_ROOT/benchmark/ttt-template"
+  "$PLUGIN_ROOT/benchmark/harness"
+  "$PLUGIN_ROOT/tests/swift"
+)
+for pkg in "${swift_packages[@]}"; do
+  if [ -f "$pkg/Package.swift" ]; then
+    note "swift test → ${pkg#$PLUGIN_ROOT/}"
+    ( cd "$pkg" && swift test ) || rc=$?
+  else
+    warn "swift package missing at $pkg"
+    rc=1
+  fi
+done
 
 if [ "$rc" -eq 0 ]; then
   note "ALL GREEN"

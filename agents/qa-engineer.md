@@ -5,7 +5,7 @@ model: sonnet
 color: yellow
 effort: medium
 maxTurns: 40
-version: 0.2.1
+version: 0.3.0
 tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__get_coverage_report, mcp__XcodeBuildMCP__get_file_coverage, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -62,10 +62,13 @@ For documentation lookup, use Context7 (`resolve-library-id` → `query-docs`) o
 
 ### Diff-Only Read Rule (QA)
 
-Before reading any source file, check `state.json → facts.files_read` for that path. If the file was read by DV:
-- Use `git diff <base>..HEAD -- <path>` for changed-file context instead of `Read <path>`.
-- Read the full file ONLY when writing new tests that need the complete type/API surface.
-- For files >200 lines, ALWAYS use `Read` with `offset`/`limit` targeting the relevant section.
+Cheapest-first read order (when only verdict/decisions/refs or the delta is needed — full reads stay available whenever context requires them):
+
+1. **Frontmatter-first**: for an upstream artifact, read its `handoff:` frontmatter block (≤200 tok, `handoff-protocol.md#frontmatter-schema`) instead of the full artifact when only verdict/decisions/refs are needed.
+2. **Diff-only**: check `state.json → facts.files_read` for a source path. If the file was read by DV, use `git diff <base>..HEAD -- <path>` for changed-file context instead of `Read <path>`.
+3. **Anchor-scoped**: when a single `## <anchor>` section suffices, `Read` that anchor's range instead of the whole file.
+
+Read the full file/artifact ONLY when writing new tests that need the complete type/API surface, or when the above is insufficient. For files >200 lines needing a full read, ALWAYS use `Read` with `offset`/`limit` targeting the relevant section.
 
 If `facts.files_read` is absent (legacy worktask), fall back to normal reads.
 
@@ -328,29 +331,9 @@ Before marking QA stage complete, verify:
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-qa`. Prev→this label: `DR→QA` (or `SR→QA` when SR runs).
 
-### Frontmatter for this stage (QA)
-
-Paste at the top of `.context/testing-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
-
-```yaml
----
-handoff:
-  stage: QA
-  verdict: go                  # go / no-go
-  summary: "<N unit tests pass, M integration checks. Coverage X%>"
-  files_touched:
-    - tests/added/test-file.sh
-  key_decisions:
-    - { id: qa1, summary: "Coverage X%, target met", anchor: "testing-N.md#coverage" }
-  refs:
-    dev: development-N.md#files-changed
-    results: testing-N.md#results
----
-```
+Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-qa`.
 
 ### State.json Atomic Merge — REQUIRED before return
-
-Run this BEFORE returning. Required by `stage-contracts.md § Completion Verification`.
 
 ```bash
 _sf=".context/state.json"
@@ -362,4 +345,4 @@ jq --arg code "QA" --arg artifact "testing-N.md" --arg verdict "<pass|fail>" \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-If `jq` is unavailable or state.json is absent (F1 fallback), skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
