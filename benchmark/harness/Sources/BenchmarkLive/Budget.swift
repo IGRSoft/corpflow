@@ -20,6 +20,18 @@ public enum Budget {
     /// The 10-stage full pipeline (PL -> ... -> ST) the live WITH-path runs.
     /// SR is IN the live pipeline (AR delta D3) even when a given worktask
     /// drops it as a stage.
+    ///
+    /// ADR (OI-3, branch a — AR delta D3): SR is a GENUINE, intended stage of
+    /// the live benchmark pipeline, distinct from DR. The SR prompt does
+    /// security-checklist work (sandbox-path/secrets/input-validation/network/
+    /// shell review); the DR prompt does correctness + SwiftUI-quality review —
+    /// verified non-overlapping (benchmark/live/prompts/{sr,dr}.txt), so
+    /// measuring SR as its own ~23% cost stage is correct, NOT double-work.
+    /// Any prior text calling SR "folded into DR/DV review" for the LIVE
+    /// pipeline is a stale mis-generalization of a WORKTASK-level stage-set
+    /// choice (a run may drop a standalone SR *review task*); it does NOT mean
+    /// the live pipeline folds SR. Do not remove SR here without re-opening that
+    /// decision — it would shift measured per-run cost baselines.
     public static let pipelineStages = ["PL", "AR", "TL", "DV", "DR", "SR",
                                         "QA", "DC", "FN", "ST"]
 
