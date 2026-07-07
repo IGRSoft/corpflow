@@ -812,6 +812,7 @@ while (tasks.some(t => t.status !== "completed")) {
       if (launchAck?.result === "error" || launchAck?.errored) {
         const cls = classifyError(launchAck);  // existing taxonomy, no new vocabulary
         const runIndex = full.metadata.run_index ?? 0;
+        const stateForFailed = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
         atomicMergeStateJson({
           stages: {
             [code]: {
@@ -824,7 +825,7 @@ while (tasks.some(t => t.status !== "completed")) {
             },
           },
           facts: {
-            dispatched_agents: markDispatchStatus(state, task.id, "failed"),
+            dispatched_agents: markDispatchStatus(stateForFailed, task.id, "failed"),
           },
         });
         routeToRetryMatrix(code, cls);  // never falls through to completion
