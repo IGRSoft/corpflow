@@ -218,6 +218,10 @@ PATCH_ARGS=()
 [[ -n "${CLAUDE_TASK_METADATA_STAGE:-}" ]] && PATCH_ARGS+=(--stage "$CLAUDE_TASK_METADATA_STAGE")
 [[ -n "${CLAUDE_ARTIFACT_PATH:-}" ]] && PATCH_ARGS+=(--artifact "$CLAUDE_ARTIFACT_PATH")
 PATCH_ARGS+=(--log "$LOG")
+# completed_via provenance: this delegating hook is enforcement Layer 2 ("hook").
+# The orchestrator's synchronous Step-6.5 path overrides via STATE_MERGE_VIA=step6_5
+# so the two layers are distinguishable in state.json. (Additive; absence = Layer 1.)
+PATCH_ARGS+=(--via "${STATE_MERGE_VIA:-hook}")
 
 bash "$PATCH_SCRIPT" "${PATCH_ARGS[@]}" 2>> "$LOG" || {
   log ERROR "state-patch.sh exited non-zero (stage=${CLAUDE_TASK_METADATA_STAGE:-} art=${CLAUDE_ARTIFACT_PATH:-}); continuing"

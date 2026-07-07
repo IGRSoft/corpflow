@@ -18,9 +18,25 @@ This file is the single source of truth referenced by:
 
 ## #atomic-write
 
-Atomic state.json write: read → merge → temp → fsync → rename. POSIX-shell pseudocode:
+Atomic state.json write: **lock → read → merge → temp → fsync → rename → unlock**. The
+read-merge-rename window is serialized by an mkdir-spinlock (macOS has no `flock(1)`), so
+legal sibling overlap (parallel DVN tracks, DC+QA) cannot drop a patch to last-rename-wins.
+POSIX-shell pseudocode:
 
 ```bash
+# 0. Acquire the merge lock (mkdir is atomic on POSIX). Env knobs:
+#    STATE_LOCK_TIMEOUT_S (default 5), STATE_LOCK_STALE_S (default 60).
+lockdir=".context/state.json.lock.d"; waited=0
+until mkdir "$lockdir" 2>/dev/null; do
+  # Break a leaked lock older than STATE_LOCK_STALE_S (by dir mtime).
+  age=$(( $(date +%s) - $(stat -f %m "$lockdir" 2>/dev/null || stat -c %Y "$lockdir") ))
+  (( age >= STATE_LOCK_STALE_S )) && { rmdir "$lockdir" 2>/dev/null; continue; }
+  # Timeout ⇒ proceed UNLOCKED + WARN (never a silent no-op). break_unlocked=1.
+  (( waited >= STATE_LOCK_TIMEOUT_S )) && { echo "WARN: lock timeout — unlocked" >&2; break_unlocked=1; break; }
+  sleep 1; waited=$(( waited + 1 ))
+done
+trap 'rmdir "$lockdir" 2>/dev/null' EXIT   # release on process end/failure
+
 # 1. Read current state (last-known-good)
 cur=$(cat .context/state.json)
 
@@ -36,6 +52,9 @@ sync "$tmp" 2>/dev/null || sync || true
 
 # 5. Atomic rename — POSIX guarantees same-FS rename is atomic
 mv -f "$tmp" .context/state.json
+
+# 6. Release the lock (also released by the EXIT trap above).
+rmdir "$lockdir" 2>/dev/null
 ```
 
 Failure semantics:
@@ -43,8 +62,20 @@ Failure semantics:
 - Crash before step 3 — state.json untouched (last-known-good preserved).
 - Crash between 3 and 5 — temp file orphaned in `.context/`. Cleanup on next worktask start: `rm -f .context/.state.json.*.tmp`. state.json untouched.
 - Crash after 5 — state.json contains new value. Idempotent (re-running merge with same patch is a no-op).
+- Crash while holding the lock — the EXIT trap releases it; a crash that skips the trap leaves a lock dir that the next writer breaks once it is older than `STATE_LOCK_STALE_S`.
 
-Single-writer invariant: at any moment exactly one stage agent is `in_progress`. No `flock` required.
+Single-writer invariant (revised): **one writer per stage KEY**. Sibling overlap is legal —
+two stages (or two parallel DVN tracks writing distinct keys) may merge concurrently; the
+mkdir-spinlock serializes their read-merge-rename windows so neither patch is lost. There is
+no global "exactly one agent `in_progress`" requirement. **Timeout ⇒ proceed unlocked + WARN**,
+which is never worse than the pre-lock lockless path (an exit-0 no-op would instead let a
+leaked lock silently swallow merges). The lock lives only in `state-patch.sh`'s `atomic_merge()`;
+the SubagentStop hook inherits it by delegation. The legacy `_inline_merge` fallback in
+`state-merge.sh` (used only when `state-patch.sh` is absent) stays unlocked — a documented
+transitional residual.
+
+The lock implementation is `skills/worktask/scripts/state-patch.sh` (`_lock_acquire` /
+`_lock_release` / `_lock_break_if_stale`); the two env knobs mirror the `DISK_MIN_GB` pattern.
 
 `$RANDOM` suffix on the temp filename guards against hypothetical PID reuse inside Task subagents (CR-7).
 
@@ -377,6 +408,14 @@ populated from the artifact's `handoff:` frontmatter instead (F2/F3) — the map
 | `IR.verdict` | `stages.IR.verdict` | incident-N.md `## root-cause` |
 | `IR.root_cause` | `facts.decisions[]` | incident-N.md `## root-cause` |
 | `ET.verdict` | `stages.ET.verdict` + `facts.verdicts.ET` | ethics-review-N.md `## verdict` |
+| `DV.worktree_path` | `stages.DV.worktree.path` | development-N.md (frontmatter `worktree_path`) |
+| `DV.worktree_branch` | `stages.DV.worktree.branch` | development-N.md (frontmatter `worktree_branch`) |
+
+The v1 additive fields have **orchestrator-loop / hook writers**, not schema-mapped stage returns
+(`facts.dispatched_agents[]`, `stages.<CODE>.last_error`, `stages.<CODE>.completed_via`,
+`facts.capabilities` — see `skills/worktask/SKILL.md § Orchestrator Execution Loop` steps 6/6.5).
+Only `stages.<CODE>.worktree` maps from a stage artifact — the DV handoff frontmatter
+`worktree_path`/`worktree_branch`, applied by `state-patch.sh` (rows above).
 
 ---
 
@@ -423,6 +462,43 @@ properties:
             completed_batches: { type: array, items: { type: string } }
             next_batch: { type: string, description: "id of the next pending sub-batch, or absent when done" }
             updated_at: { type: string, format: date-time }
+        completed_via:
+          type: string
+          enum: [hook, step6_5, f3]
+          description: |
+            OPTIONAL (additive, version:1). Which enforcement layer stamped this stage
+            `completed`. `hook` = SubagentStop delegation (Layer 2, `state-merge.sh` default);
+            `step6_5` = orchestrator synchronous Step-6.5 (`STATE_MERGE_VIA=step6_5`);
+            `f3` = orchestrator F3 minimal-patch fallback. **Absence encodes Layer-1 agent
+            self-patch OR a pre-upgrade run** — the hook's idempotency check exits before
+            writing when Layer 1 already landed, so no value is stamped. Observability only;
+            no consumer behavior branches on it.
+        last_error:
+          type: object
+          description: |
+            OPTIONAL (additive, version:1). Written by the orchestrator Step-6.5 errored-return
+            branch (CC ≥ 2.1.199/2.1.200 propagate errors with partial work) BEFORE routing to
+            the retry matrix. `class` reuses the EXISTING taxonomy from
+            `agent-coordination § Retry / Escalate Matrix` — no new vocabulary. Dropped once the
+            stage reaches `status: completed` (see eviction rules).
+          required: [class, at]
+          properties:
+            class: { type: string, enum: [transient, logic, missing_input, ambiguous_requirements, design_flaw, hard_constraint, exhausted] }
+            partial: { type: boolean, description: "partial work was preserved on the errored return" }
+            at: { type: string, format: date-time }
+            ref: { type: string, description: "pointer into .context/errors/<agent>.md (e.g. #retry-1)" }
+        worktree:
+          type: object
+          description: |
+            OPTIONAL (additive, version:1; DV primarily). Records WHICH worktree the stage ran
+            in — not just `worktree: true` semantics. Written by mapping the DV handoff
+            frontmatter `worktree_path`/`worktree_branch` (`state-patch.sh`). Lets resume
+            re-enter the exact worktree via `EnterWorktree(path)` (CC ≥ 2.1.157), DR/QA run in
+            the right dir, and fn-gate read the branch without shelling `git rev-parse`. Kept
+            through FN for PR context; dropped at archival.
+          properties:
+            path: { type: string }
+            branch: { type: string }
   facts:
     type: object
     required: [files_modified, tests_added, decisions, open_questions, verdicts]
@@ -476,6 +552,37 @@ properties:
             path: { type: string }
             stage: { type: string, enum: [PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET] }
             lines: { type: string, description: "'all' or '<start>-<end>'" }
+      dispatched_agents:
+        type: array
+        description: |
+          OPTIONAL (additive, version:1). Writer: the orchestrator loop ONLY. One entry per
+          `task_id` (NOT per stage — parallel DVN tracks share the stage code), replaced on
+          re-dispatch; dispatch history stays in `audit.jsonl`. Read by resume (`resume.md`
+          step 0) to reconcile against `claude agents --json --all` under background-default
+          dispatch (CC ≥ 2.1.198). No dispatch-timestamp field is stored (no consumer; `claude agents`
+          rows carry their own start time). Terminal entries (`status: completed|failed`) are eviction candidates.
+        items:
+          type: object
+          required: [stage, task_id, subagent_type, status]
+          properties:
+            stage: { type: string, description: "stage CODE (DV, DR, …)" }
+            task_id: { type: string, description: "Task System id — the dedupe key" }
+            subagent_type: { type: string, description: "resolved plugin:agent id" }
+            agent_id: { type: string, description: "OPTIONAL launch-ack id when the runtime surfaces one (bg-default CC ≥ 2.1.198); resume degrades to best-effort subagent_type match when absent" }
+            name: { type: string, description: "OPTIONAL named-spawn handle (megatask lanes); readable default names CC ≥ 2.1.196, /rename persists CC ≥ 2.1.202" }
+            model_requested: { type: string, description: "OPTIONAL — metadata.model alias at dispatch" }
+            model_resolved: { type: string, description: "OPTIONAL best-effort — model that actually ran (claude agents --json / audit); omit when unknown" }
+            status: { type: string, enum: [launched, completed, failed] }
+      capabilities:
+        type: object
+        description: |
+          OPTIONAL (additive, version:1). Probe cache for account-level hard-fails so every
+          later stage does not re-hit the same error. Written by the orchestrator on first
+          observed failure; model resolution consults it before any fable-tier dispatch.
+          Example: `{ "fable_dispatch": "credit_blocked", "checked_at": "<ISO>" }` — Fable 5 is
+          1M-by-default (CC 2.1.170/2.1.173) but *dispatch* fails hard without 1M credits
+          (CC 2.1.172; observed live per model-selection.md).
+        additionalProperties: true
   mcp_session:
     type: object
     description: |
@@ -503,7 +610,10 @@ When state.json approaches the 500-token cap:
 2. Drop `facts.open_questions` whose status is resolved.
 3. Drop `facts.decisions` older than 2 stages back (keep current + previous stage decisions).
 4. Drop `facts.files_read` entries whose `stage` is older than 2 stages back.
-5. NEVER store diffs, file contents, or test output. Fetch from git/disk on demand.
+5. Drop `facts.dispatched_agents[]` entries in a terminal state (`status: completed|failed`) — the live-agent reconciliation they exist for no longer applies; audit history persists in `audit.jsonl`.
+6. Drop `stages.<CODE>.last_error` and `stages.<CODE>.completed_via` for stages that have reached `status: completed` (the error is resolved; provenance was observability-only).
+7. Keep `stages.<CODE>.worktree` through FN (PR context needs the branch); drop it only at archival.
+8. NEVER store diffs, file contents, or test output. Fetch from git/disk on demand.
 
 ### PL0 seed (initial state) {#pl0-seed}
 
@@ -531,11 +641,18 @@ the JSON below shows the resulting shape:
     "tests_added": [],
     "decisions": [],
     "open_questions": [],
-    "verdicts": {}
+    "verdicts": {},
+    "dispatched_agents": []
   },
   "handoffs": {}
 }
 ```
+
+The seed includes `facts.dispatched_agents: []` (additive, version:1) so the orchestrator loop
+appends/replaces per-`task_id` dispatch entries in place rather than lazily creating the array on
+first dispatch. The other additive fields (`stages.<CODE>.completed_via`/`last_error`/`worktree`,
+`facts.capabilities`) are written on demand by their writers and MUST NOT be seeded — their absence
+is meaningful (Layer-1 self-patch, no error, no worktree record, no observed capability hard-fail).
 
 **On a new PL run in an existing `.context/`**: the seed sets `run_index = N`
 (next free index) up front; PL0 then atomically resets `stages` to

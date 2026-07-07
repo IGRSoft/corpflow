@@ -79,6 +79,7 @@ In auto mode the runtime enforces these guards independently of the rules above:
 - **Destructive git is blocked unless discard is explicitly requested** — `git reset --hard`, `git checkout -- .`, `git clean -fd`, and `git stash drop` are refused unless the prompt explicitly asks to discard those changes.
 - **`commit --amend` is blocked unless the commit was made by the agent this session** — a pre-existing commit cannot be rewritten. This enforces the plugin's existing "prefer new commits over `--amend`" rule with a runtime rationale: after a failed hook the commit did not happen, so amend would destroy prior work.
 - **IaC `destroy` is blocked unless the specific stack is named** — a bare `destroy` is refused; the target stack must be specified.
+- **Denials are self-explanatory (CC ≥ 2.1.193)** — auto-mode denial reasons surface in the transcript, the denial toast, and `/permissions` recent denials, so a blocked git guard documents itself in the audit trail. Stricter installs can set `autoMode.classifyAllShell` (CC ≥ 2.1.193) to route ALL shell commands through the classifier, not just arbitrary-code-execution patterns.
 
 FN-stage commit/cleanup and `create-pr` therefore run under this guard. None of the worktask flows rely on amending a non-agent commit, so the guard is documentation-forward (it reinforces, rather than changes, current behavior).
 

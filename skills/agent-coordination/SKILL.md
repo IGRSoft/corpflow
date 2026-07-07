@@ -319,6 +319,8 @@ for full code patterns.
 
 > **Pre-launch spawn classification (CC ≥ 2.1.178)**: in auto mode the permission classifier evaluates a subagent spawn **before** it launches, so a dispatch can be denied up front (`PermissionDenied` hook fires). The orchestrator must handle a refused spawn — treat a denied dispatch like a failed stage and route per the retry/escalate matrix rather than assuming every `Task(...)` starts.
 
+> **Background-by-default dispatch (CC ≥ 2.1.198)**: subagents now run in the **background by default** — the dispatching agent keeps its turn and receives the child's result as a completion notification. Two consequences for the worktask loop: (1) a `Task()` launch acknowledgement is NOT stage completion — advance a stage (Step 6.5, `TaskUpdate(completed)`) only on the completion notification or the `subagent_stopped` audit row (`skills/worktask/SKILL.md § Orchestrator Execution Loop`); (2) unblocked sibling stages (parallel DVN tracks, DC+QA) genuinely overlap with no extra orchestration. Depth accounting stays correct across resume: resumed subagents restore their original spawn depth and forked subagents count toward the 5-level cap (CC ≥ 2.1.187). Permission prompts from background subagents surface in the main session — dialog names the asking agent; Esc denies just that tool — instead of being auto-denied (CC ≥ 2.1.186), so an unattended run parks on them (see the resume `waitingFor` branch table).
+
 ### Model Selection
 
 ```
@@ -338,7 +340,7 @@ The Task tool `model` parameter allows per-invocation overrides:
 Task({ subagent_type: "igrsoft:developer", model: "opus" })
 ```
 
-> **Parameterized permission syntax (CC ≥ 2.1.178)**: permission rules accept a `Tool(param:value)` form with `*` wildcard support — e.g. `Agent(model:opus)` permits only opus-model spawns, `Agent(model:*)` permits any model override. Use this to constrain which dispatch overrides auto mode may take without hand-listing every agent.
+> **Parameterized permission syntax (CC ≥ 2.1.178)**: permission rules accept a `Tool(param:value)` form with `*` wildcard support — e.g. `Agent(model:opus)` permits only opus-model spawns, `Agent(model:*)` permits any model override. Use this to constrain which dispatch overrides auto mode may take without hand-listing every agent. `Agent(type)` deny rules and `Agent(x,y)` allowed-types restrictions are enforced for **named** subagent spawns too as of CC 2.1.186 (previously leaked past named spawns).
 
 > Agent teams inherit the leader's model. Teammates use the parent session's model unless explicitly overridden. Model aliases (`fable`/`opus`/`sonnet`/`haiku`) work correctly across all providers (Anthropic, Bedrock, Vertex, Foundry). Allowlist caveat (v2.1.172/v2.1.175): a managed `availableModels` list now constrains subagent model overrides too, and `enforceAvailableModels` constrains the Default model — a valid alias may silently resolve to a different model; see `skills/worktask/SKILL.md § Pre-Stage Validation` step 6.
 
@@ -393,6 +395,11 @@ than hanging indefinitely. Monitor sessions inherit this guard — if the
 background process stops producing output for >10min, treat as failure and
 escalate per `Error Handling § Retry / Escalate Matrix`.
 
+Idle background shells may additionally be reaped under memory pressure
+(CC ≥ 2.1.193) — set `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` on hosts
+where a long-lived monitor or `tee` pipe must survive; the `tee`'d
+`.context/logs/*.log` file remains the durable record either way.
+
 ### MCP Large Result Handling
 
 MCP servers can annotate tool results with `_meta["anthropic/maxResultSizeChars"]` to allow results up to 500K characters without truncation. Useful for large outputs like database schemas or build logs from XcodeBuildMCP.
@@ -422,6 +429,8 @@ Sub-agents in isolated worktrees automatically receive Read/Edit access to their
 ### Background Subagent Partial Progress
 
 Background subagents that fail report partial progress instead of returning nothing. Orchestrators can inspect partial results for recovery.
+
+Error propagation is trustworthy as of CC 2.1.199/2.1.200: a subagent cut off by a rate limit or server error returns its **partial work** to the parent; an API error (e.g. usage limit reached) is reported to the parent as an **error** rather than a successful-looking result; and a cutoff before any text now fails cleanly instead of returning an empty result. A teammate that dies on an API error reports `failed` to the lead (CC ≥ 2.1.198). Classify these as `transient` per § Retry / Escalate Matrix — never treat an errored return as stage completion (see `skills/worktask/SKILL.md` Step 6.5 completion-signal rule).
 
 ### Forked Subagents
 
@@ -626,5 +635,7 @@ Claude Code ships a native `/workflows` command and Workflow tool for **dynamic 
 
 They can compose: a DV agent inside an igrsoft worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
 
-> Claude reserves multiple-choice / AskUserQuestion prompts for genuine decisions that require user input. After the PL plan-approval gate, stage transitions are automatic — the PL gate itself is the one `AskUserQuestion` checkpoint; intra-loop transitions proceed without user confirmation.
+> Naming note: the `/config` **"Dynamic workflow size"** setting (CC ≥ 2.1.202; advisory small/medium/large agent counts) governs **native dynamic workflows** only — it is unrelated to PL0 dynamic *sizing* (complexity-scored stage selection). Workflow-spawned agents carry `workflow.run_id`/`workflow.name` OpenTelemetry attributes (CC ≥ 2.1.202), so a composed DV fan-out can be reconstructed from OTel data alongside the plugin's audit trail.
+
+> Claude reserves multiple-choice / AskUserQuestion prompts for genuine decisions that require user input. After the PL plan-approval gate, stage transitions are automatic — the PL gate itself is the one `AskUserQuestion` checkpoint; intra-loop transitions proceed without user confirmation. `AskUserQuestion` dialogs no longer auto-continue on idle by default (CC ≥ 2.1.200) — a PL/FN gate park holds indefinitely until the operator answers; the idle-timeout auto-continue is an explicit `/config` opt-in and MUST stay off on hosts running gated worktasks.
 
