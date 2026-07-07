@@ -19,6 +19,16 @@
 // written to disk BEFORE rc=4 returns — QA reads results/runs/live/*.json for
 // rc=4 partials, not the shell exit.
 //
+// D6 (OI-2 extension): partial persistence is now INCREMENTAL, not breach-only.
+// After EACH completed stage, runPipeline flushes a partial BenchmarkRecord
+// (live_partial=true, stages 1..k so far) to the frozen --record path via an
+// ATOMIC temp-file+rename write. A crash therefore loses at most the single
+// in-flight stage — the prior live run lost PL/AR/TL/DV (the four largest
+// stages) because the only write was end-of-run. The final clean-run write
+// (buildLiveRecord, livePartial=false) is byte-equivalent to before: these are
+// intermediate writes layered UNDER the existing terminal write, and the frozen
+// seam argv (--workdir/--budget/--record/--stages) is unchanged (no new flag).
+//
 // DEPENDENCY INJECTION: the real `claude -p` call is behind the `Dispatching`
 // protocol. Production = SubprocessDispatcher; tests inject fakes/tripwires so
 // NO real LLM call / spend ever happens in the suite.
@@ -209,6 +219,16 @@ public enum Dispatch {
     /// ASSEMBLED via Preamble.assembleStagePrompt (REQ-1). Gate (b): before each
     /// stage, if spent + next_estimate > budget, ABORT before the breaching
     /// dispatch and return what completed so far, flagged partial.
+    ///
+    /// OI-2: after EACH completed stage, `persistPartial` is invoked with the
+    /// stages captured so far (live_partial forced true — an in-progress run is
+    /// by definition partial). `dispatch` wires this to an atomic per-stage
+    /// record write; tests inject a recorder to assert stages 1..N-1 survive a
+    /// throw at N. The callback runs AFTER the usage is appended, so a crash
+    /// between the write and the next dispatch loses at most the in-flight stage.
+    /// If the dispatcher throws, the last successful `persistPartial` snapshot is
+    /// already on disk — the throw propagates unchanged (tests assert the
+    /// tripwire), it does not swallow or rewrite the surviving partial.
     public static func runPipeline(
         workdirPath: String, budget: Double, promptsDir: String, auditPath: String,
         dispatcher: Dispatching, estimateCalcPath: String,
@@ -216,7 +236,8 @@ public enum Dispatch {
         stages: [String] = Budget.pipelineStages,
         worktaskID: String = "benchmark-ttt",
         planFile: String = ".context/planning-0.md",
-        captureMode: CaptureMode = .json
+        captureMode: CaptureMode = .json,
+        persistPartial: (([(String, StageUsage)], _ dispatched: Int) throws -> Void)? = nil
     ) throws -> (usages: [(String, StageUsage)], livePartial: Bool, dispatched: Int) {
         let tally = Budget.RunningTally(budget: budget)
         var usages: [(String, StageUsage)] = []
@@ -242,6 +263,8 @@ public enum Dispatch {
                 stage, worktaskID: worktaskID, planFile: planFile,
                 stateJSONText: stateJSONText, taskText: taskText)
             let argv = buildStageArgv(stage: stage, captureMode: captureMode)
+            // A throw here propagates with the prior stages' partial ALREADY on
+            // disk (persisted at the end of the previous iteration) — OI-2.
             let stdout = try dispatcher.run(argv: argv, promptText: promptText)
             let usage = captureStageUsage(stdout: stdout, auditPath: auditPath,
                                           stage: stage)
@@ -253,6 +276,9 @@ public enum Dispatch {
                 livePartial = true
             }
             tally.add(usage.costUSD)
+
+            // OI-2: flush the partial (stages 1..k) atomically after this stage.
+            try persistPartial?(usages, dispatched)
         }
         return (usages, livePartial, dispatched)
     }
@@ -317,7 +343,13 @@ public enum Dispatch {
         cliLoginRunner: (() throws -> String)? = nil,
         benchmarkDir: String,
         captureMode: CaptureMode = .json,
-        stderr: ((String) -> Void)? = nil
+        stderr: ((String) -> Void)? = nil,
+        // Internal DI only — NOT part of the frozen bench-live CLI seam. Default
+        // (nil) shells the real `git rev-parse` (gitSHA7), unchanged production
+        // behavior. Tests inject a stub so no real subprocess runs: Swift
+        // Testing's parallel executor can deadlock several concurrent
+        // Subprocess.run dispatch-group waits (observed hang, OI-2 test fix).
+        gitSHARunner: ((String) -> String)? = nil
     ) throws -> Int32 {
         let warn = stderr ?? { FileHandle.standardError.write(Data(($0 + "\n").utf8)) }
         let workdirPath = benchmarkDir + "/workdirs/" + workdir
@@ -329,7 +361,7 @@ public enum Dispatch {
 
         let runID = workdir   // the seam passes run_id as --workdir
         let timestampUTC = nowISO()
-        let gitSHA = gitSHA7(repoRoot: pluginRoot)
+        let gitSHA = gitSHARunner?(pluginRoot) ?? gitSHA7(repoRoot: pluginRoot)
 
         // Default production dispatcher binds this run's workdir as cwd.
         let effectiveDispatcher = dispatcher ?? SubprocessDispatcher(workdir: workdirPath)
@@ -353,22 +385,38 @@ public enum Dispatch {
             return 2
         }
 
-        // 3. Per-stage dispatch under the running-tally gate.
+        // OI-2: the record dir must exist BEFORE the first per-stage partial
+        // flush (previously created only just before the terminal write).
+        let recordDir = (recordPath as NSString).deletingLastPathComponent
+        try FileManager.default.createDirectory(atPath: recordDir,
+                                                withIntermediateDirectories: true)
+
+        // 3. Per-stage dispatch under the running-tally gate. After each stage
+        //    completes, atomically persist a partial (live_partial=true) so a
+        //    crash loses at most the in-flight stage (D6 / OI-2). writeRecord
+        //    writes atomically=true (Foundation temp-file + rename), so a crash
+        //    mid-write never corrupts the prior good partial (R2).
         let result = try runPipeline(
             workdirPath: workdirPath, budget: budget, promptsDir: prompts,
             auditPath: auditPath, dispatcher: effectiveDispatcher,
             estimateCalcPath: estimateCalc, estimateRunner: estimateRunner,
-            stages: stages, captureMode: captureMode)
+            stages: stages, captureMode: captureMode,
+            persistPartial: { partialUsages, partialDispatched in
+                let partial = buildLiveRecord(
+                    runID: runID, timestampUTC: timestampUTC, gitSHA: gitSHA,
+                    budget: budget, usages: partialUsages,
+                    stagesDispatched: partialDispatched, livePartial: true)
+                try writeRecord(partial, to: recordPath)
+            })
 
-        // 4. Write the record (full schema, mode="live"). Partial runs still
-        //    write — BEFORE rc=4 returns (D6).
+        // 4. Terminal write (full schema, mode="live"). On a clean run this
+        //    flips live_partial back to false and is byte-equivalent to the
+        //    pre-OI-2 output. Partial runs still write here too — BEFORE rc=4
+        //    returns (D6).
         let record = buildLiveRecord(
             runID: runID, timestampUTC: timestampUTC, gitSHA: gitSHA,
             budget: budget, usages: result.usages,
             stagesDispatched: result.dispatched, livePartial: result.livePartial)
-        let recordDir = (recordPath as NSString).deletingLastPathComponent
-        try FileManager.default.createDirectory(atPath: recordDir,
-                                                withIntermediateDirectories: true)
         try writeRecord(record, to: recordPath)
 
         if result.livePartial {
