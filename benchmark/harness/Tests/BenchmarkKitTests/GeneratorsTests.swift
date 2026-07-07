@@ -28,10 +28,21 @@ private let templateDir = repoRoot + "/benchmark/ttt-template"
 private let estimateCalc = repoRoot + "/skills/estimation-methodology/scripts/estimate-calc.py"
 
 /// Memoized one-shot generation results shared by every suite in this file.
+///
+/// OI-1 (P1): these two `ttt_test_*` copies must be measured across three suites
+/// (via `pm.appPath`), so they cannot be `defer`-swept per-suite. Instead the
+/// nested `.build/` cache is already removed inside `GenLib.runAppTests`, and the
+/// top-level copies are registered for `atexit` removal — so the process leaves
+/// no `ttt_test_*` residue in $TMPDIR after the suite finishes.
 private enum SharedGen {
+    private static func trackForCleanup(_ path: String) {
+        SharedGenCleanup.register(path)
+    }
+
     static let withResult: PathMetrics = {
         let td = NSTemporaryDirectory() + "ttt_test_with_\(UUID().uuidString)"
         try! FileManager.default.createDirectory(atPath: td, withIntermediateDirectories: true)
+        trackForCleanup(td)
         return try! Generators.generateWithPlugin(
             workdir: td, templateDir: templateDir, pluginRoot: repoRoot,
             estimateCalcPath: estimateCalc)
@@ -39,9 +50,35 @@ private enum SharedGen {
     static let withoutResult: PathMetrics = {
         let td = NSTemporaryDirectory() + "ttt_test_without_\(UUID().uuidString)"
         try! FileManager.default.createDirectory(atPath: td, withIntermediateDirectories: true)
+        trackForCleanup(td)
         return try! Generators.generateWithoutPlugin(
             workdir: td, templateDir: templateDir, pluginRoot: repoRoot)
     }()
+}
+
+/// Process-exit sweeper for the memoized `SharedGen` copies. `atexit` fires once
+/// the test process ends, guaranteeing no `ttt_test_*` dir outlives the run
+/// regardless of how many suites read the memoized metrics. All mutable state
+/// lives on the shared instance behind an NSLock (Swift 6: no mutable static).
+private final class SharedGenCleanup: @unchecked Sendable {
+    static let shared = SharedGenCleanup()
+
+    private let lock = NSLock()
+    private var paths: [String] = []
+
+    private init() {
+        atexit_b { [self] in
+            lock.lock(); let toRemove = paths; lock.unlock()
+            for p in toRemove { try? FileManager.default.removeItem(atPath: p) }
+        }
+    }
+
+    func add(_ path: String) {
+        lock.lock(); defer { lock.unlock() }
+        paths.append(path)
+    }
+
+    static func register(_ path: String) { shared.add(path) }
 }
 
 @Suite("WITH-plugin generator", .serialized)

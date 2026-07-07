@@ -154,7 +154,18 @@ public enum GenLib {
     /// Run the generated app's Swift Testing suite. Returns (test_count, pass_fail).
     /// test_count parsed from the Swift Testing summary line
     /// `Test run with N test(s) ...`; pass_fail from the EXIT CODE only.
+    ///
+    /// OI-1 (P1): the nested `swift test` materializes a ~150MB `.build/` cache
+    /// INSIDE `appDir`. Nothing downstream reads it (loc counts *.swift and skips
+    /// `.build/`; metrics reference only `appDir`/Package.swift), so it is the
+    /// ephemeral heavy artifact. A `defer` sweeps it on EVERY exit path (normal
+    /// return OR a thrown parse error), scoped strictly to `appDir/.build` so the
+    /// caller's measured app copy and any `--workdir`/`--record` path survive
+    /// (R3). This bounds residue to the app sources, not the build cache — the
+    /// two ENOSPC-killed live attempts were this cache accumulating across runs.
     public static func runAppTests(appDir: String) -> (testCount: Int, passFail: String) {
+        let buildDir = (appDir as NSString).appendingPathComponent(".build")
+        defer { try? FileManager.default.removeItemIfExists(atPath: buildDir) }
         let result = Subprocess.run(
             ["swift", "test", "--package-path", appDir],
             cwd: appDir

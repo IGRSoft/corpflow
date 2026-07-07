@@ -16,6 +16,26 @@ public enum Generators {
     static let factors = ["3", "3", "3", "3", "3"]
     static let expectedTokens = "100000"
 
+    /// OI-1 (P1): run `body` against a freshly-created ephemeral workdir and
+    /// remove that workdir on EVERY exit path — normal return, thrown error, or
+    /// early return inside `body`. Callers that generate a throwaway app copy
+    /// (tests, ad-hoc measurements) use this instead of hand-rolling a
+    /// `NSTemporaryDirectory()` dir they then leak (the two ENOSPC live kills).
+    /// The `defer` is scoped to the workdir this helper OWNS — a persistent
+    /// `--workdir` passed to `generateWith*` directly is never touched (R3).
+    @discardableResult
+    public static func withEphemeralWorkdir<T>(
+        prefix: String = "ttt_gen_",
+        _ body: (_ workdir: String) throws -> T
+    ) throws -> T {
+        let fm = FileManager.default
+        let workdir = (NSTemporaryDirectory() as NSString)
+            .appendingPathComponent(prefix + UUID().uuidString)
+        try fm.createDirectory(atPath: workdir, withIntermediateDirectories: true)
+        defer { try? fm.removeItemIfExists(atPath: workdir) }
+        return try body(workdir)
+    }
+
     /// Drive the REAL estimate-calc.py. Returns (complexityTotal, aiCostUSD?).
     /// On any failure the cost degrades to nil (never fabricated) — the score
     /// falls back to 0 so a broken estimate never crashes a deterministic run.
