@@ -1,12 +1,12 @@
 ---
-name: doc-audit
+name: docs-audit
 description: Audit documentation for gaps, outdated content, and quality issues
 argument-hint: '[--path dir] [--scope full|section]'
 allowed-tools: Read, Glob, Grep
 model: haiku
 related:
   - agents/technical-writer.md
-  - commands/readme-update.md
+  - commands/docs-readme.md
 ---
 
 # Documentation Audit Command
@@ -16,9 +16,9 @@ Audit documentation for gaps, outdated content, and quality issues.
 ## Usage
 
 ```
-/doc-audit
-/doc-audit --path <directory>
-/doc-audit --type [code|readme|api|architecture]
+/docs-audit
+/docs-audit --path <directory>
+/docs-audit --type [code|readme|api|architecture]
 ```
 
 ## Options
@@ -31,9 +31,9 @@ Audit documentation for gaps, outdated content, and quality issues.
 ## Examples
 
 ```
-/doc-audit
-/doc-audit --path src/auth --type code
-/doc-audit --type api --report
+/docs-audit
+/docs-audit --path src/auth --type code
+/docs-audit --type api --report
 ```
 
 ## Output Format
@@ -167,9 +167,9 @@ The following can be auto-fixed with `--fix`:
 
 | Issue | Count | Command |
 |-------|-------|---------|
-| Missing @returns | 8 | `/doc-audit --fix` |
-| Trailing whitespace | 15 | `/doc-audit --fix` |
-| Broken relative links | 2 | `/doc-audit --fix` |
+| Missing @returns | 8 | `/docs-audit --fix` |
+| Trailing whitespace | 15 | `/docs-audit --fix` |
+| Broken relative links | 2 | `/docs-audit --fix` |
 
 ---
 
@@ -203,6 +203,6 @@ Owner: Technical Writer
 ## Integration
 
 This command works with:
-- `/readme-update` - Fix README issues
+- `/docs-readme` - Fix README issues
 - `/worktask` DC stage - Documentation phase
 

@@ -1,7 +1,7 @@
 ---
-name: code-review-dev
-description: Perform platform-aware code review using specialized developer expertise
-argument-hint: '[--pr N | --path dir]'
+name: dev-code-review
+description: Perform platform-aware code review using specialized developer expertise; --depth deep adds full technical-review analysis
+argument-hint: '[--pr N | --path dir] [--depth surface|deep]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*)
 version: 0.1.3
@@ -9,11 +9,10 @@ related:
   - agents/developer.md
   - agents/technical-lead.md
   - skills/shared/code-documentation.md
-  - commands/code-impl.md
-  - commands/senior-review.md
   - commands/arch-review.md
+  - commands/arch-debt.md
   - commands/ethics-review.md
-  - commands/transparency-check.md
+  - commands/estimate.md
   - skills/claude-constitution/SKILL.md
   - skills/shared/stage-contracts.md
   - skills/agent-coordination/SKILL.md
@@ -23,9 +22,9 @@ related:
 
 Perform a **recall-first, read-only** developer code review using specialized developer expertise. This command IS the DR (Developer Review) quality gate: it statically reviews the change for correctness, security, data-loss, concurrency, and regression risk, records findings to the DR findings artifact, and routes confirmed bugs back to DV for remediation. It does not run code (tests run later in QA) and it does not apply fixes (DV applies them).
 
-> **See also**: For deep technical analysis including complexity metrics, tech debt assessment, and performance profiling, use `/tech-review`. For estimation accuracy reviews, use `/senior-review`.
+> **Depth modes**: `--depth surface` (default) is the standard DR review described below — its behavior is unchanged. `--depth deep` layers a full technical-review analysis (complexity metrics, performance hot-paths, OWASP checklist, technical-debt table, test-coverage impact) on top of the surface review; see [Deep Mode](#deep-mode---depth-deep) below. For estimation-accuracy reviews, use `/estimate --review`.
 
-> **Disambiguation**: This plugin command (`/code-review-dev`) is the **DR stage** review — read-only analysis; DV applies the fixes. It is distinct from two CC-native commands: `/code-review --fix` (applies findings directly to the working tree) and `/simplify` (cleanup-only structural review). Use `/code-review-dev` when you want the igrsoft governed review gate with stage contracts and audit trail; use the CC-native commands for quick ad-hoc fixes outside the worktask pipeline.
+> **Disambiguation**: This plugin command (`/dev-code-review`) is the **DR stage** review — read-only analysis; DV applies the fixes. It is distinct from two CC-native commands: `/code-review --fix` (applies findings directly to the working tree) and `/simplify` (cleanup-only structural review). Use `/dev-code-review` when you want the igrsoft governed review gate with stage contracts and audit trail; use the CC-native commands for quick ad-hoc fixes outside the worktask pipeline.
 
 ## Your Job (read this first)
 
@@ -56,9 +55,10 @@ A change is worth flagging when:
 ## Usage
 
 ```
-/code-review-dev
-/code-review-dev --platform apple --path src/
-/code-review-dev --pr 123
+/dev-code-review
+/dev-code-review --platform apple --path src/
+/dev-code-review --pr 123
+/dev-code-review --pr 123 --depth deep
 ```
 
 ## Options
@@ -66,7 +66,9 @@ A change is worth flagging when:
 - `--platform <apple|android|web|all>` - Platform context (default: auto-detect)
 - `--path <dir>` - Review a specific directory (diff scoped to that path)
 - `--pr <number>` - Review the changes in a PR
-- `--focus <areas>` - Focus areas: security, performance, patterns, tests, safety, honesty, accessibility
+- `--depth <surface|deep>` - Review depth (default: `surface`). `surface` is the standard recall-first DR review (below); `deep` additionally emits the technical-review analysis (see [Deep Mode](#deep-mode---depth-deep)). The DR stage passes no `--depth`, so it always resolves to `surface`.
+- `--focus <areas>` - Focus areas: security, performance, patterns, tests, safety, honesty, accessibility. `--depth deep` additionally accepts `quality` and `debt`.
+- `--output <summary|detailed>` - Output verbosity for `--depth deep` (default: `detailed`). Ignored in surface mode, which always writes the findings artifact format below.
 - `--severity <level>` - Minimum severity to report: `P2`, `P1`, `P0` (legacy aliases `info`→`P2`, `warning`→`P1`, `error`/`critical`→`P0` are accepted for backward compatibility and normalized to the canonical P-scale). Detection (Phase 1) is never filtered by this option — it only gates what is written to the findings artifact.
 - `--ethics` - Include constitutional compliance checks
 
@@ -172,11 +174,12 @@ Tag every kept finding with its canonical P-level. The methodology definitions a
 ## Examples
 
 ```
-/code-review-dev
-/code-review-dev --platform apple --path Sources/
-/code-review-dev --pr 42 --focus security,performance
-/code-review-dev --path src/components --focus patterns
-/code-review-dev --pr 42 --severity P1
+/dev-code-review
+/dev-code-review --platform apple --path Sources/
+/dev-code-review --pr 42 --focus security,performance
+/dev-code-review --path src/components --focus patterns
+/dev-code-review --pr 42 --severity P1
+/dev-code-review --pr 42 --depth deep --focus quality,debt
 ```
 
 ## Output Format
@@ -264,6 +267,8 @@ When multiple focus areas are requested, consider parallel multi-dimensional rev
 - **safety**: Harm potential, user protection, error handling for safety-critical paths
 - **honesty**: Truthful comments, accurate error messages, non-deceptive UI patterns
 - **accessibility**: WCAG compliance, VoiceOver/TalkBack support, Dynamic Type
+- **quality** *(deep mode)*: Cyclomatic/cognitive complexity, duplication, naming clarity
+- **debt** *(deep mode)*: New and existing technical debt introduced or touched by the change
 
 ### Safety Focus (`--focus safety`)
 
@@ -296,10 +301,134 @@ Property violated: transparent, non-deceptive. Users are unaware of the data col
 Recommendation: disclose in privacy settings and allow opt-out.
 ```
 
+## Deep Mode (`--depth deep`)
+
+`--depth deep` runs the full surface review above **and then** layers a deep technical-review analysis on top — evaluating code quality, performance, and security practices beyond the standard checklist. It never alters the surface findings, the verdict semantics, or the DV-escalation loop; it only appends the analytical report below. Deep mode accepts the additional focus values `--focus quality` and `--focus debt`, and honors `--output summary|detailed` (default `detailed`) for the verbosity of this report.
+
+### Deep Output Format
+
+```markdown
+# Technical Review (deep)
+
+## Summary
+
+| Dimension | Score | Status |
+|-----------|-------|--------|
+| Correctness | 9/10 | ✅ Excellent |
+| Readability | 7/10 | ⚠️ Needs attention |
+| Maintainability | 8/10 | ✅ Good |
+| Efficiency | 8/10 | ✅ Good |
+| Security | 9/10 | ✅ Excellent |
+| Testability | 7/10 | ⚠️ Needs attention |
+
+**Overall**: 8.0/10 - Ready for merge with minor improvements
+
+## Code Quality Analysis
+
+### Complexity Assessment
+
+| File | Cyclomatic | Cognitive | Status |
+|------|------------|-----------|--------|
+| `auth.ts` | 8 | 12 | ✅ OK |
+| `validation.ts` | 15 | 22 | ⚠️ High |
+| `handlers.ts` | 6 | 8 | ✅ OK |
+
+### Duplication
+
+| Pattern | Occurrences | Impact |
+|---------|-------------|--------|
+| Error handling block | 3 | Low |
+| Validation logic | 2 | Medium |
+
+### Naming & Clarity
+
+| Issue | Location | Suggestion |
+|-------|----------|------------|
+| Vague name | `data` in line 45 | Use `userData` or `userRecord` |
+| Acronym | `validateDTO` | Consider `validateDataTransfer` |
+
+## Performance Analysis
+
+### Hot Paths
+
+| Path | Complexity | Concern |
+|------|------------|---------|
+| `processRequest()` | O(n) | ✅ Acceptable |
+| `searchUsers()` | O(n²) | ⚠️ Consider optimization |
+
+### Resource Management
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Memory allocation | ✅ | No leaks detected |
+| Connection handling | ✅ | Properly pooled |
+| File handles | ⚠️ | Missing cleanup in error path |
+
+### Caching Opportunities
+
+- `getUserById()` - Consider memoization (called 12 times/request)
+- `loadConfig()` - Should cache result (static data)
+
+## Security Implementation
+
+### OWASP Checklist
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Input validation | ✅ | Comprehensive |
+| Output encoding | ✅ | XSS protected |
+| Authentication | ✅ | Properly implemented |
+| Authorization | ⚠️ | Missing check on line 78 |
+| Data protection | ✅ | Encrypted at rest |
+| Logging | ⚠️ | Contains PII |
+
+### Vulnerability Assessment
+
+| Risk | Severity | Location | Remediation |
+|------|----------|----------|-------------|
+| Missing auth check | Medium | `admin.ts:78` | Add role verification |
+| PII in logs | Low | `logger.ts:23` | Sanitize user data |
+
+## Technical Debt Identified
+
+### New Debt
+
+| Item | Type | Interest | Effort |
+|------|------|----------|--------|
+| Complex validation | Code | Medium | M |
+| Missing error types | Code | Low | S |
+
+### Existing Debt Touched
+
+| Item | Change | Recommendation |
+|------|--------|----------------|
+| Legacy API wrapper | Extended | Consider refactoring |
+
+## Test Coverage Impact
+
+| Metric | Before | After | Status |
+|--------|--------|-------|--------|
+| Line coverage | 78% | 82% | ✅ Improved |
+| Branch coverage | 65% | 71% | ✅ Improved |
+| Changed code coverage | - | 85% | ✅ Good |
+
+### Missing Test Cases
+
+- Error path for file handle cleanup
+- Edge case: empty user list in search
+```
+
+### Deep Review Dimensions
+
+- **Quality**: cyclomatic/cognitive complexity, code duplication and DRY violations, naming conventions and clarity, error-handling completeness, documentation adequacy.
+- **Performance**: algorithm complexity (Big O), resource management, caching opportunities, hot-path optimization, memory efficiency.
+- **Security**: OWASP Top 10 checklist, input validation, authentication/authorization, data protection, secure coding practices.
+- **Debt**: new debt introduced, existing debt affected, interest-rate assessment, remediation opportunities. For a dedicated debt inventory across the codebase, use `/arch-debt`.
+
 ## Integration
 
 This command is used:
-- As the DR (Developer Review) gate in the worktask, invoked by the technical-lead (`Skill("code-review-dev")`).
+- As the DR (Developer Review) gate in the worktask, invoked by the technical-lead (`Skill("dev-code-review")`).
+- In DV/QA stages via `--depth deep` for a technical-quality deep dive.
 - Before merging PRs.
 - For periodic codebase health checks.
-

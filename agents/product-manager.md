@@ -367,7 +367,7 @@ Always emit fully-qualified `plugin:agent` form. The plugin prefix follows the a
 | AR0 | `igrsoft:software-architector` | `apple-developer:apple-architector` |
 | TL0 | `igrsoft:team-lead` | (same) |
 | DV0 | `igrsoft:developer` | `apple-developer:ios-developer` (or `:macos-developer`, `:watchos-developer`, `:tvos-developer`, `:visionos-developer`) |
-| DR0 | `igrsoft:technical-lead` | (same — invokes /code-review-dev) |
+| DR0 | `igrsoft:technical-lead` | (same — invokes /dev-code-review) |
 | SR0 | `igrsoft:security-reviewer` | `apple-developer:security-auditor` (or `security-scanning:security-auditor`) |
 | QA0 | `igrsoft:qa-engineer` | (same — may delegate to `apple-developer:test-generator`) |
 | DC0 | `igrsoft:technical-writer` | (same) |

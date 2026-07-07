@@ -7,7 +7,7 @@ model: haiku
 related:
   - agents/qa-engineer.md
   - commands/test-plan.md
-  - commands/qa-report.md
+  - commands/test-report.md
 ---
 
 # Test Coverage Command
@@ -148,5 +148,5 @@ Reports the percentage of test files annotated with markers from `skills/shared/
 Use this command:
 - Before `/test-plan` - Identify what needs testing
 - During Q stage - Verify coverage goals
-- In `/qa-report` - Include coverage metrics
+- In `/test-report` - Include coverage metrics
 

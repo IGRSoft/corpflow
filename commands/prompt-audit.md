@@ -96,9 +96,9 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 **Required**: Minimum 3 examples
 **Fix**: Add diverse usage examples
 
-### 7. Commands: 4 files
+### 7. Commands: 3 files
 **Issue**: Missing Related section
-**Files**: arch-decision, business-case, doc-audit, executive-summary
+**Files**: arch-decision, business-report, docs-audit
 **Fix**: Add Related section with links
 
 ## Agent Analysis

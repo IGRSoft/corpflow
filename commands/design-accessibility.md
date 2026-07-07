@@ -1,5 +1,5 @@
 ---
-name: accessibility-audit
+name: design-accessibility
 description: Conduct an accessibility audit for screens, components, or the entire application
 argument-hint: '<screen, component, or app path>'
 model: sonnet
@@ -7,7 +7,7 @@ allowed-tools: Read, Glob, Grep
 related:
   - agents/designer.md
   - commands/design-review.md
-  - commands/qa-report.md
+  - commands/test-report.md
 ---
 
 # Accessibility Audit Command
@@ -17,7 +17,7 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 ## Usage
 
 ```
-/accessibility-audit [target] [options]
+/design-accessibility [target] [options]
 ```
 
 ## Options
@@ -29,9 +29,9 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 ## Examples
 
 ```
-/accessibility-audit LoginScreen
-/accessibility-audit "Navigation component" --level AAA
-/accessibility-audit --scope comprehensive --platform apple
+/design-accessibility LoginScreen
+/design-accessibility "Navigation component" --level AAA
+/design-accessibility --scope comprehensive --platform apple
 ```
 
 ## What This Command Does

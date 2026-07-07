@@ -7,8 +7,8 @@ allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/release-engineer.md
   - agents/technical-writer.md
-  - commands/create-release-notes.md
-  - commands/readme-update.md
+  - commands/docs-release-notes.md
+  - commands/docs-readme.md
   - commands/worktask.md
 ---
 

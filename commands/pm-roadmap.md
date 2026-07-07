@@ -205,5 +205,5 @@ API v2
 This command works with:
 - `/pm-prioritize` - Prioritize before adding to roadmap
 - `/pm-requirements` - Detail features on roadmap
-- `/sprint-plan` - Break roadmap into sprints
+- `/pm-sprint` - Break roadmap into sprints
 

@@ -59,7 +59,7 @@ You are a technical lead specializing in implementation excellence, code quality
 
 **Stage**: DR (Developer Review, 5/11) — see `skills/shared/worktask-stage-context.md` for pipeline context.
 
-- Execute developer code review via `Skill("code-review-dev")`. That command embeds the **recall-first methodology** that governs this gate: a read-only review (no code execution, no fixes — DV applies them) with **mandatory read-beyond-the-diff** context gathering (callers/consumers, dynamic/string-literal refs, type definitions, acceptance-criteria intent check), **P0/P1/P2** severity routing, and an **Escalation to DV** loop (read-confirmed sound P0/P1 → `verdict: fail` + route back to DV via the existing retry/escalate machinery, then DR re-review). Do not duplicate that methodology here — follow it from the command.
+- Execute developer code review via `Skill("dev-code-review")`. That command embeds the **recall-first methodology** that governs this gate: a read-only review (no code execution, no fixes — DV applies them) with **mandatory read-beyond-the-diff** context gathering (callers/consumers, dynamic/string-literal refs, type definitions, acceptance-criteria intent check), **P0/P1/P2** severity routing, and an **Escalation to DV** loop (read-confirmed sound P0/P1 → `verdict: fail` + route back to DV via the existing retry/escalate machinery, then DR re-review). Do not duplicate that methodology here — follow it from the command.
 - Review code quality, patterns, and platform-specific best practices
 - **Read `.context/development-N.md § Selected Tests § Warnings`** and `.context/logs/test-selection-warnings.md`. Surface non-empty warnings (silent test drops, missing markers, malformed `@depends-on:`) as findings in `developer-review-N.md § Findings` so silent regressions don't slip through to QA. See `skills/shared/test-selection-syntax.md § Reader matrix`.
 - **DR3.5 — Warning Escalation**: when `.context/logs/test-selection-warnings.md` is non-empty (any `WARN:` line written by DV's selection parser), do BOTH of the following in addition to surfacing in `§ Findings`:
@@ -206,7 +206,7 @@ When selecting technologies, prefer in this order:
 | Integration ease | 10% | Works with existing stack? |
 | Cost (licensing) | 10% | Total cost of ownership? |
 
-For TDR template and full decision worktask, see `commands/tech-decision.md`.
+For TDR template and full decision worktask, see `commands/arch-decision.md`.
 
 To read non-markdown documents or document URLs, use pandoc — see `skills/shared/pandoc-ingestion.md`.
 

@@ -6,7 +6,7 @@ effort: low
 
 # CSV Export Templates
 
-These 13 templates are the canonical export shape. /estimate and /export-estimate both reference this file; do not redefine the file list elsewhere.
+These 13 templates are the canonical export shape. /estimate (via --export csv) references this file; do not redefine the file list elsewhere.
 
 13-category export structure for Google Sheets import.
 

@@ -612,13 +612,13 @@ while (tasks.some(t => t.status !== "completed")) {
       full.description = skillInvocation + "\n\n" + full.description;
     }
 
-    // 5b. Inject code-review-dev Skill invocation for DR stages.
+    // 5b. Inject dev-code-review Skill invocation for DR stages.
     //     handoff-protocol: APPEND as suffix (section [7]) so the preamble
     //     prefix [1][2][3][4][5] stays byte-identical with neighbour stages
     //     and the prompt cache prefix boundary is preserved.
     if (full.metadata.stage === "DR") {
       const runIndex = full.metadata.run_index ?? 0;
-      const reviewInvocation = `IMPORTANT: Execute developer code review via Skill tool: Skill("code-review-dev"). Save findings summary to .context/developer-review-${runIndex}.md`;
+      const reviewInvocation = `IMPORTANT: Execute developer code review via Skill tool: Skill("dev-code-review"). Save findings summary to .context/developer-review-${runIndex}.md`;
       full.description = full.description + "\n\n" + reviewInvocation;
     }
 

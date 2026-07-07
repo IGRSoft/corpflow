@@ -4,7 +4,7 @@
 #
 # Three modes (analyzing-0.md ad4, change-map #4):
 #   --emit pr     Print a ready-to-insert "## Visual evidence" markdown block to
-#                 stdout. The PR-body composer (FN agent / create-pr command /
+#                 stdout. The PR-body composer (FN agent / FN PR flow /
 #                 conductor-attachments skeleton) inserts it between ## Test plan
 #                 and ## Notes. Empty stdout ⇒ insert nothing (flag false / no
 #                 captures). Callers invoke UNCONDITIONALLY; gating lives here.

@@ -119,7 +119,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 ### Integration Improvements
 
 #### Missing Links
-- Related command: `/export-estimate`
+- Related command: `/estimate --export csv`
 - Related agent: `project-manager`
 
 #### Worktask Integration

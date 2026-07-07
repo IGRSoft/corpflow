@@ -7,7 +7,7 @@ allowed-tools: Read, Glob, Grep
 related:
   - agents/designer.md
   - commands/design-specs.md
-  - commands/accessibility-audit.md
+  - commands/design-accessibility.md
 ---
 
 # Design Review Command

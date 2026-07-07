@@ -1,13 +1,13 @@
 ---
-name: sprint-plan
+name: pm-sprint
 description: Plan sprint with capacity analysis, task breakdown, and resource allocation
 argument-hint: <sprint name or number>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/project-manager.md
-  - commands/risk-assess.md
-  - commands/create-release-notes.md
+  - commands/pm-risk.md
+  - commands/docs-release-notes.md
 ---
 
 # Sprint Plan Command
@@ -17,10 +17,10 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 ## Usage
 
 ```
-/sprint-plan
-/sprint-plan --capacity <points>
-/sprint-plan --from-backlog <file>
-/sprint-plan --duration [1|2|3|4] weeks
+/pm-sprint
+/pm-sprint --capacity <points>
+/pm-sprint --from-backlog <file>
+/pm-sprint --duration [1|2|3|4] weeks
 ```
 
 ## Options
@@ -34,9 +34,9 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 ## Examples
 
 ```
-/sprint-plan
-/sprint-plan --capacity 40 --duration 2
-/sprint-plan --from-backlog backlog.md --include-debt
+/pm-sprint
+/pm-sprint --capacity 40 --duration 2
+/pm-sprint --from-backlog backlog.md --include-debt
 ```
 
 ## Output Format

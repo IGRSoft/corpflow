@@ -1,5 +1,5 @@
 ---
-name: qa-report
+name: test-report
 description: Generate a comprehensive QA summary report with test results, coverage, and quality metrics
 argument-hint: '[--worktask-id ID]'
 model: sonnet
@@ -17,9 +17,9 @@ Generate a comprehensive QA summary report for completed work, including test re
 ## Usage
 
 ```
-/qa-report
-/qa-report --format [markdown|html|json]
-/qa-report --include-screenshots
+/test-report
+/test-report --format [markdown|html|json]
+/test-report --include-screenshots
 ```
 
 ## Options
@@ -33,9 +33,9 @@ Generate a comprehensive QA summary report for completed work, including test re
 ## Examples
 
 ```
-/qa-report
-/qa-report --format html --include-screenshots
-/qa-report --summary-only
+/test-report
+/test-report --format html --include-screenshots
+/test-report --summary-only
 ```
 
 ## Output Format

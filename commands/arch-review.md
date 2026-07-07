@@ -7,7 +7,7 @@ allowed-tools: Read, Glob, Grep
 related:
   - agents/software-architector.md
   - commands/arch-decision.md
-  - commands/tech-debt.md
+  - commands/arch-debt.md
 ---
 
 # Architecture Review Command
