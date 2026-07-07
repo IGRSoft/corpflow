@@ -304,7 +304,7 @@ Estimated Cost = Base Tokens × Model Cost × (1 + Retry Factor) × Complexity M
 
 Where:
 - Base Tokens: From per-stage baselines
-- Model Cost: Per-token rate for selected model — haiku ($0.25/1M), sonnet ($3/1M), opus ($15/1M)
+- Model Cost: Per-token rate for selected model — haiku ($0.25/1M), sonnet ($3/1M; Sonnet 5 promo $2/$10 per Mtok through 2026-08-31, v2.1.197), opus ($15/1M)
 - Retry Factor: 0.1 (low), 0.2 (medium), 0.5 (high complexity)
 - Complexity Multiplier: 1.0 (standard), 1.5 (large codebase), 2.0 (novel domain)
 ```

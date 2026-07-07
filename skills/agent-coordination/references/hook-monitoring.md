@@ -16,6 +16,9 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 | `WorktreeCreate` | Worktree created | — | Worktree path |
 | `MessageDisplay` | A message is displayed to the user (v2.1.152+) | — | `message`, `role` (`user`/`assistant`), `display_type` |
 | `SessionStart` | Session begins (v2.1.152+) | — | `session_id`, `session_title`, `reloadSkills` (bool) |
+| `Notification` | Background agent needs input or finishes (v2.1.198+) | — | reason ∈ `agent_needs_input` / `agent_completed` |
+
+> **`Notification` as resume wake-up (v2.1.198+)**: background sessions in `claude agents` that need input or finish fire the `Notification` hook with `agent_needs_input` / `agent_completed`. For worktask resume this is the push complement to polling `claude agents --json` — wire a `Notification` hook to nudge the orchestrator (or the operator, via PushNotification) the moment a parked stage needs an answer. The `--json` pre-check remains the authoritative reconciliation (`skills/worktask/references/resume.md` step 0).
 
 > As of CC 2.1.77, the Agent tool `resume` parameter is removed. Use `SendMessage` to communicate with running agents instead.
 
@@ -179,7 +182,7 @@ PostToolUse format-on-save hooks no longer cause "File content has changed" erro
 
 ### Hook Error Stderr (v2.1.98+)
 
-Hook errors now include the first line of stderr in the transcript for self-diagnosis without `--debug`.
+Hook errors now include the first line of stderr in the transcript for self-diagnosis without `--debug`. `SessionStart`, `Setup`, and `SubagentStart` hooks exiting with code 2 no longer hide their stderr either (v2.1.199) — the error shows in the transcript.
 
 ### Settings Resilience (v2.1.101+)
 
@@ -218,6 +221,8 @@ Hooks can invoke MCP tools directly via `type: "mcp_tool"` (previously `command`
   }
 }
 ```
+
+**Matcher semantics (CC ≥ 2.1.195):** hook matchers with hyphenated identifiers now **exact-match** instead of accidentally substring-matching — as of plugin v3.30.0 the Stop matcher is written with explicit wildcards (`.*igrsoft:product-manager.*|.*igrsoft:project-manager.*`, per the changelog's `mcp__server__.*` guidance) so it keeps firing regardless of how the runtime qualifies the agent name. Comma-separated matchers (`"Bash,PowerShell"`) silently never fired before CC 2.1.191 — always use regex alternation (`Bash|PowerShell`), never commas.
 
 **Plugin v3.10.0 historical note:** `plugin.json` shipped an `mcp_tool` hook on `Stop` matching `igrsoft:product-manager|igrsoft:project-manager` that fired `conductor.PushNotification` at the PL and FN stages. The hook still fires at stage completion for observability (PushNotification). The PL stage is followed by a human plan-approval gate (Step A.5); the FN stage is now gated by a finalization checkpoint (`fn_gate`, default `"checkpoint"`) that STOPs before commit/push/PR unless bypassed by `--auto-finalization` / `--emergency` (a `/megatask` batch stamps `fn_gate: "bypass"` directly on each per-issue PL0). Gracefully no-ops if the conductor MCP server is unavailable.
 

@@ -88,4 +88,8 @@ Handlers can return `{"continue": false, "stopReason": "..."}` to stop a teammat
 
 > Background tasks launched by a teammate (e.g. long test runs) survive the teammate finishing its turn (CC ≥ 2.1.183) — a lane teammate can kick off long-running work without it dying at the turn boundary.
 
+> **Teammate failure & wake semantics (CC ≥ 2.1.198/2.1.199)**: a teammate that dies on an API error now reports **`failed`** to the lead (no more silently-vanished lanes), messaging a stuck teammate **wakes it to retry immediately**, and `SendMessage` detects a re-spawned teammate reusing a dead teammate's name and asks the caller to retarget. Lead recovery loop: on `failed` → re-spawn the lane; on stalled → `SendMessage` nudge first, re-spawn only if the nudge doesn't wake it. tmux/pane teammates inherit the leader's `--effort` (CC ≥ 2.1.186; `teammateMode: "iterm2"` is an available backend).
+
+> **Worktree reliability (CC 2.1.187→2.1.202)**: project-scoped plugins now load correctly inside git worktrees of the same repository (CC ≥ 2.1.200) — lane teammates see the full plugin skill set in their worktrees; locked `.git/worktrees/` registrations from killed teammates are cleaned automatically (CC ≥ 2.1.187); and the resume picker no longer takes minutes in repositories with many worktrees (CC ≥ 2.1.202). Teammates that finish code work in a worktree via `claude agents` auto commit/push/open a **draft PR** (CC ≥ 2.1.198) — aligned with step 6 above and by-design in lanes, since megatask stamps per-issue `fn_gate: "bypass"`.
+
 Background completion notifications include `worktreePath` and `worktreeBranch` fields, enabling the orchestrator to locate the correct worktree for each teammate.

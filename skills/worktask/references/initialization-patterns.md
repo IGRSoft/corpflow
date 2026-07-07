@@ -39,7 +39,8 @@ cat > "$tmp" <<EOF
     "tests_added": [],
     "decisions": [],
     "open_questions": [],
-    "verdicts": {}
+    "verdicts": {},
+    "dispatched_agents": []
   },
   "handoffs": {}
 }
@@ -47,6 +48,8 @@ EOF
 sync "$tmp" 2>/dev/null || true
 mv -f "$tmp" .context/state.json
 ```
+
+`facts.dispatched_agents: []` is seeded (additive, version:1) so the orchestrator loop appends per-`task_id` dispatch entries in place. The other v1 additive fields (`stages.<CODE>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are written on demand — never seeded; their absence is meaningful. Schema: `handoff-protocol.md#state-json-schema`.
 
 Subsequent stage agents read `.context/state.json` first; if absent, they fall back to legacy `metadata.context_files` mode (path F1 — see `skills/shared/legacy-fallback-f1.md`; matrix at `handoff-protocol.md#fallback-paths`).
 

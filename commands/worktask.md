@@ -101,13 +101,14 @@ See `skills/shared/stage-codes.md` for stage details.
      "platform": "<platform>",
      "run_index": ${N},
      "stages": { "PL": { "status": "in_progress" } },
-     "facts": { "files_modified": [], "tests_added": [], "decisions": [], "open_questions": [], "verdicts": {} },
+     "facts": { "files_modified": [], "tests_added": [], "decisions": [], "open_questions": [], "verdicts": {}, "dispatched_agents": [] },
      "handoffs": {}
    }
    EOF
    sync "$tmp" 2>/dev/null || true
    mv -f "$tmp" .context/state.json
    ```
+   `facts.dispatched_agents: []` is seeded (additive, version:1) so the orchestrator loop appends per-`task_id` dispatch entries in place. The other v1 additive fields (`stages.<CODE>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are written on demand — do NOT seed them; their absence is meaningful. See `handoff-protocol.md#state-json-schema`.
 3b. **Verify SubagentStop hook installed**: After state.json seed, verify `.claude/hooks/state-merge.sh` exists and is executable AND the plugin's `plugin.json` registers the SubagentStop hook entry. If the project-local hook is missing, copy from `${CLAUDE_PLUGIN_ROOT}/.claude/hooks/state-merge.sh`. This hook is the Layer 2 safety net that patches state.json when agents skip self-patching. See `initialization-patterns.md#hook-installation`.
    ```bash
    hook_src="${CLAUDE_PLUGIN_ROOT}/.claude/hooks/state-merge.sh"
@@ -145,6 +146,9 @@ index `N` from `state.json.run_index` (default `0`).
 3. Call `AskUserQuestion`:
    *"Here is the generated plan for your worktask. Approve to begin implementation, or describe
    any changes you want first."*
+   (CC ≥ 2.1.200: `AskUserQuestion` no longer auto-continues on idle by default — the gate holds
+   until a human answers. Keep the `/config` idle-timeout opt-in OFF on hosts that run gated
+   worktasks; an idle auto-answer would count as an approval the operator never gave.)
 4. **On approval**, append one line to `.context/logs/audit.jsonl`, then proceed to Step A:
    ```json
    {"ts":"<ISO>","actor":"orchestrator","action":"approval_received","subject":"PL<N>","result":"ok"}
@@ -199,13 +203,14 @@ fi
 
 The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line of every stage prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to target. See `skills/worktask/references/workspace-modes.md § Conductor Workspace Topology` for the failure mode this guard prevents.
 
-**BINDING: Post-delegation state.json enforcement** — After every `Task()` return, before `TaskUpdate(stage→completed)`: re-read `.context/state.json`; if `stages.<CODE>.status` is NOT `completed`, run
+**BINDING: Post-delegation state.json enforcement** — After every `Task()` return (the *completed stage result* — under background-default subagents, CC ≥ 2.1.198, that is the completion notification, not the launch acknowledgement; see `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5), before `TaskUpdate(stage→completed)`: re-read `.context/state.json`; if `stages.<CODE>.status` is NOT `completed`, run
    ```bash
    CLAUDE_ARTIFACT_PATH=".context/<artifact>-N.md" \
    CLAUDE_TASK_METADATA_STAGE="<CODE>" \
+   STATE_MERGE_VIA=step6_5 \
    bash .claude/hooks/state-merge.sh
    ```
-   then re-read; if STILL not `completed`, apply the F3 fallback (derive minimal patch from agent return text). This covers environments where the SubagentStop hook never fired. Full three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5.
+   `STATE_MERGE_VIA=step6_5` stamps `stages.<CODE>.completed_via=step6_5` so this synchronous Layer-3 path is distinguishable from the SubagentStop-hook Layer-2 default (`hook`). Then re-read; if STILL not `completed`, apply the F3 fallback (derive minimal patch from agent return text — the F3 patch stamps `completed_via: "f3"`). This covers environments where the SubagentStop hook never fired. Full three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5.
 
 ## Phase 3: Post-Worktask Self-Improvement
 
@@ -232,6 +237,14 @@ When the task description contains slash commands (e.g., `/skill-creator`, `/app
 2. Match against available skills listed in the system (Skill tool's available skills)
 3. Store detected commands in `metadata.embedded_commands` on the PL0 task
 4. Pass the embedded command context to PL0 so the product-manager can plan around it
+
+> **Leading stacked skills (CC ≥ 2.1.199)**: when the user stacks slash commands
+> (`/worktask /skill-a do XYZ`), Claude Code itself loads up to 5 **leading** skills before the
+> turn runs — the embedded command's SKILL instructions may already be in context at PL0 time.
+> Extraction into `metadata.embedded_commands` is unchanged, and the DV-stage `Skill()` invocation
+> stays mandatory (it is the execution trigger, not a context load). Re-invoking an already-loaded
+> skill no longer appends a duplicate copy of its instructions (CC ≥ 2.1.202), so the DV
+> invocation is token-safe.
 
 ### Execution
 
@@ -304,13 +317,13 @@ Canonical one-liner (assumes `task.json` is one task's metadata blob and `prompt
 claude agents run \
   --cwd "$(jq -r '.metadata.workspace_path // "."' task.json)" \
   --plugin-dir "$PLUGIN_DIR" \
-  --model "$(jq -r '.metadata.model // "claude-sonnet-4-6"' task.json)" \
+  --model "$(jq -r '.metadata.model // "sonnet"' task.json)" \
   --effort "$(jq -r '.metadata.effort // "high"' task.json)" \
   --permission-mode "$(jq -r '.metadata.permission_mode // "default"' task.json)" \
   -- "$(jq -r .metadata.agent task.json)" < prompt.txt
 ```
 
-The runner MUST append one `audit.jsonl` line `action: "external_dispatch"` per `skills/agent-coordination/SKILL.md § Audit Trail`. Do NOT pass `--dangerously-skip-permissions` from an interactive shell — it is reserved for CI batches with a deny-list in `settings.json`.
+The `sonnet` fallback is an alias on purpose — it tracks the current Sonnet tier (Sonnet 5 on CC ≥ 2.1.197) and stays deprecation-proof per `skills/shared/model-selection.md`. `--permission-mode manual` is the CC ≥ 2.1.200 name for `default`; both are accepted. The runner MUST append one `audit.jsonl` line `action: "external_dispatch"` per `skills/agent-coordination/SKILL.md § Audit Trail`. Do NOT pass `--dangerously-skip-permissions` from an interactive shell — it is reserved for CI batches with a deny-list in `settings.json`.
 
 ## See Also
 

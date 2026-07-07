@@ -86,3 +86,27 @@ EOF
   dv_status=$(jq -r '.stages.DV.status' "$WD/.context/state.json")
   [ "$dv_status" = "in_progress" ]
 }
+
+# ---------------------------------------------------------------------------
+# v1 additive upgrade — --via pass-through with STATE_MERGE_VIA override (#199).
+# ---------------------------------------------------------------------------
+
+@test "via: delegation defaults completed_via=hook (Layer 2 provenance)" {
+  _seed_state
+  _seed_artifact
+  run bash -c "cd '$WD' && CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV bash '$PLUGIN_ROOT/$SCRIPT'"
+  assert_success
+  local via
+  via=$(jq -r '.stages.DV.completed_via' "$WD/.context/state.json")
+  [ "$via" = "hook" ]
+}
+
+@test "via: STATE_MERGE_VIA=step6_5 overrides completed_via" {
+  _seed_state
+  _seed_artifact
+  run bash -c "cd '$WD' && STATE_MERGE_VIA=step6_5 CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV bash '$PLUGIN_ROOT/$SCRIPT'"
+  assert_success
+  local via
+  via=$(jq -r '.stages.DV.completed_via' "$WD/.context/state.json")
+  [ "$via" = "step6_5" ]
+}

@@ -505,6 +505,14 @@ handoff:
                                # DR treats `false` as a hard fail (worktree_isolation_violation)
                                # unless an explicit waiver exists (worktree_isolation_waived
                                # audit row or task.metadata.worktree_waived) — see § D0.0.
+  worktree_path: <abs path>    # OPTIONAL (additive). The isolated worktree's absolute path —
+                               # `state-patch.sh` maps it to `stages.DV.worktree.path`. Lets
+                               # resume re-enter via `EnterWorktree(path)` (CC ≥ 2.1.157) and
+                               # DR/QA run in the right dir. Set to the worktree you confirmed
+                               # in D0.0 (WORKSPACE_ROOT when the workspace IS the worktree).
+  worktree_branch: <branch>    # OPTIONAL (additive). The worktree's git branch —
+                               # maps to `stages.DV.worktree.branch`; gives fn-gate the branch
+                               # without shelling `git rev-parse`.
   files_touched:
     - path/to/file1.md
     - path/to/file2.md

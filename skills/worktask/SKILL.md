@@ -299,6 +299,8 @@ function stageArtifactPath(code: string, runIndex: number): string {
 
 After every `Task()` return and BEFORE `TaskUpdate(stage→completed)`, execute this three-layer check:
 
+> **Completion signal (CC ≥ 2.1.198 — subagents run in the background by default)**: "`Task()` return" here means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the `TaskUpdate(stage→completed)` that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp `completed` over a still-running stage. Errored returns now propagate honestly (CC ≥ 2.1.199/2.1.200): a subagent cut off by a rate limit or API error reports the error (with any partial work preserved) instead of a successful-looking empty result — classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch on an errored return.
+
 ```typescript
 // Layer check: re-read state.json.
 const statePost = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
@@ -309,23 +311,45 @@ const artifactPath = stageArtifactPath(code, runIndex);
 if (statePost.stages?.[code]?.status !== "completed") {
   // Layer 1 (agent self-patch) missed. Invoke Layer 2 synchronously via the canonical script.
   // This fires even if the SubagentStop hook event was not delivered.
-  // Canonical Layer 2: bash skills/worktask/scripts/state-patch.sh --stage <code> --artifact <path>
+  // Canonical Layer 2: bash skills/worktask/scripts/state-patch.sh --stage <code> --artifact <path> --via step6_5
   //   (the script is the single implementation; .claude/hooks/state-merge.sh is a thin wrapper that
   //    delegates to it — invoke state-patch.sh directly here for the synchronous Step-6.5 path.)
-  runStateMergeHook(artifactPath, code);
+  //   `--via step6_5` stamps stages.<CODE>.completed_via=step6_5 so this synchronous path is
+  //   distinguishable from the SubagentStop-hook default ("hook"). (v1 additive.)
+  runStateMergeHook(artifactPath, code, /* via */ "step6_5");
 
   // Re-read after hook.
   const statePost2 = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
   if (statePost2.stages?.[code]?.status !== "completed") {
     // Layer 2 also missed (hook absent or artifact lacks frontmatter).
     // Layer 3: orchestrator derives minimal patch from agent return text (F3 fallback).
+    // The F3 patch stamps completed_via:"f3" so the enforcement layer is observable.
     const handoff = parseFrontmatter(artifactPath);  // null if missing → F3
     const patch = handoff
       ? buildPatchFromHandoff(code, handoff)
-      : { stages: { [code]: { status: "completed", artifact: artifactPath, verdict: "ok" } } };
+      : { stages: { [code]: { status: "completed", artifact: artifactPath, verdict: "ok", completed_via: "f3" } } };
+    if (handoff && !patch.stages[code].completed_via) patch.stages[code].completed_via = "f3";
     atomicMergeStateJson(patch);  // read → merge → temp → fsync → rename
   }
 }
+```
+
+**Dispatch-tracking helpers** (used by the loop above and the execution loop's steps 6a/6.5; all write only cache section [3]):
+
+```typescript
+// markDispatchStatus — return the dispatched_agents[] array with the entry for task_id
+// flipped to `status`, optionally backfilling model_resolved. Replace-array semantics
+// (jq `. * $patch` overwrites arrays). Absent entry → array unchanged (defensive).
+function markDispatchStatus(state, taskId, status, modelResolved) {
+  return (state.facts?.dispatched_agents ?? []).map(a =>
+    a.task_id === taskId
+      ? { ...a, status, ...(modelResolved ? { model_resolved: modelResolved } : {}) }
+      : a);
+}
+// classifyError — map an errored Task() return to the EXISTING retry taxonomy
+// (agent-coordination § Retry / Escalate Matrix). No new vocabulary. A rate-limit /
+// API cut-off is `transient`; other classes come from the artifact/return text.
+// errorBasename — last ":"-segment of the subagent_type (e.g. igrsoft:developer → developer).
 ```
 
 **Banner relocation (R3)**: stage-specific banners (DR Skill, FN Conductor, MCP fallback warning) are appended AFTER `full.description` (suffix), not prepended. Prefixes [1][2][3][4] stay byte-identical across stages so the cache prefix boundary stretches as far as possible.
@@ -405,6 +429,13 @@ while (tasks.some(t => t.status !== "completed")) {
     const agentType = full.metadata.agent;
     const model = full.metadata.model;
 
+    // 4.0. Re-read the live ledger for this iteration (dispatched_agents[], last_error,
+    //      facts.capabilities are all read below and evolve per stage). Cheap: state.json
+    //      is ≤500 tokens. F1 (absent) → empty shape so the additive reads degrade to no-op.
+    const state = fs.existsSync(".context/state.json")
+      ? JSON.parse(fs.readFileSync(".context/state.json", "utf8"))
+      : { stages: {}, facts: {} };
+
     // Resolve plugin: bare → "igrsoft:<name>"; 2-part "plugin:name" → as-is;
     //   3-part "a:b:c" → UNSUPPORTED, throw (message below). The .context/errors/<basename>.md
     //   basename is the last `:`-segment. Applies at every nesting depth (CC ≥ 2.1.172 allows
@@ -431,6 +462,22 @@ while (tasks.some(t => t.status !== "completed")) {
         full.description =
           `NOTE: Expected context files missing: ${missing.join(', ')}. ` +
           `Proceed using what is available; do not fabricate content.\n\n` +
+          full.description;
+      }
+    }
+
+    // 4.6-pre. last_error hint — on a retry, prepend one line summarizing the prior
+    //          errored return (class + partial + ref) to prompt section [6] so the
+    //          re-dispatch targets the recorded failure instead of re-inferring it.
+    //          Reads stages.<CODE>.last_error written by Step 6.5a. (v1 additive; [6]
+    //          is the dynamic retry-hint section — cache prefix [1][2][4] untouched.)
+    if ((full.metadata.retry_count ?? 0) > 0) {
+      const le = state.stages?.[full.metadata.stage]?.last_error;
+      if (le) {
+        full.description =
+          `PRIOR ERROR (class=${le.class}` +
+          `${le.partial ? ", partial work preserved" : ""}` +
+          `${le.ref ? `, see ${le.ref}` : ""}). Resume/repair from that point.\n\n` +
           full.description;
       }
     }
@@ -690,18 +737,65 @@ while (tasks.some(t => t.status !== "completed")) {
     //     frontmatter scrape runs, and F3 remains the fallback — no migration, no breakage. The
     //     artifact + frontmatter are ALWAYS written either way (on-disk durability/compression +
     //     F4 source); the typed return never replaces them.
+    //     Runtime note: structured-output dispatch is reliable on CC ≥ 2.1.187 (no indefinite
+    //     StructuredOutput re-call after success; schema-validation failures abort after 5
+    //     attempts on CC ≥ 2.1.186 instead of looping forever).
     //
     //     CACHE-PREFIX (binding, PRESERVE §4.1): `schema` is a Task() ARGUMENT, NOT preamble text.
     //     It is NOT inserted into sections [1][2][4] (nor anywhere in `full.description`), so the
     //     cache-prefix byte-identity of [1][2][4] is untouched and no per-call varying token is
     //     introduced into the cacheable prefix.
+    // 5f. Model resolution — consult facts.capabilities BEFORE a fable-tier dispatch
+    //     (v1 additive). Fable 5 dispatch fails hard without 1M credits (CC 2.1.172;
+    //     observed live per model-selection.md). If a prior stage already hit that
+    //     hard-fail, the orchestrator cached it in facts.capabilities — skip re-hitting
+    //     the same error and fall back to the auto-mode best-Opus target (CC 2.1.176),
+    //     recording model_requested/model_resolved on the dispatch entry below.
+    const modelRequested = model;
+    let effectiveModel = model;
+    if (model === "fable" && state.facts?.capabilities?.fable_dispatch === "credit_blocked") {
+      effectiveModel = "opus";
+      appendAudit({
+        actor: "orchestrator", action: "model_resolution_constrained", subject: task.id,
+        result: "ok",
+        metadata: { requested: "fable", resolved: "opus", reason: "capabilities.fable_dispatch=credit_blocked" }
+      });
+    }
+
     const stageSchema = HANDOFF_SCHEMA[full.metadata.stage];  // from handoff-protocol.md#handoff-schemas; may be undefined
-    Task({
+    const launchAck = Task({
       subagent_type: subagentType,
-      model: model,
+      model: effectiveModel,
       prompt: full.description,
       ...(stageSchema ? { schema: stageSchema } : {}),  // omitted entirely when the runtime lacks schema support → exactly today's path
     });
+
+    // 6a. dispatched_agents[] — record/replace the entry keyed by task_id (v1 additive,
+    //     writer = orchestrator ONLY). status:"launched" now; Step 6.5 flips it to
+    //     completed/failed. No dispatch-timestamp field is stored (no consumer). agent_id/name populated when
+    //     the runtime surfaces them (bg-default launch-ack CC ≥ 2.1.198; named spawns
+    //     via metadata.spawn_name). Consumed by resume.md step 0. Cache section [3].
+    if (fs.existsSync(".context/state.json")) {
+      const entry = {
+        stage: full.metadata.stage,
+        task_id: task.id,
+        subagent_type: subagentType,
+        ...(launchAck?.agent_id ? { agent_id: launchAck.agent_id } : {}),
+        ...(full.metadata.spawn_name ? { name: full.metadata.spawn_name } : {}),
+        model_requested: modelRequested,
+        ...(effectiveModel !== modelRequested ? { model_resolved: effectiveModel } : {}),
+        status: "launched",
+      };
+      // Replace any prior entry for this task_id (re-dispatch); history stays in audit.jsonl.
+      // dispatched_agents is a REPLACE-array: jq `. * $patch` overwrites arrays (deep-merges
+      // only objects), so this swaps in the filtered+appended list. See handoff-protocol.md#atomic-write.
+      atomicMergeStateJson({
+        facts: {
+          dispatched_agents:
+            [...(state.facts?.dispatched_agents ?? []).filter(a => a.task_id !== task.id), entry],
+        },
+      });
+    }
 
     // 6.5. handoff-protocol: patch state.json from artifact frontmatter if the
     //      agent didn't already do so. Belt-and-suspenders layer #3 (after
@@ -710,15 +804,63 @@ while (tasks.some(t => t.status !== "completed")) {
     if (fs.existsSync(".context/state.json")) {
       const post = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
       const code = full.metadata.stage;
+
+      // 6.5a. Errored return (CC ≥ 2.1.199/2.1.200 propagate errors + partial work).
+      //       Classify per agent-coordination § Retry / Escalate Matrix, write
+      //       stages.<CODE>.last_error, flip the dispatch entry to "failed", and route
+      //       to the retry matrix — do NOT run the completion patch. (v1 additive.)
+      if (launchAck?.result === "error" || launchAck?.errored) {
+        const cls = classifyError(launchAck);  // existing taxonomy, no new vocabulary
+        const runIndex = full.metadata.run_index ?? 0;
+        atomicMergeStateJson({
+          stages: {
+            [code]: {
+              last_error: {
+                class: cls,                              // transient|logic|missing_input|…|exhausted
+                partial: Boolean(launchAck?.partial),    // partial work preserved
+                at: new Date().toISOString(),
+                ref: `.context/errors/${errorBasename(subagentType)}.md#retry-${runIndex}`,
+              },
+            },
+          },
+          facts: {
+            dispatched_agents: markDispatchStatus(state, task.id, "failed"),
+          },
+        });
+        routeToRetryMatrix(code, cls);  // never falls through to completion
+        continue;
+      }
+
       if (post.stages?.[code]?.status !== "completed") {
         const runIndex = full.metadata.run_index ?? 0;
         const artifactPath = stageArtifactPath(code, runIndex);  // e.g. ".context/development-0.md"
-        const handoff = parseFrontmatter(artifactPath);  // null → F3 fallback
-        const patch = handoff
-          ? buildPatchFromHandoff(code, handoff)
-          : { stages: { [code]: { status: "completed", artifact: artifactPath, verdict: "ok" } } };
-        atomicMergeStateJson(patch);
+        // Layer 2 (synchronous): delegate to state-patch.sh with --via step6_5 so
+        // completed_via distinguishes this path from the SubagentStop hook default ("hook").
+        //   bash skills/worktask/scripts/state-patch.sh --stage <code> --artifact <path> --via step6_5
+        // (equivalently: STATE_MERGE_VIA=step6_5 bash .claude/hooks/state-merge.sh)
+        runStateMergeHook(artifactPath, code, /* via */ "step6_5");
+        const post2 = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
+        if (post2.stages?.[code]?.status !== "completed") {
+          // Layer 3 (F3): derive a minimal patch and stamp completed_via:"f3".
+          const handoff = parseFrontmatter(artifactPath);  // null → F3 fallback
+          const patch = handoff
+            ? buildPatchFromHandoff(code, handoff)
+            : { stages: { [code]: { status: "completed", artifact: artifactPath, verdict: "ok", completed_via: "f3" } } };
+          if (handoff && !patch.stages[code].completed_via) patch.stages[code].completed_via = "f3";
+          atomicMergeStateJson(patch);
+        }
       }
+
+      // 6.5b. Flip the dispatch entry to "completed" and backfill model_resolved from the
+      //       F3 liveness read when the runtime surfaced the resolved model. Re-read state
+      //       here (not the stale step-4.0 snapshot) so this maps over the fresh
+      //       dispatched_agents[] that step 6a already appended the `launched` entry to.
+      const stateForDispatch = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
+      atomicMergeStateJson({
+        facts: {
+          dispatched_agents: markDispatchStatus(stateForDispatch, task.id, "completed", launchAck?.model_resolved),
+        },
+      });
     }
 
     // 7. Mark completed
@@ -736,7 +878,7 @@ while (tasks.some(t => t.status !== "completed")) {
 - ALWAYS pass `model` from task metadata to the Agent tool (e.g. `model: opus` → `model: "opus"`); omitting/mismatching is a violation. Do NOT rely on frontmatter inheritance
 - `metadata.agent`: bare names → `igrsoft:<name>`, plugin-qualified (`apple-developer:ios-developer`) used as-is. Detection: presence of `:`
 - If a stage agent fails after 3 retries, escalate per the error handling chain
-- NEVER mark a task `completed` without first delegating and receiving results — the most common violation
+- NEVER mark a task `completed` without first delegating and receiving results — the most common violation. Launch-ack ≠ results: with background-default subagents (CC ≥ 2.1.198) the completion notification (or `subagent_stopped` audit row) is the "results received" signal; an errored return (rate-limit/API error — now propagated with partial work, CC ≥ 2.1.199) routes to the retry/escalate matrix, never to completion
 - The orchestrator uses ONLY TaskCreate, TaskUpdate, TaskGet, TaskList, and Agent tools — Edit/Write/Bash on source files belong to stage agents. It owns the loop; stage agents own their stage's work
 - Prefer in-memory task tracking over `TaskList()` polling. Call `TaskList()` only on first loop entry, after TL/DV stages (which may create sub-tasks), and every 3rd iteration as a consistency check. For linear pipelines, update the local task array from `TaskUpdate` results instead of re-fetching all tasks
 
