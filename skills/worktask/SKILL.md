@@ -2,7 +2,7 @@
 name: worktask
 description: Complete staged worktask system with dynamic sizing, task initialization, and stage management. Use when executing multi-stage worktasks, initializing tasks, or managing worktask state.
 effort: high
-version: 0.2.0
+version: 0.2.1
 ---
 
 > **INVOCATION GATE**: If you are reading this skill because the orchestrator delegated directly
@@ -942,6 +942,23 @@ session before the first Apple-platform stage. Contract:
 
 This pattern generalises to any lazy-spawn `npx`-based MCP. Add a
 new trigger block when introducing one (e.g., Pencil, Sosumi).
+
+### DV Batch Checkpointing
+
+When a single DV agent executes multiple non-separable batches in one run (a
+multi-batch coordination plan with no separable file ownership — e.g. a 6-batch
+/ 49-file refactor delegated to one DV), the DV agent MUST append a one-line
+checkpoint to its `development-N.md` artifact (or a scratch
+`.context/dv-checkpoint-N.log`) immediately after EACH completed batch, BEFORE
+starting the next: batch id, files-touched count, and the gate result if one ran
+(e.g. a residual-grep). The line is append-only — one entry per batch boundary.
+
+Rationale: if the DV agent dies or stalls mid-run (e.g. an API ConnectionRefused
+or a stream-watchdog timeout *after* the edit batches are applied but before the
+completion protocol), orchestrator F3 recovery (§ Step 6.5 Layer 3) resumes
+verification from the last checkpointed batch boundary instead of re-deriving the
+entire diff from scratch. Pairs with the orchestrator-side loop step 4.7 DV
+checkpoint resume, which carries a recorded checkpoint forward on re-dispatch.
 
 ## FN Gate
 
