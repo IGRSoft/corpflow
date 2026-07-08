@@ -8,7 +8,7 @@ related:
   - commands/appstore-info.md
   - agents/release-engineer.md
   - agents/designer.md
-  - commands/create-release-notes.md
+  - commands/docs-release-notes.md
   - skills/appstore-screenshots/SKILL.md
   - skills/pencil-design-worktask/SKILL.md
 ---

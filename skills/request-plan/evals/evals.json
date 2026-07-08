@@ -10,7 +10,7 @@
     {
       "id": 2,
       "prompt": "i want to add CSV export to the estimates feature. what's the plan?",
-      "expected_output": "Plan that notices existing estimate/export functionality (csv-export-templates, /export-estimate), scopes accordingly, phases the work, gives rough effort, and recommends a worktask trigger. Should reuse rather than rebuild existing export pieces.",
+      "expected_output": "Plan that notices existing estimate/export functionality (csv-export-templates, /estimate --export csv), scopes accordingly, phases the work, gives rough effort, and recommends a worktask trigger. Should reuse rather than rebuild existing export pieces.",
       "files": []
     },
     {

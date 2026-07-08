@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with Task System integration, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 3.31.0 · Requires Claude Code 2.1.200+**
+**Plugin 3.32.0 · Requires Claude Code 2.1.200+**
 
 ## Features
 
@@ -206,79 +206,74 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 
 ### Commands
 
-#### Core Worktask
+36 commands, grouped by domain prefix. Top-level orchestration commands stay unprefixed; every other command carries a stable domain prefix.
+
+#### Core / Orchestration
 | Command | Description |
 |---------|-------------|
 | `/worktask` | Initialize a single staged worktask (milestone-agnostic) |
 | `/megatask` | Orchestrate many worktasks across a milestone or issue array, ordered by a dependency/blocker DAG |
-| `/estimate` | Estimate task complexity and effort |
-| `/export-estimate` | Export estimates to CSV |
+| `/estimate` | Estimate task complexity and effort; `--review` senior-reviews an estimate, `--export csv` emits the CSV pack |
 | `/context-status` | Check context and worktask state |
 | `/request-plan` | Turn a free-form request into a lightweight, context-aware plan |
 | `/improve-yourself` | Retrospective: propose agent/skill/command updates from user edits |
+| `/cost-report` | Worktask token-cost report |
+| `/cc-update` | Update plugin agents/commands/skills for new Claude Code features |
 
-#### Designer
+#### Design (`design-`)
 | Command | Description |
 |---------|-------------|
 | `/design-specs` | Generate design specifications |
 | `/design-review` | Review design decisions |
-| `/accessibility-audit` | Accessibility audit (WCAG) |
+| `/design-accessibility` | Accessibility audit (WCAG) |
 
-#### Product Manager
+#### Product (`pm-`)
 | Command | Description |
 |---------|-------------|
 | `/pm-prioritize` | RICE/WSJF prioritization |
 | `/pm-requirements` | Generate PRD |
 | `/pm-roadmap` | Product roadmap planning |
 | `/pm-milestone` | Generate milestone tickets with agent assignments |
+| `/pm-sprint` | Sprint planning |
+| `/pm-risk` | Risk assessment |
 
-#### Software Architect
+#### Architecture (`arch-`)
 | Command | Description |
 |---------|-------------|
 | `/arch-review` | Architecture review |
-| `/arch-decision` | Create ADRs |
-| `/tech-debt` | Technical debt analysis |
-| `/tech-decision` | Create TDRs (technology decision records) |
-| `/tech-review` | Deep technical review (quality, performance, security) |
+| `/arch-decision` | Create ADRs, or TDRs via `--type tdr` |
+| `/arch-debt` | Technical debt analysis |
 
-#### QA Engineer
+#### Development (`dev-`)
+| Command | Description |
+|---------|-------------|
+| `/dev-code-review` | Developer code-review DR gate; `--depth deep` adds full technical-review analysis |
+
+#### QA / Test (`test-`)
 | Command | Description |
 |---------|-------------|
 | `/test-plan` | Generate test plan |
 | `/test-coverage` | Coverage analysis |
-| `/qa-report` | QA summary report |
+| `/test-report` | QA summary report |
 
-#### Project Manager
+#### Docs (`docs-`)
 | Command | Description |
 |---------|-------------|
-| `/sprint-plan` | Sprint planning |
-| `/risk-assess` | Risk assessment |
-| `/create-release-notes` | Generate release notes |
-| `/create-pr` | Commit and open a pull request to the parent branch |
+| `/docs-audit` | Documentation audit |
+| `/docs-readme` | README maintenance |
+| `/docs-release-notes` | Generate release notes |
 
-#### Team Lead
+#### Business (`business-`)
 | Command | Description |
 |---------|-------------|
-| `/senior-review` | Senior developer code review |
-| `/code-review-dev` | Development-focused code review |
-| `/code-impl` | Code implementation guidance |
+| `/business-report` | Business reporting via `--type case\|roi\|summary` |
 
-#### Technical Writer
+#### Ethics
 | Command | Description |
 |---------|-------------|
-| `/doc-audit` | Documentation audit |
-| `/readme-update` | README maintenance |
-| `/cc-update` | Update plugin agents/commands/skills for new Claude Code features |
+| `/ethics-review` | Constitutional compliance review; `--lens harm` runs a full stakeholder harm assessment |
 
-#### Stakeholder
-| Command | Description |
-|---------|-------------|
-| `/business-case` | Business case generation |
-| `/roi-analysis` | ROI calculation |
-| `/executive-summary` | Executive summary |
-| `/cost-report` | Cost analysis report |
-
-#### Prompt Engineer
+#### Authoring
 | Command | Description |
 |---------|-------------|
 | `/create-agent` | Create new agent definition |
@@ -286,14 +281,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/optimize-command` | Optimize command definition |
 | `/prompt-audit` | Audit prompt effectiveness |
 
-#### Ethics Reviewer
-| Command | Description |
-|---------|-------------|
-| `/ethics-review` | Constitutional compliance review |
-| `/harm-assessment` | Harm assessment analysis |
-| `/transparency-check` | Verify output transparency |
-
-#### App Store / Publishing
+#### App Store / Publishing (`appstore-`)
 | Command | Description |
 |---------|-------------|
 | `/appstore-info` | Scaffold App Store listing content from README |

@@ -132,7 +132,7 @@ Basic review checklist for process enforcement:
 - **Testing**: Adequate coverage? Meaningful tests? Edge cases tested?
 - **Process**: PR format correct? Linked to issue? CI passing?
 
-**For deep technical reviews** (performance, security, architecture patterns, code quality depth), escalate to `technical-lead` using `/tech-review`.
+**For deep technical reviews** (performance, security, architecture patterns, code quality depth), escalate to `technical-lead` using `/dev-code-review --depth deep`.
 
 ## Sequential Resource Allocation
 

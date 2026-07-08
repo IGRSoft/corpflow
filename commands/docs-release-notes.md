@@ -1,5 +1,5 @@
 ---
-name: create-release-notes
+name: docs-release-notes
 description: Generate release notes from completed work, git history, or worktask artifacts
 argument-hint: '[--from tag] [--to tag|HEAD]'
 allowed-tools: Read, Glob, Grep, Bash(git log:*)
@@ -7,7 +7,7 @@ model: haiku
 related:
   - agents/project-manager.md
   - agents/technical-writer.md
-  - commands/sprint-plan.md
+  - commands/pm-sprint.md
 ---
 
 # Release Notes Command
@@ -17,10 +17,10 @@ Generate release notes from completed work, git history, or worktask artifacts.
 ## Usage
 
 ```
-/create-release-notes
-/create-release-notes --version <version>
-/create-release-notes --from-commits
-/create-release-notes --format [markdown|html|slack]
+/docs-release-notes
+/docs-release-notes --version <version>
+/docs-release-notes --from-commits
+/docs-release-notes --format [markdown|html|slack]
 ```
 
 ## Options
@@ -35,9 +35,9 @@ Generate release notes from completed work, git history, or worktask artifacts.
 ## Examples
 
 ```
-/create-release-notes
-/create-release-notes --version 2.1.0 --format markdown
-/create-release-notes --from-commits --audience external
+/docs-release-notes
+/docs-release-notes --version 2.1.0 --format markdown
+/docs-release-notes --from-commits --audience external
 ```
 
 ## Output Format

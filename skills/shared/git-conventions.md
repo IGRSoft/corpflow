@@ -81,7 +81,7 @@ In auto mode the runtime enforces these guards independently of the rules above:
 - **IaC `destroy` is blocked unless the specific stack is named** — a bare `destroy` is refused; the target stack must be specified.
 - **Denials are self-explanatory (CC ≥ 2.1.193)** — auto-mode denial reasons surface in the transcript, the denial toast, and `/permissions` recent denials, so a blocked git guard documents itself in the audit trail. Stricter installs can set `autoMode.classifyAllShell` (CC ≥ 2.1.193) to route ALL shell commands through the classifier, not just arbitrary-code-execution patterns.
 
-FN-stage commit/cleanup and `create-pr` therefore run under this guard. None of the worktask flows rely on amending a non-agent commit, so the guard is documentation-forward (it reinforces, rather than changes, current behavior).
+FN-stage commit/cleanup therefore runs under this guard. None of the worktask flows rely on amending a non-agent commit, so the guard is documentation-forward (it reinforces, rather than changes, current behavior).
 
 ## Pull Request Format
 

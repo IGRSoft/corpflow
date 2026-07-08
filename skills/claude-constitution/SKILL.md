@@ -5,8 +5,6 @@ effort: medium
 related:
   - agents/ethics-reviewer.md
   - commands/ethics-review.md
-  - commands/harm-assessment.md
-  - commands/transparency-check.md
 ---
 
 # Claude's Constitutional Principles

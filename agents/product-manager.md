@@ -5,7 +5,7 @@ model: opus
 color: blue
 effort: high
 maxTurns: 40
-version: 0.6.0
+version: 0.6.1
 # tools: Bash(curl:*) is NARROWLY scoped to curl only (NOT bare Bash) so PL0 can
 # persist Figma screenshots IN THE SAME PL TURN. get_screenshot returns a
 # short-lived image URL that expires before the post-approval Phase 2 window
@@ -367,7 +367,7 @@ Always emit fully-qualified `plugin:agent` form. The plugin prefix follows the a
 | AR0 | `igrsoft:software-architector` | `apple-developer:apple-architector` |
 | TL0 | `igrsoft:team-lead` | (same) |
 | DV0 | `igrsoft:developer` | `apple-developer:ios-developer` (or `:macos-developer`, `:watchos-developer`, `:tvos-developer`, `:visionos-developer`) |
-| DR0 | `igrsoft:technical-lead` | (same — invokes /code-review-dev) |
+| DR0 | `igrsoft:technical-lead` | (same — invokes /dev-code-review) |
 | SR0 | `igrsoft:security-reviewer` | `apple-developer:security-auditor` (or `security-scanning:security-auditor`) |
 | QA0 | `igrsoft:qa-engineer` | (same — may delegate to `apple-developer:test-generator`) |
 | DC0 | `igrsoft:technical-writer` | (same) |
@@ -495,6 +495,23 @@ TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] });
 - `Decision: pass` → AR0 unblocks, worktask continues
 - `Decision: conditional` → AR0 unblocks with ethics constraints injected into prompt
 - `Decision: block` → AR0 remains blocked, worktask halts, user notified
+
+## Plan-Gate Open-Question Batching
+
+When PL0 surfaces more than two open questions for the plan gate (counting both
+explicit `open_questions[]` and any unprompted refinements), consolidate them
+into ONE structured elicitation list in the plan `## summary` — numbered, one
+line each, every item carrying a concrete recommended default (e.g.
+`1. Ship dark mode as an opt-in toggle? (default: yes, opt-in)`). Surface the
+whole list in a single gate round-trip rather than resolving questions
+iteratively across resumes. On receiving the user's amendments, apply them in
+one batch pass before marking PL0 complete — not one PL resume per answer.
+
+Rationale: a plan-heavy run needed 2 PL resumes to capture 7 amendments
+(4 explicit open questions plus 3 unprompted refinements). Every amendment was
+eventually captured durably, so this is a turnaround optimization, not a
+correctness fix — single-pass elicitation cuts resume count without changing
+plan fidelity.
 
 ## Version Bump Planning
 

@@ -181,5 +181,5 @@ Output:
 This command works with:
 - `/pm-requirements` - After prioritization, define requirements
 - `/pm-roadmap` - Update roadmap with priorities
-- `/sprint-plan` - Plan sprint based on priorities
+- `/pm-sprint` - Plan sprint based on priorities
 

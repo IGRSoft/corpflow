@@ -1,12 +1,12 @@
 ---
-name: readme-update
+name: docs-readme
 description: Update README files based on code changes, keeping documentation in sync with implementation
 argument-hint: '[--path README.md]'
 model: haiku
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash(git log:*)
 related:
   - agents/technical-writer.md
-  - commands/doc-audit.md
+  - commands/docs-audit.md
   - commands/worktask.md
 ---
 
@@ -17,9 +17,9 @@ Update README files based on code changes, keeping documentation in sync with im
 ## Usage
 
 ```
-/readme-update
-/readme-update --path <directory>
-/readme-update --section [installation|usage|api|contributing]
+/docs-readme
+/docs-readme --path <directory>
+/docs-readme --section [installation|usage|api|contributing]
 ```
 
 ## Options
@@ -33,9 +33,9 @@ Update README files based on code changes, keeping documentation in sync with im
 ## Examples
 
 ```
-/readme-update
-/readme-update --path packages/auth
-/readme-update --section installation --from-changes
+/docs-readme
+/docs-readme --path packages/auth
+/docs-readme --section installation --from-changes
 ```
 
 ## Output Format
@@ -195,6 +195,6 @@ MIT
 ## Integration
 
 This command works with:
-- `/doc-audit` - Find README issues
+- `/docs-audit` - Find README issues
 - `/release-notes` - Update for releases
 

@@ -1,5 +1,5 @@
 ---
-name: tech-debt
+name: arch-debt
 description: Analyze, document, and prioritize technical debt in the codebase
 argument-hint: '[--path dir] [--severity critical|high|medium|low]'
 model: sonnet
@@ -7,7 +7,7 @@ allowed-tools: Read, Glob, Grep
 related:
   - agents/software-architector.md
   - commands/arch-review.md
-  - commands/sprint-plan.md
+  - commands/pm-sprint.md
 ---
 
 # Technical Debt Command
@@ -17,10 +17,10 @@ Analyze, document, and prioritize technical debt in the codebase.
 ## Usage
 
 ```
-/tech-debt
-/tech-debt --path <directory>
-/tech-debt --add "Description of debt"
-/tech-debt --report
+/arch-debt
+/arch-debt --path <directory>
+/arch-debt --add "Description of debt"
+/arch-debt --report
 ```
 
 ## Options
@@ -35,10 +35,10 @@ Analyze, document, and prioritize technical debt in the codebase.
 ## Examples
 
 ```
-/tech-debt
-/tech-debt --path src/legacy
-/tech-debt --add "Migrate from callbacks to async/await in api module"
-/tech-debt --report --category security
+/arch-debt
+/arch-debt --path src/legacy
+/arch-debt --add "Migrate from callbacks to async/await in api module"
+/arch-debt --report --category security
 ```
 
 ## Output Format

@@ -1,16 +1,15 @@
 ---
-name: risk-assess
+name: pm-risk
 description: Identify, assess, and document project risks with mitigation strategies
 argument-hint: <project or feature description>
 allowed-tools: Read, Glob, Grep
 model: sonnet
 related:
   - agents/project-manager.md
-  - commands/sprint-plan.md
+  - commands/pm-sprint.md
   - agents/stakeholder.md
   - agents/ethics-reviewer.md
   - commands/ethics-review.md
-  - commands/harm-assessment.md
   - skills/claude-constitution/SKILL.md
 ---
 
@@ -21,10 +20,10 @@ Identify, assess, and document project risks with mitigation strategies.
 ## Usage
 
 ```
-/risk-assess
-/risk-assess "Feature or project description"
-/risk-assess --update
-/risk-assess --report
+/pm-risk
+/pm-risk "Feature or project description"
+/pm-risk --update
+/pm-risk --report
 ```
 
 ## Options
@@ -39,9 +38,9 @@ Identify, assess, and document project risks with mitigation strategies.
 ## Examples
 
 ```
-/risk-assess
-/risk-assess "SSO Implementation Project"
-/risk-assess --report --threshold high
+/pm-risk
+/pm-risk "SSO Implementation Project"
+/pm-risk --report --threshold high
 ```
 
 ## Output Format
@@ -232,9 +231,9 @@ Low Prob │    R-12    │   R-09     │    R-07     │
 ## Integration
 
 This command works with:
-- `/sprint-plan` - Include risk buffer
+- `/pm-sprint` - Include risk buffer
 - `/release-notes` - Document known issues
-- `/business-case` - Risk section
+- `/business-report` - Risk section
 
 ## Ethical Risk Category
 
@@ -295,9 +294,9 @@ If hard constraint risk is identified: **IMMEDIATE STOP** - escalate to stakehol
 ## Integration
 
 This command works with:
-- `/sprint-plan` - Include risk buffer
+- `/pm-sprint` - Include risk buffer
 - `/release-notes` - Document known issues
-- `/business-case` - Risk section
+- `/business-report` - Risk section
 - `/ethics-review` - Deep ethical analysis
-- `/harm-assessment` - Detailed harm evaluation
+- `/ethics-review --lens harm` - Detailed harm evaluation
 

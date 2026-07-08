@@ -219,7 +219,7 @@ How changelog entries are categorized and routed to affected files:
 | **Cost** | token, cache, prompt cache, cost reduction | cost-optimization skill |
 | **Frontmatter** | effort, maxTurns, disallowedTools, initialPrompt, paths YAML, description cap, Tool(param:value) permission syntax, model: deprecation | stage-codes skill, prompt-engineer agent, model-selection skill |
 | **Commands** | slash command, /clear, /reload-plugins, Tool(param:value) permission syntax | worktask command, relevant command files, agent-coordination skill |
-| **Security** | auto mode, destructive git block, commit --amend guard, IaC destroy block, trigger delivery can't auto-approve, attribution.sessionUrl, auth-stub tools headless | git-conventions skill, create-pr command, resume reference, security-reviewer agent |
+| **Security** | auto mode, destructive git block, commit --amend guard, IaC destroy block, trigger delivery can't auto-approve, attribution.sessionUrl, auth-stub tools headless | git-conventions skill, resume reference, security-reviewer agent |
 
 ## Integration
 

@@ -26,7 +26,7 @@ Override via Task `model` parameter when stage complexity warrants it. See `cost
 | AR | software-architector | Technical design, test architecture, validate PL sizing |
 | TL | team-lead | Coordinate approach, allocate resources, split DV into parallel streams when warranted |
 | DV | developer | Implement solution + unit tests, run formatter, verify build + scoped tests pass (tests covering changed code; full-suite regression deferred to QA) |
-| DR | technical-lead | Invoke /code-review-dev, produce developer-review.md |
+| DR | technical-lead | Invoke /dev-code-review, produce developer-review.md |
 | SR | security-reviewer | OWASP audit, vulnerability scan |
 | QA | qa-engineer | Test plan, execute tests, all tests pass |
 | DC | technical-writer | Update docs, README, ARCHITECTURE |
