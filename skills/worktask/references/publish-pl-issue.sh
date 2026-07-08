@@ -11,7 +11,13 @@
 #     token-strip with allow-list A1–A5.
 #   - Strip-ratio >50% aborts publish; aborted body persisted to
 #     .context/logs/issue-body-<run_index>.aborted.tmp.
-#   - Idempotency: state.json:metadata.github_issue_url short-circuits.
+#   - Idempotency + cross-run dedup: one .context/ ↔ one GitHub issue. The issue
+#     ref is persisted to the run-independent .context/gh-issue.json anchor (state.json
+#     is re-seeded per run, so it cannot hold this). Same-run resolve → short-circuit
+#     (already_published). A LATER worktask run in the same .context/ resolves the
+#     anchor (or, if lost, an exact-title single-hit GitHub search) and posts a
+#     marker-deduped follow-up COMMENT instead of opening a duplicate issue. See
+#     skills/gh-issue-dedup. Env: GH_ISSUE_ANCHOR (path), GH_ISSUE_SEARCH (0 disables).
 #   - Milestone-mode: state.json:metadata.milestone OR workspace.json present →
 #     exit 0 immediately with reason=milestone_mode. No gh API call of any kind
 #     (no create, no comment). The parent milestone issue is the canonical record.
@@ -127,6 +133,15 @@ GH_TIMEOUT="${GH_TIMEOUT:-30}"
 STRICT="${STRICT:-0}"
 LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
 AUDIT_FILE="$LOG_DIR/audit.jsonl"
+# Run-independent .context ↔ issue binding. state.json is re-seeded on every fresh
+# /worktask (commands/worktask.md § seed), wiping metadata.github_issue_url — so the
+# canonical issue reference is persisted HERE instead, surviving run_index increments.
+# A second worktask in the same .context/ then comments on the existing issue rather
+# than opening a duplicate. See skills/gh-issue-dedup. Sits next to state.json.
+ISSUE_ANCHOR="${GH_ISSUE_ANCHOR:-$(dirname "$STATE_FILE")/gh-issue.json}"
+# GitHub-side recovery search when no local anchor resolves (fresh clone / lost
+# .context/). Default on; exact-title single-hit only (guarded against false matches).
+GH_ISSUE_SEARCH="${GH_ISSUE_SEARCH:-1}"
 
 # ---------- asset-hosting env hooks (Figma image embed) ---------------------
 # Roots used to resolve {{asset:<basename>}} tokens and to stage hosted copies.
@@ -659,6 +674,99 @@ write_state_url() {
   jq --arg url "$url" '.metadata = (.metadata // {}) | .metadata.github_issue_url = $url' "$STATE_FILE" > "$tmp" || return 1
   sync "$tmp" 2>/dev/null || true
   mv -f "$tmp" "$STATE_FILE" || return 1
+}
+
+# ---------- run-independent GitHub-issue anchor -----------------------------
+# The .context/gh-issue.json anchor binds this context to its canonical issue
+# across worktask runs (state.json cannot: it is re-seeded, metadata wiped, on
+# every fresh /worktask — so a second run would lose github_issue_url and open a
+# duplicate). write_context_issue stamps created/last-commented to the CURRENT run;
+# a later run (run_index greater than created_run_index) comments instead of creating.
+write_context_issue() {
+  # $1=url $2=number. Atomic (tmp → fsync → mv), mirroring write_state_url. Non-fatal.
+  local url="$1" number="$2"
+  [ -z "$url" ] && return 0
+  [ -n "$ISSUE_ANCHOR" ] || return 0
+  local tmp="${ISSUE_ANCHOR}.tmp.$$"
+  jq -cn --arg url "$url" --argjson num "${number:-0}" \
+     --arg wid "${WORKTASK_ID:-unknown}" --argjson ri "${RUN_INDEX:-0}" \
+     --arg ts "$(date -u +%FT%TZ)" \
+     '{version:1, url:$url, number:$num, created_run_index:$ri, created_worktask_id:$wid, created_at:$ts, last_commented_run_index:$ri}' \
+     > "$tmp" 2>/dev/null || return 1
+  sync "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$ISSUE_ANCHOR" || return 1
+}
+
+bump_anchor_commented() {
+  # $1=run_index. Record a follow-up comment for this run (anchor-source path).
+  local ri="$1"
+  [ -n "$ISSUE_ANCHOR" ] && [ -f "$ISSUE_ANCHOR" ] || return 0
+  local tmp="${ISSUE_ANCHOR}.tmp.$$"
+  jq --argjson ri "${ri:-0}" '.last_commented_run_index = $ri' "$ISSUE_ANCHOR" > "$tmp" 2>/dev/null || return 1
+  sync "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$ISSUE_ANCHOR" || return 1
+}
+
+# Return 0 if the issue already carries $2 among its comment bodies (network guard
+# for comment idempotency; mirrors attach-visual-evidence.sh:issue_has_marker).
+pl_issue_has_marker() {
+  local url="$1" marker="$2" body
+  body=$("$GH_BIN" issue view "$url" --json comments --jq '.comments[].body' 2>/dev/null || true)
+  printf '%s' "$body" | grep -qF "$marker"
+}
+
+# Resolve the canonical issue for this .context WITHOUT touching GitHub.
+# Priority: (1) .context/gh-issue.json anchor, (2) state.json:metadata.github_issue_url
+# (only present within the same run). On hit sets RESOLVED_ISSUE_{URL,NUMBER,
+# CREATED_RUN,SOURCE} and returns 0; otherwise resets them and returns 1.
+resolve_context_issue_local() {
+  RESOLVED_ISSUE_URL=""; RESOLVED_ISSUE_NUMBER=""; RESOLVED_ISSUE_CREATED_RUN=""; RESOLVED_ISSUE_SOURCE=""
+  if [ -n "$ISSUE_ANCHOR" ] && [ -f "$ISSUE_ANCHOR" ] && jq -e . "$ISSUE_ANCHOR" >/dev/null 2>&1; then
+    local a_url
+    a_url=$(jq -r '.url // ""' "$ISSUE_ANCHOR" 2>/dev/null)
+    if [ -n "$a_url" ]; then
+      RESOLVED_ISSUE_URL="$a_url"
+      RESOLVED_ISSUE_NUMBER=$(jq -r '.number // ""' "$ISSUE_ANCHOR" 2>/dev/null)
+      RESOLVED_ISSUE_CREATED_RUN=$(jq -r '.created_run_index // 0' "$ISSUE_ANCHOR" 2>/dev/null)
+      RESOLVED_ISSUE_SOURCE="anchor"
+      return 0
+    fi
+  fi
+  local s_url
+  s_url=$(jq -r '.metadata.github_issue_url // ""' "$STATE_FILE" 2>/dev/null)
+  if [ -n "$s_url" ]; then
+    RESOLVED_ISSUE_URL="$s_url"
+    RESOLVED_ISSUE_NUMBER=$(printf '%s' "$s_url" | grep -oE '[0-9]+$' || true)
+    RESOLVED_ISSUE_CREATED_RUN="$RUN_INDEX"
+    RESOLVED_ISSUE_SOURCE="state"
+    return 0
+  fi
+  return 1
+}
+
+# GitHub-side recovery: find an OPEN issue whose title EXACTLY matches $TITLE
+# (case-insensitive, trimmed). Accepts a single hit only — an ambiguous / multi-hit
+# result is ignored so an unrelated same-worded issue never captures a fresh context.
+# Needs $TITLE, so it runs AFTER the title is built. Sets RESOLVED_ISSUE_* on hit.
+resolve_context_issue_search() {
+  [ "$GH_ISSUE_SEARCH" = "1" ] || return 1
+  [ "$DRY_RUN" != "1" ] || return 1
+  command -v "$GH_BIN" >/dev/null 2>&1 || return 1
+  local want; want=$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  [ -n "$want" ] || return 1
+  local hits; hits=$("$GH_BIN" issue list --state open --search "$TITLE in:title" --json number,title,url --limit 20 2>/dev/null || true)
+  [ -n "$hits" ] || return 1
+  local matched n
+  matched=$(printf '%s' "$hits" | jq -c --arg t "$want" '[ .[] | select((.title|ascii_downcase|gsub("^\\s+|\\s+$";"")) == $t) ]' 2>/dev/null || echo '[]')
+  n=$(printf '%s' "$matched" | jq 'length' 2>/dev/null || echo 0)
+  if [ "$n" = "1" ]; then
+    RESOLVED_ISSUE_URL=$(printf '%s' "$matched" | jq -r '.[0].url')
+    RESOLVED_ISSUE_NUMBER=$(printf '%s' "$matched" | jq -r '.[0].number')
+    RESOLVED_ISSUE_CREATED_RUN="-1"   # predates this context's runs → always comment
+    RESOLVED_ISSUE_SOURCE="search"
+    return 0
+  fi
+  return 1
 }
 
 # ---------- label auto-provisioning -----------------------------------------
@@ -1653,10 +1761,23 @@ if [ "${NO_GH_ISSUE:-${NO_GH}}" = "true" ]; then
   defer "opted_out"
 fi
 
-# Guard 2: idempotency — already-published.
-EXISTING_URL=$(jq -r '.metadata.github_issue_url // ""' "$STATE_FILE" 2>/dev/null)
-if [ -n "$EXISTING_URL" ]; then
-  defer "already_published"
+# Guard 2: idempotency + cross-run dedup. Resolve the canonical issue for this
+# .context from the run-independent anchor (or the same-run state url). Created in
+# THIS run → already published (defer). Created in an EARLIER run → comment on it
+# instead of opening a duplicate (COMMENT_MODE, executed at the publish branch once
+# the body is built). No local hit → COMMENT_MODE stays 0; a GitHub-side search may
+# still recover a lost anchor after the title is built. See skills/gh-issue-dedup.
+COMMENT_MODE=0
+EXISTING_ISSUE_URL=""
+EXISTING_ISSUE_SOURCE=""
+if resolve_context_issue_local; then
+  if [ "${RESOLVED_ISSUE_CREATED_RUN:-0}" -lt "${RUN_INDEX:-0}" ] 2>/dev/null; then
+    COMMENT_MODE=1
+    EXISTING_ISSUE_URL="$RESOLVED_ISSUE_URL"
+    EXISTING_ISSUE_SOURCE="$RESOLVED_ISSUE_SOURCE"
+  else
+    defer "already_published"
+  fi
 fi
 
 # Guard 2.5: milestone-mode — skip GH publish entirely (no create, no comment).
@@ -1809,12 +1930,21 @@ if [ -n "$EXTERNAL_TICKET" ]; then
   esac
 fi
 
+# Guard 2 (recovery half): no local anchor resolved → try a GitHub-side search to
+# recover a lost .context ↔ issue binding (fresh clone / regenerated state). Needs
+# the finalised TITLE. On an exact-title single hit, comment instead of create.
+if [ "$COMMENT_MODE" != "1" ] && resolve_context_issue_search; then
+  COMMENT_MODE=1
+  EXISTING_ISSUE_URL="$RESOLVED_ISSUE_URL"
+  EXISTING_ISSUE_SOURCE="$RESOLVED_ISSUE_SOURCE"
+fi
+
 # AC-1 + AC-2: build the canonical label list and auto-provision missing ones.
 CANONICAL_LABELS="worktask planning-approved complexity:$TIER"
 if [ -n "$EXTERNAL_TICKET" ]; then
   CANONICAL_LABELS="$CANONICAL_LABELS ticket:$EXTERNAL_TICKET"
 fi
-if [ "$DRY_RUN" != "1" ]; then
+if [ "$DRY_RUN" != "1" ] && [ "$COMMENT_MODE" != "1" ]; then
   # shellcheck disable=SC2086
   ensure_labels $CANONICAL_LABELS
 fi
@@ -1832,9 +1962,54 @@ for _l in $CANONICAL_LABELS; do
   fi
 done
 
-# Invoke gh — single publish path (create). Milestone mode skipped above.
+# Invoke gh — create a NEW issue, or (cross-run) COMMENT on the existing one.
+# Milestone mode skipped above. Comment path: a subsequent worktask in the same
+# .context/ appends a marker-deduped plan summary instead of opening a duplicate.
 URL=""
 GH_OUT=""
+if [ "$COMMENT_MODE" = "1" ]; then
+  PLAN_MARKER="<!-- worktask-plan:$WORKTASK_ID:$RUN_INDEX -->"
+  COMMENT_TMP="$LOG_DIR/issue-comment-${RUN_INDEX}.tmp"
+  {
+    printf '%s\n' "$PLAN_MARKER"
+    printf '## Follow-up worktask — run #%s\n\n' "$RUN_INDEX"
+    cat "$BODY_TMP"
+  } > "$COMMENT_TMP" 2>/dev/null || fatal "audit_dir_unwritable"
+  if [ "$DRY_RUN" = "1" ]; then
+    URL="$EXISTING_ISSUE_URL"
+    echo "DRY_RUN: $GH_BIN issue comment $EXISTING_ISSUE_URL --body-file $COMMENT_TMP" >&2
+  else
+    # Idempotency: this run already commented (marker present) → do not double-post.
+    if pl_issue_has_marker "$EXISTING_ISSUE_URL" "$PLAN_MARKER"; then
+      defer "comment_already_present"
+    fi
+    if CMT_OUT=$("$GH_BIN" issue comment "$EXISTING_ISSUE_URL" --body-file "$COMMENT_TMP" 2>&1); then
+      URL="$EXISTING_ISSUE_URL"
+    else
+      CMT_REASON=$(classify_gh_failure "$CMT_OUT")
+      CMT_FAIL=$(jq -cn --arg v "publish-pl-issue.sh" --arg r "$CMT_REASON" --arg url "$EXISTING_ISSUE_URL" --arg src "$EXISTING_ISSUE_SOURCE" --arg dk "$DEDUPE_KEY" \
+        '{via:$v, mode:"comment", reason:$r, url:$url, resolved_via:$src, dedupe_key:$dk}')
+      if [ "$STRICT" = "1" ] || [ "$STRICT" = "true" ]; then
+        audit_row "failed" "$CMT_FAIL" || true
+        exit 1
+      fi
+      audit_row "deferred" "$CMT_FAIL" || true
+      exit 0
+    fi
+  fi
+  # Persist/refresh the run-independent anchor so future runs resolve locally.
+  if [ "$EXISTING_ISSUE_SOURCE" = "anchor" ]; then
+    bump_anchor_commented "$RUN_INDEX" || true
+  else
+    write_context_issue "$EXISTING_ISSUE_URL" "${RESOLVED_ISSUE_NUMBER:-$(printf '%s' "$EXISTING_ISSUE_URL" | grep -oE '[0-9]+$')}" || true
+  fi
+  CMT_META=$(jq -cn --arg v "publish-pl-issue.sh" --arg url "$URL" --arg tier "$TIER" --argjson sp "$STRIP_PCT" --arg src "$EXISTING_ISSUE_SOURCE" --arg dk "$DEDUPE_KEY" \
+    '{via:$v, mode:"comment", url:$url, complexity_tier:$tier, sanitiser_stripped_pct:$sp, resolved_via:$src, dedupe_key:$dk}')
+  audit_row "ok" "$CMT_META" || true
+  printf 'commented_url=%s\n' "$URL"
+  exit 0
+fi
+
 if [ "$DRY_RUN" = "1" ]; then
   URL="https://github.com/dry/run/issues/0"
   echo "DRY_RUN: $GH_BIN issue create --title \"$TITLE\" --body-file $BODY_TMP --label $SURVIVING_LABELS" >&2
@@ -1871,6 +2046,10 @@ fi
 
 # Persist URL to state.json (atomic). Audit row appended regardless of write success.
 write_state_url "$URL" || true
+# Persist the run-independent .context/gh-issue.json anchor so a later worktask in
+# this .context/ (which re-seeds state.json) resolves this issue and comments on it
+# instead of opening a duplicate. Non-fatal; state.json stays the same-run fallback.
+write_context_issue "$URL" "$(printf '%s' "$URL" | grep -oE '[0-9]+$')" || true
 META_JSON=$(jq -cn --arg v "publish-pl-issue.sh" --arg mode "$MODE" --arg url "$URL" --arg tier "$TIER" --argjson sp "$STRIP_PCT" --arg dk "$DEDUPE_KEY" \
   --arg tkt "${EXTERNAL_TICKET:-}" --arg dropped "${DROPPED_LABELS:-}" \
   '{via:$v, mode:$mode, url:$url, complexity_tier:$tier, sanitiser_stripped_pct:$sp, dedupe_key:$dk}

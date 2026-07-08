@@ -182,6 +182,9 @@ Step A. No prompt, no approval line.
   `workspace.json` presence / `metadata.milestone`, already published,
   missing `gh`/auth/remote) — each exits 0 and audits a `deferred` row.
   Sanitiser rules + non-blocking guarantee: `skills/worktask/SKILL.md § PL Issue Publish`.
+- One `.context/` ↔ one GitHub issue: a second or later run in the same `.context/`
+  resolves the run-independent `.context/gh-issue.json` anchor and posts a follow-up
+  comment instead of opening a duplicate. Protocol: `skills/gh-issue-dedup`.
 - This step is NOT optional. Do not skip it because SKILL.md describes it —
   the orchestrator MUST run the command above as written.
 
