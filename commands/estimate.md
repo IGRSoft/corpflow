@@ -284,7 +284,8 @@ See `skills/shared/three-stage-planning.md` for stage definitions, sequential ru
 `--export csv` runs the estimation, then writes 13 CSV files for Google Sheets
 import. The canonical file list, column schemas, delimiter, and validation rules
 live in `skills/csv-export-templates/SKILL.md` — do not redefine the export shape
-here. Requires `--detailed`.
+here. Requires `--detailed`. Bare `--export` (no value) defaults to `csv`, the
+only currently supported format.
 
 Creates 13 CSV files in `--dir` (default `exports/`):
 
@@ -363,5 +364,5 @@ This command works well with:
 - `/pm-prioritize` - Estimation feeds into RICE calculations
 - `/pm-sprint` - Story points for capacity planning
 - `/pm-roadmap` - Roadmap milestones feed the CSV export
-- `estimate --review` - Platform-specific review adjustments of an estimate
-- `estimate --export csv` - Generate CSVs from the estimation
+- `/estimate --review` - Platform-specific review adjustments of an estimate
+- `/estimate --export csv` - Generate CSVs from the estimation

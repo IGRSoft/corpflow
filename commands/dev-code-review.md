@@ -4,7 +4,7 @@ description: Perform platform-aware code review using specialized developer expe
 argument-hint: '[--pr N | --path dir] [--depth surface|deep]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*)
-version: 0.1.3
+version: 0.2.0
 related:
   - agents/developer.md
   - agents/technical-lead.md
