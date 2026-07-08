@@ -67,14 +67,15 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 ├── ethics-review-0.md       # Ethics compliance review (ET stage, run 0)
 ├── milestone.json           # GitHub milestone context (when run under /megatask)
 ├── deployment.md            # Deployment plan (if applicable)
-├── state.json               # Worktask ledger (shared across runs)
+├── state.json               # Worktask ledger (shared across runs; re-seeded each PL run)
+├── gh-issue.json            # Run-independent .context ↔ GitHub issue anchor (one issue per .context/; see skills/gh-issue-dedup)
 ├── designs/                 # CANONICAL Figma asset dir: figma-*.png + figma-registry.md + Pencil .pen mockups
 ├── images/                  # User-attached screenshots + DV implementation screenshots (distinct from designs/)
 ├── errors/                  # Per-agent escalation narratives (see Per-Agent Error Files)
 └── logs/                    # Runtime capture logs: build/test/monitor/sim/incident/hotfix
 ```
 
-Each stage artifact uses the pattern `<basename>-N.md` where N equals `task.metadata.run_index` (integer stamped by PL0 on every downstream task). First run uses N=0. Subsequent PL reruns increment N. `state.json`, `errors/`, `logs/`, `designs/`, and `images/` are shared across all runs.
+Each stage artifact uses the pattern `<basename>-N.md` where N equals `task.metadata.run_index` (integer stamped by PL0 on every downstream task). First run uses N=0. Subsequent PL reruns increment N. `state.json`, `gh-issue.json`, `errors/`, `logs/`, `designs/`, and `images/` are shared across all runs. Note: `state.json` is re-seeded (metadata wiped) each PL run, so the persistent `.context ↔ issue` binding lives in `gh-issue.json`, not `state.json` — this is what lets a follow-up run comment on the existing issue instead of opening a duplicate (`skills/gh-issue-dedup`).
 
 ### Multi-Run Layout
 
@@ -91,6 +92,7 @@ When PL0 reruns (e.g. scope change, re-plan), it increments the run index and wr
 ├── development-1.md
 ├── complete-summary-1.md
 ├── state.json          # Shared (reset + patched each run)
+├── gh-issue.json       # Shared (run-independent issue anchor; persists across re-seeds)
 ├── errors/             # Shared (cumulative across runs)
 └── logs/               # Shared (cumulative across runs)
 ```

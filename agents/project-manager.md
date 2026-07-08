@@ -52,9 +52,10 @@ You are an expert project manager for software development with mastery of agile
 - **PR-issue-link validator (runs immediately BEFORE `gh pr create`)**:
 
   Resolve issue number from ranked sources (first-match-wins):
-  1. `state.json` → `.metadata.github_issue_url` — extract trailing integer from `/issues/<N>`. (Canonical location; written by `publish-pl-issue.sh`. NOT `facts.github_issue_url`.)
-  2. PL0 task `metadata.github_issue_number` (megatask per-issue mode — megatask issue ID).
-  3. Branch parse: `feature/<slug>-<NNN>` last 3-digit token, OR first `#NNN` token in `git log --oneline -n 5`.
+  1. `state.json` → `.metadata.github_issue_url` — extract trailing integer from `/issues/<N>`. (Written by `publish-pl-issue.sh` on the run that CREATED the issue. NOT `facts.github_issue_url`.)
+  2. `.context/gh-issue.json` → `.url` (trailing integer) or `.number` — the run-independent context ↔ issue anchor. **Authoritative on a follow-up run**, where `state.json` was re-seeded and no longer carries the URL (see `skills/gh-issue-dedup`).
+  3. PL0 task `metadata.github_issue_number` (megatask per-issue mode — megatask issue ID).
+  4. Branch parse: `feature/<slug>-<NNN>` last 3-digit token, OR first `#NNN` token in `git log --oneline -n 5`.
 
   Validate composed PR body via regex `(?im)^(?:Closes|Fixes|Resolves)\s+#\d+\s*$`. Branching:
 
@@ -70,6 +71,7 @@ You are an expert project manager for software development with mastery of agile
 
   ```bash
   issue_n=$(jq -r '.metadata.github_issue_url // empty' .context/state.json | grep -oE '[0-9]+$') \
+    || issue_n=$(jq -r 'if .url then .url elif .number then (.number|tostring) else empty end' .context/gh-issue.json 2>/dev/null | grep -oE '[0-9]+$') \
     || issue_n=$(jq -r '.metadata.github_issue_number // empty' .context/state.json) \
     || issue_n=$(git rev-parse --abbrev-ref HEAD | grep -oE '[0-9]+$') \
     || issue_n=$(git log --oneline -n 5 | grep -oE '#[0-9]+' | head -1 | tr -d '#')  # first-match among #NNN tokens in last 5 commits

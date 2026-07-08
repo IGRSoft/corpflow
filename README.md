@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with Task System integration, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 3.32.0 · Requires Claude Code 2.1.200+**
+**Plugin 3.33.0 · Requires Claude Code 2.1.200+**
 
 ## Features
 
@@ -288,7 +288,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/appstore-iap` | Set up App Store Connect in-app purchases |
 | `/appstore-screenshots` | Generate App Store screenshots |
 
-### Skills (23 total)
+### Skills (24 total)
 - `agent-coordination` — Multi-agent coordination, handoffs, parallel execution, error escalation
 - `appstore-screenshots` — App Store screenshot generation (device specs, layout, Pencil MCP)
 - `claude-constitution` — Constitutional principles and ethics framework
@@ -298,6 +298,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 - `csv-export-templates` — CSV export structure for Google Sheets import
 - `dv-screenshot-capture` — DV-stage screenshot capture, attached to the PR as visual evidence
 - `estimation` — Complexity scoring (0–50) and T-shirt sizing
+- `gh-issue-dedup` — One GitHub issue per `.context/`; later runs comment instead of duplicating
 - `incident-response` — Incident classification, hotfix worktask, rollback, post-mortem (IR)
 - `logging-conventions` — Route runtime log capture to `.context/logs/`
 - `megatask` — Dependency-DAG orchestration of many worktasks (the `/megatask` command)
