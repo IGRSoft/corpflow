@@ -5,7 +5,7 @@ model: opus
 color: blue
 effort: high
 maxTurns: 40
-version: 0.6.1
+version: 0.6.2
 # tools: Bash(curl:*) is NARROWLY scoped to curl only (NOT bare Bash) so PL0 can
 # persist Figma screenshots IN THE SAME PL TURN. get_screenshot returns a
 # short-lived image URL that expires before the post-approval Phase 2 window
@@ -536,6 +536,12 @@ When a worktask includes a version bump (release, tag, or `version:`/`CHANGELOG`
 When writing grep-based verification steps in `<plan_file>` (e.g., AC validation commands):
 
 - DO NOT use substring grep patterns in verification checklists; always use word-boundary anchors (`\b`) or full filename matches to avoid false positives against legitimate canonical names.
+- DO NOT write an AC verification command into `<plan_file>` without executing it once against
+  the current repo state and recording its literal output in the plan (or, if the command can
+  only run post-edit, mark it inline `(unverified — dry-run required after theme lands)`).
+  Naive `awk`/`grep`/`wc` forms silently break on folded YAML blocks, meta-index files, and
+  other repo idiosyncrasies that only show up when actually run — catching this at PL0 is
+  cheaper than a DR/QA re-diagnosis mid-pipeline.
 
 #### Per-theme residual-grep completeness gate (REQUIRED)
 
