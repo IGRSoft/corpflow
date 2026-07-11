@@ -220,7 +220,7 @@ v3.10.6 adds a second dedupe key — `metadata.dedupe_key_extended` — to every
 - `dedupe_key` (existing, BASE): `<session_id>:<agent_id>:stop` or `<session_id>:<agent_id>:stage:<stage>`. Compatibility-safe — every audit row carries this, every reader can grep it, every pre-v3.10.6 file is readable.
 - `dedupe_key_extended` (v3.10.6+): prepends `<parent_agent_id>:` to the base key. Today evaluates to `none:…` everywhere (parent_agent_id is `"none"`), so dedupes identically to base. When CC starts populating `parent_agent_id` in hook stdin, gains parent-aware granularity automatically — useful for multi-track parallel runs where the same `agent_id` appears under different dispatch parents.
 
-**Auto-detection rule (full reader cut-over):** readers MUST call the canonical helper `${CLAUDE_PLUGIN_ROOT}/hooks/audit-dedup.sh --check-mode` which scans the tail of `.context/logs/audit.jsonl` and prints one word to stdout:
+**Auto-detection rule (full reader cut-over):** readers MUST call the canonical helper `hooks/audit-dedup.sh --check-mode` (plugin root: `${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`) which scans the tail of `.context/logs/audit.jsonl` and prints one word to stdout:
 
 - `base` — when no rows in the rolling 100-row window have `metadata.parent_agent_id != "none"`. Reader dedups on `metadata.dedupe_key`.
 - `extended` — when ≥1 row in the rolling 100-row window has a non-`"none"` `parent_agent_id`. Reader dedups on `metadata.dedupe_key_extended`.

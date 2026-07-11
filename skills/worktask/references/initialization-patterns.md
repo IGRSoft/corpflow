@@ -59,9 +59,13 @@ PL0 (or `commands/worktask.md` Phase 1) MUST verify the `state-merge.sh` Subagen
 
 ```bash
 # Idempotent hook installation — run after state.json seed, before PL0 delegation.
-# Source: ${CLAUDE_PLUGIN_ROOT}/.claude/hooks/state-merge.sh (ships with igrsoft plugin).
+# Source: <plugin-root>/.claude/hooks/state-merge.sh (ships with igrsoft plugin).
 
-hook_src="${CLAUDE_PLUGIN_ROOT}/.claude/hooks/state-merge.sh"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
+# Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
+# above this skill's base directory (see skills/shared/plugin-root-resolution.md).
+[ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+hook_src="$PLUGIN_ROOT/.claude/hooks/state-merge.sh"
 hook_dst=".claude/hooks/state-merge.sh"
 
 if [[ ! -x "$hook_dst" ]]; then
@@ -76,7 +80,7 @@ fi
 2. `.claude/hooks/state-merge.sh` exists and is executable
 3. The plugin's `plugin.json` registers the SubagentStop hook (this is declarative — no project-local action needed)
 
-If hook source is not found (e.g. `CLAUDE_PLUGIN_ROOT` unset), log a warning and continue — the plugin.json-registered hook will still fire via the plugin hook system. The project-local copy is a belt-and-suspenders fallback for environments where plugin hooks are not supported.
+If hook source is not found (e.g. plugin root unresolved — the fallback line left unsubstituted), log a warning and continue — the plugin.json-registered hook will still fire via the plugin hook system. The project-local copy is a belt-and-suspenders fallback for environments where plugin hooks are not supported.
 
 ### Sample TaskCreate using context_refs (handoff-protocol mode)
 

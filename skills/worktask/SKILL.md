@@ -378,7 +378,11 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 2. **Re-validate before executing**: Call `TaskList()` to get all stage tasks. For each task, verify `metadata.agent` and `metadata.model` are set. This checkpoint prevents drift — the orchestrator re-grounds itself in the delegation rules before touching any stage.
 3. **Publish plan to GitHub** (before stage loop). Run:
      ```bash
-     HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh"
+     PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
+     # Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
+     # above this skill's base directory (see skills/shared/plugin-root-resolution.md).
+     [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+     HELPER="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue.sh"
      if [ -f "$HELPER" ]; then
        bash "$HELPER"; true
      else
@@ -976,7 +980,11 @@ The FN gate is the **pre-finalization human checkpoint**. Carried by `PL0.metada
 After the execution loop exits (all stage tasks completed — this runs whether or not the stage set includes FN, and after the FN push when it does so the raw asset tier sees a reachable ref): post the DV screenshot captures to the GitHub issue as a marker-deduped comment. Mirrors Step 6.5's invocation discipline exactly — **non-blocking by contract** (`; true`; helper exits 0 on every operational outcome):
 
 ```bash
-HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/attach-visual-evidence.sh"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
+# Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
+# above this skill's base directory (see skills/shared/plugin-root-resolution.md).
+[ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+HELPER="$PLUGIN_ROOT/skills/worktask/scripts/attach-visual-evidence.sh"
 if [ -f "$HELPER" ]; then
   bash "$HELPER" --post issue; true
 else
@@ -996,7 +1004,11 @@ The helper self-gates: it skips silently when `metadata.requires_screenshots == 
 After the post-capture issue update above (and after FN has created/merged the PR so the closing refs are real — "when the PR closes"): post a work-summary + screenshot completion comment to every related issue the PR closes. Same **non-blocking by contract** discipline (`; true`; helper exits 0 on every operational outcome):
 
 ```bash
-HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/attach-visual-evidence.sh"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
+# Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
+# above this skill's base directory (see skills/shared/plugin-root-resolution.md).
+[ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+HELPER="$PLUGIN_ROOT/skills/worktask/scripts/attach-visual-evidence.sh"
 if [ -f "$HELPER" ]; then
   bash "$HELPER" --post completion; true
 else

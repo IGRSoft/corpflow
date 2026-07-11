@@ -155,8 +155,10 @@ Before executing any megatask run, validate:
 
 **Root cause**: All three state.json enforcement layers failed — agents skipped self-patching (Layer 1), SubagentStop hook was not installed (Layer 2), and orchestrator Step 6.5 was not executed (Layer 3).
 
+**Resolving `<plugin-root>`** (the directory containing `.claude-plugin/plugin.json`): use `$CLAUDE_PLUGIN_ROOT` if set in your shell; else the base directory of any loaded igrsoft skill minus the trailing `/skills/<name>`; else (Claude Code installs) the newest dir from `ls -d ~/.claude/plugins/cache/igrsoft/igrsoft/*/ 2>/dev/null | sort -V | tail -1`; in a git clone of the plugin repo, the repo root. Validate: `[ -f "$ROOT/.claude-plugin/plugin.json" ]`. Full ladder: `skills/shared/plugin-root-resolution.md`. The scripts below self-locate once found — only finding the root matters.
+
 **Runbook**:
-1. **Check hook installation**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/hook-install.sh" --check`. If missing, install: `bash "${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/hook-install.sh"`
+1. **Check hook installation**: `bash "<plugin-root>/skills/worktask/scripts/hook-install.sh" --check`. If missing, install: `bash "<plugin-root>/skills/worktask/scripts/hook-install.sh"`
 2. **Verify settings registration**: Check `.claude-plugin/plugin.json` contains a `SubagentStop` hook entry pointing to `state-merge.sh`
 3. **Manual repair** — run the hook for each stage artifact:
    ```bash
@@ -174,7 +176,7 @@ Before executing any megatask run, validate:
    mv .context/state.json ".context/state.json.bad.$(date +%s)"
    # Re-run PL0 initialization to re-seed, then run step 3 above
    ```
-5. **Validate artifact filenames**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/cache-lint.sh" --filename-lint .context/` — non-canonical names (e.g. `architecture-0.md` instead of `analyzing-0.md`) prevent the hook from resolving artifacts
+5. **Validate artifact filenames**: `bash "<plugin-root>/skills/worktask/scripts/cache-lint.sh" --filename-lint .context/` — non-canonical names (e.g. `architecture-0.md` instead of `analyzing-0.md`) prevent the hook from resolving artifacts
 
 **Prevention**: Ensure `commands/worktask.md` Phase 1 step 3b runs at worktask start. The plugin.json hook registration (v3.11.0+) provides automatic Layer 2 coverage without project-local installation.
 

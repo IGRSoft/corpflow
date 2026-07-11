@@ -109,9 +109,13 @@ See `skills/shared/stage-codes.md` for stage details.
    mv -f "$tmp" .context/state.json
    ```
    `facts.dispatched_agents: []` is seeded (additive, version:1) so the orchestrator loop appends per-`task_id` dispatch entries in place. The other v1 additive fields (`stages.<CODE>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are written on demand — do NOT seed them; their absence is meaningful. See `handoff-protocol.md#state-json-schema`.
-3b. **Verify SubagentStop hook installed**: After state.json seed, verify `.claude/hooks/state-merge.sh` exists and is executable AND the plugin's `plugin.json` registers the SubagentStop hook entry. If the project-local hook is missing, copy from `${CLAUDE_PLUGIN_ROOT}/.claude/hooks/state-merge.sh`. This hook is the Layer 2 safety net that patches state.json when agents skip self-patching. See `initialization-patterns.md#hook-installation`.
+3b. **Verify SubagentStop hook installed**: After state.json seed, verify `.claude/hooks/state-merge.sh` exists and is executable AND the plugin's `plugin.json` registers the SubagentStop hook entry. If the project-local hook is missing, copy from `<plugin-root>/.claude/hooks/state-merge.sh` (resolved in the snippet below). This hook is the Layer 2 safety net that patches state.json when agents skip self-patching. See `initialization-patterns.md#hook-installation`.
    ```bash
-   hook_src="${CLAUDE_PLUGIN_ROOT}/.claude/hooks/state-merge.sh"
+   PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
+   # Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
+   # above the worktask skill's base directory (see skills/shared/plugin-root-resolution.md).
+   [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+   hook_src="$PLUGIN_ROOT/.claude/hooks/state-merge.sh"
    hook_dst=".claude/hooks/state-merge.sh"
    if [[ ! -x "$hook_dst" ]] && [[ -f "$hook_src" ]]; then
      mkdir -p .claude/hooks
@@ -164,7 +168,11 @@ Step A. No prompt, no approval line.
 
 **Step A — Publish plan to GitHub** (run BEFORE the stage loop):
 
-    HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh"
+    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
+    # Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
+    # above the worktask skill's base directory (see skills/shared/plugin-root-resolution.md).
+    [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+    HELPER="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue.sh"
     if [ -f "$HELPER" ]; then
       bash "$HELPER"; true
     else
