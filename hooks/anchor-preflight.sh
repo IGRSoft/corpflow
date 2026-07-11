@@ -16,6 +16,10 @@
 # non-zero exit shows the producing agent the diagnostic so it self-amends;
 # registered with continueOnBlock so a non-artifact write is never blocked.
 #
+# Plugin root: env-first ($CLAUDE_PLUGIN_ROOT, exported by the CC hook
+# runtime), else self-locate from $0 — provider-agnostic per
+# skills/shared/plugin-root-resolution.md.
+#
 # Self-test: pass --self-test to assert the gating regex.
 set -eu
 
@@ -60,7 +64,18 @@ fi
 printf '%s' "$FILE_PATH" | grep -qE "$ARTIFACT_RE" || exit 0
 [ -f "$FILE_PATH" ] || exit 0
 
-LINT="${CLAUDE_PLUGIN_ROOT:-.}/skills/worktask/scripts/cache-lint.sh"
+# Plugin root: an explicitly set env var always wins (override contract);
+# otherwise this script ships at <plugin-root>/hooks/, so derive the root from
+# its own location, validated by the .claude-plugin/plugin.json marker.
+# Mirrors find_plugin_root() in skills/worktask/scripts/hook-install.sh.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+if [ -z "$PLUGIN_ROOT" ]; then
+  SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd -P)" || SCRIPT_DIR=""
+  if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/../.claude-plugin/plugin.json" ]; then
+    PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+  fi
+fi
+LINT="${PLUGIN_ROOT:-.}/skills/worktask/scripts/cache-lint.sh"
 [ -x "$LINT" ] || [ -f "$LINT" ] || exit 0
 
 # Delegate to the canonical anchor-lint mode. Non-zero exit propagates the
