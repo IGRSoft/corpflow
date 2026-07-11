@@ -147,6 +147,6 @@ Reports the percentage of test files annotated with markers from `skills/shared/
 
 Use this command:
 - Before `/test-plan` - Identify what needs testing
-- During Q stage - Verify coverage goals
+- During QA stage - Verify coverage goals
 - In `/test-report` - Include coverage metrics
 

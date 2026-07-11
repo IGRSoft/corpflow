@@ -319,11 +319,11 @@ The following always result in ❌ Violation (never acceptable regardless of ben
 
 ### Worktask Integration
 Can be invoked at any worktask stage:
-- **P Stage**: Review planned features for ethical concerns / assess harms before design
-- **A Stage**: Review architecture for safety and harm implications
-- **D Stage**: Review implementation for harm potential
-- **Q Stage**: Include ethics in quality criteria
-- **S Stage**: Stakeholder review of harm assessment (`--lens harm`)
+- **PL Stage**: Review planned features for ethical concerns / assess harms before design
+- **AR Stage**: Review architecture for safety and harm implications
+- **DV Stage**: Review implementation for harm potential
+- **QA Stage**: Include ethics in quality criteria
+- **ST Stage**: Stakeholder review of harm assessment (`--lens harm`)
 
 ### Related Commands
 - `/pm-risk` - Technical risk assessment

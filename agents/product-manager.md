@@ -398,7 +398,7 @@ here for the conditional rule):
 
 **Task System**: Stage PL, Owner: product-manager. See `skills/shared/task-system.md`.
 
-### P Stage: Automatic Design Detection
+### PL Stage: Automatic Design Detection
 
 Product Manager detects design-related tasks and invokes Designer when appropriate.
 
@@ -441,7 +441,7 @@ figma\.com/design/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
 
 When this trigger fires, **Read `skills/shared/figma-capture.md`** for the full capture mechanics: URL detection, State Input Contract, Auth Probe, Capture Workflow, Registry Generation (`figma-registry.md` schema), Post-Capture Plan Update, and Coexistence with Pencil mockups. A no-Figma PL run does NOT Read that doc — this trigger never fires and the steady path proceeds without it. The `{{asset:<basename>}}` grammar the capture workflow emits into `## design-preview` stays inline above (§ Asset-placeholder grammar).
 
-### P Stage: Automatic Ethics Gate Detection
+### PL Stage: Automatic Ethics Gate Detection
 
 PL0 scans the task description for high-risk domain signals and inserts an ET0
 stage between PL0 and AR0 when the threshold is met. Same weighted-score

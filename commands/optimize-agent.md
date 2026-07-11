@@ -114,7 +114,7 @@ You are a QA engineer specializing in test strategy, test case design, and quali
 | YAML frontmatter format | ✅ Valid |
 | Section structure | ✅ Standard |
 | Terminology | ⚠️ Inconsistent ("test" vs "testing") |
-| Worktask integration | ✅ Proper Q stage references |
+| Worktask integration | ✅ Proper QA stage references |
 
 ### Recommendations
 

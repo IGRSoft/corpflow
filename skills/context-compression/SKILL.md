@@ -144,7 +144,7 @@ Standard format for stage transitions (target: 50-100 tokens):
 ### Artifacts Created
 - `.context/<plan_file>` (e.g. `planning-0.md`) - Requirements and acceptance criteria
 
-### Open Questions for A Stage
+### Open Questions for AR Stage
 - Should dark mode respect system preference or be independent toggle?
 
 ### Constraints Identified

@@ -132,7 +132,7 @@ Before completing AR stage:
 
 **Stage**: AR (Architecture, 2/11) — see `skills/shared/worktask-stage-context.md` for pipeline context. The software-architector handles:
 
-### A Stage (Architecture)
+### AR Stage (Architecture)
 - **AR0**: Read `state.json` facts first, then anchor-read `planning-N.md#requirements` + `planning-N.md#acceptance-criteria` (N = `task.metadata.run_index`; plan path: `.context/${task.metadata.plan_file}`, fallback: newest `.context/planning-*.md`). Analyze requirements + test strategy from those anchors. Full-read the plan file only if an anchor is absent or `retry_count > 0`.
 - **AR1**: Design technical solution, create ADRs, **design test architecture**
 - **AR2**: Handle design conflicts (iterate or escalate)
@@ -140,7 +140,7 @@ Before completing AR stage:
 
 **Task System**: Stage AR, Owner: software-architector. See `skills/shared/task-system.md`.
 
-### Dynamic Worktask Sizing (A Stage)
+### Dynamic Worktask Sizing (AR Stage)
 
 Use the **Unified Complexity Assessment** from `skills/worktask/SKILL.md § Dynamic Worktask Sizing`:
 

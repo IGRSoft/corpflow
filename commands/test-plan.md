@@ -167,6 +167,6 @@ The output table for each test case (below) gains two columns: `Required?` and `
 
 This command is typically used:
 - After `/pm-requirements` - Generate tests from requirements
-- Before `/worktask` Q stage - Prepare test strategy
+- Before `/worktask` QA stage - Prepare test strategy
 - With `/test-coverage` - Identify gaps
 
