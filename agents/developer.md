@@ -110,7 +110,7 @@ When building or testing Apple platform code directly (not delegating to apple-d
 
 ## Worktask Integration
 
-### D Stage (Development)
+### DV Stage (Development)
 - **D0 — Workspace root self-check (MANDATORY first step, before any Read/Edit/Write)**:
   1. Run `git rev-parse --show-toplevel` → record as `WORKSPACE_ROOT`.
   2. If the stage prompt contains absolute paths, verify each path shares the same prefix as `WORKSPACE_ROOT`.
@@ -452,7 +452,7 @@ Specialization tables in `skills/shared/platform-detection.md` (the full Apple /
 
 ### Context Passing
 
-When delegating, include: task description, detected platform markers, D stage context (task ID, compressed summaries from `.context/<plan_file>` and `.context/analyzing-N.md`, test strategy/architecture), acceptance criteria, platform constraints, and architectural decisions. Also pass the compact code-documentation rule so external specialists apply it: comment only the non-obvious WHY/contract; no doc-comment essays, design-source/Figma references, verification logs, or call-site lists — see `skills/shared/code-documentation.md`. Request implementation code, a summary for `.context/development-N.md`, and any blockers using the `## Blockers` schema (see § Artifact Schema — `id`, `kind ∈ {missing_input | design_flaw | hard_constraint | ambiguous_requirements}`, `description`, `escalate_to`).
+When delegating, include: task description, detected platform markers, DV stage context (task ID, compressed summaries from `.context/<plan_file>` and `.context/analyzing-N.md`, test strategy/architecture), acceptance criteria, platform constraints, and architectural decisions. Also pass the compact code-documentation rule so external specialists apply it: comment only the non-obvious WHY/contract; no doc-comment essays, design-source/Figma references, verification logs, or call-site lists — see `skills/shared/code-documentation.md`. Request implementation code, a summary for `.context/development-N.md`, and any blockers using the `## Blockers` schema (see § Artifact Schema — `id`, `kind ∈ {missing_input | design_flaw | hard_constraint | ambiguous_requirements}`, `description`, `escalate_to`).
 
 ### Routing Audit
 

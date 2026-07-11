@@ -107,7 +107,7 @@ Megatask (per-issue) tickets run in isolated workspaces. `.context/` base path b
 
 ## Parallel Execution
 
-### W + Q Parallel (Default)
+### DC + QA Parallel (Default)
 
 ```typescript
 TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // DR ← DV
@@ -354,7 +354,7 @@ function markDispatchStatus(state, taskId, status, modelResolved) {
 
 **Banner relocation (R3)**: stage-specific banners (DR Skill, FN Conductor, MCP fallback warning) are appended AFTER `full.description` (suffix), not prepended. Prefixes [1][2][3][4] stay byte-identical across stages so the cache prefix boundary stretches as far as possible.
 
-The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: timestamps, ENV expansions that vary per call, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. CI lint (`skills/worktask/references/cache-lint.sh`) asserts byte-stability across consecutive stages of the same `worktask_id`.
+The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: timestamps, ENV expansions that vary per call, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. CI lint (`skills/worktask/scripts/cache-lint.sh`) asserts byte-stability across consecutive stages of the same `worktask_id`.
 
 ### CRITICAL: Delegation-Only Rule
 
@@ -378,7 +378,7 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 2. **Re-validate before executing**: Call `TaskList()` to get all stage tasks. For each task, verify `metadata.agent` and `metadata.model` are set. This checkpoint prevents drift — the orchestrator re-grounds itself in the delegation rules before touching any stage.
 3. **Publish plan to GitHub** (before stage loop). Run:
      ```bash
-     HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/references/publish-pl-issue.sh"
+     HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh"
      if [ -f "$HELPER" ]; then
        bash "$HELPER"; true
      else
@@ -885,7 +885,7 @@ while (tasks.some(t => t.status !== "completed")) {
 
 ### PL Issue Publish
 
-Step 6.5 invokes `skills/worktask/references/publish-pl-issue.sh` between PL0 completion and the stage-loop entry. The helper is **non-blocking by contract** (default): orchestrator wraps it in a `; true` so a non-zero exit is never propagated, and the helper itself returns `0` for every operational outcome (success, deferred, network error, sanitiser abort) — only catastrophic bugs (`jq` missing, `audit_dir_unwritable`, `state_corrupt`, `plan_unreadable`) raise `1`. Each outcome is recorded as one `github_issue_created` row in `.context/logs/audit.jsonl` with `result ∈ {ok, deferred, failed, error}` and `metadata.reason ∈ {gh_not_installed, auth_missing, no_remote, network_error, sanitiser_aborted, already_published, comment_already_present, opted_out, milestone_mode, helper_not_found, label_create_failed, gh_api_error, gh_timeout, permission_denied, repo_not_found}`. On success `metadata.mode ∈ {create, comment}`: the FIRST run in a `.context/` creates the issue, a LATER run comments on it (cross-run dedup — see `skills/gh-issue-dedup`; milestone-mode still skips both). The `helper_not_found` reason is not raised by the helper itself — the orchestrator emits this directly when the helper file is unreachable. The `network_error` reason is reserved for genuine transport-failure stderr (`could not resolve host`, `connection refused`, `timeout`); label/auth/api failures are mapped to their specific reason instead of being bucketed as network errors. Dedupe-key shape: `<worktask_id>:<run_index>:gh_issue`.
+Step 6.5 invokes `skills/worktask/scripts/publish-pl-issue.sh` between PL0 completion and the stage-loop entry. The helper is **non-blocking by contract** (default): orchestrator wraps it in a `; true` so a non-zero exit is never propagated, and the helper itself returns `0` for every operational outcome (success, deferred, network error, sanitiser abort) — only catastrophic bugs (`jq` missing, `audit_dir_unwritable`, `state_corrupt`, `plan_unreadable`) raise `1`. Each outcome is recorded as one `github_issue_created` row in `.context/logs/audit.jsonl` with `result ∈ {ok, deferred, failed, error}` and `metadata.reason ∈ {gh_not_installed, auth_missing, no_remote, network_error, sanitiser_aborted, already_published, comment_already_present, opted_out, milestone_mode, helper_not_found, label_create_failed, gh_api_error, gh_timeout, permission_denied, repo_not_found}`. On success `metadata.mode ∈ {create, comment}`: the FIRST run in a `.context/` creates the issue, a LATER run comments on it (cross-run dedup — see `skills/gh-issue-dedup`; milestone-mode still skips both). The `helper_not_found` reason is not raised by the helper itself — the orchestrator emits this directly when the helper file is unreachable. The `network_error` reason is reserved for genuine transport-failure stderr (`could not resolve host`, `connection refused`, `timeout`); label/auth/api failures are mapped to their specific reason instead of being bucketed as network errors. Dedupe-key shape: `<worktask_id>:<run_index>:gh_issue`.
 
 **Strict mode opt-in.** Passing `--strict` to the helper, or stamping `metadata.gh_issue.strict: true` on the state.json, flips operational failures from non-blocking `result: "deferred"` to blocking `result: "failed"` with `exit 1`. Use when an unpublished issue is unacceptable (e.g., compliance-tracked runs). Default behaviour stays unchanged so the existing fixture corpus and casual runs are unaffected.
 
@@ -976,7 +976,7 @@ The FN gate is the **pre-finalization human checkpoint**. Carried by `PL0.metada
 After the execution loop exits (all stage tasks completed — this runs whether or not the stage set includes FN, and after the FN push when it does so the raw asset tier sees a reachable ref): post the DV screenshot captures to the GitHub issue as a marker-deduped comment. Mirrors Step 6.5's invocation discipline exactly — **non-blocking by contract** (`; true`; helper exits 0 on every operational outcome):
 
 ```bash
-HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/references/attach-visual-evidence.sh"
+HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/attach-visual-evidence.sh"
 if [ -f "$HELPER" ]; then
   bash "$HELPER" --post issue; true
 else
@@ -996,7 +996,7 @@ The helper self-gates: it skips silently when `metadata.requires_screenshots == 
 After the post-capture issue update above (and after FN has created/merged the PR so the closing refs are real — "when the PR closes"): post a work-summary + screenshot completion comment to every related issue the PR closes. Same **non-blocking by contract** discipline (`; true`; helper exits 0 on every operational outcome):
 
 ```bash
-HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/references/attach-visual-evidence.sh"
+HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/attach-visual-evidence.sh"
 if [ -f "$HELPER" ]; then
   bash "$HELPER" --post completion; true
 else

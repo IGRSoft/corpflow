@@ -1,6 +1,6 @@
 # Per-Stage Test Templates
 
-## P Stage: Test Strategy Definition
+## PL Stage: Test Strategy Definition
 
 ### What to Include in `<plan_file>` (e.g. `planning-0.md`)
 
@@ -40,7 +40,7 @@ When changing existing logic, identify affected tests:
 | **Total** | **X+Y+Z** |
 ```
 
-## A Stage: Test Architecture
+## AR Stage: Test Architecture
 
 ### What to Include in analyzing.md
 

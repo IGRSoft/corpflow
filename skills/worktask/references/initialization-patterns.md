@@ -217,7 +217,7 @@ After planning completes, PL0 creates stage tasks based on complexity score. Eac
 // Example: PL0 creates stages for a medium-complexity task
 const worktaskId = "dark-mode-2025";
 // requires_screenshots: the value PL0 stamped on the plan frontmatter, computed
-// by `skills/worktask/references/detect-ui-change.sh <plan> --platform <p>`
+// by `skills/worktask/scripts/detect-ui-change.sh <plan> --platform <p>`
 // (true whenever the change set touches UI; fail-safe true on detector error).
 // Read it back from the plan frontmatter and propagate to DV + QA below.
 const requiresScreenshots = planMetadata.requires_screenshots; // boolean

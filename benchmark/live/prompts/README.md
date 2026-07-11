@@ -19,7 +19,7 @@ coverage manifest; see `benchmark/README.md`.)
 
 The marker literals (`<<<contract-reminder>>>`, `<<<worktask-header>>>`,
 `<<<state-json>>>`, `<<<stage-contract>>>`, `<<<task>>>`) match
-`skills/worktask/references/cache-lint.sh` exactly, so a captured live prompt-log
+`skills/worktask/scripts/cache-lint.sh` exactly, so a captured live prompt-log
 can be linted by the SAME `prefix_lint` that guards production.
 
 The benchmark workload is a **real runnable SwiftUI multiplatform Tic-Tac-Toe

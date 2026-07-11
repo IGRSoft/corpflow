@@ -121,14 +121,14 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 
 | Source file | Test file | Lines valid | Lines covered | % |
 |-------------|-----------|-------------|---------------|---|
-| `skills/worktask/references/publish-pl-issue.sh` | `tests/shell/worktask/publish-pl-issue.bats` | — | — | — |
-| `skills/worktask/references/attach-visual-evidence.sh` | `tests/shell/worktask/attach-visual-evidence.bats` | — | — | — |
-| `skills/worktask/references/cache-lint.sh` | `tests/shell/worktask/cache-lint.bats` | — | — | — |
-| `skills/worktask/references/desc-lint.sh` | `tests/shell/worktask/desc-lint.bats` | — | — | — |
-| `skills/worktask/references/detect-ui-change.sh` | `tests/shell/worktask/detect-ui-change.bats` | — | — | — |
-| `skills/worktask/references/handoff-harness.sh` | `tests/shell/worktask/handoff-harness.bats` | — | — | — |
-| `skills/worktask/references/hook-install.sh` | `tests/shell/worktask/hook-install.bats` | — | — | — |
-| `skills/worktask/references/attachments-preseed-test.sh` | `tests/shell/worktask/attachments-preseed-test.bats` | — | — | — |
+| `skills/worktask/scripts/publish-pl-issue.sh` | `tests/shell/worktask/publish-pl-issue.bats` | — | — | — |
+| `skills/worktask/scripts/attach-visual-evidence.sh` | `tests/shell/worktask/attach-visual-evidence.bats` | — | — | — |
+| `skills/worktask/scripts/cache-lint.sh` | `tests/shell/worktask/cache-lint.bats` | — | — | — |
+| `skills/worktask/scripts/desc-lint.sh` | `tests/shell/worktask/desc-lint.bats` | — | — | — |
+| `skills/worktask/scripts/detect-ui-change.sh` | `tests/shell/worktask/detect-ui-change.bats` | — | — | — |
+| `skills/worktask/scripts/handoff-harness.sh` | `tests/shell/worktask/handoff-harness.bats` | — | — | — |
+| `skills/worktask/scripts/hook-install.sh` | `tests/shell/worktask/hook-install.bats` | — | — | — |
+| `skills/worktask/scripts/attachments-preseed-test.sh` | `tests/shell/worktask/attachments-preseed-test.bats` | — | — | — |
 | `skills/worktask/scripts/state-patch.sh` | `tests/shell/worktask/state-patch.bats` | — | — | — |
 
 ### Shell scripts — other-skill (DV0b, kcov)
@@ -145,7 +145,7 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/release-engineering/scripts/changelog-from-git.sh` | `tests/shell/skills/changelog-from-git.bats` | — | — | — |
 | `skills/security-review-process/scripts/scan-secrets.sh` | `tests/shell/skills/scan-secrets.bats` | — | — | — |
 | `skills/context-compression/scripts/post-compact-recovery.sh` | `tests/shell/skills/post-compact-recovery.bats` | — | — | — |
-| `skills/agent-coordination/references/audit-dedup.sh` | `tests/shell/skills/agent-coordination__audit-dedup.bats` | — | — | — |
+| `skills/agent-coordination/scripts/audit-dedup.sh` | `tests/shell/skills/agent-coordination__audit-dedup.bats` | — | — | — |
 
 ### Skill scripts (behavioral pins — tests/swift)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Cross-run GitHub-issue dedup for skills/worktask/references/publish-pl-issue.sh.
+# Cross-run GitHub-issue dedup for skills/worktask/scripts/publish-pl-issue.sh.
 # Contract (skills/gh-issue-dedup): one .context/ ↔ one GitHub issue.
 #   - FIRST run creates the issue AND writes the run-independent .context/gh-issue.json
 #     anchor (state.json is re-seeded per run, so it cannot carry the binding).
@@ -14,7 +14,7 @@
 # posted comment bodies into comments.txt so `issue view` reflects them (idempotency).
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
-SCRIPT="skills/worktask/references/publish-pl-issue.sh"
+SCRIPT="skills/worktask/scripts/publish-pl-issue.sh"
 
 setup() {
   WD="$(mk_tmpworkdir)"

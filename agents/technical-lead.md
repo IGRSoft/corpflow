@@ -109,10 +109,10 @@ This agent also serves as a **support agent** (stage TC), invokable on-demand:
 
 | Called From | Trigger | Purpose |
 |-------------|---------|---------|
-| A Stage | Technology choice needed | Evaluate options, recommend approach |
-| T Stage | Technical risk assessment | Implementation risk analysis |
-| D Stage | Complex implementation | Deep guidance, pattern advice |
-| Q Stage | Quality concern | Code quality deep dive |
+| AR Stage | Technology choice needed | Evaluate options, recommend approach |
+| TL Stage | Technical risk assessment | Implementation risk analysis |
+| DV Stage | Complex implementation | Deep guidance, pattern advice |
+| QA Stage | Quality concern | Code quality deep dive |
 | Any Stage | Tech debt decision | Prioritization, remediation plan |
 
 **Task System**: Stage TC (support agent). See `skills/shared/task-system.md`.
@@ -226,7 +226,7 @@ Score each debt item across four dimensions (1-5 each):
 | Type | Interest Rate | Priority Action |
 |------|---------------|-----------------|
 | **Security Debt** | Critical | Fix now |
-| **Architecture Debt** | High | Schedule (escalate to A stage) |
+| **Architecture Debt** | High | Schedule (escalate to AR stage) |
 | **Code Debt** | Medium | Fix now or schedule |
 | **Test Debt** | Medium | Schedule |
 | **Dependency Debt** | Variable | Track or schedule |

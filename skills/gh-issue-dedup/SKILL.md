@@ -4,7 +4,7 @@ description: Enforce one GitHub issue per `.context/` across every worktask run 
 effort: low
 version: 0.1.0
 related:
-  - ../worktask/references/publish-pl-issue.sh
+  - ../worktask/scripts/publish-pl-issue.sh
   - ../worktask/SKILL.md
   - ../shared/task-system.md
   - ../task-folder-organization/SKILL.md
@@ -80,7 +80,7 @@ comment.
 
 ## Enforcement lives in the helper
 
-This protocol is implemented in `skills/worktask/references/publish-pl-issue.sh` (functions
+This protocol is implemented in `skills/worktask/scripts/publish-pl-issue.sh` (functions
 `resolve_context_issue_local`, `resolve_context_issue_search`, `write_context_issue`,
 `bump_anchor_commented`; the create-vs-comment branch at the publish step). The skill is the
 canonical description; the helper is the single choke point the orchestrator invokes. Behavior is

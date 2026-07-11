@@ -764,7 +764,7 @@ Documented in `skills/cost-optimization/SKILL.md`. Without 1h flag, default 5-mi
 
 ### Lint
 
-`skills/worktask/references/cache-lint.sh` asserts byte-identity of sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`. Runs in CI on PRs touching `skills/worktask/`, `skills/shared/`, or `agents/`.
+`skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`. Runs in CI on PRs touching `skills/worktask/`, `skills/shared/`, or `agents/`.
 
 ---
 
@@ -797,7 +797,7 @@ All stage artifacts MUST contain exactly the H2 headings (kebab-case, no undersc
 
 ### Anchor Pre-Flight (PostToolUse hook)
 
-Anchor-lint also runs at the DR gate, but that is post-hoc — a missing anchor in `planning-N.md` only surfaces after AR/TL/DV have already paid the full-file re-read cost. To catch omissions at the producing stage, anchor-lint runs as a **managed plugin hook (shipped in `.claude-plugin/plugin.json`, default-on)** — it is no longer an optional, opt-in registration. The managed PostToolUse `Write|Edit` entry invokes `${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh`, which gates on the `.context/*-N.md` artifact regex below and delegates matching writes to `skills/worktask/references/cache-lint.sh --anchor-lint`:
+Anchor-lint also runs at the DR gate, but that is post-hoc — a missing anchor in `planning-N.md` only surfaces after AR/TL/DV have already paid the full-file re-read cost. To catch omissions at the producing stage, anchor-lint runs as a **managed plugin hook (shipped in `.claude-plugin/plugin.json`, default-on)** — it is no longer an optional, opt-in registration. The managed PostToolUse `Write|Edit` entry invokes `${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh`, which gates on the `.context/*-N.md` artifact regex below and delegates matching writes to `skills/worktask/scripts/cache-lint.sh --anchor-lint`:
 
 ```jsonc
 // .claude-plugin/plugin.json → hooks.PostToolUse (managed entry, alongside audit-tooluse)

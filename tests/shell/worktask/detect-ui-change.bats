@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Contract tests for skills/worktask/references/detect-ui-change.sh.
+# Contract tests for skills/worktask/scripts/detect-ui-change.sh.
 # Contracts (from header):
 #   - emits a single JSON line {"requires_screenshots":bool,"signals":[...],"rationale":"..."}
 #   - exit 0 ALWAYS on the detection path
@@ -9,7 +9,7 @@
 #   - --self-test => "fail=0", exit 0
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
-SCRIPT="skills/worktask/references/detect-ui-change.sh"
+SCRIPT="skills/worktask/scripts/detect-ui-change.sh"
 
 setup() {
   WD="$(mk_tmpworkdir)"

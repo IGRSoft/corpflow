@@ -178,8 +178,8 @@ When stages can run independently, coordinate parallel execution:
 
 | Pattern | Stages | Use When | Time Savings |
 |---------|--------|----------|--------------|
-| Docs + QA Parallel | W + Q | Documentation doesn't depend on test results | ~30-40% |
-| Early Documentation | W starts during D | Core API is stable | Docs ready sooner |
+| Docs + QA Parallel | DC + QA | Documentation doesn't depend on test results | ~30-40% |
+| Early Documentation | DC starts during DV | Core API is stable | Docs ready sooner |
 
 ### Worktree Parallelism
 
@@ -201,19 +201,19 @@ Worktree isolation is always active in megatask runs — each issue gets its own
 ```
 1. Verify both stages have independent inputs
 2. Create separate tasks with proper dependencies
-3. Set up native dependencies via Task System (Q and W blocked by D only)
+3. Set up native dependencies via Task System (QA and DC blocked by DV only)
 4. Monitor both stages concurrently
-5. Wait for both tasks completed before proceeding to F
+5. Wait for both tasks completed before proceeding to FN
 ```
 
 ### Never Parallelize
 
 | Combination | Reason |
 |-------------|--------|
-| A before P complete | Architecture needs requirements |
-| D before T complete | Development needs coordination |
-| Q before D complete | Can't test unwritten code |
-| S before F complete | Approval needs release package |
+| AR before PL complete | Architecture needs requirements |
+| DV before TL complete | Development needs coordination |
+| QA before DV complete | Can't test unwritten code |
+| ST before FN complete | Approval needs release package |
 
 ## Cost-Aware Delegation
 

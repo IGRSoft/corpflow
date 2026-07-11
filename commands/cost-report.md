@@ -19,7 +19,7 @@ Generate cost analysis for completed or in-progress worktasks with token usage b
 
 ```
 /cost-report
-/cost-report --stage D
+/cost-report --stage DV
 /cost-report --budget-alert 80%
 /cost-report --export
 /cost-report --optimize
@@ -27,7 +27,7 @@ Generate cost analysis for completed or in-progress worktasks with token usage b
 
 ## Options
 
-- `--stage <code>` - Show costs for specific stage only (P, A, T, D, Q, W, F, S)
+- `--stage <code>` - Show costs for specific stage only (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR)
 - `--budget-alert <percent>` - Set alert threshold (default: 75%)
 - `--export` - Export cost data to CSV
 - `--optimize` - Include optimization recommendations
@@ -53,18 +53,19 @@ Generate cost analysis for completed or in-progress worktasks with token usage b
 ### By Stage
 | Stage | Tokens | Model | Cost | % of Total |
 |-------|--------|-------|------|------------|
-| P | 7,500 | opus | $0.113 | 17% |
-| A | 15,000 | opus | $0.225 | 33% |
-| T | 4,000 | sonnet | $0.012 | 9% |
-| D | 18,500 | sonnet | $0.056 | 41% |
-| Q | - | - | - | - |
-| W | - | - | - | - |
-| F | - | - | - | - |
-| S | - | - | - | - |
+| PL | 7,500 | opus | $0.113 | 17% |
+| AR | 15,000 | opus | $0.225 | 33% |
+| TL | 4,000 | sonnet | $0.012 | 9% |
+| DV | 18,500 | sonnet | $0.056 | 41% |
+| DR | - | - | - | - |
+| QA | - | - | - | - |
+| DC | - | - | - | - |
+| FN | - | - | - | - |
+| ST | - | - | - | - |
 
 ### Status
-Current Stage: D (in_progress)
-Stages Complete: P, A, T
+Current Stage: DV (in_progress)
+Stages Complete: PL, AR, TL
 Estimated Remaining: ~$0.15
 ```
 
@@ -133,7 +134,7 @@ Background activity columns require plugin v3.10.6+ audit rows. Earlier `audit.j
 
 Emit `## Optimization Recommendations` grouped **High Impact** / **Medium Impact** — each item: current state, recommendation, estimated savings ($, %) — plus a `### Model Usage Summary` table (`Model | Invocations | Tokens | Cost`). Source the strategies from `skills/cost-optimization/SKILL.md` (model downgrade per task type, context compression at thresholds, batched reads).
 
-### Stage Detail (`--stage D`)
+### Stage Detail (`--stage DV`)
 
 Emit `## <Stage> Cost Detail` with: `### Summary` (Total Tokens, Model, Cost, Duration), `### Operation Breakdown` (per-operation tokens + cost from that stage's cost-*.jsonl rows), `### Context Usage` (input context / output generated / overhead).
 
@@ -177,7 +178,7 @@ Model rates: canonical table in `skills/shared/model-selection.md § Cost Tiers`
 
 ```bash
 /cost-report                          # summary for current worktask
-/cost-report --stage A                # per-stage detail
+/cost-report --stage AR               # per-stage detail
 /cost-report --optimize               # + actionable recommendations
 /cost-report --budget-alert 60%      # alert at 60% budget consumption
 /cost-report --export                 # writes cost-report.csv to .context/
@@ -198,7 +199,7 @@ one subagent invocation — the aggregator groups by `stage`, sums `input_tokens
 through the canonical dedup filter before counting:
 
 ```bash
-skills/agent-coordination/references/audit-dedup.sh .context/logs/audit.jsonl \
+skills/agent-coordination/scripts/audit-dedup.sh .context/logs/audit.jsonl \
   | jq -c 'select(.action == "tool_invoked")' \
   | jq -s 'group_by([.metadata.stage // "unknown", .metadata.effort // "unknown"]) | …'
 ```
@@ -208,7 +209,7 @@ count by 1 — most visibly on stages where both writers fire (Write/Edit, TaskC
 TaskUpdate). Dedup is keyed on `metadata.dedupe_key`; rows without one (singletons
 such as `approval_received`, `stage_transition`) pass through unchanged. See
 `skills/agent-coordination/SKILL.md § Writers` for the hook-authority rule and
-`skills/agent-coordination/references/audit-dedup.sh --self-test` to verify the
+`skills/agent-coordination/scripts/audit-dedup.sh --self-test` to verify the
 filter against a synthetic fixture.
 
 The Cache Performance table additionally reads:

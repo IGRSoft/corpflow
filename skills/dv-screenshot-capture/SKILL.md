@@ -198,7 +198,7 @@ When `metadata.requires_screenshots: false` and DV captures nothing:
 
 **Do NOT** hand-author `![…](.context/…)` refs in the PR body — relative `.context/` paths never render in GitHub PR or issue bodies (the camo image proxy fetches anonymously; private/internal raw URLs 404; relative markdown links are not resolved). This form was the root cause of the broken-image class fixed in v3.11.2.
 
-Instead, FN runs `skills/worktask/references/attach-visual-evidence.sh --emit pr` and inserts its stdout between `## Test plan` and `## Notes` in the PR body. The helper hosts PNGs via the publish-helper tier order (raw → gist → none-tier note), emitting a `## Visual evidence` block with hosted URLs. It prints nothing when `metadata.requires_screenshots == false` or no captures exist (section cleanly absent). `.txt` placeholder and oversize rows become plain bullets, never image embeds. See `references/conductor-attachments.md` for the full insertion contract.
+Instead, FN runs `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and inserts its stdout between `## Test plan` and `## Notes` in the PR body. The helper hosts PNGs via the publish-helper tier order (raw → gist → none-tier note), emitting a `## Visual evidence` block with hosted URLs. It prints nothing when `metadata.requires_screenshots == false` or no captures exist (section cleanly absent). `.txt` placeholder and oversize rows become plain bullets, never image embeds. See `references/conductor-attachments.md` for the full insertion contract.
 
 **Issue body**: the orchestrator posts captures to the GitHub issue at stage-loop exit via `attach-visual-evidence.sh --post issue` (marker-deduped `gh issue comment`). FN does not write to the issue.
 

@@ -60,7 +60,7 @@ fi
 printf '%s' "$FILE_PATH" | grep -qE "$ARTIFACT_RE" || exit 0
 [ -f "$FILE_PATH" ] || exit 0
 
-LINT="${CLAUDE_PLUGIN_ROOT:-.}/skills/worktask/references/cache-lint.sh"
+LINT="${CLAUDE_PLUGIN_ROOT:-.}/skills/worktask/scripts/cache-lint.sh"
 [ -x "$LINT" ] || [ -f "$LINT" ] || exit 0
 
 # Delegate to the canonical anchor-lint mode. Non-zero exit propagates the

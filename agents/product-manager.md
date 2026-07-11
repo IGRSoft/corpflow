@@ -124,7 +124,7 @@ Drives `dv-screenshot-capture` and its SubagentStop completion gate (`hooks/dv-s
 
 1. Run the detector against the draft plan:
    ```bash
-   skills/worktask/references/detect-ui-change.sh <draft-plan> --platform <platform>
+   skills/worktask/scripts/detect-ui-change.sh <draft-plan> --platform <platform>
    ```
    It emits `{"requires_screenshots": <bool>, "signals": [...], "rationale": "..."}`. Signals (ANY true ⇒ true): **S1** `ui_visual_check: true` (invariant); **S2** `.context/designs/` has `figma-registry.md` or any `*.png`; **S3** the `## scope`/`## requirements` text matches the UI keyword set; **S4** platform ∈ {apple, web, android} AND scope names UI path classes (`Views/`, `Screens/`, `*.storyboard`, `*.tsx`, …). The detector exits 0 always; any error returns `true` (`fail_safe_default`).
 2. Stamp the returned value on the plan frontmatter `metadata.requires_screenshots` and record the `rationale` line in the plan (this satisfies AC-2's "recorded rationale" when false).
@@ -239,7 +239,7 @@ Every stage (AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) writes its artifact
 
 #### `--no-gh-issue` opt-out
 
-When the orchestrator's `/worktask` invocation carries `--no-gh-issue`, PL0 MUST stamp `metadata.no_gh_issue: true` on its own PL0 task and propagate the field through every downstream task it creates. The orchestrator's Step 6.5 reads the field via `skills/worktask/references/publish-pl-issue.sh`; the helper exits 0 immediately without any `gh` API call, auditing `result: "deferred"`, `reason: "opted_out"`. Worktask execution is unaffected — the stage loop proceeds as normal.
+When the orchestrator's `/worktask` invocation carries `--no-gh-issue`, PL0 MUST stamp `metadata.no_gh_issue: true` on its own PL0 task and propagate the field through every downstream task it creates. The orchestrator's Step 6.5 reads the field via `skills/worktask/scripts/publish-pl-issue.sh`; the helper exits 0 immediately without any `gh` API call, auditing `result: "deferred"`, `reason: "opted_out"`. Worktask execution is unaffected — the stage loop proceeds as normal.
 
 When the flag is **absent** (default), PL0 leaves the field unset and the helper runs the full publish pipeline (sanitise → `gh issue create` → state.json write → audit row). See `commands/worktask.md` for the canonical flag list and `skills/worktask/SKILL.md § PL Issue Publish` for the runtime semantics.
 
@@ -385,7 +385,7 @@ worktask mixes both, split DV sub-tasks by scope and route each independently
 (`skills/shared/stage-codes.md` keeps its single unconditional DV default and points
 here for the conditional rule):
 
-- `skills/worktask/references/*.sh` (worktask reference helpers, e.g. `publish-pl-issue.sh`)
+- `skills/worktask/scripts/*.sh` (worktask helper scripts, e.g. `publish-pl-issue.sh`)
 - the worktask state-machine / stage transitions / Task-System glue under `skills/worktask/**`
 - `hooks/**` (worktask runtime hooks)
 
@@ -398,7 +398,7 @@ here for the conditional rule):
 
 **Task System**: Stage PL, Owner: product-manager. See `skills/shared/task-system.md`.
 
-### P Stage: Automatic Design Detection
+### PL Stage: Automatic Design Detection
 
 Product Manager detects design-related tasks and invokes Designer when appropriate.
 
@@ -441,7 +441,7 @@ figma\.com/design/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
 
 When this trigger fires, **Read `skills/shared/figma-capture.md`** for the full capture mechanics: URL detection, State Input Contract, Auth Probe, Capture Workflow, Registry Generation (`figma-registry.md` schema), Post-Capture Plan Update, and Coexistence with Pencil mockups. A no-Figma PL run does NOT Read that doc — this trigger never fires and the steady path proceeds without it. The `{{asset:<basename>}}` grammar the capture workflow emits into `## design-preview` stays inline above (§ Asset-placeholder grammar).
 
-### P Stage: Automatic Ethics Gate Detection
+### PL Stage: Automatic Ethics Gate Detection
 
 PL0 scans the task description for high-risk domain signals and inserts an ET0
 stage between PL0 and AR0 when the threshold is met. Same weighted-score

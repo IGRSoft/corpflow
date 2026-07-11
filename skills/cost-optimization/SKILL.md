@@ -40,7 +40,7 @@ Effort levels (`low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛) map 
 
 ```
 Before: All stages use sonnet
-After:  Q and W use haiku for procedural tasks
+After:  QA and DC use haiku for procedural tasks
 Savings: ~30% on those stages
 ```
 
@@ -293,7 +293,7 @@ Per `handoff-protocol.md#cache-prefix`:
 - Stage 2..N, retry within same stage: ≈ 80% (full preamble cached).
 - Cross-stage average: ≈ 60% — meets AC-14 threshold.
 
-CI lint (`skills/worktask/references/cache-lint.sh`) asserts byte-stability of preamble sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`. Drift collapses cache-hit rate.
+CI lint (`skills/worktask/scripts/cache-lint.sh`) asserts byte-stability of preamble sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`. Drift collapses cache-hit rate.
 
 ## Budget Tracking
 

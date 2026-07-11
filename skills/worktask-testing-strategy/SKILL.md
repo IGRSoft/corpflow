@@ -12,7 +12,7 @@ related:
 
 # Worktask Testing Strategy Skill
 
-Guidance for planning tests during P and AR stages of the igrsoft worktask, before implementation begins.
+Guidance for planning tests during PL and AR stages of the igrsoft worktask, before implementation begins.
 
 Note: This skill focuses on worktask-integrated testing planning. For platform-specific testing patterns (Swift Testing, XCTest), see `apple-developer:testing-strategy`.
 
@@ -37,7 +37,7 @@ For Swift Testing and XCTest framework syntax, AAA pattern, and DV/QA boundary, 
 | API endpoint | Request/response validation | Contract tests | Optional |
 | UI component | ViewModel tests | Snapshot tests | Optional |
 
-## Handoff to Q Stage
+## Handoff to QA Stage
 
 QA stage receives from DV:
 1. **Test scope** from `<plan_file>` (resolved via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`) - WHAT was planned to test
@@ -57,7 +57,7 @@ QA stage then:
 
 When logic changes, follow this process:
 
-### 1. Identify Affected Tests (P Stage)
+### 1. Identify Affected Tests (PL Stage)
 ```markdown
 ### Existing Tests to Update
 | Test File | Reason | Action |
@@ -66,7 +66,7 @@ When logic changes, follow this process:
 | IntegrationTests | API contract changed | Update mocks |
 ```
 
-### 2. Update Test Architecture (A Stage)
+### 2. Update Test Architecture (AR Stage)
 - If new dependencies added: define test doubles
 - If new patterns introduced: document testability approach
 - If boundaries changed: update test organization

@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Contract tests for skills/worktask/references/handoff-harness.sh.
+# Contract tests for skills/worktask/scripts/handoff-harness.sh.
 # Contracts (from header):
 #   - default run (--out DIR): generates synthetic artifacts, computes token reduction,
 #     reports >=30% on all stages (AC-12), "PASS: all stages"; exit 0
@@ -11,7 +11,7 @@
 #   - unknown arg => usage exit 2
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
-SCRIPT="skills/worktask/references/handoff-harness.sh"
+SCRIPT="skills/worktask/scripts/handoff-harness.sh"
 
 setup() {
   WD="$(mk_tmpworkdir)"

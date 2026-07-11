@@ -59,10 +59,10 @@ Check context window utilization, analyze token distribution, and trigger compre
 ### Stage Artifacts
 | Stage | Artifact | Tokens |
 |-------|----------|--------|
-| P | planning-0.md (or planning-N.md if multiple plans) | 3,500 |
-| A | analyzing.md | 6,000 |
-| T | - | 0 |
-| D | development.md (partial) | 5,500 |
+| PL | planning-0.md (or planning-N.md if multiple plans) | 3,500 |
+| AR | analyzing.md | 6,000 |
+| TL | - | 0 |
+| DV | development.md (partial) | 5,500 |
 
 ### Recommendations
 - Status: No compression needed

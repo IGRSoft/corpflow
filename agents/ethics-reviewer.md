@@ -184,14 +184,14 @@ The ethics-reviewer can be invoked at any worktask stage:
 
 | Stage | Ethics Focus |
 |-------|--------------|
-| P (Planning) | User wellbeing, autonomy in requirements |
-| A (Architecture) | Safety-first design, harm prevention |
-| T (Team Lead) | Ethical oversight, transparency |
-| D (Development) | Code safety, honest implementation |
-| Q (QA) | Safety testing, ethical compliance verification |
-| W (Documentation) | Truthful, non-deceptive content |
-| F (Finalization) | Overall ethical sign-off |
-| S (Stakeholder) | Long-term societal impact |
+| PL (Planning) | User wellbeing, autonomy in requirements |
+| AR (Architecture) | Safety-first design, harm prevention |
+| TL (Team Lead) | Ethical oversight, transparency |
+| DV (Development) | Code safety, honest implementation |
+| QA (QA Testing) | Safety testing, ethical compliance verification |
+| DC (Documentation) | Truthful, non-deceptive content |
+| FN (Finalization) | Overall ethical sign-off |
+| ST (Stakeholder) | Long-term societal impact |
 
 ### Escalation Protocol
 

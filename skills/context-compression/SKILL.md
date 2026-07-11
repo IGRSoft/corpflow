@@ -35,7 +35,7 @@ Binding order (per `handoff-protocol.md#cache-prefix`):
 [7] Stage-specific banners (DR/FN/MCP)     ← suffix, dynamic
 ```
 
-Forbidden in [1][2][4]: timestamps, ENV expansions, random IDs, retry counters, file mtimes, agent-specific names beyond `worktask_id`. CI lint (`skills/worktask/references/cache-lint.sh`) asserts byte-stability.
+Forbidden in [1][2][4]: timestamps, ENV expansions, random IDs, retry counters, file mtimes, agent-specific names beyond `worktask_id`. CI lint (`skills/worktask/scripts/cache-lint.sh`) asserts byte-stability.
 
 Expected `cache_read_input_tokens`: ≈20% on cross-stage transitions, ≈80% on retries within a stage, ≈60% on cross-stage average — meets AC-14 threshold of `≥60%` for stages 2–N.
 
@@ -144,7 +144,7 @@ Standard format for stage transitions (target: 50-100 tokens):
 ### Artifacts Created
 - `.context/<plan_file>` (e.g. `planning-0.md`) - Requirements and acceptance criteria
 
-### Open Questions for A Stage
+### Open Questions for AR Stage
 - Should dark mode respect system preference or be independent toggle?
 
 ### Constraints Identified

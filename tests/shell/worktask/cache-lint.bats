@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Contract tests for skills/worktask/references/cache-lint.sh.
+# Contract tests for skills/worktask/scripts/cache-lint.sh.
 # Contracts (from header):
 #   - --anchor-lint <file>: stage anchors all present => "ok", exit 0
 #   - --anchor-lint <file>: anchors missing => "FAIL, missing:", exit 1
@@ -9,7 +9,7 @@
 #   - --self-test => "ALL PASS", exit 0
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
-SCRIPT="skills/worktask/references/cache-lint.sh"
+SCRIPT="skills/worktask/scripts/cache-lint.sh"
 
 setup() {
   WD="$(mk_tmpworkdir)"

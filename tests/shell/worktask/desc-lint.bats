@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Contract tests for skills/worktask/references/desc-lint.sh.
+# Contract tests for skills/worktask/scripts/desc-lint.sh.
 # Contracts (from header + body):
 #   - explicit-file mode: within cap => "N chars ok", exit 0
 #   - over cap (multi-line block scalar joined) => "OVER", exit 1
@@ -7,7 +7,7 @@
 #   - --self-test => "ALL PASS", exit 0
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
-SCRIPT="skills/worktask/references/desc-lint.sh"
+SCRIPT="skills/worktask/scripts/desc-lint.sh"
 
 setup() {
   WD="$(mk_tmpworkdir)"

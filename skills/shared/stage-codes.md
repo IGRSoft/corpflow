@@ -24,7 +24,7 @@ Single source of truth for worktask stage codes.
 | ST | Stakeholder | stakeholder | sonnet |
 | IR | Incident Response | incident-responder | sonnet |
 
-> DV defaults to `developer` (platform app code). For plugin worktask-infrastructure scope (`skills/worktask/references/*.sh`, the stage state-machine, `hooks/**`), PL0 routes DV to `workflow-engineer` instead — see `agents/product-manager.md` § Dynamic Worktask Sizing → DV0 routing override. This table keeps the single unconditional default; the conditional rule lives there.
+> DV defaults to `developer` (platform app code). For plugin worktask-infrastructure scope (`skills/worktask/scripts/*.sh`, the stage state-machine, `hooks/**`), PL0 routes DV to `workflow-engineer` instead — see `agents/product-manager.md` § Dynamic Worktask Sizing → DV0 routing override. This table keeps the single unconditional default; the conditional rule lives there.
 
 ## Model Lookup
 

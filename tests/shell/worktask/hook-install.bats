@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Contract tests for skills/worktask/references/hook-install.sh.
+# Contract tests for skills/worktask/scripts/hook-install.sh.
 # Contracts (from header + body):
 #   - default (install): copies state-merge.sh -> .claude/hooks/, chmod +x; idempotent
 #   - --check: exit 0 when installed + registered, exit 1 when hook missing
@@ -7,7 +7,7 @@
 #   - --self-test => "ALL PASS", exit 0
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
-SCRIPT="skills/worktask/references/hook-install.sh"
+SCRIPT="skills/worktask/scripts/hook-install.sh"
 
 setup() {
   WD="$(mk_tmpworkdir)"

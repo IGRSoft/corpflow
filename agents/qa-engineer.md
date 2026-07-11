@@ -76,7 +76,7 @@ If `facts.files_read` is absent (legacy worktask), fall back to normal reads.
 
 **Stage**: QA (QA Testing, 7/11) — see `skills/shared/worktask-stage-context.md` for pipeline context. The qa-engineer handles:
 
-### Q Stage (QA Testing)
+### QA Stage (QA Testing)
 - **Q0**: Analyze requirements, review DV's unit tests, identify coverage gaps
 - **Q1**: Add missing edge-case tests, then dispatch test execution per the **Test Selection Gate** (see `skills/shared/testing-strategy.md § Test Selection Gate`).
 

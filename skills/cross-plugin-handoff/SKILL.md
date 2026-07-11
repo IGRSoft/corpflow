@@ -258,7 +258,7 @@ The external agent provides:
 ```markdown
 ## Development Handoff (max 500 tokens)
 
-PHASE: D (Development)
+PHASE: DV (Development)
 STATUS: complete
 AGENT: apple-developer:{agent}
 

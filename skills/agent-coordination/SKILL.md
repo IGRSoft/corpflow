@@ -209,7 +209,7 @@ review, the audit tail is the single source of truth for what happened.
 - `tool_invoked`: `"<session_id>:<tool_use_id>"`
 - `subagent_stopped`: `"<session_id>:<agent_id>:<task_id>:stop"` (v3.10.1+; the `<task_id>` segment disambiguates back-to-back DV0/DV1 split-task retries where `agent_id` is constant. Pre-v3.10.1 producers may emit the legacy shape `"<session_id>:<agent_id>:stop"` — readers MUST treat both prefixes as the same key for a single `(session, agent, task)` row to preserve dedupe across the upgrade. Orchestrator populates `task_id` in hook stdin where the runtime exposes it; on older CC builds the hook degrades to legacy shape automatically.)
 - `stage_completion_hook`: `"<session_id>:<agent_id>:stage:<PL|FN|ST>"`
-- `github_issue_created`: `"<worktask_id>:<run_index>:gh_issue"` — collision on resume detects already-published; multi-track safety via `run_index` increment. Writer: orchestrator (via `skills/worktask/references/publish-pl-issue.sh` between PL approval and stage-loop entry).
+- `github_issue_created`: `"<worktask_id>:<run_index>:gh_issue"` — collision on resume detects already-published; multi-track safety via `run_index` increment. Writer: orchestrator (via `skills/worktask/scripts/publish-pl-issue.sh` between PL approval and stage-loop entry).
 
 ### Dedupe Key Migration (v3.10.6+, auto-detecting)
 
