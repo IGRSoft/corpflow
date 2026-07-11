@@ -107,7 +107,7 @@ Megatask (per-issue) tickets run in isolated workspaces. `.context/` base path b
 
 ## Parallel Execution
 
-### W + Q Parallel (Default)
+### DC + QA Parallel (Default)
 
 ```typescript
 TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // DR ← DV

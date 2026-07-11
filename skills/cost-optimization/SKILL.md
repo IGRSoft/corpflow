@@ -40,7 +40,7 @@ Effort levels (`low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛) map 
 
 ```
 Before: All stages use sonnet
-After:  Q and W use haiku for procedural tasks
+After:  QA and DC use haiku for procedural tasks
 Savings: ~30% on those stages
 ```
 

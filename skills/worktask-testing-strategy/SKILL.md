@@ -12,7 +12,7 @@ related:
 
 # Worktask Testing Strategy Skill
 
-Guidance for planning tests during P and AR stages of the igrsoft worktask, before implementation begins.
+Guidance for planning tests during PL and AR stages of the igrsoft worktask, before implementation begins.
 
 Note: This skill focuses on worktask-integrated testing planning. For platform-specific testing patterns (Swift Testing, XCTest), see `apple-developer:testing-strategy`.
 

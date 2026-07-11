@@ -96,14 +96,14 @@ When principles conflict, consider:
 
 | Stage | Constitutional Check |
 |-------|---------------------|
-| P (Planning) | User wellbeing in requirements, autonomy considerations |
-| A (Architecture) | Safety-first design, avoid harmful capabilities |
-| T (Team Lead) | Ethical oversight, transparency in coordination |
-| D (Development) | Code safety, honest documentation |
-| Q (QA) | Test for safety and ethical compliance |
-| W (Documentation) | Truthful, non-deceptive content |
-| F (Finalization) | Overall ethical review |
-| S (Stakeholder) | Long-term impact assessment |
+| PL (Planning) | User wellbeing in requirements, autonomy considerations |
+| AR (Architecture) | Safety-first design, avoid harmful capabilities |
+| TL (Team Lead) | Ethical oversight, transparency in coordination |
+| DV (Development) | Code safety, honest documentation |
+| QA (QA Testing) | Test for safety and ethical compliance |
+| DC (Documentation) | Truthful, non-deceptive content |
+| FN (Finalization) | Overall ethical review |
+| ST (Stakeholder) | Long-term impact assessment |
 
 ### Escalation Triggers
 
