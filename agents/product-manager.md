@@ -385,7 +385,7 @@ worktask mixes both, split DV sub-tasks by scope and route each independently
 (`skills/shared/stage-codes.md` keeps its single unconditional DV default and points
 here for the conditional rule):
 
-- `skills/worktask/references/*.sh` (worktask reference helpers, e.g. `publish-pl-issue.sh`)
+- `skills/worktask/scripts/*.sh` (worktask helper scripts, e.g. `publish-pl-issue.sh`)
 - the worktask state-machine / stage transitions / Task-System glue under `skills/worktask/**`
 - `hooks/**` (worktask runtime hooks)
 
