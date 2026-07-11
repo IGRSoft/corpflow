@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Contract tests for skills/agent-coordination/references/audit-dedup.sh
+# Contract tests for skills/agent-coordination/scripts/audit-dedup.sh
 # (PATH-KEYED filename: agent-coordination__audit-dedup.bats to avoid basename
 # collision with hooks/audit-dedup.sh; AC-2 gate resolves both independently.)
 #
@@ -13,7 +13,7 @@
 #   --self-test -> prints "self-test OK", exits 0.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
-SCRIPT="skills/agent-coordination/references/audit-dedup.sh"
+SCRIPT="skills/agent-coordination/scripts/audit-dedup.sh"
 FIX_AUDIT="${FIXTURES}/skills/audit-dedup.jsonl"
 
 # --- happy path -----------------------------------------------------------

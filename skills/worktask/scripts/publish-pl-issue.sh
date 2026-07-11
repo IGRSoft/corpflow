@@ -894,7 +894,9 @@ write_state_external_ticket() {
 # ---------- self-test -------------------------------------------------------
 run_self_tests() {
   local fixtures_dir
-  fixtures_dir="$(dirname "$0")/fixtures/publish-pl-issue"
+  # Self-test fixtures are reference data kept under references/fixtures/; this
+  # script lives in scripts/, so reach one level up into the sibling references/.
+  fixtures_dir="$(dirname "$0")/../references/fixtures/publish-pl-issue"
   [ -d "$fixtures_dir" ] || { echo "publish-pl-issue: fixtures dir missing: $fixtures_dir" >&2; return 1; }
   local pass=0 fail=0
 

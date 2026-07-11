@@ -130,7 +130,7 @@ tests/shell/skills/build-context-set.bats  # Not "self-improvement__build-contex
 For the two `audit-dedup.sh` files (hook vs skill), use full paths:
 ```
 tests/shell/hooks/audit-dedup.bats                          # hooks/audit-dedup.sh
-tests/shell/skills/agent-coordination__audit-dedup.bats    # skills/agent-coordination/references/audit-dedup.sh
+tests/shell/skills/agent-coordination__audit-dedup.bats    # skills/agent-coordination/scripts/audit-dedup.sh
 ```
 
 **Minimum test template:**

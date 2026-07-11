@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Contract tests for skills/worktask/references/attachments-preseed-test.sh.
+# Contract tests for skills/worktask/scripts/attachments-preseed-test.sh.
 # This script is a fixture-driven self-test harness for the FN pre-gate
 # Conductor-attachments writer. Its external CLI contract:
 #   - --self-test  => runs Test 1 (gated path), Test 2 (idempotency),
@@ -11,7 +11,7 @@
 # real contract coverage, not a bare smoke invocation.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
-SCRIPT="skills/worktask/references/attachments-preseed-test.sh"
+SCRIPT="skills/worktask/scripts/attachments-preseed-test.sh"
 
 @test "happy: --self-test runs all three scenarios and passes (exit 0)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test

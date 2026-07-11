@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Contract tests for skills/worktask/references/attach-visual-evidence.sh.
+# Contract tests for skills/worktask/scripts/attach-visual-evidence.sh.
 # Contracts (from header + body):
 #   - --emit pr: requires_screenshots=false => empty stdout, audit reason=requires_screenshots_false
 #   - --emit pr: requires_screenshots=true + no manifest/captures => empty stdout, audit reason=no_captures
@@ -10,7 +10,7 @@
 #   - --self-test => "fail=0", exit 0
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
-SCRIPT="skills/worktask/references/attach-visual-evidence.sh"
+SCRIPT="skills/worktask/scripts/attach-visual-evidence.sh"
 
 setup() {
   WD="$(mk_tmpworkdir)"

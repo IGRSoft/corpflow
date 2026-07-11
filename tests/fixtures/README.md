@@ -23,7 +23,7 @@ Two source files share the basename `audit-dedup.sh`:
 | # | Path | Track | Test file |
 |---|------|-------|-----------|
 | 1 | `hooks/audit-dedup.sh`                                 | DV0c | `tests/shell/hooks/audit-dedup.bats` |
-| 2 | `skills/agent-coordination/references/audit-dedup.sh`  | DV0b | `tests/shell/skills/agent-coordination__audit-dedup.bats` |
+| 2 | `skills/agent-coordination/scripts/audit-dedup.sh`  | DV0b | `tests/shell/skills/agent-coordination__audit-dedup.bats` |
 
 The AC-2 residual-completeness gate strips the extension and greps `tests/ -R` for
 the stem. A naive grep for `audit-dedup` would match BOTH files with a SINGLE test

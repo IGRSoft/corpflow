@@ -60,7 +60,7 @@ See `skills/shared/stage-codes.md` for stage details.
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 11-stage worktask |
 | `--emergency` | Run the incident pipeline (IR→DV→DR→QA→RE→FN) instead of the standard PL-first pipeline; IR stage owned by `incident-responder`. Replaces the former `emergency:` prefix. |
-| `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish step. Sets `metadata.no_gh_issue: true` on the PL0 task; `skills/worktask/references/publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues as normal. |
+| `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish step. Sets `metadata.no_gh_issue: true` on the PL0 task; `skills/worktask/scripts/publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues as normal. |
 
 ## Examples
 
@@ -164,7 +164,7 @@ Step A. No prompt, no approval line.
 
 **Step A — Publish plan to GitHub** (run BEFORE the stage loop):
 
-    HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/references/publish-pl-issue.sh"
+    HELPER="${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh"
     if [ -f "$HELPER" ]; then
       bash "$HELPER"; true
     else

@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Contract tests for skills/worktask/references/publish-pl-issue.sh (AC-4 priority).
+# Contract tests for skills/worktask/scripts/publish-pl-issue.sh (AC-4 priority).
 # Asserted contracts (from script header + entrypoint):
 #   - opt-out (NO_GH_ISSUE=true) => defer reason=opted_out, exit 0
 #   - idempotency (metadata.github_issue_url set) => defer reason=already_published
@@ -17,7 +17,7 @@
 # PATH + DRY_RUN=1 satisfies the probes without any live API call.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
-SCRIPT="skills/worktask/references/publish-pl-issue.sh"
+SCRIPT="skills/worktask/scripts/publish-pl-issue.sh"
 
 setup() {
   WD="$(mk_tmpworkdir)"

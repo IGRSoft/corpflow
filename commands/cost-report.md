@@ -199,7 +199,7 @@ one subagent invocation — the aggregator groups by `stage`, sums `input_tokens
 through the canonical dedup filter before counting:
 
 ```bash
-skills/agent-coordination/references/audit-dedup.sh .context/logs/audit.jsonl \
+skills/agent-coordination/scripts/audit-dedup.sh .context/logs/audit.jsonl \
   | jq -c 'select(.action == "tool_invoked")' \
   | jq -s 'group_by([.metadata.stage // "unknown", .metadata.effort // "unknown"]) | …'
 ```
@@ -209,7 +209,7 @@ count by 1 — most visibly on stages where both writers fire (Write/Edit, TaskC
 TaskUpdate). Dedup is keyed on `metadata.dedupe_key`; rows without one (singletons
 such as `approval_received`, `stage_transition`) pass through unchanged. See
 `skills/agent-coordination/SKILL.md § Writers` for the hook-authority rule and
-`skills/agent-coordination/references/audit-dedup.sh --self-test` to verify the
+`skills/agent-coordination/scripts/audit-dedup.sh --self-test` to verify the
 filter against a synthetic fixture.
 
 The Cache Performance table additionally reads:
