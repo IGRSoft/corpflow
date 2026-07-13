@@ -213,6 +213,26 @@ With `--fix` flag, these issues can be automatically resolved:
 3. Section ordering: Usage → Options → Examples → Output → Integration → Related
 4. Terminology standardized
 
+### Frontmatter Parsing Convention
+
+Definition files (`agents/*.md`, `commands/*.md`, `skills/*/SKILL.md`) are matched by the
+`---`-delimited YAML block at the top of the file. When detecting or extracting that block,
+be tolerant of real-world line endings and flag a present-but-broken `description`:
+
+1. **Tolerate CRLF and trailing whitespace on the delimiter lines.** A file authored on
+   Windows or saved with trailing spaces still has valid frontmatter — match `---` even when
+   followed by spaces/tabs and `\r\n`, not only a bare `---\n`. Do not report "missing
+   frontmatter" for a file whose only difference is line endings.
+2. **Distinguish absent from malformed.** A missing frontmatter block and a block that is
+   present but has a missing, empty, or unparseable `description:` are different findings:
+   - *absent frontmatter* → error (the file has no metadata at all);
+   - *present but empty/malformed `description`* → error, reported as
+     `<file> — missing or malformed description`, because an empty description silently
+     breaks skill/command triggering even though the block parses.
+3. **`description` is required and non-empty.** `description:` with no value, only
+   whitespace, or a value that fails to parse is a violation — report it distinctly from a
+   wholly missing field so the fix is unambiguous.
+
 ## Integration
 
 This command is used:

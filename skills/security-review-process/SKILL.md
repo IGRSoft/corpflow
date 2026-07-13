@@ -1,6 +1,6 @@
 ---
 name: security-review-process
-description: OWASP Top 10 security review checklist and secure coding patterns for SR stage. Use when conducting security reviews or applying secure coding patterns.
+description: OWASP Top 10 security review checklist, dependency supply-chain triage, and secure coding patterns for SR stage. Use when conducting security reviews, auditing dependencies for vulnerabilities or supply-chain risk, or applying secure coding patterns.
 effort: medium
 ---
 
@@ -116,12 +116,33 @@ func getResource(id: String, requestingUser: User) throws -> Resource {
 
 ### Supply Chain Security
 
-- [ ] Dependencies pinned to exact versions
-- [ ] No typosquatting risk in package names
-- [ ] SBOM generated for release artifacts
-- [ ] Package provenance verified (SLSA framework)
-- [ ] Lock files committed and reviewed
-- [ ] No dependencies with restrictive/incompatible licenses
+A dependency audit reports **known advisories only** — it does not prove a package is
+trustworthy or that the vulnerable code is reachable. Use the platform's native audit
+against the committed lockfile (SwiftPM: resolve `Package.resolved` and scan advisories
+via GitHub/Dependabot or `swift package` tooling; e.g. for npm projects, `npm audit`),
+then triage the findings — don't equate a clean audit with a safe dependency.
+
+- [ ] **One authoritative lockfile per installation boundary**, committed and never
+  rewritten by CI. For SwiftPM the local analog is `Package.resolved` (one per
+  package/workspace root); CI resolves against it rather than re-pinning. Competing or
+  duplicate lockfiles at a single boundary is a red flag.
+- [ ] **Critical/high advisories triaged for reachability** across runtime, build, test,
+  and deployment paths — not merely "present in the graph". Each deferral carries a reason
+  and a review date.
+- [ ] **Forced audit remediation is never applied automatically** (`npm audit fix --force`
+  or any equivalent that crosses declared version ranges). Preview the remediation, read
+  the changelog, and let the test suite decide.
+- [ ] **Dependency lifecycle / build scripts are attack surface** — block them before first
+  execution, inspect the script source and pinned version, and approve only the minimum
+  required. Apple analog: SwiftPM build-tool / prebuild plugins execute arbitrary code
+  during the build; vet plugin sources before enabling them.
+- [ ] **Registry signatures / provenance verified where supported** (SLSA provenance,
+  signed releases, `swift package` checksum pins for binary targets). Absence is a signal
+  to investigate, not automatic proof of compromise.
+- [ ] No typosquatting risk in package names; new dependencies reviewed for ownership,
+  maintenance, release age, and transitive graph.
+- [ ] SBOM generated for release artifacts.
+- [ ] No dependencies with restrictive/incompatible licenses.
 
 ### Cloud Security Posture
 

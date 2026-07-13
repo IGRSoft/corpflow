@@ -162,13 +162,23 @@ SR stage retains ownership and sign-off authority. Apple security-auditor findin
 - [ ] Logging excludes sensitive data
 
 ### Dependencies & Supply Chain
+
+An audit reports known advisories only — it does not prove a package trustworthy or its
+vulnerable code reachable. Run the platform's native audit against the committed lockfile
+(SwiftPM `Package.resolved` is the local analog; `npm audit` is an npm-project example, not
+the sole directive), then triage:
+
 - [ ] No known CVEs in dependencies
 - [ ] Dependencies up to date
 - [ ] License compliance verified
-- [ ] Supply chain security considered
 - [ ] SBOM generated or verifiable
 - [ ] Dependency provenance checked
 - [ ] No typosquatting or malicious packages
+- [ ] Exactly one authoritative lockfile per installation boundary, committed and never rewritten by CI
+- [ ] Critical/high advisories triaged for reachability across runtime, build, test, and deploy paths (deferrals carry a reason + review date)
+- [ ] Forced audit remediation never applied automatically; remediation diffs and changelogs reviewed first
+- [ ] Dependency lifecycle / build-tool scripts (incl. SwiftPM build-tool & prebuild plugins) blocked before first execution and approved narrowly
+- [ ] Registry signatures / provenance verified where the ecosystem supports it
 
 ### Secrets Management
 - [ ] No hardcoded secrets

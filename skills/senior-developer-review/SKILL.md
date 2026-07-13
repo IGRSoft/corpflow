@@ -138,6 +138,38 @@ Watch for these during review:
 2. [Action 2]
 ```
 
+## Dependency Upgrade Review
+
+Upgrading an existing dependency is a code change, and the riskiest upgrades are the ones
+merged in bulk as "bump deps." When a review request touches a manifest (`Package.swift`,
+`Podfile`, `*.gradle`, `requirements.txt`, `package.json`, …) or its lockfile, apply the
+same senior discipline you'd apply to feature code:
+
+1. **Read the changelog, not just the version number.** Semver is a promise the maintainer
+   may not have kept; a "patch" can carry a behavioral change. For a major bump, read the
+   migration notes and find what breaks.
+2. **One dependency per change.** Upgrade and merge individually (or in small related
+   groups). A bulk bump that breaks the build hides which package did it; single-package
+   changes keep the cause obvious and the revert clean.
+3. **Let the suite decide.** The upgrade is verified by a green test suite before *and*
+   after, not by "it resolved." Thin coverage around the dependency's behavior is itself
+   the finding — add a test first.
+4. **Mind the transitive graph.** Most resolved packages are ones nobody chose directly.
+   Review the lockfile / transitive-graph diff, not just the manifest — one direct bump can
+   pull in dozens of indirect changes.
+5. **Keep the lockfile honest.** Commit it, review its diff, and never hand-edit it; the
+   lockfile (SwiftPM `Package.resolved` and equivalents) is what actually pins what ships.
+
+For advisory triage and supply-chain verdicts, defer to the `security-review-process`
+skill — this is the upgrade *workflow*, that is the security *verdict*.
+
+### Red-flag rebuttals
+
+| Rationalization | Reality |
+|-----------------|---------|
+| "It's just a version bump" | A bump is a behavior change you didn't write. Read the changelog; semver doesn't guarantee no breakage. |
+| "I'll upgrade everything in one PR to save time" | A bulk bump that breaks the build hides which package did it. One dependency per change keeps the cause and the revert clean. |
+
 ## Review Feedback Hygiene
 
 When acting on review comments before re-requesting review (mirrors the PR-feedback discipline in upstream review-agent-governance pattern):
