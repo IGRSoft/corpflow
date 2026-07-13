@@ -369,6 +369,16 @@ procedure (stub: `skills/worktask/SKILL.md § Resume After Interruption`).
 
 Claude Code auto-generates a session recap at key moments (also available via `/recap` or `--recap` on resume). Recaps are self-contained summaries that survive compaction and can be used as handoff context between worktask sessions. Telemetry-disabled users also receive recaps.
 
+### Post-Compaction Behavioral Recovery (behavioral, not hook-driven)
+
+The `PreCompact`/`PostCompact` hooks and Session Recap above reduce compaction damage but do not eliminate it — compaction is silent, and any decision that lived only in the conversation can vanish without a trace. Recovery therefore cannot be left to the hook alone; the agent has to re-anchor itself. On any compaction signal — a sudden loss of earlier context, an explicit `/compact`, or a `PostCompact` pointer file — before taking the next action:
+
+1. **Re-read `.context/state.json` and the active stage artifact FIRST.** The file-mediated ledger (see [State Ledger as Compression Primitive](#state-ledger-as-compression-primitive)) is the source of truth; post-compaction conversational memory is not.
+2. **Recite the active stage's constraints and acceptance criteria** before the next edit, so a requirement dropped by compaction resurfaces instead of being silently skipped.
+3. **Trust but verify cached reads.** If a fresh re-read contradicts what you "remember" reading earlier, the recollection is the stale copy — follow the file, not the memory.
+
+The durable fix is upstream: write decisions into files as they are made, never only into the conversation, so compaction has nothing load-bearing left to drop.
+
 ### Context Size Estimation
 
 Rough token counts:

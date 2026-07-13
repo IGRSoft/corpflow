@@ -149,6 +149,8 @@ Before executing any megatask run, validate:
 5. Cross-check `.context/logs/` for the most recent run artifacts (raw captures outlive task state)
 6. Manually update if needed
 
+**Trust but verify "done" claims.** A task marked `completed` in the Task System, or a `status: "completed"` in state.json, is a claim — not proof. Reconcile it against the artifact actually present on disk (`.context/<stage>-N.md` and its handoff frontmatter) before trusting it: a stage can report done while its artifact write silently failed, and taking the claim at face value is how the ledger drifts out of sync in the first place.
+
 ### state.json Stuck at PL.in_progress
 
 **Symptoms**: Worktask ran through multiple stages, but `.context/state.json` still shows `stages.PL.status: "in_progress"` and empty `handoffs`.
