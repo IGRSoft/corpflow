@@ -24,7 +24,7 @@ All available skills for the igrsoft worktask plugin.
 | [release-engineering](release-engineering/SKILL.md) | Semantic versioning, changelog generation, and deployment readiness patterns | high |
 | [request-plan](request-plan/SKILL.md) | Lightweight context-aware plan (goal, scope, phases, rough effort, risks) from a free-form request, with a worktask-trigger handoff | medium |
 | [senior-developer-review](senior-developer-review/SKILL.md) | Technical review framework for estimates by platform specialists | low |
-| [security-review-process](security-review-process/SKILL.md) | OWASP Top 10 security review checklist and secure coding patterns | medium |
+| [security-review-process](security-review-process/SKILL.md) | OWASP Top 10 security review checklist, dependency supply-chain triage, and secure coding patterns | medium |
 | [self-improvement](self-improvement/SKILL.md) | ST-stage retrospective: diff-based learning from user edits; writes `.context/learnings.md` with per-proposal approval checklist | medium |
 | [task-folder-organization](task-folder-organization/SKILL.md) | Context folder structure (.context/) with artifact naming and path resolution | medium |
 | [worktask](worktask/SKILL.md) | Complete staged worktask system with dynamic sizing and stage management | high |

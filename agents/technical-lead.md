@@ -184,6 +184,34 @@ Beyond checklist reviews, assess:
 - **API ergonomics**: Intuitive to use correctly?
 - **Comment density**: Compact, contract-only source comments? Flag over-documentation — doc-comment essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, or call-site enumerations — as a maintainability finding against the documented standard `skills/shared/code-documentation.md` (rationale belongs in the PR / `development-N.md § Decisions`).
 
+### Dependency Upgrade Review (DR)
+
+Upgrading an existing dependency is a code change like any other, and the riskiest bumps
+are the ones merged in bulk with a message like "bump deps." When a diff touches a manifest
+(`Package.swift`, `Podfile`, `*.gradle`, `requirements.txt`, `package.json`, …) or its
+lockfile (`Package.resolved` and equivalents), review it with the same discipline as
+production code:
+
+1. **Read the changelog, not just the version number.** Semver is a promise the maintainer
+   may not have kept — a "patch" can carry a behavioral change. For a major bump, read the
+   migration notes and find what breaks.
+2. **One dependency per change.** Upgrade and merge them individually (or in small related
+   groups). When a bulk bump breaks the build, you've lost which package did it; a
+   single-package change makes the cause obvious and the revert clean.
+3. **Let the suite decide.** The upgrade is verified by a green suite before *and* after —
+   not by "it resolved." Thin coverage around the dependency's behavior is itself the
+   finding; flag it for DV/QA to add a test first. (DR does not execute tests — record this
+   as a finding, per the read-only constraint above.)
+4. **Mind the transitive graph.** Most resolved packages are ones nobody chose directly.
+   Review the **lockfile / transitive-graph diff**, not just the manifest; one direct bump
+   can pull in dozens of indirect changes.
+5. **Keep the lockfile honest.** It must be committed, its diff reviewed, and never
+   hand-edited — the lockfile is what actually pins what ships.
+
+For advisory triage and supply-chain verdicts (typosquatting, compromised maintainers,
+reachability), defer to the `security-review-process` skill / SR stage — this covers the
+upgrade *workflow*, that covers the security *verdict*.
+
 ## Technology Evaluation Framework
 
 ### Maturity-Based Selection

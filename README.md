@@ -307,7 +307,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 - `release-engineering` — Semantic versioning, changelog, deployment readiness (RE)
 - `request-plan` — Turn a free-form request into a lightweight, context-aware plan
 - `review` — Senior technical review framework for estimates
-- `security-review-process` — OWASP Top 10 checklist and secure-coding patterns (SR)
+- `security-review-process` — OWASP Top 10 checklist, dependency supply-chain triage, secure-coding patterns (SR)
 - `self-improvement` — ST-stage retrospective: propose scoped updates from user edits
 - `shared/milestone-helpers` — Helper patterns for milestone/megatask operations
 - `task-folder-organization` — `.context/` folder structure and artifact naming

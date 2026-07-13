@@ -65,7 +65,13 @@
 - [ ] Software up to date
 ```
 
-## A06: Vulnerable Components
+## A06: Vulnerable & Outdated Components
+
+Audits find **known advisories**; they do not prove trustworthiness or reachability.
+Triage findings against the paths that actually execute rather than treating any hit as a
+blocker. State commands package-manager-agnostically — the SwiftPM `Package.resolved`
+lockfile is the local analog (`npm audit`/`npm ci` are npm-project examples, not the sole
+directive).
 
 ```markdown
 - [ ] Dependency versions current
@@ -76,6 +82,11 @@
 - [ ] Automated vulnerability scanning enabled
 - [ ] Update process documented
 - [ ] SBOM (Software Bill of Materials) maintained
+- [ ] Exactly one authoritative lockfile per installation boundary (SwiftPM: Package.resolved), committed and never rewritten by CI
+- [ ] Critical/high advisories triaged for reachability (runtime, build, test, deploy) — deferrals carry a reason and review date
+- [ ] Forced audit remediation is never automatic; remediation diffs and changelogs are reviewed
+- [ ] Dependency lifecycle / build-tool scripts blocked before first execution, approved narrowly
+- [ ] Registry signatures / provenance verified where the ecosystem supports it
 ```
 
 ## A07: Authentication Failures

@@ -37,6 +37,11 @@ For Swift Testing and XCTest framework syntax, AAA pattern, and DV/QA boundary, 
 | API endpoint | Request/response validation | Contract tests | Optional |
 | UI component | ViewModel tests | Snapshot tests | Optional |
 
+**UI test selectors:** prefer stable accessibility identifiers over brittle text or
+coordinate lookups — in XCUITest, query by `accessibilityIdentifier` (set it in the view)
+rather than by visible label or screen position, so tests survive copy changes and layout
+shifts.
+
 ## Handoff to QA Stage
 
 QA stage receives from DV:
