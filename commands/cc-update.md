@@ -125,13 +125,13 @@ Output of the standing `## Worktask Efficiency Analysis (required pass)` (see th
 
 ### High Impact
 
-#### PostToolUse hook — agents/developer.md, skills/agent-coordination.md
+#### PostToolUse hook — agents/developer.md, skills/agent-coordination/SKILL.md
 
 **Why affected**: `developer` documents hook patterns; `agent-coordination` skill covers SubagentStart/SubagentStop — PostToolUse extends this pattern.
 
 **Proposed changes**:
 - `agents/developer.md` — Add PostToolUse to hook documentation block
-- `skills/agent-coordination.md` — Add PostToolUse row to Hook-Based Stage Monitoring table
+- `skills/agent-coordination/SKILL.md` — Add PostToolUse row to Hook-Based Stage Monitoring table
 
 <!-- Medium and Low impact entries follow the same structure with proportionally less detail -->
 
@@ -141,7 +141,7 @@ Output of the standing `## Worktask Efficiency Analysis (required pass)` (see th
 |------|--------|---------|
 | agents/developer.md | ✅ Updated | PostToolUse hook + GA worktree note |
 | agents/workflow-engineer.md | ✅ Updated | GA worktree note |
-| skills/agent-coordination.md | ✅ Updated | PostToolUse row, sparsePaths note |
+| skills/agent-coordination/SKILL.md | ✅ Updated | PostToolUse row, sparsePaths note |
 | skills/shared/stage-codes.md | ✅ Updated | Model alias footnote |
 
 ## MEMORY.md Update

@@ -126,7 +126,7 @@ Estimated Remaining: ~$0.15
 - `session_crons` = same, for `metadata.session_crons_count`.
 - `dispatch_depth` = computed from the `metadata.parent_agent_id` chain — 0 when `"none"`, otherwise `1 + depth(parent)`. Activates with CC ≥ 2.1.172 (sub-agents spawn sub-agents up to 5 levels deep) — depths ≥ 1 now appear whenever a stage agent delegates to a specialist; on older CC the column stays 0.
 - `notable` = comma-joined `metadata.background_task_ids` and `metadata.session_cron_ids` when count > 0; otherwise `—`. Watch for the literal `"unknown"` string — signals the canonical ID-field name has shifted (see `skills/agent-coordination/references/hook-monitoring.md § BG-Task ID Schema Watch`).
-- Aggregation MUST first call `${CLAUDE_PLUGIN_ROOT}/hooks/audit-dedup.sh --check-mode` to pick the authoritative key (`base` or `extended`), then group rows by stage and compute max/sum/depth. Pinning the mode at startup avoids mixed-mode dedup (forbidden per `skills/agent-coordination/SKILL.md § Dedupe Key Migration`).
+- Aggregation MUST first call `hooks/audit-dedup.sh --check-mode` (plugin root: `${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`) to pick the authoritative key (`base` or `extended`), then group rows by stage and compute max/sum/depth. Pinning the mode at startup avoids mixed-mode dedup (forbidden per `skills/agent-coordination/SKILL.md § Dedupe Key Migration`).
 
 Background activity columns require plugin v3.10.6+ audit rows. Earlier `audit.jsonl` rows lack these fields; values default to `0` / `—`. The helper `hooks/audit-dedup.sh --check-mode` decides whether to dedup on `dedupe_key` (base) or `dedupe_key_extended` (parent-aware) for correctness in multi-track parallel runs.
 

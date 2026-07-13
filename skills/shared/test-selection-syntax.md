@@ -193,7 +193,7 @@ The marker grammar is platform-agnostic (line comments are universally parseable
 
 | Platform | Test ID format used in `-only-testing:` / equivalent | Implementation |
 |----------|------------------------------------------------------|----------------|
-| Apple (Swift Testing / XCTest) | `<TargetName>/<TypeName>/<methodName>` | `apple-developer:swift-testing-entry` skill, `references/dependency-markers.md` |
+| Apple (Swift Testing / XCTest) | `<TargetName>/<TypeName>/<methodName>` | `apple-developer:swift-testing-entry` skill |
 | Android (JUnit) | `<package>.<ClassName>#<methodName>` (TBD) | Stub — handler not yet implemented |
 | Web (Vitest/Jest) | file-path + test-name pattern (TBD) | Stub — handler not yet implemented |
 

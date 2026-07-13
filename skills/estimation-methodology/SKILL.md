@@ -168,7 +168,7 @@ Re-run the estimate (e.g. via `/estimate --update`, an out-of-scope follow-up co
 - **Scope change > 20%** — features added/removed shift total SP by more than a fifth.
 - **Complexity score change ≥ 3 points** — any of the 5 factors moves enough to bump the score by 3 or more.
 - **New external SDK introduced** — a dependency that was not in the baseline estimate now appears.
-- **Risk register adds a High-priority risk** — Probability × Impact crosses the High threshold per `skills/shared/risk-assessment.md`.
+- **Risk register adds a High-priority risk** — Probability × Impact crosses the High threshold per the `/pm-risk` risk matrix (`commands/pm-risk.md`).
 
 Until `/estimate --update` exists, re-running `/estimate --detailed` against the new scope and replacing the prior estimate is acceptable.
 

@@ -15,6 +15,7 @@ All available skills for the igrsoft worktask plugin.
 | [cross-plugin-handoff](cross-plugin-handoff/SKILL.md) | Protocol for handoffs between igrsoft worktask and external plugins | medium |
 | [csv-export-templates](csv-export-templates/SKILL.md) | 13-category CSV export structure for Google Sheets import | low |
 | [estimation-methodology](estimation-methodology/SKILL.md) | Complexity scoring (0-50 scale) and T-shirt sizing for project estimation | low |
+| [gh-issue-dedup](gh-issue-dedup/SKILL.md) | One GitHub issue per `.context/` across worktask runs — follow-up runs comment on the existing issue instead of opening a duplicate | low |
 | [incident-response](incident-response/SKILL.md) | Incident classification, hotfix worktask, rollback procedures, and post-mortem templates | high |
 | [logging-conventions](logging-conventions/SKILL.md) | Route runtime log capture to `.context/logs/` with filename conventions and cleanup patterns | low |
 | [megatask](megatask/SKILL.md) | Meta-orchestration of many worktasks across a GitHub milestone or issue array — dependency/blocker DAG, priority ordering, isolated per-issue worktrees, completion-driven monitor hook (the `/megatask` command) | high |
