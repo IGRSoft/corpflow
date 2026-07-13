@@ -197,6 +197,14 @@ Task({
 
 Use the `Monitor` tool to stream events from background log capture scripts. Start a background Bash process and Monitor its output for real-time incident investigation instead of polling log files with Read. Tee capture to `.context/logs/incident-<YYYYMMDD-HHMMSS>.log` (see `logging-conventions` skill) for persistence into `incident-report.md`.
 
+### Log-Primary Discipline
+
+Logs are the **primary evidence** for any finding — treat dashboards, metrics panels, and a script's stdout as pointers, not proof (dashboards paginate; aggregated panels smooth away the outlier; async timing lies about ordering). Confirm against the raw log stream before you commit a root cause to `incident-N.md`.
+
+- **No inference presented as fact.** If the relevant logs were not pulled, are unavailable, or were truncated, say so explicitly and label the conclusion an inference — never let an unverified guess read as an established finding in the Timeline or Root Cause Analysis.
+- **Dedup before you count.** The same job/request/trace id appearing N times is one failure retried, not N distinct failures — cross-reference ids before reporting any count, or the blast-radius and severity call inflate.
+- **Record the window and volume.** Note the time window queried and the number of log lines pulled in `incident-N.md`, so a truncated or too-narrow capture is visible to reviewers rather than mistaken for the whole picture.
+
 ### Observability-Driven Investigation
 
 When root cause is unclear, leverage observability data:

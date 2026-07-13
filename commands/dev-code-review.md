@@ -111,7 +111,7 @@ Goal: enumerate **every** plausible concern. **Apply NO confidence bar and NO "w
 
 **Depth scales to change size (gate):** Small diff (≤10–15 changed lines, single file) — one focused sweep against only the bug classes plausibly implicated, plus a one-line "other classes: n/a"; skip the per-class "none" enumeration and the mandatory riskiest-hunk narrative. Medium / large / architecturally significant diff — the full multi-lens sweep with per-class accounting and more surrounding-context reading. (Large PRs hide far more issues than tiny ones — give them proportional scrutiny; reviewer fatigue rises past ~400 changed lines, so slow down on large diffs, do not skim.)
 
-For **each changed hunk**, first reason briefly (internal scratchpad, not written to the artifact): *what is this code supposed to do; trace the main path plus at least one error / empty / null / boundary / concurrency path; what does it assume about its callers?* Then sweep it against the **12-class bug checklist**, treating each class as a separate lens. On a medium/large diff, reach an explicit decision for every class — a hit becomes a candidate; a clean class is noted "none" so the omission is visible, not silent:
+For **each changed hunk**, first reason briefly (internal scratchpad, not written to the artifact): *what is this code supposed to do; trace the main path plus at least one error / empty / null / boundary / concurrency path; what does it assume about its callers?* Then sweep it against the **13-class bug checklist**, treating each class as a separate lens. On a medium/large diff, reach an explicit decision for every class — a hit becomes a candidate; a clean class is noted "none" so the omission is visible, not silent:
 
 1. **Correctness vs. intent** — logic errors, inverted conditions, wrong operator, copy-paste slips, **and any acceptance criterion from the intent check left unimplemented**.
 2. **Edge cases** — empty/null/zero/negative/very-large inputs, single-element collections, first/last iteration.
@@ -125,6 +125,7 @@ For **each changed hunk**, first reason briefly (internal scratchpad, not writte
 10. **State / persistence / migration** — schema/migration correctness, default values, data-loss on write, cache/state coherence, idempotency.
 11. **Performance cliffs** — accidental O(n²), N+1 queries, work in hot loops, unbounded growth, blocking the main thread.
 12. **Regressions to existing behavior** — does this change a previously-working path, including a latent path the change now newly *activates* or makes reachable? A changed default/constant/threshold that alters an untouched consumer's behavior is the classic silent regression — verify those consumers.
+13. **Hallucinated / nonexistent dependencies** — imports/requires/`use`s that resolve to no real, declared dependency (absent from Package.swift/Podfile/`*.gradle`/package.json/requirements.txt); invented API methods or plausible-but-absent symbols; calls into a deprecated or removed API of the version actually resolved. AI-generated code fabricates plausible-but-absent packages and methods at rates hand-written code does not — and this stage's diff **is** AI-generated — so give it a dedicated lens. This class does not overlap the resource (6), error-handling (4), or contract (9) lenses above: a fabricated symbol can type-check locally yet resolve to nothing at build time.
 
 ### Phase 2 — VERIFICATION & FILTERING (the only place you suppress)
 
@@ -155,7 +156,7 @@ If verification is **BLOCKED** — the caller/consumer/threading-model is not re
 Do NOT skip this — it catches the misses. (On a small diff per the Phase-1 size gate, steps 2–3 collapse to one line confirming the implicated classes were considered.)
 
 1. **Coverage**: confirm you examined **every changed file and every hunk**. If any was skipped, go back now. This is the basis of the mandatory coverage statement (`N files, M hunks reviewed`).
-2. **What did I miss?**: re-read the full diff once more against the 12-class bug checklist. **Treat your own silence as a red flag, not a success** — but do not manufacture a finding to break the silence; a genuinely earned clean pass is valid.
+2. **What did I miss?**: re-read the full diff once more against the 13-class bug checklist. **Treat your own silence as a red flag, not a success** — but do not manufacture a finding to break the silence; a genuinely earned clean pass is valid.
 3. **Highest-risk hunks**: for the 1–3 riskiest changes (medium/large diffs), explicitly answer "**what is the most likely way this breaks in production?**" If you have no answer, you have not looked hard enough.
 4. For anything you considered and **dismissed**, keep a one-line reason (in your reasoning; not necessarily written to the artifact).
 
