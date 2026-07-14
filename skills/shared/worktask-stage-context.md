@@ -32,6 +32,11 @@ sizes which stages run by complexity score (AR/TL/DC may be dropped for low-comp
 | 4 | DV | Development | Implement the planned changes (developer routes to the platform specialist). |
 | 5 | DR | Developer Review | Gate code quality with a read-only developer review before QA. |
 | 6 | SR | Security Review | Assess security/OWASP exposure of the change (11-stage / secure only). |
+
+### Stages 7–11
+
+| # (11) | Code | Stage | Role (one line) |
+|--------|------|-------|-----------------|
 | 7 | QA | QA Testing | Select and run tests, add edge-case coverage, verify acceptance. |
 | 8 | DC | Documentation | Update code docs, README, and project docs for the change. |
 | 9 | RE | Release Engineering | Prepare versioning, changelog, and release artifacts (11-stage only). |

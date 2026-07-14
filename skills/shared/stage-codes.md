@@ -24,6 +24,8 @@ Single source of truth for worktask stage codes.
 | ST | Stakeholder | stakeholder | sonnet |
 | IR | Incident Response | incident-responder | sonnet |
 
+### DV routing note
+
 > DV defaults to `developer` (platform app code). For plugin worktask-infrastructure scope (`skills/worktask/scripts/*.sh`, the stage state-machine, `hooks/**`), PL0 routes DV to `workflow-engineer` instead — see `agents/product-manager.md` § Dynamic Worktask Sizing → DV0 routing override. This table keeps the single unconditional default; the conditional rule lives there.
 
 ## Model Lookup
@@ -50,7 +52,11 @@ Support-agent model assignments live in the Support Agents table below.
 
 Support agents don't own worktask stages but can be invoked on-demand via Task tool.
 
+### Model alias notes
+
 > Model column uses aliases (`opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-4-8`) are also supported in agent frontmatter. Use aliases for portability across providers. **Fable 5** = `claude-fable-5`, the Mythos-class top reasoning model — the `fable` alias resolves only on CC ≥ 2.1.170 and degrades to the provider default below that (live degrade caveat); Current: it ships **1M context by default**, which fails dispatch on accounts without 1M credits (degrade guidance: `skills/shared/model-selection.md`). Under a managed `availableModels` allowlist (applied to subagent overrides since v2.1.172; `enforceAvailableModels` since v2.1.175) any alias here may silently resolve to a different model. **Opus 4.8** is the prior top Claude model; Opus 4.6 and Opus 4.7 remain supported. Auto mode is available for Max subscribers on Opus 4.8 and does not require `--enable-auto-mode`.
+
+### Default effort
 
 > **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans. Only Pro plan retains medium default. Agents with explicit `effort:` frontmatter are unaffected.
 

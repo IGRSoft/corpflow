@@ -8,6 +8,8 @@ rarely changes the recommendation.
 
 Read top-down and stop early once the picture is clear enough to scope, phase, and size the work.
 
+### Sources 1–3 — state, memory, git
+
 1. **In-flight worktask state** — `.context/state.json` and the latest `.context/planning-*.md`
    (highest N). Tells you whether this request overlaps active work, and what was already decided.
    Skip if `.context/` doesn't exist.
@@ -15,6 +17,9 @@ Read top-down and stop early once the picture is clear enough to scope, phase, a
    present. Surfaces constraints, conventions, and recent decisions not visible in code.
 3. **Recent git activity** — `git status` (uncommitted work in progress) and `git log --oneline -15`
    (direction of travel, naming conventions, what shipped lately).
+
+### Sources 4–5 — code and existing capabilities
+
 4. **The code the request touches** — use the `Explore` agent for "where does X live / how is Y done
    here" questions. Ask for the conclusion (files, patterns, existing utilities to reuse), not a file
    dump. Only read individual files directly when you already know the path and need specifics.

@@ -61,6 +61,8 @@ Start an emergency worktask:
 
 Create `.context/incident-N.md` (N from `task.metadata.run_index`; first run writes `incident-0.md`):
 
+#### Artifact template — summary & impact
+
 ```markdown
 ## Incident Report
 
@@ -78,7 +80,11 @@ Create `.context/incident-N.md` (N from `task.metadata.run_index`; first run wri
 - **Services impacted**: [list]
 - **Business impact**: [description]
 - **Blast radius**: [scope]
+```
 
+#### Artifact template — timeline, RCA & resolution
+
+```markdown
 ### Timeline
 | Time | Event |
 |------|-------|
@@ -200,6 +206,8 @@ Use the `Monitor` tool to stream events from background log capture scripts. Sta
 ### Log-Primary Discipline
 
 Logs are the **primary evidence** for any finding — treat dashboards, metrics panels, and a script's stdout as pointers, not proof (dashboards paginate; aggregated panels smooth away the outlier; async timing lies about ordering). Confirm against the raw log stream before you commit a root cause to `incident-N.md`.
+
+#### Log evidence rules
 
 - **No inference presented as fact.** If the relevant logs were not pulled, are unavailable, or were truncated, say so explicitly and label the conclusion an inference — never let an unverified guess read as an established finding in the Timeline or Root Cause Analysis.
 - **Dedup before you count.** The same job/request/trace id appearing N times is one failure retried, not N distinct failures — cross-reference ids before reporting any count, or the blast-radius and severity call inflate.

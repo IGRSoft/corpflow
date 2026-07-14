@@ -154,7 +154,12 @@ function initializeWorkspace(
 
   // 2. Create .context/ inside the worktree
   // mkdir -p ${worktreePath}/.context
+```
 
+### initializeWorkspace — workspace.json write
+
+```typescript
+  // …continued: initializeWorkspace body
   // 3. Write workspace.json inside the worktree
   const workspace = {
     version: '2.0',
@@ -230,7 +235,12 @@ function createIssueWorktree(
 
   // 3. Create .context/ inside the worktree
   // mkdir -p ${worktreePath}/.context
+```
 
+#### createIssueWorktree — workspace.json write
+
+```typescript
+  // …continued: createIssueWorktree body
   // 4. Write workspace.json inside the worktree
   const workspace = {
     version: '2.0',
@@ -276,7 +286,12 @@ function removeIssueWorktree(
   args.push(worktreePath);
   // git worktree remove [--force] ${worktreePath}
   execFileNoThrow('git', args);
+```
 
+#### removeIssueWorktree — prune and return
+
+```typescript
+  // …continued: removeIssueWorktree body
   // 3. Prune stale worktree entries
   // Note: Stale worktrees from interrupted runs are auto-cleaned on startup (2.1.76+)
   // Manual prune as fallback:
@@ -310,7 +325,12 @@ function createSparseWorktree(
 
   // 3. Create .context/ inside worktree
   // mkdir -p ${worktreePath}/.context
+```
 
+#### createSparseWorktree — workspace.json write
+
+```typescript
+  // …continued: createSparseWorktree body
   // 4. Write workspace.json (same as createIssueWorktree)
   const workspace = {
     version: '2.0',
@@ -388,7 +408,12 @@ function completeIssueWorktree(
   // gh pr create --base ${workspace.git.base_branch} \
   //   --title "#${issueNumber} ${workspace.issue.title}" \
   //   --body "Closes #${issueNumber}"
+```
 
+#### completeIssueWorktree — orchestrator update and cleanup
+
+```typescript
+  // …continued: completeIssueWorktree body
   // 4. Update orchestrator (in main repo root)
   updateOrchestratorIssue('.worktrees/orchestrator.json', issueNumber, {
     status: 'completed',

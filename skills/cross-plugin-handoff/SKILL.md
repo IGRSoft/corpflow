@@ -24,6 +24,8 @@ For plugin-specific protocol tables and error handling, see `${CLAUDE_SKILL_DIR}
 
 The canonical schema lives at `skills/worktask/references/handoff-protocol.md` (frontmatter + state.json + cache layout). Cross-plugin agents (e.g. `apple-developer:ios-developer`, `apple-developer:macos-developer`, `system-developer:c-developer`, `system-developer:cpp-developer`, `system-developer:python-developer`, `system-developer:bash-developer`, `android-developer:android-phone-developer`, `android-developer:kotlin-architector`, `debugging-toolkit:*`, `security-scanning:*`) MUST adopt the **full schema** when they take over a worktask stage:
 
+### Required schema elements
+
 - Artifact starts with `---\nhandoff:\n` YAML block per `handoff-protocol.md#frontmatter-schema`.
 - Per-stage required fields per `handoff-protocol.md#frontmatter-schema § Per-stage required-field matrix`.
 - state.json patched per `handoff-protocol.md#atomic-write` (or omitted — orchestrator's SubagentStop hook will repair).
@@ -53,7 +55,13 @@ handoff:
 ---
 ```
 
-The `error_file` for an apple-developer agent is `.context/errors/ios-developer.md` (last segment of qualified name) per `task-system.md § error_file derivation`. The same rule applies to system-developer agents (e.g., `.context/errors/c-developer.md`, `.context/errors/sys-code-fixer.md`) and android-developer agents (e.g., `.context/errors/android-phone-developer.md`, `.context/errors/kotlin-architector.md`). system-developer DV takeovers follow the identical frontmatter shape; note that systems work defaults `metadata.requires_screenshots: false` and supplies Build Evidence (terminal transcripts under `.context/logs/`) via the `cli_fallback_adapter` instead of UI screenshots. android-developer DV takeovers default `metadata.requires_screenshots: true` and supply Build Evidence via the `android_adapter` (`adb exec-out screencap -p`) plus Gradle build/test transcripts under `.context/logs/`; there is no Android build MCP, so builds run through scoped `Bash(gradle:*|./gradlew|adb:*)`.
+#### error_file derivation
+
+The `error_file` for an apple-developer agent is `.context/errors/ios-developer.md` (last segment of qualified name) per `task-system.md § error_file derivation`. The same rule applies to system-developer agents (e.g., `.context/errors/c-developer.md`, `.context/errors/sys-code-fixer.md`) and android-developer agents (e.g., `.context/errors/android-phone-developer.md`, `.context/errors/kotlin-architector.md`).
+
+#### Build evidence defaults
+
+system-developer DV takeovers follow the identical frontmatter shape; note that systems work defaults `metadata.requires_screenshots: false` and supplies Build Evidence (terminal transcripts under `.context/logs/`) via the `cli_fallback_adapter` instead of UI screenshots. android-developer DV takeovers default `metadata.requires_screenshots: true` and supply Build Evidence via the `android_adapter` (`adb exec-out screencap -p`) plus Gradle build/test transcripts under `.context/logs/`; there is no Android build MCP, so builds run through scoped `Bash(gradle:*|./gradlew|adb:*)`.
 
 ## #relaxed-profile
 
@@ -212,6 +220,8 @@ External agent should:
 
 The orchestrator loop dispatches `metadata.agent` directly. **Convention**: always emit fully-qualified `plugin:agent` form (e.g., `igrsoft:developer`, `apple-developer:ios-developer`). A back-compat shim still prepends `igrsoft:` to bare names but logs a deprecation warning. This convention enables PL0 to route stages to any plugin agent — `igrsoft:`, `apple-developer:`, or any other installed plugin — using identical syntax at every call site.
 
+### Direct dispatch example
+
 ```typescript
 // PL0 creates a DV stage task routed directly to apple-developer.
 // error_file derives from basename (last ':'-separated segment) → ios-developer.md.
@@ -229,6 +239,8 @@ TaskCreate({
   }
 });
 ```
+
+### When to use direct dispatch
 
 Use direct dispatch when:
 - The task is entirely within one external plugin's domain (e.g., pure Swift/Apple work)

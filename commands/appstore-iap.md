@@ -41,7 +41,7 @@ by inspecting the project source, then drives the entire App Store Connect setup
 
 ### Phase 1 — Locate or Generate Products.plist
 
-**1.1 — Search for existing plist**
+#### 1.1 — Search for existing plist
 
 Search the local filesystem for a `Products.plist` associated with the target bundle ID.
 Look in common locations relative to the project root:
@@ -58,7 +58,7 @@ Supporting Files/Products.plist
 Also search for any `.plist` file containing the bundle ID prefix as a string
 (e.g. files referencing `com.igrsoft.newapp.tip`).
 
-**1.2 — If found: read and validate**
+#### 1.2 — If found: read and validate
 
 Parse the plist. Confirm it contains at least one of:
 - `Products` array with product entries
@@ -67,7 +67,7 @@ Parse the plist. Confirm it contains at least one of:
 If the plist exists but uses the legacy short-form (product IDs without bundle prefix),
 expand each ID by prepending `<bundle.id>.`.
 
-**1.3 — If not found: generate Products.plist**
+#### 1.3 — If not found: generate Products.plist
 
 Inspect the project source to discover all IAP and subscription product IDs. Look for:
 
@@ -75,6 +75,8 @@ Inspect the project source to discover all IAP and subscription product IDs. Loo
   `Transaction`, `.appTransaction`, any string matching the bundle ID pattern
 - Any existing `StoreKit Configuration File` (`.storekit`) — parse it directly if present
 - `Info.plist`, entitlements files, or build settings referencing IAP product IDs
+
+##### Inference rules
 
 From the discovered product IDs, infer:
 - **Type**: Non-Consumable, Consumable, or Auto-Renewable Subscription
@@ -90,6 +92,8 @@ From the discovered product IDs, infer:
   based on the product ID suffix and app purpose (inferred from README or source)
 - **Review Notes**: default to `"go Settings -> Support the Developer"` unless source indicates otherwise
 
+##### Products.plist template — header
+
 Write the generated `Products.plist` to the project root using this format:
 
 ```xml
@@ -97,7 +101,12 @@ Write the generated `Products.plist` to the project root using this format:
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+```
 
+##### Products.plist template — Products array
+
+```xml
+<!-- …continued: Products array -->
   <key>Products</key>
   <array>
     <dict>
@@ -120,7 +129,12 @@ Write the generated `Products.plist` to the project root using this format:
       </array>
     </dict>
   </array>
+```
 
+##### Products.plist template — Subscriptions group
+
+```xml
+<!-- …continued: Subscriptions array -->
   <key>Subscriptions</key>
   <array>
     <dict>
@@ -132,6 +146,12 @@ Write the generated `Products.plist` to the project root using this format:
           <key>Duration</key>     <string>1 Month</string>
           <key>PriceUSD</key>     <real>0.99</real>
           <key>ReviewNotes</key>  <string>go Settings -> Support the Developer</string>
+```
+
+##### Products.plist template — subscription localizations & closing
+
+```xml
+<!-- …continued: subscription Localizations + closing tags -->
           <key>Localizations</key>
           <array>
             <dict>
@@ -153,6 +173,8 @@ Write the generated `Products.plist` to the project root using this format:
 </dict>
 </plist>
 ```
+
+#### Confirmation gate
 
 Print the generated file path and contents, then pause and ask the user to confirm before proceeding:
 
@@ -178,7 +200,7 @@ Find the app by bundle ID, open it, then go to **In-App Purchases**.
 
 **For each entry in the plist `Products` array (cheapest `PriceUSD` first):**
 
-**2.1 — Create**
+#### 2.1 — Create
 - Click `(+)` / `Create`
 - Set `Type` from plist entry
 - Set `Reference Name` to the last dot-segment of `ProductID`
@@ -186,7 +208,7 @@ Find the app by bundle ID, open it, then go to **In-App Purchases**.
 - Set `Product ID` to the full `ProductID` from plist
 - Click **Create**
 
-**2.2 — Set Price**
+#### 2.2 — Set Price
 - Scroll to `Price Schedule` → click `Add Pricing`
 - Base country defaults to `United States (USD)` — leave it
 - In the `Price` dropdown, type the price to filter (e.g. `1.99`), select the match
@@ -194,7 +216,7 @@ Find the app by bundle ID, open it, then go to **In-App Purchases**.
 - Click **Next** on the country confirmation screen
 - Click **Confirm**
 
-**2.3 — Add Localizations**
+#### 2.3 — Add Localizations
 
 For each localization entry in the plist:
 - Click `Add Localization` (or `+` next to App Store Localization)
@@ -211,10 +233,10 @@ For each localization entry in the plist:
 - Click **Create**
 - Repeat for remaining localizations
 
-**2.4 — Add Review Notes**
+#### 2.4 — Add Review Notes
 - Scroll to `Review Notes` textarea, click, type `ReviewNotes` from plist
 
-**2.5 — Save**
+#### 2.5 — Save
 - Click **Save** — confirm `✓ Saved` before moving to the next IAP
 
 ---

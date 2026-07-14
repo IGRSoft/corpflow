@@ -40,7 +40,7 @@ Apply RICE, WSJF, or other prioritization frameworks to rank features and tasks.
 ## Output Format
 
 ### RICE Framework (Default)
-```markdown
+~~~markdown
 # RICE Prioritization: Add Dark Mode Support
 
 ## Scores
@@ -59,7 +59,12 @@ RICE = (Reach × Impact × Confidence) / Effort
 RICE = (5000 × 2 × 0.8) / 2
 RICE = 4,000
 ```
+~~~
 
+#### RICE — priority, ranking, recommendation
+
+```markdown
+<!-- …continued: RICE output -->
 ## Priority: **High**
 
 ### Ranking Context

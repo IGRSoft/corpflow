@@ -42,7 +42,11 @@ Flat bullet list, one bullet per diff hunk. Keep it short — detail belongs in 
 
 Numbered checklist. **Each item is independently approvable.** The orchestrator reads which boxes the user ticked and passes only those to `prompt-engineer`.
 
-```markdown
+**Ordering:** sort proposals by `confidence desc` then `category` then `target path asc`. High-confidence items appear first so the user approves the strongest signals quickly.
+
+### Proposed Updates Example
+
+~~~markdown
 ## Proposed Updates
 
 - [ ] **#1 — agents/developer.md — `completeness` — confidence: high**
@@ -60,10 +64,8 @@ Numbered checklist. **Each item is independently approvable.** The orchestrator 
   - **Proposed edit:** (diff block showing new hierarchy)
   - **Target location:** lines 44–72
   - **Version bump:** patch
-  - **Rationale:** cleaner cognitive load; user preference confirmed once.
-```
-
-**Ordering:** sort proposals by `confidence desc` then `category` then `target path asc`. High-confidence items appear first so the user approves the strongest signals quickly.
+  - **Rationale:** cleaner cognitive load; confirmed once.
+~~~
 
 ## Section 4 — Deferred (Low Confidence)
 

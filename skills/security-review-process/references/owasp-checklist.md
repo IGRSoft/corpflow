@@ -73,6 +73,8 @@ blocker. State commands package-manager-agnostically — the SwiftPM `Package.re
 lockfile is the local analog (`npm audit`/`npm ci` are npm-project examples, not the sole
 directive).
 
+### Checklist
+
 ```markdown
 - [ ] Dependency versions current
 - [ ] No known CVEs in dependencies

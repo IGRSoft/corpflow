@@ -60,7 +60,7 @@ and are primarily used with `--type tdr` technology assessments.
 
 Creates file: `docs/adr/ADR-XXX-title.md`
 
-```markdown
+~~~markdown
 # ADR-015: Use PostgreSQL for Primary Database
 
 ## Status
@@ -76,7 +76,12 @@ We need to select a primary database for storing user data, transactions, and ap
 - Complex querying capabilities
 - Proven scalability to millions of records
 - Strong ecosystem and tooling support
+~~~
 
+### Output Format (ADR) — Options Considered
+
+~~~markdown
+<!-- …continued: Options Considered -->
 ### Options Considered
 
 #### Option 1: PostgreSQL
@@ -90,7 +95,12 @@ We need to select a primary database for storing user data, transactions, and ap
 #### Option 3: MongoDB
 - **Pros**: Flexible schema, horizontal scaling
 - **Cons**: Not ACID by default, eventual consistency concerns
+~~~
 
+### Output Format (ADR) — Decision & Rationale
+
+~~~markdown
+<!-- …continued: Decision -->
 ## Decision
 
 We will use **PostgreSQL** as our primary database.
@@ -101,7 +111,12 @@ We will use **PostgreSQL** as our primary database.
 3. **Strong ecosystem** with excellent ORMs and migration tools
 4. **Proven at scale** by companies with similar requirements
 5. **Team expertise** - team has PostgreSQL experience
+~~~
 
+### Output Format (ADR) — Consequences
+
+~~~markdown
+<!-- …continued: Consequences -->
 ## Consequences
 
 ### Positive
@@ -118,7 +133,12 @@ We will use **PostgreSQL** as our primary database.
 ### Neutral
 - Will use Prisma as ORM for type safety
 - Need to set up backup and replication strategy
+~~~
 
+### Output Format (ADR) — Implementation & References
+
+~~~markdown
+<!-- …continued: Implementation Notes -->
 ## Implementation Notes
 
 - Use connection pooling (PgBouncer or built-in)
@@ -135,13 +155,13 @@ We will use **PostgreSQL** as our primary database.
 
 - [PostgreSQL Documentation](https://www.postgresql.org/docs/)
 - [Prisma with PostgreSQL](https://www.prisma.io/docs/concepts/database-connectors/postgresql)
-```
+~~~
 
 ## Output Format (TDR — `--type tdr`)
 
 Creates file: `docs/tdr/TDR-XXX-title.md`
 
-```markdown
+~~~markdown
 # TDR-012: Use Zod for Runtime Validation
 
 ## Status
@@ -167,7 +187,12 @@ Current validation is inconsistent across the codebase:
 - Manual checks in some handlers
 - Joi in legacy modules
 - No validation in newer code
+~~~
 
+### Output Format (TDR) — Evaluation
+
+~~~markdown
+<!-- …continued: Evaluation -->
 ## Evaluation
 
 ### Candidates Assessed
@@ -182,7 +207,12 @@ Current validation is inconsistent across the codebase:
 | Bundle size | 10% | 4 | 3 | 2 |
 | Error messages | 5% | 5 | 4 | 4 |
 | **Weighted Score** | | **4.3** | **3.7** | **3.4** |
+~~~
 
+### Output Format (TDR) — Detailed Analysis
+
+~~~markdown
+<!-- …continued: Detailed Analysis -->
 ### Detailed Analysis
 
 #### Zod (Selected)
@@ -203,7 +233,12 @@ Current validation is inconsistent across the codebase:
 #### Joi (Considered)
 - **Pros**: Very mature, comprehensive validation
 - **Cons**: Poor TypeScript support, large bundle, Node-focused
+~~~
 
+### Output Format (TDR) — Decision & Implementation Plan
+
+~~~markdown
+<!-- …continued: Decision -->
 ## Decision
 
 We will use **Zod** for runtime validation across the codebase.
@@ -227,7 +262,12 @@ We will use **Zod** for runtime validation across the codebase.
 - Replace Joi in legacy modules
 - Add validation to unvalidated endpoints
 - Remove Joi dependency
+~~~
 
+### Output Format (TDR) — Consequences & References
+
+~~~markdown
+<!-- …continued: Consequences -->
 ## Consequences
 
 ### Positive
@@ -244,7 +284,7 @@ We will use **Zod** for runtime validation across the codebase.
 
 - [Zod Documentation](https://zod.dev/)
 - [Zod GitHub](https://github.com/colinhacks/zod)
-```
+~~~
 
 ## Record Numbering
 

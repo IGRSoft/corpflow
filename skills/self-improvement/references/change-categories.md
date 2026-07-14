@@ -4,13 +4,25 @@ Each diff hunk is assigned exactly one category plus a confidence (`high | mediu
 
 ## Category Table
 
+### Wording & structure
+
 | Category | Signal | Confidence heuristic | Typical proposal shape |
 |----------|--------|----------------------|-------------------------|
 | `tone` | Reworded sentences preserving meaning | **high** if ≥ 1 sentence reworded; **low** if ≤ 2 words swapped | Prompt wording edit |
 | `structure` | Sections added/removed/reordered; heading level changes | **high** if a new section appears; **medium** if reordered | Add/remove/reorder section in target template |
 | `accuracy` | Fact corrections: numbers, names, technical claims, typos | **high** always (factual correctness is critical) | Add constraint or correct example |
+
+### Factual & completeness
+
+| Category | Signal | Confidence heuristic | Typical proposal shape |
+|----------|--------|----------------------|-------------------------|
 | `completeness` | New content fills a genuine gap (e.g., missing edge case, new capability) | **high** if ≥ 1 paragraph added; **medium** if ≤ 1 paragraph | Add capability/responsibility/constraint bullet |
 | `style` | Formatting, naming conventions, indentation, list style | **medium** if consistent change across ≥ 2 places; **low** if one-off | Style-guide reference or explicit constraint |
+
+### Style & domain knowledge
+
+| Category | Signal | Confidence heuristic | Typical proposal shape |
+|----------|--------|----------------------|-------------------------|
 | `domain-knowledge` | Introduces project-specific rules the agent did not know (Swift 6 Sendable, project naming, internal API) | **high** always (knowledge gaps repeat) | Add domain reference, glossary, or explicit rule |
 
 ## Decision Tree

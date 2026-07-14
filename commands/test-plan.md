@@ -56,7 +56,12 @@ Generate a comprehensive test plan from requirements or code changes. Creates st
 | Unit Tests | 80% | - |
 | Integration Tests | 70% | - |
 | E2E Critical Paths | 100% | - |
+```
 
+### Template — testing framework
+
+```markdown
+<!-- …continued: testing framework -->
 ## Testing Framework
 
 | Test Type | Framework | Example |
@@ -65,7 +70,12 @@ Generate a comprehensive test plan from requirements or code changes. Creates st
 | UI Tests | XCTest | `XCUIApplication`, `XCTestCase` |
 
 **Note**: XCUITest requires XCTest framework; all other tests should use Swift Testing.
+```
 
+### Template — test cases and selection markers
+
+```markdown
+<!-- …continued: test cases, selection markers -->
 ## Test Cases
 
 ### Selection Markers (required for new test cases)
@@ -79,7 +89,12 @@ Each generated test case MUST include selection metadata so DV's parser can incl
 | `@test-tag:` | `smoke`, `regression`, `perf`, `ui`, `flaky` | Categorization |
 
 The output table for each test case (below) gains two columns: `Required?` and `Dependencies`. Columns may be empty if not applicable, but should not be omitted.
+```
 
+#### Test case examples — unit
+
+```markdown
+<!-- …continued: unit test cases -->
 ### Unit Tests
 
 #### UT-001: Token Validation
@@ -104,7 +119,12 @@ The output table for each test case (below) gains two columns: `Required?` and `
   3. Verify new token is stored
 - **Expected**: New access token returned
 - **Automation**: Yes
+```
 
+#### Test case examples — integration and E2E
+
+```markdown
+<!-- …continued: integration, E2E test cases -->
 ### Integration Tests
 
 #### IT-001: OAuth Login Flow
@@ -131,7 +151,12 @@ The output table for each test case (below) gains two columns: `Required?` and `
   5. Verify user info displayed
 - **Expected**: User sees personalized dashboard
 - **Automation**: Yes (Playwright)
+```
 
+### Template — edge cases and security tests
+
+```markdown
+<!-- …continued: edge cases, security test cases -->
 ## Edge Cases
 
 | ID | Scenario | Expected Behavior |
@@ -148,7 +173,12 @@ The output table for each test case (below) gains two columns: `Required?` and `
 | SEC-001 | Token stored securely | Not in localStorage/cookies |
 | SEC-002 | CSRF protection | State parameter validated |
 | SEC-003 | XSS in OAuth flow | No script injection possible |
+```
 
+### Template — test data and dependencies
+
+```markdown
+<!-- …continued: test data, dependencies -->
 ## Test Data Requirements
 
 | Data | Source | Notes |

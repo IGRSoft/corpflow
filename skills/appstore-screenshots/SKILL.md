@@ -16,6 +16,8 @@ Device specifications, layout patterns, typography tables, and Pencil MCP workta
 
 `scripts/layout-calc.py` encodes the full 22-device matrix and all proportional/centering formulas from the two reference files below.  One call returns paste-ready JSON for `batch_design`; the model is responsible only for op-string assembly, copy, and color.
 
+### Invocation examples
+
 ```bash
 # By device key (preferred)
 python3 ${CLAUDE_SKILL_DIR}/scripts/layout-calc.py iphone-6.9-1320x2868 --layout A
@@ -30,6 +32,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/layout-calc.py --list-devices
 python3 ${CLAUDE_SKILL_DIR}/scripts/layout-calc.py appletv-4k-3840x2160 --layout A
 ```
 
+### Output schema
+
 Output schema (compact JSON, suitable for direct interpolation into batch_design params):
 ```
 {
@@ -40,6 +44,8 @@ Output schema (compact JSON, suitable for direct interpolation into batch_design
 }
 # full-bleed devices additionally include: "full_bleed": true
 ```
+
+### Layouts and reference files
 
 Layouts available: **A** (text top / screenshot bottom-center hero), **B** (text top-left), **C** (screenshot top / text bottom), **D** (text top / large screenshot).  Op-string construction, copy, gradient stops, and color selection stay with the model.
 
@@ -111,7 +117,7 @@ Document
 
 ### Building with batch_design
 
-**Create device frame and first slide:**
+#### Create device frame and first slide
 
 ```typescript
 mcp__pencil__batch_design({
@@ -122,7 +128,7 @@ slide1=I(device, {type: "frame", name: "Slide 1 - Core Value", width: 1320, heig
 })
 ```
 
-**Add background image (bg.png):**
+#### Add background image (bg.png)
 
 ```typescript
 mcp__pencil__batch_design({
@@ -133,7 +139,7 @@ G(bg, "file", "/absolute/path/to/AppStore/images/bg.png")
 })
 ```
 
-**Add screenshot image (centered, with padding for device-like look):**
+#### Add screenshot image (centered, with padding for device-like look)
 
 Geometry values below come from `layout-calc.py iphone-6.9-1320x2868 --layout A` — use the script; do not hand-compute.
 
@@ -146,7 +152,7 @@ G(ss, "file", "/absolute/path/to/AppStore/images/01-home.png")
 })
 ```
 
-**Add text layers:**
+#### Add text layers
 
 ```typescript
 mcp__pencil__batch_design({
@@ -157,7 +163,7 @@ subtitle=I("slide1-id", {type: "text", name: "Subtitle", content: "A short benef
 })
 ```
 
-**Full-bleed layout (tvOS/watchOS) — no text, no device frame:**
+#### Full-bleed layout (tvOS/watchOS) — no text, no device frame
 
 ```typescript
 mcp__pencil__batch_design({

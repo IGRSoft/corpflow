@@ -2,6 +2,8 @@
 
 Canonical specification for worktask inter-stage communication. Defines the `state.json` ledger, the YAML `handoff:` frontmatter contract, the cache-friendly preamble layout, and four documented backward-compat fallback paths.
 
+## Referenced by
+
 This file is the single source of truth referenced by:
 
 - `skills/shared/stage-contracts.md` — Required Inputs / Required Outputs vocabulary
@@ -23,6 +25,8 @@ read-merge-rename window is serialized by an mkdir-spinlock (macOS has no `flock
 legal sibling overlap (parallel DVN tracks, DC+QA) cannot drop a patch to last-rename-wins.
 POSIX-shell pseudocode:
 
+### Lock acquisition (step 0)
+
 ```bash
 # 0. Acquire the merge lock (mkdir is atomic on POSIX). Env knobs:
 #    STATE_LOCK_TIMEOUT_S (default 5), STATE_LOCK_STALE_S (default 60).
@@ -36,7 +40,12 @@ until mkdir "$lockdir" 2>/dev/null; do
   sleep 1; waited=$(( waited + 1 ))
 done
 trap 'rmdir "$lockdir" 2>/dev/null' EXIT   # release on process end/failure
+```
 
+### Merge, write, rename (steps 1–6)
+
+```bash
+# …continued: same script, after lock acquisition
 # 1. Read current state (last-known-good)
 cur=$(cat .context/state.json)
 
@@ -57,12 +66,14 @@ mv -f "$tmp" .context/state.json
 rmdir "$lockdir" 2>/dev/null
 ```
 
-Failure semantics:
+### Failure semantics
 
 - Crash before step 3 — state.json untouched (last-known-good preserved).
 - Crash between 3 and 5 — temp file orphaned in `.context/`. Cleanup on next worktask start: `rm -f .context/.state.json.*.tmp`. state.json untouched.
 - Crash after 5 — state.json contains new value. Idempotent (re-running merge with same patch is a no-op).
 - Crash while holding the lock — the EXIT trap releases it; a crash that skips the trap leaves a lock dir that the next writer breaks once it is older than `STATE_LOCK_STALE_S`.
+
+### Single-writer invariant
 
 Single-writer invariant (revised): **one writer per stage KEY**. Sibling overlap is legal —
 two stages (or two parallel DVN tracks writing distinct keys) may merge concurrently; the
@@ -73,6 +84,8 @@ leaked lock silently swallow merges). The lock lives only in `state-patch.sh`'s 
 the SubagentStop hook inherits it by delegation. The legacy `_inline_merge` fallback in
 `state-merge.sh` (used only when `state-patch.sh` is absent) stays unlocked — a documented
 transitional residual.
+
+### Lock implementation
 
 The lock implementation is `skills/worktask/scripts/state-patch.sh` (`_lock_acquire` /
 `_lock_release` / `_lock_break_if_stale`); the two env knobs mirror the `DISK_MIN_GB` pattern.
@@ -86,6 +99,8 @@ The lock implementation is `skills/worktask/scripts/state-patch.sh` (`_lock_acqu
 Every stage artifact (planning-N.md, analyzing-N.md, coordination-N.md, development-N.md, …) MUST start with a YAML block between `^---$` markers. Token budget ≤200. Line budget ≤30.
 
 JSON-Schema-style spec:
+
+### Schema — handoff base
 
 ```yaml
 $schema: https://json-schema.org/draft/2020-12/schema
@@ -106,6 +121,12 @@ properties:
       summary:
         type: string
         maxLength: 200
+```
+
+### Schema — key_decisions, files_touched, next_stage_focus
+
+```yaml
+# …continued: handoff.properties
       key_decisions:
         type: array
         maxItems: 8
@@ -122,6 +143,12 @@ properties:
       next_stage_focus:
         type: string
         maxLength: 240
+```
+
+### Schema — open_questions, refs, constraints
+
+```yaml
+# …continued: handoff.properties
       open_questions:
         type: array
         items:
@@ -143,6 +170,8 @@ constraints:
 
 ### Per-stage required-field matrix
 
+#### Stages PL–DR
+
 | Stage | Required (beyond base 4) | Optional | Verdict vocabulary |
 |-------|--------------------------|----------|--------------------|
 | PL | next_stage_focus, key_decisions | files_touched, open_questions | ok / blocked / escalate |
@@ -150,6 +179,11 @@ constraints:
 | TL | next_stage_focus | key_decisions, files_touched | ok / blocked / escalate |
 | DV | files_touched, next_stage_focus | key_decisions, open_questions | ok / blocked / escalate |
 | DR | key_decisions (= findings) | files_touched, open_questions | pass / fail |
+
+#### Stages SR–ET
+
+| Stage | Required (beyond base 4) | Optional | Verdict vocabulary |
+|-------|--------------------------|----------|--------------------|
 | SR | key_decisions (= findings) | files_touched | pass / fail |
 | QA | files_touched (= tests added), key_decisions (= results) | open_questions | go / no-go |
 | DC | files_touched | key_decisions | ok / blocked / escalate |
@@ -171,9 +205,13 @@ Canonical typed-return schemas. These are the single source of truth for the str
 
 Typed `schema` returns replace prose-frontmatter scraping **on the typed path**, but each stage STILL mirrors its result to `state.json facts` and writes its `.context/<stage>-N.md` artifact with `handoff:` frontmatter (durability, human readability, F4 regeneration — see `#frontmatter-schema`, `#fallback-paths`). The typed return is a *parallel, validated* channel; the frontmatter is the *cache-friendly compressed on-disk* channel. Neither replaces the other.
 
+### Schema conventions
+
 Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST match that stage's row in `#frontmatter-schema § Per-stage required-field matrix`** — the typed return and the frontmatter share one verdict vocabulary per stage. The `required` field set is the typed superset of that stage's frontmatter required fields (e.g. DR's `key_decisions (= findings)` becomes the typed `findings`/`blockers` arrays).
 
 > **Cache-prefix note (binding, PRESERVE §4.1).** The schema is passed as a `Task()`/`agent()` **argument**, never inserted into preamble sections [1][2][4]. Adding schema dispatch therefore does NOT touch cache-prefix byte-identity (`#cache-prefix`).
+
+### PLHandoff
 
 ```json
 {
@@ -192,6 +230,8 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
 }
 ```
 
+### ARHandoff
+
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -208,6 +248,8 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
 }
 ```
 
+### TLHandoff
+
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -222,6 +264,8 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
   }
 }
 ```
+
+### DVHandoff
 
 ```json
 {
@@ -239,6 +283,8 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
 }
 ```
 
+### DRHandoff
+
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -253,6 +299,8 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
   }
 }
 ```
+
+### SRHandoff
 
 ```json
 {
@@ -269,6 +317,8 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
 }
 ```
 
+### QAHandoff
+
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -284,6 +334,8 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
 }
 ```
 
+### DCHandoff
+
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -297,6 +349,8 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
   }
 }
 ```
+
+### REHandoff
 
 ```json
 {
@@ -312,6 +366,8 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
   }
 }
 ```
+
+### FNHandoff
 
 ```json
 {
@@ -329,6 +385,8 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
 }
 ```
 
+### STHandoff
+
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -342,6 +400,8 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
   }
 }
 ```
+
+### IRHandoff
 
 ```json
 {
@@ -357,6 +417,8 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
   }
 }
 ```
+
+### ETHandoff
 
 ```json
 {
@@ -379,6 +441,8 @@ artifact anchor (`#anchor-allow-list`). The orchestrator applies this map when a
 present (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6). When no typed return is present, the same targets are
 populated from the artifact's `handoff:` frontmatter instead (F2/F3) — the map is channel-agnostic.
 
+#### Map — PL, AR, TL
+
 | Schema field | state.json target | Artifact anchor |
 |--------------|-------------------|-----------------|
 | `PL.verdict` | `stages.PL.verdict` | planning-N.md (frontmatter) |
@@ -388,11 +452,21 @@ populated from the artifact's `handoff:` frontmatter instead (F2/F3) — the map
 | `AR.key_decisions` | `facts.decisions[]` | analyzing-N.md `## decisions` |
 | `TL.verdict` | `stages.TL.verdict` | coordination-N.md `## fan-out` |
 | `TL.fanout` | (DV sub-task prompts; not a ledger field) | coordination-N.md `## fan-out` |
+
+#### Map — DV
+
+| Schema field | state.json target | Artifact anchor |
+|--------------|-------------------|-----------------|
 | `DV.verdict` | `stages.DV.verdict` | development-N.md `## deviations` (summary line) |
 | `DV.files_modified` | `facts.files_modified` (union) | development-N.md `## files-changed` |
 | `DV.tests_added` | `facts.tests_added` (union) | development-N.md `## tests-added` |
 | `DV.build_status` | `stages.DV.status` derivation | development-N.md `## deviations` |
 | `DV.decisions` | `facts.decisions[]` | development-N.md (inline) |
+
+#### Map — DR, SR, QA, DC, RE
+
+| Schema field | state.json target | Artifact anchor |
+|--------------|-------------------|-----------------|
 | `DR.verdict` | `stages.DR.verdict` + `facts.verdicts.DR` | developer-review-N.md `## verdict` |
 | `DR.findings`/`blockers` | `facts.decisions[]` (= findings) | developer-review-N.md `## findings`/`## blockers` |
 | `SR.*` | mirrors DR targets (`facts.verdicts.SR`) | security-review-N.md |
@@ -402,6 +476,11 @@ populated from the artifact's `handoff:` frontmatter instead (F2/F3) — the map
 | `DC.files_modified` | `facts.files_modified` (union) | documentation-N.md `## files-changed` |
 | `RE.verdict` | `stages.RE.verdict` | release-N.md `## version` |
 | `RE.version` | `facts.decisions[]` (version) | release-N.md `## version` |
+
+#### Map — FN, ST, IR, ET, worktree
+
+| Schema field | state.json target | Artifact anchor |
+|--------------|-------------------|-----------------|
 | `FN.verdict` | `stages.FN.verdict` | complete-summary-N.md `## summary` |
 | `FN.pr_url` | `handoffs["RE→FN"]`/`DC→FN` (ref pointer) | complete-summary-N.md `## artifacts` |
 | `ST.verdict` | `stages.ST.verdict` + `facts.verdicts.ST` | retrospective-N.md `## decision` |
@@ -410,6 +489,8 @@ populated from the artifact's `handoff:` frontmatter instead (F2/F3) — the map
 | `ET.verdict` | `stages.ET.verdict` + `facts.verdicts.ET` | ethics-review-N.md `## verdict` |
 | `DV.worktree_path` | `stages.DV.worktree.path` | development-N.md (frontmatter `worktree_path`) |
 | `DV.worktree_branch` | `stages.DV.worktree.branch` | development-N.md (frontmatter `worktree_branch`) |
+
+#### Additive-field writers
 
 The v1 additive fields have **orchestrator-loop / hook writers**, not schema-mapped stage returns
 (`facts.dispatched_agents[]`, `stages.<CODE>.last_error`, `stages.<CODE>.completed_via`,
@@ -425,6 +506,8 @@ Only `stages.<CODE>.worktree` maps from a stage artifact — the DV handoff fron
 
 JSON-Schema-style spec:
 
+#### Ledger root
+
 ```yaml
 $schema: https://json-schema.org/draft/2020-12/schema
 title: WorktaskStateLedger
@@ -436,6 +519,12 @@ properties:
   plan_file: { type: string }
   platform: { type: string, enum: [all, apple, ios, macos, watchos, tvos, visionos, web, server] }
   run_index: { type: integer, minimum: 0, default: 0 }
+```
+
+#### stages
+
+```yaml
+# …continued: WorktaskStateLedger.properties.stages
   stages:
     type: object
     additionalProperties:
@@ -450,55 +539,48 @@ properties:
         error_file: { type: string }
         progress:
           type: object
-          description: |
-            OPTIONAL. Budget-aware checkpoint for multi-batch stages (currently DV).
-            Written after each sub-batch commit so a budget-exhausted agent leaves a
-            resumable record instead of a progress narration. The orchestrator reads
-            `next_batch` to resume the stage from where it stopped (see
-            `agents/developer.md § Budget-Aware Checkpointing` and
-            `skills/worktask/SKILL.md § Orchestrator Execution Loop` step 4.7).
-            Stores batch ids only — never diffs, file contents, or test output.
+          description: "OPTIONAL. Budget-aware checkpoint — see field notes"
           properties:
             completed_batches: { type: array, items: { type: string } }
             next_batch: { type: string, description: "id of the next pending sub-batch, or absent when done" }
             updated_at: { type: string, format: date-time }
+```
+
+#### stages — completed_via, last_error
+
+```yaml
+# …continued: WorktaskStateLedger.properties.stages.additionalProperties.properties
         completed_via:
           type: string
           enum: [hook, step6_5, f3]
-          description: |
-            OPTIONAL (additive, version:1). Which enforcement layer stamped this stage
-            `completed`. `hook` = SubagentStop delegation (Layer 2, `state-merge.sh` default);
-            `step6_5` = orchestrator synchronous Step-6.5 (`STATE_MERGE_VIA=step6_5`);
-            `f3` = orchestrator F3 minimal-patch fallback. **Absence encodes Layer-1 agent
-            self-patch OR a pre-upgrade run** — the hook's idempotency check exits before
-            writing when Layer 1 already landed, so no value is stamped. Observability only;
-            no consumer behavior branches on it.
+          description: "OPTIONAL (additive, version:1) — see field notes"
         last_error:
           type: object
-          description: |
-            OPTIONAL (additive, version:1). Written by the orchestrator Step-6.5 errored-return
-            branch (CC ≥ 2.1.199/2.1.200 propagate errors with partial work) BEFORE routing to
-            the retry matrix. `class` reuses the EXISTING taxonomy from
-            `agent-coordination § Retry / Escalate Matrix` — no new vocabulary. Dropped once the
-            stage reaches `status: completed` (see eviction rules).
+          description: "OPTIONAL (additive, version:1) — see field notes"
           required: [class, at]
           properties:
             class: { type: string, enum: [transient, logic, missing_input, ambiguous_requirements, design_flaw, hard_constraint, exhausted] }
             partial: { type: boolean, description: "partial work was preserved on the errored return" }
             at: { type: string, format: date-time }
             ref: { type: string, description: "pointer into .context/errors/<agent>.md (e.g. #retry-1)" }
+```
+
+#### stages — worktree
+
+```yaml
+# …continued: WorktaskStateLedger.properties.stages.additionalProperties.properties
         worktree:
           type: object
-          description: |
-            OPTIONAL (additive, version:1; DV primarily). Records WHICH worktree the stage ran
-            in — not just `worktree: true` semantics. Written by mapping the DV handoff
-            frontmatter `worktree_path`/`worktree_branch` (`state-patch.sh`). Lets resume
-            re-enter the exact worktree via `EnterWorktree(path)` (CC ≥ 2.1.157), DR/QA run in
-            the right dir, and fn-gate read the branch without shelling `git rev-parse`. Kept
-            through FN for PR context; dropped at archival.
+          description: "OPTIONAL (additive, version:1; DV primarily) — see field notes"
           properties:
             path: { type: string }
             branch: { type: string }
+```
+
+#### facts
+
+```yaml
+# …continued: WorktaskStateLedger.properties
   facts:
     type: object
     required: [files_modified, tests_added, decisions, open_questions, verdicts]
@@ -506,12 +588,7 @@ properties:
       goal:
         type: string
         maxLength: 240
-        description: |
-          One-sentence statement of the worktask's intent, populated by PL0 from the user-supplied task
-          description (or the issue title under a `/megatask` per-issue run). Read by stage agents that need the
-          original intent without re-reading the plan file (e.g. AR sanity-checking architecture against
-          requirements, FN composing the PR title). Supersedes the `/goal` slash directive — the directive
-          would have been a second, drift-prone surface for the same value (v3.10.1).
+        description: "One-sentence worktask intent, populated by PL0 — see field notes"
       files_modified: { type: array, items: { type: string } }
       tests_added: { type: array, items: { type: string } }
       decisions:
@@ -523,6 +600,12 @@ properties:
             id: { type: string }
             summary: { type: string, maxLength: 160 }
             ref: { type: string }
+```
+
+#### facts — open_questions, verdicts, files_read
+
+```yaml
+# …continued: WorktaskStateLedger.properties.facts.properties
       open_questions:
         type: array
         items:
@@ -538,13 +621,7 @@ properties:
       files_read:
         type: array
         maxItems: 30
-        description: |
-          Source files read by prior stages. Populated by DV; consumed by DR/QA
-          to prefer `git diff` over full re-reads. When a file appears here,
-          downstream stages SHOULD use `git diff <base>..HEAD -- <path>` instead
-          of `Read <path>`. Full reads are still permitted when the diff is
-          insufficient (e.g., reviewing surrounding context of a complex change).
-          If absent, downstream stages fall back to normal reads (backward-compat).
+        description: "Source files read by prior stages; DR/QA prefer git diff — see field notes"
         items:
           type: object
           required: [path, stage]
@@ -552,15 +629,15 @@ properties:
             path: { type: string }
             stage: { type: string, enum: [PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET] }
             lines: { type: string, description: "'all' or '<start>-<end>'" }
+```
+
+#### facts — dispatched_agents
+
+```yaml
+# …continued: WorktaskStateLedger.properties.facts.properties
       dispatched_agents:
         type: array
-        description: |
-          OPTIONAL (additive, version:1). Writer: the orchestrator loop ONLY. One entry per
-          `task_id` (NOT per stage — parallel DVN tracks share the stage code), replaced on
-          re-dispatch; dispatch history stays in `audit.jsonl`. Read by resume (`resume.md`
-          step 0) to reconcile against `claude agents --json --all` under background-default
-          dispatch (CC ≥ 2.1.198). No dispatch-timestamp field is stored (no consumer; `claude agents`
-          rows carry their own start time). Terminal entries (`status: completed|failed`) are eviction candidates.
+        description: "OPTIONAL (additive, version:1); writer: the orchestrator loop ONLY — see field notes"
         items:
           type: object
           required: [stage, task_id, subagent_type, status]
@@ -568,27 +645,36 @@ properties:
             stage: { type: string, description: "stage CODE (DV, DR, …)" }
             task_id: { type: string, description: "Task System id — the dedupe key" }
             subagent_type: { type: string, description: "resolved plugin:agent id" }
+```
+
+#### facts — dispatched_agents (continued)
+
+```yaml
+# …continued: dispatched_agents.items.properties
             agent_id: { type: string, description: "OPTIONAL launch-ack id when the runtime surfaces one (bg-default CC ≥ 2.1.198); resume degrades to best-effort subagent_type match when absent" }
             name: { type: string, description: "OPTIONAL named-spawn handle (megatask lanes); readable default names CC ≥ 2.1.196, /rename persists CC ≥ 2.1.202" }
             model_requested: { type: string, description: "OPTIONAL — metadata.model alias at dispatch" }
             model_resolved: { type: string, description: "OPTIONAL best-effort — model that actually ran (claude agents --json / audit); omit when unknown" }
             status: { type: string, enum: [launched, completed, failed] }
+```
+
+#### facts — capabilities
+
+```yaml
+# …continued: WorktaskStateLedger.properties.facts.properties
       capabilities:
         type: object
-        description: |
-          OPTIONAL (additive, version:1). Probe cache for account-level hard-fails so every
-          later stage does not re-hit the same error. Written by the orchestrator on first
-          observed failure; model resolution consults it before any fable-tier dispatch.
-          Example: `{ "fable_dispatch": "credit_blocked", "checked_at": "<ISO>" }` — Fable 5 is
-          1M-by-default (CC 2.1.170/2.1.173) but *dispatch* fails hard without 1M credits
-          (CC 2.1.172; observed live per model-selection.md).
+        description: "OPTIONAL (additive, version:1); probe cache for account-level hard-fails — see field notes"
         additionalProperties: true
+```
+
+#### mcp_session, handoffs
+
+```yaml
+# …continued: WorktaskStateLedger.properties
   mcp_session:
     type: object
-    description: |
-      Cached XcodeBuildMCP session state. Written by orchestrator warmup (step 5c);
-      read by DV/DR/QA to skip redundant session_show_defaults / list_schemes /
-      list_sims calls. If absent or stale (>30min), agents fall back to live calls.
+    description: "Cached XcodeBuildMCP session state (orchestrator warmup step 5c) — see field notes"
     properties:
       xcode_defaults: { type: object, description: "Result of session_show_defaults" }
       schemes: { type: array, items: { type: string } }
@@ -602,6 +688,42 @@ properties:
       pattern: '.*ref:.*'
 ```
 
+#### Field notes — progress
+
+OPTIONAL. Budget-aware checkpoint for multi-batch stages (currently DV). Written after each sub-batch commit so a budget-exhausted agent leaves a resumable record instead of a progress narration. The orchestrator reads `next_batch` to resume the stage from where it stopped (see `agents/developer.md § Budget-Aware Checkpointing` and `skills/worktask/SKILL.md § Orchestrator Execution Loop` step 4.7). Stores batch ids only — never diffs, file contents, or test output.
+
+#### Field notes — completed_via
+
+OPTIONAL (additive, version:1). Which enforcement layer stamped this stage `completed`. `hook` = SubagentStop delegation (Layer 2, `state-merge.sh` default); `step6_5` = orchestrator synchronous Step-6.5 (`STATE_MERGE_VIA=step6_5`); `f3` = orchestrator F3 minimal-patch fallback. **Absence encodes Layer-1 agent self-patch OR a pre-upgrade run** — the hook's idempotency check exits before writing when Layer 1 already landed, so no value is stamped. Observability only; no consumer behavior branches on it.
+
+#### Field notes — last_error
+
+OPTIONAL (additive, version:1). Written by the orchestrator Step-6.5 errored-return branch (CC ≥ 2.1.199/2.1.200 propagate errors with partial work) BEFORE routing to the retry matrix. `class` reuses the EXISTING taxonomy from `agent-coordination § Retry / Escalate Matrix` — no new vocabulary. Dropped once the stage reaches `status: completed` (see eviction rules).
+
+#### Field notes — worktree
+
+OPTIONAL (additive, version:1; DV primarily). Records WHICH worktree the stage ran in — not just `worktree: true` semantics. Written by mapping the DV handoff frontmatter `worktree_path`/`worktree_branch` (`state-patch.sh`). Lets resume re-enter the exact worktree via `EnterWorktree(path)` (CC ≥ 2.1.157), DR/QA run in the right dir, and fn-gate read the branch without shelling `git rev-parse`. Kept through FN for PR context; dropped at archival.
+
+#### Field notes — goal
+
+One-sentence statement of the worktask's intent, populated by PL0 from the user-supplied task description (or the issue title under a `/megatask` per-issue run). Read by stage agents that need the original intent without re-reading the plan file (e.g. AR sanity-checking architecture against requirements, FN composing the PR title). Supersedes the `/goal` slash directive — the directive would have been a second, drift-prone surface for the same value (v3.10.1).
+
+#### Field notes — files_read
+
+Source files read by prior stages. Populated by DV; consumed by DR/QA to prefer `git diff` over full re-reads. When a file appears here, downstream stages SHOULD use `git diff <base>..HEAD -- <path>` instead of `Read <path>`. Full reads are still permitted when the diff is insufficient (e.g., reviewing surrounding context of a complex change). If absent, downstream stages fall back to normal reads (backward-compat).
+
+#### Field notes — dispatched_agents
+
+OPTIONAL (additive, version:1). Writer: the orchestrator loop ONLY. One entry per `task_id` (NOT per stage — parallel DVN tracks share the stage code), replaced on re-dispatch; dispatch history stays in `audit.jsonl`. Read by resume (`resume.md` step 0) to reconcile against `claude agents --json --all` under background-default dispatch (CC ≥ 2.1.198). No dispatch-timestamp field is stored (no consumer; `claude agents` rows carry their own start time). Terminal entries (`status: completed|failed`) are eviction candidates.
+
+#### Field notes — capabilities
+
+OPTIONAL (additive, version:1). Probe cache for account-level hard-fails so every later stage does not re-hit the same error. Written by the orchestrator on first observed failure; model resolution consults it before any fable-tier dispatch. Example: `{ "fable_dispatch": "credit_blocked", "checked_at": "<ISO>" }` — Fable 5 is 1M-by-default (CC 2.1.170/2.1.173) but *dispatch* fails hard without 1M credits (CC 2.1.172; observed live per model-selection.md).
+
+#### Field notes — mcp_session
+
+Cached XcodeBuildMCP session state. Written by orchestrator warmup (step 5c); read by DV/DR/QA to skip redundant session_show_defaults / list_schemes / list_sims calls. If absent or stale (>30min), agents fall back to live calls.
+
 ### Eviction order on overflow
 
 When state.json approaches the 500-token cap:
@@ -610,6 +732,9 @@ When state.json approaches the 500-token cap:
 2. Drop `facts.open_questions` whose status is resolved.
 3. Drop `facts.decisions` older than 2 stages back (keep current + previous stage decisions).
 4. Drop `facts.files_read` entries whose `stage` is older than 2 stages back.
+
+#### Eviction steps 5–8
+
 5. Drop `facts.dispatched_agents[]` entries in a terminal state (`status: completed|failed`) — the live-agent reconciliation they exist for no longer applies; audit history persists in `audit.jsonl`.
 6. Drop `stages.<CODE>.last_error` and `stages.<CODE>.completed_via` for stages that have reached `status: completed` (the error is resolved; provenance was observability-only).
 7. Keep `stages.<CODE>.worktree` through FN (PR context needs the branch); drop it only at archival.
@@ -624,6 +749,8 @@ PL0 (or `commands/worktask.md` Phase 1) writes the initial ledger. The seed is
 overwrite `planning-0.md`. The canonical executable snippet (with the bash `N`
 computation) lives in `commands/worktask.md` Phase 1 step 3a — use it verbatim;
 the JSON below shows the resulting shape:
+
+#### Seed shape (resulting JSON)
 
 ```json
 {
@@ -648,6 +775,8 @@ the JSON below shows the resulting shape:
 }
 ```
 
+#### Additive-field seeding
+
 The seed includes `facts.dispatched_agents: []` (additive, version:1) so the orchestrator loop
 appends/replaces per-`task_id` dispatch entries in place rather than lazily creating the array on
 first dispatch. The other additive fields (`stages.<CODE>.completed_via`/`last_error`/`worktree`,
@@ -669,6 +798,11 @@ Four documented degradation paths. Worktask MUST complete in all four (AC-16, AC
 |------|---------|----------|
 | F1 | state.json **absent** | Fall back to legacy `metadata.context_files` mode. Read listed files in full. No cache-friendly preamble. Log INFO `state.json not found, legacy mode`. |
 | F2 | state.json **present**, agent ignores it | No penalty. Agent reads listed files and writes its artifact. Orchestrator's hook patches state.json from frontmatter (or return text on F3). |
+
+### Paths F3–F4
+
+| Path | Trigger | Behavior |
+|------|---------|----------|
 | F3 | Agent writes artifact **without frontmatter** | Orchestrator logs WARN `frontmatter missing in <artifact>`. Derives minimal handoff: `{stage, verdict: ok, summary: <first 200 chars of return>, refs: {artifact: <path>}}`. Worktask proceeds. |
 | F4 | state.json **corrupt** (invalid JSON or schema mismatch) | Quarantine to `.context/state.json.bad.<unix-ts>`. Regenerate from PL0 + completed-stage frontmatter walk. Audit log to `.context/logs/state-recovery.log`. Continue. |
 
@@ -706,6 +840,8 @@ All stage artifacts are numbered; N is allocated by PL0 (same value as `planning
 | ST | `retrospective-N.md` | yes |
 | IR | `incident-N.md` | yes |
 | ET | `ethics-review-N.md` | yes |
+
+### Run-index resolution
 
 The same N is shared across all stages within a worktask run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. See `agents/product-manager.md § Plan File & Run Index Naming` for the full resolver and propagation algorithm.
 
@@ -772,6 +908,8 @@ Documented in `skills/cost-optimization/SKILL.md`. Without 1h flag, default 5-mi
 
 All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below. DR runs anchor-lint on every produced artifact; CI runs the same lint on PRs touching `skills/` or `agents/`.
 
+### Anchors — PL to DR
+
 | Stage | Artifact | Mandatory H2 anchors |
 |-------|----------|-----------------------|
 | PL | planning-N.md | `## requirements`, `## acceptance-criteria`, `## scope`, `## out-of-scope`, `## risks`, `## complexity`, `## stages` |
@@ -779,6 +917,11 @@ All stage artifacts MUST contain exactly the H2 headings (kebab-case, no undersc
 | TL | coordination-N.md | `## fan-out`, `## shared-snippets`, `## sequence`, `## risks` |
 | DV | development-N.md | `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups` |
 | DR | developer-review-N.md | `## findings`, `## verdict`, `## blockers`, `## follow-ups` |
+
+### Anchors — SR to ET
+
+| Stage | Artifact | Mandatory H2 anchors |
+|-------|----------|-----------------------|
 | SR | security-review-N.md | `## findings`, `## verdict`, `## blockers`, `## threat-model` |
 | QA | testing-N.md | `## results`, `## coverage`, `## regressions`, `## verdict` |
 | DC | documentation-N.md | `## files-changed`, `## cross-references`, `## follow-ups` |
@@ -799,6 +942,8 @@ All stage artifacts MUST contain exactly the H2 headings (kebab-case, no undersc
 
 Anchor-lint also runs at the DR gate, but that is post-hoc — a missing anchor in `planning-N.md` only surfaces after AR/TL/DV have already paid the full-file re-read cost. To catch omissions at the producing stage, anchor-lint runs as a **managed plugin hook (shipped in `.claude-plugin/plugin.json`, default-on)** — it is no longer an optional, opt-in registration. The managed PostToolUse `Write|Edit` entry invokes `${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh`, which gates on the `.context/*-N.md` artifact regex below and delegates matching writes to `skills/worktask/scripts/cache-lint.sh --anchor-lint`:
 
+#### Managed hook entry (plugin.json)
+
 ```jsonc
 // .claude-plugin/plugin.json → hooks.PostToolUse (managed entry, alongside audit-tooluse)
 {
@@ -808,6 +953,8 @@ Anchor-lint also runs at the DR gate, but that is post-hoc — a missing anchor 
   ]
 }
 ```
+
+#### Preflight behavior and cost
 
 `anchor-preflight.sh` matches only the canonical artifact regex (`\.context/(planning|analyzing|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+\.md$`); any other Write/Edit is a no-op. When the lint fails (non-zero exit), the agent that produced the artifact sees the diagnostic and amends the file before continuing — no downstream stages incur the cost. `continueOnBlock` follows the same managed-hook discipline as the other entries (the diagnostic is surfaced; an unrelated write is never blocked). The DR-gate lint plus the CI lint (PRs touching `skills/` or `agents/`) remain as the safety net for non-hook environments.
 

@@ -45,7 +45,7 @@ Identify, assess, and document project risks with mitigation strategies.
 
 ## Output Format
 
-```markdown
+~~~markdown
 # Risk Assessment: SSO Implementation
 
 ## Risk Summary
@@ -70,9 +70,12 @@ Med Prob │    R-14    │ R-04, R-05 │ R-02, R-06  │
 Low Prob │    R-12    │   R-09     │    R-07     │
 ─────────┴────────────┴────────────┴─────────────┘
 ```
+~~~
 
----
+### Template — risk detail (R-01 exemplar)
 
+```markdown
+<!-- …continued: per-risk detail -->
 ## High Priority Risks 🔴
 
 ### R-01: OAuth Provider API Breaking Changes
@@ -95,7 +98,12 @@ Low Prob │    R-12    │   R-09     │    R-07     │
 - 2-4 week delay if major changes
 - Potential security vulnerabilities
 - Customer trust impact
+```
 
+#### R-01 — mitigation, contingency, and sibling risks
+
+```markdown
+<!-- …continued: R-01 responses -->
 **Mitigation Strategies**:
 1. **Avoid**: Abstract provider interface for easy switching
 2. **Reduce**: Subscribe to provider changelogs
@@ -111,31 +119,13 @@ Low Prob │    R-12    │   R-09     │    R-07     │
 
 ---
 
-### R-02: Key Developer Unavailability
-| Attribute | Value |
-|-----------|-------|
-| Category | Resource |
-| Probability | Medium (40%) |
-| Impact | High |
-| Risk Score | 7/10 |
-| Owner | Project Manager |
+<!-- repeat per high risk: R-02 (e.g., Key Developer Unavailability, Category Resource, Prob Medium 40%, Impact High, Score 7/10, Owner PM) — same shape as R-01: attribute table, Description, Mitigation Strategies, Contingency Plan, Status -->
+```
 
-**Description**: Lead SSO developer may become unavailable (illness, resignation, competing priorities).
+### Template — medium priority risks
 
-**Mitigation Strategies**:
-1. **Reduce**: Pair programming for knowledge sharing
-2. **Reduce**: Document decisions and implementation details
-3. **Transfer**: Cross-train backup developer
-
-**Contingency Plan**:
-- Backup developer takes over
-- Extend timeline by 1-2 weeks
-- Bring in contractor if needed
-
-**Status**: Mitigation in progress
-
----
-
+```markdown
+<!-- …continued: medium priority risks -->
 ## Medium Priority Risks ⚠️
 
 ### R-03: Integration Testing Delays
@@ -155,23 +145,13 @@ Low Prob │    R-12    │   R-09     │    R-07     │
 
 ---
 
-### R-04: Scope Creep from Stakeholders
-| Attribute | Value |
-|-----------|-------|
-| Category | Schedule |
-| Probability | Medium (50%) |
-| Impact | Medium |
-| Risk Score | 5/10 |
+<!-- repeat per medium risk: R-04.. (e.g., Scope Creep from Stakeholders, Schedule, Medium 50%, Medium, 5/10) — same condensed shape as R-03: attribute table (no Owner), Description, Mitigation bullets -->
+```
 
-**Description**: Additional requirements may be added during development.
+### Template — risk register
 
-**Mitigation**:
-- Clear PRD sign-off before development
-- Change control process
-- MVP-first approach
-
----
-
+```markdown
+<!-- …continued: risk register -->
 ## Risk Register
 
 | ID | Risk | Category | Prob | Impact | Score | Owner | Status |
@@ -186,7 +166,12 @@ Low Prob │    R-12    │   R-09     │    R-07     │
 | R-08 | Documentation gaps | Technical | H | L | 4 | Tech Writer | Accept |
 
 ---
+```
 
+### Template — response summary and monitoring
+
+```markdown
+<!-- …continued: response summary, monitoring plan -->
 ## Risk Response Summary
 
 | Response | Count | Risks |
@@ -208,7 +193,12 @@ Low Prob │    R-12    │   R-09     │    R-07     │
 | R-06 | Response time > 500ms | Continuous | Within 1h to Dev Lead |
 
 ---
+```
 
+### Template — action items
+
+```markdown
+<!-- …continued: action items -->
 ## Action Items
 
 | Priority | Action | Owner | Due Date |

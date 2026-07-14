@@ -42,6 +42,8 @@ This loads all `mcp__pencil__*` tools. Do this once at the start of any design s
 
 ### Available Tools
 
+#### Document, element, and validation tools
+
 | Tool | Purpose |
 |------|---------|
 | `get_editor_state` | Check current Pencil editor state and active file |
@@ -50,6 +52,11 @@ This loads all `mcp__pencil__*` tools. Do this once at the start of any design s
 | `batch_get` | Read element nodes by pattern or ID |
 | `get_screenshot` | Visual validation — capture screenshot of a node |
 | `snapshot_layout` | Structured layout export for developer handoff |
+
+#### Guideline, token, and search tools
+
+| Tool | Purpose |
+|------|---------|
 | `get_guidelines` | Design guidelines by topic (design-system, landing-page, table, code, tailwind) |
 | `get_style_guide_tags` | List available style guide tag categories |
 | `get_style_guide` | Retrieve style guide by tags or name for design inspiration |
@@ -108,7 +115,11 @@ title=I(header, {type: "text", content: "Login", fontSize: 20, fontWeight: "600"
 content=I(screen, {type: "frame", name: "Content", width: "fill_container", layout: "vertical", gap: 24, padding: 32})
 `
 })
+```
 
+#### Step 3 continued: content elements
+
+```typescript
 // Add form elements in subsequent calls
 mcp__pencil__batch_design({
   filePath: `${designsPath}/mockup-feature-screen.pen`,

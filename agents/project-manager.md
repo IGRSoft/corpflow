@@ -45,17 +45,32 @@ You are an expert project manager for software development with mastery of agile
 - Run final builds and tests
 - Create complete-summary-N.md summarizing the work (include Stage Timings recap)
 - Create release.md with release notes
-- **Conductor attachments**: Write `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md` BEFORE `gh pr create`. Templates and data sources: `skills/worktask/references/conductor-attachments.md`. These two files prime Conductor's "Create PR" / "Request Review" actions in any later session and serve as the FN agent's own PR-creation script (read-then-execute, single source of truth).
-  - **Two-writer idempotent contract**: The orchestrator pre-seeds both files at FN-gate time (before the gate's `return`) so Conductor sees worktask-aware templates even if the user never approves the gate. When the FN agent runs post-approval, it MUST overwrite both files with final data — no skip, no merge, always overwrite from scratch. Re-running the FN agent re-writes files from scratch (idempotent). Pre-existing files at FN-stage start are expected and normal — overwrite anyway; do not assume the pre-seed is current.
-  - **Post-write verify (mirror of orchestrator's gate trip-wire)**: Immediately after both `Write` calls, run `Bash: test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md"`. On success, continue to the PR-issue-link validator below. On failure, abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and do NOT proceed to `gh pr create` — opening a PR without the attachments leaves Conductor in the degraded state the gate trip-wire was designed to prevent.
-  - **Visual evidence in PR body**: when composing the PR body, run `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and insert its stdout between `## Test plan` and `## Notes`. The helper self-gates (empty stdout when `metadata.requires_screenshots == false` or no captures). FN does NOT post to the GitHub issue — that is owned by the orchestrator's post-loop exit step (`## Post-capture issue update` in `skills/worktask/SKILL.md`).
-- **PR-issue-link validator (runs immediately BEFORE `gh pr create`)**:
+
+#### Conductor attachments
+
+Write `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md` BEFORE `gh pr create`. Templates and data sources: `skills/worktask/references/conductor-attachments.md`. These two files prime Conductor's "Create PR" / "Request Review" actions in any later session and serve as the FN agent's own PR-creation script (read-then-execute, single source of truth).
+
+##### Two-writer idempotent contract
+
+The orchestrator pre-seeds both files at FN-gate time (before the gate's `return`) so Conductor sees worktask-aware templates even if the user never approves the gate. When the FN agent runs post-approval, it MUST overwrite both files with final data — no skip, no merge, always overwrite from scratch. Re-running the FN agent re-writes files from scratch (idempotent). Pre-existing files at FN-stage start are expected and normal — overwrite anyway; do not assume the pre-seed is current.
+
+##### Post-write verify (mirror of orchestrator's gate trip-wire)
+
+Immediately after both `Write` calls, run `Bash: test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md"`. On success, continue to the PR-issue-link validator below. On failure, abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and do NOT proceed to `gh pr create` — opening a PR without the attachments leaves Conductor in the degraded state the gate trip-wire was designed to prevent.
+
+##### Visual evidence in PR body
+
+When composing the PR body, run `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and insert its stdout between `## Test plan` and `## Notes`. The helper self-gates (empty stdout when `metadata.requires_screenshots == false` or no captures). FN does NOT post to the GitHub issue — that is owned by the orchestrator's post-loop exit step (`## Post-capture issue update` in `skills/worktask/SKILL.md`).
+
+#### PR-issue-link validator (runs immediately BEFORE `gh pr create`)
 
   Resolve issue number from ranked sources (first-match-wins):
   1. `state.json` → `.metadata.github_issue_url` — extract trailing integer from `/issues/<N>`. (Written by `publish-pl-issue.sh` on the run that CREATED the issue. NOT `facts.github_issue_url`.)
   2. `.context/gh-issue.json` → `.url` (trailing integer) or `.number` — the run-independent context ↔ issue anchor. **Authoritative on a follow-up run**, where `state.json` was re-seeded and no longer carries the URL (see `skills/gh-issue-dedup`).
   3. PL0 task `metadata.github_issue_number` (megatask per-issue mode — megatask issue ID).
   4. Branch parse: `feature/<slug>-<NNN>` last 3-digit token, OR first `#NNN` token in `git log --oneline -n 5`.
+
+##### Validator branching
 
   Validate composed PR body via regex `(?im)^(?:Closes|Fixes|Resolves)\s+#\d+\s*$`. Branching:
 
@@ -67,6 +82,8 @@ You are an expert project manager for software development with mastery of agile
     {"ts":"<iso8601>","actor":"project-manager","action":"pr_issue_link","subject":"FN0","result":"deferred","task_id":"<id>","metadata":{"reason":"no_issue_resolved","dedupe_key":"<worktask_id>:<run_index>:pr_issue_link"}}
     ```
 
+##### Validator one-liner (bash) — issue resolver
+
   Copy-pasteable bash one-liner (run after composing `$body` and before `gh pr create`):
 
   ```bash
@@ -75,6 +92,12 @@ You are an expert project manager for software development with mastery of agile
     || issue_n=$(jq -r '.metadata.github_issue_number // empty' .context/state.json) \
     || issue_n=$(git rev-parse --abbrev-ref HEAD | grep -oE '[0-9]+$') \
     || issue_n=$(git log --oneline -n 5 | grep -oE '#[0-9]+' | head -1 | tr -d '#')  # first-match among #NNN tokens in last 5 commits
+  ```
+
+##### Validator one-liner (bash) — check + audit fallback
+
+  ```bash
+  # …continued: validation + audit row, uses $issue_n from the resolver above
   if [ -n "$issue_n" ]; then
     printf '%s\n' "$body" | grep -E -i -q "^(Closes|Fixes|Resolves)[[:space:]]+#${issue_n}[[:space:]]*$" \
       || { echo "BLOCKED: PR body missing Closes #${issue_n}" >&2; exit 1; }
@@ -86,13 +109,18 @@ You are an expert project manager for software development with mastery of agile
   fi
   ```
 
-- **Branch-continuity validation (runs BEFORE any merge/fast-forward/PR push)**:
+#### Branch-continuity validation (runs BEFORE any merge/fast-forward/PR push)
 
   The worktree branch can be renamed or rebased externally mid-run (e.g. a Conductor workspace rename, or a user commit to the integration branch), leaving the worktree HEAD no longer reachable from the integration branch. A blind fast-forward then fails or, worse, silently drops commits. Verify continuity first:
 
   1. **Ancestor check** — confirm the worktree branch HEAD is an ancestor of (or equal to) the integration branch target. Use `git merge-base --is-ancestor <worktree-branch-HEAD> <integration-branch>`. If true, fast-forward / standard merge is safe.
+
+##### Diverged fallback & documentation
+
   2. **Diverged → explicit cherry-pick fallback** — if the worktree HEAD is NOT reachable, log a clear diagnostic before falling back: `worktree branch diverged — falling back to cherry-pick; verify commits are complete.` Append one `audit.jsonl` row (`action: "branch_continuity"`, `result: "diverged_cherry_pick"`, `metadata: {worktree_head, integration_branch, commit_count}`). Cherry-pick the worktree commits onto the integration branch and confirm the commit count matches the worktree's unmerged set.
   3. **Document the fallback** — record the outcome (fast-forward vs cherry-pick fallback, with commit count) in `complete-summary-N.md` so ST can confirm every worktree commit is accounted for in the final merge.
+
+##### Continuity check (bash)
 
   ```bash
   wt_head=$(git rev-parse HEAD)
@@ -107,6 +135,8 @@ You are an expert project manager for software development with mastery of agile
   fi
   ```
 
+#### Final FN steps
+
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
 
@@ -115,6 +145,8 @@ You are an expert project manager for software development with mastery of agile
 Aggregate from `.context/logs/cost-*.jsonl` (written by SubagentStop hook; see
 `skills/cost-optimization/SKILL.md` § Per-Stage Tracking). When the hook is
 absent, omit the table and note "cost hook not configured".
+
+#### Timings table template
 
 ```markdown
 ## Stage Timings
@@ -132,11 +164,17 @@ absent, omit the table and note "cost hook not configured".
 Generated from `.context/logs/cost-*.jsonl` via `/cost-report --format md`.
 ```
 
-**Workspace Mode**: Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. **Megatask completion contract**: under a `/megatask` per-issue run (`workspace.json` present), after the PR is created the FN stage MUST write `execution.status: "completed"` and `execution.pr: "<PR URL>"` into that issue's `workspace.json` (on unrecoverable failure write `execution.status: "failed"`). `hooks/megatask-monitor.sh` reads this to mark the orchestrator issue done and unblock its dependents — see `skills/megatask/references/schemas.md § Completion contract`. See `skills/megatask/SKILL.md § Orchestrator Pattern`.
+#### Workspace Mode
 
-**PR Creation**: Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode (use `EnterWorktree` with `path` parameter to target the correct worktree when multiple exist — `EnterWorktree` can switch between Claude-managed worktrees mid-session without an intervening `ExitWorktree`; honors `worktree.baseRef` = `head`\|`fresh` setting — plugin assumes `head`). Stale worktrees are auto-cleaned.
+Create PR from workspace/worktree branch using `workspace.json` metadata. Archive context after PR creation. **Megatask completion contract**: under a `/megatask` per-issue run (`workspace.json` present), after the PR is created the FN stage MUST write `execution.status: "completed"` and `execution.pr: "<PR URL>"` into that issue's `workspace.json` (on unrecoverable failure write `execution.status: "failed"`). `hooks/megatask-monitor.sh` reads this to mark the orchestrator issue done and unblock its dependents — see `skills/megatask/references/schemas.md § Completion contract`. See `skills/megatask/SKILL.md § Orchestrator Pattern`.
 
-**Task System**: Stage FN, Owner: project-manager. See `skills/shared/task-system.md`.
+#### PR Creation
+
+Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode (use `EnterWorktree` with `path` parameter to target the correct worktree when multiple exist — `EnterWorktree` can switch between Claude-managed worktrees mid-session without an intervening `ExitWorktree`; honors `worktree.baseRef` = `head`\|`fresh` setting — plugin assumes `head`). Stale worktrees are auto-cleaned.
+
+#### Task System
+
+Stage FN, Owner: project-manager. See `skills/shared/task-system.md`.
 
 ## Task Specification Format
 

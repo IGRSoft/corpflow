@@ -70,10 +70,15 @@ The skill owns the pipeline; this command wires flags around it:
 2. Build used-in-context set via `skills/self-improvement/scripts/build-context-set.sh`; `--no-scope-filter` marks it unbounded (mapper keeps every mapped proposal).
 3. Run the skill's classify → map → emit pipeline — writes `.context/learnings.md` when proposals survive, `.context/logs/self-improve-<ts>.log` always. Post-filter proposals by `--target`.
 4. Present `learnings.md` to the user: proposal count by confidence (high/medium), deferred count, out-of-context discard count.
-5. **Apply phase** (only with `--apply`, never under `--dry-run`): STOP for user box-checking (`- [ ]` → `- [x]`) + explicit approval message → re-read checked items → delegate to `igrsoft:prompt-engineer` per `agents/prompt-engineer.md § Self-Improvement Patch Application` (one commit + `version:` bump per proposal) → append audit line:
-   ```json
-   {"actor": "command:/improve-yourself", "action": "self_improvement_applied", "applied_count": N, "skipped_count": M, "result": "ok"}
-   ```
+5. **Apply phase** — see below.
+
+### Step 5 — Apply Phase
+
+Runs only with `--apply`, never under `--dry-run`: STOP for user box-checking (`- [ ]` → `- [x]`) + explicit approval message → re-read checked items → delegate to `igrsoft:prompt-engineer` per `agents/prompt-engineer.md § Self-Improvement Patch Application` (one commit + `version:` bump per proposal) → append audit line:
+
+```json
+{"actor": "command:/improve-yourself", "action": "self_improvement_applied", "applied_count": N, "skipped_count": M, "result": "ok"}
+```
 
 ## Output Format
 

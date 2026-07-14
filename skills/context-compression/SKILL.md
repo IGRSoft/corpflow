@@ -16,6 +16,8 @@ The single most effective compression technique is the worktask state ledger (`.
 - **What stays in artifacts**: full reasoning, tables, code snippets, evidence. The ledger points; the artifact carries.
 - **Eviction order on overflow** (defined in `skills/worktask/references/handoff-protocol.md#state-json-schema`): drop completed-stage artifact paths once handoff strings capture essentials → drop resolved open questions → drop decisions older than 2 stages back.
 
+### Ledger lifecycle
+
 The ledger is created by PL0 and patched atomically (`#atomic-write`) by every stage on completion. Downstream stages read it FIRST, before any artifact, and use it to decide which anchors to grep.
 
 ## Cache-Friendly Prompt Layout
@@ -34,6 +36,8 @@ Binding order (per `handoff-protocol.md#cache-prefix`):
 [6] retry hints                            ← dynamic
 [7] Stage-specific banners (DR/FN/MCP)     ← suffix, dynamic
 ```
+
+### Prefix stability rules
 
 Forbidden in [1][2][4]: timestamps, ENV expansions, random IDs, retry counters, file mtimes, agent-specific names beyond `worktask_id`. CI lint (`skills/worktask/scripts/cache-lint.sh`) asserts byte-stability.
 
@@ -245,10 +249,14 @@ When running on Opus 4.6/4.7/4.8 with Max/Team/Enterprise plans — or on **Fabl
 | **DC→FN** | 200 | 800 |
 | **FN→ST** | 150 | 600 |
 
+#### 1M credit caveats
+
 > Use extended budgets only when complexity warrants it — standard budgets are still preferred for cost efficiency. Compression remains a best practice regardless of window size.
 >
 > **WARNING (v2.1.172)**: a 1M session on an account **without 1M usage credits** auto-compacts back under the standard limit — extended handoff budgets are NOT guaranteed just because the model nominally has a 1M window (Fable 5 always does). Plan stage handoffs against the **standard** column unless the account's 1M credits are confirmed; fable-tier *dispatch* on such accounts fails outright (see `skills/shared/model-selection.md`).
->
+
+#### Compaction fallback & thinking
+
 > **`--fallback-model` (v2.1.178)**: compaction now honors the session `--fallback-model`. A credit-gated 1M Fable compaction falls back to the configured fallback model instead of failing — the degrade above becomes a graceful fallback rather than an error, provided a `--fallback-model` (e.g. `claude-sonnet-4-6`) is set on the session.
 >
 > **Compaction thinking inheritance (v2.1.198)**: context compaction inherits the session's extended-thinking configuration — compaction on a high-effort orchestrator session gets the same thinking budget as the session itself, improving summary fidelity and PostCompact recovery. Also note Sonnet 5 (v2.1.197) carries a native 1M window on the default `sonnet` alias — the credit caveat above still applies to account tiers without 1M usage credits.
@@ -344,6 +352,8 @@ System handle, and its per-agent error file, then writes a compact JSON pointer 
 stdout — only the file path is reported on stderr to keep the hook's token footprint
 near zero.
 
+##### Invocation
+
 ```
 bash skills/context-compression/scripts/post-compact-recovery.sh
 # Optional overrides:
@@ -353,6 +363,8 @@ bash skills/context-compression/scripts/post-compact-recovery.sh
 #   --dry-run             print JSON to stdout instead of writing file
 #   --self-test           run fixture tests; exit 0 on pass
 ```
+
+##### Post-recovery resume
 
 After compaction, the orchestrator's next turn reads the most recent
 `post-compact-*.json`, follows the `resume_guide_ref`, and continues the
@@ -372,6 +384,8 @@ Claude Code auto-generates a session recap at key moments (also available via `/
 ### Post-Compaction Behavioral Recovery (behavioral, not hook-driven)
 
 The `PreCompact`/`PostCompact` hooks and Session Recap above reduce compaction damage but do not eliminate it — compaction is silent, and any decision that lived only in the conversation can vanish without a trace. Recovery therefore cannot be left to the hook alone; the agent has to re-anchor itself. On any compaction signal — a sudden loss of earlier context, an explicit `/compact`, or a `PostCompact` pointer file — before taking the next action:
+
+#### Re-anchor steps
 
 1. **Re-read `.context/state.json` and the active stage artifact FIRST.** The file-mediated ledger (see [State Ledger as Compression Primitive](#state-ledger-as-compression-primitive)) is the source of truth; post-compaction conversational memory is not.
 2. **Recite the active stage's constraints and acceptance criteria** before the next edit, so a requirement dropped by compaction resurfaces instead of being silently skipped.

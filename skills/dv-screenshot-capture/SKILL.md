@@ -35,7 +35,8 @@ Run this skill under any of the following conditions:
 └── screenshots.md          # REQUIRED manifest — single source of truth
 ```
 
-**Path scheme rules**:
+### Path scheme rules
+
 - `<worktask_id>` from `state.json.worktask_id`.
 - `NN` is **two-digit zero-padded**, monotonically increasing within a worktask. First capture = `01`.
 - `<slug>` is kebab-case, ≤40 chars, derived from purpose.
@@ -95,7 +96,9 @@ else:
 
 Unknown or `"all"` platform → `cli_fallback_adapter`. Emit audit row `screenshot_platform_fallback` with `reason: "unknown_platform"`.
 
-**`sim_unavailable(state)` definition** (boolean, evaluated per `apple-canvas` selection):
+#### sim_unavailable(state) definition
+
+Boolean, evaluated per `apple-canvas` selection:
 
 ```python
 def sim_unavailable(state) -> bool:
@@ -111,16 +114,35 @@ def sim_unavailable(state) -> bool:
     )
 ```
 
+#### force_canvas trigger inputs
+
 Trigger inputs for `force_canvas`: `metadata.requires_canvas_screenshot` (plan-level) or `args.force_canvas` (skill-call-level). When both unset and `sim_unavailable(state)` is False, the legacy `apple_adapter` runs unchanged.
 
 ### Per-adapter behavior
 
+#### apple, web, android adapters
+
 | Adapter | Backing tool | Concrete behavior | Failure → fallback |
 |---------|-------------|-------------------|--------------------|
 | `apple` | `mcp__XcodeBuildMCP__screenshot` | Boot/locate simulator (per `args.simulator`), navigate best-effort, call MCP screenshot tool. Save to target path. | XcodeBuildMCP unavailable → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "xcodebuildmcp_unavailable"`. |
-| `apple-canvas` | `swift run SnapshotHost` (host-side SPM executable) + `Skill("preview-ensurer")` | Scaffold `tools/SnapshotHost/` from template if missing → invoke `preview-ensurer` to auto-add `#Preview` macros to modified View files → `swift run --package-path tools/SnapshotHost SnapshotHost --view <ModuleType> --output <path> [--size WxH] [--scheme light\|dark]`. macOS host first (`metadata.canvas_destination=macos-host`, default); iOS sim opt-in (`canvas_destination=ios-sim`). Emits `canvas_render` + `preview_added` audit rows. See `references/apple-canvas.md` for the full recipe and `references/preview-ensurer.md` for the heuristics summary. | Host build fail → `apple` (sim) adapter (audit `screenshot_platform_fallback`, `reason: "canvas_host_build_failed"`). Sim unavailable → `cli_fallback` (audit `screenshot_platform_fallback`, `reason: "canvas_sim_unavailable"`). preview-ensurer error → DV `missing_input`. |
 | `web` | Playwright (`npx playwright screenshot <url>`) or Chrome MCP | Launch headless browser, navigate to `args.url`, capture at `args.viewport`. | Playwright not installed → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "playwright_unavailable"`. |
 | `android` | `adb exec-out screencap -p` | Verify device via `adb devices`, then `adb exec-out screencap -p > <path>`. | `adb` not on PATH → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "adb_unavailable"`. |
+
+#### apple-canvas adapter
+
+- **Backing tool**: `swift run SnapshotHost` (host-side SPM executable) + `Skill("preview-ensurer")`.
+- **Behavior**: Scaffold `tools/SnapshotHost/` from template if missing → invoke `preview-ensurer` to auto-add `#Preview` macros to modified View files → `swift run --package-path tools/SnapshotHost SnapshotHost --view <ModuleType> --output <path> [--size WxH] [--scheme light|dark]`. macOS host first (`metadata.canvas_destination=macos-host`, default); iOS sim opt-in (`canvas_destination=ios-sim`). Emits `canvas_render` + `preview_added` audit rows. See `references/apple-canvas.md` for the full recipe and `references/preview-ensurer.md` for the heuristics summary.
+
+##### apple-canvas failure → fallback
+
+- Host build fail → `apple` (sim) adapter (audit `screenshot_platform_fallback`, `reason: "canvas_host_build_failed"`).
+- Sim unavailable → `cli_fallback` (audit `screenshot_platform_fallback`, `reason: "canvas_sim_unavailable"`).
+- preview-ensurer error → DV `missing_input`.
+
+#### cli/fallback adapter
+
+| Adapter | Backing tool | Concrete behavior | Failure → fallback |
+|---------|-------------|-------------------|--------------------|
 | `cli/fallback` (also `platform: "all"`) | `silicon` → ImageMagick → `.txt` | **Step 1**: `git diff <base>...HEAD -- <files> \| silicon --language diff --output <path>`. **Step 2** (silicon absent): `magick -background white -fill black -size 1200x800 caption:"<slug>\n\n<first 60 lines of diff>" <path>`. **Step 3** (neither available): write `<path>.txt` (still recorded in screenshots.md; `ok: false`, `error: "tool_missing"`). | None — this IS the fallback. `.txt` is the floor. |
 
 ## Scripts (canonical executables)
@@ -131,6 +153,8 @@ Trigger inputs for `force_canvas`: `metadata.requires_canvas_screenshot` (plan-l
 | `scripts/size-budget.sh` | `bash scripts/size-budget.sh --path <file> --worktask-id <id> [--slug <kebab>] [--project-root <dir>]` | Enforces the 5-step size budget (stat→pngquant→oversize/→warn→audit). Emits `size_audit: path=… bytes=… verdict=…` to stdout. |
 
 Both scripts implement `--self-test` (no network, no git required). Exit codes and stdout contract are documented in each script's shdoc header.
+
+### Scripts vs reference docs
 
 `references/cli-fallback.md` remains as the spec (silicon/magick command examples, `.txt` schema, redaction recipe) but is **no longer needed in the happy path** — `scripts/cli-fallback.sh` is the canonical implementation. Similarly, the size-budget prose in `## Size budget` below is the authoritative spec; `scripts/size-budget.sh` is its executable form.
 
@@ -151,12 +175,22 @@ The manifest is the authoritative index. It is rewritten atomically on every ski
 |---|------|------|-------|----------|---------|---------|----------|------------|
 | 01 | <slug> | dv-01-<slug>.png | 187234 | apple | apple_adapter | <one-line caption> | <ISO-8601 UTC> | design-002 |
 | 02 | <slug> | dv-02-<slug>.txt | 0      | all   | cli_fallback (.txt) | tool_missing: silicon and magick absent | <ISO-8601 UTC> | — |
+```
 
+#### Design Ref column (QA join key)
+
+```markdown
+<!-- …continued: screenshots.md manifest template -->
 The trailing **`Design Ref`** column is the QA join key (Option A). It carries the
 matching `figma-registry.md` row `ID` when this capture maps to a known design
 frame, else `—`. See **Registry tagging** below. The column is optional and
 append-only: old manifests lacking it parse fine (QA treats a missing value as `—`).
+```
 
+#### Manifest tail sections
+
+```markdown
+<!-- …continued: screenshots.md manifest template -->
 ## Fallbacks invoked
 
 - dv-02: silicon and ImageMagick both absent on PATH; .txt placeholder written.
@@ -180,11 +214,15 @@ capture's `Design Ref` so QA can reuse the result image instead of re-capturing:
    container-completeness references, not per-state result frames. Skip them.
 4. No registry, no unique match, or an ambiguous (multi-row) match → write `—`.
 
+#### Advisory semantics
+
 This step is **advisory**: it never fails DV. A failed, missing, or ambiguous match
 writes `—` and DV proceeds normally. The registry is **PM-owned** — DV reads it but
 NEVER writes or back-patches it. The match is conservative by construction: when in
 doubt write `—`, which routes QA to its safe live-capture fallback (never a wrong
 pairing).
+
+#### Skip manifest (requires_screenshots: false)
 
 When `metadata.requires_screenshots: false` and DV captures nothing:
 
@@ -196,13 +234,15 @@ When `metadata.requires_screenshots: false` and DV captures nothing:
 
 ### PR body attachment
 
-**Do NOT** hand-author `![…](.context/…)` refs in the PR body — relative `.context/` paths never render in GitHub PR or issue bodies (the camo image proxy fetches anonymously; private/internal raw URLs 404; relative markdown links are not resolved). This form was the root cause of the broken-image class fixed in v3.11.2.
+**Do NOT** hand-author `![…](.context/…)` refs in the PR body — relative `.context/` paths never render in GitHub PR or issue bodies (camo image proxy fetches anonymously; private/internal raw URLs 404; relative markdown links unresolved). Root cause of the broken-image class fixed in v3.11.2.
 
 Instead, FN runs `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and inserts its stdout between `## Test plan` and `## Notes` in the PR body. The helper hosts PNGs via the publish-helper tier order (raw → gist → none-tier note), emitting a `## Visual evidence` block with hosted URLs. It prints nothing when `metadata.requires_screenshots == false` or no captures exist (section cleanly absent). `.txt` placeholder and oversize rows become plain bullets, never image embeds. See `skills/worktask/references/conductor-attachments.md` for the full insertion contract.
 
-**Issue body**: the orchestrator posts captures to the GitHub issue at stage-loop exit via `attach-visual-evidence.sh --post issue` (marker-deduped `gh issue comment`). FN does not write to the issue.
+#### Issue body
 
-**Consumers**:
+The orchestrator posts captures to the GitHub issue at stage-loop exit via `attach-visual-evidence.sh --post issue` (marker-deduped `gh issue comment`). FN does not write to the issue.
+
+#### Attachment consumers
 
 | Consumer | Stage | Action |
 |----------|-------|--------|
@@ -224,11 +264,18 @@ Budget constants: **warn ≥200 KB**, **hard fail ≥500 KB**, **cap 5 files/run
 
 ## Failure modes
 
+### Gate and tool failures
+
 | Failure | Detection | Required Behavior |
 |---------|-----------|-------------------|
 | `metadata.requires_screenshots: false` AND zero captures | DV completion checklist | Write `screenshots.md` with skip rationale. DV proceeds. NO `missing_screenshot_artifact` error. |
 | `metadata.requires_screenshots: true` (default) AND zero captures | DV completion checklist | DV FAILS with `missing_screenshot_artifact`. Append `## DV[N] Retry [X/3]` block to `.context/errors/developer.md` (classification: `logic`). Retry: attempt `cli_fallback` once. |
 | Platform tool missing (XcodeBuildMCP / Playwright / adb) | `error: "tool_missing"` from adapter | Fall back to `cli_fallback`. Audit `screenshot_platform_fallback`. Continue. |
+
+### Fallback-floor, budget, and invocation failures
+
+| Failure | Detection | Required Behavior |
+|---------|-----------|-------------------|
 | All adapters fail including `cli_fallback` (no silicon, no magick) | `cli_fallback` returns `ok: false, error: "tool_missing"` | Write `.txt` placeholder. Audit `screenshot_tool_missing`. screenshots.md records it. DV completion counts this as evidence-of-attempt — the gate measures evidence, not visual fidelity. |
 | Size budget exceeded after pngquant | `oversize_unquantizable` | Move to `oversize/`, link-only in screenshots.md. Continue. |
 | 5-cap reached | `screenshot_count_exceeded` | Stop further captures. Audit row. Continue. |
@@ -268,6 +315,8 @@ Array max 5 items. Eviction: cleared on worktask archival (FN/ST), not within a 
 
 ### Audit actions emitted by this skill
 
+#### screenshot_* actions
+
 | `action` | When | Required `metadata` keys |
 |----------|------|--------------------------|
 | `screenshot_captured` | Successful `capture()` | `slug, path, bytes, platform, adapter` |
@@ -277,6 +326,11 @@ Array max 5 items. Eviction: cleared on worktask archival (FN/ST), not within a 
 | `screenshot_size_fail` | bytes ≥ 500 KB after pngquant | `path, bytes_before, bytes_after` |
 | `screenshot_count_exceeded` | 6th capture attempted | `attempted_slug` |
 | `screenshot_tool_missing` | cli/fallback: no silicon, no magick | `tools_checked` |
+
+#### canvas and visual-diff actions
+
+| `action` | When | Required `metadata` keys |
+|----------|------|--------------------------|
 | `canvas_render` | Each `apple-canvas` adapter invocation (one row per phase) | `phase ∈ {"scaffold","complete","retry"}`, `view`, `destination ∈ {"macos-host","ios-sim"}`, `output_path`, `bytes`, `duration_ms`, `swift_version`, `swift_syntax_version` (optional) |
 | `preview_added` | `preview-ensurer` added a `#Preview` block to source | `file`, `view_type`, `mock_strategy ∈ {"binding-constant","optional-nil","mock-found","preview-tbd"}`, `lines_added` |
 | `visual_diff_run` | QA executes RMSE diff (via `scripts/visual-diff.sh`) | `reference`, `candidate`, `metric: "RMSE"`, `value_percent`, `threshold_percent`, `verdict ∈ {"pass","fail_visual_diff"}` |

@@ -124,6 +124,8 @@ After the decision is recorded, **always invoke** the `self-improvement` skill. 
 - If changes exist **within the used-in-context set** (agents/skills/commands that participated in this worktask) → skill writes `.context/learnings.md` with per-proposal approval checklist.
 - If no in-scope changes → skill short-circuits (logs "no-changes"), no artifact produced. Worktask proceeds unchanged.
 
+#### Scope Filter, Approval, and Artifact Summary
+
 **Scope filter:** proposals are only surfaced for agents/skills/commands that actually ran in this worktask. Edits to out-of-context files are logged but never proposed (see `skills/self-improvement/SKILL.md § Step 4`).
 
 **User approval:** the orchestrator (`commands/worktask.md`) reads `learnings.md` after ST completes, presents checked proposals for user confirmation, and routes each approved item to `prompt-engineer` for application. This stakeholder agent does NOT apply proposals itself.

@@ -41,6 +41,8 @@ authoritative spec but are no longer needed in the happy path.
 Reads pre-fetched issue JSON, extracts dependency edges, runs Kahn cycle detection, assigns
 levels, computes `parallel_tracks`, and emits `orchestrator.json v3.1`.
 
+#### Invocation — build-orchestrator
+
 ```bash
 # One-line contract (no network required — pass pre-fetched JSON):
 bash scripts/build-orchestrator.sh \
@@ -65,6 +67,8 @@ issues on stderr — never silently invents an order.
 For one issue: resolves base branch (delegates to `milestone-helpers.sh`), creates the git
 worktree at `.worktrees/<group>/<issue#>`, makes `.context/`, and stamps `workspace.json v2.0`.
 
+#### Invocation — init-worktree
+
 ```bash
 # One-line contract:
 bash scripts/init-worktree.sh \
@@ -79,6 +83,8 @@ bash scripts/init-worktree.sh --issue 42 --title "..." --group milestone-1 --dry
 bash scripts/init-worktree.sh --self-test
 ```
 
+#### Behavior — init-worktree
+
 `--file` accepts pre-fetched `gh issue view … --json body,labels` output for offline/testable
 use. Without `--file`, base-branch resolution calls git ls-remote (thin, optional). Idempotent:
 re-running on an existing worktree path is a no-op (safe on retry).
@@ -87,6 +93,8 @@ The reference file `references/git-integration.md` is the lifecycle spec; this s
 executable implementation. Branch naming and base-branch resolution are fully delegated to
 `../shared/milestone-helpers/scripts/milestone-helpers.sh` — no slug or branch logic is
 duplicated here.
+
+#### Runtime twin
 
 > **Runtime twin.** `hooks/megatask-monitor.sh` (the SubagentStop/Stop hook) handles the
 > *completion* side of the lifecycle — reconciling workspace.json outcomes back into
@@ -281,6 +289,8 @@ The loop is **completion-driven** via `hooks/megatask-monitor.sh` (registered Su
 3. **Errors** — a `failed` issue frees its track but keeps its dependents permanently `blocked`;
    surface the blocked set so the user can intervene (retry, re-scope, or drop the edge).
 4. **Stage creation** — verify each per-issue `PL0` created its subsequent stages.
+
+#### Hook properties
 
 The hook is **non-blocking** (always exits 0) and **self-skips** when no `orchestrator.json` is
 present (i.e. plain single-issue worktasks are untouched). See `references/agent-teams.md` for the

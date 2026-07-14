@@ -68,6 +68,10 @@
 
 ## Post-Mortem Template
 
+Concatenate the three parts below, in order, into a single `post-mortem.md`.
+
+### Template Part 1 — Header, Impact & Timeline
+
 ```markdown
 # Post-Mortem: [Incident Title]
 
@@ -95,7 +99,11 @@
 | HH:MM | Root cause identified |
 | HH:MM | Fix deployed |
 | HH:MM | Full service restored |
+```
 
+### Template Part 2 — Root Cause & Retrospective
+
+```markdown
 ## Root Cause Analysis
 
 ### What Happened
@@ -128,7 +136,11 @@
 ## What Could Be Improved
 - [Area for improvement]
 - [Area for improvement]
+```
 
+### Template Part 3 — Action Items, Lessons & Appendix
+
+```markdown
 ## Action Items
 | Priority | Action | Owner | Due Date | Status |
 |----------|--------|-------|----------|--------|

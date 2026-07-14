@@ -157,11 +157,18 @@ Before executing any megatask run, validate:
 
 **Root cause**: All three state.json enforcement layers failed — agents skipped self-patching (Layer 1), SubagentStop hook was not installed (Layer 2), and orchestrator Step 6.5 was not executed (Layer 3).
 
+#### Plugin-Root Resolution
+
 **Resolving `<plugin-root>`** (the directory containing `.claude-plugin/plugin.json`): use `$CLAUDE_PLUGIN_ROOT` if set in your shell; else the base directory of any loaded igrsoft skill minus the trailing `/skills/<name>`; else (Claude Code installs) the newest dir from `ls -d ~/.claude/plugins/cache/igrsoft/igrsoft/*/ 2>/dev/null | sort -V | tail -1`; in a git clone of the plugin repo, the repo root. Validate: `[ -f "$ROOT/.claude-plugin/plugin.json" ]`. Full ladder: `skills/shared/plugin-root-resolution.md`. The scripts below self-locate once found — only finding the root matters.
+
+#### Runbook — Steps 1-2
 
 **Runbook**:
 1. **Check hook installation**: `bash "<plugin-root>/skills/worktask/scripts/hook-install.sh" --check`. If missing, install: `bash "<plugin-root>/skills/worktask/scripts/hook-install.sh"`
 2. **Verify settings registration**: Check `.claude-plugin/plugin.json` contains a `SubagentStop` hook entry pointing to `state-merge.sh`
+
+#### Runbook — Step 3: Manual Repair
+
 3. **Manual repair** — run the hook for each stage artifact:
    ```bash
    # nullglob: unmatched globs expand to nothing instead of erroring under zsh
@@ -173,6 +180,9 @@ Before executing any megatask run, validate:
      [[ -n "$stage" ]] && CLAUDE_ARTIFACT_PATH="$artifact" CLAUDE_TASK_METADATA_STAGE="$stage" bash .claude/hooks/state-merge.sh
    done
    ```
+
+#### Runbook — Steps 4-5 and Prevention
+
 4. **F4 recovery** (corrupt state.json): If `jq . .context/state.json` fails, quarantine and rebuild:
    ```bash
    mv .context/state.json ".context/state.json.bad.$(date +%s)"
@@ -221,13 +231,25 @@ When a worktree operation partially succeeds, the orchestrator state can drift
 from the filesystem. Diagnose by comparing `git worktree list` to
 `orchestrator.json`, and match the symptom below.
 
+#### Creation and Fetch Failures
+
 | Symptom | Cause | Recovery |
 |---------|-------|----------|
 | `git worktree add` returned 0 but `.context/` dir absent | mkdir race or disk-full after branch creation | `git -C {path} status` to confirm worktree integrity → `mkdir -p {path}/.context/{errors,logs,designs,images}` → update orchestrator.json `initialized: true` |
 | Worktree created, branch fetch fails (auth/network) | Network loss between `worktree add` and `git fetch` | `git -C {path} fetch origin` retry → if persistent, `git worktree remove --force {path}` and retry from `workflow-engineer` init |
+
+#### Ledger Drift and Stale Files
+
+| Symptom | Cause | Recovery |
+|---------|-------|----------|
 | orchestrator.json lists issue #N with worktree_path, but `git worktree list` does not include it | Prior manual `git worktree remove` or disk cleanup | Re-create: `git worktree add -b feature/{N}-{slug} {path} origin/{base}` → restore `.context/` from `workspace.json` if present |
 | `git worktree list` shows path, but orchestrator.json has no entry for it | Orphaned worktree from cancelled worktask | If `.context/` empty or task archived: `git worktree remove {path}`. Otherwise resume via Task System, then remove on FN |
 | Stale untracked files block `worktree remove` | Build output, log files, editor swap files | Auto-cleanup handles most; fallback: `git -C {path} clean -fd` → retry `worktree remove` |
+
+#### Branch Locks, Disk, Lost Paths
+
+| Symptom | Cause | Recovery |
+|---------|-------|----------|
 | Branch locked by another worktree (`fatal: 'X' is already checked out`) | Same branch active in two worktrees (usually main) | `git worktree list` locate existing → switch main to different branch OR use a new branch name for the new worktree |
 | Disk full during `worktree add` | Filesystem exhausted | `git worktree prune` to reclaim stale space → free disk → retry. Do NOT leave partial worktree entries in orchestrator.json — remove the broken entry first |
 | `workspace.json` references path that no longer exists | External cleanup or symlink break | Treat worktask as lost. Archive `.context/` if recoverable (`git cat-file` for committed state), then remove orchestrator entry and restart the issue track |

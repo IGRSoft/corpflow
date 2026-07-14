@@ -20,6 +20,10 @@ Reusable patterns for milestone worktask operations.
 bash scripts/milestone-helpers.sh <subcommand> [args...]
 ```
 
+All subcommands accept pre-fetched JSON via `--file` so they are network-free and testable. Run `--self-test` to verify (26 checks, no network required).
+
+### Subcommands
+
 | Subcommand | Invocation | Output |
 |---|---|---|
 | `branch-name` | `bash milestone-helpers.sh branch-name 42 "Add login flow"` | `feature/42-add-login-flow` |
@@ -29,8 +33,6 @@ bash scripts/milestone-helpers.sh <subcommand> [args...]
 | `filter-prs` | `bash milestone-helpers.sh filter-prs --file issues.json` | TSV: `<number> <status>` |
 | `orchestrator-update` | `bash milestone-helpers.sh orchestrator-update --file in.json --path out.json --issue 42 status=completed` | writes updated JSON atomically |
 | `workspace-init` | `bash milestone-helpers.sh workspace-init 42 "Add login flow"` | `branch=…` `worktree_path=…` `context_path=…` key=value lines |
-
-All subcommands accept pre-fetched JSON via `--file` so they are network-free and testable. Run `--self-test` to verify (26 checks, no network required).
 
 ### Slug-length canon: **50 characters**
 
@@ -61,6 +63,11 @@ All subcommands accept pre-fetched JSON via `--file` so they are network-free an
 | Create branch | `git checkout -b feature/{issue#}-{slug} origin/develop` | `git worktree add -b feature/{issue#}-{slug} .worktrees/milestone-{N}/{issue#} origin/develop` |
 | Switch to issue | `git checkout feature/{issue#}-{slug}` | `cd .worktrees/milestone-{N}/{issue#}` (no checkout needed) |
 | Stage changes | `git add -A` | `git -C .worktrees/milestone-{N}/{issue#} add -A` |
+
+### Commit, push, PR, cleanup
+
+| Operation | Legacy Command | Worktree Command |
+|-----------|----------------|------------------|
 | Commit | `git commit -m "#{issue} feat: {title}"` | `git -C .worktrees/milestone-{N}/{issue#} commit -m "#{issue} feat: {title}"` |
 | Push branch | `git push -u origin feature/{issue#}-{slug}` | `git -C .worktrees/milestone-{N}/{issue#} push -u origin feature/{issue#}-{slug}` |
 | Create PR | `gh pr create --base develop --body "Closes #{issue}"` | `gh pr create --base develop --body "Closes #{issue}"` |

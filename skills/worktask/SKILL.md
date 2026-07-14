@@ -45,6 +45,12 @@ stateDiagram-v2
     Escalated --> [*]: abort / hard_constraint / user stop
     StageActive --> Completed: all tasks completed
     Completed --> [*]
+```
+
+#### Post-compact recovery states
+
+```mermaid
+stateDiagram-v2
     ApprovalWaiting --> PostCompactRecovery: context compacted
     FNGateWaiting --> PostCompactRecovery: context compacted
     StageActive --> PostCompactRecovery: context compacted
@@ -52,6 +58,8 @@ stateDiagram-v2
     PostCompactRecovery --> FNGateWaiting: was awaiting FN approval
     PostCompactRecovery --> StageActive: was mid-stage
 ```
+
+#### State-machine references
 
 **Stage codes and invocation**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md` and `${CLAUDE_SKILL_DIR}/../shared/worktask-invocation.md`
 
@@ -170,13 +178,21 @@ Document errors in `.context/errors/<agent>.md` (per-agent, append-only; one `##
 
 ### Pre-Stage Disk Guard (ENOSPC)
 
-Stages that invoke `swift build` / `xcodebuild` — **AR, DV, QA, SR, RE** — accumulate `.build/` and DerivedData artifacts across runs. With no pre-flight disk check, an exhausted filesystem kills the build harness mid-stage. In the `tokamak-reconciler-unification` run (#14) ENOSPC killed the harness twice: AR partially (recovered) and SR fully (the orchestrator could only persist the stage from the artifact frontmatter, noting `"agent hit ENOSPC"` in state.json). Before delegating any of those five stages, assert free space on the workspace filesystem:
+Stages that invoke `swift build` / `xcodebuild` — **AR, DV, QA, SR, RE** — accumulate `.build/` and DerivedData artifacts across runs. With no pre-flight disk check, an exhausted filesystem kills the build harness mid-stage (precedent: `tokamak-reconciler-unification` run #14 — ENOSPC killed the harness twice, AR partially and SR fully). Before delegating any of those five stages, assert free space on the workspace filesystem:
+
+#### Disk guard — thresholds
 
 ```bash
 # Threshold is configurable via DISK_MIN_GB (hard halt, default 5) and
 # DISK_WARN_GB (hygiene warn, default 8).
 MIN_GB="${DISK_MIN_GB:-5}"; WARN_GB="${DISK_WARN_GB:-8}"
 AVAIL_GB=$(df -Pg "${WORKSPACE_ROOT:-.}" 2>/dev/null | awk 'NR==2 {print $4+0}')
+```
+
+#### Disk guard — halt / warn decision
+
+```bash
+# …continued: halt/warn decision on AVAIL_GB (thresholds set above)
 if [ -n "$AVAIL_GB" ] && [ "$AVAIL_GB" -lt "$MIN_GB" ]; then
   appendAudit action=pre_stage_disk_halt result=blocked \
     metadata="{\"stage\":\"$CODE\",\"avail_gb\":$AVAIL_GB,\"min_gb\":$MIN_GB}"
@@ -191,6 +207,8 @@ elif [ -n "$AVAIL_GB" ] && [ "$AVAIL_GB" -lt "$WARN_GB" ]; then
   # Optional hygiene before DV: swift package clean to reclaim build artifacts.
 fi
 ```
+
+#### Disk guard — semantics
 
 - **Hard halt** (< `DISK_MIN_GB`, default 5): do NOT delegate; surface the remediation and return — a halted run is recoverable, an ENOSPC-killed harness mid-stage is not.
 - **Warn** (< `DISK_WARN_GB`, default 8): proceed, but run `swift package clean` as a pre-DV hygiene step to reclaim `.build/` first.
@@ -212,15 +230,25 @@ See references/ for initialization code, stage details, and agent teams integrat
 
 Before executing any worktask stage, the orchestrator MUST validate:
 
+### Validation checks 1–5
+
 1. **TaskList check**: Call `TaskList()` and verify at least one task exists with `metadata.worktask_id` matching the current worktask
 2. **PL0 exists**: Verify a task with subject starting with `PL0:` exists
 3. **Stage tasks exist**: After PL0 completes, verify PL0 created subsequent stage tasks (at minimum DV0, DR0, and QA0 for any complexity level)
 4. **Stage contract check**: Verify upstream outputs match the next stage's Required Inputs per `shared/stage-contracts.md` (file exists + required sections present)
 5. **Metadata schema check**: Validate next task's metadata against `shared/task-system.md` § JSON Schema (non-PL tasks require `stage`, `agent`, `model`, `error_file`)
+### Validation checks 6–7
+
 6. **Model alias check**: `metadata.model ∈ {fable, opus, sonnet, haiku}` — reject unknown aliases before `Task()` delegation. Caveat (CC ≥ 2.1.172/2.1.175): under a managed `availableModels` allowlist (now applied to subagent model overrides too) or `enforceAvailableModels`, a *valid* alias may silently resolve to a different model at dispatch — emit a `model_resolution_constrained` audit row when a managed allowlist is in effect; do NOT hard-block
 7. **Workspace existence** (megatask per-issue/worktree mode only): verify `metadata.workspace_path` directory exists and `workspace.json` is readable
+### Validation check 8
+
 8. **Artifact path resolution check** (non-blocking): for the next task's `metadata.run_index`, resolve the upstream artifact via the `stageArtifactPath()` helper below. Emit one `artifact_path_resolved` audit row with `result ∈ {ok, fallback_glob, fallback_legacy, miss}` and `metadata.resolved_path`. A `miss` result means the upstream stage produced no artifact and is treated by F3 in `references/handoff-protocol.md#fallback-paths` — warn but proceed. Catches run_index drift early (off-by-one between PL0 and stage tasks) before downstream stages burn tokens on fallback reads.
+### Validation check 9
+
 9. **Hook installation check** (first stage only): Verify `state-merge.sh` SubagentStop hook is operational. Check: (a) `.claude/hooks/state-merge.sh` exists and is executable, OR (b) the plugin's `plugin.json` registers the SubagentStop hook entry. If neither is true, emit a warning: `"⚠ state-merge.sh hook not installed — run hook-install.sh"`. Do NOT block — the orchestrator's Step 6.5 provides Layer 3 coverage. See `references/initialization-patterns.md#hook-installation`.
+
+### On validation failure
 
 If validation fails:
 - No tasks exist → Worktask not initialized. Re-run initialization (TaskCreate PL0)
@@ -245,7 +273,7 @@ If validation fails:
 
 The orchestrator builds every delegation prompt in a **binding** order so consecutive `Task()` calls within the same `worktask_id` share a byte-identical prefix and benefit from Anthropic's prompt cache. Spec source: `skills/worktask/references/handoff-protocol.md#cache-prefix`.
 
-**Preamble layout (binding)**:
+#### Preamble layout (binding)
 
 ```
 [1] Plugin/agent contract reminder         ← stable across ALL stages (cacheable)
@@ -258,7 +286,7 @@ The orchestrator builds every delegation prompt in a **binding** order so consec
 [7] Stage-specific banners (DR Skill, FN Conductor, MCP fallback) ← SUFFIX, dynamic
 ```
 
-**Step 0 (NEW) — Read state.json before each delegation**:
+#### Step 0 (NEW) — Read state.json before each delegation
 
 ```typescript
 const stateRaw = fs.existsSync(".context/state.json")
@@ -269,7 +297,9 @@ const stateRaw = fs.existsSync(".context/state.json")
 // no cache-friendly preamble (legacy mode).
 ```
 
-**Artifact path helper** (resolves numbered path with fallback):
+#### Artifact path helper
+
+Resolves the numbered artifact path with fallback:
 
 ```typescript
 const ARTIFACT_BASE: Record<string, string> = {
@@ -279,6 +309,12 @@ const ARTIFACT_BASE: Record<string, string> = {
   FN: "complete-summary", ST: "retrospective", IR: "incident",
   ET: "ethics-review",
 };
+```
+
+##### stageArtifactPath()
+
+```typescript
+// …continued: uses ARTIFACT_BASE above
 function stageArtifactPath(code: string, runIndex: number): string {
   const base = ARTIFACT_BASE[code];
   const numbered = `.context/${base}-${runIndex}.md`;
@@ -295,11 +331,15 @@ function stageArtifactPath(code: string, runIndex: number): string {
 }
 ```
 
-**Step 6.5 — After Task() returns, enforce state.json patch (MANDATORY)**:
+#### Step 6.5 — After Task() returns, enforce state.json patch (MANDATORY)
 
 After every `Task()` return and BEFORE `TaskUpdate(stage→completed)`, execute this three-layer check:
 
-> **Completion signal (CC ≥ 2.1.198 — subagents run in the background by default)**: "`Task()` return" here means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the `TaskUpdate(stage→completed)` that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp `completed` over a still-running stage. Errored returns now propagate honestly (CC ≥ 2.1.199/2.1.200): a subagent cut off by a rate limit or API error reports the error (with any partial work preserved) instead of a successful-looking empty result — classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch on an errored return.
+##### Completion signal (CC ≥ 2.1.198 — subagents run in the background by default)
+
+> "`Task()` return" here means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the `TaskUpdate(stage→completed)` that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp `completed` over a still-running stage. Errored returns now propagate honestly (CC ≥ 2.1.199/2.1.200): a subagent cut off by a rate limit or API error reports the error (with any partial work preserved) instead of a successful-looking empty result — classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch on an errored return.
+
+###### Layer check — Layers 1–2
 
 ```typescript
 // Layer check: re-read state.json.
@@ -309,16 +349,18 @@ const runIndex = full.metadata.run_index ?? 0;
 const artifactPath = stageArtifactPath(code, runIndex);
 
 if (statePost.stages?.[code]?.status !== "completed") {
-  // Layer 1 (agent self-patch) missed. Invoke Layer 2 synchronously via the canonical script.
-  // This fires even if the SubagentStop hook event was not delivered.
-  // Canonical Layer 2: bash skills/worktask/scripts/state-patch.sh --stage <code> --artifact <path> --via step6_5
-  //   (the script is the single implementation; .claude/hooks/state-merge.sh is a thin wrapper that
-  //    delegates to it — invoke state-patch.sh directly here for the synchronous Step-6.5 path.)
-  //   `--via step6_5` stamps stages.<CODE>.completed_via=step6_5 so this synchronous path is
-  //   distinguishable from the SubagentStop-hook default ("hook"). (v1 additive.)
+  // Layer 1 (agent self-patch) missed → invoke Layer 2 synchronously via the canonical script
+  // (fires even if the SubagentStop hook event was not delivered):
+  //   bash skills/worktask/scripts/state-patch.sh --stage <code> --artifact <path> --via step6_5
+  // state-patch.sh is the single implementation (.claude/hooks/state-merge.sh is a thin wrapper);
+  // `--via step6_5` stamps stages.<CODE>.completed_via=step6_5 vs the hook default ("hook"). (v1 additive.)
   runStateMergeHook(artifactPath, code, /* via */ "step6_5");
+```
 
-  // Re-read after hook.
+###### Layer 3 (F3) fallback
+
+```typescript
+  // …continued: re-read after the Layer-2 hook.
   const statePost2 = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
   if (statePost2.stages?.[code]?.status !== "completed") {
     // Layer 2 also missed (hook absent or artifact lacks frontmatter).
@@ -334,7 +376,7 @@ if (statePost.stages?.[code]?.status !== "completed") {
 }
 ```
 
-**Dispatch-tracking helpers** (used by the loop above and the execution loop's steps 6a/6.5; all write only cache section [3]):
+###### Dispatch-tracking helpers (steps 6a/6.5 — write only cache section [3])
 
 ```typescript
 // markDispatchStatus — return the dispatched_agents[] array with the entry for task_id
@@ -352,6 +394,8 @@ function markDispatchStatus(state, taskId, status, modelResolved) {
 // errorBasename — last ":"-segment of the subagent_type (e.g. igrsoft:developer → developer).
 ```
 
+###### Banner relocation & cache-prefix hygiene
+
 **Banner relocation (R3)**: stage-specific banners (DR Skill, FN Conductor, MCP fallback warning) are appended AFTER `full.description` (suffix), not prepended. Prefixes [1][2][3][4] stay byte-identical across stages so the cache prefix boundary stretches as far as possible.
 
 The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: timestamps, ENV expansions that vary per call, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. CI lint (`skills/worktask/scripts/cache-lint.sh`) asserts byte-stability across consecutive stages of the same `worktask_id`.
@@ -362,6 +406,9 @@ The orchestrator NEVER writes implementation code directly. ALL stage work is de
 
 ### PRECONDITION CHECK
 Before entering this loop, verify:
+
+#### Signals 1–3
+
 - **Signal 1 (TaskList audit)**: Call `TaskList()`, find the PL0 task, verify its status is `completed`. If PL0 does not exist or is not completed, STOP — worktask not initialized or planning incomplete.
 
 **Signal 2 (plan gate)**: Read `PL0.metadata.plan_gate` (via `TaskGet`; default `"checkpoint"`).
@@ -370,13 +417,20 @@ Before entering this loop, verify:
   absent, STOP — return to `commands/worktask.md § Step A.5` to fulfil the gate.
 - `"bypass"` (`--auto-plan` / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator): PL0 `completed` alone is sufficient; no approval line.
 
-**Signal 3 (FN gate)**: FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`). The orchestrator STOPs immediately before the FN `Task()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto-finalization` / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator). See loop step 4.9 and § FN Gate.
+##### Signal 3 (FN gate)
+
+FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`). The orchestrator STOPs immediately before the FN `Task()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto-finalization` / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator). See loop step 4.9 and § FN Gate.
+
+#### After PL0 — steps 1–3
 
 After PL0 completes and creates stage tasks, the orchestrator MUST:
 
 1. **Present PL0 results** to the user: complexity score, stages created (with agents), dependency chain, and key planning decisions (presented at the Step A.5 plan gate; on a `checkpoint` gate execution proceeds only after approval).
 2. **Re-validate before executing**: Call `TaskList()` to get all stage tasks. For each task, verify `metadata.agent` and `metadata.model` are set. This checkpoint prevents drift — the orchestrator re-grounds itself in the delegation rules before touching any stage.
 3. **Publish plan to GitHub** (before stage loop). Run:
+
+##### Step 3 — publish snippet
+
      ```bash
      PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
      # Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
@@ -385,6 +439,12 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
      HELPER="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue.sh"
      if [ -f "$HELPER" ]; then
        bash "$HELPER"; true
+     ```
+
+##### Step 3 — publish fallback (helper_not_found)
+
+     ```bash
+     # …continued: helper missing → audit one deferred github_issue_created row
      else
        LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
        mkdir -p "$LOG_DIR"
@@ -394,31 +454,34 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
          >> "$LOG_DIR/audit.jsonl"; true
      fi
      ```
+
+##### Step 3 — non-blocking & skip rules
+
      The trailing `; true` masks the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error, etc.) MUST NEVER propagate as orchestrator failure. Skip entirely when `--no-gh-issue` was supplied on the CLI (PL0 sets `task.metadata.no_gh_issue: true`; the helper short-circuits internally and audits `deferred`/`opted_out`). Under megatask per-issue mode (`state.json:metadata.milestone` set, or `workspace.json` present), the helper exits `0` immediately with `reason: "milestone_mode"` — no `gh` API call of any kind is made. A **second or later worktask run in the same `.context/`** does NOT open a duplicate issue: the helper resolves the run-independent `.context/gh-issue.json` anchor and posts a follow-up comment instead (`metadata.mode: "comment"`; see `skills/gh-issue-dedup`). See `### PL Issue Publish` below for sanitiser rules and the non-blocking guarantee.
 
+
+#### Steps 1–3
 
 ```typescript
 // 1. Get all tasks for this worktask
 let tasks = TaskList();
+```
 
-// Typed-return schemas keyed by stage code (verbatim from handoff-protocol.md#handoff-schemas).
+##### HANDOFF_SCHEMA
+
+```typescript
+// Typed-return schemas — SSOT: skills/worktask/references/handoff-protocol.md#handoff-schemas.
+// Read the SSOT ONCE at loop entry and materialize the other 12 entries verbatim (PL is the exemplar).
 // A missing key leaves stageSchema undefined → schema param omitted → today's frontmatter path.
 const HANDOFF_SCHEMA: Record<string, object> = {
   PL: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "PLHandoff", type: "object", required: ["verdict", "summary", "key_decisions", "next_stage_focus"], properties: { verdict: { type: "string", enum: ["ok", "blocked", "escalate"] }, summary: { type: "string", maxLength: 200 }, complexity: { type: "integer", minimum: 0, maximum: 50 }, key_decisions: { type: "array", items: { type: "string" } }, next_stage_focus: { type: "string" }, open_questions: { type: "array", items: { type: "string" } } } },
-  AR: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "ARHandoff", type: "object", required: ["verdict", "summary", "key_decisions", "next_stage_focus"], properties: { verdict: { type: "string", enum: ["ok", "blocked", "escalate"] }, summary: { type: "string", maxLength: 200 }, key_decisions: { type: "array", items: { type: "string" } }, next_stage_focus: { type: "string" }, open_questions: { type: "array", items: { type: "string" } } } },
-  TL: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "TLHandoff", type: "object", required: ["verdict", "summary", "next_stage_focus"], properties: { verdict: { type: "string", enum: ["ok", "blocked", "escalate"] }, summary: { type: "string", maxLength: 200 }, next_stage_focus: { type: "string" }, fanout: { type: "array", items: { type: "string" } } } },
-  DV: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "DVHandoff", type: "object", required: ["verdict", "files_modified", "build_status"], properties: { verdict: { type: "string", enum: ["ok", "blocked", "escalate"] }, files_modified: { type: "array", items: { type: "string" } }, tests_added: { type: "array", items: { type: "string" } }, build_status: { type: "string", enum: ["pass", "fail", "skipped"] }, decisions: { type: "array", items: { type: "string" } } } },
-  DR: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "DRHandoff", type: "object", required: ["verdict", "findings", "blockers"], properties: { verdict: { type: "string", enum: ["pass", "fail"] }, findings: { type: "array", items: { type: "string" } }, blockers: { type: "array", items: { type: "string" } }, p2_only: { type: "boolean" } } },
-  SR: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "SRHandoff", type: "object", required: ["verdict", "findings", "blockers"], properties: { verdict: { type: "string", enum: ["pass", "fail"] }, findings: { type: "array", items: { type: "string" } }, blockers: { type: "array", items: { type: "string" } }, threat_model: { type: "string" } } },
-  QA: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "QAHandoff", type: "object", required: ["verdict", "tests_passed", "tests_failed"], properties: { verdict: { type: "string", enum: ["go", "no-go"] }, tests_passed: { type: "integer", minimum: 0 }, tests_failed: { type: "integer", minimum: 0 }, blocking_defects: { type: "array", items: { type: "string" } } } },
-  DC: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "DCHandoff", type: "object", required: ["verdict", "files_modified"], properties: { verdict: { type: "string", enum: ["ok", "blocked", "escalate"] }, files_modified: { type: "array", items: { type: "string" } }, cross_references: { type: "array", items: { type: "string" } } } },
-  RE: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "REHandoff", type: "object", required: ["verdict", "version", "files_modified"], properties: { verdict: { type: "string", enum: ["ok", "blocked"] }, version: { type: "string" }, files_modified: { type: "array", items: { type: "string" } }, changelog: { type: "array", items: { type: "string" } } } },
-  FN: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "FNHandoff", type: "object", required: ["verdict", "summary", "next_stage_focus"], properties: { verdict: { type: "string", enum: ["ok", "blocked"] }, summary: { type: "string", maxLength: 200 }, next_stage_focus: { type: "string" }, files_modified: { type: "array", items: { type: "string" } }, pr_url: { type: "string" } } },
-  ST: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "STHandoff", type: "object", required: ["verdict", "key_decisions"], properties: { verdict: { type: "string", enum: ["approve", "reject"] }, key_decisions: { type: "array", items: { type: "string" } }, follow_ups: { type: "array", items: { type: "string" } } } },
-  IR: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "IRHandoff", type: "object", required: ["verdict", "root_cause", "next_stage_focus"], properties: { verdict: { type: "string", enum: ["ok", "escalate"] }, root_cause: { type: "string" }, next_stage_focus: { type: "string" }, blast_radius: { type: "string" } } },
-  ET: { $schema: "https://json-schema.org/draft/2020-12/schema", title: "ETHandoff", type: "object", required: ["verdict", "findings"], properties: { verdict: { type: "string", enum: ["pass", "fail"] }, findings: { type: "array", items: { type: "string" } }, mitigations: { type: "array", items: { type: "string" } } } },
+  // …AR TL DV DR SR QA DC RE FN ST IR ET: materialize verbatim from the SSOT above.
 };
+```
 
+##### Steps 2–3 — completion loop & ready filter
+
+```typescript
 // 2. Loop until all tasks are completed
 while (tasks.some(t => t.status !== "completed")) {
   // 3. Find unblocked pending tasks
@@ -428,6 +491,11 @@ while (tasks.some(t => t.status !== "completed")) {
   );
 
   for (const task of ready) {
+```
+
+#### Step 4.0
+
+```typescript
     // 4. Get full task details
     const full = TaskGet({ taskId: task.id });
     const agentType = full.metadata.agent;
@@ -439,7 +507,11 @@ while (tasks.some(t => t.status !== "completed")) {
     const state = fs.existsSync(".context/state.json")
       ? JSON.parse(fs.readFileSync(".context/state.json", "utf8"))
       : { stages: {}, facts: {} };
+```
 
+##### Agent-type resolution
+
+```typescript
     // Resolve plugin: bare → "igrsoft:<name>"; 2-part "plugin:name" → as-is;
     //   3-part "a:b:c" → UNSUPPORTED, throw (message below). The .context/errors/<basename>.md
     //   basename is the last `:`-segment. Applies at every nesting depth (CC ≥ 2.1.172 allows
@@ -449,7 +521,11 @@ while (tasks.some(t => t.status !== "completed")) {
       throw new Error(`Invalid agent reference '${agentType}': only bare or plugin-qualified names supported.`);
     }
     const subagentType = colonCount === 1 ? agentType : `igrsoft:${agentType}`;
+```
 
+#### Step 4.5
+
+```typescript
     // 4.5. Soft context_files validation — warn, don't abort
     //      Low-complexity worktasks legitimately skip upstream stages,
     //      so a missing listed file is a warning appended to the prompt.
@@ -469,7 +545,11 @@ while (tasks.some(t => t.status !== "completed")) {
           full.description;
       }
     }
+```
 
+#### Step 4.6-pre
+
+```typescript
     // 4.6-pre. last_error hint — on a retry, prepend one line summarizing the prior
     //          errored return (class + partial + ref) to prompt section [6] so the
     //          re-dispatch targets the recorded failure instead of re-inferring it.
@@ -486,19 +566,27 @@ while (tasks.some(t => t.status !== "completed")) {
       }
     }
 
+```
+
+#### Step 4.6
+
+```typescript
     // 4.6. Gate-feedback injection — DR→DV / QA→DV loop-back (gate-feedback contract).
-    //      When the previous DR returned `verdict:fail` or QA returned `verdict:no-go`,
-    //      the orchestrator re-dispatches DV (run_index bumped, retry_count++). This
-    //      step carries the upstream remediation VERBATIM into the retry prompt so the
-    //      re-run targets *those* findings instead of re-inferring the fix — the
-    //      orchestrator surface of the gate-feedback contract (the hook surface is
-    //      `hookSpecificOutput.additionalContext`; see
-    //      skills/agent-coordination/references/hook-monitoring.md §"Gate-feedback contract").
-    //      Symmetric with dv-screenshot-gate.sh's block-path additionalContext.
+    //      Prior DR `verdict:fail` / QA `verdict:no-go` → re-dispatch DV (run_index bumped,
+    //      retry_count++) carrying the upstream remediation VERBATIM so the re-run targets
+    //      *those* findings. Hook surface: `hookSpecificOutput.additionalContext` — see
+    //      skills/agent-coordination/references/hook-monitoring.md §"Gate-feedback contract";
+    //      symmetric with dv-screenshot-gate.sh's block-path additionalContext.
     if (full.metadata.stage === "DV" && (full.metadata.retry_count ?? 0) > 0) {
       // Read the upstream gate handoff for this run: DR `.context/developer-review-N.md`
       // (DRHandoff.blockers[]) and/or QA `.context/testing-N.md` (QAHandoff.blocking_defects[]),
       // N = the failing upstream run_index. Embed whichever is present as a remediation block.
+```
+
+##### Step 4.6 — remediation injection & audit
+
+```typescript
+      // …continued: step 4.6 body
       const fromStage = full.metadata.gate_from_stage; // "DR" | "QA" (set by the loop-back)
       const blockers = full.metadata.gate_blockers ?? []; // blockers[] | blocking_defects[]
       if (fromStage && blockers.length > 0) {
@@ -516,18 +604,26 @@ while (tasks.some(t => t.status !== "completed")) {
       }
     }
 
+```
+
+#### Step 4.7
+
+```typescript
     // 4.7. DV checkpoint resume — restart DV from its last budget-aware checkpoint.
-    //       When a prior DV run exhausted its budget mid-implementation, it wrote a
-    //       partial `development-N.md` (+ `## Blockers`) and recorded the completed
-    //       sub-batches at `state.json → stages.DV.progress` rather than emitting a
-    //       progress narration (see agents/developer.md § Budget-Aware Checkpointing).
-    //       On re-dispatch, carry the checkpoint forward so the re-run resumes from
-    //       `next_batch` instead of redoing applied work. Friction precedent:
-    //       tokamak-reconciler-unification (#14) — DV hit its budget twice and the
-    //       orchestrator had to reconstruct partial state by hand.
+    //       A budget-exhausted DV run wrote a partial `development-N.md` (+ `## Blockers`)
+    //       and recorded completed sub-batches at `state.json → stages.DV.progress`
+    //       (agents/developer.md § Budget-Aware Checkpointing). On re-dispatch, carry the
+    //       checkpoint forward so the re-run resumes from `next_batch` instead of redoing
+    //       applied work. Friction precedent: tokamak-reconciler-unification (#14).
     if (full.metadata.stage === "DV") {
       const dvProgress = state.stages?.DV?.progress;  // {completed_batches, next_batch, updated_at}
       if (dvProgress && (dvProgress.completed_batches?.length ?? 0) > 0) {
+```
+
+##### Step 4.7 — resume injection & audit
+
+```typescript
+        // …continued: step 4.7 body
         const resume =
           `RESUME (DV checkpoint — prior run completed batches ` +
           `[${dvProgress.completed_batches.join(", ")}]; resume from ` +
@@ -547,23 +643,37 @@ while (tasks.some(t => t.status !== "completed")) {
       }
     }
 
+```
+
+#### Step 4.8
+
+```typescript
     // 4.8. DV worktree-isolation enforcement — isolation is ALWAYS expected.
     //       Every DV stage runs in an isolated worktree before writing files
     //       (see agents/developer.md § D0.0). Carry that requirement into the DV
     //       prompt so the agent confirms isolation, creates a worktree, or flags
     //       the deviation and returns — instead of silently editing the shared checkout.
-    //       Friction precedent: tokamak-reconciler-unification (#14, decision dv6) ran DV
-    //       in the main baton-rouge workspace, risking cross-contamination and weakening
-    //       branch-exclusion constraints. DR rejects a DV handoff carrying `worktree:false`
-    //       (isolation is always expected) unless an explicit waiver exists
-    //       (`worktree_isolation_waived` audit / task.metadata.worktree_waived).
+    //       DR rejects a DV handoff carrying `worktree:false` unless an explicit waiver
+    //       exists (`worktree_isolation_waived` audit / task.metadata.worktree_waived).
+    //       Friction precedent: tokamak-reconciler-unification (#14, decision dv6).
     if (full.metadata.stage === "DV") {
+```
+
+##### Step 4.8 — enforcement banner
+
+```typescript
       const enforce =
         `WORKTREE ISOLATION REQUIRED (always): ` +
         `confirm you are in an isolated worktree before any Edit/Write (D0.0). ` +
         `If not, EnterWorktree and proceed, or flag worktree_isolation_missing and ` +
         `return verdict:blocked. Set handoff frontmatter \`worktree: true\` (false is a hard DR fail).`;
       full.description = full.description + "\n\n" + enforce;
+```
+
+##### Step 4.8 — worktree audit
+
+```typescript
+      // …continued: step 4.8 body
       appendAudit({
         actor: "orchestrator",
         action: "dv_worktree_enforced",
@@ -573,6 +683,11 @@ while (tasks.some(t => t.status !== "completed")) {
       });
     }
 
+```
+
+#### Step 4.9
+
+```typescript
     // 4.9. FN gate — read PL0.metadata.fn_gate (default "checkpoint"). The gate
     //      sits BEFORE the FN Task() delegation so nothing remote happens pre-approval.
     //      N = state.json.run_index (default 0). See § FN Gate below — Read
@@ -585,6 +700,11 @@ while (tasks.some(t => t.status !== "completed")) {
       //     (references/fn-gate.md § Pre-gate Conductor-attachments writer) —
       //     local-only writes, no remote ops. Bypass path falls through to
       //     FN-agent Writer 2 inside the FN stage.
+```
+
+##### Step 4.9 — checkpoint path
+
+```typescript
       if (fnGate === "checkpoint") {
         // (b) Emit `fn_gate_waiting subject:"FN<N>"`.
         appendAudit({ actor: "orchestrator", action: "fn_gate_waiting",
@@ -598,6 +718,11 @@ while (tasks.some(t => t.status !== "completed")) {
         //     (do NOT delegate FN; surface feedback).
         // appendAudit({ ...action:"approval_received", subject:`FN${N}`, result:"ok" });
         // appendAudit({ ...action:"approval_rejected", subject:`FN${N}`, result:"rejected" }); // STOP
+```
+
+##### Step 4.9 — bypass path
+
+```typescript
       } else {  // "bypass" — stamped by --auto-finalization / --emergency, or directly per-issue by /megatask
         // (e) Emit `fn_gate_bypass subject:"FN<N>"` (reason: "unattended") and
         //     fall through to delegate FN — commit/push/PR unattended.
@@ -606,6 +731,11 @@ while (tasks.some(t => t.status !== "completed")) {
       }
     }
 
+```
+
+#### Steps 5–5a
+
+```typescript
     // 5. Mark in_progress
     TaskUpdate({ taskId: task.id, status: "in_progress" });
 
@@ -616,6 +746,11 @@ while (tasks.some(t => t.status !== "completed")) {
       full.description = skillInvocation + "\n\n" + full.description;
     }
 
+```
+
+#### Step 5b
+
+```typescript
     // 5b. Inject dev-code-review Skill invocation for DR stages.
     //     handoff-protocol: APPEND as suffix (section [7]) so the preamble
     //     prefix [1][2][3][4][5] stays byte-identical with neighbour stages
@@ -626,6 +761,11 @@ while (tasks.some(t => t.status !== "completed")) {
       full.description = full.description + "\n\n" + reviewInvocation;
     }
 
+```
+
+#### Step 5c
+
+```typescript
     // 5c. Pre-warm XcodeBuildMCP for Apple DV/DR/QA stages.
     //     XcodeBuildMCP (`npx -y xcodebuildmcp@latest mcp`, stdio lazy-spawn) is only
     //     inherited by subagents if ALREADY RUNNING in the parent at delegation time;
@@ -643,6 +783,11 @@ while (tasks.some(t => t.status !== "completed")) {
             .some(g => glob.sync(g, { cwd: process.cwd(), dot: false }).length > 0)
         )
       );
+```
+
+##### Step 5c — warmup attempts
+
+```typescript
     if (isAppleStage && !state.xcodeMcpWarmed) {
       // See `agent-coordination § MCP Unavailability Detection` for the canonical regex.
       const MCP_UNAVAILABLE_RE = /(tool not available|server (not reachable|unavailable)|connection refused|ECONNREFUSED|EPIPE|ETIMEDOUT|timed? ?out|spawn ENOENT|command not found|InputValidationError)/i;
@@ -653,6 +798,11 @@ while (tasks.some(t => t.status !== "completed")) {
           warmed = true;
           appendAudit({ action: "mcp_warmup_attempt",
                         metadata: { server: "XcodeBuildMCP", attempt, result: "ok" } });
+```
+
+##### Step 5c — failure classification & backoff
+
+```typescript
         } catch (err) {
           const reason = String(err?.message ?? err).slice(0, 500);
           const classified = MCP_UNAVAILABLE_RE.test(reason) ? "transient" : "fatal";
@@ -665,6 +815,11 @@ while (tasks.some(t => t.status !== "completed")) {
       }
       state.xcodeMcpWarmed = warmed;
 
+```
+
+##### Step 5c — session-state cache
+
+```typescript
       // Cache session state in state.json so DV/DR/QA skip redundant queries
       if (warmed && fs.existsSync(".context/state.json")) {
         try {
@@ -678,6 +833,11 @@ while (tasks.some(t => t.status !== "completed")) {
         } catch (_) { /* non-critical — agents fall back to live calls */ }
       }
 
+```
+
+##### Step 5c — fallback banner
+
+```typescript
       if (!warmed) {
         appendAudit({ action: "mcp_warmup_failed",
                       metadata: { server: "XcodeBuildMCP" } });
@@ -695,9 +855,13 @@ while (tasks.some(t => t.status !== "completed")) {
       // warmup succeeded → child inherits a live XcodeBuildMCP server.
     }
 
-    // 5d. Inject Conductor-attachments requirement for FN stages — ensures
-    //     project-manager always creates .context/attachments/ files regardless of
-    //     PL0's FN-task wording. Mirrors 5b. Templates: skills/worktask/references/conductor-attachments.md
+```
+
+#### Step 5d
+
+```typescript
+    // 5d. Conductor-attachments for FN stages — project-manager always creates .context/attachments/
+    //     files regardless of PL0's FN-task wording. Mirrors 5b; templates: references/conductor-attachments.md
     if (full.metadata.stage === "FN") {
       const fnInjection = [
         "IMPORTANT — Conductor attachments (FN-stage requirement, non-optional):",
@@ -712,6 +876,11 @@ while (tasks.some(t => t.status !== "completed")) {
       full.description = full.description + "\n\n" + fnInjection;
     }
 
+```
+
+#### Step 5e
+
+```typescript
     // 5e. Permission-Mode Pinning (honour task.metadata.permission_mode).
     //     When PL0 set `permission_mode: "default"` (typically SR/FN under --secure/--full),
     //     the orchestrator MUST NOT propagate --dangerously-skip-permissions into descendant
@@ -727,6 +896,11 @@ while (tasks.some(t => t.status !== "completed")) {
       });
     }
 
+```
+
+#### Step 6 — typed-schema dispatch (P0-1)
+
+```typescript
     // 6. Delegate to stage agent.
     //     Typed-schema dispatch (P0-1): the orchestrator SHOULD pass the stage's typed-return
     //     schema (the `<CODE>Handoff` schema from
@@ -735,6 +909,11 @@ while (tasks.some(t => t.status !== "completed")) {
     //     `handoff-protocol.md#schema-to-state-map` and SUPERSEDES the post-hoc frontmatter grep
     //     (stage-contracts.md § Validation Protocol step 2 + Step 6.5 below).
     //
+```
+
+##### Step 6 — degrade path (binding)
+
+```typescript
     //     STRICT-SUPERSET / DEGRADE (binding): the `schema` is OPTIONAL on the wire. When the
     //     runtime Task() primitive does NOT accept a `schema` param, behavior degrades to EXACTLY
     //     today's: the agent still writes its artifact with `handoff:` frontmatter, the Step-6.5
@@ -745,14 +924,23 @@ while (tasks.some(t => t.status !== "completed")) {
     //     StructuredOutput re-call after success; schema-validation failures abort after 5
     //     attempts on CC ≥ 2.1.186 instead of looping forever).
     //
+```
+
+##### Step 6 — cache-prefix (binding)
+
+```typescript
     //     CACHE-PREFIX (binding, PRESERVE §4.1): `schema` is a Task() ARGUMENT, NOT preamble text.
     //     It is NOT inserted into sections [1][2][4] (nor anywhere in `full.description`), so the
     //     cache-prefix byte-identity of [1][2][4] is untouched and no per-call varying token is
     //     introduced into the cacheable prefix.
-    // 5f. Model resolution — consult facts.capabilities BEFORE a fable-tier dispatch
-    //     (v1 additive). Fable 5 dispatch fails hard without 1M credits (CC 2.1.172;
-    //     observed live per model-selection.md). If a prior stage already hit that
-    //     hard-fail, the orchestrator cached it in facts.capabilities — skip re-hitting
+```
+
+##### Step 5f — model resolution
+
+```typescript
+    // 5f. Model resolution — consult facts.capabilities BEFORE a fable-tier dispatch (v1 additive).
+    //     Fable 5 dispatch fails hard without 1M credits (CC 2.1.172; observed live per
+    //     model-selection.md). A prior hard-fail is cached in facts.capabilities — skip re-hitting
     //     the same error and fall back to the auto-mode best-Opus target (CC 2.1.176),
     //     recording model_requested/model_resolved on the dispatch entry below.
     const modelRequested = model;
@@ -766,6 +954,11 @@ while (tasks.some(t => t.status !== "completed")) {
       });
     }
 
+```
+
+##### Step 6 — Task() dispatch
+
+```typescript
     const stageSchema = HANDOFF_SCHEMA[full.metadata.stage];  // from handoff-protocol.md#handoff-schemas; may be undefined
     const launchAck = Task({
       subagent_type: subagentType,
@@ -774,6 +967,11 @@ while (tasks.some(t => t.status !== "completed")) {
       ...(stageSchema ? { schema: stageSchema } : {}),  // omitted entirely when the runtime lacks schema support → exactly today's path
     });
 
+```
+
+#### Step 6a
+
+```typescript
     // 6a. dispatched_agents[] — record/replace the entry keyed by task_id (v1 additive,
     //     writer = orchestrator ONLY). status:"launched" now; Step 6.5 flips it to
     //     completed/failed. No dispatch-timestamp field is stored (no consumer). agent_id/name populated when
@@ -790,6 +988,11 @@ while (tasks.some(t => t.status !== "completed")) {
         ...(effectiveModel !== modelRequested ? { model_resolved: effectiveModel } : {}),
         status: "launched",
       };
+```
+
+##### Step 6a — replace-array merge
+
+```typescript
       // Replace any prior entry for this task_id (re-dispatch); history stays in audit.jsonl.
       // dispatched_agents is a REPLACE-array: jq `. * $patch` overwrites arrays (deep-merges
       // only objects), so this swaps in the filtered+appended list. See handoff-protocol.md#atomic-write.
@@ -801,6 +1004,11 @@ while (tasks.some(t => t.status !== "completed")) {
       });
     }
 
+```
+
+#### Step 6.5
+
+```typescript
     // 6.5. handoff-protocol: patch state.json from artifact frontmatter if the
     //      agent didn't already do so. Belt-and-suspenders layer #3 (after
     //      in-agent atomic write and the optional SubagentStop hook).
@@ -809,6 +1017,11 @@ while (tasks.some(t => t.status !== "completed")) {
       const post = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
       const code = full.metadata.stage;
 
+```
+
+##### Step 6.5a — errored return
+
+```typescript
       // 6.5a. Errored return (CC ≥ 2.1.199/2.1.200 propagate errors + partial work).
       //       Classify per agent-coordination § Retry / Escalate Matrix, write
       //       stages.<CODE>.last_error, flip the dispatch entry to "failed", and route
@@ -817,6 +1030,12 @@ while (tasks.some(t => t.status !== "completed")) {
         const cls = classifyError(launchAck);  // existing taxonomy, no new vocabulary
         const runIndex = full.metadata.run_index ?? 0;
         const stateForFailed = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
+```
+
+##### Step 6.5a — last_error patch
+
+```typescript
+        // …continued: step 6.5a body
         atomicMergeStateJson({
           stages: {
             [code]: {
@@ -836,6 +1055,11 @@ while (tasks.some(t => t.status !== "completed")) {
         continue;
       }
 
+```
+
+##### Step 6.5 — Layer 2 (synchronous patch)
+
+```typescript
       if (post.stages?.[code]?.status !== "completed") {
         const runIndex = full.metadata.run_index ?? 0;
         const artifactPath = stageArtifactPath(code, runIndex);  // e.g. ".context/development-0.md"
@@ -844,6 +1068,11 @@ while (tasks.some(t => t.status !== "completed")) {
         //   bash skills/worktask/scripts/state-patch.sh --stage <code> --artifact <path> --via step6_5
         // (equivalently: STATE_MERGE_VIA=step6_5 bash .claude/hooks/state-merge.sh)
         runStateMergeHook(artifactPath, code, /* via */ "step6_5");
+```
+
+##### Step 6.5 — Layer 3 (F3)
+
+```typescript
         const post2 = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
         if (post2.stages?.[code]?.status !== "completed") {
           // Layer 3 (F3): derive a minimal patch and stamp completed_via:"f3".
@@ -856,6 +1085,11 @@ while (tasks.some(t => t.status !== "completed")) {
         }
       }
 
+```
+
+##### Step 6.5b — dispatch entry completed
+
+```typescript
       // 6.5b. Flip the dispatch entry to "completed" and backfill model_resolved from the
       //       F3 liveness read when the runtime surfaced the resolved model. Re-read state
       //       here (not the stale step-4.0 snapshot) so this maps over the fresh
@@ -868,6 +1102,11 @@ while (tasks.some(t => t.status !== "completed")) {
       });
     }
 
+```
+
+#### Step 7
+
+```typescript
     // 7. Mark completed
     TaskUpdate({ taskId: task.id, status: "completed" });
   }
@@ -877,37 +1116,82 @@ while (tasks.some(t => t.status !== "completed")) {
 }
 ```
 
-**Key rules**:
+#### Key rules
+
 - NEVER skip TaskUpdate calls (both in_progress and completed)
 - NEVER execute a stage without checking blockedBy dependencies are completed
 - ALWAYS pass `model` from task metadata to the Agent tool (e.g. `model: opus` → `model: "opus"`); omitting/mismatching is a violation. Do NOT rely on frontmatter inheritance
 - `metadata.agent`: bare names → `igrsoft:<name>`, plugin-qualified (`apple-developer:ios-developer`) used as-is. Detection: presence of `:`
 - If a stage agent fails after 3 retries, escalate per the error handling chain
+
+##### Key rules — completion & tooling
+
 - NEVER mark a task `completed` without first delegating and receiving results — the most common violation. Launch-ack ≠ results: with background-default subagents (CC ≥ 2.1.198) the completion notification (or `subagent_stopped` audit row) is the "results received" signal; an errored return (rate-limit/API error — now propagated with partial work, CC ≥ 2.1.199) routes to the retry/escalate matrix, never to completion
 - The orchestrator uses ONLY TaskCreate, TaskUpdate, TaskGet, TaskList, and Agent tools — Edit/Write/Bash on source files belong to stage agents. It owns the loop; stage agents own their stage's work
 - Prefer in-memory task tracking over `TaskList()` polling. Call `TaskList()` only on first loop entry, after TL/DV stages (which may create sub-tasks), and every 3rd iteration as a consistency check. For linear pipelines, update the local task array from `TaskUpdate` results instead of re-fetching all tasks
 
 ### PL Issue Publish
 
-Step 6.5 invokes `skills/worktask/scripts/publish-pl-issue.sh` between PL0 completion and the stage-loop entry. The helper is **non-blocking by contract** (default): orchestrator wraps it in a `; true` so a non-zero exit is never propagated, and the helper itself returns `0` for every operational outcome (success, deferred, network error, sanitiser abort) — only catastrophic bugs (`jq` missing, `audit_dir_unwritable`, `state_corrupt`, `plan_unreadable`) raise `1`. Each outcome is recorded as one `github_issue_created` row in `.context/logs/audit.jsonl` with `result ∈ {ok, deferred, failed, error}` and `metadata.reason ∈ {gh_not_installed, auth_missing, no_remote, network_error, sanitiser_aborted, already_published, comment_already_present, opted_out, milestone_mode, helper_not_found, label_create_failed, gh_api_error, gh_timeout, permission_denied, repo_not_found}`. On success `metadata.mode ∈ {create, comment}`: the FIRST run in a `.context/` creates the issue, a LATER run comments on it (cross-run dedup — see `skills/gh-issue-dedup`; milestone-mode still skips both). The `helper_not_found` reason is not raised by the helper itself — the orchestrator emits this directly when the helper file is unreachable. The `network_error` reason is reserved for genuine transport-failure stderr (`could not resolve host`, `connection refused`, `timeout`); label/auth/api failures are mapped to their specific reason instead of being bucketed as network errors. Dedupe-key shape: `<worktask_id>:<run_index>:gh_issue`.
+Step 6.5 invokes `skills/worktask/scripts/publish-pl-issue.sh` between PL0 completion and the stage-loop entry.
+
+#### Outcome & audit vocabulary
+
+The helper is **non-blocking by contract** (default): orchestrator wraps it in a `; true` so a non-zero exit is never propagated, and the helper itself returns `0` for every operational outcome (success, deferred, network error, sanitiser abort) — only catastrophic bugs (`jq` missing, `audit_dir_unwritable`, `state_corrupt`, `plan_unreadable`) raise `1`. Each outcome is recorded as one `github_issue_created` row in `.context/logs/audit.jsonl` with `result ∈ {ok, deferred, failed, error}` and `metadata.reason` from the table below. On success `metadata.mode ∈ {create, comment}`: the FIRST run in a `.context/` creates the issue, a LATER run comments on it (cross-run dedup — see `skills/gh-issue-dedup`; milestone-mode still skips both). Dedupe-key shape: `<worktask_id>:<run_index>:gh_issue`.
+
+#### Reason enum
+
+| `metadata.reason` | Notes |
+|---|---|
+| `gh_not_installed`, `auth_missing`, `no_remote` | environment preflight failures |
+| `network_error` | reserved for genuine transport-failure stderr (`could not resolve host`, `connection refused`, `timeout`); label/auth/api failures are mapped to their specific reason instead of being bucketed as network errors |
+| `sanitiser_aborted` | >50% strip-ratio abort (see § Strip-ratio abort) |
+| `already_published`, `comment_already_present` | cross-run dedup outcomes |
+| `opted_out` | `--no-gh-issue` |
+| `milestone_mode` | megatask per-issue skip |
+| `helper_not_found` | not raised by the helper itself — the orchestrator emits this directly when the helper file is unreachable |
+| `label_create_failed`, `gh_api_error`, `gh_timeout`, `permission_denied`, `repo_not_found` | `gh`-side failures |
+
+#### Strict mode
 
 **Strict mode opt-in.** Passing `--strict` to the helper, or stamping `metadata.gh_issue.strict: true` on the state.json, flips operational failures from non-blocking `result: "deferred"` to blocking `result: "failed"` with `exit 1`. Use when an unpublished issue is unacceptable (e.g., compliance-tracked runs). Default behaviour stays unchanged so the existing fixture corpus and casual runs are unaffected.
 
-**External-ticket extraction.** The helper extracts a `^[A-Z][A-Z0-9]+-[0-9]+` prefix from `facts.goal` (falls back to upper-cased `worktask_id`). On match it (a) ensures the issue title starts with the prefix without double-prefixing, (b) appends a `ticket:<PREFIX>` label (auto-provisioned via the same `ensure_labels()` path as the canonical set), (c) persists the prefix to `state.json:metadata.external_ticket`, (d) includes `external_ticket` in the success audit row. When `ensure_labels()` cannot create one of the canonical or ticket labels, the offending label is dropped from the `--label` argument and recorded in the audit row under `metadata.labels_dropped` (array).
+#### External-ticket extraction
 
-**Sanitiser rules summary (two-pass).** Pass 1 drops entire lines matching any of nine rules (L1–L9): `.context/` paths, absolute filesystem paths (`/Users/`, `/home/`, `/tmp/`, `/var/`, `/opt/`, `/etc/`, `/root/`), `~/`-prefixed paths, `conductor/workspaces/<id>` directories, the literal tokens `workspace_path`/`plan_file`/`run_index`/`artifact_path`, every numbered artifact filename (`planning-N.md`, `analyzing-N.md`, `coordination-N.md`, `development-N.md`, `developer-review-N.md`, `testing-N.md`, `documentation-N.md`, `release-N.md`, `complete-summary-N.md`, `retrospective-N.md`, `incident-N.md`, `ethics-review-N.md`), and `./` / `../` relative paths. Pass 2 strips filename-shaped tokens like `MyClass.swift` UNLESS at least one allow-list rule fires (A1: token is inside a fenced code block; A2: token is inside inline-code backticks; A3: token follows a `symbol:` prefix; A4: token sits on a narrative-bullet line labelled `class`/`type`/`protocol`/`struct`/`enum`/`function`/`fn`/`func`/`method`; A5: extension is outside the deny-list `.md/.json/.jsonl/.swift/.ts/.py/.yml/.yaml/.sh/.bash/.go/.rs/.kt/.java/.rb/.cpp/.c/.h/.hpp/.m/.mm`). The full grammar lives in `analyzing-0.md#sanitiser-regex` (per-release plan history).
+The helper extracts a `^[A-Z][A-Z0-9]+-[0-9]+` prefix from `facts.goal` (falls back to upper-cased `worktask_id`). On match it (a) ensures the issue title starts with the prefix without double-prefixing, (b) appends a `ticket:<PREFIX>` label (auto-provisioned via the same `ensure_labels()` path as the canonical set), (c) persists the prefix to `state.json:metadata.external_ticket`, (d) includes `external_ticket` in the success audit row. When `ensure_labels()` cannot create one of the canonical or ticket labels, the offending label is dropped from the `--label` argument and recorded in the audit row under `metadata.labels_dropped` (array).
 
-**Strip-ratio abort.** If sanitiser removes more than 50% of the body length, the helper refuses to publish, persists the (still partially-sanitised) body to `.context/logs/issue-body-<run_index>.aborted.tmp` for operator inspection, and audits `result: "deferred"`, `reason: "sanitiser_aborted"`, `metadata.strip_ratio: <int>`. Operators investigate the aborted body and amend the plan's `## requirements`/`## acceptance-criteria`/`## scope`/`## complexity` anchors to reduce path-like noise.
+#### Sanitiser pass 1 — line drops (L1–L9)
 
-**Opt-out: `--no-gh-issue`.** When the CLI invocation carries `--no-gh-issue`, PL0 stamps `metadata.no_gh_issue: true` on its own task and propagates the field through. The helper exits `0` immediately with `result: "deferred"`, `reason: "opted_out"` — no `gh` API call is issued. The state-loop entry proceeds unchanged.
+Pass 1 drops entire lines matching any of nine rules (L1–L9): `.context/` paths, absolute filesystem paths (`/Users/`, `/home/`, `/tmp/`, `/var/`, `/opt/`, `/etc/`, `/root/`), `~/`-prefixed paths, `conductor/workspaces/<id>` directories, the literal tokens `workspace_path`/`plan_file`/`run_index`/`artifact_path`, every numbered artifact filename (`planning-N.md`, `analyzing-N.md`, `coordination-N.md`, `development-N.md`, `developer-review-N.md`, `testing-N.md`, `documentation-N.md`, `release-N.md`, `complete-summary-N.md`, `retrospective-N.md`, `incident-N.md`, `ethics-review-N.md`), and `./` / `../` relative paths.
 
-**Megatask per-issue skip.** When the worktask runs under a `/megatask` batch (state.json `metadata.milestone` set, or a `workspace.json` exists at `$PWD`/`$WORKSPACE_ROOT`), the helper exits `0` immediately with `result: "deferred"`, `reason: "milestone_mode"` — **no `gh issue create`, no `gh issue comment`, no API call of any kind**. Rationale: the parent milestone issue is the canonical record; auto-posting plan-approval comments fragments the review surface. PR linkage (FN stage or manual) ties the implementation back to the milestone. Detection signals (highest priority first): `MILESTONE_MODE=1` env override (tests), `state.json:metadata.milestone` non-empty, `workspace.json` present at either discovery path.
+#### Sanitiser pass 2 — filename tokens (A1–A5)
 
-**Cross-run dedup (one `.context/` ↔ one issue).** `state.json` is re-seeded on every fresh `/worktask` (its `metadata` is wiped), so the canonical issue reference is persisted to the run-independent `.context/gh-issue.json` anchor instead. Guard order: opt-out → **cross-run resolve** → milestone skip → `gh`/auth/remote. The helper resolves the anchor (or, if the anchor is lost, an exact-title **single-hit** `gh issue list --state open --search` — disable with `GH_ISSUE_SEARCH=0`, ambiguous multi-hit results are refused): created **this** run → `already_published`; created in an **earlier** run → posts one marker-deduped follow-up comment (`result: "ok"`, `metadata.mode: "comment"`, `metadata.resolved_via ∈ {anchor, search}`) instead of a duplicate, and re-posting the same run defers `comment_already_present`. Full protocol: `skills/gh-issue-dedup`.
+Pass 2 strips filename-shaped tokens like `MyClass.swift` UNLESS at least one allow-list rule fires (A1: token is inside a fenced code block; A2: token is inside inline-code backticks; A3: token follows a `symbol:` prefix; A4: token sits on a narrative-bullet line labelled `class`/`type`/`protocol`/`struct`/`enum`/`function`/`fn`/`func`/`method`; A5: extension is outside the deny-list `.md/.json/.jsonl/.swift/.ts/.py/.yml/.yaml/.sh/.bash/.go/.rs/.kt/.java/.rb/.cpp/.c/.h/.hpp/.m/.mm`). The full grammar lives in `analyzing-0.md#sanitiser-regex` (per-release plan history).
+
+#### Strip-ratio abort
+
+If sanitiser removes more than 50% of the body length, the helper refuses to publish, persists the (still partially-sanitised) body to `.context/logs/issue-body-<run_index>.aborted.tmp` for operator inspection, and audits `result: "deferred"`, `reason: "sanitiser_aborted"`, `metadata.strip_ratio: <int>`. Operators investigate the aborted body and amend the plan's `## requirements`/`## acceptance-criteria`/`## scope`/`## complexity` anchors to reduce path-like noise.
+
+#### Opt-out: `--no-gh-issue`
+
+When the CLI invocation carries `--no-gh-issue`, PL0 stamps `metadata.no_gh_issue: true` on its own task and propagates the field through. The helper exits `0` immediately with `result: "deferred"`, `reason: "opted_out"` — no `gh` API call is issued. The state-loop entry proceeds unchanged.
+
+#### Dedup & milestone behavior
+
+##### Megatask per-issue skip
+
+When the worktask runs under a `/megatask` batch (state.json `metadata.milestone` set, or a `workspace.json` exists at `$PWD`/`$WORKSPACE_ROOT`), the helper exits `0` immediately with `result: "deferred"`, `reason: "milestone_mode"` — **no `gh issue create`, no `gh issue comment`, no API call of any kind**. Rationale: the parent milestone issue is the canonical record; auto-posting plan-approval comments fragments the review surface. PR linkage (FN stage or manual) ties the implementation back to the milestone. Detection signals (highest priority first): `MILESTONE_MODE=1` env override (tests), `state.json:metadata.milestone` non-empty, `workspace.json` present at either discovery path.
+
+##### Cross-run dedup (one `.context/` ↔ one issue)
+
+`state.json` is re-seeded on every fresh `/worktask` (its `metadata` is wiped), so the canonical issue reference is persisted to the run-independent `.context/gh-issue.json` anchor instead. Guard order: opt-out → **cross-run resolve** → milestone skip → `gh`/auth/remote. The helper resolves the anchor (or, if the anchor is lost, an exact-title **single-hit** `gh issue list --state open --search` — disable with `GH_ISSUE_SEARCH=0`, ambiguous multi-hit results are refused): created **this** run → `already_published`; created in an **earlier** run → posts one marker-deduped follow-up comment (`result: "ok"`, `metadata.mode: "comment"`, `metadata.resolved_via ∈ {anchor, search}`) instead of a duplicate, and re-posting the same run defers `comment_already_present`. Full protocol: `skills/gh-issue-dedup`.
+
+#### Hard guarantee
 
 **HARD GUARANTEE** — the published GitHub issue contains **no local-file paths**, no `.context/` references, no `planning-N.md` or any other artifact filename, no absolute or relative source paths, no Conductor workspace IDs, and no `workspace_path`/`plan_file`/`run_index`/`artifact_path` literals are EVER written to the published GitHub issue body, under any circumstances. The sanitiser is defence-in-depth: PL0 authoring hygiene is the primary defence (see `agents/product-manager.md § Anchor-content hygiene`), the two-pass sanitiser is the runtime safety net, and the >50% strip-ratio abort is the final brake when both fail.
 
-**Non-blocking guarantee.** Helper exit 1 (catastrophic), exit 0 with `result: "deferred"` (any reason), `gh` hang past `GH_TIMEOUT` (default 30s), or `state.json` write failure after a successful `gh` call — none of these cause the orchestrator to halt, retry the publish step, or branch to a different code path. After the helper returns, the orchestrator's only post-helper action is to read one optional `published_url=<url>` line from helper stdout (for terminal UX) and unconditionally continue to the stage-loop entry. See `analyzing-0.md#sequence-diagram` for the canonical sequence.
+#### Non-blocking guarantee
+
+Helper exit 1 (catastrophic), exit 0 with `result: "deferred"` (any reason), `gh` hang past `GH_TIMEOUT` (default 30s), or `state.json` write failure after a successful `gh` call — none of these cause the orchestrator to halt, retry the publish step, or branch to a different code path. After the helper returns, the orchestrator's only post-helper action is to read one optional `published_url=<url>` line from helper stdout (for terminal UX) and unconditionally continue to the stage-loop entry. See `analyzing-0.md#sequence-diagram` for the canonical sequence.
 
 ### Pre-DV MCP warmup
 
@@ -924,6 +1208,8 @@ available."
 Step `5c` in the execution loop above warms the server in the parent
 session before the first Apple-platform stage. Contract:
 
+#### Warmup contract — trigger & action
+
 - **Trigger**: `metadata.stage ∈ {DV,DR,QA}` AND
   (`metadata.platform === "apple"` OR
    `metadata.subagent` matches `^(developer|technical-lead|qa-engineer)$`
@@ -934,6 +1220,9 @@ session before the first Apple-platform stage. Contract:
   Failure messages are classified against
   `agent-coordination § MCP Unavailability Detection` — only matches retry,
   non-matches re-throw immediately as real bugs.
+
+#### Warmup contract — audit, failure, idempotency
+
 - **Audit**: every attempt writes one
   `audit.jsonl` line `action: "mcp_warmup_attempt"` with
   `metadata: {server, attempt, result, classified, reason?}`. On final failure,
@@ -959,6 +1248,8 @@ checkpoint to its `development-N.md` artifact (or a scratch
 starting the next: batch id, files-touched count, and the gate result if one ran
 (e.g. a residual-grep). The line is append-only — one entry per batch boundary.
 
+#### Checkpoint rationale
+
 Rationale: if the DV agent dies or stalls mid-run (e.g. an API ConnectionRefused
 or a stream-watchdog timeout *after* the edit batches are applied but before the
 completion protocol), orchestrator F3 recovery (§ Step 6.5 Layer 3) resumes
@@ -970,14 +1261,20 @@ checkpoint resume, which carries a recorded checkpoint forward on re-dispatch.
 
 The FN gate is the **pre-finalization human checkpoint**. Carried by `PL0.metadata.fn_gate`, default `"checkpoint"`. It sits **before the FN `Task()` delegation**, so nothing remote (commit/push/PR) happens before approval. `N = state.json.run_index` (default `0`).
 
+### FN gate paths
+
 - **`checkpoint`** (default): loop step 4.9 runs the Pre-gate Conductor-attachments writer (local-only), emits `fn_gate_waiting subject:"FN<N>"`, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. On approval → append `approval_received subject:"FN<N>"` then delegate FN (commit/push/PR). On reject → append `approval_rejected subject:"FN<N>"` and STOP (do NOT delegate FN).
 - **`bypass`** (stamped only by `--auto-finalization` or `--emergency`, or directly per-issue by the `/megatask` batch orchestrator): loop step 4.9 runs the writer, emits `fn_gate_bypass subject:"FN<N>"` (`reason: "unattended"`), then delegates FN unattended. In dynamic mode the same bypass path applies on workflow return.
+
+### At the FN stage
 
 **At the FN stage — Read `references/fn-gate.md`** for the full procedure: the Pre-gate Conductor-attachments writer (run on both paths so Conductor's *Create PR* / *Request Review* actions inherit worktask context) and the four audit lines.
 
 ## Post-capture issue update (Visual evidence)
 
 After the execution loop exits (all stage tasks completed — this runs whether or not the stage set includes FN, and after the FN push when it does so the raw asset tier sees a reachable ref): post the DV screenshot captures to the GitHub issue as a marker-deduped comment. Mirrors Step 6.5's invocation discipline exactly — **non-blocking by contract** (`; true`; helper exits 0 on every operational outcome):
+
+### Post-capture publish snippet
 
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
@@ -987,6 +1284,12 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when l
 HELPER="$PLUGIN_ROOT/skills/worktask/scripts/attach-visual-evidence.sh"
 if [ -f "$HELPER" ]; then
   bash "$HELPER" --post issue; true
+```
+
+### Post-capture fallback audit (helper_not_found)
+
+```bash
+# …continued: helper missing → audit one deferred row
 else
   LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
   mkdir -p "$LOG_DIR"
@@ -997,11 +1300,15 @@ else
 fi
 ```
 
+### Post-capture self-gating & dedup
+
 The helper self-gates: it skips silently when `metadata.requires_screenshots == false` or no captures exist, defers when `metadata.github_issue_url` is absent (publish deferred / failed at Step 6.5) or under megatask per-issue mode, and dedupes on the HTML marker `<!-- visual-evidence:<worktask_id>:<run_index> -->` so a retry never double-posts. Each outcome is one `visual_evidence_issue_commented` audit row (`result ∈ {ok, skipped, deferred}`). The PR-body counterpart (`--emit pr`) is owned by the FN stage during PR composition, not here — see `agents/project-manager.md` and `references/conductor-attachments.md`.
 
 ## Post-merge completion comment
 
 After the post-capture issue update above (and after FN has created/merged the PR so the closing refs are real — "when the PR closes"): post a work-summary + screenshot completion comment to every related issue the PR closes. Same **non-blocking by contract** discipline (`; true`; helper exits 0 on every operational outcome):
+
+### Completion snippet
 
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
@@ -1011,6 +1318,12 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when l
 HELPER="$PLUGIN_ROOT/skills/worktask/scripts/attach-visual-evidence.sh"
 if [ -f "$HELPER" ]; then
   bash "$HELPER" --post completion; true
+```
+
+### Completion fallback audit (helper_not_found)
+
+```bash
+# …continued: helper missing → audit one deferred row
 else
   LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
   mkdir -p "$LOG_DIR"
@@ -1021,7 +1334,13 @@ else
 fi
 ```
 
-The helper resolves related issues from PR-body keywords (`Closes`/`Fixes`/`Resolves #N`, case-insensitive) unioned with `gh pr view --json closingIssuesReferences`, deduped to integers (so no untrusted PR-body text reaches a `gh` argv). It posts one comment per issue carrying the work summary (sourced from `.context/complete-summary-<run_index>.md`, else `state.json` `facts.goal`, else PR title+body — sanitised) plus the visual-evidence block when `requires_screenshots == true` and captures exist (summary-only otherwise). Per-issue HTML-marker dedup (`<!-- completion-summary:<worktask_id>:<run_index>:<issue_n> -->`) means a retry never double-posts; a partially-failed prior run re-posts only the missing issues. It defers under megatask per-issue mode (parent milestone issue is canonical) and audits `no_related_issues` when the PR closes nothing. Each issue yields one `completion_summary_commented` audit row (`result ∈ {ok, skipped, deferred}`); a single `gh` failure on one issue is audited and the loop continues to the rest (overall exit 0). The `FN` agent is NOT modified — it continues to own only `--emit pr` for the PR body. Timing note: at post-loop time the PR is created with its closing refs (populated at PR creation from the body keywords) even if the merge is a local fast-forward/push — so the resolver works; a later real merge re-running this step is a marker no-op.
+### Completion resolver & summary sourcing
+
+The helper resolves related issues from PR-body keywords (`Closes`/`Fixes`/`Resolves #N`, case-insensitive) unioned with `gh pr view --json closingIssuesReferences`, deduped to integers (so no untrusted PR-body text reaches a `gh` argv). It posts one comment per issue carrying the work summary (sourced from `.context/complete-summary-<run_index>.md`, else `state.json` `facts.goal`, else PR title+body — sanitised) plus the visual-evidence block when `requires_screenshots == true` and captures exist (summary-only otherwise).
+
+### Completion dedup, audit rows & timing
+
+Per-issue HTML-marker dedup (`<!-- completion-summary:<worktask_id>:<run_index>:<issue_n> -->`) means a retry never double-posts; a partially-failed prior run re-posts only the missing issues. It defers under megatask per-issue mode (parent milestone issue is canonical) and audits `no_related_issues` when the PR closes nothing. Each issue yields one `completion_summary_commented` audit row (`result ∈ {ok, skipped, deferred}`); a single `gh` failure on one issue is audited and the loop continues to the rest (overall exit 0). The `FN` agent is NOT modified — it continues to own only `--emit pr` for the PR body. Timing note: at post-loop time the PR is created with its closing refs (populated at PR creation from the body keywords) even if the merge is a local fast-forward/push — so the resolver works; a later real merge re-running this step is a marker no-op.
 
 ## Post-Worktask Self-Improvement
 

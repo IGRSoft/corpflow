@@ -20,6 +20,8 @@ when using the app at night...
 [continues for 3 more paragraphs per story]
 ```
 
+### After: compressed requirements handoff
+
 **After (180 tokens)**:
 ```markdown
 ## PL0: Planning Complete
@@ -69,6 +71,8 @@ Comparing these options across several dimensions...
 After careful consideration, we have decided to go with Option 3...
 [150 words of rationale]
 ```
+
+### After: compressed architecture handoff
 
 **After (200 tokens)**:
 ```markdown

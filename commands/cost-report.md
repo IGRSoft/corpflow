@@ -84,6 +84,8 @@ Estimated Remaining: ~$0.15
 | **Average** | — | — | — | **52% ⚠** | **0** |
 ```
 
+#### Cache Performance — Field Notes
+
 - `hit_ratio = cache_read_input_tokens / (input_tokens + cache_read_input_tokens)`.
 - Row flagged with ⚠ when ratio < 60%. Cross-stage **average** is the AC-14 target (≥ 60%); flag the average row when below.
 - PL is always 0% (cold cache); the average excludes PL once at least 3 downstream stages have data so a single cold prefix doesn't drag the headline.
@@ -104,6 +106,8 @@ Estimated Remaining: ~$0.15
 | QA    |   0 |      1 |    0 |     0 |   0 |       0 |
 ```
 
+#### Effort Distribution — Field Notes
+
 - Count of `cost-*.jsonl` rows grouped by `(stage, effort)` (effort source: `CLAUDE_EFFORT` env var and/or hook stdin `effort.level`).
 - Mismatch with the per-stage `effort:` declared in the agent frontmatter (see `skills/shared/model-selection.md`) — flag as **budget drift**; common cause is operator `/effort` override mid-run or PL0 dispatch metadata writer setting a non-default effort.
 - `unknown` rows are historical entries logged before effort capture (plugin v3.10.0) — current runtimes always export `CLAUDE_EFFORT`, so persistent new `unknown` rows indicate a broken hook environment.
@@ -122,11 +126,18 @@ Estimated Remaining: ~$0.15
 | QA    |              0  |            0  |       2        | —                        |
 ```
 
+#### Background Activity — Counter Columns
+
 - `bg_tasks_active` = max(`metadata.background_tasks_count`) observed across hook rows for that stage in `audit.jsonl` (writers: `hook:audit-subagent`, `hook:agent-stop`; field added v3.10.6).
 - `session_crons` = same, for `metadata.session_crons_count`.
 - `dispatch_depth` = computed from the `metadata.parent_agent_id` chain — 0 when `"none"`, otherwise `1 + depth(parent)`. Activates with CC ≥ 2.1.172 (sub-agents spawn sub-agents up to 5 levels deep) — depths ≥ 1 now appear whenever a stage agent delegates to a specialist; on older CC the column stays 0.
+
+#### Background Activity — Notable Column & Dedup Mode
+
 - `notable` = comma-joined `metadata.background_task_ids` and `metadata.session_cron_ids` when count > 0; otherwise `—`. Watch for the literal `"unknown"` string — signals the canonical ID-field name has shifted (see `skills/agent-coordination/references/hook-monitoring.md § BG-Task ID Schema Watch`).
 - Aggregation MUST first call `hooks/audit-dedup.sh --check-mode` (plugin root: `${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`) to pick the authoritative key (`base` or `extended`), then group rows by stage and compute max/sum/depth. Pinning the mode at startup avoids mixed-mode dedup (forbidden per `skills/agent-coordination/SKILL.md § Dedupe Key Migration`).
+
+#### Background Activity — Version Requirements
 
 Background activity columns require plugin v3.10.6+ audit rows. Earlier `audit.jsonl` rows lack these fields; values default to `0` / `—`. The helper `hooks/audit-dedup.sh --check-mode` decides whether to dedup on `dedupe_key` (base) or `dedupe_key_extended` (parent-aware) for correctness in multi-track parallel runs.
 
@@ -192,6 +203,8 @@ Reads `.context/logs/cost-*.jsonl` written by the `SubagentStop` hook (see
 one subagent invocation — the aggregator groups by `stage`, sums `input_tokens`
 + `output_tokens`, and applies the `model` rate.
 
+### Audit Dedup Before Aggregation
+
 **Audit-trail input is deduplicated before aggregation** (v3.10.1+). The
 `### Effort Distribution` table sources `(stage, effort)` counts from
 `.context/logs/audit.jsonl`, which since v3.10.0 carries BOTH hook-emitted rows
@@ -204,6 +217,8 @@ skills/agent-coordination/scripts/audit-dedup.sh .context/logs/audit.jsonl \
   | jq -s 'group_by([.metadata.stage // "unknown", .metadata.effort // "unknown"]) | …'
 ```
 
+#### Dedup Key & Verification
+
 Without the dedup step, every hook+agent paired row inflates the `(stage, effort)`
 count by 1 — most visibly on stages where both writers fire (Write/Edit, TaskCreate/
 TaskUpdate). Dedup is keyed on `metadata.dedupe_key`; rows without one (singletons
@@ -212,11 +227,15 @@ such as `approval_received`, `stage_transition`) pass through unchanged. See
 `skills/agent-coordination/scripts/audit-dedup.sh --self-test` to verify the
 filter against a synthetic fixture.
 
+### Cache Performance Inputs
+
 The Cache Performance table additionally reads:
 
 - `cache_read_input_tokens` / `cache_creation_input_tokens` columns from the same JSONL (added in plugin v3.9.0; exported by Claude Code on `SubagentStop` as `CLAUDE_CACHE_READ_INPUT_TOKENS` / `CLAUDE_CACHE_CREATION_INPUT_TOKENS`).
 - `effort` column added in plugin v3.10.0; sourced from `CLAUDE_EFFORT` and powers `### Effort Distribution`.
 - `.context/logs/fallback-*.log` line counts for the F1 fallback column (one line per agent that fell back to legacy `metadata.context_files` mode; see `skills/shared/stage-contracts.md § F1`).
+
+### Missing-Data Fallback
 
 If `.context/logs/cost-*.jsonl` is absent, the command falls back to estimated
 baselines from `skills/cost-optimization/references/token-baselines.md` and

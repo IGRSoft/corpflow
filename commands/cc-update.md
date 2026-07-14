@@ -80,12 +80,21 @@ For multi-version updates (e.g., 2.1.77 through 2.1.86):
 4. Commit once after the full batch
 5. Write the consolidated band file at the canonical path:
    `~/.claude/projects/<project-slug>/memory/cc-features-<FROM>-<TO>.md` using the prior band's structure (categorized: Model & Effort / Hooks / Tools / Plugins / Context / Performance / Subagents / Security / UX / Settings — only categories that apply).
-6. **Plugin version bump policy** (the DV agent picks the tier and records rationale in `.context/development-N.md`; mirror across `MEMORY.md` "Plugin version" line and `.claude-plugin/plugin.json` if present):
-   - **Patch (X.Y.Z → X.Y.Z+1):** additive, non-breaking, doc-only changes.
-   - **Minor (X.Y.Z → X.Y+1.0):** new agent/skill/command added, or existing tools list expanded, or backwards-compatible behavior change.
-   - **Major (X.Y.Z → X+1.0.0):** breaking change to existing agents/commands/skills (renames, removed tools, altered stage codes).
+6. Apply the plugin version bump policy (next subsection).
+
+### Plugin Version Bump Policy
+
+Batch step 6. The DV agent picks the tier and records rationale in `.context/development-N.md`; mirror across `MEMORY.md` "Plugin version" line and `.claude-plugin/plugin.json` if present:
+
+- **Patch (X.Y.Z → X.Y.Z+1):** additive, non-breaking, doc-only changes.
+- **Minor (X.Y.Z → X.Y+1.0):** new agent/skill/command added, or existing tools list expanded, or backwards-compatible behavior change.
+- **Major (X.Y.Z → X+1.0.0):** breaking change to existing agents/commands/skills (renames, removed tools, altered stage codes).
 
 ## Output Format
+
+One markdown report; emit the fenced chunks below concatenated in order.
+
+### Output Format — Release Summary
 
 ```markdown
 # Claude Code Update Report — v2.1.77
@@ -100,7 +109,11 @@ For multi-version updates (e.g., 2.1.77 through 2.1.86):
 | Scope | all |
 | Dry Run | No |
 | Files Scanned | 78 |
+```
 
+### Output Format — Feature Extraction
+
+```markdown
 ## Feature Extraction
 
 | Feature | Category | Impact Level |
@@ -109,18 +122,26 @@ For multi-version updates (e.g., 2.1.77 through 2.1.86):
 | ExitWorktree now GA | Tools | Medium |
 | Opus 4.7 model alias registered | Model | Medium |
 | Sparse worktree path filtering | Context | Low |
+```
 
+### Output Format — Worktask Efficiency Impact
+
+```markdown
 ## Worktask Efficiency Impact
 
-Output of the standing `## Worktask Efficiency Analysis (required pass)` (see the section below this fence). Behavioral rows lead — they each get an implementation task, prioritized above doc-only edits.
+Output of the standing `## Worktask Efficiency Analysis (required pass)`. Behavioral rows lead — each gets an implementation task, prioritized above doc-only edits.
 
 | Feature | Axis | Verdict | Improvement (mechanism) |
 |---------|------|---------|--------------------------|
 | Stop/SubagentStop `hookSpecificOutput.additionalContext` | Gates | **Behavioral** | DV screenshot-gate block path now emits actionable remediation into the re-run's context (self-healing gate) instead of a dead-end block |
 | `claude agents --json waitingFor` | Resume/recovery | **Behavioral** | Resume loop reads `waitingFor` → 3-way reattach/await/re-dispatch, avoiding blind respawn of a waiting agent and redundant nudging of a busy one |
 | ExitWorktree now GA | Parallelism | Doc-only | reference accuracy; no pipeline-execution change |
-| Opus 4.7 model alias | Dispatch | N/A | no worktask gate/handoff/resume surface |
+<!-- N/A rows (no worktask surface, e.g. a model alias): same shape -->
+```
 
+### Output Format — Impact Mapping
+
+```markdown
 ## Impact Mapping
 
 ### High Impact
@@ -134,7 +155,11 @@ Output of the standing `## Worktask Efficiency Analysis (required pass)` (see th
 - `skills/agent-coordination/SKILL.md` — Add PostToolUse row to Hook-Based Stage Monitoring table
 
 <!-- Medium and Low impact entries follow the same structure with proportionally less detail -->
+```
 
+### Output Format — Files Modified
+
+```markdown
 ## Files Modified
 
 | File | Status | Changes |
@@ -143,7 +168,11 @@ Output of the standing `## Worktask Efficiency Analysis (required pass)` (see th
 | agents/workflow-engineer.md | ✅ Updated | GA worktree note |
 | skills/agent-coordination/SKILL.md | ✅ Updated | PostToolUse row, sparsePaths note |
 | skills/shared/stage-codes.md | ✅ Updated | Model alias footnote |
+```
 
+### Output Format — MEMORY.md Update
+
+```markdown
 ## MEMORY.md Update
 
 MEMORY.md is a lean rolling file (~5KB hard cap). Update ONLY:
@@ -156,7 +185,11 @@ MEMORY.md is a lean rolling file (~5KB hard cap). Update ONLY:
 |-------|--------|-------|
 | Claude Code latest integrated band | 2.1.51→2.1.76 | 2.1.51→2.1.86 |
 | Claude Code min required | 2.1.72 | 2.1.72 (unchanged) |
+```
 
+### Output Format — README Min Version & Summary
+
+```markdown
 ## README.md Min Version Update
 
 | Field | Before | After | Reason |
@@ -174,7 +207,11 @@ Bump when updated files depend on new CC capabilities. Use `--bump-min` to force
 | Files unchanged | 74 |
 | MEMORY.md updated | Yes |
 | README.md min version | 2.1.76 → 2.1.77 |
+```
 
+### Output Format — Next Steps
+
+```markdown
 ## Next Steps
 
 1. Review changes: `git diff agents/ skills/ README.md`
@@ -189,7 +226,8 @@ A **standing, required pass** run on every invocation (including `--dry-run`; sk
 
 For each extracted feature, score it against the worktask **leverage axes** and assign a verdict:
 
-**Leverage axes**:
+### Leverage Axes
+
 - **Gates** — DV/DR/QA/SR feedback & hook blocks (e.g., `hookSpecificOutput.additionalContext`, screenshot-gate, gate-feedback contract).
 - **Handoffs** — stage→stage compression, schema returns, cache-prefix prompt layout.
 - **Resume/recovery** — session discovery, reattach vs re-dispatch (`claude agents --json`, `waitingFor`, PostCompact).
@@ -197,7 +235,8 @@ For each extracted feature, score it against the worktask **leverage axes** and 
 - **Dispatch** — headless CLI flags, permission/model/effort metadata.
 - **Observability/Cost** — OTEL, audit rows, token baselines.
 
-**Verdict per feature** (mutually exclusive):
+### Verdict per Feature (mutually exclusive)
+
 - **Behavioral** — changes pipeline *execution* (a gate, handoff, resume loop, or parallelism mechanism). Gets its own implementation task, **prioritized above doc-only edits**. Record the *mechanism*: which gate/handoff/loop changes and how.
 - **Doc-only** — accuracy / reference update; no execution change.
 - **N/A** — no worktask surface.
@@ -208,16 +247,33 @@ Behavioral rows lead the `## Worktask Efficiency Impact` table so the report ope
 
 How changelog entries are categorized and routed to affected files:
 
+### Categories — Hooks, Tools
+
 | Category | Keywords | Affected File Types |
 |----------|----------|---------------------|
 | **Hooks** | hook, PostToolUse, SubagentStart, PreToolUse, PostCompact, Elicitation, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate, conditional if, scheduled task, webhook, trigger delivery, task notification | agents with hook docs, agent-coordination skill, worktask resume reference |
 | **Tools** | new tool, ExitWorktree, EnterWorktree, TaskCreate, worktree, SendMessage, TeamCreate/TeamDelete removed, implicit team, Agent(name:) spawn, team_name ignored | agents with tool in `tools:` frontmatter, task-system + agent-teams skills |
+
+### Categories — Model, Context, Subagents
+
+| Category | Keywords | Affected File Types |
+|----------|----------|---------------------|
 | **Model** | model alias, Opus/Sonnet/Haiku version, effort level, availableModels, /fast allowlist, model-deprecation | stage-codes skill, agents with full model IDs, model-selection skill |
 | **Context** | compaction, context window, sparsePaths, worktree, circuit breaker, --fallback-model | context-compression skill, agent-coordination skill |
 | **Subagents** | subagent, background agent, teammate, partial result, resume removed, implicit team, Agent(name:) spawn, pre-launch spawn classification, fg/bg nesting depth | agent-coordination skill, developer/project-manager agents, task-system + agent-teams skills |
+
+### Categories — MCP, Cost, Frontmatter
+
+| Category | Keywords | Affected File Types |
+|----------|----------|---------------------|
 | **MCP** | MCP, elicitation, server deduplication, deferred tools, description cap, server-level disallowedTools, auth-stub tools | agent-coordination skill, cross-plugin-handoff skill |
 | **Cost** | token, cache, prompt cache, cost reduction | cost-optimization skill |
 | **Frontmatter** | effort, maxTurns, disallowedTools, initialPrompt, paths YAML, description cap, Tool(param:value) permission syntax, model: deprecation | stage-codes skill, prompt-engineer agent, model-selection skill |
+
+### Categories — Commands, Security
+
+| Category | Keywords | Affected File Types |
+|----------|----------|---------------------|
 | **Commands** | slash command, /clear, /reload-plugins, Tool(param:value) permission syntax | worktask command, relevant command files, agent-coordination skill |
 | **Security** | auto mode, destructive git block, commit --amend guard, IaC destroy block, trigger delivery can't auto-approve, attribution.sessionUrl, auth-stub tools headless | git-conventions skill, resume reference, security-reviewer agent |
 
@@ -229,6 +285,8 @@ This command is used by:
 - As a prerequisite before running `/prompt-audit`
 
 Not part of the 9/11-stage worktask — standalone maintenance command with stage code **PE**. Recommended cadence: run within one week of each Claude Code release. Use `--dry-run` first to review impact scope, then apply.
+
+### Required-Pass Invocation Rules
 
 The **`## Worktask Efficiency Analysis (required pass)`** runs on **every** invocation (including `--dry-run`, where it previews behavioral wins before any file is touched). It is skipped only under `--memory-only` (which deliberately bypasses file analysis). No new *required* flag is added — the surface stays stable; the optional `--worktask-impact-only` emits just the resulting `## Worktask Efficiency Impact` table for a quick read. This pass is the explicit gate that promotes a feature from "documented" to "implemented": every Behavioral verdict it produces becomes an implementation task ahead of doc-only edits.
 
@@ -248,5 +306,10 @@ PL0 must set `metadata.agent: "igrsoft:prompt-engineer"` on the implementation t
 | `--scope` yields zero changes | Report clean scan; skip MEMORY.md update |
 | MEMORY.md missing or malformed | Recreate the lean skeleton (Version Tracking + CC Feature Band Index + Release History) from scratch |
 | Plugin version bump suggested | 3.2.0 → 3.3.0 |
+
+### Edge Cases — Team-Tool Removal
+
+| Scenario | Behavior |
+|----------|----------|
 | Team-tool removed by a band (e.g. TeamCreate/TeamDelete → implicit team) | Rewrite the team/coordination docs to the new model (`Agent(name: …)` spawn, `team_name` ignored). Bump **Minor**, not Major, when the removed tools were never in any agent's `tools:` frontmatter — no breaking change to plugin agents, only reference-doc corrections. |
 

@@ -26,6 +26,8 @@ multiple lines:
 | `Depends on:` / `Depends-on:` / `Blocked by:` `#(\d+)` | edge `thisIssue.blocked_by += N` |
 | `Blocks:` / `Blocked:` `#(\d+)` | edge `N.blocked_by += thisIssue` (reverse) |
 
+### Extraction pseudocode
+
 ```
 extractEdges(issue):
   deps   = regexAll(issue.body, /(?:depends[ -]on|blocked[ -]by)\s*:?\s*((?:#\d+[,\s]*)+)/i)
@@ -76,6 +78,8 @@ kahn(nodes, edges):
   return order
 ```
 
+### Queue ordering
+
 > The queue is a **priority queue keyed by (priority tier, issue number)** so that, among issues
 > that become eligible at the same time, P0 precedes P1 … and lower issue numbers precede higher
 > within a tier. This yields a deterministic, priority-respecting topological order.
@@ -122,6 +126,8 @@ onIssueCompleted(group, completedNumber):
   audit("megatask_progress", subject=group, completed=completedNumber,
         newly_ready=[…], remaining=(total - completed - failed))
 ```
+
+### Failed blockers
 
 A **failed** blocker is NOT removed from dependents' `blocked_by[]` — its dependents stay `blocked`
 permanently and are reported to the user (retry the blocker, drop the edge, or re-scope).

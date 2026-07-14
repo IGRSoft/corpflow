@@ -63,7 +63,12 @@ Generate a Product Requirements Document (PRD) from task description or user sto
 ## 3. Functional Requirements
 ### 3.1 Core Features (table: ID | Requirement | Priority | Notes)
 ### 3.2 Acceptance Criteria (Given/When/Then per FR)
+```
 
+### Template — sections 4–10 and appendix
+
+```markdown
+<!-- …continued: PRD sections 4–10, appendix -->
 ## 4. Non-Functional Requirements (table: Category | Requirement | Target)
 
 ## 5. Design Requirements (color palette, component considerations)

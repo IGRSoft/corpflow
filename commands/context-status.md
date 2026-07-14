@@ -117,7 +117,12 @@ Check context window utilization, analyze token distribution, and trigger compre
    - Current: 18,000 tokens (45 turns)
    - After: ~8,000 tokens (summary + recent 10 turns)
    - Method: Summarize turns older than current stage
+```
 
+#### Recommendations template — medium/low priority & action
+
+```
+<!-- …continued: medium/low priority -->
 ### Medium Priority (500-1,000 token savings)
 
 3. **Code References: Replace inline code**

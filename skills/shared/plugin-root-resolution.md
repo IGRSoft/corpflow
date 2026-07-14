@@ -40,6 +40,9 @@ Resolve the plugin root by trying, in order:
    (Claude Code included) announces "Base directory for this skill: `<path>`" when a
    skill loads. For any igrsoft skill that path is `<plugin-root>/skills/<name>`, so the
    plugin root is two directory levels up.
+
+### Rungs 3–4 and validation
+
 3. **Read-path derivation** — if you `Read` any plugin file from disk you know its
    absolute path: walk up to the nearest ancestor directory containing
    `.claude-plugin/plugin.json`.
@@ -62,7 +65,9 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when l
 HELPER="$PLUGIN_ROOT/skills/<skill>/scripts/<helper>.sh"
 ```
 
-Why this shape: under Claude Code the first line is substituted at load time and the
+### Why this shape
+
+Under Claude Code the first line is substituted at load time and the
 fallback is dead code; everywhere else the unset variable expands to empty, the `-d`
 test fails, and the executor substitutes `<plugin-root>` using the ladder above (it
 knows the skill base directory or the path it read the file from). If the placeholder
@@ -70,6 +75,8 @@ is pasted verbatim, the downstream `-f` guard fails exactly like today's unresol
 paths — graceful deferral, never a hard error.
 
 ## Author rules
+
+### Markdown token form
 
 - **Markdown may contain the token only in its exact bare dollar-brace form** — never
   compose a longer path by appending a slash and segments after the closing brace, and
@@ -80,6 +87,9 @@ paths — graceful deferral, never a hard error.
   Code): the `hooks` block of `.claude-plugin/plugin.json`, `hooks:` entries in agent
   frontmatter, and verbatim documentation of those entries
   (`skills/worktask/references/handoff-protocol.md`).
+
+### Prose and shell-script paths
+
 - **Prose instructions** write helper paths plugin-root-relative (e.g.
   `hooks/audit-dedup.sh --check-mode`) followed by:
   "(plugin root: `${CLAUDE_PLUGIN_ROOT}` if available, else resolve per
@@ -90,6 +100,9 @@ paths — graceful deferral, never a hard error.
   `skills/worktask/scripts/hook-install.sh` (gold standard),
   `skills/dv-screenshot-capture/scripts/apple-canvas.sh` (one-liner form),
   `hooks/anchor-preflight.sh` (hook variant).
+
+### Tests
+
 - **Tests** may set or unset the env var freely to exercise the override and fallback
   contracts (`tests/shell/worktask/hook-install.bats`,
   `tests/shell/dv-screenshot/apple-canvas.bats`,

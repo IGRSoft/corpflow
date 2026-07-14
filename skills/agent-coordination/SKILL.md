@@ -51,11 +51,15 @@ When PL0 has produced `.context/exploration.md`, every downstream task it create
 | `skip_exploration` | boolean | `true` |
 | `exploration_anchors` | string[] | List of `<file>#<anchor>` pointers — e.g. `["exploration.md#facts", "exploration.md#refs", "planning-0.md#requirements"]` |
 
+##### Downstream honouring
+
 Downstream agents (AR/TL/DV/DR) honour these by:
 
 - Treating `exploration_anchors` as the authoritative pre-explored set.
 - Not running Glob/Grep on the source tree for files already covered by the anchors.
 - Reading only the listed anchors instead of full files.
+
+##### Why & opt-out
 
 **Why**: avoids redundant Glob/Grep cycles in AR/TL that PL has already paid the token cost for. Re-exploration is the largest avoidable AR/TL token expense after the cache prefix has been established.
 
@@ -87,28 +91,28 @@ Downstream agents (AR/TL/DV/DR) honour these by:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Failure
-    Failure --> Classify
-    Classify --> Transient: 5xx / rate-limit / network
-    Classify --> Logic: bug / wrong approach
-    Classify --> MissingInput: required artifact absent
-    Classify --> Ambiguous: requirements unclear
-    Classify --> DesignFlaw: architecture blocks implementation
-    Classify --> HardConstraint: ethics / security / legal block
-    Transient --> RetrySame: retry_count++
-    Logic --> RetrySame: retry_count++ with corrective context
-    RetrySame --> Succeeded: fix works
-    RetrySame --> Exhausted: retry_count == 3
-    MissingInput --> EscalatePrev
-    Ambiguous --> EscalatePL
-    DesignFlaw --> EscalateAR
-    HardConstraint --> Abort
-    Exhausted --> EscalatePrev
-    EscalatePrev --> [*]: error_escalated_to set
-    EscalatePL --> [*]: error_escalated_to = "PL"
-    EscalateAR --> [*]: error_escalated_to = "AR"
-    Abort --> [*]: stage blocked
-    Succeeded --> [*]: retry_count reset
+  [*] --> Failure
+  Failure --> Classify
+  Classify --> Transient: 5xx / rate-limit / network
+  Classify --> Logic: bug / wrong approach
+  Classify --> MissingInput: required artifact absent
+  Classify --> Ambiguous: requirements unclear
+  Classify --> DesignFlaw: architecture blocks implementation
+  Classify --> HardConstraint: ethics / security / legal block
+  Transient --> RetrySame: retry_count++
+  Logic --> RetrySame: retry_count++ with corrective context
+  RetrySame --> Succeeded: fix works
+  RetrySame --> Exhausted: retry_count == 3
+  MissingInput --> EscalatePrev
+  Ambiguous --> EscalatePL
+  DesignFlaw --> EscalateAR
+  HardConstraint --> Abort
+  Exhausted --> EscalatePrev
+  EscalatePrev --> [*]: error_escalated_to set
+  EscalatePL --> [*]: error_escalated_to = "PL"
+  EscalateAR --> [*]: error_escalated_to = "AR"
+  Abort --> [*]: stage blocked
+  Succeeded --> [*]: retry_count reset
 ```
 
 ### Retry / Escalate Matrix
@@ -195,19 +199,36 @@ review, the audit tail is the single source of truth for what happened.
 | Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned`, `github_issue_created` |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation` |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
+
+#### Writers — plugin hooks (authoritative)
+
+| Actor | Action Examples |
+|-------|-----------------|
 | `hook:audit-subagent` (SubagentStop, plugin) **(authoritative)** | `subagent_stopped` (paired with cost-*.jsonl entry) — v3.10.0+. v3.10.6+ rows additionally carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`, and `dedupe_key_extended` (see § Dedupe Key Migration below). |
 | `hook:audit-tooluse` (PostToolUse, plugin) **(authoritative)** | `tool_invoked` for `TaskUpdate\|TaskCreate\|Write\|Edit` with `duration_ms` + `effort` — v3.10.0+ |
 | `hook:precompact` (PreCompact, plugin) **(authoritative)** | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` — v3.10.0+ |
 | `hook:agent-stop` (Stop, PL/FN/ST agents) **(authoritative)** | `stage_completion_hook` with `metadata.stage` — v3.10.0+. v3.10.6+ rows additionally carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`, and `dedupe_key_extended`. |
+
+#### Writers — external & adapters
+
+| Actor | Action Examples |
+|-------|-----------------|
 | External dispatcher | `external_dispatch` (CI/cron/user-shell invoked a stage via `claude agents run` — see `references/headless-dispatch.md`) |
 | `apple-canvas` adapter (in `dv-screenshot-capture`) | `canvas_render` (one row per phase ∈ scaffold\|complete\|retry — see `skills/dv-screenshot-capture/references/apple-canvas.md § Audit row schema`) |
 | `preview-ensurer` skill | `preview_added` (one row per `#Preview` block written to source by SwiftSyntax driver — `metadata: {file, view_type, mock_strategy, lines_added}`) |
 | QA visual-diff wrapper (`scripts/visual-diff.sh`) | `visual_diff_run` (one row per RMSE diff invocation — `metadata: {reference, candidate, metric:"RMSE", value_percent, threshold_percent, verdict}`) |
 
+#### Hook authority + dedupe rule (v3.10.0+)
+
 **Hook authority + dedupe rule (v3.10.0+):** rows emitted by plugin hooks carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action remain forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are downgraded to **advisory**. Readers (`/cost-report`, resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`. Dedupe-key shapes:
+
+#### Dedupe-key shapes — tool & subagent
 
 - `tool_invoked`: `"<session_id>:<tool_use_id>"`
 - `subagent_stopped`: `"<session_id>:<agent_id>:<task_id>:stop"` (v3.10.1+; the `<task_id>` segment disambiguates back-to-back DV0/DV1 split-task retries where `agent_id` is constant. Pre-v3.10.1 producers may emit the legacy shape `"<session_id>:<agent_id>:stop"` — readers MUST treat both prefixes as the same key for a single `(session, agent, task)` row to preserve dedupe across the upgrade. Orchestrator populates `task_id` in hook stdin where the runtime exposes it; on older CC builds the hook degrades to legacy shape automatically.)
+
+#### Dedupe-key shapes — stage & issue
+
 - `stage_completion_hook`: `"<session_id>:<agent_id>:stage:<PL|FN|ST>"`
 - `github_issue_created`: `"<worktask_id>:<run_index>:gh_issue"` — collision on resume detects already-published; multi-track safety via `run_index` increment. Writer: orchestrator (via `skills/worktask/scripts/publish-pl-issue.sh` between PL approval and stage-loop entry).
 
@@ -215,19 +236,25 @@ review, the audit tail is the single source of truth for what happened.
 
 v3.10.6 adds a second dedupe key — `metadata.dedupe_key_extended` — to every `subagent_stopped` and `stage_completion_hook` row. Both keys are written simultaneously; readers choose which to use based on a runtime auto-detection rule.
 
-**Key definitions:**
+#### Key definitions
 
 - `dedupe_key` (existing, BASE): `<session_id>:<agent_id>:stop` or `<session_id>:<agent_id>:stage:<stage>`. Compatibility-safe — every audit row carries this, every reader can grep it, every pre-v3.10.6 file is readable.
 - `dedupe_key_extended` (v3.10.6+): prepends `<parent_agent_id>:` to the base key. Today evaluates to `none:…` everywhere (parent_agent_id is `"none"`), so dedupes identically to base. When CC starts populating `parent_agent_id` in hook stdin, gains parent-aware granularity automatically — useful for multi-track parallel runs where the same `agent_id` appears under different dispatch parents.
+
+#### Auto-detection rule (full reader cut-over)
 
 **Auto-detection rule (full reader cut-over):** readers MUST call the canonical helper `hooks/audit-dedup.sh --check-mode` (plugin root: `${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`) which scans the tail of `.context/logs/audit.jsonl` and prints one word to stdout:
 
 - `base` — when no rows in the rolling 100-row window have `metadata.parent_agent_id != "none"`. Reader dedups on `metadata.dedupe_key`.
 - `extended` — when ≥1 row in the rolling 100-row window has a non-`"none"` `parent_agent_id`. Reader dedups on `metadata.dedupe_key_extended`.
 
+#### Cut-over & reader contract
+
 The helper handles cut-over transparently. On CC versions where parent_agent_id is unpopulated (today), it always returns `base`. The moment CC surfaces the field in hook stdin and a single row carries a real parent, all conforming readers switch to extended without redeploy.
 
 **Reader contract**: anything that dedupes audit rows (`/cost-report`, manual `jq` scripts, future automation) calls the helper exactly once at startup and pins the result for the rest of the run. Mixed-mode dedup within a single run is forbidden.
+
+#### Pre-v3.10.6 compat
 
 **Pre-v3.10.6 compat**: pre-v3.10.6 audit.jsonl files lack `dedupe_key_extended` — the helper detects absence on the first row and falls back to `base` even if `parent_agent_id` shows up in later rows. This keeps existing audit files readable without migration.
 
@@ -247,6 +274,8 @@ The hook authority + dedupe rule from the previous paragraph still applies — `
   "metadata": { "...": "action-specific extras" }
 }
 ```
+
+#### v3.10.6+ metadata fields
 
 For `subagent_stopped` and `stage_completion_hook` rows written by plugin hooks (v3.10.6+), `metadata` carries these optional fields in addition to action-specific extras:
 
@@ -288,6 +317,10 @@ the split and *what* the dependency shape is. Pick one pattern — do not mix.
 | Independent sub-scopes, different owners | **TL-initiated (parallel)** | DVN tasks blocked by TL0; all run concurrently; DR0 blocked by all DVN | `theme colors` + `theme switcher` + `dark assets` |
 | Sequential discovery (later work depends on earlier) | **DV-initiated (sequential)** | DVN tasks blocked by DV0; run one after another | `implement auth` then `migrate existing users` then `deprecate old endpoints` |
 | Single cohesive scope with <3 files | **No split** | DV0 handles entirely | `fix null check in login validator` |
+#### Decision Table — refactor & retry rows
+
+| Condition | Pattern | Effect | Example |
+|-----------|---------|--------|---------|
 | Cross-cutting refactor spanning many modules | **TL-initiated (parallel)** with `track` metadata | Each stream gets own worktree | `rename User → Account across auth/api/db` |
 | Stage already failed and retry needs narrower scope | **DV-initiated (sequential)** | DV1 creates focused retry; retry_count resets | DV0 failed on full feature → DV1 focused on auth module only |
 
@@ -315,11 +348,21 @@ for full code patterns.
 
 > **Cross-plugin AR collaboration**: For Apple platform projects, `software-architector` consults `apple-developer:apple-architector` during AR stage for Swift app architecture (pattern selection, DI, navigation, concurrency). See `cross-plugin-handoff` skill for the full protocol.
 
+#### Nested delegation (CC ≥ 2.1.172)
+
 > **Nested delegation (CC ≥ 2.1.172)**: sub-agents spawn their own sub-agents, up to **5 levels deep**. Level-2 specialists reached via the table above may themselves delegate Level-3 — e.g. orchestrator → `developer` → `apple-developer:ios-developer` → `apple-developer:test-generator` is now a native chain; the orchestrator no longer needs to flatten Tier-2 dispatch into its own loop. Foreground and background subagents share the same 5-level depth budget (CC ≥ 2.1.181) — a foreground chain plus a backgrounded child count against one cap. Budget accordingly: each level summarizes results upward, and `/cost-report`'s `dispatch_depth` column makes depth visible.
+
+#### Pre-launch spawn classification (CC ≥ 2.1.178)
 
 > **Pre-launch spawn classification (CC ≥ 2.1.178)**: in auto mode the permission classifier evaluates a subagent spawn **before** it launches, so a dispatch can be denied up front (`PermissionDenied` hook fires). The orchestrator must handle a refused spawn — treat a denied dispatch like a failed stage and route per the retry/escalate matrix rather than assuming every `Task(...)` starts.
 
-> **Background-by-default dispatch (CC ≥ 2.1.198)**: subagents now run in the **background by default** — the dispatching agent keeps its turn and receives the child's result as a completion notification. Two consequences for the worktask loop: (1) a `Task()` launch acknowledgement is NOT stage completion — advance a stage (Step 6.5, `TaskUpdate(completed)`) only on the completion notification or the `subagent_stopped` audit row (`skills/worktask/SKILL.md § Orchestrator Execution Loop`); (2) unblocked sibling stages (parallel DVN tracks, DC+QA) genuinely overlap with no extra orchestration. Depth accounting stays correct across resume: resumed subagents restore their original spawn depth and forked subagents count toward the 5-level cap (CC ≥ 2.1.187). Permission prompts from background subagents surface in the main session — dialog names the asking agent; Esc denies just that tool — instead of being auto-denied (CC ≥ 2.1.186), so an unattended run parks on them (see the resume `waitingFor` branch table).
+#### Background-by-default dispatch (CC ≥ 2.1.198)
+
+> **Background-by-default dispatch (CC ≥ 2.1.198)**: subagents now run in the **background by default** — the dispatching agent keeps its turn and receives the child's result as a completion notification. Two consequences for the worktask loop: (1) a `Task()` launch acknowledgement is NOT stage completion — advance a stage (Step 6.5, `TaskUpdate(completed)`) only on the completion notification or the `subagent_stopped` audit row (`skills/worktask/SKILL.md § Orchestrator Execution Loop`); (2) unblocked sibling stages (parallel DVN tracks, DC+QA) genuinely overlap with no extra orchestration.
+
+##### Depth accounting & background permission prompts
+
+> Depth accounting stays correct across resume: resumed subagents restore their original spawn depth and forked subagents count toward the 5-level cap (CC ≥ 2.1.187). Permission prompts from background subagents surface in the main session — dialog names the asking agent; Esc denies just that tool — instead of being auto-denied (CC ≥ 2.1.186), so an unattended run parks on them (see the resume `waitingFor` branch table).
 
 ### Model Selection
 
@@ -342,15 +385,23 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 
 > **Parameterized permission syntax (CC ≥ 2.1.178)**: permission rules accept a `Tool(param:value)` form with `*` wildcard support — e.g. `Agent(model:opus)` permits only opus-model spawns, `Agent(model:*)` permits any model override. Use this to constrain which dispatch overrides auto mode may take without hand-listing every agent. `Agent(type)` deny rules and `Agent(x,y)` allowed-types restrictions are enforced for **named** subagent spawns too as of CC 2.1.186 (previously leaked past named spawns).
 
+#### Model aliases, allowlists & @-mentions
+
 > Agent teams inherit the leader's model. Teammates use the parent session's model unless explicitly overridden. Model aliases (`fable`/`opus`/`sonnet`/`haiku`) work correctly across all providers (Anthropic, Bedrock, Vertex, Foundry). Allowlist caveat (v2.1.172/v2.1.175): a managed `availableModels` list now constrains subagent model overrides too, and `enforceAvailableModels` constrains the Default model — a valid alias may silently resolve to a different model; see `skills/worktask/SKILL.md § Pre-Stage Validation` step 6.
 
 > Named subagents appear in `@`-mention typeahead suggestions, making it easier to reference and communicate with running agents via `SendMessage`.
 
+#### SendMessage authority hardening
+
 > **SendMessage authority hardening**: a relayed `SendMessage` does not carry the originating user's authority. Receivers **refuse relayed permission requests**, and auto mode blocks them outright. A reattach can *nudge* a parked agent (re-prompt, supply an awaited answer) but cannot *authorize* a permission escalation. Permission escalations remain operator-owned — never satisfy them via a relayed message. (The PL gate is operator-owned and cannot be satisfied by a relayed message; this caveat covers both permission escalations and the PL approval gate.)
+
+#### Skill discovery & subagent_type resolution
 
 > Subagents discover project + user + plugin skills natively. Orchestrators do not need to inline-load skill instructions before delegation — the child can resolve `Skill("name")` from any source the parent could. This holds at every nesting depth (CC ≥ 2.1.172): a Level-3 child resolves skills the same way a Level-1 child does.
 
 > `subagent_type` matching is case- and separator-insensitive. `Task({ subagent_type: "IGRSoft:Developer" })` resolves to the same agent as `igrsoft:developer`. Bare-name → `igrsoft:` prefix convention still applies for resolution priority, but typos in case/separator no longer fail-stop the call.
+
+#### Dispatch flags & /agents UI
 
 > `claude agents` dispatch flags (`--cwd`, `--add-dir`, `--settings`, `--mcp-config`, `--plugin-dir`, `--permission-mode`, `--model`, `--effort`, `--dangerously-skip-permissions`) are mapped to `task.metadata` fields per the **`references/headless-dispatch.md`** translation table. PL0 populates the optional fields per `agents/product-manager.md § Optional dispatch metadata`; external runners consume them via the canonical one-liner in `commands/worktask.md § Headless dispatch`.
 
@@ -359,6 +410,8 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 ### Agent Naming & Collision Avoidance
 
 Claude Code keys installed agents by the YAML frontmatter `name`, so two plugins shipping the same agent name silently overwrite each other when installed together. Common collision-prone stems include `developer`, `qa-engineer`, `incident-responder`, `designer`, `technical-writer` — all generic across marketplaces. (Source: ai-research PR #554.)
+
+#### Naming mitigation & authoring audit
 
 For new agents, prefer **plugin-scoped names** (`<plugin>-<role>`, e.g. `igrsoft-developer`) when the role is generic. For the 16 existing igrsoft agents, the orchestrator disambiguates today via `igrsoft:<name>` prefixes (see USER `CLAUDE.md § Orchestrator Rules` — bare names prepend `igrsoft:`; qualified names like `apple-developer:ios-developer` are used as-is), so no rename is forced — renaming would cascade into every `Task(subagent_type=…)` reference (high blast radius).
 
@@ -379,10 +432,17 @@ capture persists after the Monitor session ends — see `logging-conventions` sk
 | DV | Swift Package resolution | `swift build 2>&1 \| tee .context/logs/build-spm-<ts>.log` | Detect dependency resolution issues |
 | QA | XCTest run | `xcodebuild test … 2>&1 \| tee .context/logs/test-<slug>-<ts>.log` | Stream pass/fail per test; stop on first red |
 | QA | Simulator app logs | `xcrun simctl spawn … log stream … \| tee .context/logs/sim-<dev>-<ts>.log` | Watch runtime behavior during manual test |
+
+##### Monitor usage — IR/DR/SR/RE/FN
+
+| Stage | Scenario | Background Command | Monitor Purpose |
+|-------|----------|--------------------|-----------------|
 | IR | Production log tail | `ssh prod tail -f /var/log/app.log \| tee .context/logs/incident-<ts>.log` | Identify recurring error pattern |
 | DR/SR | Static analysis | `swiftlint --reporter json 2>&1 \| tee .context/logs/monitor-lint-<ts>.log` | Stream warnings to triage severity in real time |
 | RE | Release build | `xcodebuild archive … 2>&1 \| tee .context/logs/build-release-<ts>.log` | Watch signing / archive steps; abort on signing failure |
 | FN | CI run after push | `gh run watch <run-id> \| tee .context/logs/monitor-ci-<ts>.log` | Watch PR checks progress |
+
+##### Common pattern
 
 **Common pattern**: start background Bash with `run_in_background: true`, note
 the returned shell ID, then attach `Monitor` to that ID. When Monitor detaches
@@ -407,6 +467,8 @@ MCP servers can annotate tool results with `_meta["anthropic/maxResultSizeChars"
 ### MCP Tool Inheritance
 
 Subagents inherit MCP tools from MCP servers that are **already running** in the parent session at delegation time. Cross-plugin MCP tools (XcodeBuildMCP, Pencil, etc.) are available to stage agents without explicit `tools:` frontmatter entries for each MCP tool — **provided the parent has already spawned the server**.
+
+#### Lazy-spawn warmup requirement
 
 For lazy-spawned servers — anything registered as `npx -y …` over stdio (XcodeBuildMCP, Pencil, etc.) — Claude Code starts the process only on the first tool call in a given session. Subagents inherit the server reference but inheritance does NOT trigger a spawn. If the orchestrator delegates before any tool call, the child (especially under `isolation: worktree`) inherits an unstarted reference and the first `mcp__<server>__*` call fails with "tool not available".
 
@@ -620,6 +682,8 @@ See references/ for hook-based monitoring (including PermissionDenied, StopFailu
 
 Claude Code ships a native `/workflows` command and Workflow tool for **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. This is complementary to (not a replacement for) the igrsoft 11-stage worktask system:
 
+### Comparison
+
 | Dimension | Native dynamic workflows (`/workflows`) | igrsoft staged worktask |
 |---|---|---|
 | **Scale** | Tens–hundreds of parallel agents | 11 governed sequential/parallel stages |
@@ -628,14 +692,18 @@ Claude Code ships a native `/workflows` command and Workflow tool for **dynamic 
 | **State management** | Orchestrator-in-context | `.context/state.json`, Task System, audit.jsonl |
 | **Resume / rollback** | Manual | Resume Procedure, state.checkpoint-*.json |
 
-**When to reach for each:**
+### When to reach for each
 
 - Reach for native dynamic workflows when you need quick parallelism without governance overhead (e.g., batch linting, parallel research, one-off data transforms).
 - Reach for the igrsoft worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks have two human checkpoints — the PL gate (plan approval after PL0) and the FN gate (finalization approval, which STOPs before commit/push/PR by default); both are bypassed by `--emergency`, the PL gate also by `--auto-plan` and the FN gate also by `--auto-finalization`. A batch orchestrator (`/megatask`) stamps `plan_gate`/`fn_gate: "bypass"` directly on each per-issue PL0.
 
+### Composition & workflow sizing
+
 They can compose: a DV agent inside an igrsoft worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
 
 > Naming note: the `/config` **"Dynamic workflow size"** setting (CC ≥ 2.1.202; advisory small/medium/large agent counts) governs **native dynamic workflows** only — it is unrelated to PL0 dynamic *sizing* (complexity-scored stage selection). Workflow-spawned agents carry `workflow.run_id`/`workflow.name` OpenTelemetry attributes (CC ≥ 2.1.202), so a composed DV fan-out can be reconstructed from OTel data alongside the plugin's audit trail.
+
+### Gate prompts (AskUserQuestion)
 
 > Claude reserves multiple-choice / AskUserQuestion prompts for genuine decisions that require user input. After the PL plan-approval gate, stage transitions are automatic — the PL gate itself is the one `AskUserQuestion` checkpoint; intra-loop transitions proceed without user confirmation. `AskUserQuestion` dialogs no longer auto-continue on idle by default (CC ≥ 2.1.200) — a PL/FN gate park holds indefinitely until the operator answers; the idle-timeout auto-continue is an explicit `/config` opt-in and MUST stay off on hosts running gated worktasks.
 

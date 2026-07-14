@@ -126,12 +126,21 @@ Tests are slow (especially UI/simulator bundles). The gate decides — per workt
 | Mode | DV behaviour | QA behaviour | When PL sets it |
 |------|--------------|--------------|-----------------|
 | `build-only` | Build + run **smoke set only** (`@test-required` ∪ `metadata.always_required_tests`). Parse `@depends-on:` markers. Emit Selected Tests list for QA. | Run **only Selected Tests** (always-required ∪ dependency-matched). Visual comparison gated on `ui_visual_check`. | Repos that have completed marker migration. Refactors, dep updates, doc-only changes. **Opt-in** via explicit `test_mode: build-only` in plan. |
+
+#### `scoped` and `full` modes
+
+| Mode | DV behaviour | QA behaviour | When PL sets it |
+|------|--------------|--------------|-----------------|
 | `scoped` (effective default) | Build + run Selected Tests + tests in any module the diff touches. | Selected Tests + module-level tests + any QA-added edge-case tests. Visual comparison gated on `ui_visual_check`. | Bug fixes, small features. Default for plans that omit `test_mode` (avoids silent coverage blackout on untagged repos). |
 | `full` | Build + run Selected Tests at DV. | **Full project test suite** as regression gate. Visual comparison gated on `ui_visual_check`. | Release candidates, multi-module features, post-major-dep-upgrade. |
 
-**Effective default**: when `<plan_file>` omits `metadata.test_mode`, agents resolve to `scoped` (not `build-only`). This preserves today's "DV runs scoped tests, QA runs the unit+integration suite" semantics for untagged repositories. To unlock `build-only` speedup, a plan must opt in by writing `test_mode: build-only` explicitly **and** the repo should have meaningful marker coverage (parser logs a warning if `< 50%` of test files lack any marker).
+#### Effective default
 
-**Auto-promotion safety nets** (DV/QA enforce these even if PL set a tighter mode):
+When `<plan_file>` omits `metadata.test_mode`, agents resolve to `scoped` (not `build-only`). This preserves today's "DV runs scoped tests, QA runs the unit+integration suite" semantics for untagged repositories. To unlock `build-only` speedup, a plan must opt in by writing `test_mode: build-only` explicitly **and** the repo should have meaningful marker coverage (parser logs a warning if `< 50%` of test files lack any marker).
+
+#### Auto-promotion safety nets
+
+DV/QA enforce these even if PL set a tighter mode:
 - Selected Tests list is empty AND `test_mode = build-only` → DV warns and runs the smoke set; QA promotes to `scoped` with a logged note in `testing-N.md § Notes`.
 - Platform has no marker parser handler (e.g., Android/Web until handlers ship) AND `test_mode ∈ {build-only, scoped}` → DV auto-promotes to `full` for that platform with a logged warning. The mode stays as the PL-declared value in metadata; the promotion is recorded in `development-N.md § Decisions` with `auto_promoted_mode: full`.
 
@@ -143,10 +152,15 @@ Tests are slow (especially UI/simulator bundles). The gate decides — per workt
   - `metadata.always_required_tests: [<test ID>...]` — explicit override, included in every Selected Tests list regardless of mode.
   - `metadata.ui_visual_check: <bool>` — default `false`. When `true` AND `.context/designs/` exists, QA performs Design Comparison (was previously bundled into `requires_ui_tests`). Independent of `test_mode`.
 - **Writer**: PL stage (`agents/product-manager.md` § Test Strategy Definition).
-- **Readers**:
-  - DV step D2 (`agents/developer.md`) — parses markers, computes Selected Tests, runs only when `test_mode ∈ {scoped, full}`.
-  - QA step Q1 (`agents/qa-engineer.md`) — three-mode dispatcher.
-  - QA Design Comparison (`agents/qa-engineer.md` § Design Comparison) — gated on `ui_visual_check=true` (NOT `test_mode`).
+
+#### Readers
+
+- DV step D2 (`agents/developer.md`) — parses markers, computes Selected Tests, runs only when `test_mode ∈ {scoped, full}`.
+- QA step Q1 (`agents/qa-engineer.md`) — three-mode dispatcher.
+- QA Design Comparison (`agents/qa-engineer.md` § Design Comparison) — gated on `ui_visual_check=true` (NOT `test_mode`).
+
+#### DR test-execution exclusion
+
 - **DR** (`agents/technical-lead.md`) does not run tests; the gate does not apply. DR's tool list and constraints explicitly forbid test execution — see `agents/technical-lead.md § Constraints` and § Bash Scope (DR) for the canonical forbidden-commands list (`xcodebuild test`, `swift test`, `xcrun simctl … test`, `npm/pnpm/yarn test`, `jest`, `vitest`, `pytest`, `go test`, `cargo test`, `rspec`, `mcp__XcodeBuildMCP__test_*`, `mcp__XcodeBuildMCP__swift_package_test`, `mcp__XcodeBuildMCP__build_run_*`). If DR thinks runtime verification is needed, it records a finding for QA — it never executes.
 
 ### DV Executed vs Selected (scope split)
@@ -155,6 +169,9 @@ DV's `Selected Tests` is the **handoff artifact** consumed by QA; DV's `Executed
 
 - **Selected Tests** = full algorithm output (smoke ∪ dependency-matched ∪ covers-changed-files ∪ module-level ∪ `metadata.always_required_tests`). Always written to `development-N.md § Selected Tests`. QA executes this list.
 - **Executed Tests (DV)** = (Selected ∩ test files Added/Modified in `git diff --diff-filter=AMR <base>...HEAD`) ∪ `metadata.always_required_tests`. Only this subset runs at DV.
+
+#### Empty-set safety net and rationale
+
 - **Empty-set safety net**: if Executed Tests (DV) is empty AND Selected Tests is non-empty (production changed without touching tests), DV runs only the smoke set and records `auto_executed: smoke_set` in `§ Decisions`. QA still executes the full Selected list.
 - **Rationale**: DV's job is to verify the code+tests it just wrote/modified compile and pass. Broader regression (dep-matched, covers, module-level) belongs to QA so DV stays fast and QA owns the regression gate. See `agents/developer.md § D2` for the canonical derivation.
 
@@ -227,18 +244,24 @@ re-captures a fresh live screenshot. The canonical per-row algorithm, the verdic
 reconciliation matrix, and the reporting `RMSE` column all live in
 `agents/qa-engineer.md § Design Comparison` (not duplicated here).
 
-**Join key (Option A)**: DV's `.context/images/<worktask_id>/screenshots.md` manifest
+#### Join key (Option A)
+
+DV's `.context/images/<worktask_id>/screenshots.md` manifest
 carries an optional trailing `Design Ref` column populated with the matching
 `figma-registry.md` row `ID` (see `skills/dv-screenshot-capture/SKILL.md § Registry
 tagging`). QA joins `screenshots.md.Design Ref → figma-registry.md.ID` by ID equality;
 the mapped DV image is both the RMSE `--candidate` (`scripts/visual-diff.sh`) and the
 vision input. Live re-capture is the fallback only — used when no DV image maps.
 
-**Verdict reconciliation (by reference)**: RMSE is a **one-way escalator** — it may raise
+#### Verdict reconciliation (by reference)
+
+RMSE is a **one-way escalator** — it may raise
 severity, never lower it (RMSE is blind to copy/semantic errors). The full 6-row matrix is
 in `agents/qa-engineer.md § Verdict reconciliation`.
 
-**Backward-compat guarantees** (the change is strictly additive):
+#### Backward-compat guarantees
+
+The change is strictly additive:
 - Top-level gate unchanged (`ui_visual_check: true` AND `.context/designs/` artifacts).
 - `requires_screenshots: false` → no DV images → 100% live-capture fallback = today's output.
 - `magick` absent → `visual-diff.sh` self-degrades (`skipped`/`imagemagick_not_found`, exit 0)

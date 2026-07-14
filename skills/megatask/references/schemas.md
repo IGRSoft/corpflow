@@ -9,6 +9,8 @@
 > user-supplied — the literal below is an illustrative recorded runtime value. `group` is
 > `milestone-{N}` (milestone mode) or `issues-{shortid}` (array mode).
 
+#### Top-level fields
+
 ```json
 {
   "version": "3.1",
@@ -24,6 +26,12 @@
   "dependency_warnings": [
     { "issue": 42, "external_dependency": 99, "note": "#99 not in resolved set — not gating" }
   ],
+```
+
+#### `issues[]` — completed entry (example)
+
+```json
+  // …continued: issues[] array of the same orchestrator.json
   "issues": [
     {
       "number": 41,
@@ -41,6 +49,12 @@
       "isolation": "worktree",
       "pr": "https://github.com/owner/repo/pull/120"
     },
+```
+
+#### `issues[]` — blocked entry (example)
+
+```json
+    // …continued: second issues[] entry
     {
       "number": 60,
       "title": "feat: Settings integration",
@@ -57,6 +71,12 @@
       "isolation": "worktree"
     }
   ],
+```
+
+#### `tracks` & `progress`
+
+```json
+  // …continued: closing keys of the same orchestrator.json
   "tracks": {
     "1": { "issue_number": 41, "task_prefix": "t1" },
     "2": { "issue_number": null, "status": "available" }
@@ -72,7 +92,7 @@
 }
 ```
 
-**DAG field contract:**
+#### DAG field contract — per-issue fields
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -80,6 +100,11 @@
 | `issues[].blocks` | `int[]` | Reverse edges — issues this one blocks. Informational (handy for the R1 summary and audits); the runtime unblock works purely by subtracting the completed issue from each dependent's `blocked_by[]`, so the monitor never needs to read `blocks`. |
 | `issues[].level` | `int` | Topological wave (0 = no blockers). Upper bound on when it can start, not a barrier. |
 | `issues[].external_dependencies` | `int[]` | Declared `Depends on` targets outside the resolved set — surfaced, not gating. |
+
+#### DAG field contract — top-level fields
+
+| Field | Type | Meaning |
+|-------|------|---------|
 | `topological_order` | `int[]` | Deterministic priority-respecting topological order from Kahn's algorithm. |
 | `dependency_warnings` | `object[]` | External-dependency and dropped-self-edge notes for the R1 summary. |
 
@@ -106,6 +131,8 @@
   "task_ids": { "PL": "t1-1", "AR": "t1-2", "DV": "t1-3", "DR": "t1-4", "QA": "t1-5" }
 }
 ```
+
+#### Completion contract
 
 **Completion contract (read by `hooks/megatask-monitor.sh`).** The per-issue worktask MUST write its
 terminal outcome into `workspace.json.execution`:

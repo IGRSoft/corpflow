@@ -66,7 +66,12 @@ Analyze, document, and prioritize technical debt in the codebase.
 | Testing | 4 | 5d | Medium |
 | Documentation | 2 | 3d | Low |
 | Security | 0 | 0d | - |
+```
 
+#### Analysis template — critical items
+
+```markdown
+<!-- …continued: critical items -->
 ## Critical Items 🔴
 
 ### TD-001: Legacy Authentication Module
@@ -92,7 +97,12 @@ Analyze, document, and prioritize technical debt in the codebase.
 - **Effort**: 1 day
 - **Interest**: Growing with data volume
 - **Recommendation**: Fix immediately
+```
 
+#### Analysis template — high priority & debt interest
+
+```markdown
+<!-- …continued: high priority items -->
 ## High Priority Items ⚠️
 
 ### TD-004: Callback Hell in Data Import
@@ -114,7 +124,12 @@ Analyze, document, and prioritize technical debt in the codebase.
 | TD-001 | 5d | High (50%) | 7.5d |
 | TD-002 | 3d | Medium (25%) | 3.75d |
 | TD-003 | 1d | High (50%) | 1.5d |
+```
 
+#### Analysis template — recommended actions & tracking
+
+```markdown
+<!-- …continued: recommended actions -->
 ## Recommended Actions
 
 ### This Sprint

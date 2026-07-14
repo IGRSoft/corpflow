@@ -4,6 +4,10 @@
 
 ### What to Include in `<plan_file>` (e.g. `planning-0.md`)
 
+Concatenate the two template parts below into the plan file's `## Test Strategy` block.
+
+#### Plan Template — Scope, Framework & Criteria
+
 ```markdown
 ## Test Strategy
 
@@ -23,7 +27,11 @@ Derived from acceptance criteria - each should be testable:
 - [ ] Given [precondition], when [action], then [expected result]
 - [ ] [Edge case]: [Expected behavior]
 - [ ] [Error case]: [Expected error handling]
+```
 
+#### Plan Template — Existing Tests & Effort
+
+```markdown
 ### Existing Tests to Update
 When changing existing logic, identify affected tests:
 | Test File | Reason for Update | Impact |
@@ -44,6 +52,10 @@ When changing existing logic, identify affected tests:
 
 ### What to Include in analyzing.md
 
+Concatenate the two template parts below into the `## Test Architecture` block.
+
+#### Architecture Template — Patterns & Doubles
+
 ```markdown
 ## Test Architecture
 
@@ -61,7 +73,11 @@ When changing existing logic, identify affected tests:
 | Database | In-memory | SQLite in-memory or mock store |
 | File System | Temporary directory | Create in setUp, clean in tearDown |
 | Date/Time | Injectable | Clock protocol |
+```
 
+#### Architecture Template — Data & Organization
+
+~~~markdown
 ### Test Data Management
 - Fixtures location: `Tests/Fixtures/`
 - Factory pattern for test objects
@@ -78,7 +94,7 @@ Tests/
 │   └── Storage/
 └── Fixtures/
 ```
-```
+~~~
 
 ## DV Stage: Test Implementation
 

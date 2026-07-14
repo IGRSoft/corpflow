@@ -125,6 +125,7 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/attach-visual-evidence.sh` | `tests/shell/worktask/attach-visual-evidence.bats` | — | — | — |
 | `skills/worktask/scripts/cache-lint.sh` | `tests/shell/worktask/cache-lint.bats` | — | — | — |
 | `skills/worktask/scripts/desc-lint.sh` | `tests/shell/worktask/desc-lint.bats` | — | — | — |
+| `skills/worktask/scripts/section-lint.sh` | `tests/shell/worktask/section-lint.bats` | — | — | — |
 | `skills/worktask/scripts/detect-ui-change.sh` | `tests/shell/worktask/detect-ui-change.bats` | — | — | — |
 | `skills/worktask/scripts/handoff-harness.sh` | `tests/shell/worktask/handoff-harness.bats` | — | — | — |
 | `skills/worktask/scripts/hook-install.sh` | `tests/shell/worktask/hook-install.bats` | — | — | — |
