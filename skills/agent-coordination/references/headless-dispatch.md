@@ -70,6 +70,10 @@ The model/effort defaults track `skills/shared/model-selection.md`. Override per
 
 > **Background-worker reliability (v2.1.172/2.1.174)**: fixed — pre-warmed workers leaking another directory's project settings, `EAUTH` on attach after daemon auto-update and on claim-after-idle, stuck-`active` state after a nested child stopped, and background sessions inheriting another session's `ANTHROPIC_*` provider env. No plugin workaround needed on CC ≥ 2.1.174; on older CC, restart the daemon when attach fails with `EAUTH`.
 
+### Background-session env reliability (2.1.203/2.1.206)
+
+> **Background-session env reliability (2.1.203/2.1.206)**: background/agent-view sessions now preserve shell-exported `ANTHROPIC_BASE_URL` (**2.1.203** — previously leaked API keys to the default endpoint → 401), inherit the dispatching shell's `PATH` (2.1.203), honor `effortLevel` when forked through the daemon (2.1.203), and follow `CLAUDE_CODE_EXTRA_BODY` (2.1.206). A login-expiry warning now fires **before** a background session is interrupted (2.1.203), so a headless runner can re-auth ahead of the cut-off.
+
 ### Unattended-runner resilience (2.1.185→2.1.202)
 
 > **Unattended-runner resilience (2.1.185→2.1.202)**: `CLAUDE_CODE_MAX_RETRIES` is capped at 15 (v2.1.186); for unattended batches set `CLAUDE_CODE_RETRY_WATCHDOG` instead — it raises the default retry count for non-capacity transient errors to 300 and lifts the 15-retry cap (v2.1.199). The streaming idle watchdog is default-on for all providers (v2.1.196): a stream silent for 5 minutes aborts and retries (`CLAUDE_ENABLE_STREAM_WATCHDOG=0` disables). Transient 429s unrelated to the usage limit retry automatically with backoff for subscribers (v2.1.199).

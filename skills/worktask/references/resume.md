@@ -93,6 +93,10 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 #### Background-agent reliability (continued: d–f)
 
    (d) Waking a background job can no longer delete its transcript and re-run the original prompt (CC ≥ 2.1.196). (e) Long-running background commands survive the session process being stopped/restarted/updated (CC ≥ 2.1.196), and locked `.git/worktrees/` entries from killed agents are cleaned automatically (CC ≥ 2.1.187) — stale-worktree cleanup is no longer a resume chore. (f) `SendMessage` detects a re-spawned agent reusing a previous agent's name and asks the caller to retarget (CC ≥ 2.1.199) — closes the misroute hazard when re-dispatching a stage under the same name; session `/rename` persists across background restarts on CC ≥ 2.1.202.
+#### Background-agent reliability (continued: g–j, 2.1.203→2.1.208)
+
+   (g) Returning to `claude agents` now carries a running subagent's work **over** instead of restarting from scratch (CC ≥ 2.1.203). (h) `TaskStop`/`TaskOutput` now find agents spawned by **another** agent and list them by id/description on error (CC ≥ 2.1.203) — resume can target a cross-spawned stage agent. (i) A background agent resumed via `SendMessage` no longer sticks as `failed`/`completed` (CC ≥ 2.1.205). (j) Completed background agents stay in `/tasks` until cleanup, and attaching shows the transcript immediately (CC ≥ 2.1.208) — a just-finished stage is still inspectable during resume.
+
 ### Steps 1–7 — replay & audit
 
 1. `tail -n 50 .context/logs/audit.jsonl | jq .` — last 50 audit lines

@@ -262,6 +262,10 @@ from the filesystem. Diagnose by comparing `git worktree list` to
 - `EnterWorktree` accepts a `path` parameter to target a specific worktree directory; it can switch between Claude-managed worktrees mid-session (re-target without an `ExitWorktree` first). A background session on a shared checkout is told upfront that edits are blocked until it runs `EnterWorktree` (worktree contract enforced at session start, not via a rejected mid-work edit)
 - Subagents stalled for more than 10 minutes fail with a clear error — escalate or retry rather than waiting indefinitely
 
+### EnterWorktree out-of-tree confirmation (2.1.206)
+
+On CC ≥ 2.1.206, an `EnterWorktree` `path` **outside** `.claude/worktrees/` triggers a confirmation prompt. Keep unattended resume/megatask targets under `.claude/worktrees/`, pre-authorize the prompt via auto/skip-permissions mode, or rely on cwd-based pre-existing-worktree recognition (see `agents/developer.md:258`) (2.1.206).
+
 ### Orchestrator / Worktree Mismatch
 
 **Symptoms**: orchestrator.json shows worktree mode but paths don't match filesystem.

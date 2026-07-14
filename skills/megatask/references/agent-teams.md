@@ -77,6 +77,8 @@ Each teammate operates in its own worktree. This provides the strongest isolatio
 
 This is the **recommended configuration** for milestone parallel execution when token budget allows it.
 
+**EnterWorktree out-of-tree confirmation (2.1.206)**: megatask worktrees live at `${repo_root}/.worktrees/<group>/<issue>` — **outside** `.claude/worktrees/` — so on CC ≥ 2.1.206 an `EnterWorktree` `path` into a lane worktree triggers a confirmation prompt. Keep unattended lanes under auto/skip-permissions mode (which pre-authorizes the prompt), or rely on cwd-based pre-existing-worktree recognition (see `agents/developer.md:258`) (2.1.206).
+
 ## Hook Events for Team Monitoring
 
 | Hook Event | Lead Action | Payload |
@@ -97,3 +99,7 @@ Handlers can return `{"continue": false, "stopReason": "..."}` to stop a teammat
 > **Worktree reliability (CC 2.1.187→2.1.202)**: project-scoped plugins now load correctly inside git worktrees of the same repository (CC ≥ 2.1.200) — lane teammates see the full plugin skill set in their worktrees; locked `.git/worktrees/` registrations from killed teammates are cleaned automatically (CC ≥ 2.1.187); and the resume picker no longer takes minutes in repositories with many worktrees (CC ≥ 2.1.202). Teammates that finish code work in a worktree via `claude agents` auto commit/push/open a **draft PR** (CC ≥ 2.1.198) — aligned with step 6 above and by-design in lanes, since megatask stamps per-issue `fn_gate: "bypass"`.
 
 Background completion notifications include `worktreePath` and `worktreeBranch` fields, enabling the orchestrator to locate the correct worktree for each teammate.
+
+### Agent-teams reliability (2.1.203/2.1.207)
+
+> **Mailbox crash-loop fix (2.1.207)**: a malformed teammate mailbox message no longer crash-loops an agent team — previously it errored every second until the mailbox file was manually deleted. **Parent-checkout isolation (2.1.203)**: worktree-isolated subagents no longer run shell commands in the parent checkout, so a lane teammate's `Bash` stays inside its own worktree.

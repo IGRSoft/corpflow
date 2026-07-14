@@ -16,7 +16,7 @@ effort: low
 
 ### Fable 5 availability
 
-> **Fable 5** (`claude-fable-5`) is the Mythos-class top reasoning model (v2.1.170). The `fable` alias only resolves on **CC ≥ 2.1.170**; on CC 2.1.169 (the current plugin minimum) the alias degrades to the provider default until the operator updates. This plugin defaults its highest-reasoning stages (AR, DV, SR, ET, PE) to `opus`; `fable` remains a valid CC model alias for operators who choose to override. Pull the exact `$/1M` pricing from `/model` (or the `claude-api` skill) when needed.
+> **Fable 5** (`claude-fable-5`) is the Mythos-class top reasoning model (v2.1.170). The `fable` alias only resolves on **CC ≥ 2.1.170** (below that it degrades to the provider default until the operator updates); the current plugin minimum is 2.1.200, so `fable` resolves on every supported CC. This plugin defaults its highest-reasoning stages (AR, DV, SR, ET, PE) to `opus`; `fable` remains a valid CC model alias for operators who choose to override. Pull the exact `$/1M` pricing from `/model` (or the `claude-api` skill) when needed.
 
 ### Fable 5 context & credits
 
@@ -68,7 +68,7 @@ effort: low
 
 ### Auto mode on Bedrock/Vertex/Foundry
 
-> **Auto mode on Bedrock/Vertex/Foundry**: `CLAUDE_CODE_ENABLE_AUTO_MODE=1` enables auto model/effort selection for Opus 4.7/4.8 on Bedrock, Vertex, and Foundry providers. Opt-in; leaves explicit `--model`/`--effort` (and `metadata.model`) overrides authoritative when set. Bedrock also resolves its region from `~/.aws` config when `AWS_REGION` is unset (v2.1.172), and GovCloud inference profiles get the correct `us-gov` prefix (v2.1.174) — headless runners no longer need to export region env explicitly on configured machines.
+> **Auto mode on Bedrock/Vertex/Foundry**: as of **v2.1.207** auto model/effort selection is available on Bedrock, Vertex AI, and Foundry **without** the former `CLAUDE_CODE_ENABLE_AUTO_MODE=1` opt-in — disable it with `disableAutoMode` in settings instead. These providers (plus Claude-Platform-on-AWS) now **default to Opus 4.8** (v2.1.207). Explicit `--model`/`--effort` (and `metadata.model`) overrides stay authoritative when set. Bedrock also resolves its region from `~/.aws` config when `AWS_REGION` is unset (v2.1.172), and GovCloud inference profiles get the correct `us-gov` prefix (v2.1.174) — headless runners no longer need to export region env explicitly on configured machines.
 
 ### Lean system prompt default
 

@@ -170,7 +170,7 @@ Create PR from workspace/worktree branch using `workspace.json` metadata. Archiv
 
 #### PR Creation
 
-Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode (use `EnterWorktree` with `path` parameter to target the correct worktree when multiple exist — `EnterWorktree` can switch between Claude-managed worktrees mid-session without an intervening `ExitWorktree`; honors `worktree.baseRef` = `head`\|`fresh` setting — plugin assumes `head`). Stale worktrees are auto-cleaned.
+Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode (use `EnterWorktree` with `path` parameter to target the correct worktree when multiple exist — `EnterWorktree` can switch between Claude-managed worktrees mid-session without an intervening `ExitWorktree`; honors `worktree.baseRef` = `head`\|`fresh` setting — plugin assumes `head`). Stale worktrees are auto-cleaned. On CC ≥ 2.1.206, an `EnterWorktree` `path` outside `.claude/worktrees/` triggers a confirmation prompt — keep unattended re-targets under `.claude/worktrees/` or pre-authorize via skip-permissions mode (2.1.206).
 
 #### Task System
 

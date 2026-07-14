@@ -257,6 +257,10 @@ When the merge target is not the worktask default (e.g. shipping into `origin/re
 
 Background subagents spawned via `claude agents` cannot escape their assigned worktree scope (the worktree-isolation guard covers them). Background-session dispatch recognises pre-existing git worktrees (e.g., Conductor `.context` workspaces, externally-managed worktree shells) instead of refusing to spawn with a duplicate-creation error — `Edit` is not blocked when `EnterWorktree` would have collided. A background session on a *shared* checkout (no isolated worktree of its own) is told upfront that edits are blocked until it runs `EnterWorktree` — the worktree contract is enforced at the start of the session rather than surfacing as a rejected edit mid-work.
 
+##### Out-of-tree confirmation guard
+
+On CC ≥ 2.1.206, `EnterWorktree` with a `path` **outside** `.claude/worktrees/` triggers a confirmation prompt. Unattended DV/resume flows should keep targets under `.claude/worktrees/`, pre-authorize via `bypassPermissions`/skip-permissions mode, or rely on the cwd-based pre-existing-worktree recognition above (2.1.206).
+
 ##### Background session lifecycle
 
 Background agents launched via `/bg` or `←←` preserve the active permission mode across retire/wake — a permissive `bypassPermissions` parent does not revert to `default` after the daemon hibernates. Sub-agents in isolated worktrees automatically get Read/Edit access to their own worktree. Stalled subagents fail with a clear error after 10 minutes — surface and retry rather than waiting. Subagents resumed via `SendMessage` restore their explicit spawn `cwd` correctly.
