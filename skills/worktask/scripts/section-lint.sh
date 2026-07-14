@@ -35,7 +35,7 @@ HEAD_RE = re.compile(r'^#{1,6} ')
 
 def sections(text):
     """Yield (lineno, heading, char_count) leaf sections of a markdown text."""
-    lines = text.split('\n')
+    lines = text.splitlines()
     start = 0
     if lines and lines[0].rstrip('\r') == '---':          # skip YAML frontmatter
         for j in range(1, len(lines)):
@@ -52,7 +52,7 @@ def sections(text):
             if fence_char is None:
                 fence_char, fence_len = marker, mlen      # open
             elif marker == fence_char and mlen >= fence_len \
-                    and ln.strip(marker + ' \t\r') == '':
+                    and ln[m.end():].strip() == '':
                 fence_char = None                         # close (bare fence only)
             # opposite marker / shorter run / info-string close = content
         elif fence_char is None and HEAD_RE.match(ln):
