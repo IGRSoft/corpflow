@@ -19,7 +19,12 @@ parameter type T
 │   ├─ U is Array<V>       → .constant([])                 | binding-constant
 │   └─ U otherwise         → skip; preview-tbd            | preview-tbd
 │       reason: "binding_complex_type:<U>"
-│
+```
+
+### Derivation tree — Optional, existential, concrete branches
+
+```
+# …continued: derivation tree (same root: parameter type T)
 ├─ T matches Optional<U> / U?
 │   └─ → nil                                               | optional-nil
 │
@@ -31,7 +36,12 @@ parameter type T
 │
 ├─ T is a concrete struct/class with synthesized no-arg init
 │   └─ → T()                                                | concrete-init
-│
+```
+
+### Derivation tree — closure, generic, fallback branches
+
+```
+# …continued: derivation tree (same root: parameter type T)
 ├─ T is a closure type ((...) -> ... )
 │   └─ → skip; preview-tbd                                  | preview-tbd
 │       reason: "closure_unsupported"

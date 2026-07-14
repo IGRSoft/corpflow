@@ -33,6 +33,8 @@ When platform is `android`, further route based on context:
 | Test generation | `android-developer:test-generator` | JUnit4/5, MockK, Turbine, Roborazzi screenshot tests |
 | Code fixes | `android-developer:code-fixer` | ktlint/detekt remediation, minimal-diff fixes |
 
+### Android DV evidence and review specialists
+
 Android work is UI by default: set/forward `metadata.requires_screenshots: true` on DV tasks (captured via the `android_adapter` → `adb exec-out screencap -p`); the screenshot manifest at `.context/images/<worktask_id>/screenshots.md` plus Gradle build/test transcripts under `.context/logs/` are the Build Evidence. There is no Android build MCP — builds and device interaction run through scoped `Bash(gradle:*|./gradlew|adb:*|ktlint:*|detekt:*)`. Review-only specialists (`android-developer:security-auditor`, `android-developer:dependency-manager`) are reached through the stage flow (DR/SR/QA), not as direct DV `Task(...)` targets.
 
 ## Systems Platform Specialization
@@ -47,6 +49,8 @@ When platform is `systems`, further route based on context:
 | Python | `system-developer:python-developer` | Python 3.14, uv/ruff toolchain, asyncio |
 | Shell scripting | `system-developer:bash-developer` | Bash 5.x, POSIX sh, CI scripts |
 
+### Systems DV evidence
+
 Systems and backend work are non-UI by default: set/forward `metadata.requires_screenshots: false` on DV tasks (or rely on the `cli_fallback_adapter`); build/test transcripts under `.context/logs/` are the Build Evidence. For backend, the cli-fallback evidence is API request/response transcripts (curl/httpie), test output, k6 load reports, and migration logs.
 
 ## Web Platform Specialization
@@ -60,9 +64,16 @@ When platform is `web`, further route based on context:
 | Vue / Nuxt | `frontend-developer:vue-developer` | Vue 3 Composition API, `<script setup>`, Pinia |
 | Svelte / SvelteKit | `frontend-developer:svelte-developer` | Svelte 5 runes, load/actions |
 | Angular | `frontend-developer:angular-developer` | Angular 18+ signals, standalone, RxJS interop |
+
+### Web cross-cutting specialists
+
+| Context | Agent | Use Case |
+|---------|-------|----------|
 | TypeScript type layer | `frontend-developer:typescript-developer` | Generics, narrowing, strictness, `tsc` errors |
 | CSS / Tailwind / styling | `frontend-developer:css-developer` | Modern CSS, design tokens, responsive + a11y |
 | Rendering strategy / micro-frontends / state + design-system architecture | `frontend-developer:frontend-architector` | CSR/SSR/SSG/ISR, module federation |
 | Component/unit/e2e tests | `frontend-developer:fe-test-generator` | Vitest/Jest, Playwright, Testing Library |
+
+### Web DV evidence and review specialists
 
 Web work is UI by default: set/forward `metadata.requires_screenshots: true` on DV tasks (captured via the `web_adapter` → Playwright `npx playwright screenshot` / Chrome MCP); the screenshot manifest at `.context/images/<worktask_id>/screenshots.md` plus Lighthouse/axe reports are the Build Evidence. Review-only specialists (`frontend-developer:fe-performance-engineer`, `frontend-developer:fe-accessibility-auditor`, `frontend-developer:fe-security-auditor`) are reached through the stage flow (DR/SR/QA), not as direct DV `Task(...)` targets.

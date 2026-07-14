@@ -128,7 +128,12 @@ Three-tier cascade per ad6. Each transition emits its own audit row.
       → escalate to `apple` (sim) adapter
       → emit screenshot_platform_fallback, reason: "canvas_host_build_failed"
       → success | proceed to [3]
+```
 
+### Cascade tiers 3–4
+
+```
+# …continued: failure cascade ladder
 [3] `apple` (sim) adapter unavailable (sim_unavailable(state) == true)
       → cli/fallback (existing skill behavior)
       → emit screenshot_platform_fallback, reason: "canvas_sim_unavailable"
@@ -138,6 +143,8 @@ Three-tier cascade per ad6. Each transition emits its own audit row.
       → append to .context/errors/developer.md
       → do NOT render; do NOT silently skip (ad8)
 ```
+
+### Cascade additivity
 
 The cascade is additive to the existing `dv-screenshot-capture` failure-mode vocabulary — apple-canvas never replaces the existing chain.
 
@@ -159,7 +166,7 @@ Switch via `metadata.canvas_destination: "ios-sim"`. The scaffolder uncomments t
 3. **Status bar / dynamic island / device chrome** — `ImageRenderer` produces a clipped content rect; canvas snapshots have NO device chrome (constraint C5).
 4. **Dynamic Type / dark-mode matrices** — single-shot snapshot only; matrix rendering deferred to a future `args.trait_collections` flag.
 
-Mitigations:
+### Mitigations
 
 - Pin `proposedSize = CGSize(width: 393, height: 852)` (iPhone artboard) so layout is deterministic across host/sim (risk row 3).
 - Default RMSE threshold 8% absorbs sub-pixel font drift while still catching real visual regressions.
@@ -213,6 +220,8 @@ Exit codes:
 --size <WxH>                  # optional; default 393x852
 --scheme <light|dark>         # optional; default light
 ```
+
+### Driver steps
 
 Steps (matches the failure cascade above):
 

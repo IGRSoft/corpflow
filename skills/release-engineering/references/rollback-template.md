@@ -1,6 +1,8 @@
 # Rollback Plan Template
 
-```markdown
+#### Template — prerequisites, triggers, steps 1–3
+
+~~~markdown
 ## Rollback Plan: v[X.Y.Z]
 
 ### Prerequisites
@@ -32,6 +34,12 @@ Initiate rollback if:
    # or
    git revert HEAD && git push
    ```
+~~~
+
+#### Template — steps 4–6, data, communication
+
+~~~markdown
+<!-- …continued: Rollback Plan steps 4–6 and closing sections -->
 
 4. **Revert database** (if applicable)
    ```sql
@@ -57,4 +65,4 @@ Initiate rollback if:
 - [ ] Internal: [channel]
 - [ ] External: [status page]
 - [ ] Customers: [if applicable]
-```
+~~~

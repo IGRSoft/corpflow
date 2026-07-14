@@ -87,7 +87,12 @@ Populate all App Store Connect listing fields in English using content extracted
 ## Keywords
 <!-- Max 100 characters total, comma-separated -->
 [keyword1, keyword2, keyword3, ...]
+```
 
+#### `info.md` template — URLs, release info & categories
+
+```markdown
+<!-- …continued: URLs & categories -->
 ## Support URL
 [https://your-support-url.com]
 

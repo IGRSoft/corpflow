@@ -76,8 +76,14 @@ TL is the **canonical and sole owner** of the intra-issue async decision: TL dec
 
 1. **Primary inputs**: Read `state.json` facts first, then read the `handoff:` frontmatter of `analyzing-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `analyzing-*.md`) and anchor-read `analyzing-N.md#decisions` to identify work streams from AR's architecture decisions. **Conditional**: only when AR's `next_stage_focus` does NOT already enumerate the work streams, anchor-read `planning-N.md#requirements` + `planning-N.md#acceptance-criteria` (plan path: `.context/${task.metadata.plan_file}`, fallback: newest `.context/planning-*.md`). Full-read either file only if an anchor is absent or `retry_count > 0`.
 2. For each stream, define: exclusive file ownership list, interface contracts, acceptance criteria
+
+##### Steps 3-4: Locate and Narrow DV0
+
 3. Use `TaskGet` to find DV0 and DR0 task IDs from the current worktask
 4. Use `TaskUpdate` on DV0 to narrow its description to the primary stream's scope
+
+##### Step 5: Create Stream Tasks
+
 5. Use `TaskCreate` for each additional stream. All DVN share `developer.md` — retry sections are scoped per-task (`## DV1 Retry N`, `## DV2 Retry N`):
    ```
    // Resolve plan file with fallback before creating tasks
@@ -96,6 +102,9 @@ TL is the **canonical and sole owner** of the intra-issue async decision: TL dec
      }
    })
    ```
+
+##### Steps 6-8: Wire Dependencies and Document
+
 6. Set each new DVN blocked by TL0 (not by DV0 — they run in parallel):
    ```
    TaskUpdate({ taskId: dvN_id, addBlockedBy: [tl0_id] })

@@ -56,7 +56,12 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 
 **Health Score**: 81/100 (Good)
 **Last Audit**: 2024-01-15
+```
 
+### Report template — critical issues
+
+```markdown
+<!-- …continued: critical issues -->
 ## Critical Issues 🔴
 
 ### 1. Agent: workflow-engineer
@@ -70,7 +75,12 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 **Location**: `commands/estimate.md`
 **Details**: No "Output Format" section defined
 **Fix**: Add output format specification
+```
 
+### Report template — warnings
+
+```markdown
+<!-- …continued: warnings -->
 ## Warnings ⚠️
 
 ### 3. Agent: qa-engineer
@@ -100,7 +110,12 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 **Issue**: Missing Related section
 **Files**: arch-decision, business-report, docs-audit
 **Fix**: Add Related section with links
+```
 
+### Report template — agent analysis
+
+```markdown
+<!-- …continued: agent analysis -->
 ## Agent Analysis
 
 | Agent | Model | Clarity | Efficiency | Consistency |
@@ -116,7 +131,12 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 | team-lead | sonnet | 7/10 | 7/10 | 8/10 |
 | technical-writer | haiku | 7/10 | 7/10 | 7/10 |
 | workflow-engineer | sonnet | 6/10 | 8/10 | 7/10 |
+```
 
+### Report template — model distribution & command analysis
+
+```markdown
+<!-- …continued: model distribution -->
 ### Model Distribution
 | Model | Count | Percentage |
 |-------|-------|------------|
@@ -134,7 +154,12 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 | Has Output Format | 30/36 | 83% |
 | Has Related section | 31/36 | 86% |
 | Platform param | 18/36 | 50% |
+```
 
+### Report template — consistency checks
+
+```markdown
+<!-- …continued: consistency checks -->
 ## Consistency Checks
 
 | Check | Status | Issues |
@@ -151,7 +176,12 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 | "test" | "testing" | 12 |
 | "check" | "validate" | 8 |
 | "PR" | "pull request" | 5 |
+```
 
+### Report template — recommendations
+
+```markdown
+<!-- …continued: recommendations -->
 ## Recommendations
 
 ### Priority 1 (Fix Now)
@@ -168,7 +198,12 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 1. Standardize terminology across all files
 2. Add example interactions to all agents
 3. Create command template for consistency
+```
 
+### Report template — auto-fixable issues & metadata
+
+```markdown
+<!-- …continued: auto-fixable issues -->
 ## Auto-Fixable Issues
 
 With `--fix` flag, these issues can be automatically resolved:
@@ -219,10 +254,15 @@ Definition files (`agents/*.md`, `commands/*.md`, `skills/*/SKILL.md`) are match
 `---`-delimited YAML block at the top of the file. When detecting or extracting that block,
 be tolerant of real-world line endings and flag a present-but-broken `description`:
 
+#### Rule 1 — Tolerate CRLF & trailing whitespace
+
 1. **Tolerate CRLF and trailing whitespace on the delimiter lines.** A file authored on
    Windows or saved with trailing spaces still has valid frontmatter — match `---` even when
    followed by spaces/tabs and `\r\n`, not only a bare `---\n`. Do not report "missing
    frontmatter" for a file whose only difference is line endings.
+
+#### Rules 2–3 — Absent vs malformed `description`
+
 2. **Distinguish absent from malformed.** A missing frontmatter block and a block that is
    present but has a missing, empty, or unparseable `description:` are different findings:
    - *absent frontmatter* → error (the file has no metadata at all);

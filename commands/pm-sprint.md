@@ -55,7 +55,12 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 | Buffer | 2 points (5%) | 2 points (5%) |
 
 ---
+```
 
+### Template — goals
+
+```markdown
+<!-- …continued: sprint goals -->
 ## Goals
 
 ### Sprint Goals
@@ -69,7 +74,12 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 - [ ] Dark mode toggle functional
 
 ---
+```
 
+### Template — capacity planning
+
+```markdown
+<!-- …continued: capacity planning -->
 ## Capacity Planning
 
 ### Team Capacity
@@ -93,7 +103,12 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 | Buffer | 2 | 2 | 5% | Unexpected work |
 
 ---
+```
 
+### Template — sprint backlog (features)
+
+```markdown
+<!-- …continued: sprint backlog -->
 ## Sprint Backlog
 
 ### Features (22-28 pts)
@@ -105,7 +120,12 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 | FEAT-103 | Dark mode: Core implementation | 5 | 8 | Carol | P1 |
 | FEAT-104 | Dark mode: Settings toggle | 2 | 3 | Carol | P1 |
 | FEAT-105 | Dashboard performance: Query optimization | 3 | 4 | Dave | P1 |
+```
 
+#### Backlog — tech debt and bugs
+
+```markdown
+<!-- …continued: tech debt, bugs -->
 ### Tech Debt (5-6 pts)
 
 | ID | Item | SP Min | SP Max | Assignee | Priority |
@@ -122,7 +142,12 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 | BUG-238 | Chart rendering issue in Safari | 1 | 2 | Eve | P2 |
 
 ---
+```
 
+### Template — daily breakdown
+
+```markdown
+<!-- …continued: daily breakdown -->
 ## Daily Breakdown
 
 ### Week 1 (Jan 13-17)
@@ -146,7 +171,12 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 | Fri | Sprint end | Demo, retro, release prep |
 
 ---
+```
 
+### Template — dependencies and risks
+
+~~~markdown
+<!-- …continued: dependencies, risks -->
 ## Dependencies
 
 ```
@@ -171,7 +201,12 @@ FEAT-103 (Dark mode core)
 | Team member availability | Low | Medium | Cross-training on SSO |
 
 ---
+~~~
 
+### Template — definition of done, ceremonies, notes
+
+```markdown
+<!-- …continued: DoD, ceremonies, notes -->
 ## Definition of Done
 
 - [ ] Code complete and reviewed

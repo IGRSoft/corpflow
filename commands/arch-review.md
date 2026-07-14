@@ -40,7 +40,7 @@ Perform architecture review for PRs, features, or system changes. Evaluates arch
 
 ## Output Format
 
-```markdown
+~~~markdown
 # Architecture Review
 
 ## Summary
@@ -58,7 +58,12 @@ Perform architecture review for PRs, features, or system changes. Evaluates arch
 | Architectural Impact | Medium | New service boundary |
 | Risk Level | Low | Well-understood patterns |
 | Breaking Changes | None | Backward compatible |
+~~~
 
+### Output Format — Pattern Analysis
+
+~~~markdown
+<!-- …continued: Pattern Analysis -->
 ## Pattern Analysis
 
 ### Positive Patterns ✅
@@ -73,7 +78,12 @@ Perform architecture review for PRs, features, or system changes. Evaluates arch
 **Issue**: Direct database calls bypassing repository
 **Impact**: Medium - reduces testability
 **Recommendation**: Inject UserRepository instead of direct DB access
+~~~
 
+#### Output Format — Concerns (continued)
+
+~~~markdown
+<!-- …continued: concern #1 code sample -->
 ```typescript
 // Current (problematic)
 class UserService {
@@ -100,7 +110,12 @@ class UserService {
 
 ### Anti-Patterns Found 🔴
 - None critical
+~~~
 
+### Output Format — Scalability & Security
+
+~~~markdown
+<!-- …continued: Scalability Review -->
 ## Scalability Review
 
 | Component | Current | At 10x Scale | Recommendation |
@@ -118,7 +133,12 @@ class UserService {
 | Data Encryption | ✅ | AES-256 for sensitive data |
 | Input Validation | ⚠️ | Missing in 2 endpoints |
 | Secret Management | ✅ | Using environment variables |
+~~~
 
+### Output Format — Recommendations & Approval
+
+~~~markdown
+<!-- …continued: Recommendations -->
 ## Recommendations
 
 ### Must Fix (Before Merge)
@@ -147,7 +167,7 @@ class UserService {
 |--------|-----------|
 | ✅ Approved | With required fixes |
 | Blockers | Input validation must be added |
-```
+~~~
 
 ## Apple Platform Detection
 

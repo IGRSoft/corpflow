@@ -7,16 +7,29 @@ Read at gate time from `skills/worktask/SKILL.md § FN Gate` (stub). This file i
 ## Gate semantics
 
 - **Carrier**: `PL0.metadata.fn_gate`, default `"checkpoint"`. PL0 stamps `"bypass"` ONLY when `--auto-finalization` or `--emergency` is present (see `commands/worktask.md` Phase 1, step 4); a batch orchestrator such as `/megatask` stamps it directly on each per-issue PL0. `--auto-plan` NEVER bypasses the FN gate — it is orthogonal and bypasses only the plan gate.
-- **Effect (checkpoint — the gated path)** — when `fn_gate == "checkpoint"`: the orchestrator runs the **Pre-gate Conductor-attachments writer** (below), appends the `fn_gate_waiting` audit line, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. On approval → append `approval_received` then delegate FN (commit, push, PR). On reject → append `approval_rejected` and STOP — do NOT delegate FN; surface the user's feedback.
-- **Effect (bypass)**: the orchestrator runs the Pre-gate Conductor-attachments writer (or, on the bypass path, FN-agent Writer 2 in `agents/project-manager.md § FN Stage`), appends the `fn_gate_bypass` audit line, then proceeds directly into the FN stage (commit, push, PR — unattended).
-- The Conductor-attachments writer runs on the gated path so later sessions inherit worktask context. Run it directly — do not delegate to a subagent.
-- **Park semantics (CC ≥ 2.1.200)**: `AskUserQuestion` no longer auto-continues on idle by default — the `fn_gate_waiting` park holds until the operator answers. The idle-timeout auto-continue is an explicit `/config` opt-in; keep it OFF on hosts running gated worktasks (an idle auto-answer would count as an approval the operator never gave). Approval authority stays with the operator: subagent/launcher messages are task direction, never approval (CC ≥ 2.1.198), matching the SendMessage and trigger-delivery caveats in `resume.md`.
+
+### Effect (checkpoint — the gated path)
+
+When `fn_gate == "checkpoint"`: the orchestrator runs the **Pre-gate Conductor-attachments writer** (below), appends the `fn_gate_waiting` audit line, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. On approval → append `approval_received` then delegate FN (commit, push, PR). On reject → append `approval_rejected` and STOP — do NOT delegate FN; surface the user's feedback.
+### Effect (bypass)
+
+The orchestrator runs the Pre-gate Conductor-attachments writer (or, on the bypass path, FN-agent Writer 2 in `agents/project-manager.md § FN Stage`), appends the `fn_gate_bypass` audit line, then proceeds directly into the FN stage (commit, push, PR — unattended).
+
+The Conductor-attachments writer runs on the gated path so later sessions inherit worktask context. Run it directly — do not delegate to a subagent.
+
+### Park semantics (CC ≥ 2.1.200)
+
+`AskUserQuestion` no longer auto-continues on idle by default — the `fn_gate_waiting` park holds until the operator answers. The idle-timeout auto-continue is an explicit `/config` opt-in; keep it OFF on hosts running gated worktasks (an idle auto-answer would count as an approval the operator never gave). Approval authority stays with the operator: subagent/launcher messages are task direction, never approval (CC ≥ 2.1.198), matching the SendMessage and trigger-delivery caveats in `resume.md`.
 
 ## Pre-gate Conductor-attachments writer
 
 **Why this exists.** The two files this writer produces are how Conductor's *Create PR* / *Request Review* actions inherit worktask context in later sessions — DR/QA verdicts, resolved base branch, conventional-commit type, link to `complete-summary-N.md`. If they are absent, Conductor falls back to generic built-in templates and the FN agent (running post-approval) has no canonical script to follow. **Skipping this writer silently breaks the handoff — there is no recovery once the gate has returned**, because Conductor will cache the absent state for the duration of the next session. That is why the *Effect, in order* list above wraps this writer in three separate `test -f` checks (steps 2, 3, 6).
 
+### Idempotency & scope
+
 The writer is unconditional on the gated (`checkpoint`) path; the bypass path falls through to FN-agent Writer 2 (in `agents/project-manager.md § FN Stage`). It is idempotent: every FN-gate entry overwrites both files from scratch. Run it directly — do not delegate to a subagent.
+
+### Step 1 — gather git state
 
 Steps:
 
@@ -30,15 +43,21 @@ Steps:
    echo "UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo 'no upstream')"
    ```
 
+### Steps 2–4 — read plan & verdict inputs
+
 2. `Read: <plan_file>` (resolve via `FN0.metadata.plan_file`; fallback newest `.context/planning-*.md`) → derive COMMIT_TYPE from first match of `\b(fix|refactor|perf|docs|chore|test|ci|build|style|feat)\b` (default `feat`).
 3. `Read: .context/developer-review-N.md` (N = `FN0.metadata.run_index`) → DR_VERDICT, DR_CONCERNS.
 4. `Read: .context/testing-N.md` → QA_VERDICT, QA_NOTES.
+### Steps 5–6 — write attachments
+
 5. `Write: .context/attachments/PR instructions.md` using template in `skills/worktask/references/conductor-attachments.md § Template — PR instructions.md`.
 6. `Write: .context/attachments/Review request.md` using template in `skills/worktask/references/conductor-attachments.md § Template — Review request.md`.
 
 Verification is owned by the *Effect, in order* list (step 2 immediately after this writer, step 6 immediately before `return`). Do not skip those — they exist because partial writer completion has happened in practice.
 
-**Fault tolerance — per-input policy** (each Read is independent; do NOT wrap the whole sequence in a single try/catch — failure of one optional input must not skip the Writes):
+### Fault tolerance — per-input policy
+
+Each Read is independent; do NOT wrap the whole sequence in a single try/catch — failure of one optional input must not skip the Writes:
 
 | Input | Required? | If missing |
 |-------|-----------|-----------|
@@ -81,6 +100,8 @@ After the execution loop exits (all tasks completed, including ST), the orchestr
 4. **Read checked items:** parse `.context/learnings.md` for lines matching `- [x]` under `## Proposed Updates`. Each checked item is a proposal to apply.
    - If zero checked items → skip to step 6.
 
+### Step 5 — delegate to prompt-engineer
+
 5. **Delegate to prompt-engineer** with one `Agent` call carrying the full list of checked proposals:
    ```typescript
    Task({
@@ -93,6 +114,8 @@ After the execution loop exits (all tasks completed, including ST), the orchestr
    });
    ```
    The prompt-engineer applies each proposal as its own commit with a `version:` bump (see `agents/prompt-engineer.md § Self-Improvement Patch Application`).
+
+### Steps 6–7 — audit & terminate
 
 6. **Audit entry:** append one line to `.context/logs/audit.jsonl`:
    ```json

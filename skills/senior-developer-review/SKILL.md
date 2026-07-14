@@ -143,7 +143,9 @@ Watch for these during review:
 Upgrading an existing dependency is a code change, and the riskiest upgrades are the ones
 merged in bulk as "bump deps." When a review request touches a manifest (`Package.swift`,
 `Podfile`, `*.gradle`, `requirements.txt`, `package.json`, …) or its lockfile, apply the
-same senior discipline you'd apply to feature code:
+same senior discipline you'd apply to feature code.
+
+### Read, Isolate, Verify (steps 1–3)
 
 1. **Read the changelog, not just the version number.** Semver is a promise the maintainer
    may not have kept; a "patch" can carry a behavioral change. For a major bump, read the
@@ -154,6 +156,9 @@ same senior discipline you'd apply to feature code:
 3. **Let the suite decide.** The upgrade is verified by a green test suite before *and*
    after, not by "it resolved." Thin coverage around the dependency's behavior is itself
    the finding — add a test first.
+
+### Transitive Graph & Lockfile (steps 4–5)
+
 4. **Mind the transitive graph.** Most resolved packages are ones nobody chose directly.
    Review the lockfile / transitive-graph diff, not just the manifest — one direct bump can
    pull in dozens of indirect changes.

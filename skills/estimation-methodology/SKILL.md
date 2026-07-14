@@ -29,6 +29,8 @@ python3 skills/estimation-methodology/scripts/estimate-calc.py \
   [--phase-hours <min> <max>]
 ```
 
+### Output & Self-Test
+
 Outputs a single-line JSON object with keys: `sp`, `multiplier_h`, `base_hours`,
 `buffer_pct`, `total_hours`, `budget` (if `--rate`), `phase`, `ai_cost` (if `--tokens`),
 `complexity` (if `--factors`). No large text blocks — just the numbers.

@@ -105,6 +105,11 @@ Emit `## Detailed Estimate: <task>` with these sections, in order:
 | `### Resource Requirements` | Skills needed, dependencies, blockers |
 | `### Breakdown` | Per-component table: Component, Size, SP Min, SP Max, Notes — tests included per component |
 | `### Risk Assessment` | Risk, Probability, Impact, Mitigation |
+
+#### Detailed Estimation — Budget & AI Cost Sections
+
+| Section | Content |
+|---------|---------|
 | `### Budget Calculation` | Base Hours (SP × multiplier), Buffer (15%), Total Hours, Budget = Total × `--dev-rate`. **Canonical math**: invoke `skills/estimation-methodology/scripts/estimate-calc.py --size <S> --rate <R>` and read `total_hours` + `budget` from the JSON output. |
 | `### AI Cost` | Est. tokens, AI cost, % of total budget. **Canonical math**: pass `--tokens <n> --model <m>` to `skills/estimation-methodology/scripts/estimate-calc.py` and read `ai_cost.usd`. Formula + token bands: `skills/estimation-methodology/SKILL.md § AI Agent Cost Estimation`. |
 
@@ -140,7 +145,9 @@ See `skills/shared/three-stage-planning.md § Stage Budget Template` for column 
 ### Review Output (`--review`)
 
 Senior/platform-specialist review of an existing estimate. Emit
-`## Senior Developer Review: [Project]` with these sections:
+`## Senior Developer Review: [Project]` with these sections (the fenced chunks below concatenate into one report):
+
+#### Review Output — Adjustments & Impact
 
 ```markdown
 ## Senior Developer Review: [Project]
@@ -157,7 +164,11 @@ Senior/platform-specialist review of an existing estimate. Emit
 - Adjusted SP: 150-193
 - Delta: +30-41 SP (+25-27%)
 - Hours Impact: +180-246h
+```
 
+#### Review Output — Risks & Recommendations
+
+```markdown
 ### Risk Flags
 1. Third-party SDK iOS version support uncertain
 2. BLE background mode reliability concerns
@@ -286,6 +297,8 @@ import. The canonical file list, column schemas, delimiter, and validation rules
 live in `skills/csv-export-templates/SKILL.md` — do not redefine the export shape
 here. Requires `--detailed`. Bare `--export` (no value) defaults to `csv`, the
 only currently supported format.
+
+### Export File Tree
 
 Creates 13 CSV files in `--dir` (default `exports/`):
 

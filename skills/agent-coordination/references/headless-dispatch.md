@@ -10,15 +10,32 @@ External orchestrators (CI runners, batch schedulers, the user's own shell) that
 |---|---|---|---|---|
 | `agent` | `--agent <name>` | string | N/A (in-process uses `Task({subagent_type})`) | overrides the session's `settings.json` `agent` default (v2.1.157); e.g. force `igrsoft:developer` for a one-shot run |
 | `--all` (listing flag, not a `metadata` key) | `claude agents --all` | bool | N/A (listing only) | includes **completed** sessions in `claude agents [--json]` output (v2.1.169); pair with `state` to tell `done` apart from `running`/`blocked` |
+
+### Translation table — model & effort
+
+| `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
+|---|---|---|---|---|
 | `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-4-8`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6`. Caveat: a managed `availableModels` allowlist now also constrains subagent model overrides (v2.1.172), and `enforceAvailableModels` (v2.1.175) constrains the Default model too — a requested id may silently down-resolve; audit, don't assume |
 | `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN/RE→`medium` |
+
+### Translation table — permission, workspace & MCP
+
+| `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
+|---|---|---|---|---|
 | `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` (`manual` = CC ≥ 2.1.200 alias for `default`; both accepted) | **Yes — audited** (see § Permission-Mode Pinning below) | SR/FN→`default`; DV under `--auto-plan`→`bypassPermissions` |
 | `workspace_path` | `--cwd <path>` | string | N/A (in-process inherits parent cwd) | megatask tracks → per-issue worktree |
 | `add_dirs` (array) | repeated `--add-dir <path>` | string[] | N/A | cross-repo work, monorepo siblings |
 | `mcp_config_path` | `--mcp-config <path>` | string | N/A | scoped MCP set per dispatch |
+
+### Translation table — plugins, skip-permissions & settings
+
+| `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
+|---|---|---|---|---|
 | `plugin_dir_overrides` (array) | repeated `--plugin-dir <path>` | string[] | N/A | local plugin development |
 | `dangerously_skip_permissions` | `--dangerously-skip-permissions` | bool | Advisory; orchestrator MAY refuse | CI batch only, with a deny-list in `settings.json` |
 | `settings_path` | `--settings <path>` | string | N/A | provider / org config swap |
+
+### Advisory vs audited legend
 
 "Advisory" = the field is recorded on the task and read by external dispatchers, but the in-process `Task()` tool has no equivalent parameter today. "Audited" = the orchestrator writes an `audit.jsonl` line when the field is set, even though it cannot enforce the mode on a `Task()` child.
 
@@ -32,17 +49,34 @@ The minimum recommended flag set per stage when dispatching from a headless runn
 | **DR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode acceptEdits -- igrsoft:technical-lead < dr-prompt.txt` |
 | **SR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` |
 | **QA** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort high --permission-mode acceptEdits -- igrsoft:qa-engineer < qa-prompt.txt` |
+
+### FN / RE / ST one-liners
+
+| Stage | Canonical headless one-liner |
+|---|---|
 | **FN** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:project-manager < fn-prompt.txt` |
 | **RE** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:release-engineer < re-prompt.txt` |
 | **ST** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode acceptEdits -- igrsoft:stakeholder < st-prompt.txt` |
 
+### Model & effort defaults
+
 The model/effort defaults track `skills/shared/model-selection.md`. Override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **opus/xhigh** (matches `skills/shared/stage-codes.md` and the stage table in `benchmark/harness/Sources/BenchmarkLive/Dispatch.swift`, the machine-checked SSOT — the Python `dispatch.py` predecessor was retired in v3.29.0); the agent's `model: opus` frontmatter default applies to both the DR stage dispatch and direct TC consults.
+
+### Sonnet 5 alias note (v2.1.197)
 
 > **Sonnet 5 (v2.1.197)**: the pinned `claude-sonnet-4-6` ids above are benchmark-parity snapshots, not a tier recommendation — on CC ≥ 2.1.197 the `sonnet` **alias** resolves to Claude Sonnet 5 (new CC default; native 1M context). Prefer aliases in ad-hoc runner scripts (deprecation-proof per `skills/shared/model-selection.md`); keep pinned ids only where byte-reproducibility against the benchmark SSOT matters.
 
+### Background-worker reliability (v2.1.172/2.1.174)
+
 > **Background-worker reliability (v2.1.172/2.1.174)**: fixed — pre-warmed workers leaking another directory's project settings, `EAUTH` on attach after daemon auto-update and on claim-after-idle, stuck-`active` state after a nested child stopped, and background sessions inheriting another session's `ANTHROPIC_*` provider env. No plugin workaround needed on CC ≥ 2.1.174; on older CC, restart the daemon when attach fails with `EAUTH`.
 
-> **Unattended-runner resilience (2.1.185→2.1.202)**: `CLAUDE_CODE_MAX_RETRIES` is capped at 15 (v2.1.186); for unattended batches set `CLAUDE_CODE_RETRY_WATCHDOG` instead — it raises the default retry count for non-capacity transient errors to 300 and lifts the 15-retry cap (v2.1.199). The streaming idle watchdog is default-on for all providers (v2.1.196): a stream silent for 5 minutes aborts and retries (`CLAUDE_ENABLE_STREAM_WATCHDOG=0` disables). Transient 429s unrelated to the usage limit retry automatically with backoff for subscribers (v2.1.199). `--json-schema` structured output is reliable for dispatch pipelines on v2.1.187+ (no indefinite `StructuredOutput` re-call; schema-validation failures abort after 5 attempts, v2.1.186). Authenticate MCP servers up front with `claude mcp login <name>` / `claude mcp logout <name>` (v2.1.186; `--no-browser` completes over SSH) — pairs with the auth-stub-hiding note below. `claude agents --dangerously-skip-permissions` now shows the bypass disclaimer and applies bypass mode to spawned agents (v2.1.196) instead of silently falling back to auto mode.
+### Unattended-runner resilience (2.1.185→2.1.202)
+
+> **Unattended-runner resilience (2.1.185→2.1.202)**: `CLAUDE_CODE_MAX_RETRIES` is capped at 15 (v2.1.186); for unattended batches set `CLAUDE_CODE_RETRY_WATCHDOG` instead — it raises the default retry count for non-capacity transient errors to 300 and lifts the 15-retry cap (v2.1.199). The streaming idle watchdog is default-on for all providers (v2.1.196): a stream silent for 5 minutes aborts and retries (`CLAUDE_ENABLE_STREAM_WATCHDOG=0` disables). Transient 429s unrelated to the usage limit retry automatically with backoff for subscribers (v2.1.199).
+
+#### Structured output & MCP auth (v2.1.186+)
+
+> `--json-schema` structured output is reliable for dispatch pipelines on v2.1.187+ (no indefinite `StructuredOutput` re-call; schema-validation failures abort after 5 attempts, v2.1.186). Authenticate MCP servers up front with `claude mcp login <name>` / `claude mcp logout <name>` (v2.1.186; `--no-browser` completes over SSH) — pairs with the auth-stub-hiding note below. `claude agents --dangerously-skip-permissions` now shows the bypass disclaimer and applies bypass mode to spawned agents (v2.1.196) instead of silently falling back to auto mode.
 
 ## Live Session Discovery
 
@@ -55,17 +89,23 @@ claude agents --json | jq -r --arg track "$TRACK_ID" '
   .[] | select(.metadata.worktask_track == $track) | .agent_id'
 ```
 
+### Usage patterns
+
 Three usage patterns:
 
 - **Resume pre-check** — before respawning a subagent during worktask resume, query live sessions; if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` still appears, prefer `SendMessage` reattach over re-delegation. Eliminates the "blind respawn of an already-working subagent" token-waste class. See `skills/worktask/SKILL.md § Resume Procedure` step 0.
 - **Parallel track health** — for megatask runs, periodic `claude agents --json | jq '[.[] | select(.tag=="igrsoft-track")] | length'` should equal the orchestrator-derived `parallel_tracks`. Less = stalled track.
 - **Status-line integration** — drives tmux / shell-status-bar widgets showing the active worktask stage without polluting `.context/`.
 
+### Schema-drift caveat
+
 Caveat: the CLI is stable but the JSON schema is not formally versioned — guard every read with defensive jq (`.parent_agent_id // "none"`). See § Schema Versioning Watch below.
 
 ### Schema Versioning Watch (v2.1.169 baseline)
 
 The `claude agents --json` output schema is **not formally versioned** by Claude Code as of v2.1.169. Plugin consumers must defensively guard fields.
+
+#### Recorded baseline (CC 2.1.169)
 
 **Recorded baseline** (CC 2.1.169) — array of objects with these observed top-level fields:
 
@@ -74,15 +114,31 @@ The `claude agents --json` output schema is **not formally versioned** by Claude
 
 Rows additionally render a `done/total` progress count (v2.1.161) in the human-readable (non-`--json`) listing.
 
+#### `--all` + omission fix (v2.1.169)
+
 > **`--all` + omission fix (v2.1.169)**: `claude agents [--json] --all` includes **completed** sessions (otherwise filtered out), and v2.1.169 fixed an earlier omission where **blocked** and **just-dispatched** sessions were silently absent from the listing. Combined with the new `state` field, a resume scan can now distinguish a `blocked` agent (reattach via `SendMessage`) from a genuinely absent one (re-delegate) — closing the "blind re-dispatch of an invisible blocked agent" waste class. See `skills/worktask/SKILL.md § Resume Procedure` step 0.
+
+#### Defensive-read rule for optional fields
 
 `waitingFor`, `id`, and `state` are read defensively (`.waitingFor // empty`, `.id // ""`, `.state // ""`) to guard against schema drift — the listing schema is not formally versioned, and additive optional fields do **not** bump min CC (per the "If the baseline shifts" rule below, which is reserved for *required* / renamed / type-changed fields). The resume loop branches directly on `{agent_id, state, waitingFor}` (`skills/worktask/SKILL.md § Resume Procedure` step 0).
 
+#### Watch protocol for future /cc-update runs
+
 **Watch protocol for future `/cc-update` runs**: in any cc-update where the CC version delta touches `claude agents` CLI surface, the prompt-engineer MUST run `claude agents --json | jq 'first | keys'` and diff the key list against this recorded baseline. Surface any drift as a Q for the operator.
 
-> ⚠ **Drift observed on CC 2.1.175** (2026-06-12, v3.17.0 cc-update; unannounced in the changelog): with only interactive sessions live, rows came back as `{pid, cwd, kind: "interactive", startedAt, sessionId}` — **camelCase** (`session_id` → `sessionId`), `startedAt` as **epoch-millis number** (was ISO-8601 string), a new `kind` discriminator, and no `agent_id`/`state`/`waitingFor` on that row type. **Unconfirmed** whether dispatched-agent rows (`kind` ≠ `interactive`) kept the snake_case baseline shape — no live agents existed at observation time. Until the next cc-update pins the agent-row variant: (a) coalesce both spellings in every read (pattern below); (b) filter by `kind` before matching resume rows; (c) expect the resume pre-check to degrade safely to "absent → re-delegate" when fields read null. Min CC was NOT bumped on this evidence (interactive-row variant only); if agent rows are confirmed renamed, the baseline-shift rule below applies and the next cc-update must bump.
+#### Drift observed on CC 2.1.175
+
+> ⚠ **Drift observed on CC 2.1.175** (2026-06-12, v3.17.0 cc-update; unannounced in the changelog): with only interactive sessions live, rows came back as `{pid, cwd, kind: "interactive", startedAt, sessionId}` — **camelCase** (`session_id` → `sessionId`), `startedAt` as **epoch-millis number** (was ISO-8601 string), a new `kind` discriminator, and no `agent_id`/`state`/`waitingFor` on that row type. **Unconfirmed** whether dispatched-agent rows (`kind` ≠ `interactive`) kept the snake_case baseline shape — no live agents existed at observation time.
+
+##### Mitigations until the agent-row variant is pinned
+
+> Until the next cc-update pins the agent-row variant: (a) coalesce both spellings in every read (pattern below); (b) filter by `kind` before matching resume rows; (c) expect the resume pre-check to degrade safely to "absent → re-delegate" when fields read null. Min CC was NOT bumped on this evidence (interactive-row variant only); if agent rows are confirmed renamed, the baseline-shift rule below applies and the next cc-update must bump.
+
+#### Watch run 2026-07-07 (CC 2.1.198 local, v3.30.0 cc-update)
 
 > **Watch run 2026-07-07 (CC 2.1.198 local, v3.30.0 cc-update)**: interactive-row variant returned `{cwd, kind, name, pid, sessionId, startedAt}` — same camelCase shape as the 2.1.175 observation plus a new optional **`name`** key (readable default session names, v2.1.196; also the `SendMessage`/`/rename` address — `/rename` on background sessions persists across restarts on CC ≥ 2.1.202). Agent-row variant still unconfirmed (no dispatched agents live at observation time). Baseline-shift rule not triggered — additive optional key on the interactive variant only; min CC not bumped on this evidence.
+
+#### Defensive jq pattern
 
 **Defensive jq pattern** (canonical for any plugin code reading this output):
 
@@ -97,9 +153,15 @@ Rows additionally render a `done/total` progress count (v2.1.161) in the human-r
 }
 ```
 
+#### If the baseline shifts
+
 **If the baseline shifts** (new required field, renamed field, type change), the next cc-update MUST bump min CC version and add a migration note to the relevant `cc-features-<from>-<to>.md` band file.
 
+#### `--tools` Grep/Glob (v2.1.162)
+
 > **`--tools` Grep/Glob (v2.1.162)**: when a headless dispatch passes `--tools` and explicitly lists `Grep`/`Glob`, native builds now wire up dedicated search tools for them (rather than falling back to shelling out). No plugin change needed — relevant only when an external runner hand-builds the `--tools` set; the in-process `Task()` path inherits agent-frontmatter `tools:` unchanged.
+
+#### Subagent tool enforcement (v2.1.178 / 2.1.183)
 
 > **Subagent tool enforcement (v2.1.178 / 2.1.183)**: a subagent's `disallowedTools` now honors MCP **server-level** specs (`mcp__server`, `mcp__*`), so a headless cross-plugin dispatch can deny an entire MCP server to a child rather than enumerating each tool (v2.1.178). `WebSearch` is fixed inside subagents — a child can rely on it (v2.1.178). And auth-capable MCP servers no longer expose their auth-stub tools to headless / SDK runs (v2.1.183), so a `--print`/`agents run` child does not see stub auth tools it cannot complete. These let server-level MCP denials and child `WebSearch` be relied upon in cross-plugin dispatch.
 
@@ -148,6 +210,9 @@ Without this line, the post-worktask audit cannot distinguish in-process delegat
 - **Do not** mix `--cwd` and `task.metadata.workspace_path` pointing at different paths. The runner MUST resolve one canonical worktree directory and pass it consistently.
 - **Do not** set `dangerously_skip_permissions: true` on PL/SR/FN tasks — these are gated stages where human review is the entire point. PL0 SHOULD reject such metadata at validation time.
 - **Do not** treat the CLI flags as a replacement for agent-frontmatter `tools:` restrictions. The flags configure the *session*; the frontmatter restricts the *agent*. Both apply.
+
+### FN-gate race (v2.1.198)
+
 - **Do not** let a headless code-writing dispatch race the FN gate: background agents launched from `claude agents` now **auto commit, push, and open a draft PR** when they finish code work in a worktree (v2.1.198) instead of stopping to ask. For gated worktasks, scope DV dispatches to implementation only (no push-capable permission mode / credentials) so commit/push/PR stays owned by the FN stage behind `fn_gate`. (Megatask lanes stamp per-issue `fn_gate: "bypass"`, so lane auto-PR is by-design there.)
 
 ## Background Shell Dispatch (v2.1.154)

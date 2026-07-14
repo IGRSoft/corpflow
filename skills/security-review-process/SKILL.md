@@ -122,6 +122,8 @@ against the committed lockfile (SwiftPM: resolve `Package.resolved` and scan adv
 via GitHub/Dependabot or `swift package` tooling; e.g. for npm projects, `npm audit`),
 then triage the findings — don't equate a clean audit with a safe dependency.
 
+#### Lockfile and Advisory Triage
+
 - [ ] **One authoritative lockfile per installation boundary**, committed and never
   rewritten by CI. For SwiftPM the local analog is `Package.resolved` (one per
   package/workspace root); CI resolves against it rather than re-pinning. Competing or
@@ -132,6 +134,9 @@ then triage the findings — don't equate a clean audit with a safe dependency.
 - [ ] **Forced audit remediation is never applied automatically** (`npm audit fix --force`
   or any equivalent that crosses declared version ranges). Preview the remediation, read
   the changelog, and let the test suite decide.
+
+##### Provenance & Package Hygiene
+
 - [ ] **Dependency lifecycle / build scripts are attack surface** — block them before first
   execution, inspect the script source and pinned version, and approve only the minimum
   required. Apple analog: SwiftPM build-tool / prebuild plugins execute arbitrary code

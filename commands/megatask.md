@@ -83,6 +83,8 @@ least one of the two MUST be present. When both are present, `--issues` filters 
    flags (`--secure`, `--platform`, …). Validate that `N` OR `--issues` is present; otherwise STOP
    with a usage error.
 
+### Phase 1 · Step 2 — Resolve the issue set
+
 2. **Resolve the issue set**:
    ```bash
    # Milestone mode
@@ -95,6 +97,8 @@ least one of the two MUST be present. When both are present, `--issues` filters 
    Drop issues that are `closed` or that already have a linked PR (auto-detect via
    `hasExistingPR` — see `skills/shared/milestone-helpers/SKILL.md`); record them as `skipped_has_pr`.
 
+### Phase 1 · Steps 3–4 — Build the DAG & compute order
+
 3. **Build the dependency DAG** — for each issue, parse the body for `Depends on: #N` and
    `Blocks: #M` lines (the format `/pm-milestone` writes) and the priority label (`P0`–`P3`).
    Construct `blocked_by[]` / `blocks[]` adjacency. **Normalize edges** so `A Blocks B` and
@@ -106,12 +110,16 @@ least one of the two MUST be present. When both are present, `--issues` filters 
    (P0 before P1 …; FIFO by issue number within a tier). If a cycle exists, STOP and report the
    participating issues — do NOT proceed.
 
+### Phase 1 · Step 5 — Seed orchestrator.json
+
 5. **Seed orchestrator.json** — atomic-write `.worktrees/<group>/orchestrator.json` (schema v3.1,
    `skills/megatask/references/schemas.md`) recording the milestone/array, the DAG edges per issue
    (`blocked_by`/`blocks`/`level`), the initial `status` (`ready` when `blocked_by` is empty, else
    `blocked`), priorities, the computed topological order, and
    `configuration.parallel_tracks` (derived in Phase 2). `<group>` is `milestone-{N}` (milestone
    mode) or `issues-{shortid}` (array mode).
+
+### Phase 1 · Step 6 — R1 batch confirmation gate
 
 6. **R1 — Batch confirmation gate (the one human checkpoint)** — present:
    - the resolved issue set (number, title, priority, `blocked_by`),
@@ -122,6 +130,8 @@ least one of the two MUST be present. When both are present, `--issues` filters 
    Then call `AskUserQuestion`:
    *"Megatask will execute N issues across M dependency levels, opening N PRs unattended (each
    per-issue worktask auto-approves its plan and finalization). Approve to begin, or adjust scope."*
+
+#### R1 outcomes
 
    - **On approval** → append `{"actor":"megatask","action":"batch_approved","subject":"<group>","result":"ok"}` to `.context/logs/audit.jsonl`; continue to Phase 2.
    - **On rejection** → append `batch_rejected`; STOP. Surface feedback; do not create worktrees.
@@ -139,6 +149,8 @@ parallel_tracks = reduce_by_disk_capacity(parallel_tracks)     # each worktree d
 
 Never a flag, never a fixed default. Re-derived as the ready-set grows when blockers merge.
 
+### Phase 2 loop · Steps 1–2 — Select ready issues & assign tracks
+
 **Execution loop** (driven cooperatively with `hooks/megatask-monitor.sh`):
 
 1. **Select ready issues** — an issue is *ready* when every entry in its `blocked_by[]` has
@@ -151,6 +163,8 @@ Never a flag, never a fixed default. Re-derived as the ready-set grows when bloc
    - Write `workspace.json` (`isolation: "worktree"`, version 2.0) and `mkdir -p …/.context`.
    - Set the issue's orchestrator status `in_progress`, assign `track`.
 
+### Phase 2 loop · Step 3 — Launch the per-issue worktask
+
 3. **Launch the per-issue worktask** — delegate to `/worktask` for that issue, **with both gates
    pre-bypassed**. Megatask stamps the per-issue `PL0.metadata` directly:
    `{ stage:"PL", agent:"igrsoft:product-manager", model:"opus", issue_number, track,
@@ -161,12 +175,16 @@ Never a flag, never a fixed default. Re-derived as the ready-set grows when bloc
    `workspace.json` makes the per-issue worktask auto-skip its own GitHub-issue publish (the parent
    milestone/issue is the canonical record).
 
+### Phase 2 loop · Step 4 — Monitor
+
 4. **Monitor** — `hooks/megatask-monitor.sh` (SubagentStop/Stop) watches per-issue completion:
    on completion it marks the issue `completed` in `orchestrator.json`, **unblocks dependents**
    (removes the merged issue from each dependent's `blocked_by[]`; promotes any now-empty dependent
    to `ready`), frees the track, and emits a progress audit row + notification. The orchestrator
    re-reads `orchestrator.json` each loop turn, re-derives `parallel_tracks`, and assigns freed
    tracks to newly-ready issues. See `skills/megatask/SKILL.md § Monitoring Loop`.
+
+### Phase 2 loop · Steps 5–6 — Completion, errors, termination
 
 5. **Completion / errors** — on issue success: PR is created with `Closes #{issue}`, track freed.
    On issue failure: mark `failed`, free the track, preserve the worktree for debugging, and

@@ -43,6 +43,9 @@ Generate release notes from completed work, git history, or worktask artifacts.
 ## Output Format
 
 ### External Release Notes
+
+#### External template — highlights & new features
+
 ```markdown
 # Release Notes v2.1.0
 
@@ -76,7 +79,12 @@ Enterprise customers can now use their existing identity provider for seamless a
 - More providers coming soon
 
 Contact your account manager to enable SSO for your organization.
+```
 
+#### External template — improvements, fixes & known issues
+
+```markdown
+<!-- …continued: improvements -->
 ---
 
 ## Improvements
@@ -99,7 +107,12 @@ Contact your account manager to enable SSO for your organization.
 
 - Dark mode may not apply to embedded third-party widgets
 - SSO logout may require clearing browser cache on first use
+```
 
+#### External template — getting started & feedback
+
+```markdown
+<!-- …continued: getting started -->
 ---
 
 ## Getting Started
@@ -120,6 +133,9 @@ We'd love to hear your thoughts! Send feedback to feedback@example.com or use th
 ```
 
 ### Internal Release Notes
+
+#### Internal template — summary
+
 ```markdown
 # Release Notes v2.1.0 (Internal)
 
@@ -138,7 +154,12 @@ We'd love to hear your thoughts! Send feedback to feedback@example.com or use th
 | Bug Fixes | 8 |
 | Story Points | 30-38 |
 | Contributors | 5 |
+```
 
+#### Internal template — features
+
+```markdown
+<!-- …continued: features -->
 ---
 
 ## Features
@@ -161,7 +182,12 @@ We'd love to hear your thoughts! Send feedback to feedback@example.com or use th
 - **PR**: #470
 - **Tests**: 20 unit tests, 5 E2E tests
 - **Design**: Uses CSS custom properties
+```
 
+#### Internal template — technical changes
+
+```markdown
+<!-- …continued: technical changes -->
 ---
 
 ## Technical Changes
@@ -187,7 +213,12 @@ We'd love to hear your thoughts! Send feedback to feedback@example.com or use th
 - `@auth/core`: 4.1.0 → 4.2.1
 - `react`: 18.2.0 → 18.3.0
 - Removed: `legacy-auth-lib`
+```
 
+#### Internal template — deployment notes
+
+```markdown
+<!-- …continued: deployment notes -->
 ---
 
 ## Deployment Notes
@@ -206,7 +237,12 @@ We'd love to hear your thoughts! Send feedback to feedback@example.com or use th
 1. Revert to previous Docker image tag
 2. No database rollback needed
 3. Remove new env vars
+```
 
+#### Internal template — metrics, known issues & contributors
+
+```markdown
+<!-- …continued: metrics -->
 ---
 
 ## Metrics to Monitor

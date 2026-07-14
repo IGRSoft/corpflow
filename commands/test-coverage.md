@@ -58,7 +58,12 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 | src/api | 78% | 72% | 88% | 🟡 Medium |
 | src/utils | 92% | 88% | 95% | 🟢 Low |
 | src/ui | 68% | 55% | 75% | 🟡 Medium |
+```
 
+### Template — critical gaps
+
+```markdown
+<!-- …continued: critical gaps -->
 ## Critical Gaps
 
 ### 🔴 High Priority
@@ -79,7 +84,12 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 - Timeout logic in `validateSession()` - Lines 67-72
 
 **Risk**: Session management edge cases untested
+```
 
+#### Medium priority gaps and recommended actions
+
+```markdown
+<!-- …continued: medium priority gaps, recommended actions -->
 ### 🟡 Medium Priority
 
 #### src/api/endpoints.ts (78% coverage)
@@ -97,7 +107,12 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 | 2 | Test session error handling | S | Medium |
 | 3 | Add API error response tests | S | Medium |
 | 4 | Increase UI component coverage | L | Low |
+```
 
+### Template — untested files and quality metrics
+
+```markdown
+<!-- …continued: files without tests, test quality metrics -->
 ## Files Without Tests
 
 | File | Lines | Risk Assessment |
@@ -114,7 +129,12 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 | Test Isolation | 95% | ✅ Good |
 | Flaky Tests | 3 | ⚠️ Needs attention |
 | Avg Test Duration | 45ms | ✅ Good |
+```
 
+### Template — selection marker coverage
+
+```markdown
+<!-- …continued: selection marker coverage -->
 ## Selection Marker Coverage
 
 Reports the percentage of test files annotated with markers from `skills/shared/test-selection-syntax.md`. Low marker coverage means selective execution defaults to `covers-changed-files` (filename-correlation only) — degrading to `scoped` mode automatically.
@@ -125,7 +145,12 @@ Reports the percentage of test files annotated with markers from `skills/shared/
 | `@depends-on:` | 18 | 36% | ⚠️ Below 50% target |
 | `@test-tag:` | 12 | 24% | — |
 | **Any marker** | **22** | **44%** | ⚠️ Below 50% target — `test_mode: build-only` will warn |
+```
 
+#### Untagged tests and framework compliance
+
+```markdown
+<!-- …continued: untagged tests, framework compliance -->
 ### Untagged Tests (warn-only on first release; block once project sets `selective_tests_ready: true`)
 
 | File | Tests | Recommendation |

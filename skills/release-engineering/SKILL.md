@@ -106,6 +106,8 @@ bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" --file subjects.txt --v
 bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" "v1.1.0..HEAD" --repo /path/to/repo --version "1.2.0"
 ```
 
+### Script Classification Behavior
+
 The script classifies all 10 conventional-commit types (feat, fix, docs, style, refactor, perf, test, chore, ci, build) into Keep-a-Changelog sections (Added / Changed / Fixed / Other). Non-conventional commits are bucketed under "Other" — never dropped. Breaking changes (`!` suffix) are prefixed with `**BREAKING**` in Added. Silent types (docs, style, test, chore, ci, build) are suppressed. Output is always compact markdown — no large echoes.
 
 The spec below (Keep a Changelog Format + Commit-to-Section mapping) is retained as reference for the model and for human review; the happy path is the script above.

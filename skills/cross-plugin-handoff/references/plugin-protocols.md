@@ -14,11 +14,18 @@
 
 ## system-developer Plugin
 
+### system-developer — core stage handoffs
+
 | igrsoft Stage | system-developer Agent | Handoff Data |
 |---------------|------------------------|--------------|
 | AR (Architecture) | system-architector | planning context + system constraints (consultation model, like apple-architector) |
 | DV (Development) | system-developer (router), c-developer, cpp-developer, python-developer, bash-developer | planning + architecture context; `requires_screenshots: false` for CLI work (Build Evidence = terminal transcripts) |
 | DR (Developer Review) | sys-code-fixer | gate blockers (`metadata.gate_blockers[]`) + minimal-diff remediation |
+
+### system-developer — review, support & incident handoffs
+
+| igrsoft Stage | system-developer Agent | Handoff Data |
+|---------------|------------------------|--------------|
 | SR (Security) | sys-security-auditor | development context + systems security checklist (sanitizers, CWE Top 25, injection, hardening flags) |
 | QA (Quality) | sys-test-generator | development context + test requirements; QA gate includes ASan+UBSan clean on changed components |
 | DV-support (performance) | sys-performance-engineer | profiling artifacts under `.context/logs/profile-*/` |
@@ -27,10 +34,17 @@
 
 ## android-developer Plugin
 
+### android-developer — architecture & development handoffs
+
 | igrsoft Stage | android-developer Agent | Handoff Data |
 |---------------|-------------------------|--------------|
 | AR (Architecture) | kotlin-architector | planning context + Android architecture constraints (Clean Architecture, modularization, Hilt DI — consultation model, like apple-architector) |
 | DV (Development) | android-developer (router), android-phone-developer | planning + architecture context; `requires_screenshots: true` (Build Evidence = `adb exec-out screencap -p` via `android_adapter` + Gradle build/test transcripts); no Android build MCP — scoped `Bash(gradle:*\|./gradlew\|adb:*)` |
+
+### android-developer — review, QA & dependency handoffs
+
+| igrsoft Stage | android-developer Agent | Handoff Data |
+|---------------|-------------------------|--------------|
 | DR (Developer Review) | code-fixer | gate blockers (`metadata.gate_blockers[]`) + ktlint/detekt minimal-diff remediation |
 | SR (Security) | security-auditor | development context + Android security checklist (EncryptedSharedPreferences/Keystore, no-cleartext, exported-component validation, no hardcoded secrets) |
 | QA (Quality) | test-generator | development context + test requirements; JUnit4/5, MockK, Turbine, Roborazzi screenshot tests |
@@ -81,6 +95,8 @@ IF external_agent_fails:
      PARTIAL_FAILURES:
      - Agent: {name}, Error: {error}, Impact: {impact}
 ```
+
+#### Child tool restrictions
 
 > **Child tool restrictions (CC ≥ 2.1.178 / 2.1.183)**: when handing off to an external-plugin agent, a `disallowedTools` entry may now use MCP **server-level** specs (`mcp__server`, `mcp__*`) and is honored on the child — deny a whole MCP server in one rule instead of enumerating tools (v2.1.178). `WebSearch` works in subagents, so a delegated agent can rely on it (v2.1.178). Auth-capable MCP servers no longer leak auth-stub tools to headless / SDK children (v2.1.183). See `skills/agent-coordination/references/headless-dispatch.md`.
 

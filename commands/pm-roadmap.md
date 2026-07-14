@@ -50,7 +50,12 @@ Create or update product roadmap with timeline, milestones, and dependencies.
 Become the leading platform for team collaboration with enterprise-grade security and delightful user experience.
 
 ---
+```
 
+#### Q1 — themes and milestones
+
+~~~markdown
+<!-- …continued: Q1 -->
 ## Q1 [Year]: Foundation & Security
 
 ### Themes
@@ -68,7 +73,12 @@ Jan ──────────────── Feb ───────�
          └──[Dark Mode]───────────────────┘
               └──[Performance v1]─────────┘
 ```
+~~~
 
+#### Q1 — features and key results
+
+```markdown
+<!-- …continued: Q1 features -->
 ### Features
 
 | Feature | Status | Owner | Target | Dependencies |
@@ -84,7 +94,12 @@ Jan ──────────────── Feb ───────�
 - [ ] 20% performance improvement
 
 ---
+```
 
+#### Q2 — growth and collaboration
+
+```markdown
+<!-- …continued: Q2 -->
 ## Q2 [Year]: Growth & Collaboration
 
 ### Themes
@@ -106,7 +121,12 @@ Jan ──────────────── Feb ───────�
 - [ ] Mobile app launched in App Store
 
 ---
+```
 
+#### Q3 and Q4
+
+```markdown
+<!-- …continued: Q3, Q4 -->
 ## Q3 [Year]: Intelligence & Scale
 
 ### Themes
@@ -138,7 +158,12 @@ Jan ──────────────── Feb ───────�
 | Localization (10 languages) | 🔵 Planned | i18n | Dec 15 |
 
 ---
+```
 
+#### Dependencies and risks
+
+~~~markdown
+<!-- …continued: dependencies map, risk register -->
 ## Dependencies Map
 
 ```
@@ -166,7 +191,12 @@ API v2
 | AI model costs | Medium | Medium | Usage-based pricing model |
 
 ---
+~~~
 
+#### Status legend
+
+```markdown
+<!-- …continued: status legend -->
 ## Status Legend
 
 | Icon | Status |

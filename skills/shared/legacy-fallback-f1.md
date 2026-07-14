@@ -19,6 +19,8 @@ This path remains **supported for backward compatibility** (AC-16/AC-17): a
 worktask MUST complete even when state.json is absent. `context_refs` wins when
 state.json is present; `context_files` is the safety net.
 
-Canonical operational specs (not duplicated here):
+## Canonical operational specs
+
+Not duplicated here:
 the F1..F4 matrix lives in `skills/worktask/references/handoff-protocol.md#fallback-paths`;
 the F1 telemetry snippet lives in `skills/shared/stage-contracts.md#f1-telemetry`.

@@ -4,6 +4,8 @@ Fill these sections in this exact order. Keep it tight — a scannable one-scree
 exhaustive document. Cut any section to a single line if the request is small; never drop a section
 header, so the shape stays predictable.
 
+#### Template — context, goal, scope, phases
+
 ```markdown
 # Plan: <one-line goal>
 
@@ -28,6 +30,12 @@ tests included inside the phase, not split out.
 | P0 — Required | … | … |
 | P1 — Nice-to-have | … | … |
 | P2 — v1.1 | … | … |
+```
+
+#### Template — effort, risks, next step
+
+```markdown
+<!-- …continued: Plan template — effort, risks, recommended next step -->
 
 ## Effort (rough)
 T-shirt size + 5-factor complexity (0–25) per `skills/estimation-methodology/SKILL.md`. A range, not a point.

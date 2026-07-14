@@ -41,7 +41,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 
 ## Output Format
 
-```markdown
+~~~markdown
 # Command Optimization Report
 
 ## Command: /estimate
@@ -57,7 +57,12 @@ Analyze and optimize existing command definitions for usability, consistency, an
 | Integration | 6/10 | ⚠️ Improvable |
 
 **Overall Score**: 7.0/10
+~~~
 
+### Output Format — Usage & Options
+
+~~~markdown
+<!-- …continued: Usage Improvements -->
 ### Usage Improvements
 
 #### Current
@@ -86,7 +91,12 @@ Analyze and optimize existing command definitions for usability, consistency, an
 | --platform | ✅ | Well documented | None |
 | --format | ❌ | Missing | Add output format option |
 | --output | ❌ | Missing | Add file output option |
+~~~
 
+### Output Format — Examples & Output Review
+
+~~~markdown
+<!-- …continued: Examples Improvements -->
 ### Examples Improvements
 
 **Before**: 2 examples (insufficient coverage)
@@ -115,7 +125,12 @@ Analyze and optimize existing command definitions for usability, consistency, an
 | Confidence level | ❌ Missing |
 
 **Recommendation**: Add confidence level indicator (Low/Medium/High)
+~~~
 
+### Output Format — Integration & Recommendations
+
+~~~markdown
+<!-- …continued: Integration Improvements -->
 ### Integration Improvements
 
 #### Missing Links
@@ -141,7 +156,12 @@ Analyze and optimize existing command definitions for usability, consistency, an
 #### Consider
 1. Add JSON schema for output
 2. Add validation for scope values
+~~~
 
+### Output Format — Changes & Summary
+
+~~~markdown
+<!-- …continued: Changes Applied -->
 ### Changes Applied
 
 | Section | Change | Impact |
@@ -159,7 +179,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 | Examples | 5/10 | 8/10 | +3 |
 | Integration | 6/10 | 8/10 | +2 |
 | Overall | 7.0/10 | 8.4/10 | +1.4 |
-```
+~~~
 
 ## Focus Areas
 
@@ -204,17 +224,36 @@ Analyze and optimize existing command definitions for usability, consistency, an
 
 Run on every command regardless of focus area. Treat findings here as blocking on the "Must Apply" tier. Reference rubric: `skills/shared/model-selection.md § Cost Tiers`.
 
+#### Frontmatter Audit — P0 fields
+
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
 | `description` | ≤250 characters (CC 2.1.86 cap). Same metric as agents. | P0 |
 | `model` | Strict membership: ∈ {`haiku`, `sonnet`, `opus`}. Tier per `model-selection.md`: meta-tooling and orchestration → `opus`; analysis/summary → `sonnet`; one-shot scans → `haiku`. Flag commands that optimize other prompts (`/optimize-*`, `/create-*`, `/prompt-audit`) running on `sonnet` or below — meta-optimization is opus tier. | P0 |
+
+#### Frontmatter Audit — P1 fields
+
+| Field | Audit Rule | Severity |
+|-------|------------|----------|
 | `allowed-tools` | Explicit list. Bash subcommand scoping required: `Bash(git:*)`, `Bash(gh:*)`, `Bash(swift test:*)` — never bare `Bash` unless the command's purpose is general shell access. Flag commands that declare `Write` without `Read` (likely incomplete). | P1 |
 | `argument-hint` | Must align with the Usage section's actual positional/optional surface. Count `--<flag>` mentions in `## Usage` vs hint; flag mismatch (e.g., hint says `<command name>` but Usage shows `--all`, `--focus`, `--dry-run` — hint missing the flag landscape). Use square brackets for optional positional, angle brackets for required. | P1 |
+
+#### Frontmatter Audit — P2 consistency checks
+
+| Field | Audit Rule | Severity |
+|-------|------------|----------|
 | `$ARGUMENTS` substitution | If the command body references `$ARGUMENTS`, the frontmatter `argument-hint` MUST be non-empty. If the body has no `$ARGUMENTS` but `argument-hint` is set, suggest removing the hint. | P2 |
 | Option-to-example coverage | Every documented `--option` in `## Options` should appear at least once in `## Examples`. Compute: `set(options) − set(options-used-in-examples)`. Flag the diff with one-line "missing example for `--<flag>`". | P2 |
 | Output-format consistency | Output samples should match the schema declared in prose. If the command claims "JSON output via `--format json`", flag if the Output Format section shows only Markdown samples. | P2 |
 | Related links | Cross-reference targets (`./create-agent.md`, `../agents/prompt-engineer.md`) must resolve. Flag dead links. | P2 |
+
+#### Frontmatter Audit — description trigger phrase (P1)
+
+| Field | Audit Rule | Severity |
+|-------|------------|----------|
 | `description` trigger phrase | MUST include a recognised trigger phrase (`Use when …`, `Use after …`, `Use PROACTIVELY when …`, `Auto-loads when …`, `Reference when …`, `Apply for …`) so the model can decide whether to invoke. EXEMPT: commands/skills with `disable-model-invocation: true` (slash-only) or `paths:` frontmatter (path-triggered) — these bypass description-trigger auto-invocation and MUST NOT be flagged. Source: ai-research PR #531 (MISSING_TRIGGER lint + exemption pattern). | P1 |
+
+#### Frontmatter Audit — reporting
 
 Failures here are reported as a `## Frontmatter Findings` table before the existing scoring tables in § Output Format. Row schema mirrors `/optimize-agent`: `| Field | Observed | Required | Severity | Suggested edit |`.
 

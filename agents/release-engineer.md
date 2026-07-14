@@ -77,7 +77,12 @@ Create `.context/release-N.md` (N = `task.metadata.run_index`; resolver: metadat
 
 #### Security
 - [Security fixes]
+```
 
+#### Template — continued: Breaking Changes to Platform-Specific
+
+```markdown
+<!-- …continued: release-N.md template -->
 ### Breaking Changes
 - [List of breaking changes]
 - Migration guide: [link or inline]

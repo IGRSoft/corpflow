@@ -86,7 +86,12 @@ Generate developer-ready design specifications for components, screens, or featu
 ### Spacing
 - Internal spacing: [token]
 - External spacing: [token]
+```
 
+### Template — states and responsive behavior
+
+```markdown
+<!-- …continued: states, responsive behavior -->
 ## States
 
 ### Default
@@ -116,7 +121,12 @@ Generate developer-ready design specifications for components, screens, or featu
 
 ### Large (> 768pt)
 - [Adjustments]
+```
 
+### Template — accessibility, animation, assets
+
+```markdown
+<!-- …continued: accessibility, animation, implementation notes, assets -->
 ## Accessibility
 
 - Min touch target: 44x44pt

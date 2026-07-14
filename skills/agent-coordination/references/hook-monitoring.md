@@ -14,15 +14,26 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 | `FileChanged` | Monitored file modified | — | File path |
 | `TaskCreated` | TaskCreate tool called | — | Task ID, subject |
 | `WorktreeCreate` | Worktree created | — | Worktree path |
+
+### Later lifecycle events (v2.1.152+ / v2.1.198+)
+
+| Hook Event | Fires When | Matcher | Payload Fields |
+|------------|------------|---------|----------------|
 | `MessageDisplay` | A message is displayed to the user (v2.1.152+) | — | `message`, `role` (`user`/`assistant`), `display_type` |
 | `SessionStart` | Session begins (v2.1.152+) | — | `session_id`, `session_title`, `reloadSkills` (bool) |
 | `Notification` | Background agent needs input or finishes (v2.1.198+) | — | reason ∈ `agent_needs_input` / `agent_completed` |
+
+### Notification as resume wake-up (v2.1.198+)
 
 > **`Notification` as resume wake-up (v2.1.198+)**: background sessions in `claude agents` that need input or finish fire the `Notification` hook with `agent_needs_input` / `agent_completed`. For worktask resume this is the push complement to polling `claude agents --json` — wire a `Notification` hook to nudge the orchestrator (or the operator, via PushNotification) the moment a parked stage needs an answer. The `--json` pre-check remains the authoritative reconciliation (`skills/worktask/references/resume.md` step 0).
 
 > As of CC 2.1.77, the Agent tool `resume` parameter is removed. Use `SendMessage` to communicate with running agents instead.
 
+### SessionStart reloadSkills (v2.1.152+)
+
 > **SessionStart `reloadSkills:true`** (v2.1.152+): when a `SessionStart` hook fires with `reloadSkills: true`, plugin skills are reloaded mid-session (e.g., after a `/reload-skills` command). Since v2.1.174 hot-reload re-announces **only changed skills** (delta, not the full set) — hooks listening on `SessionStart` must re-apply skill-specific initialization idempotently and must not assume every skill re-announces. The `sessionTitle` field (v2.1.77 — allows the agent to set the session title visible in the UI) continues to be available alongside `reloadSkills`.
+
+### Compaction recovery & hook-output guards
 
 > Parent agents reliably recover subagent results after context compaction. Background agents that are killed or interrupted preserve partial results in context, preventing total loss of intermediate work. The `PostCompact` hook can re-inject critical state after auto-compaction.
 
@@ -30,9 +41,13 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 > PreToolUse/PostToolUse hooks receive `file_path` as an absolute path for Write/Edit/Read tools, matching documented behavior (confirmed v2.1.89).
 
+### PreCompact & plugin monitors (v2.1.105+)
+
 > `PreCompact` hook (v2.1.105+) fires **before** automatic compaction and can block it by returning exit code 2 — useful for guarding critical stage handoffs from premature summarization. See `context-compression` skill for the paired `PostCompact` recovery pattern. **As of plugin v3.10.0, the managed hook `hooks/precompact-checkpoint.sh` (registered in `plugin.json`) snapshots `.context/state.json` to `.context/state.checkpoint-<ts>.json` on every compaction — never blocks (exit 0 always).**
 
 > Background monitor support for plugins via `monitors` manifest key (v2.1.105+). Declare long-running monitors that stream events into the session without occupying a foreground tool call.
+
+### Stall timeout (v2.1.113)
 
 > Subagents that stall fail with a clear error after 10 minutes (v2.1.113). Orchestrators should surface this error and either retry the stage or escalate rather than waiting indefinitely. Crash fix (v2.1.114): permission dialog no longer crashes when an agent teams teammate requests tool permission.
 
@@ -51,12 +66,16 @@ Stop and SubagentStop hooks may return `hookSpecificOutput.additionalContext` (v
 }
 ```
 
+#### Gate-feedback contract (one contract, two surfaces)
+
 **Gate-feedback contract (one contract, two surfaces).** Every worktask gate — hook-enforced *or* orchestrator-mediated — must return **structured remediation** that flows into the *next attempt's context*:
 
 | Surface | Mechanism | Reference user |
 |---------|-----------|----------------|
 | Hook gate | `hookSpecificOutput.additionalContext` alongside `decision:block` | `hooks/dv-screenshot-gate.sh` (block path) |
 | Orchestrator gate | inject `blockers[]` / `blocking_defects[]` verbatim into the re-dispatched stage prompt | `skills/worktask/SKILL.md` DR→DV / QA→DV loop-back (`gate_remediation_injected` audit row) |
+
+#### Surface symmetry & unchanged block-path schema
 
 The two surfaces are symmetric: the hook embeds remediation in the block JSON; the orchestrator embeds the upstream blocker list in the retry prompt. Keep them in sync when either changes. The block-path `decision:block` verb, the exit-0 discipline, and the `screenshot_gate_block` audit-row schema are unchanged — `hookSpecificOutput` is an additive stdout field only.
 
@@ -66,11 +85,15 @@ The two surfaces are symmetric: the hook embeds remediation in the block JSON; t
 
 **Plugin impact**: when an OTEL collector (Honeycomb/Datadog/Jaeger) is wired via `settings.json` → `otelExporter`, the PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST dispatch becomes a single nested trace tree. Diagnostic value: spot which stage spawned an orphan span (= subagent that escaped the dispatch chain).
 
+#### Hook-stdin forward-compat
+
 **Hook-stdin forward-compat**: `parent_agent_id` is OTEL-side in v2.1.145 and not confirmed in Stop/SubagentStop hook stdin yet, but `audit-subagent.sh` and `agent-stop.sh` defensively capture it with `(.parent_agent_id // "none")` — no-op on current CC, automatically populated the moment CC surfaces it in hook payloads. Paired with the new `dedupe_key_extended` audit field (see `skills/agent-coordination/SKILL.md § Dedupe Key Migration`) the worktask gets parent-aware audit dedup without any future plugin release.
 
 ### Background Tasks & Crons Visibility (v2.1.145)
 
 v2.1.145 added `background_tasks` and `session_crons` arrays to Stop/SubagentStop hook stdin payloads. The plugin now captures these into audit rows for `/cost-report` cross-correlation (which cron/bg task was active when a stage spiked).
+
+#### Captured fields
 
 Captured fields (additive metadata on existing audit rows; written by `hooks/audit-subagent.sh` and `hooks/agent-stop.sh`):
 
@@ -86,6 +109,8 @@ Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved. With ne
 - `tool_decision` telemetry events now carry a `tool_parameters` field (v2.1.157) — the decision span records *which* tool args were classified, not just the tool name. Lets cost/audit dashboards distinguish e.g. a `Bash git push` decision from a `Bash ls`.
 - `OTEL_RESOURCE_ATTRIBUTES` values now surface as **metric-datapoint labels** (v2.1.161), not only on spans. Tag `worktask_id` / `stage` there to slice collector dashboards (Honeycomb/Datadog) per-stage without parsing span attributes.
 - `claude_code.lines_of_code.count` carries a `model` attribute (v2.1.172) — per-model LoC attribution lands in collector dashboards for free; pairs with the opus/sonnet/haiku stage split in `skills/shared/stage-codes.md` to show which tier wrote the code.
+
+#### BG-Task ID Schema Watch
 
 **BG-Task ID Schema Watch**: the ID extraction uses a defensive coalesce `(.id // .task_id // "unknown")` / `(.id // .cron_id // "unknown")` because the canonical key name is not yet confirmed in CC docs. Any `"unknown"` value appearing in `background_task_ids` or `session_cron_ids` is a signal that CC has begun populating the arrays with payloads whose ID field name is neither `id` nor `task_id`/`cron_id`. When that happens, the next `/cc-update` should pin the canonical key (remove the coalesce) and update both hook scripts. Until then the coalesce keeps the capture working across whichever name CC chooses.
 
@@ -222,7 +247,11 @@ Hooks can invoke MCP tools directly via `type: "mcp_tool"` (previously `command`
 }
 ```
 
+#### Matcher semantics (CC ≥ 2.1.195)
+
 **Matcher semantics (CC ≥ 2.1.195):** hook matchers with hyphenated identifiers now **exact-match** instead of accidentally substring-matching — as of plugin v3.30.0 the Stop matcher is written with explicit wildcards (`.*igrsoft:product-manager.*|.*igrsoft:project-manager.*`, per the changelog's `mcp__server__.*` guidance) so it keeps firing regardless of how the runtime qualifies the agent name. Comma-separated matchers (`"Bash,PowerShell"`) silently never fired before CC 2.1.191 — always use regex alternation (`Bash|PowerShell`), never commas.
+
+#### Plugin v3.10.0 historical note
 
 **Plugin v3.10.0 historical note:** `plugin.json` shipped an `mcp_tool` hook on `Stop` matching `igrsoft:product-manager|igrsoft:project-manager` that fired `conductor.PushNotification` at the PL and FN stages. The hook still fires at stage completion for observability (PushNotification). The PL stage is followed by a human plan-approval gate (Step A.5); the FN stage is now gated by a finalization checkpoint (`fn_gate`, default `"checkpoint"`) that STOPs before commit/push/PR unless bypassed by `--auto-finalization` / `--emergency` (a `/megatask` batch stamps `fn_gate: "bypass"` directly on each per-issue PL0). Gracefully no-ops if the conductor MCP server is unavailable.
 

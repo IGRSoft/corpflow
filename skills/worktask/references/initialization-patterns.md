@@ -9,6 +9,8 @@
 
 PL0 (or `commands/worktask.md` Phase 1) creates `.context/state.json` immediately after `mkdir -p .context/`. This seeds the worktask ledger that every subsequent stage reads and patches. The seed is **re-run aware**: `run_index` (and the matching `plan_file`) is the next free planning index `N` computed from any pre-existing `.context/planning-*.md` (`0` on a fresh `.context/`). `run_index` is a **required** schema field (`handoff-protocol.md#state-json-schema`) — never omit it. The canonical executable snippet lives in `commands/worktask.md` Phase 1 step 3a.
 
+### Seed snippet — next free planning index
+
 ```bash
 mkdir -p .context/
 
@@ -23,7 +25,12 @@ for f in .context/planning-*.md; do
   case "$i" in *[!0-9]*) continue ;; esac
   [ "$i" -ge "$N" ] && N=$((i + 1))
 done
+```
 
+### Seed snippet — atomic write
+
+```bash
+# …continued: atomic write of the seeded state.json (same shell session; uses $N)
 # Atomic write: temp + fsync + rename
 tmp=".context/.state.json.$$.${RANDOM}.tmp"
 cat > "$tmp" <<EOF
@@ -49,6 +56,8 @@ sync "$tmp" 2>/dev/null || true
 mv -f "$tmp" .context/state.json
 ```
 
+### Post-seed notes
+
 `facts.dispatched_agents: []` is seeded (additive, version:1) so the orchestrator loop appends per-`task_id` dispatch entries in place. The other v1 additive fields (`stages.<CODE>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are written on demand — never seeded; their absence is meaningful. Schema: `handoff-protocol.md#state-json-schema`.
 
 Subsequent stage agents read `.context/state.json` first; if absent, they fall back to legacy `metadata.context_files` mode (path F1 — see `skills/shared/legacy-fallback-f1.md`; matrix at `handoff-protocol.md#fallback-paths`).
@@ -56,6 +65,8 @@ Subsequent stage agents read `.context/state.json` first; if absent, they fall b
 ## Hook Installation
 
 PL0 (or `commands/worktask.md` Phase 1) MUST verify the `state-merge.sh` SubagentStop hook is installed before proceeding. This hook is the Layer 2 safety net — it patches `state.json` from artifact frontmatter when stage agents forget to self-patch (Layer 1) or when the orchestrator's Step 6.5 check is skipped.
+
+### Install snippet
 
 ```bash
 # Idempotent hook installation — run after state.json seed, before PL0 delegation.
@@ -75,7 +86,9 @@ if [[ ! -x "$hook_dst" ]]; then
 fi
 ```
 
-**PL0 invariant**: Before continuing to TaskCreate, verify:
+### PL0 invariant
+
+Before continuing to TaskCreate, verify:
 1. `.context/state.json` exists and is valid JSON
 2. `.claude/hooks/state-merge.sh` exists and is executable
 3. The plugin's `plugin.json` registers the SubagentStop hook (this is declarative — no project-local action needed)
@@ -186,6 +199,12 @@ enum FullScreenRoute: Hashable, Identifiable {
     ...
 }
 ~~~
+```
+
+#### Template (continued)
+
+```markdown
+<!-- …continued: patterns, external context, user decisions -->
 
 ## Patterns
 
@@ -217,6 +236,8 @@ For implementation details, use `file:line` references.
 
 After planning completes, PL0 creates stage tasks based on complexity score. Each task is self-describing with `metadata.agent` specifying the executor and `metadata.model` specifying the model alias. **Capture returned task IDs** to correctly set up dependency chains.
 
+### Setup — flags
+
 ```typescript
 // Example: PL0 creates stages for a medium-complexity task
 const worktaskId = "dark-mode-2025";
@@ -225,7 +246,12 @@ const worktaskId = "dark-mode-2025";
 // (true whenever the change set touches UI; fail-safe true on detector error).
 // Read it back from the plan frontmatter and propagate to DV + QA below.
 const requiresScreenshots = planMetadata.requires_screenshots; // boolean
+```
 
+### AR0 task
+
+```typescript
+// …continued: AR0 creation
 // Capture task IDs returned by TaskCreate.
 // NOTE: context_files includes error_file per task-system § context_files ↔ error_file coupling.
 // If omitted, the orchestrator appends it at delegation time (normalizeMetadata).
@@ -241,7 +267,12 @@ const ar0 = TaskCreate({
     worktask_id: worktaskId, priority: "medium"
   }
 });
+```
 
+### DV0 task
+
+```typescript
+// …continued: DV0 creation
 const dv0 = TaskCreate({
   subject: "DV0: Development",
   description: "Implement dark mode theme system and color tokens",
@@ -258,7 +289,12 @@ const dv0 = TaskCreate({
     worktask_id: worktaskId, priority: "medium"
   }
 });
+```
 
+### DR0 task
+
+```typescript
+// …continued: DR0 creation
 const dr0 = TaskCreate({
   subject: "DR0: Developer Review",
   description: "Review code quality, patterns, and platform-specific best practices",
@@ -271,7 +307,12 @@ const dr0 = TaskCreate({
     worktask_id: worktaskId, priority: "medium"
   }
 });
+```
 
+### QA0 task
+
+```typescript
+// …continued: QA0 creation
 const qa0 = TaskCreate({
   subject: "QA0: QA Testing",
   description: "Test theme switching, contrast ratios, persistence",
@@ -287,7 +328,12 @@ const qa0 = TaskCreate({
     worktask_id: worktaskId, priority: "medium"
   }
 });
+```
 
+### Dependency chain
+
+```typescript
+// …continued: wire dependencies, close PL0
 // Chain dependencies using captured IDs (PL0 is taskId "1" from initial creation)
 TaskUpdate({ taskId: ar0, addBlockedBy: ["1"] });  // AR0 ← PL0
 TaskUpdate({ taskId: dv0, addBlockedBy: [ar0] });  // DV0 ← AR0
@@ -302,6 +348,8 @@ TaskUpdate({ taskId: "1", status: "completed" });
 
 When a task starts, the executor reads `metadata.agent` and spawns the agent. **Convention**: `metadata.agent` MUST be fully-qualified `plugin:agent` form (e.g., `igrsoft:developer`, `apple-developer:ios-developer`). Bare names are accepted by the back-compat shim below but are deprecated and should be replaced.
 
+### Resolve agent & model
+
 ```typescript
 const task = TaskGet({ taskId: currentTaskId });
 const agentType = task.metadata.agent;  // e.g., "igrsoft:developer" or "apple-developer:ios-developer"
@@ -310,7 +358,12 @@ const model = task.metadata.model;      // e.g., "haiku"
 // Back-compat shim: qualified names used as-is. Bare names prepend "igrsoft:" and
 // log a deprecation warning — emit qualified form at the call site instead.
 const subagentType = agentType.includes(':') ? agentType : `igrsoft:${agentType}`;
+```
 
+### Build prompt & dispatch
+
+```typescript
+// …continued: same execution flow
 // Build context-aware prompt
 const explorationExists = fileExists('.context/exploration.md');
 const previousArtifacts = getPreviousStageArtifacts(task.metadata.stage);
@@ -344,6 +397,8 @@ PL0 → AR0 → TL0 ─┤→ DV1 ─├→ DR0 → QA0
                   └→ DV2 ─┘
 ```
 
+#### Narrow scope & DV1 stream
+
 ```typescript
 // TL narrows DV0 scope to primary stream
 TaskUpdate({ taskId: dv0_id, description: "Implement theme color tokens (owns: Source/Theme/Colors/)" });
@@ -361,7 +416,12 @@ const dv1 = TaskCreate({
     worktask_id: worktaskId, priority: "medium"
   }
 });
+```
 
+#### DV2 stream
+
+```typescript
+// …continued: second parallel stream
 const dv2 = TaskCreate({
   subject: "DV2: Implement dark mode assets",
   description: "Create dark variants for all image assets (owns: Assets/Dark/)",
@@ -373,7 +433,12 @@ const dv2 = TaskCreate({
     worktask_id: worktaskId, priority: "medium"
   }
 });
+```
 
+#### Dependency wiring
+
+```typescript
+// …continued: block streams on TL0, DR0 on all streams
 // All DVN blocked by TL0 (not DV0) — enables true parallelism
 TaskUpdate({ taskId: dv1, addBlockedBy: [tl0_id] });
 TaskUpdate({ taskId: dv2, addBlockedBy: [tl0_id] });
@@ -385,6 +450,8 @@ TaskUpdate({ taskId: dr0_id, addBlockedBy: [dv1, dv2] });
 ### DV-Initiated Split (Sequential Sub-tasks)
 
 DV agent splits during its own execution. Sub-tasks are children of DV0 — sequential, not parallel.
+
+#### DV1 sub-task
 
 ```typescript
 // Developer splits DV0 into focused sub-tasks.
@@ -400,7 +467,12 @@ const dv1 = TaskCreate({
     worktask_id: worktaskId, priority: "medium"
   }
 });
+```
 
+#### DV2 sub-task & sequencing
+
+```typescript
+// …continued: second sub-task, then block both on DV0
 const dv2 = TaskCreate({
   subject: "DV2: Implement theme switcher",
   description: "Add toggle and persistence for theme preference",

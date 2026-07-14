@@ -113,6 +113,8 @@ A test is considered to **cover** a changed source file when **any** of these ma
 2. **Type-name correlation**: changed file declares a top-level type `T`; test source declares a type matching `^${T}Tests?$` or `^${T}Spec$`.
 3. **Module correlation** (used in `scoped` mode only — not `build-only`): test file is in the same module/target as the changed file (Swift package target, Xcode test target, or sibling directory under `Tests/`).
 
+#### Covers rule × test mode
+
 Rules 1 and 2 are the universal "covers" definition for `build-only` mode. Rule 3 is an additive over-inclusion in `scoped` mode (deliberate safety margin). `full` mode ignores this heuristic — it runs everything.
 
 The parser logs an `info`-level note in `.context/logs/test-selection-warnings.md` for every diffed file with no covering test and no marker hit, so PMs can assess gaps.
@@ -164,6 +166,8 @@ A project with zero markers running `test_mode: build-only` produces an empty Se
 
 > Selected Tests was empty under `test_mode: build-only`. Auto-promoted to `scoped` for safety. Add `@test-required` markers or `metadata.always_required_tests` to opt back into build-only.
 
+#### DV warning and DR surfacing
+
 DV warns to `.context/logs/test-selection-warnings.md`:
 
 > No `@test-required` or `@depends-on:` markers found in <N> test files. Selected Tests is empty. Either tag tests, set `metadata.always_required_tests`, or use `test_mode: scoped|full`.
@@ -197,7 +201,9 @@ The marker grammar is platform-agnostic (line comments are universally parseable
 | Android (JUnit) | `<package>.<ClassName>#<methodName>` (TBD) | Stub — handler not yet implemented |
 | Web (Vitest/Jest) | file-path + test-name pattern (TBD) | Stub — handler not yet implemented |
 
-**Auto-promotion when no handler**: a non-Apple platform with `test_mode ∈ {build-only, scoped}` triggers DV to auto-promote that run to `full` and log to `.context/logs/test-selection-warnings.md`:
+### Auto-promotion when no handler
+
+A non-Apple platform with `test_mode ∈ {build-only, scoped}` triggers DV to auto-promote that run to `full` and log to `.context/logs/test-selection-warnings.md`:
 
 > No selective-test handler for platform `<android|web>`. Auto-promoted to `full` for this run; selective execution will activate when a handler ships. Markers are still parsed and recorded for forward-compatibility.
 
@@ -205,10 +211,17 @@ The marker grammar is platform-agnostic (line comments are universally parseable
 
 ## Reader matrix
 
+### DV and QA
+
 | Reader | What it does with markers/Selected Tests |
 |--------|------------------------------------------|
 | **DV** (`agents/developer.md` D2) | Parses markers; writes Selected Tests list and any warnings. Builds in every mode. Executes only `Executed Tests (DV)` = `Selected ∩ test files Added/Modified` (`git diff --diff-filter=AMR`) ∪ `metadata.always_required_tests`. Empty-set safety net: runs smoke set with `auto_executed: smoke_set`. See `testing-strategy.md § DV Executed vs Selected`. |
 | **QA** (`agents/qa-engineer.md` Q1) | Reads `development-N.md § Selected Tests` (full list, not DV's Executed subset); runs the list (build-only/scoped) or full suite (full); reads `.context/logs/test-selection-warnings.md` and copies WARN lines to `testing-N.md § Notes`. |
+
+### DR and PL
+
+| Reader | What it does with markers/Selected Tests |
+|--------|------------------------------------------|
 | **DR** (`agents/technical-lead.md`) | Reads `.context/logs/test-selection-warnings.md` and `§ Executed at DV`; surfaces non-empty warnings as findings in `developer-review-N.md § Findings`. Does NOT execute tests — see `agents/technical-lead.md § Constraints` for the forbidden-commands list. |
 | **PL** (`agents/product-manager.md`) | Writes `metadata.test_mode`, `metadata.always_required_tests`, `metadata.ui_visual_check`. Does not parse markers. |
 
@@ -225,6 +238,8 @@ Appended to production source files. Provides a forward pointer from source to i
 | `@test-file:` | yes | Relative path from project root | Primary test file for this source |
 | `@related-tests:` | no | Comma-separated relative paths | Cross-dependency test files that also exercise this source |
 | `@test-coverage:` | yes | Free text (single line) | Brief description of what the tests verify |
+
+#### Source footer examples
 
 ```swift
 // MARK: - Test Info

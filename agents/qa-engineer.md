@@ -68,6 +68,8 @@ Cheapest-first read order (when only verdict/decisions/refs or the delta is need
 2. **Diff-only**: check `state.json → facts.files_read` for a source path. If the file was read by DV, use `git diff <base>..HEAD -- <path>` for changed-file context instead of `Read <path>`.
 3. **Anchor-scoped**: when a single `## <anchor>` section suffices, `Read` that anchor's range instead of the whole file.
 
+#### Full-Read Escape Hatch (QA)
+
 Read the full file/artifact ONLY when writing new tests that need the complete type/API surface, or when the above is insufficient. For files >200 lines needing a full read, ALWAYS use `Read` with `offset`/`limit` targeting the relevant section.
 
 If `facts.files_read` is absent (legacy worktask), fall back to normal reads.
@@ -78,24 +80,36 @@ If `facts.files_read` is absent (legacy worktask), fall back to normal reads.
 
 ### QA Stage (QA Testing)
 - **Q0**: Analyze requirements, review DV's unit tests, identify coverage gaps
-- **Q1**: Add missing edge-case tests, then dispatch test execution per the **Test Selection Gate** (see `skills/shared/testing-strategy.md § Test Selection Gate`).
+- **Q1**: Add missing edge-case tests, then dispatch test execution per the **Test Selection Gate** (see `skills/shared/testing-strategy.md § Test Selection Gate`). Q1 details in the sub-sections below.
 
-  **Three-mode dispatcher** — read `metadata.test_mode` from `<plan_file>` (effective default: `scoped`; one-cycle legacy alias is documented in `skills/shared/testing-strategy.md § Backward compatibility`). Read `.context/development-N.md § Selected Tests` (DV's authored list).
+#### Q1 Three-Mode Dispatcher
 
-  | `test_mode` (DV's effective mode after auto-promotion, if any) | QA execution |
-  |---|---|
-  | `build-only` | Run **only Selected Tests** (positive `-only-testing:` per test ID). If list is empty, auto-promote to `scoped` and log to `testing-N.md § Notes`: `Selected Tests empty under build-only; promoted to scoped for safety.` |
-  | `scoped` | Run Selected Tests + any new edge-case tests added by QA + tests in any module touched by the diff. Pass each as `-only-testing:`. |
-  | `full` | Run the full project test suite (no `-only-testing:`). UI test bundles run unless platform omits them. |
+Read `metadata.test_mode` from `<plan_file>` (effective default: `scoped`; one-cycle legacy alias is documented in `skills/shared/testing-strategy.md § Backward compatibility`). Read `.context/development-N.md § Selected Tests` (DV's authored list).
 
-  **QA additions**: when QA writes new tests during edge-case review, append them to `testing-N.md § Selected Tests (QA additions)` with the same schema as DV's section. Include them in the test-run invocation.
+| `test_mode` (DV's effective mode after auto-promotion, if any) | QA execution |
+|---|---|
+| `build-only` | Run **only Selected Tests** (positive `-only-testing:` per test ID). If list is empty, auto-promote to `scoped` and log to `testing-N.md § Notes`: `Selected Tests empty under build-only; promoted to scoped for safety.` |
+| `scoped` | Run Selected Tests + any new edge-case tests added by QA + tests in any module touched by the diff. Pass each as `-only-testing:`. |
+| `full` | Run the full project test suite (no `-only-testing:`). UI test bundles run unless platform omits them. |
 
-  **Warnings ingestion**: read `.context/logs/test-selection-warnings.md` after the run. Copy any `WARN:` lines to `testing-N.md § Notes`. If warnings are non-empty, escalate to DR or DV per `agent-coordination § Error Handling`.
+#### Q1 QA Additions and Warnings
 
-  **Footer marker discovery**: read `@test-file:` and `@related-tests:` from `// MARK: - Test Info` footers in modified source files to discover additional test candidates not captured by `@depends-on:` markers. Check bidirectional consistency — a source footer's `@test-file:` path should have a corresponding `@source-file:` entry in that test file. Log inconsistencies in `testing-N.md § Notes`. See `test-selection-syntax.md § Footer Markers`.
+**QA additions**: when QA writes new tests during edge-case review, append them to `testing-N.md § Selected Tests (QA additions)` with the same schema as DV's section. Include them in the test-run invocation.
 
-  **Visual comparison gate**: independent of `test_mode`. Run Design Comparison (see § Design Comparison below) when `metadata.ui_visual_check: true` AND `.context/designs/` has artifacts. Otherwise skip.
-- **Q1.5 — Visual Evidence ingestion**: read `.context/images/<worktask_id>/screenshots.md` (path resolves from `state.json.worktask_id`). For each row in its manifest table, append one line to `testing-N.md § Visual Evidence` with the filename, captioned purpose, and a verdict (`accepted` | `flagged` | `missing`). Cross-reference each screenshot against the acceptance-criteria list in `<plan_file>`: if an AC names a UI/output behavior and no screenshot captures it, append a finding `AC-<id>: no visual evidence` to `testing-N.md § Notes`. When `metadata.requires_screenshots: false`, treat `screenshots.md` as advisory and skip the AC cross-reference; record `Visual Evidence skipped per plan` in `§ Notes`. (PL0 is the writer of `requires_screenshots`, stamped via `detect-ui-change.sh`; this stage only reads it.)
+**Warnings ingestion**: read `.context/logs/test-selection-warnings.md` after the run. Copy any `WARN:` lines to `testing-N.md § Notes`. If warnings are non-empty, escalate to DR or DV per `agent-coordination § Error Handling`.
+
+#### Q1 Footer Markers and Visual Gate
+
+**Footer marker discovery**: read `@test-file:` and `@related-tests:` from `// MARK: - Test Info` footers in modified source files to discover additional test candidates not captured by `@depends-on:` markers. Check bidirectional consistency — a source footer's `@test-file:` path should have a corresponding `@source-file:` entry in that test file. Log inconsistencies in `testing-N.md § Notes`. See `test-selection-syntax.md § Footer Markers`.
+
+**Visual comparison gate**: independent of `test_mode`. Run Design Comparison (see § Design Comparison below) when `metadata.ui_visual_check: true` AND `.context/designs/` has artifacts. Otherwise skip.
+
+#### Q1.5 — Visual Evidence Ingestion
+
+**Q1.5**: read `.context/images/<worktask_id>/screenshots.md` (path resolves from `state.json.worktask_id`). For each row in its manifest table, append one line to `testing-N.md § Visual Evidence` with the filename, captioned purpose, and a verdict (`accepted` | `flagged` | `missing`). Cross-reference each screenshot against the acceptance-criteria list in `<plan_file>`: if an AC names a UI/output behavior and no screenshot captures it, append a finding `AC-<id>: no visual evidence` to `testing-N.md § Notes`. When `metadata.requires_screenshots: false`, treat `screenshots.md` as advisory and skip the AC cross-reference; record `Visual Evidence skipped per plan` in `§ Notes`. (PL0 is the writer of `requires_screenshots`, stamped via `detect-ui-change.sh`; this stage only reads it.)
+
+#### Q2–Q3 Completion
+
 - **Q2**: Handle test failures (retry or escalate to DV)
 - **Q3**: All tests pass, document results and metrics in testing.md
 
@@ -115,7 +129,11 @@ When the gate is open, perform visual comparison during Q1 (after functional tes
 
 If `.context/designs/figma-registry.md` exists, it is the authoritative source — parse its Entries table and run comparison row-by-row. QA **reuses the DV-captured result images** as the primary comparison source and runs the RMSE pixel diff (`skills/dv-screenshot-capture/scripts/visual-diff.sh`) as an objective pre-pass **before** multimodal vision. **Step 3 (live capture) is skipped when a DV image maps to the row; live re-capture is the fallback only** (see § Implementation Screenshot Capture (fallback only)).
 
-The join key is the optional **`Design Ref`** column on DV's `.context/images/<worktask_id>/screenshots.md` manifest (Option A): QA joins `screenshots.md.Design Ref → figma-registry.md.ID` by explicit ID equality. A missing column or missing value is treated as `—` (no candidate → fallback). Per-row algorithm (replaces the legacy 5-step capture loop):
+##### Join Key (Design Ref)
+
+The join key is the optional **`Design Ref`** column on DV's `.context/images/<worktask_id>/screenshots.md` manifest (Option A): QA joins `screenshots.md.Design Ref → figma-registry.md.ID` by explicit ID equality. A missing column or missing value is treated as `—` (no candidate → fallback). Per-row algorithm (replaces the legacy 5-step capture loop) — three parts below form ONE loop:
+
+##### Per-Row Algorithm — Skip, Overview, Join
 
 ```
 for each registry row R:
@@ -129,12 +147,22 @@ for each registry row R:
       emit_row(R, vision, rmse=None); continue
 
   candidates = screenshots.md rows where (Design Ref == R.ID)   # absent col / all "—" → ∅
+```
 
+##### Per-Row Algorithm — Fallback Branch (d)
+
+```
+# …continued: same loop, empty-candidates branch
   if candidates == ∅:                       # (d) LEGACY FALLBACK — byte-equivalent to today
       impl = build_run_sim → navigate(R.Target File(s)) → screenshot   # § fallback-only below
       vision = multimodal_compare(R.Screenshot, impl)
       emit_row(R, reconcile(None, vision), source="live-capture"); continue
+```
 
+##### Per-Row Algorithm — DV-Image Branch
+
+```
+# …continued: same loop, DV-image branch
   dv_img = newest_non_placeholder_png(candidates)   # log extra candidates to § Notes
   if dv_img is .txt / non-png placeholder:
       rmse = None
@@ -149,7 +177,8 @@ for each registry row R:
   emit_row(R, reconcile(rmse, vision), source="dv-result-image")
 ```
 
-Notes on the algorithm:
+##### Algorithm Notes
+
 - **Step 3 (live capture) is skipped** for any row with a mapped DV image — the DV result image is both the RMSE `--candidate` and the vision input.
 - `visual-diff.sh` self-degrades: `magick` absent → it emits `verdict=skipped reason=imagemagick_not_found` and exits 0; QA then proceeds vision-only for that row (non-blocking).
 - The fallback branch `(d)` is intentionally a **separately-headed branch that stays byte-equivalent to today's behaviour** (R1): same build→navigate→screenshot→vision, same `source="live-capture"` labelling.
@@ -159,6 +188,9 @@ Notes on the algorithm:
 When the registry contains **per-frame rows** — a container produces one `State: overview` row plus one row per child frame, each keyed on its own `Figma Node` id (see `agents/product-manager.md § Registry Generation`) — compare against **each persisted frame file individually**, state by state, NOT against a single combined screenshot:
 
 1. Treat the `overview` row as the container reference. It is verified for layout completeness (all frames present) but is not a per-state target — **vision-only, no RMSE** (`rmse=None`).
+
+##### Per-Frame Child Rows and Emission
+
 2. For each child-frame row, run the RMSE pre-pass on the mapped DV result image (joined via `Design Ref == ID`) when one exists, then compare against that row's `.context/designs/<Screenshot>` file via vision; live re-capture only when no DV image maps. Compare state by state (default/error/empty/loading/success/…), NOT against a single combined screenshot.
 3. Emit one Design Comparison table row per registry row (overview + each frame), so an N-frame container yields N+1 comparison rows. A mismatch on one frame does not mask matches on the others.
 
@@ -217,6 +249,8 @@ RMSE on a screen with the wrong button label is still a Mismatch per vision.
 | skipped/None | match | Match | — (vision-only) |
 | skipped/None | mismatch | Mismatch | per vision |
 
+##### Skipped/None Semantics and Threshold Caveat
+
 `skipped/None` covers overview rows (no RMSE), `.txt`/non-png placeholders, and the
 `magick`-absent self-degrade path — all of which fall through to the vision verdict
 alone. The `fail+match → ≥ Major` row may over-escalate on AA/DPR/scale noise between
@@ -235,12 +269,14 @@ Document results in `testing.md § Design Comparison` using the canonical table:
 | design-003 | login | overview | — (vision) | Match | — | container layout complete |
 | design-004 | login | empty   | n/a (live-capture) | Match | — | source=live-capture (no DV image mapped) |
 
+When using the registry path, every registry row MUST appear as exactly one row in this table.
+
+##### RMSE Column Values and AC Summary
+
 `RMSE` column values by row type:
 - Compared child row → `<value>% (pass|fail)` (e.g. `2.1% (pass)`, `11.4% (fail)`).
 - Overview row → `— (vision)` (vision-only, no RMSE).
 - Skipped/degraded row → `n/a (<reason>)` — e.g. `n/a (live-capture)`, `n/a (imagemagick_not_found)`, `n/a (placeholder)`.
-
-When using the registry path, every registry row MUST appear as exactly one row in this table.
 
 After the table, include a one-line AC coverage summary:
 
@@ -258,6 +294,9 @@ The design↔result reuse + RMSE pre-pass is strictly additive — these invaria
 - **`requires_screenshots: false` → today's output**: no DV result images exist, so every
   registry row joins to ∅ and falls to the live-capture branch `(d)`. RMSE is never invoked;
   output is byte-equivalent to the pre-change behaviour (100% live-capture).
+
+##### Degradation and Legacy-Input Invariants
+
 - **`magick` absent → vision-only, non-blocking**: `visual-diff.sh` self-degrades
   (`verdict=skipped reason=imagemagick_not_found`, exit 0). QA proceeds with vision alone;
   the row reports `n/a (imagemagick_not_found)`. Never blocks.

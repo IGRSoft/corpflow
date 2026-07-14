@@ -171,7 +171,7 @@ extract_section() {
 
 # ---------- Forbidden-token scanner (L1, REQ-3/AC-4) ----------
 # Scans ONE section's text for the seven forbidden-token classes named in
-# handoff-protocol.md#cache-prefix:614-624 (mirrored verbatim in
+# handoff-protocol.md#cache-prefix (mirrored verbatim in
 # coordination-0.md#shared-snippets so no second taxonomy is ever invented):
 #   timestamp / ENV expansion / UUID / $RANDOM / retry-counter / mtime /
 #   agent-specific-name-beyond-worktask_id.

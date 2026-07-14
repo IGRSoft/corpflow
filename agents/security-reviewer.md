@@ -174,6 +174,9 @@ the sole directive), then triage:
 - [ ] SBOM generated or verifiable
 - [ ] Dependency provenance checked
 - [ ] No typosquatting or malicious packages
+
+#### Lockfile, Triage & Plugin Discipline
+
 - [ ] Exactly one authoritative lockfile per installation boundary, committed and never rewritten by CI
 - [ ] Critical/high advisories triaged for reachability across runtime, build, test, and deploy paths (deferrals carry a reason + review date)
 - [ ] Forced audit remediation never applied automatically; remediation diffs and changelogs reviewed first

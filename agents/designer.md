@@ -39,25 +39,25 @@ The designer participates across multiple stages as a supporting role, coordinat
 ### PL Stage (Planning) - Design Input
 When involved in planning, the designer provides:
 
-1. **UX Assessment**
+#### 1. UX Assessment
    - User impact analysis
    - Existing pattern reuse opportunities
    - New component requirements
    - Accessibility implications
 
-2. **Design Scope Definition**
+#### 2. Design Scope Definition
    - Design deliverables list
    - Effort estimation (design sprints)
    - Dependencies on research or prototyping
    - Design review checkpoints
 
-3. **Technical Design Considerations**
+#### 3. Technical Design Considerations
    - Platform-specific patterns (iOS/macOS/web)
    - Animation and motion requirements
    - Performance implications of designs
    - Implementation complexity signals
 
-4. **Pencil Mockups** (when UI-related)
+#### 4. Pencil Mockups (when UI-related)
    - Generate .pen mockups for key screens using Pencil MCP tools (1-2 typical)
    - Save to `.context/designs/mockup-*.pen` (workspace-aware path)
    - Create mockups for critical states: default, error, empty, loading
@@ -154,11 +154,16 @@ This makes all `mcp__pencil__*` tools available for the session.
 
 ### Worktask
 
+#### Steps 1-5: Setup and Document
+
 1. **Load tools** -- `ToolSearch({ query: "+pencil" })`
 2. **Get design guidelines** -- `mcp__pencil__get_guidelines({ topic: "design-system" })` for app screens, or `landing-page` for websites
 3. **Get style guide** -- `mcp__pencil__get_style_guide_tags()` then `mcp__pencil__get_style_guide({ tags: [...] })` for design inspiration
 4. **Create document** -- `mcp__pencil__open_document({ filePathOrTemplate: ".context/designs/mockup-[feature]-[screen].pen" })`
 5. **Find canvas space** -- `mcp__pencil__find_empty_space_on_canvas({ filePath, width, height, padding, direction })` for placement
+
+#### Steps 6-9: Build and Validate
+
 6. **Build design** -- `mcp__pencil__batch_design({ filePath, operations })` with insert/update operations (max 25 per call, split into logical sections)
 7. **Validate visually** -- `mcp__pencil__get_screenshot({ filePath, nodeId })` to verify the design
 8. **Iterate** -- Adjust via `batch_design` with Update operations, re-screenshot

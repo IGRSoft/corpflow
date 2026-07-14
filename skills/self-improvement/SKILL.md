@@ -85,7 +85,9 @@ commands/worktask.md
 
 **Goal:** every classified change gets mapped to exactly one owning agent/skill/command file, **then filtered** against the used-in-context set from Step 1.
 
-**Canonical script:** `scripts/map-and-filter.sh`
+#### Canonical Script
+
+`scripts/map-and-filter.sh`
 
 ```
 LOG_OUT=<log_path> bash scripts/map-and-filter.sh \
@@ -96,13 +98,17 @@ LOG_OUT=<log_path> bash scripts/map-and-filter.sh \
 
 Output: TSV rows `<path>\t<rule_num>\t<target>\t<lines_added>\t<lines_removed>` for every KEPT change. Discards are appended to `$LOG_OUT` under `## Out-of-Context Discards`. The `rule_num` column (1–17) provides auditability — matches the row numbers in `references/target-mapping.md`. For rows that need TaskList/stage-gate inputs the script cannot reach (rules 5, 13, 16), pass the resolved DV agent via `--dv-agent`; if omitted, the script defaults to `agents/developer.md`.
 
-**Mapping rules (apply first match):** full table in `references/target-mapping.md` (spec; the happy path no longer requires reading it directly).
+#### Mapping Rules (apply first match)
+
+Full table in `references/target-mapping.md` (spec; the happy path no longer requires reading it directly).
 
 1. **Direct edit to a prompt file** (`agents/*.md`, `skills/**/SKILL.md`, `commands/*.md`) → target is that file itself (self-edit signal).
 2. **Edit to `.context/<stage-artifact>-N.md`** → target is the agent that produced that artifact (look up via stage-contracts.md: any `planning-N.md` → product-manager, `development-N.md` → developer, etc.).
 3. **Edit to source code file** → target is the DV-stage agent for the current worktask (`developer` or whichever platform-specific agent was assigned in `metadata.agent`).
 4. **Edit to docs (`README.md`, `docs/**`)** → target is `technical-writer` (DC stage).
 5. **No match** → discard, logged only.
+
+#### Filter & Rationale
 
 **Filter:** after mapping, **drop** any item whose target path is NOT in the used-in-context set. Log discarded items under `## Out-of-Context Discards` in the log file.
 
@@ -113,6 +119,8 @@ Output: TSV rows `<path>\t<rule_num>\t<target>\t<lines_added>\t<lines_removed>` 
 **Goal:** write the retrospective artifact with per-proposal checklist items the user can tick to approve.
 
 **Template:** `references/retrospective-template.md`. Structure (4 blocks, inspired by 4Ls):
+
+#### Learnings Artifact Template
 
 ```markdown
 # Self-Improvement Learnings — <worktask_id>
@@ -142,6 +150,8 @@ Output: TSV rows `<path>\t<rule_num>\t<target>\t<lines_added>\t<lines_removed>` 
 ## Out-of-Context Discards
 <count only, full list in .context/logs/self-improve-<ts>.log>
 ```
+
+#### Versioning Note
 
 **Versioning note:** each proposal block that modifies a file's frontmatter MUST instruct prompt-engineer to bump `version: x.y.z` (semver minor for additions, patch for wording tweaks).
 

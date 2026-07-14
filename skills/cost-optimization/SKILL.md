@@ -22,13 +22,17 @@ Canonical tables live in `${CLAUDE_SKILL_DIR}/../shared/model-selection.md` (§ 
 
 Effort levels (`low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛) map to thinking-token ceilings. Use these as a budget signal — Claude Code does not enforce them, but they justify per-agent `effort:` assignments and let reviewers calibrate complexity to cost.
 
-| Effort  | Thinking Budget | Use For                                                       | Example Agents                                            |
-|---------|-----------------|---------------------------------------------------------------|-----------------------------------------------------------|
-| `low`     | ≤ 4K tokens     | Mechanical tasks, formatting, routing, status updates           | haiku-tier supports                                          |
-| `medium`  | ≤ 16K tokens    | Standard implementation, code review, coordination             | qa-engineer, technical-writer, release-engineer              |
-| `high`    | ≤ 32K tokens    | Multi-step reasoning, default for sonnet/opus on API/Team plans | developer, technical-lead, project-manager |
-| `xhigh`   | ≤ 50K tokens    | Hard tradeoffs, meta-optimization, architecture                | software-architector, security-reviewer, prompt-engineer     |
-| `max`     | ≤ 64K tokens    | Reserved for novel-domain research; cap risk of runaway thinking | (none assigned by default)                                   |
+### Budget Ceilings by Effort
+
+| Effort | Thinking Budget | Use For | Example Agents |
+|--------|-----------------|---------|----------------|
+| `low` | ≤ 4K tokens | Mechanical tasks, formatting, routing, status updates | haiku-tier supports |
+| `medium` | ≤ 16K tokens | Standard implementation, code review, coordination | qa-engineer, technical-writer, release-engineer |
+| `high` | ≤ 32K tokens | Multi-step reasoning, default for sonnet/opus on API/Team plans | developer, technical-lead, project-manager |
+| `xhigh` | ≤ 50K tokens | Hard tradeoffs, meta-optimization, architecture | software-architector, security-reviewer, prompt-engineer |
+| `max` | ≤ 64K tokens | Reserved for novel-domain research; cap risk of runaway thinking | (none assigned by default) |
+
+### Effort Tuning Rule
 
 **Rule of thumb**: increase effort one tier when a stage repeatedly retries with `classification: logic`; decrease one tier when the stage trivially passes on first try across three consecutive runs.
 
@@ -212,6 +216,8 @@ jq -cn --arg ts "$(date -u +%FT%TZ)" '{
   status: env.CLAUDE_SUBAGENT_STATUS
 }' >> "$LOG"
 ```
+
+#### Env Vars & Fallbacks
 
 `CLAUDE_CACHE_READ_INPUT_TOKENS` and `CLAUDE_CACHE_CREATION_INPUT_TOKENS` are exported on SubagentStop alongside `CLAUDE_INPUT_TOKENS`/`CLAUDE_OUTPUT_TOKENS`; `CLAUDE_EFFORT` is exported too (hook stdin JSON also carries `effort.level`). The `// "0"`/`"unknown"` fallbacks keep the line valid if an env var is absent — `/cost-report` flags such rows (`n/a` hit ratio, `unknown` effort).
 

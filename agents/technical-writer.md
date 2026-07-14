@@ -129,7 +129,13 @@ Cheapest-first read order (when only verdict/decisions/refs or the delta is need
 3. **Anchor-scoped**: when a single `## <anchor>` section suffices, `Read` that anchor's range instead of the whole file.
 
 Read the full file/artifact ONLY when the above is insufficient. If `facts.files_read` is absent (legacy worktask), fall back to normal reads.
+
+#### DC6 — Version-Ordering Verification
+
 - **DC6 — version-ordering verification**: When the worktask touches a version (release, tag, or `version:`/`CHANGELOG`/`MEMORY.md` change), confirm the proposed version is greater than **every** entry in the `MEMORY.md` release-history section. If the proposed version is not the maximum (i.e. it sits at or below an already-released version), flag a **version-ordering anomaly** in `documentation-N.md` naming both versions and request **stakeholder acknowledgment** before FN commits. This is the second gate after PL0's check (`agents/product-manager.md § Version Bump Planning`) — DC is the last reviewer before FN, so a missed PL0 ordering regression is caught here. Non-blocking: surface the anomaly, do not halt the worktask.
+
+#### DC3 — Completion
+
 - **DC3**: All documentation updated, create documentation.md summary
 
 **Task System**: Stage DC, Owner: technical-writer. See `skills/shared/task-system.md`.
@@ -172,6 +178,8 @@ jq --arg code "DC" --arg artifact "documentation-N.md" --arg verdict "<pass|fail
 ```
 
 If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+
+#### Mandatory Close (DC)
 
 ---
 

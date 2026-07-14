@@ -12,7 +12,8 @@ Contains user-attached screenshots, diagrams, and other visual references.
 
 The Designer agent generates .pen design mockups for UI-related tasks using the Pencil MCP server and saves them to `.context/designs/`.
 
-**Worktask:**
+### Mockup Workflow
+
 1. Product Manager detects UI work (design score >= 5)
 2. Product Manager invokes Designer with mockup request
 3. Designer loads Pencil tools via `ToolSearch({ query: "+pencil" })`
@@ -22,7 +23,7 @@ The Designer agent generates .pen design mockups for UI-related tasks using the 
 7. Designer references mockups in design documentation
 8. Downstream stages use mockups: AR reviews, DV implements, QA validates
 
-**Pencil Mockups vs User-Attached Images:**
+### Pencil Mockups vs User-Attached Images
 
 | Type | Source | Location | Format |
 |------|--------|----------|--------|
@@ -35,6 +36,8 @@ The Designer agent generates .pen design mockups for UI-related tasks using the 
 | Monitor Streams | Any agent w/ Monitor | `.context/logs/monitor-*.log` | plain text |
 | Simulator Logs | DV / QA (launch_app_logs_sim) | `.context/logs/sim-*.log` | plain text |
 | Incident Tails | IR / incident-responder | `.context/logs/incident-*.log` | plain text |
+
+### Naming & Directory Layout
 
 **Naming**:
 - Pencil: `mockup-[feature]-[screen]-[variant].pen`

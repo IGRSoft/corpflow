@@ -15,6 +15,8 @@ Single source of truth for how a worktask is launched and its invocation rule.
 > exploration, and no agent delegation before that launch. Handling the request as a freeform
 > instruction inline is a violation.
 
+### Entry point and gates
+
 `/worktask` (or `Skill({skill:"igrsoft:worktask"})`) is the canonical entry point. There are two human
 checkpoints. After PL0 it STOPs at the PL gate and presents the plan for approval, unless `--auto-plan`
 or `--emergency` is set (both stamp `plan_gate: "bypass"`). Then, immediately before the
@@ -31,10 +33,14 @@ for the incident pipeline) or `Skill({skill:"igrsoft:worktask"})`. There are no 
 prefixes — PL0 dynamic sizing selects which of the 9 stages actually run, dropping stages for low
 complexity. See `../worktask/SKILL.md § Dynamic Worktask Sizing`.
 
+### PL gate carrier (plan_gate)
+
 The post-plan checkpoint is carried by `PL0.metadata.plan_gate`, default `"checkpoint"`.
 `--auto-plan` and `--emergency` stamp `"bypass"` (a `/megatask` batch run stamps it per-issue). On resume after interruption, this carrier
 tells the orchestrator whether to re-enter the stage loop immediately (`bypass`) or stop for user
 approval (`checkpoint`) — see `../worktask/references/resume.md § State → Action Table`.
+
+### FN gate carrier (fn_gate)
 
 The pre-finalization checkpoint is carried by `PL0.metadata.fn_gate`, default `"checkpoint"`.
 `--auto-finalization` and `--emergency` stamp `"bypass"` (a `/megatask` batch run stamps it per-issue; note: `--auto-plan` does NOT

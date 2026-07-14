@@ -52,7 +52,12 @@ Generate a comprehensive QA summary report for completed work, including test re
 | Coverage | 82% | ✅ Above threshold |
 | Critical Bugs | 0 | ✅ None |
 | Release Ready | Yes | Conditional |
+```
 
+### Template — test execution summary
+
+```markdown
+<!-- …continued: test execution summary -->
 ## Test Execution Summary
 
 ### Test Selection Mode
@@ -72,7 +77,12 @@ Generate a comprehensive QA summary report for completed work, including test re
 | Integration | 12 | 10 | 2 | 0 |
 | E2E | 3 | 2 | 1 | 0 |
 | Visual Comparison | — | — | — | <"skipped — ui_visual_check=false" if applicable> |
+```
 
+#### Execution — selected tests breakdown
+
+```markdown
+<!-- …continued: selected tests breakdown -->
 ### Selected Tests Breakdown
 
 | Source | Count | Examples |
@@ -84,7 +94,12 @@ Generate a comprehensive QA summary report for completed work, including test re
 | Module-level (scoped only) | N | All NetworkingTests/* |
 | QA additions | N | <new edge-case tests> |
 | **Excluded** | N | <reason summary; e.g., "no marker, mode=build-only"> |
+```
 
+#### Execution — selection warnings and by priority
+
+```markdown
+<!-- …continued: selection warnings, by priority -->
 ### Selection Warnings
 
 Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty section means clean run.
@@ -96,7 +111,12 @@ Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty s
 | High | 15 | 14 | 1 |
 | Medium | 20 | 18 | 2 |
 | Low | 7 | 7 | 0 |
+```
 
+### Template — failed tests
+
+```markdown
+<!-- …continued: failed tests -->
 ## Failed Tests
 
 ### IT-005: Token Refresh Under Load
@@ -114,7 +134,12 @@ Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty s
 - **Root Cause**: Flaky test, needs retry logic
 - **Status**: Test improvement needed
 - **Ticket**: #457
+```
 
+### Template — coverage and quality metrics
+
+```markdown
+<!-- …continued: coverage report, quality metrics -->
 ## Coverage Report
 
 | Module | Line | Branch | Target | Status |
@@ -132,7 +157,12 @@ Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty s
 | Test Stability | 94% | ↑ | 3 flaky tests remaining |
 | Avg Test Time | 2.3s | → | Stable |
 | Code Complexity | 12 avg | → | Within limits |
+```
 
+### Template — bugs and regression
+
+```markdown
+<!-- …continued: bugs found, regression testing -->
 ## Bugs Found
 
 | ID | Severity | Summary | Status |
@@ -148,7 +178,12 @@ Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty s
 | Existing Auth | 15 | ✅ All pass |
 | User Management | 8 | ✅ All pass |
 | API Endpoints | 12 | ✅ All pass |
+```
 
+### Template — recommendations, sign-off, attachments
+
+```markdown
+<!-- …continued: recommendations, sign-off, attachments -->
 ## Recommendations
 
 ### Release Blockers

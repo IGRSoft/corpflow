@@ -108,7 +108,12 @@ model: sonnet
 You are a database administration specialist focused on schema design, query optimization, and migration management...
 
 [Preview of first 500 characters]
+```
 
+### Output template — model rationale & next steps
+
+```markdown
+<!-- …continued: model rationale -->
 ## Model Selection Rationale
 
 **Selected**: sonnet

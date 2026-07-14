@@ -31,18 +31,35 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 
 ## Metadata Fields
 
+### Routing fields
+
 | Field | Purpose |
 |-------|---------|
 | `stage` | Stage code unnumbered (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) |
 | `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (e.g., `igrsoft:software-architector`, `apple-developer:ios-developer`). Bare names are accepted via a back-compat shim that prepends `igrsoft:` and emits a deprecation warning — emit qualified form at the call site |
 | `model` | Model alias for this stage (fable, opus, sonnet, haiku). Always pass explicitly to `Task()` — do not rely on frontmatter inheritance. Under a managed `availableModels`/`enforceAvailableModels` allowlist (CC 2.1.172/2.1.175) a valid alias may silently resolve to a different model — see `skills/worktask/SKILL.md § Pre-Stage Validation` step 6 |
+
+### Run & context fields
+
+| Field | Purpose |
+|-------|---------|
 | `run_index` | Integer ≥ 0; PL0 stamps this on every downstream task (same N as `planning-N.md`). Default 0. Orchestrator uses it to resolve `<stage>-N.md` paths. See `agents/product-manager.md § Stage Artifact Naming`. |
 | `context_refs` | JSON-encoded array of anchor refs (e.g. `["analyzing-N.md#decisions","planning-N.md#requirements"]`) the stage agent should grep instead of reading whole files. Preferred over `context_files` (handoff-protocol mode). When present, agent reads `state.json` + only these anchors |
 | `state_file` | Path to the worktask state ledger. Default `.context/state.json`. Read by the stage agent before delegation (per `skills/worktask/references/handoff-protocol.md#state-json-schema`). Absent state.json triggers fallback path F1 (legacy `context_files` mode) |
+
+### Error & retry fields
+
+| Field | Purpose |
+|-------|---------|
 | `context_files` | (Legacy fallback.) Comma-separated list of `.context/` artifacts this stage should read in full when `state.json` is absent or `context_refs` is missing. MUST include `error_file` — orchestrator appends automatically on `TaskCreate`/`TaskUpdate` if omitted. Retained for AC-16/AC-17 backward-compat |
 | `error_file` | Path `.context/errors/<agent-basename>.md`. Auto-derived from `agent` if absent. Basename = last `:`-separated segment; collisions joined with `-`. Auto-appended to `context_files` so the stage agent reads its own prior retry narrative |
 | `retry_count` | Integer 0–3. Incremented on retry; resets on escalation or success |
 | `error_escalated_to` | Stage code the failure escalated to when `retry_count` reached 3 |
+
+### Worktask & workspace fields
+
+| Field | Purpose |
+|-------|---------|
 | `worktask_id` | Links task to worktask instance |
 | `priority` | high, medium, low |
 | `milestone_number` | GitHub milestone (megatask mode) |
@@ -56,6 +73,8 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 
 These fields map to `claude agents run` CLI flags per `skills/agent-coordination/references/headless-dispatch.md`. All are optional and additive — the in-process orchestrator honours `model` (always) and `permission_mode` (audits per `skills/worktask/SKILL.md § Permission-Mode Pinning`); the rest are advisory in-process and consumed only by external CLI dispatchers.
 
+#### Dispatch field table
+
 | Field | Purpose | Honoured in-process? |
 |-------|---------|----------------------|
 | `effort` | Effort tier (`low\|medium\|high\|xhigh\|max`) for this dispatch. Falls back to agent frontmatter when absent | Advisory |
@@ -65,6 +84,8 @@ These fields map to `claude agents run` CLI flags per `skills/agent-coordination
 | `plugin_dir_overrides` | Array of `--plugin-dir` paths (local plugin development) | Advisory |
 | `dangerously_skip_permissions` | Boolean. CI batch only; PL0 MUST NOT set this on PL/SR/FN tasks | Advisory; orchestrator MAY refuse |
 | `settings_path` | Path to alternative `settings.json` (`--settings`) for provider/org swap | Advisory |
+
+#### Dispatch writer rules
 
 PL0's writer rules for these fields live in `agents/product-manager.md § Optional dispatch metadata`. The `workspace_path` field (already documented above) doubles as the `--cwd` source for headless dispatchers.
 
@@ -87,6 +108,12 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
     "model": {
       "enum": ["opus", "sonnet", "haiku"]
     },
+```
+
+#### Schema — run & context properties
+
+```json
+// …continued: task.metadata JSON Schema "properties" (part 2 of 5)
     "run_index": {
       "type": "integer",
       "minimum": 0,
@@ -102,6 +129,12 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
       "default": ".context/state.json",
       "pattern": "^\\.context/[a-z0-9/_.-]+\\.json$"
     },
+```
+
+#### Schema — error & retry properties
+
+```json
+// …continued: task.metadata JSON Schema "properties" (part 3 of 5)
     "context_files": {
       "type": "string",
       "pattern": "^([a-z0-9/_.-]+\\.(md|json|jsonl|png|jpg|pen)(,[a-z0-9/_.-]+\\.(md|json|jsonl|png|jpg|pen))*)?$",
@@ -119,6 +152,12 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
     "error_escalated_to": {
       "enum": ["PL", "AR", "TL", "DV", "DR", "SR", "QA", "DC", "RE", "FN", "ST", "IR", "ET"]
     },
+```
+
+#### Schema — worktask properties
+
+```json
+// …continued: task.metadata JSON Schema "properties" (part 4 of 5)
     "track": {
       "type": "integer",
       "minimum": 1,
@@ -134,6 +173,12 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
     "approved": {
       "enum": ["user", "auto"]
     },
+```
+
+#### Schema — requires_screenshots + required-fields rule
+
+```json
+// …continued: task.metadata JSON Schema (part 5 of 5, closes "properties")
     "requires_screenshots": {
       "type": "boolean",
       "description": "Advisory: DV and QA tasks SHOULD carry this, stamped by PL0 from the plan frontmatter (writer: product-manager via detect-ui-change.sh). Drives dv-screenshot-capture + hooks/dv-screenshot-gate.sh + attach-visual-evidence.sh. Downstream readers default it true as defense-in-depth when absent."
@@ -153,18 +198,26 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
 }
 ```
 
-**error_file derivation** (orchestrator populates if absent):
+#### error_file derivation
+
+Orchestrator populates if absent:
 - `agent: "igrsoft:developer"` → `error_file: ".context/errors/developer.md"` (last segment)
 - `agent: "apple-developer:ios-developer"` → `error_file: ".context/errors/ios-developer.md"` (last segment)
 - Basename collision across plugins → join with `-`: `.context/errors/apple-developer-ios-developer.md`
 
-**context_files ↔ error_file coupling**: On every `TaskCreate` and `TaskUpdate`,
+#### context_files ↔ error_file coupling
+
+On every `TaskCreate` and `TaskUpdate`,
 the orchestrator ensures `metadata.error_file` appears in `metadata.context_files`
 (appended if absent, deduped if already present). This guarantees the stage
 agent receives its own error history in its reading scope — on retry, it can
 see what it tried before and why it failed.
 
-**context_refs vs context_files (handoff-protocol mode)**: When `metadata.context_refs` is set, the stage agent reads `state_file` + only the listed anchors; when absent or `state_file` is missing on disk, it falls back to reading every `context_files` path in full. `context_refs` wins when state.json is present; `context_files` is the safety net. F1-fallback rationale: see `skills/shared/legacy-fallback-f1.md`. F1..F4 matrix: `skills/worktask/references/handoff-protocol.md#fallback-paths`.
+#### context_refs vs context_files (handoff-protocol mode)
+
+When `metadata.context_refs` is set, the stage agent reads `state_file` + only the listed anchors; when absent or `state_file` is missing on disk, it falls back to reading every `context_files` path in full. `context_refs` wins when state.json is present; `context_files` is the safety net. F1-fallback rationale: see `skills/shared/legacy-fallback-f1.md`. F1..F4 matrix: `skills/worktask/references/handoff-protocol.md#fallback-paths`.
+
+#### Orchestrator normalization snippet
 
 ```typescript
 // Orchestrator normalization (runs before Task() delegation)
@@ -182,12 +235,21 @@ function normalizeMetadata(meta) {
 
 These fields live at `state.json:$.metadata` (worktask-scoped, distinct from `task.metadata` documented above). Canonical schema lives in `skills/worktask/references/handoff-protocol.md#state-json-schema`; the table below is the additive index of fields documented elsewhere in this plugin.
 
+### Orchestrator-stamped fields
+
 | Field | Type | Description |
 |-------|------|-------------|
 | `metadata.embedded_commands` | string (optional) | Comma-separated list of `/plugin:command` slash-command identifiers detected on the worktask trigger (e.g. `skill-creator`). Writer: orchestrator at `/worktask` parse time. Reader: DV agent before stage work begins. See `commands/worktask.md § Embedded Command Detection`. |
 | `metadata.preexisting_plan` | string (optional) | Absolute path to a user-approved plan supplied at worktask init; PL0 adopts it verbatim and reuses anchors. Writer: orchestrator. Reader: PL agent. |
 | `metadata.no_gh_issue` | boolean (optional) | When `true`, suppresses post-PL GitHub issue publishing. Writer: orchestrator at parse time (set by the `--no-gh-issue` CLI flag). Reader: `skills/worktask/scripts/publish-pl-issue.sh`. |
+
+### Issue publishing field
+
+| Field | Type | Description |
+|-------|------|-------------|
 | `metadata.github_issue_url` | string (optional) | GitHub issue URL written by `publish-pl-issue.sh` on the run that CREATES the issue. Pattern: `^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[0-9]+(#issuecomment-[0-9]+)?$`. The helper short-circuits (`already_published`) on a resume of that same run. **`state.json` is re-seeded on every fresh `/worktask`, so this field does NOT survive a `run_index` increment** — the run-independent `.context/gh-issue.json` anchor (below) carries the canonical `.context ↔ issue` binding across runs, so a later run comments on the existing issue instead of duplicating it (see `skills/gh-issue-dedup`). Writer: `publish-pl-issue.sh`. Readers: `publish-pl-issue.sh` (idempotency), FN PR-issue-link validator (rank-1). |
+
+### Run-independent issue anchor
 
 > **Run-independent issue anchor — `.context/gh-issue.json`** (a sibling FILE, not a `state.json` field): binds one `.context/` to one GitHub issue and survives `run_index` increments (state.json is re-seeded; this is not). Schema and protocol: `skills/gh-issue-dedup`; folder placement: `skills/task-folder-organization/SKILL.md`. Written/read by `publish-pl-issue.sh`; read by the FN PR-issue-link validator (rank-2).
 
@@ -221,6 +283,8 @@ Storage: `~/.claude/tasks/<list-id>/`
 
 Configure in project `settings.json` or agent frontmatter `hooks` field:
 
+### Hook event table
+
 | Hook Event | Fires When | Configuration Level |
 |------------|------------|---------------------|
 | `SubagentStart` | Stage agent spawned | settings.json (matcher: agent type) |
@@ -230,12 +294,19 @@ Configure in project `settings.json` or agent frontmatter `hooks` field:
 | `PostCompact` | After context compaction completes | settings.json (all modes) |
 | `Elicitation` | MCP server requests user input | settings.json |
 | `ElicitationResult` | User responds to MCP elicitation | settings.json |
+
+#### Hook event table (continued)
+
+| Hook Event | Fires When | Configuration Level |
+|------------|------------|---------------------|
 | `StopFailure` | API error causes turn end | settings.json |
 | `CwdChanged` | Working directory changes | settings.json |
 | `FileChanged` | Monitored file modified | settings.json |
 | `TaskCreated` | TaskCreate tool called | settings.json |
 | `PermissionDenied` | Auto-mode classifier denies tool call | settings.json (all modes) |
 | `WorktreeCreate` | Worktree created | settings.json |
+
+### Hook usage notes
 
 `TeammateIdle` and `TaskCompleted` require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
 

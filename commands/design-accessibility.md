@@ -111,7 +111,12 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 | Operable | [Pass/Fail] | [Count] |
 | Understandable | [Pass/Fail] | [Count] |
 | Robust | [Pass/Fail] | [Count] |
+```
 
+### Template — issue inventory
+
+```markdown
+<!-- …continued: issue sections -->
 ## Critical Issues (P0)
 
 ### Issue: [Description]
@@ -123,11 +128,7 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 
 ## High Priority Issues (P1)
 
-### Issue: [Description]
-- **WCAG Criterion**: [X.X.X - Name]
-- **Location**: [Where in UI]
-- **Impact**: [Who is affected]
-- **Remediation**: [How to fix]
+<!-- repeat per priority: P1..P3, same issue shape as P0 (P1..P3 omit Effort) -->
 
 ## Medium Priority Issues (P2)
 
@@ -136,7 +137,12 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 ## Low Priority Issues (P3)
 
 [Similar format]
+```
 
+### Template — findings and next steps
+
+```markdown
+<!-- …continued: findings, recommendations, next steps -->
 ## Platform-Specific Findings
 
 ### iOS

@@ -76,6 +76,11 @@ Select based on `--platform` flag and ticket content:
 | `--platform android` | `developer` | igrsoft |
 | `--platform web` | `developer` | igrsoft |
 | `all` / omitted | `developer` | igrsoft |
+
+##### Content-Based Routing
+
+| Platform / Content | Agent | Plugin |
+|--------------------|-------|--------|
 | macOS-specific ticket | `macos-developer` | apple-developer |
 | watchOS-specific ticket | `watchos-developer` | apple-developer |
 | tvOS-specific ticket | `tvos-developer` | apple-developer |

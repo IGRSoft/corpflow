@@ -23,11 +23,15 @@ Every stage agent reads inputs in this order, anchor-first:
 3. Read only the listed anchors in upstream artifacts (e.g. `analyzing-N.md#decisions`, `planning-N.md#requirements`). Do **not** read whole files unless an anchor is absent.
 4. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
 
+### Run index and F1 fallback
+
 **Run Index Resolution** (two-step resolver — see `agents/product-manager.md § Stage Artifact Naming`):
 1. `task.metadata.run_index` → `<basename>-${N}.md`.
 2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
 
 **Backward-compatibility fallback (F1)**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode), reading the listed files in full. Rationale and full F1 description: `skills/shared/legacy-fallback-f1.md`.
+
+### F1 telemetry emission
 
 To surface F1 entries, agents MUST emit one telemetry line:
 
@@ -43,6 +47,8 @@ printf '%s\t%s\t%s\t%s\n' \
 ```
 
 Then proceed with the legacy read. The fallback log is consumed by `/cost-report` to flag worktasks that lost cache hits silently.
+
+### No-restate rule
 
 > Agents MUST NOT restate this F1 telemetry snippet, the run-index resolver, or the atomic-write pseudocode in their own files — link to `#f1-telemetry`, `#run-index-resolution`, or `handoff-protocol.md#atomic-write` instead. Drift checker: `cache-lint.sh --frontmatter-template-lint`.
 
@@ -66,19 +72,61 @@ Every stage's output artifact MUST:
 
 All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolver in **Run Index Resolution** above).
 
+### PL
+
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
 | **PL** | product-manager | opus | User request; trigger flags | `.context/<plan_file>` (`planning-N.md` where N = next free integer ≥ 0; see `agents/product-manager.md § Plan File & Run Index Naming`) with sections: Goal, Scope, Complexity Score, Stage Plan, Approval Required + `.context/designs/figma-registry.md` (if Figma URLs provided) | `<plan_file>` exists + Complexity Score int 0–50 + Stage Plan lists downstream task subjects + `metadata.plan_file = <plan_file>` AND `metadata.run_index = N` stamped on every downstream task | `.context/errors/product-manager.md` |
+
+### AR–TL
+
+| Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
+|-------|-------|-------|-----------------|------------------|------------|------------|
 | **AR** | software-architector | opus | `.context/<plan_file>` (resolved via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`) | `.context/analyzing-N.md` with sections: Architecture Decisions, Trade-offs, Patterns, Integration Points | `analyzing-N.md` exists + at least one decision with rationale | `.context/errors/software-architector.md` |
 | **TL** | team-lead | sonnet | `.context/<plan_file>` (resolved per AR rule), `.context/analyzing-N.md` | `.context/coordination-N.md` with sections: Task Breakdown, Parallel Streams, Assignments, Risks | `coordination-N.md` exists + task breakdown maps to DV sub-tasks | `.context/errors/team-lead.md` |
+
+### DV–DR
+
+| Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
+|-------|-------|-------|-----------------|------------------|------------|------------|
 | **DV** | developer | opus | `.context/<plan_file>` (resolved per AR rule), `.context/analyzing-N.md`, `.context/coordination-N.md` (if present) | `.context/development-N.md` with sections: Files Changed, Approach, Tests Added, Verification Command + actual code changes | `development-N.md` exists + git diff is non-empty + `.context/logs/build-*.log` shows success | `.context/errors/developer.md` |
 | **DR** | technical-lead | sonnet | `.context/development-N.md` + source diff | `.context/developer-review-N.md` with sections: Code Quality, Test Coverage, Issues Found, Approval Status | `developer-review-N.md` exists + Approval Status ∈ {approved, needs-changes, rejected} | `.context/errors/technical-lead.md` |
+
+### SR
+
+| Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
+|-------|-------|-------|-----------------|------------------|------------|------------|
 | **SR** | security-reviewer | fable | `.context/development-N.md` + source diff | `.context/security-review-N.md` with sections: Threat Model, Findings, Severity, Remediation | `security-review-N.md` exists + no High/Critical findings unresolved | `.context/errors/security-reviewer.md` |
+
+### QA
+
+| Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
+|-------|-------|-------|-----------------|------------------|------------|------------|
 | **QA** | qa-engineer | sonnet | `.context/development-N.md`, `.context/developer-review-N.md` + `.context/designs/figma-registry.md` (if present; else glob `.context/designs/figma-*.png`) | `.context/testing-N.md` with sections: Test Plan, Results, Design Comparison (if UI), Regression Check | `testing-N.md` exists + `.context/logs/test-*.log` shows pass + no blocking defects + if `figma-registry.md` present, `testing-N.md § Design Comparison` has one row per registry entry | `.context/errors/qa-engineer.md` |
+
+### DC–RE
+
+| Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
+|-------|-------|-------|-----------------|------------------|------------|------------|
 | **DC** | technical-writer | haiku | `.context/development-N.md`, `.context/analyzing-N.md` | `.context/documentation-N.md` with sections: Doc Changes, README Updates, API Docs | `documentation-N.md` exists + docs diff present | `.context/errors/technical-writer.md` |
 | **RE** | release-engineer | haiku | `.context/development-N.md`, `.context/testing-N.md`, `.context/documentation-N.md` | `.context/release-N.md` with sections: Version Bump, Changelog, Deployment Checklist | `release-N.md` exists + version bump proposed + changelog entry drafted | `.context/errors/release-engineer.md` |
+
+### FN
+
+| Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
+|-------|-------|-------|-----------------|------------------|------------|------------|
 | **FN** | project-manager | opus | All upstream `.context/*-N.md` | `.context/complete-summary-N.md` with sections: Summary, Files Changed, Stage Timings, Next Actions + `.context/attachments/PR instructions.md` + `.context/attachments/Review request.md` (templates per `skills/worktask/references/conductor-attachments.md`) + commit/PR created | `complete-summary-N.md` exists + both attachments exist + commit created OR PR opened | `.context/errors/project-manager.md` |
+
+### ST
+
+| Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
+|-------|-------|-------|-----------------|------------------|------------|------------|
 | **ST** | stakeholder | sonnet | `.context/complete-summary-N.md` | `.context/retrospective-N.md` with sections: Decision, Feedback, Follow-ups, Self-Improvement + **optional** `.context/learnings.md` (only when in-scope user changes detected — see `skills/self-improvement/SKILL.md`) | `retrospective-N.md` exists + Decision ∈ {approved, rejected, changes-requested} + `self-improvement` skill invocation recorded (either `learnings.md` present or log entry `Result: no-changes` in `.context/logs/self-improve-*.log`) | `.context/errors/stakeholder.md` |
+
+### IR–ET
+
+| Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
+|-------|-------|-------|-----------------|------------------|------------|------------|
 | **IR** | incident-responder | sonnet | User incident report | `.context/incident-N.md` with sections: Required Fix, Constraints, Blast Radius, Verification Command | `incident-N.md` exists + all 4 sections non-empty | `.context/errors/incident-responder.md` |
 | **ET** | ethics-reviewer | fable | `.context/<plan_file>` (resolved per AR rule) + high-risk keyword match | `.context/ethics-review-N.md` with sections: Risk Assessment, Mitigation, Decision | `ethics-review-N.md` exists + Decision ∈ {pass, block, conditional} | `.context/errors/ethics-reviewer.md` |
 
@@ -87,12 +135,28 @@ All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolve
 The orchestrator runs validation between `TaskUpdate({status: "completed"})` and the next stage's `status: in_progress`:
 
 1. **File check**: Read `metadata.context_refs` (anchor-based, preferred) or `metadata.context_files` (legacy fallback) for next stage — verify every referenced file exists on disk. `metadata.error_file` is always present in `context_files` (orchestrator auto-appends on `TaskCreate`/`TaskUpdate`); treat its absence on disk as "no prior retries" (not a failure).
-2. **Frontmatter / typed-return check**: When the stage's `Task()` dispatch returned a **valid typed object** (the orchestrator passed the stage `schema` from `handoff-protocol.md#handoff-schemas` and the runtime honored it), that typed return **SUPERSEDES** this step — the verdict and facts are taken from the validated object and mapped via `handoff-protocol.md#schema-to-state-map`; the `head -1`/`grep -c '^handoff:'` grep is skipped (its only job — recovering the verdict from prose — is already done structurally). When **no** typed return is present (the runtime dispatch primitive does not accept a `schema` argument, or the stage returned no typed object), this grep is the path: `head -1 <artifact>` MUST equal `---`; `grep -c '^handoff:' <artifact>` MUST equal `1` within the top-of-file block. Missing frontmatter triggers fallback path F3 (orchestrator derives a minimal handoff record). The `.context/<artifact>-N.md` + `handoff:` frontmatter is written by the agent in BOTH cases — it remains the on-disk durability/compression form and the F4 regeneration source, never replaced by the typed return.
+
+### Step 2 — frontmatter / typed-return check
+
+2. **Frontmatter / typed-return check**: When the stage's `Task()` dispatch returned a **valid typed object** (the orchestrator passed the stage `schema` from `handoff-protocol.md#handoff-schemas` and the runtime honored it), that typed return **SUPERSEDES** this step — the verdict and facts are taken from the validated object and mapped via `handoff-protocol.md#schema-to-state-map`; the `head -1`/`grep -c '^handoff:'` grep is skipped (its only job — recovering the verdict from prose — is already done structurally).
+
+#### Step 2 — no-typed-return grep path
+
+When **no** typed return is present (the runtime dispatch primitive does not accept a `schema` argument, or the stage returned no typed object), this grep is the path: `head -1 <artifact>` MUST equal `---`; `grep -c '^handoff:' <artifact>` MUST equal `1` within the top-of-file block. Missing frontmatter triggers fallback path F3 (orchestrator derives a minimal handoff record). The `.context/<artifact>-N.md` + `handoff:` frontmatter is written by the agent in BOTH cases — it remains the on-disk durability/compression form and the F4 regeneration source, never replaced by the typed return.
+
+### Steps 3–5
+
 3. **Anchor lint (DR gate)**: For each produced artifact, verify all H2 headings match the per-stage allow-list in `skills/worktask/references/handoff-protocol.md#anchor-allow-list`. DR runs `cache-lint.sh --anchor-lint <artifact>` as a stage gate. CI runs the same on PRs touching `skills/` or `agents/` as a safety net.
 4. **Section check**: Grep the output artifact for required section headers.
 5. **Side-artifact check**: For DV/QA stages, confirm corresponding `.context/logs/` capture exists (build/test logs).
+
+### Steps 6–7
+
 6. **Metadata check**: Validate task `metadata` against `task-system` § JSON Schema.
 7. **Error file check**: If `retry_count > 0`, `metadata.error_file` MUST exist on disk AND appear in `context_files`. If `metadata.error_file` is set but the path does NOT exist on disk (e.g. orchestrator stamped the path but no agent has appended yet), treat the situation as `retry_count = 0` (no prior retries) — do NOT fail validation. The file is created lazily by the first appending agent (mkdir -p its parent, then append the retry block).
+
+### Step 8 and failure rule
+
 8. **state.json patch check**: After Task() returns, orchestrator re-reads `.context/state.json`. If `stages.<CODE>.status` is still `in_progress`, parse the artifact's `handoff:` frontmatter and atomic-merge into state.json (third belt-and-suspenders layer; see `handoff-protocol.md#fallback-paths` F2/F3).
 
 Failure at any step → do NOT transition. Append a `missing_input` entry to the *next* stage's error file and block until resolved.
@@ -117,6 +181,8 @@ When TL splits DV into DV0/DV1/DV2 (parallel streams):
 ## Per-Stage Frontmatter Templates
 
 Canonical YAML templates for the `handoff:` block atop every stage artifact. Each agent's `## Handoff Protocol` pastes the matching block verbatim (with substitutions) into `.context/<artifact>-N.md` (N resolved per `#run-index-resolution`). These are the single source of truth — agents MUST NOT diverge from the field shape below. To change a template, edit here, then re-run `cache-lint.sh --frontmatter-template-lint agents/*.md` to revalidate every agent's inline copy.
+
+### Typed-return equivalent
 
 > **Typed-return equivalent.** Each frontmatter template below has a typed-return JSON-Schema counterpart
 > (`<CODE>Handoff`) in `skills/worktask/references/handoff-protocol.md#handoff-schemas`. When the runtime
@@ -382,11 +448,18 @@ Prev→this label: `<invoker>→ET` (whichever stage triggered the ethics gate).
 
 Single source of truth for what every stage agent verifies before `status: completed`. Each agent's `## Handoff Protocol` MUST reference this checklist, not restate it. **Agents MUST repeat the numbered step outcomes verbatim in their return summary.** Execute in order:
 
+### Steps 1–3
+
 1. **Artifact frontmatter**: Your artifact (`.context/<artifact>-N.md`) MUST start with `---\nhandoff:` YAML frontmatter conforming to the per-stage template at `stage-contracts.md#tpl-<CODE>`.
 2. **Required fields**: Frontmatter MUST include all required fields for your stage `<CODE>` per `skills/worktask/references/handoff-protocol.md#frontmatter-schema` § Per-stage required-field matrix.
 3. **Artifact filename**: Artifact MUST use the canonical name from `handoff-protocol.md#stage-artifact-map`. Non-canonical names (e.g. `architecture-0.md` instead of `analyzing-0.md`) break the SubagentStop safety net.
+
+### Steps 4–5
+
 4. **Patch state.json**: `.context/state.json` MUST be patched with `stages.<CODE>` (`status`, `artifact`, `verdict`, `retry_count`) and `handoffs["<PREV>→<CODE>"]` (≤300-char summary ending with `ref:` pointer). `<PREV>→<CODE>` is documented in the template's footer (e.g. `PL→AR`, `USER→IR`).
 5. **Atomic write**: Use `handoff-protocol.md#atomic-write` (read → merge → temp → `sync` → `mv -f`). NEVER write `.context/state.json` directly.
+
+#### Atomic-merge snippet
 
 ```bash
 # Inline atomic-merge — run BEFORE returning (steps 4+5 combined)
@@ -398,6 +471,8 @@ jq --arg code "<CODE>" --arg artifact "<artifact>-N.md" --arg verdict "<pass|fai
     .handoffs[($prev_code + "→" + $code)] = $summary' \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
+
+### Post-return repair (F2/F3)
 
 The orchestrator verifies `stages.<CODE>.status == "completed"` after the task returns. If still `in_progress`, the SubagentStop hook (`state-merge.sh`) repairs the ledger from the artifact's frontmatter (F2 fallback). If the artifact itself lacks frontmatter, the orchestrator derives a minimal handoff record from the agent's return text (F3) — but downstream cache hits collapse, so producing valid frontmatter is mandatory in steady state.
 

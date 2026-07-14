@@ -4,12 +4,19 @@ Every classified diff hunk must be mapped to exactly one owning file (the "targe
 
 ## Mapping Rules (apply first match)
 
+### Prompt & early-stage artifacts (rules 1–5)
+
 | # | Pattern of changed file | Target | Notes |
 |---|--------------------------|--------|-------|
 | 1 | `agents/<name>.md`, `skills/**/SKILL.md`, `commands/<name>.md` | The file itself | User edited the prompt directly — self-signal. Map to that file. |
 | 2 | `.context/planning-*.md` (numbered, e.g. `planning-0.md`, `planning-1.md`) | `agents/product-manager.md` | Producer lookup via stage-contracts. Match the glob — every numbered plan is owned by PM. |
 | 3 | `.context/analyzing-*.md` | `agents/software-architector.md` | Match the glob — every numbered artifact owned by AR. |
 | 4 | `.context/coordination-*.md` | `agents/team-lead.md` | |
+
+### Mid-stage artifacts (rules 6–11)
+
+| # | Pattern of changed file | Target | Notes |
+|---|--------------------------|--------|-------|
 | 5 | `.context/development-*.md` | `metadata.agent` of the DV task (resolve from `TaskList`) | Platform-aware: could be `igrsoft:developer`, `apple-developer:ios-developer`, etc. |
 | 6 | `.context/developer-review-*.md` | `agents/technical-lead.md` | |
 | 7 | `.context/security-review-*.md` | `agents/security-reviewer.md` | |
@@ -17,11 +24,21 @@ Every classified diff hunk must be mapped to exactly one owning file (the "targe
 | 9 | `.context/documentation-*.md` | `agents/technical-writer.md` | |
 | 10 | `.context/release-*.md` | `agents/release-engineer.md` | |
 | 11 | `.context/complete-summary-*.md` | `agents/project-manager.md` | |
+
+### Late-stage artifacts (rules 12–14)
+
+| # | Pattern of changed file | Target | Notes |
+|---|--------------------------|--------|-------|
 | 12 | `.context/retrospective-*.md` | `agents/stakeholder.md` | Edits to own artifact — self-improvement for ST itself. |
 | 13 | Source code (`src/**`, `app/**`, `lib/**`, `Sources/**`) | Resolved DV agent (same lookup as row 5) | Default to `agents/developer.md` if DV agent missing. |
 | 14 | `README.md`, `docs/**`, `*.md` at repo root | `agents/technical-writer.md` | Only if DC stage ran in this worktask. |
 | 15 | Tests (`tests/**`, `**/*Tests.swift`, `**/*_test.py`, `spec/**`) | `agents/qa-engineer.md` | Only if QA stage ran. |
 | 16 | Config (`*.json`, `*.toml`, `*.yml`, `*.yaml`, `Makefile`, `Package.swift`) | Resolved DV agent (row 5) | Exception: `plugin.json` → `agents/workflow-engineer.md`. |
+
+### Source, tests & config (rules 15–17)
+
+| # | Pattern of changed file | Target | Notes |
+|---|--------------------------|--------|-------|
 | 17 | No rule matched | Discard (logged) | Log under `## Out-of-Context Discards` in the run log. |
 
 ## In-Context Filter (mandatory)

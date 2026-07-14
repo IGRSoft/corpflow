@@ -69,6 +69,8 @@ selected with `--type`:
 
 ## Output Format — `--type case` (default)
 
+### Case template — sections 1–3
+
 ```markdown
 # Business Case: [Initiative Name]
 
@@ -88,7 +90,12 @@ selected with `--type`:
 ### Investment Required (table: Category | One-Time | Recurring)
 ### Expected Benefits (table: Benefit | Year 1 | Year 2 | Year 3)
 ### ROI Calculation (table: Metric | Value — NPV, IRR, Payback)
+```
 
+### Case template — sections 4–10
+
+```markdown
+<!-- …continued: business case sections 4–10 -->
 ## 4. Strategic Alignment
 ### Company Objectives (table: Objective | Alignment | Contribution)
 ### Competitive Analysis (table: Competitor | Support | Our Position)
@@ -121,6 +128,8 @@ selected with `--type`:
 
 Calculate Return on Investment with NPV, IRR, and payback period.
 
+### ROI template — investment & cash flow
+
 ```markdown
 # ROI Analysis: SSO Implementation
 
@@ -141,7 +150,12 @@ Calculate Return on Investment with NPV, IRR, and payback period.
 | 1 | -$36,000 | $898,000 | $862,000 | $712,000 |
 | 2 | -$36,000 | $1,327,000 | $1,291,000 | $2,003,000 |
 | 3 | -$36,000 | $1,756,000 | $1,720,000 | $3,723,000 |
+```
 
+### ROI template — financial metrics
+
+```markdown
+<!-- …continued: financial metrics -->
 ## Financial Metrics
 
 ### Primary Metrics
@@ -166,7 +180,12 @@ Calculate Return on Investment with NPV, IRR, and payback period.
 
 #### Payback Period
     Payback = Time to recover initial investment
+```
 
+### ROI template — sensitivity & break-even
+
+```markdown
+<!-- …continued: sensitivity analysis -->
 ## Sensitivity Analysis
 
 ### Optimistic Scenario (+20% benefits) / Pessimistic Scenario (-30% benefits)
@@ -184,7 +203,12 @@ Calculate Return on Investment with NPV, IRR, and payback period.
 | Break-even | $258,000 | 6% |
 | 100% ROI | $516,000 | 13% |
 | Target ROI (200%) | $774,000 | 19% |
+```
 
+### ROI template — risk-adjusted returns & comparison
+
+```markdown
+<!-- …continued: risk-adjusted returns -->
 ## Risk-Adjusted Returns
 
 | Risk Factor | Probability | Impact on NPV |

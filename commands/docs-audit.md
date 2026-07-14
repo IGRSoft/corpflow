@@ -52,7 +52,12 @@ Audit documentation for gaps, outdated content, and quality issues.
 | **Total** | **71** | **22** | **65%** |
 
 ---
+```
 
+### Template — critical issues
+
+```markdown
+<!-- …continued: critical issues -->
 ## Critical Issues 🔴
 
 ### Missing API Documentation
@@ -77,7 +82,12 @@ Audit documentation for gaps, outdated content, and quality issues.
 **Recommendation**: Update with current auth flow including OAuth
 
 ---
+```
 
+### Template — high priority issues
+
+```markdown
+<!-- …continued: high priority issues -->
 ## High Priority Issues ⚠️
 
 ### Undocumented Functions
@@ -99,7 +109,12 @@ Audit documentation for gaps, outdated content, and quality issues.
 | `packages/shared/` | Outdated dependencies section |
 
 ---
+```
 
+### Template — medium priority issues
+
+```markdown
+<!-- …continued: medium priority issues -->
 ## Medium Priority Issues
 
 ### Incomplete Code Comments
@@ -119,7 +134,12 @@ Audit documentation for gaps, outdated content, and quality issues.
 | Markdown | 3 | Broken links |
 
 ---
+```
 
+### Template — documentation scores
+
+```markdown
+<!-- …continued: documentation scores -->
 ## Code Documentation Score
 
 ### By Module
@@ -141,7 +161,12 @@ Audit documentation for gaps, outdated content, and quality issues.
 | Freshness | 68% | 90% | ⚠️ |
 
 ---
+```
 
+### Template — recommended actions and auto-fix
+
+```markdown
+<!-- …continued: recommended actions, auto-fix -->
 ## Recommended Actions
 
 ### Immediate (This Sprint)
@@ -172,7 +197,12 @@ The following can be auto-fixed with `--fix`:
 | Broken relative links | 2 | `/docs-audit --fix` |
 
 ---
+```
 
+### Template — health trend and next review
+
+```markdown
+<!-- …continued: health trend, next review -->
 ## Documentation Health Trend
 
 | Month | Score | Change |
