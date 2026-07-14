@@ -86,6 +86,10 @@ In auto mode the runtime enforces these guards independently of the rules above:
 
 FN-stage commit/cleanup therefore runs under this guard. None of the worktask flows rely on amending a non-agent commit, so the guard is documentation-forward (it reinforces, rather than changes, current behavior).
 
+#### Broadened destructive-removal guards (2.1.205/2.1.208)
+
+CC now guards destructive removals more broadly: auto mode asks before `rm -rf` on an unresolvable variable (2.1.205); catastrophic removals inside `$(…)`/backticks/`<(…)` now prompt even under `--dangerously-skip-permissions` and auto mode (2.1.208); and an auto-mode rule blocks tampering with session transcript files (2.1.205). FN-stage cleanup is unaffected — it never expands unresolved variables into `rm` targets.
+
 ## Pull Request Format
 
 Title: `<type>[scope][!]: <summary>`

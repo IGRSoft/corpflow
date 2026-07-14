@@ -33,6 +33,10 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 > **SessionStart `reloadSkills:true`** (v2.1.152+): when a `SessionStart` hook fires with `reloadSkills: true`, plugin skills are reloaded mid-session (e.g., after a `/reload-skills` command). Since v2.1.174 hot-reload re-announces **only changed skills** (delta, not the full set) — hooks listening on `SessionStart` must re-apply skill-specific initialization idempotently and must not assume every skill re-announces. The `sessionTitle` field (v2.1.77 — allows the agent to set the session title visible in the UI) continues to be available alongside `reloadSkills`.
 
+### SessionStart headless streaming (v2.1.204)
+
+> **SessionStart headless streaming (v2.1.204)**: `SessionStart` hook events now stream in headless sessions — previously a headless run could idle-reap remote workers mid-hook before the `SessionStart` handler finished. Plugin hooks use `${CLAUDE_PLUGIN_ROOT}` exec-form (`type: command` + `args`), so they are unaffected by the v2.1.207 rejection of `${user_config.*}` shell-form hook commands.
+
 ### Compaction recovery & hook-output guards
 
 > Parent agents reliably recover subagent results after context compaction. Background agents that are killed or interrupted preserve partial results in context, preventing total loss of intermediate work. The `PostCompact` hook can re-inject critical state after auto-compaction.

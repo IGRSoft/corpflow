@@ -202,7 +202,9 @@ index `N` from `state.json.run_index` (default `0`).
    any changes you want first."*
    (CC ≥ 2.1.200: `AskUserQuestion` no longer auto-continues on idle by default — the gate holds
    until a human answers. Keep the `/config` idle-timeout opt-in OFF on hosts that run gated
-   worktasks; an idle auto-answer would count as an approval the operator never gave.)
+   worktasks; an idle auto-answer would count as an approval the operator never gave. A
+   background-task completion notification is never this approval either — it now explicitly
+   states no human input occurred, so do not treat it as the operator's answer, CC ≥ 2.1.205.)
 #### Plan gate approval / rejection audit rows
 
 4. **On approval**, append one line to `.context/logs/audit.jsonl`, then proceed to Step A:
