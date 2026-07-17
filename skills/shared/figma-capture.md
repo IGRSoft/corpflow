@@ -12,10 +12,12 @@ When a Figma URL is provided in the task description or user input, capture desi
 Scan the task description for URLs matching:
 
 ```
-figma\.com/design/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
+figma\.com/(?:file|design|proto)/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
 ```
 
 - Group 1: `fileKey`, Group 4: `nodeId` (convert `-` to `:` for API calls)
+- `(?:file|design|proto)` covers all three design-file path forms and is **non-capturing**, so group numbers are unchanged (Group 1 `fileKey`, Group 4 `nodeId`). Keep it in lockstep with the two trigger regexes in `agents/product-manager.md § Figma Design Capture`; if they drift, a `/file/` or `/proto/` URL surfaces in `design-preview` but never fires capture (no PNGs, no registry, QA design gate skipped).
+- Do **not** add `/board/` or `/slides/`: `get_metadata` is design-file-only and rejects FigJam/Slides.
 - Branch URLs: `figma.com/design/:fileKey/branch/:branchKey/...` → use `branchKey` as fileKey
 - URLs without `node-id` are valid — capture the top-level frame
 

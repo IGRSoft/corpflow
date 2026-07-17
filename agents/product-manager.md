@@ -498,8 +498,14 @@ When a Figma URL is provided in the task description or user input, capture desi
 **Trigger** — the task description contains a Figma URL matching:
 
 ```
-figma\.com/design/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
+figma\.com/(?:file|design|proto)/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
 ```
+
+#### Trigger path forms
+
+`(?:file|design|proto)` is non-capturing (Group 1 `fileKey`, Group 4 `nodeId` unchanged) and must match both the `§ design-preview` trigger above and `skills/shared/figma-capture.md § Figma URL Detection`. If the sites drift, a `/file/` or `/proto/` URL surfaces in `design-preview` but never fires capture (no PNGs, no `figma-registry.md`, QA design gate silently skipped). Do **not** add `/board/` or `/slides/` — `get_metadata` is design-file-only and rejects FigJam/Slides.
+
+#### On match — read the capture doc
 
 When this trigger fires, **Read `skills/shared/figma-capture.md`** for the full capture mechanics: URL detection, State Input Contract, Auth Probe, Capture Workflow, Registry Generation (`figma-registry.md` schema), Post-Capture Plan Update, and Coexistence with Pencil mockups. A no-Figma PL run does NOT Read that doc — this trigger never fires and the steady path proceeds without it. The `{{asset:<basename>}}` grammar the capture workflow emits into `## design-preview` stays inline above (§ Asset-placeholder grammar).
 
