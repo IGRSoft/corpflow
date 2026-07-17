@@ -15,6 +15,7 @@ authoritative checks QA greps for.
 | `01-single-screen.md` | Leaf node — one screen | AC-2, AC-3, AC-6 |
 | `02-multi-frame-section.md` | Container — section with 4 child frames | AC-1, AC-3, AC-4, AC-5 |
 | `03-auth-failure.md` | Figma MCP not authenticated — soft halt | AC-8 |
+| `04-alternate-url-forms.md` | `/file/` + `/proto/` forms fire capture; `/board/` + `/slides/` rejected | AC-2, AC-3 |
 
 ## How QA uses these
 
