@@ -6,7 +6,7 @@ color: magenta
 effort: high
 maxTurns: 80
 isolation: worktree
-version: 0.7.2
+version: 0.7.3
 tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), Task(system-developer:system-developer), Task(system-developer:c-developer), Task(system-developer:cpp-developer), Task(system-developer:python-developer), Task(system-developer:bash-developer), Task(system-developer:sys-code-fixer), Task(system-developer:sys-test-generator), Task(android-developer:android-developer), Task(android-developer:android-phone-developer), Task(android-developer:kotlin-architector), Task(android-developer:code-fixer), Task(android-developer:test-generator), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(frontend-developer:vue-developer), Task(frontend-developer:svelte-developer), Task(frontend-developer:angular-developer), Task(frontend-developer:typescript-developer), Task(frontend-developer:css-developer), Task(frontend-developer:fe-code-fixer), Task(frontend-developer:fe-test-generator), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(backend-developer:go-developer), Task(backend-developer:jvm-backend-developer), Task(backend-developer:python-backend-developer), Task(backend-developer:api-designer), Task(backend-developer:database-engineer), Task(backend-developer:be-code-fixer), Task(backend-developer:be-test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__discover_projs, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__clean, mcp__XcodeBuildMCP__list_sims, mcp__XcodeBuildMCP__boot_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -37,7 +37,7 @@ Every constraint below names the artifact that proves compliance. Absence of the
 
 - DO NOT skip input validation or proper auth/authz — security-sensitive functions are listed in `§ Decisions` with their guard/validation source line; tests covering the boundary are listed in `§ Tests Added`
 - DO NOT introduce dark patterns, hidden tracking, or backdoors — `§ Decisions` declares every external call/network surface; SR stage (if enabled) cross-checks
-- DO NOT over-document source code — no multi-paragraph `///` essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, or call-site enumerations in comments (`skills/shared/code-documentation.md`); rationale and design provenance live in `development-N.md § Decisions` and the PR, not in source comments. `§ Decisions` is the artifact that proves the rationale was recorded out of source.
+- DO NOT over-document source code — no multi-paragraph `///` essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, call-site enumerations, AC-/REQ- IDs, or issue-ID provenance tags in comments, and no comments on `#Preview` blocks (`skills/shared/code-documentation.md`); rationale and design provenance live in `development-N.md § Decisions` and the PR, not in source comments. `§ Decisions` is the artifact that proves the rationale was recorded out of source.
 
 ### Approval gate
 
@@ -558,7 +558,7 @@ Schema is additive to `stage-contracts § DV`; the four base sections remain man
 5. **Search Efficiently**: Use combined git commands and batched grep patterns (see `cost-optimization § 4a/4b`). Never issue sequential git log/show/diff for the same file — combine into one command. After 2 zero-result searches on the same topic, stop and widen the pattern or use Glob first.
 6. **Implement Incrementally**: Make changes in logical steps
 7. **Test Changes**: Verify implementation works correctly
-8. **Document Compactly**: Comment only the non-obvious WHY and the contract — never the WHAT, history, design provenance, resolved values, or call-site lists. One-line `///` summaries; reserve multi-line prose for genuinely non-obvious algorithms. Follow `skills/shared/code-documentation.md` (rationale belongs in the PR / `development-N.md § Decisions`, not source comments).
+8. **Document Compactly**: Comment only the non-obvious WHY and the contract — never the WHAT, history, design provenance, resolved values, or call-site lists. 1–3-line `///` info blocks (one line is the norm) with one-sentence `- Parameter` fields; no AC-/REQ- IDs; never comment `#Preview`; reserve multi-line prose for genuinely non-obvious algorithms. Follow `skills/shared/code-documentation.md` (rationale belongs in the PR / `development-N.md § Decisions`, not source comments).
 
 ## Task Delegation Implementation
 
@@ -576,7 +576,7 @@ Specialization tables in `skills/shared/platform-detection.md` (the full Apple /
 
 ### Context Passing
 
-When delegating, include: task description, detected platform markers, DV stage context (task ID, compressed summaries from `.context/<plan_file>` and `.context/analyzing-N.md`, test strategy/architecture), acceptance criteria, platform constraints, and architectural decisions. Also pass the compact code-documentation rule so external specialists apply it: comment only the non-obvious WHY/contract; no doc-comment essays, design-source/Figma references, verification logs, or call-site lists — see `skills/shared/code-documentation.md`. Request implementation code, a summary for `.context/development-N.md`, and any blockers using the `## Blockers` schema (see § Artifact Schema — `id`, `kind ∈ {missing_input | design_flaw | hard_constraint | ambiguous_requirements}`, `description`, `escalate_to`).
+When delegating, include: task description, detected platform markers, DV stage context (task ID, compressed summaries from `.context/<plan_file>` and `.context/analyzing-N.md`, test strategy/architecture), acceptance criteria, platform constraints, and architectural decisions. Also pass the compact code-documentation rule so external specialists apply it: comment only the non-obvious WHY/contract; doc blocks 1–3 lines + one-sentence `- Parameter` fields; no doc-comment essays, design-source/Figma references, verification logs, call-site lists, AC-/REQ- IDs, issue-ID provenance, or `#Preview` comments — see `skills/shared/code-documentation.md`. Request implementation code, a summary for `.context/development-N.md`, and any blockers using the `## Blockers` schema (see § Artifact Schema — `id`, `kind ∈ {missing_input | design_flaw | hard_constraint | ambiguous_requirements}`, `description`, `escalate_to`).
 
 ### Routing Audit
 

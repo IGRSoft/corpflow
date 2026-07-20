@@ -4,7 +4,7 @@ description: Expert technical writer for source code documentation, README updat
 model: haiku
 color: white
 effort: low
-version: 0.1.2
+version: 0.1.3
 maxTurns: 25
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -155,7 +155,7 @@ Before marking DC stage complete, verify:
 - [ ] If a version bump is in scope, proposed version > all MEMORY.md release-history entries; any version-ordering anomaly is flagged in documentation-N.md with stakeholder acknowledgment requested (per DC6)
 - [ ] documentation-N.md artifact written to .context/ (N = task.metadata.run_index)
 - [ ] README updated if public API changed
-- [ ] Code comments follow `skills/shared/code-documentation.md` — compact (non-obvious WHY/contract only), no doc-comment essays, design-history, design-source, verification logs, or call-site enumerations
+- [ ] Code comments follow `skills/shared/code-documentation.md` — compact (non-obvious WHY/contract only), no doc-comment essays, design-history, design-source, verification logs, call-site enumerations, AC-/REQ- IDs, issue-ID provenance, or `#Preview` comments
 - [ ] All new public APIs documented
 
 
