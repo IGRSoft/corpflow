@@ -39,12 +39,36 @@ a copy drifts and lies the moment the source changes.
 
 | Element | Budget |
 |---|---|
-| Doc-comment summary | ≤ ~2 lines (a hard cap of 3); one line is the norm |
-| Params / Returns / Throws | Only when non-obvious; omit when the signature already says it |
+| Function doc block | 1–3-line info block; one line is the norm; only when the name/signature isn't already clear |
+| `- Parameters:` entries / Returns / Throws | One short-to-average sentence each; only when non-obvious — omit when the signature already says it |
+| Var / constant doc | One average sentence, only when the name alone isn't clear; otherwise nothing |
+| SwiftUI `#Preview` | Never commented — no doc line, no inline note, ever |
 | Inline `//` rationale | One short trailing line per non-obvious literal |
 | Longer discussion (multi-line) | Reserved strictly for a genuinely non-obvious **algorithm** — not for restating design, color, history, or callers |
 
 Target comment-to-code density well below 1:1. A file that is ~half prose is over-documented.
+
+## Doc block shape
+
+No parameters — summary lines only (1–3):
+
+```swift
+/// The announcement is only posted if VoiceOver is currently running.
+/// Second line only if needed.
+```
+
+With parameters — summary, one blank `///` line, then a grouped `- Parameters:` block with
+one short sentence per entry (wrap to a continuation line only when unavoidable). A single
+parameter may use `- Parameter x:` on one line instead:
+
+```swift
+/// The announcement is only posted if VoiceOver is currently running.
+///
+/// - Parameters:
+///   - message: The message to announce.
+///   - delay: Optional delay before announcing, so the announcement lands
+///     after view transitions complete.
+```
 
 ## Where rationale belongs instead
 
@@ -54,6 +78,7 @@ Target comment-to-code density well below 1:1. A file that is ~half prose is ove
 | Material/color/approach decision, rejected alternatives, DV verification evidence | **`.context/development-N.md` § Decisions** |
 | Durable architectural decision | **ADR** (`igrsoft:arch-decision`) |
 | Design source (Figma board, rgba/hex) | **design spec / `.context/designs`** (`igrsoft:design-specs`) |
+| `AC-n` / `REQ-n` requirement traceability | **PR description / `.context/` stage artifacts** — never source comments |
 | Resolved token value | **the asset catalog** (the single source of truth) — trust the semantic token |
 
 ## DO NOT
@@ -63,10 +88,14 @@ Target comment-to-code density well below 1:1. A file that is ~half prose is ove
 - DO NOT reference external design sources (Figma board names, design-tool URLs, raw rgba/hex from mockups) in comments.
 - DO NOT add verification logs, audit trails, "verified:"/"resolves to", or per-channel byte dumps.
 - DO NOT enumerate call sites or callers — rely on the compiler and "find usages".
-- DO NOT sprinkle an issue/ticket ID across every symbol — at most one tag per file (the issue link belongs in the PR); the example's `(OV-140)` on 6 sites is provenance noise.
+- DO NOT sprinkle issue/ticket IDs as provenance — tag a function only where that issue materially changed its business logic; the issue link belongs in the PR.
+- DO NOT write acceptance-criteria or requirement IDs (`AC-2`, `REQ-5`) into source comments — traceability lives in the PR and `.context/` artifacts.
+- DO NOT comment SwiftUI `#Preview` blocks — ever.
 - DO NOT restate the symbol name, signature, or body in prose; if the comment echoes the code, delete it.
 
-## Example (BEFORE → AFTER)
+## Examples (BEFORE → AFTER)
+
+### Property example
 
 BEFORE — a 7-line doc block on the gradient property:
 
@@ -88,6 +117,30 @@ AFTER — one doc line + one inline note; hex, Figma ref, and per-stop walkthrou
 …
     .init(color: .clear, location: 1.0),
 ] // endPoint y: 1.42 — >1.0: extend fade past bottom edge
+```
+
+### Function example
+
+BEFORE — a ~35-line `///` essay on a navigation helper (condensed here):
+
+```swift
+/// Opens `SkinAnalysisResultView` (the skin map) for the persisted analysis,
+/// without running a camera session, reconstruction step, or YouCam network
+/// call. Backs the Settings Skin Insights panel's VIEW SKIN MAP CTA (OV-153).
+///
+/// **Why this exists rather than the panel handing over its own data.** …
+/// [… ~28 more lines: restart-hydration narrative, resolution order, guards]
+```
+
+AFTER — a 2-line info block + one `- Parameter` field; the why-narrative moves to the
+PR / `development-N.md § Decisions`, and the issue tag goes (provenance, not a material
+logic change):
+
+```swift
+/// Opens the skin map for a persisted analysis without running a camera
+/// session, reconstruction, or network call.
+/// - Parameter analysisID: The persisted analysis to display.
+func openPersistedSkinMap(analysisID: AnalysisID) { … }
 ```
 
 ## Reconciliation

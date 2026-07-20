@@ -201,7 +201,7 @@ Implement the following for the igrsoft worktask DV stage:
 ## Constraints
 - Platform: {platform}
 - Architecture decisions: {decisions}
-- Code documentation: compact source comments only — non-obvious WHY/contract, never the WHAT, design history, Figma/rgba design sources, verification logs, or call-site lists (skills/shared/code-documentation.md)
+- Code documentation: compact source comments only — non-obvious WHY/contract; function docs 1–3 lines + one-sentence "- Parameter" fields; never the WHAT, design history, Figma/rgba design sources, verification logs, call-site lists, AC-/REQ- IDs, issue-ID provenance, or #Preview comments (skills/shared/code-documentation.md)
 
 ## Expected Output
 1. Implementation code
