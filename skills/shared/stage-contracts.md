@@ -1,6 +1,7 @@
 ---
 name: stage-contracts
 description: Per-stage Inputs→Outputs→Validation contract for every worktask stage (PL/AR/TL/DV/DR/SR/QA/DC/RE/FN/ST/IR/ET). Use when authoring stage agents, implementing handoffs, or validating worktask completion.
+version: 0.1.0
 ---
 
 # Stage Contracts Reference
@@ -202,6 +203,7 @@ handoff:
   stage: PL
   verdict: ok                  # ok / blocked / escalate
   summary: "<one-line summary ≤200 chars>"
+  rejection_reason: "<gate feedback, revisions only; omit on first draft>"
   key_decisions:
     - { id: pd1, summary: "<decision>", anchor: "planning-N.md#scope" }
   next_stage_focus: "<imperative: what AR must grep/design>"
@@ -214,6 +216,8 @@ handoff:
 ```
 
 Prev→this label: `USER→PL`.
+
+After a plan-gate rejection, the revised `planning-N.md` MUST set `rejection_reason:` to the user's gate feedback (verbatim or condensed) — distinct from the `## Key Decisions` narrative — so downstream stages and ST retrospectives can cite it without reconstructing it from `audit.jsonl`. Omit the field on a first, un-rejected draft.
 
 ### #tpl-ar — Architecture (software-architector)
 
