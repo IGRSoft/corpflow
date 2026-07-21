@@ -5,7 +5,7 @@ model: opus
 color: blue
 effort: high
 maxTurns: 40
-version: 0.6.2
+version: 0.7.0
 # tools: Bash(curl:*) is NARROWLY scoped to curl only (NOT bare Bash) so PL0 can
 # persist Figma screenshots IN THE SAME PL TURN. get_screenshot returns a
 # short-lived image URL that expires before the post-approval Phase 2 window
@@ -565,6 +565,27 @@ TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] });
 - `Decision: pass` → AR0 unblocks, worktask continues
 - `Decision: conditional` → AR0 unblocks with ethics constraints injected into prompt
 - `Decision: block` → AR0 remains blocked, worktask halts, user notified
+
+## Scope-Term Disambiguation
+
+Before finalizing a plan draft, scan the task text for a **scope noun with more
+than one plausible referent domain** (e.g. "artifacts", "the system", "the
+tests"). When the competing interpretations map to **materially different file
+sets** — concretely, when they swing the estimated complexity score by more than
+~20% — PL0 MUST NOT silently commit to the broadest reading. Instead, either:
+
+- **(a) Flag a vetoable assumption**: state the chosen interpretation in the plan
+  `## summary` with one line of justification, marked as an assumption the user
+  can override at the gate; OR
+- **(b) Ask one clarifying question** before drafting when the swing is large
+  enough to change the stage set or tier.
+
+### Disambiguation Rationale
+
+A run read "artifacts" as "all Swift packages" (incl. the benchmark harness's own
+test suite) rather than the intended "AI-model-output only" — a 32→43 complexity
+swing (>20%) that cost one full gate-reject/replan cycle (~37 min). Surfacing the
+ambiguity as a flagged assumption at draft time is far cheaper than a re-gate.
 
 ## Plan-Gate Open-Question Batching
 
