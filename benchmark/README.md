@@ -30,7 +30,7 @@ make report        # -> benchmark/results/result.html
 
 # Or explicitly:
 ./benchmark/run-benchmark.sh                        # deterministic
-./benchmark/run-benchmark.sh --live                 # live, --budget 5.00 default
+./benchmark/run-benchmark.sh --live                 # live, --budget 50.00 default
 ./benchmark/run-benchmark.sh --live --budget 2.50
 ./benchmark/run-benchmark.sh --live --stages PL,AR,DV   # targeted stage subset
 ```

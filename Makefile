@@ -172,9 +172,9 @@ benchmark:
 benchmark-live:
 	@echo "[benchmark-live] OPT-IN live A/B — credential probe + budget cap apply."
 	@if [ -n "$(STAGES)" ]; then \
-	    "$(PLUGIN_ROOT)/benchmark/run-benchmark.sh" --live --budget $${BUDGET:-5.00} --stages "$(STAGES)"; \
+	    "$(PLUGIN_ROOT)/benchmark/run-benchmark.sh" --live --budget $${BUDGET:-50.00} --stages "$(STAGES)"; \
 	  else \
-	    "$(PLUGIN_ROOT)/benchmark/run-benchmark.sh" --live --budget $${BUDGET:-5.00}; \
+	    "$(PLUGIN_ROOT)/benchmark/run-benchmark.sh" --live --budget $${BUDGET:-50.00}; \
 	  fi
 	@$(MAKE) --no-print-directory report
 

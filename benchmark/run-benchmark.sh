@@ -26,7 +26,7 @@ PLUGIN_ROOT="$(cd "$BENCH_DIR/.." && pwd)"
 
 MODE="deterministic"
 LIVE=0
-BUDGET="5.00"
+BUDGET="50.00"
 STAGES=""
 
 while [ "$#" -gt 0 ]; do
