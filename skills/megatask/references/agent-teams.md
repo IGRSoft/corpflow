@@ -77,7 +77,7 @@ Each teammate operates in its own worktree. This provides the strongest isolatio
 
 This is the **recommended configuration** for milestone parallel execution when token budget allows it.
 
-**EnterWorktree out-of-tree confirmation**: megatask worktrees live at `${repo_root}/.worktrees/<group>/<issue>` — **outside** `.claude/worktrees/` — so an `EnterWorktree` `path` into a lane worktree triggers a confirmation prompt. Keep unattended lanes under auto/skip-permissions mode (which pre-authorizes the prompt), or rely on cwd-based pre-existing-worktree recognition (see `agents/developer.md:258`).
+**EnterWorktree out-of-tree confirmation**: megatask worktrees live at `${repo_root}/.worktrees/<group>/<issue>` — **outside** `.claude/worktrees/` — so an `EnterWorktree` `path` into a lane worktree triggers a confirmation prompt. Keep unattended lanes under auto/skip-permissions mode (which pre-authorizes the prompt), or rely on cwd-based pre-existing-worktree recognition (see `agents/developer.md:262`).
 
 ## Hook Events for Team Monitoring
 

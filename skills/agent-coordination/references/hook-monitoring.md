@@ -316,7 +316,7 @@ Hook JSON output accepts a `terminalSequence` field for emitting terminal contro
 ```json
 {
   "hookSpecificOutput": {
-    "terminalSequence": "]9;Stage QA complete"
+    "terminalSequence": "\u001b]9;Stage QA complete\u0007"
   }
 }
 ```

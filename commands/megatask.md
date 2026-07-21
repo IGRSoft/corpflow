@@ -125,7 +125,7 @@ least one of the two MUST be present. When both are present, `--issues` filters 
    - the resolved issue set (number, title, priority, `blocked_by`),
    - the DAG as an ordered/levelled list (which issues start immediately vs. wait on blockers),
    - the derived `parallel_tracks` and the **total PR count** this run will open,
-   - the estimated subagent spawn count (`issue_count × ~9–11 stages`) against the session's `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` cap (default 200; see `skills/megatask/SKILL.md § Track Derivation`),
+   - the estimated subagent spawn count (`issue_count × ~9–11 stages`, plus nested-delegation spawns — the cap counts every depth) against the session's `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` cap (default 200; see `skills/megatask/SKILL.md § Track Derivation`),
    - any `external_dependency` warnings and `skipped_has_pr` issues.
 
    Then call `AskUserQuestion`:

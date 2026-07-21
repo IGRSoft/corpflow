@@ -264,7 +264,7 @@ from the filesystem. Diagnose by comparing `git worktree list` to
 
 ### EnterWorktree out-of-tree confirmation
 
-An `EnterWorktree` `path` **outside** `.claude/worktrees/` triggers a confirmation prompt. Keep unattended resume/megatask targets under `.claude/worktrees/`, pre-authorize the prompt via auto/skip-permissions mode, or rely on cwd-based pre-existing-worktree recognition (see `agents/developer.md:258`). Worktree creation does not follow a repository-committed symlink at `.claude/worktrees`, so such a symlink cannot redirect worktree creation outside the repository (informational; no plugin action needed).
+An `EnterWorktree` `path` **outside** `.claude/worktrees/` triggers a confirmation prompt. Keep unattended resume/megatask targets under `.claude/worktrees/`, pre-authorize the prompt via auto/skip-permissions mode, or rely on cwd-based pre-existing-worktree recognition (see `agents/developer.md:262`). Worktree creation does not follow a repository-committed symlink at `.claude/worktrees`, so such a symlink cannot redirect worktree creation outside the repository (informational; no plugin action needed).
 
 In megatask's per-issue worktree fan-out, an "Always allow" rule approved in one issue's worktree persists to every other worktree of the same repo (rules save at the repository root) — the operator approves a given tool/command pattern once per milestone, not once per lane.
 
