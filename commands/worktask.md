@@ -200,11 +200,11 @@ index `N` from `state.json.run_index` (default `0`).
 3. Call `AskUserQuestion`:
    *"Here is the generated plan for your worktask. Approve to begin implementation, or describe
    any changes you want first."*
-   (CC ≥ 2.1.200: `AskUserQuestion` no longer auto-continues on idle by default — the gate holds
+   (`AskUserQuestion` does not auto-continue on idle by default — the gate holds
    until a human answers. Keep the `/config` idle-timeout opt-in OFF on hosts that run gated
    worktasks; an idle auto-answer would count as an approval the operator never gave. A
-   background-task completion notification is never this approval either — it now explicitly
-   states no human input occurred, so do not treat it as the operator's answer, CC ≥ 2.1.205.)
+   background-task completion notification is never this approval either — it explicitly
+   states no human input occurred, so do not treat it as the operator's answer.)
 #### Plan gate approval / rejection audit rows
 
 4. **On approval**, append one line to `.context/logs/audit.jsonl`, then proceed to Step A:
@@ -283,7 +283,7 @@ The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line
 
 #### Post-delegation state.json enforcement (BINDING)
 
-**BINDING: Post-delegation state.json enforcement** — After every `Task()` return (the *completed stage result* — under background-default subagents, CC ≥ 2.1.198, that is the completion notification, not the launch acknowledgement; see `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5), before `TaskUpdate(stage→completed)`: re-read `.context/state.json`; if `stages.<CODE>.status` is NOT `completed`, run
+**BINDING: Post-delegation state.json enforcement** — After every `Task()` return (the *completed stage result* — under background-default subagents, that is the completion notification, not the launch acknowledgement; see `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5), before `TaskUpdate(stage→completed)`: re-read `.context/state.json`; if `stages.<CODE>.status` is NOT `completed`, run
    ```bash
    CLAUDE_ARTIFACT_PATH=".context/<artifact>-N.md" \
    CLAUDE_TASK_METADATA_STAGE="<CODE>" \
@@ -323,12 +323,12 @@ When the task description contains slash commands (e.g., `/skill-creator`, `/app
 3. Store detected commands in `metadata.embedded_commands` on the PL0 task
 4. Pass the embedded command context to PL0 so the product-manager can plan around it
 
-> **Leading stacked skills (CC ≥ 2.1.199)**: when the user stacks slash commands
+> **Leading stacked skills**: when the user stacks slash commands
 > (`/worktask /skill-a do XYZ`), Claude Code itself loads up to 5 **leading** skills before the
 > turn runs — the embedded command's SKILL instructions may already be in context at PL0 time.
 > Extraction into `metadata.embedded_commands` is unchanged, and the DV-stage `Skill()` invocation
 > stays mandatory (it is the execution trigger, not a context load). Re-invoking an already-loaded
-> skill no longer appends a duplicate copy of its instructions (CC ≥ 2.1.202), so the DV
+> skill does not append a duplicate copy of its instructions, so the DV
 > invocation is token-safe.
 
 ### Execution
@@ -412,7 +412,7 @@ claude agents run \
 
 ### Runner rules (model alias, audit, permissions)
 
-The `sonnet` fallback is an alias on purpose — it tracks the current Sonnet tier (Sonnet 5 on CC ≥ 2.1.197) and stays deprecation-proof per `skills/shared/model-selection.md`. `--permission-mode manual` is the CC ≥ 2.1.200 name for `default`; both are accepted. The runner MUST append one `audit.jsonl` line `action: "external_dispatch"` per `skills/agent-coordination/SKILL.md § Audit Trail`. Do NOT pass `--dangerously-skip-permissions` from an interactive shell — it is reserved for CI batches with a deny-list in `settings.json`.
+The `sonnet` fallback is an alias on purpose — it tracks the current Sonnet tier (Sonnet 5) and stays deprecation-proof per `skills/shared/model-selection.md`. `--permission-mode manual` is the current name for `default`; both are accepted. The runner MUST append one `audit.jsonl` line `action: "external_dispatch"` per `skills/agent-coordination/SKILL.md § Audit Trail`. Do NOT pass `--dangerously-skip-permissions` from an interactive shell — it is reserved for CI batches with a deny-list in `settings.json`.
 
 ## See Also
 

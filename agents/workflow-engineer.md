@@ -262,9 +262,11 @@ from the filesystem. Diagnose by comparing `git worktree list` to
 - `EnterWorktree` accepts a `path` parameter to target a specific worktree directory; it can switch between Claude-managed worktrees mid-session (re-target without an `ExitWorktree` first). A background session on a shared checkout is told upfront that edits are blocked until it runs `EnterWorktree` (worktree contract enforced at session start, not via a rejected mid-work edit)
 - Subagents stalled for more than 10 minutes fail with a clear error — escalate or retry rather than waiting indefinitely
 
-### EnterWorktree out-of-tree confirmation (2.1.206)
+### EnterWorktree out-of-tree confirmation
 
-On CC ≥ 2.1.206, an `EnterWorktree` `path` **outside** `.claude/worktrees/` triggers a confirmation prompt. Keep unattended resume/megatask targets under `.claude/worktrees/`, pre-authorize the prompt via auto/skip-permissions mode, or rely on cwd-based pre-existing-worktree recognition (see `agents/developer.md:258`) (2.1.206).
+An `EnterWorktree` `path` **outside** `.claude/worktrees/` triggers a confirmation prompt. Keep unattended resume/megatask targets under `.claude/worktrees/`, pre-authorize the prompt via auto/skip-permissions mode, or rely on cwd-based pre-existing-worktree recognition (see `agents/developer.md:258`). Worktree creation does not follow a repository-committed symlink at `.claude/worktrees`, so such a symlink cannot redirect worktree creation outside the repository (informational; no plugin action needed).
+
+In megatask's per-issue worktree fan-out, an "Always allow" rule approved in one issue's worktree persists to every other worktree of the same repo (rules save at the repository root) — the operator approves a given tool/command pattern once per milestone, not once per lane.
 
 ### Orchestrator / Worktree Mismatch
 

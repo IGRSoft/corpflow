@@ -147,7 +147,7 @@ These automatic improvements compound across multi-stage worktasks — no agent 
 | Dynamic workflows background orchestration | 2.1.154 | Native `/workflows` Workflow tool spawns lightweight background agents (tens–hundreds); no worktask state overhead — complementary to igrsoft staged pipeline |
 | Lean system prompt default on Opus 4.8 | 2.1.154 | Opus 4.8 uses shorter system prompt by default (Haiku/Sonnet/Opus ≤4.7 unchanged); reduces input token cost per request |
 
-### v2.1.173–2.1.172
+### v2.1.172–2.1.173
 
 | Improvement | Version | Impact |
 |-------------|---------|--------|
@@ -155,13 +155,22 @@ These automatic improvements compound across multi-stage worktasks — no agent 
 | 1M sessions without usage credits auto-compact under standard limit | 2.1.172 | Interactive sessions degrade gracefully instead of erroring; budget handoffs against the **standard** window when credits are absent |
 | `availableModels` applied to subagent model overrides + dispatch picker | 2.1.172 | `Task({model})`/`metadata.model` may silently down-resolve under a managed allowlist — cost projections per stage tier need the *resolved* model |
 
-### v2.1.175–2.1.172
+### v2.1.172–2.1.175
 
 | Improvement | Version | Impact |
 |-------------|---------|--------|
 | `enforceAvailableModels` managed setting | 2.1.175 | Allowlist also constrains the Default model; user/project settings cannot widen a managed list — org-pinned cost ceilings become enforceable |
 | Skill hot-reload re-announces only changed skills | 2.1.174 | `/reload-skills` mid-session no longer re-injects the full skill listing — smaller context delta on plugin-dev iterations |
 | Long-conversation responsiveness + idle-CPU fixes | 2.1.172 | Faster turn startup on long worktask sessions; no token effect, less wall-clock per stage |
+
+### v2.1.210–2.1.215
+
+| Improvement | Version | Impact |
+|-------------|---------|--------|
+| `SendMessage` bodies no longer duplicated into replayed history and tool results | 2.1.212 | Direct token reduction on every reattach/nudge/relay path (teammate wake, resume nudges, cross-agent messaging) — the message body is carried once, not re-embedded each turn |
+| Prompt-cache mid-conversation system block works behind LLM gateways and custom base URLs (Bedrock, Vertex, 1P) | 2.1.212 | Gateway-routed deployments get the same cache-hit economics as direct API — the handoff-protocol AC-14 cache ratios now hold behind gateways too |
+| Bedrock/Vertex/Mantle/Foundry prompt-caching regression fix (trailing system block billed as fresh input) | 2.1.211 | Corrects over-billing on cache trailing blocks; reconcile pre-fix cost dashboards against provider billing |
+| Session cost/token telemetry no longer double-counts on streams emitting multiple cumulative message_delta frames | 2.1.214 | /cost and cost-report numbers trustworthy on streaming turns |
 
 ## Calendar Month Billing
 

@@ -65,14 +65,14 @@ Use git trailer format (`token: value` or `token #value`). Hyphens replace space
 - Always prefix with issue code (#PROJ-123)
 - Body must be separated from summary by a blank line
 - Never add "Generated with" or "Co-Authored-By" footers
-- Set `attribution.sessionUrl` to omit the claude.ai session link from commits/PRs (CC ≥ 2.1.183) — keeps the no-AI-footer rule above enforced at the tooling layer
+- Set `attribution.sessionUrl` to omit the claude.ai session link from commits/PRs — keeps the no-AI-footer rule above enforced at the tooling layer
 
 ## Git Safety (beyond CC defaults)
 
 - Never push directly to main/master without PR
 - Never delete branches without explicit user instruction
 
-### Auto-mode Git Safety (CC ≥ 2.1.183)
+### Auto-mode Git Safety
 
 In auto mode the runtime enforces these guards independently of the rules above:
 
@@ -82,13 +82,13 @@ In auto mode the runtime enforces these guards independently of the rules above:
 #### IaC destroy and denial transparency
 
 - **IaC `destroy` is blocked unless the specific stack is named** — a bare `destroy` is refused; the target stack must be specified.
-- **Denials are self-explanatory (CC ≥ 2.1.193)** — auto-mode denial reasons surface in the transcript, the denial toast, and `/permissions` recent denials, so a blocked git guard documents itself in the audit trail. Stricter installs can set `autoMode.classifyAllShell` (CC ≥ 2.1.193) to route ALL shell commands through the classifier, not just arbitrary-code-execution patterns.
+- **Denials are self-explanatory** — auto-mode denial reasons surface in the transcript, the denial toast, and `/permissions` recent denials, so a blocked git guard documents itself in the audit trail. Stricter installs can set `autoMode.classifyAllShell` to route ALL shell commands through the classifier, not just arbitrary-code-execution patterns.
 
 FN-stage commit/cleanup therefore runs under this guard. None of the worktask flows rely on amending a non-agent commit, so the guard is documentation-forward (it reinforces, rather than changes, current behavior).
 
-#### Broadened destructive-removal guards (2.1.205/2.1.208)
+#### Broadened destructive-removal guards
 
-CC now guards destructive removals more broadly: auto mode asks before `rm -rf` on an unresolvable variable (2.1.205); catastrophic removals inside `$(…)`/backticks/`<(…)` now prompt even under `--dangerously-skip-permissions` and auto mode (2.1.208); and an auto-mode rule blocks tampering with session transcript files (2.1.205). FN-stage cleanup is unaffected — it never expands unresolved variables into `rm` targets.
+CC guards destructive removals broadly: auto mode asks before `rm -rf` on an unresolvable variable; catastrophic removals inside `$(…)`/backticks/`<(…)` prompt even under `--dangerously-skip-permissions` and auto mode; and an auto-mode rule blocks tampering with session transcript files. FN-stage cleanup is unaffected — it never expands unresolved variables into `rm` targets.
 
 ## Pull Request Format
 

@@ -1,7 +1,7 @@
 {
   "name": "igrsoft",
   "description": "Comprehensive 11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with Task System integration, developer review, security review, release engineering, incident response, and ST-stage self-improvement retrospectives. Includes /megatask — dependency-DAG orchestration of many worktasks across a GitHub milestone or issue array.",
-  "version": "3.34.2",
+  "version": "3.35.0",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
@@ -114,7 +114,15 @@
     "exact-match-hook-matchers",
     "gh-issue-dedup",
     "cross-run-issue-anchor",
-    "provider-agnostic-paths"
+    "provider-agnostic-paths",
+    "mcp-auto-background",
+    "subagent-spawn-cap",
+    "needs-input-status",
+    "worktree-lock-sweep",
+    "sendmessage-replay-dedup",
+    "cross-worktree-permission-persist",
+    "cwd-anchored-permission-rules",
+    "version-gate-cleanup"
   ],
   "hooks": {
     "PostToolUse": [

@@ -212,9 +212,9 @@ function completeIssue(
 
 ## Worktree Operations
 
-Git worktree isolation for milestone worktasks. Requires Claude Code 2.1.51+.
+Git worktree isolation for milestone worktasks.
 
-> **Shared configuration (2.1.63+)**: Project configs and auto-memory are automatically shared across all git worktrees of the same repo. No per-worktree configuration duplication needed.
+> **Shared configuration**: Project configs and auto-memory are automatically shared across all git worktrees of the same repo. No per-worktree configuration duplication needed.
 
 ### createIssueWorktree
 
@@ -293,7 +293,7 @@ function removeIssueWorktree(
 ```typescript
   // …continued: removeIssueWorktree body
   // 3. Prune stale worktree entries
-  // Note: Stale worktrees from interrupted runs are auto-cleaned on startup (2.1.76+)
+  // Note: Stale worktrees from interrupted runs are auto-cleaned on startup
   // Manual prune as fallback:
   // git worktree prune
   execFileNoThrow('git', ['worktree', 'prune']);
@@ -302,7 +302,7 @@ function removeIssueWorktree(
 }
 ```
 
-### createSparseWorktree (2.1.76+)
+### createSparseWorktree
 
 For large monorepos, use sparse checkout to reduce worktree size:
 
@@ -319,7 +319,7 @@ function createSparseWorktree(
   // 1. Create worktree
   // git worktree add -b ${branchName} ${worktreePath} origin/${baseBranch}
 
-  // 2. Enable sparse checkout (2.1.76+)
+  // 2. Enable sparse checkout
   // git -C ${worktreePath} sparse-checkout init --cone
   // git -C ${worktreePath} sparse-checkout set ${sparsePaths.join(' ')}
 
@@ -420,11 +420,11 @@ function completeIssueWorktree(
     track: null
   });
 
-  // 5. Exit worktree context (2.1.72+)
+  // 5. Exit worktree context
   // If EnterWorktree was used, call ExitWorktree tool before removal
 
   // 6. Remove worktree (branch persists on remote)
-  // Note: Stale worktrees from interrupted runs are auto-cleaned on startup (2.1.76+)
+  // Note: Stale worktrees from interrupted runs are auto-cleaned on startup
   removeIssueWorktree(milestoneNumber, issueNumber);
 }
 ```

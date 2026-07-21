@@ -56,7 +56,7 @@ Prefer XcodeBuildMCP tools over raw `xcodebuild` commands:
 2. `test_sim` → run tests (replaces `xcodebuild test`)
 3. `get_coverage_report` / `get_file_coverage` → coverage analysis (replaces manual lcov parsing)
 
-For long test runs, combine with Monitor tool: start `test_sim` via Bash with `run_in_background`, then use Monitor to stream pass/fail events in real time. Tee stdout to `.context/logs/test-qa-<YYYYMMDD-HHMMSS>.log` for persistence into `testing.md` (see `logging-conventions` skill).
+For long test runs: `test_sim` itself auto-backgrounds past ~2 min (`CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` to tune) — await the completion notification/poll rather than treating the returned handle as results (see `agent-coordination § MCP Auto-Background`). For the Bash `xcodebuild test` fallback, start it with `run_in_background` and attach the Monitor tool to stream pass/fail events in real time. Either way, tee stdout to `.context/logs/test-qa-<YYYYMMDD-HHMMSS>.log` for persistence into `testing.md` (see `logging-conventions` skill).
 
 For documentation lookup, use Context7 (`resolve-library-id` → `query-docs`) or Ref (`ref_search_documentation`). To read non-markdown files or document URLs, use pandoc — see `skills/shared/pandoc-ingestion.md`.
 
@@ -182,6 +182,7 @@ for each registry row R:
 - **Step 3 (live capture) is skipped** for any row with a mapped DV image — the DV result image is both the RMSE `--candidate` and the vision input.
 - `visual-diff.sh` self-degrades: `magick` absent → it emits `verdict=skipped reason=imagemagick_not_found` and exits 0; QA then proceeds vision-only for that row (non-blocking).
 - The fallback branch `(d)` is intentionally a **separately-headed branch that stays byte-equivalent to today's behaviour** (R1): same build→navigate→screenshot→vision, same `source="live-capture"` labelling.
+- **Auto-background**: branch (d)'s `build_run_sim` may auto-background past ~2 min — await the completion notification (not the returned handle) before `navigate`/`screenshot`; see `agent-coordination § MCP Auto-Background`.
 
 #### Per-Frame Comparison
 
@@ -210,6 +211,8 @@ Live re-capture runs **only** when no DV result image maps to a registry row
 (absent `Design Ref` column, all `—`, or no PNG candidate). When a DV image maps,
 this step is skipped and the DV result image is used directly. This branch is
 byte-equivalent to the pre-change behaviour (R1) — same tools, same `source="live-capture"`.
+
+`build_run_sim` past ~2 min auto-backgrounds — await the completion notification before navigating/screenshotting (`agent-coordination § MCP Auto-Background`).
 
 | Platform | Worktask |
 |----------|----------|

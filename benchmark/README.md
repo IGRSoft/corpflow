@@ -159,6 +159,14 @@ plugin-surface coverage ratio (exercised/declared) at report time from
 layered and degrades honestly: stage stdout (stream-json events or single JSON
 object) → `.context/logs/audit.jsonl` → nulls + `live_partial`.
 
+Two runtime guarantees back this chain: the stream-json exit drain scales with
+queued bytes (no flat 2s cap), so a slow-reading consumer no longer sees
+truncated terminal `result` lines; and SIGTERM during a running Bash tool in a
+print/SDK dispatch kills the command's process tree and exits 143, so an
+interrupted `claude -p` surfaces as a clean rc=143 rather than an orphaned
+tree with a false timeout. The defensive line-skip in Coverage parsing stays
+as defense-in-depth.
+
 ## Layout
 
 ```

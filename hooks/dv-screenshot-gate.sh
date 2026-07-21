@@ -23,7 +23,7 @@
 #                    "additionalContext":"<remediation>"}} + screenshot_gate_block row.
 #       present -> pass + screenshot_gate_pass row.
 #       requires_screenshots == false -> pass + screenshot_gate_pass row.
-#   - Gate-feedback contract (v2.1.163+): the block JSON carries
+#   - Gate-feedback contract: the block JSON carries
 #     hookSpecificOutput.additionalContext so the remediation (run
 #     dv-screenshot-capture; headless is not a skip reason; expected manifest
 #     path) flows into the developer re-run's context instead of a dead-end
@@ -114,9 +114,9 @@ run_gate() {
 
   # Required + manifest absent -> BLOCK.
   # Build the block JSON via jq -c (matching the audit-row construction below),
-  # adding hookSpecificOutput.additionalContext (gate-feedback contract,
-  # v2.1.163+) so the remediation flows into the re-run's context. The
-  # decision:block verb + exit-0 discipline are unchanged.
+  # adding hookSpecificOutput.additionalContext (gate-feedback contract) so
+  # the remediation flows into the re-run's context. The decision:block verb
+  # + exit-0 discipline are unchanged.
   _reason="missing screenshots.md — run dv-screenshot-capture (apple-canvas/cli-fallback); headless is not a skip reason"
   _additional_context="run dv-screenshot-capture (apple-canvas/cli-fallback); headless is not a skip reason; expected manifest $_manifest"
   _block=$(jq -cn \
@@ -166,7 +166,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   _bout=$(run_gate "$_bpayload" "$_bctx")
   printf '%s' "$_bout" | jq -e '.decision == "block" and (.reason | test("missing screenshots.md"))' >/dev/null 2>&1 \
     || { echo "dv-screenshot-gate: self-test FAIL (block: no block decision)"; _fail=1; }
-  # Gate-feedback contract (v2.1.163+): block JSON carries actionable remediation.
+  # Gate-feedback contract: block JSON carries actionable remediation.
   printf '%s' "$_bout" | jq -e '
     .hookSpecificOutput.hookEventName == "SubagentStop"
     and (.hookSpecificOutput.additionalContext | length > 0)

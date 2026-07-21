@@ -239,7 +239,7 @@ Before executing any worktask stage, the orchestrator MUST validate:
 5. **Metadata schema check**: Validate next task's metadata against `shared/task-system.md` § JSON Schema (non-PL tasks require `stage`, `agent`, `model`, `error_file`)
 ### Validation checks 6–7
 
-6. **Model alias check**: `metadata.model ∈ {fable, opus, sonnet, haiku}` — reject unknown aliases before `Task()` delegation. Caveat (CC ≥ 2.1.172/2.1.175): under a managed `availableModels` allowlist (now applied to subagent model overrides too) or `enforceAvailableModels`, a *valid* alias may silently resolve to a different model at dispatch — emit a `model_resolution_constrained` audit row when a managed allowlist is in effect; do NOT hard-block
+6. **Model alias check**: `metadata.model ∈ {fable, opus, sonnet, haiku}` — reject unknown aliases before `Task()` delegation. Caveat: under a managed `availableModels` allowlist (applied to subagent model overrides too) or `enforceAvailableModels`, a *valid* alias may silently resolve to a different model at dispatch — emit a `model_resolution_constrained` audit row when a managed allowlist is in effect; do NOT hard-block
 7. **Workspace existence** (megatask per-issue/worktree mode only): verify `metadata.workspace_path` directory exists and `workspace.json` is readable
 ### Validation check 8
 
@@ -335,9 +335,9 @@ function stageArtifactPath(code: string, runIndex: number): string {
 
 After every `Task()` return and BEFORE `TaskUpdate(stage→completed)`, execute this three-layer check:
 
-##### Completion signal (CC ≥ 2.1.198 — subagents run in the background by default)
+##### Completion signal (subagents run in the background by default)
 
-> "`Task()` return" here means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the `TaskUpdate(stage→completed)` that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp `completed` over a still-running stage. Errored returns now propagate honestly (CC ≥ 2.1.199/2.1.200): a subagent cut off by a rate limit or API error reports the error (with any partial work preserved) instead of a successful-looking empty result — classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch on an errored return.
+> "`Task()` return" here means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the `TaskUpdate(stage→completed)` that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp `completed` over a still-running stage. Errored returns propagate honestly: a subagent cut off by a rate limit or API error reports the error (with any partial work preserved) instead of a successful-looking empty result — classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch on an errored return.
 
 ###### Layer check — Layers 1–2
 
@@ -514,7 +514,7 @@ while (tasks.some(t => t.status !== "completed")) {
 ```typescript
     // Resolve plugin: bare → "igrsoft:<name>"; 2-part "plugin:name" → as-is;
     //   3-part "a:b:c" → UNSUPPORTED, throw (message below). The .context/errors/<basename>.md
-    //   basename is the last `:`-segment. Applies at every nesting depth (CC ≥ 2.1.172 allows
+    //   basename is the last `:`-segment. Applies at every nesting depth (the runtime allows
     //   5-deep sub-agent spawning) — depth never legitimizes a 3-part name.
     const colonCount = (agentType.match(/:/g) ?? []).length;
     if (colonCount > 1) {
@@ -884,8 +884,10 @@ while (tasks.some(t => t.status !== "completed")) {
     // 5e. Permission-Mode Pinning (honour task.metadata.permission_mode).
     //     When PL0 set `permission_mode: "default"` (typically SR/FN under --secure/--full),
     //     the orchestrator MUST NOT propagate --dangerously-skip-permissions into descendant
-    //     Task()/Bash calls for this stage, and MUST audit the boundary. Procedural constraint
-    //     backed by audit (Task() has no permission-mode param), not runtime enforcement. See
+    //     Task()/Bash calls for this stage, and MUST audit the boundary. Subagents natively
+    //     inherit the parent session's permission mode (Task()'s deprecated `mode` param is
+    //     ignored), so pinning = not widening the inherited mode; the audit row records that
+    //     the boundary held. See
     //     skills/agent-coordination/references/headless-dispatch.md § Permission-Mode Pinning.
     if (full.metadata.permission_mode === "default") {
       appendAudit({
@@ -920,9 +922,9 @@ while (tasks.some(t => t.status !== "completed")) {
     //     frontmatter scrape runs, and F3 remains the fallback — no migration, no breakage. The
     //     artifact + frontmatter are ALWAYS written either way (on-disk durability/compression +
     //     F4 source); the typed return never replaces them.
-    //     Runtime note: structured-output dispatch is reliable on CC ≥ 2.1.187 (no indefinite
+    //     Runtime note: structured-output dispatch is reliable (no indefinite
     //     StructuredOutput re-call after success; schema-validation failures abort after 5
-    //     attempts on CC ≥ 2.1.186 instead of looping forever).
+    //     attempts instead of looping forever).
     //
 ```
 
@@ -939,9 +941,9 @@ while (tasks.some(t => t.status !== "completed")) {
 
 ```typescript
     // 5f. Model resolution — consult facts.capabilities BEFORE a fable-tier dispatch (v1 additive).
-    //     Fable 5 dispatch fails hard without 1M credits (CC 2.1.172; observed live per
+    //     Fable 5 dispatch fails hard without 1M credits (observed live per
     //     model-selection.md). A prior hard-fail is cached in facts.capabilities — skip re-hitting
-    //     the same error and fall back to the auto-mode best-Opus target (CC 2.1.176),
+    //     the same error and fall back to the auto-mode best-Opus target,
     //     recording model_requested/model_resolved on the dispatch entry below.
     const modelRequested = model;
     let effectiveModel = model;
@@ -975,7 +977,7 @@ while (tasks.some(t => t.status !== "completed")) {
     // 6a. dispatched_agents[] — record/replace the entry keyed by task_id (v1 additive,
     //     writer = orchestrator ONLY). status:"launched" now; Step 6.5 flips it to
     //     completed/failed. No dispatch-timestamp field is stored (no consumer). agent_id/name populated when
-    //     the runtime surfaces them (bg-default launch-ack CC ≥ 2.1.198; named spawns
+    //     the runtime surfaces them (bg-default launch-ack; named spawns
     //     via metadata.spawn_name). Consumed by resume.md step 0. Cache section [3].
     if (fs.existsSync(".context/state.json")) {
       const entry = {
@@ -1022,7 +1024,7 @@ while (tasks.some(t => t.status !== "completed")) {
 ##### Step 6.5a — errored return
 
 ```typescript
-      // 6.5a. Errored return (CC ≥ 2.1.199/2.1.200 propagate errors + partial work).
+      // 6.5a. Errored return (errors propagate with partial work).
       //       Classify per agent-coordination § Retry / Escalate Matrix, write
       //       stages.<CODE>.last_error, flip the dispatch entry to "failed", and route
       //       to the retry matrix — do NOT run the completion patch. (v1 additive.)
@@ -1126,7 +1128,7 @@ while (tasks.some(t => t.status !== "completed")) {
 
 ##### Key rules — completion & tooling
 
-- NEVER mark a task `completed` without first delegating and receiving results — the most common violation. Launch-ack ≠ results: with background-default subagents (CC ≥ 2.1.198) the completion notification (or `subagent_stopped` audit row) is the "results received" signal; an errored return (rate-limit/API error — now propagated with partial work, CC ≥ 2.1.199) routes to the retry/escalate matrix, never to completion
+- NEVER mark a task `completed` without first delegating and receiving results — the most common violation. Launch-ack ≠ results: with background-default subagents the completion notification (or `subagent_stopped` audit row) is the "results received" signal; an errored return (rate-limit/API error — propagated with partial work) routes to the retry/escalate matrix, never to completion
 - The orchestrator uses ONLY TaskCreate, TaskUpdate, TaskGet, TaskList, and Agent tools — Edit/Write/Bash on source files belong to stage agents. It owns the loop; stage agents own their stage's work
 - Prefer in-memory task tracking over `TaskList()` polling. Call `TaskList()` only on first loop entry, after TL/DV stages (which may create sub-tasks), and every 3rd iteration as a consistency check. For linear pipelines, update the local task array from `TaskUpdate` results instead of re-fetching all tasks
 

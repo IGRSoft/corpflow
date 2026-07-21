@@ -125,6 +125,7 @@ least one of the two MUST be present. When both are present, `--issues` filters 
    - the resolved issue set (number, title, priority, `blocked_by`),
    - the DAG as an ordered/levelled list (which issues start immediately vs. wait on blockers),
    - the derived `parallel_tracks` and the **total PR count** this run will open,
+   - the estimated subagent spawn count (`issue_count × ~9–11 stages`) against the session's `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` cap (default 200; see `skills/megatask/SKILL.md § Track Derivation`),
    - any `external_dependency` warnings and `skipped_has_pr` issues.
 
    Then call `AskUserQuestion`:
@@ -148,6 +149,7 @@ parallel_tracks = reduce_by_disk_capacity(parallel_tracks)     # each worktree d
 ```
 
 Never a flag, never a fixed default. Re-derived as the ready-set grows when blockers merge.
+See `skills/megatask/SKILL.md § Track Derivation` for the subagent spawn budget this implies (`CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`, default 200).
 
 ### Phase 2 loop · Steps 1–2 — Select ready issues & assign tracks
 

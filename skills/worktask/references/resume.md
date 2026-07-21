@@ -39,6 +39,7 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 |----------------|------------|--------|
 | Any stage `in_progress` AND `claude agents --json --all` shows live `agent_id` matching that stage | — | Subagent still alive. Branch on `{state, waitingFor}` (see Resume Procedure step 0) — never blind re-delegate a live agent |
 | Live `agent_id` matching that stage AND `waitingFor` = `approval`/`input` | — | Agent parked **on us**. Cheap `SendMessage` reattach with the awaited answer — do not re-delegate |
+| Live `agent_id` matching that stage AND its status reads **"Needs input"** (parked on a sandbox, MCP-input, or managed-settings prompt) | — | Parked **on us** but operator-owned. Reattach via `SendMessage` only to surface the prompt verbatim to the operator — never auto-answer, never re-dispatch a duplicate agent for that stage |
 | Live `agent_id` matching that stage AND `waitingFor` = null/empty (mid-work) | — | Agent busy. **Leave it** — poll/await; do **not** double-dispatch or nudge |
 
 ### Live-agent rows — parked or gone
@@ -52,6 +53,7 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 
 0. `claude agents --json --all | jq '.[] | {agent_id, state, waitingFor}'` — match rows against `.context/state.json.facts.dispatched_agents[]` (`--all` also surfaces completed and just-dispatched sessions) and branch directly:
    - live + `waitingFor` = `approval`/`input` → it is parked **on us**; `SendMessage` the awaited answer (cheap nudge, no re-dispatch).
+   - live + status **"Needs input"** (sandbox / MCP-input / managed-settings prompt) → parked on us but **operator-owned**; reattach only to surface the prompt verbatim — never auto-answer, never re-delegate (see § Step 0 notes — authority caveat).
    - live + `waitingFor` = null/empty (mid-work) → **leave it**; poll/await — do **not** `SendMessage` (avoids nudging a busy agent) and do **not** re-delegate.
    - `state` = `blocked` → alive but parked; **reattach** via `SendMessage`, do not re-delegate.
    - `state` = `done`, or the `agent_id` is genuinely absent even with `--all` → re-delegate from the first incomplete stage.
@@ -70,11 +72,11 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
    - **entry `status: completed|failed`** (terminal) → the stage already resolved; do not reattach — advance to the next incomplete stage. (Terminal entries are eviction candidates and may be absent after compaction; treat absence as "no live agent".)
 #### Worktree re-entry
 
-   - **`stages.<CODE>.worktree.path` recorded** → re-enter the exact worktree with `EnterWorktree(path)` before resuming that stage (CC ≥ 2.1.157 mid-session worktree switching), so DR/QA/DV-retry run in the right directory rather than the shared checkout. The recorded `worktree.branch` gives the branch without shelling `git rev-parse`.
+   - **`stages.<CODE>.worktree.path` recorded** → re-enter the exact worktree with `EnterWorktree(path)` before resuming that stage (mid-session worktree switching), so DR/QA/DV-retry run in the right directory rather than the shared checkout. The recorded `worktree.branch` gives the branch without shelling `git rev-parse`.
 
 ### Step 0 notes — state-signal reliability
 
-   **Reliability note (CC ≥ 2.1.172)**: the `state` signal got more trustworthy — CC 2.1.172 fixed background sub-agents staying stuck as `active` after a nested child they spawned was stopped, and removed the up-to-30s busy-spinner lag in the agents view. With nested spawning live (5 levels), only match **top-level** dispatched agents from `facts.dispatched_agents[]`; rows whose `parent_agent_id` points at another live row are the stage agent's own children — never reattach or re-delegate those directly. Nothing here is retired; the branch table above is unchanged.
+   The `state` signal is trustworthy — a background sub-agent no longer sticks as `active` after a nested child it spawned was stopped. With nested spawning (5 levels), only match **top-level** dispatched agents from `facts.dispatched_agents[]`; rows whose `parent_agent_id` points at another live row are the stage agent's own children — never reattach or re-delegate those directly.
 
 ### Step 0 notes — authority caveat
 
@@ -82,20 +84,21 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 
 ### Step 0 notes — trigger delivery & reattach
 
-   **Trigger-delivery caveat (CC ≥ 2.1.183)**: scheduled-task and webhook trigger deliveries are classified as **task notifications** — in auto mode they can no longer approve a pending action or set a session title. A trigger-delivered event therefore does **not** satisfy a `waitingFor = approval` park (treat it like a relayed message, not operator authority): keep the stage parked and resolve the approval through the operator-owned path. This extends the SendMessage-authority caveat above to trigger deliveries.
+   **Trigger-delivery caveat**: scheduled-task and webhook trigger deliveries are classified as **task notifications** — in auto mode they cannot approve a pending action or set a session title. A trigger-delivered event therefore does **not** satisfy a `waitingFor = approval` park (treat it like a relayed message, not operator authority): keep the stage parked and resolve the approval through the operator-owned path. This extends the SendMessage-authority caveat above to trigger deliveries.
 
-   **Reattach reliability (CC ≥ 2.1.183)**: subagent messages sent while the subagent is finishing its turn are no longer dropped, and `ctrl+b` no longer restarts the session on reattach — a mid-turn reattach is now reliable and will not lose the awaited answer.
+   **Reattach reliability**: subagent messages sent while the subagent is finishing its turn are not dropped, and `ctrl+b` does not restart the session on reattach — a mid-turn reattach is reliable and will not lose the awaited answer.
 
-### Step 0 notes — background-agent reliability
+### Step 0 notes — background-agent guarantees
 
-   **Background-agent reliability (CC 2.1.185→2.1.202)**: (a) sessions that finish or need input fire the `Notification` hook (`agent_completed` / `agent_needs_input`, CC ≥ 2.1.198) — prefer these push signals as the resume wake-up; the `claude agents --json` pre-check above stays the authoritative reconciliation. (b) An errored subagent surfaces as an **error with partial work preserved** instead of an empty success (CC ≥ 2.1.199/2.1.200) — trust `subagent_stopped` `result: error` rows. (c) A stopped background agent stays stopped (CC ≥ 2.1.191), and a worker killed by a daemon restart auto-resumes from where it left off when the agents view next opens (CC ≥ 2.1.196) — re-delegate only when the pre-check shows the agent truly absent.
+   Runtime-assured at the plugin's min CC — the resume loop may rely on all of these unconditionally:
 
-#### Background-agent reliability (continued: d–f)
-
-   (d) Waking a background job can no longer delete its transcript and re-run the original prompt (CC ≥ 2.1.196). (e) Long-running background commands survive the session process being stopped/restarted/updated (CC ≥ 2.1.196), and locked `.git/worktrees/` entries from killed agents are cleaned automatically (CC ≥ 2.1.187) — stale-worktree cleanup is no longer a resume chore. (f) `SendMessage` detects a re-spawned agent reusing a previous agent's name and asks the caller to retarget (CC ≥ 2.1.199) — closes the misroute hazard when re-dispatching a stage under the same name; session `/rename` persists across background restarts on CC ≥ 2.1.202.
-#### Background-agent reliability (continued: g–j, 2.1.203→2.1.208)
-
-   (g) Returning to `claude agents` now carries a running subagent's work **over** instead of restarting from scratch (CC ≥ 2.1.203). (h) `TaskStop`/`TaskOutput` now find agents spawned by **another** agent and list them by id/description on error (CC ≥ 2.1.203) — resume can target a cross-spawned stage agent. (i) A background agent resumed via `SendMessage` no longer sticks as `failed`/`completed` (CC ≥ 2.1.205). (j) Completed background agents stay in `/tasks` until cleanup, and attaching shows the transcript immediately (CC ≥ 2.1.208) — a just-finished stage is still inspectable during resume.
+   - **Push signals**: sessions that finish or need input fire the `Notification` hook (`agent_completed` / `agent_needs_input`) — prefer these as the resume wake-up; the `claude agents --json` pre-check above stays the authoritative reconciliation.
+   - **Honest completion**: an errored subagent surfaces as an **error with partial work preserved**, never an empty success — trust `subagent_stopped` `result: error` rows. Result reporting waits for real completion instead of fabricating a done status for a still-running agent (a behavioral improvement, not a hard invariant — keep the fn-gate cross-check in `references/fn-gate.md`, "BG notification ≠ approval").
+   - **Stopped means stopped**: a stopped background agent stays stopped; an agent killed by the operator never auto-respawns or re-runs a stale prompt; a worker killed by a daemon restart auto-resumes from where it left off when the agents view next opens — re-delegate only when the pre-check shows the agent truly absent.
+   - **Work preservation**: waking a background job cannot delete its transcript or re-run the original prompt; returning to `claude agents` carries a running subagent's work over instead of restarting; long-running background commands survive the session process being stopped/restarted/updated; locked `.git/worktrees/` entries from killed agents are released by a periodic sweep once the owning process is gone — stale-worktree cleanup is not a resume chore.
+   - **Reattach fidelity**: `SendMessage` detects a re-spawned agent reusing a previous agent's name and asks the caller to retarget; a background agent resumed via `SendMessage` does not stick as `failed`/`completed`; an explicit per-stage model override survives resume and follow-up `SendMessage` (the `model_requested`/`model_resolved` pair in `dispatched_agents[]` stays matched across reattach — see `skills/shared/model-selection.md § Per-Invocation Override`); session `/rename` persists across background restarts.
+   - **Cross-spawn targeting**: `TaskStop`/`TaskOutput` find agents spawned by **another** agent and list them by id/description on error — resume can target a cross-spawned stage agent.
+   - **Inspection**: completed background agents stay in `/tasks` until cleanup, and attaching shows the transcript immediately — a just-finished stage is still inspectable during resume. Reopening a stopped background session resumes it or reports why it cannot — treat a resume refusal as a signal to re-delegate, not a reason to retry blindly.
 
 ### Steps 1–7 — replay & audit
 

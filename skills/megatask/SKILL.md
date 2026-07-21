@@ -212,6 +212,8 @@ parallel_tracks = reduce_by_disk_capacity(parallel_tracks)   # each worktree dup
 
 Recorded in `orchestrator.json → configuration.parallel_tracks`. Never a flag/default.
 
+> **Subagent spawn budget**: each issue dispatches ~9–11 stage subagents (9-stage default, 11-stage `--secure`) from the single megatask orchestrator session — all counted against that session's `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` cap (default **200**; see `agent-coordination § Per-session subagent spawn cap`). A milestone/array of **~18+ issues** (11-stage) or **~22+ issues** (9-stage) risks hitting the default cap mid-run, retries included. For larger batches, raise `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` before starting, or split into multiple `/megatask --issues` batches.
+
 ## Status Transitions
 
 ```
