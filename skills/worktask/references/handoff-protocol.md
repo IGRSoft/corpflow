@@ -651,8 +651,8 @@ properties:
 
 ```yaml
 # …continued: dispatched_agents.items.properties
-            agent_id: { type: string, description: "OPTIONAL launch-ack id when the runtime surfaces one (bg-default CC ≥ 2.1.198); resume degrades to best-effort subagent_type match when absent" }
-            name: { type: string, description: "OPTIONAL named-spawn handle (megatask lanes); readable default names CC ≥ 2.1.196, /rename persists CC ≥ 2.1.202" }
+            agent_id: { type: string, description: "OPTIONAL launch-ack id when the runtime surfaces one (background-default dispatch); resume degrades to best-effort subagent_type match when absent" }
+            name: { type: string, description: "OPTIONAL named-spawn handle (megatask lanes); readable default names, /rename persists across restarts" }
             model_requested: { type: string, description: "OPTIONAL — metadata.model alias at dispatch" }
             model_resolved: { type: string, description: "OPTIONAL best-effort — model that actually ran (claude agents --json / audit); omit when unknown" }
             status: { type: string, enum: [launched, completed, failed] }
@@ -698,11 +698,11 @@ OPTIONAL (additive, version:1). Which enforcement layer stamped this stage `comp
 
 #### Field notes — last_error
 
-OPTIONAL (additive, version:1). Written by the orchestrator Step-6.5 errored-return branch (CC ≥ 2.1.199/2.1.200 propagate errors with partial work) BEFORE routing to the retry matrix. `class` reuses the EXISTING taxonomy from `agent-coordination § Retry / Escalate Matrix` — no new vocabulary. Dropped once the stage reaches `status: completed` (see eviction rules).
+OPTIONAL (additive, version:1). Written by the orchestrator Step-6.5 errored-return branch (errors propagate with partial work) BEFORE routing to the retry matrix. `class` reuses the EXISTING taxonomy from `agent-coordination § Retry / Escalate Matrix` — no new vocabulary. Dropped once the stage reaches `status: completed` (see eviction rules).
 
 #### Field notes — worktree
 
-OPTIONAL (additive, version:1; DV primarily). Records WHICH worktree the stage ran in — not just `worktree: true` semantics. Written by mapping the DV handoff frontmatter `worktree_path`/`worktree_branch` (`state-patch.sh`). Lets resume re-enter the exact worktree via `EnterWorktree(path)` (CC ≥ 2.1.157), DR/QA run in the right dir, and fn-gate read the branch without shelling `git rev-parse`. Kept through FN for PR context; dropped at archival.
+OPTIONAL (additive, version:1; DV primarily). Records WHICH worktree the stage ran in — not just `worktree: true` semantics. Written by mapping the DV handoff frontmatter `worktree_path`/`worktree_branch` (`state-patch.sh`). Lets resume re-enter the exact worktree via `EnterWorktree(path)`, DR/QA run in the right dir, and fn-gate read the branch without shelling `git rev-parse`. Kept through FN for PR context; dropped at archival.
 
 #### Field notes — goal
 
@@ -714,11 +714,11 @@ Source files read by prior stages. Populated by DV; consumed by DR/QA to prefer 
 
 #### Field notes — dispatched_agents
 
-OPTIONAL (additive, version:1). Writer: the orchestrator loop ONLY. One entry per `task_id` (NOT per stage — parallel DVN tracks share the stage code), replaced on re-dispatch; dispatch history stays in `audit.jsonl`. Read by resume (`resume.md` step 0) to reconcile against `claude agents --json --all` under background-default dispatch (CC ≥ 2.1.198). No dispatch-timestamp field is stored (no consumer; `claude agents` rows carry their own start time). Terminal entries (`status: completed|failed`) are eviction candidates.
+OPTIONAL (additive, version:1). Writer: the orchestrator loop ONLY. One entry per `task_id` (NOT per stage — parallel DVN tracks share the stage code), replaced on re-dispatch; dispatch history stays in `audit.jsonl`. Read by resume (`resume.md` step 0) to reconcile against `claude agents --json --all` under background-default dispatch. No dispatch-timestamp field is stored (no consumer; `claude agents` rows carry their own start time). Terminal entries (`status: completed|failed`) are eviction candidates.
 
 #### Field notes — capabilities
 
-OPTIONAL (additive, version:1). Probe cache for account-level hard-fails so every later stage does not re-hit the same error. Written by the orchestrator on first observed failure; model resolution consults it before any fable-tier dispatch. Example: `{ "fable_dispatch": "credit_blocked", "checked_at": "<ISO>" }` — Fable 5 is 1M-by-default (CC 2.1.170/2.1.173) but *dispatch* fails hard without 1M credits (CC 2.1.172; observed live per model-selection.md).
+OPTIONAL (additive, version:1). Probe cache for account-level hard-fails so every later stage does not re-hit the same error. Written by the orchestrator on first observed failure; model resolution consults it before any fable-tier dispatch. Example: `{ "fable_dispatch": "credit_blocked", "checked_at": "<ISO>" }` — Fable 5 is 1M-by-default but *dispatch* fails hard without 1M credits (observed live per model-selection.md).
 
 #### Field notes — mcp_session
 

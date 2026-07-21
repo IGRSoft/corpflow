@@ -64,6 +64,8 @@ When called from Claude Code's `Bash` tool with `run_in_background: true`, use t
 3. When `Monitor` detaches, the file remains readable via `Read`.
 4. Reference the file path in downstream stage docs (`testing.md`, `incident-report.md`, `release-prep.md`).
 
+> **MCP auto-background**: the tee pattern above covers Bash-invoked builds/tests. When an MCP tool call itself (`build_sim`, `test_sim`, …) exceeds ~2 min it is auto-backgrounded at the CC layer — no tee'd log exists until the agent reads the completion result. Treat the completion notification, not a `.context/logs/*.log` file's mere presence, as the readiness signal. See `agent-coordination § MCP Auto-Background`.
+
 ## Cleanup & Retention
 
 - **Per-task hygiene**: `.context/logs/` is cleared together with the rest of `.context/` when the task archives (worktask FN stage or `/worktask` completion).

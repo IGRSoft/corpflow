@@ -2,7 +2,7 @@
 
 When `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is enabled, megatask runs can use agent teams for true parallel issue execution instead of sequential Task-based orchestration. (`milestone-{N}` in the paths below is the `<group>` token — `milestone-{N}` in milestone mode, `issues-{shortid}` in array mode.)
 
-> The session **is** the team (CC ≥ 2.1.178): there is one implicit per-session team, so teammates are spawned via `Agent(name: …)` — there is no separate team to create or tear down.
+> The session **is** the team: there is one implicit per-session team, so teammates are spawned via `Agent(name: …)` — there is no separate team to create or tear down.
 
 ## Architecture Comparison
 
@@ -77,7 +77,7 @@ Each teammate operates in its own worktree. This provides the strongest isolatio
 
 This is the **recommended configuration** for milestone parallel execution when token budget allows it.
 
-**EnterWorktree out-of-tree confirmation (2.1.206)**: megatask worktrees live at `${repo_root}/.worktrees/<group>/<issue>` — **outside** `.claude/worktrees/` — so on CC ≥ 2.1.206 an `EnterWorktree` `path` into a lane worktree triggers a confirmation prompt. Keep unattended lanes under auto/skip-permissions mode (which pre-authorizes the prompt), or rely on cwd-based pre-existing-worktree recognition (see `agents/developer.md:258`) (2.1.206).
+**EnterWorktree out-of-tree confirmation**: megatask worktrees live at `${repo_root}/.worktrees/<group>/<issue>` — **outside** `.claude/worktrees/` — so an `EnterWorktree` `path` into a lane worktree triggers a confirmation prompt. Keep unattended lanes under auto/skip-permissions mode (which pre-authorizes the prompt), or rely on cwd-based pre-existing-worktree recognition (see `agents/developer.md:262`).
 
 ## Hook Events for Team Monitoring
 
@@ -90,16 +90,16 @@ Handlers can return `{"continue": false, "stopReason": "..."}` to stop a teammat
 
 ### Teammate lifecycle notes
 
-> Background tasks launched by a teammate (e.g. long test runs) survive the teammate finishing its turn (CC ≥ 2.1.183) — a lane teammate can kick off long-running work without it dying at the turn boundary.
+> Background tasks launched by a teammate (e.g. long test runs) survive the teammate finishing its turn — a lane teammate can kick off long-running work without it dying at the turn boundary.
 
-> **Teammate failure & wake semantics (CC ≥ 2.1.198/2.1.199)**: a teammate that dies on an API error now reports **`failed`** to the lead (no more silently-vanished lanes), messaging a stuck teammate **wakes it to retry immediately**, and `SendMessage` detects a re-spawned teammate reusing a dead teammate's name and asks the caller to retarget. Lead recovery loop: on `failed` → re-spawn the lane; on stalled → `SendMessage` nudge first, re-spawn only if the nudge doesn't wake it. tmux/pane teammates inherit the leader's `--effort` (CC ≥ 2.1.186; `teammateMode: "iterm2"` is an available backend).
+> **Teammate failure & wake semantics**: a teammate that dies on an API error reports **`failed`** to the lead (no silently-vanished lanes), messaging a stuck teammate **wakes it to retry immediately**, and `SendMessage` detects a re-spawned teammate reusing a dead teammate's name and asks the caller to retarget. A stopping teammate does not send the leader duplicate idle notifications when team initialization re-runs within a session. Lead recovery loop: on `failed` → re-spawn the lane; on stalled → `SendMessage` nudge first, re-spawn only if the nudge doesn't wake it. tmux/pane teammates inherit the leader's `--effort` (`teammateMode: "iterm2"` is an available backend).
 
 ### Worktree reliability notes
 
-> **Worktree reliability (CC 2.1.187→2.1.202)**: project-scoped plugins now load correctly inside git worktrees of the same repository (CC ≥ 2.1.200) — lane teammates see the full plugin skill set in their worktrees; locked `.git/worktrees/` registrations from killed teammates are cleaned automatically (CC ≥ 2.1.187); and the resume picker no longer takes minutes in repositories with many worktrees (CC ≥ 2.1.202). Teammates that finish code work in a worktree via `claude agents` auto commit/push/open a **draft PR** (CC ≥ 2.1.198) — aligned with step 6 above and by-design in lanes, since megatask stamps per-issue `fn_gate: "bypass"`.
+> **Worktree reliability**: project-scoped plugins load correctly inside git worktrees of the same repository — lane teammates see the full plugin skill set in their worktrees; locked `.git/worktrees/` registrations from killed teammates are released by a **periodic sweep** once the owning process is confirmed gone — a killed lane never leaves a permanent `git worktree lock` behind; and the resume picker stays fast in repositories with many worktrees. Teammates that finish code work in a worktree via `claude agents` auto commit/push/open a **draft PR** — aligned with step 6 above and by-design in lanes, since megatask stamps per-issue `fn_gate: "bypass"`.
 
 Background completion notifications include `worktreePath` and `worktreeBranch` fields, enabling the orchestrator to locate the correct worktree for each teammate.
 
-### Agent-teams reliability (2.1.203/2.1.207)
+### Agent-teams reliability
 
-> **Mailbox crash-loop fix (2.1.207)**: a malformed teammate mailbox message no longer crash-loops an agent team — previously it errored every second until the mailbox file was manually deleted. **Parent-checkout isolation (2.1.203)**: worktree-isolated subagents no longer run shell commands in the parent checkout, so a lane teammate's `Bash` stays inside its own worktree.
+> **Mailbox robustness**: a malformed teammate mailbox message does not crash-loop an agent team. **Parent-checkout isolation**: worktree-isolated subagents do not run shell commands in the parent checkout — and specifically, **git-mutating commands** from an `isolation: 'worktree'` subagent execute against its own worktree, never the main checkout — so a lane teammate's `Bash` stays inside its own worktree.

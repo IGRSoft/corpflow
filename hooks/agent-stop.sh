@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stop event multiplexer for PL/FN/ST worktask-boundary agents (v3.10.0+).
-# Wired via agent frontmatter `hooks:` (CC 2.1.116+).
+# Wired via agent frontmatter `hooks:`.
 #
 # Writes one canonical `stage_completion_hook` row to
 # .context/logs/audit.jsonl. PushNotification at PL/FN approval gates is

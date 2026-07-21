@@ -98,7 +98,7 @@ IF external_agent_fails:
 
 #### Child tool restrictions
 
-> **Child tool restrictions (CC ≥ 2.1.178 / 2.1.183)**: when handing off to an external-plugin agent, a `disallowedTools` entry may now use MCP **server-level** specs (`mcp__server`, `mcp__*`) and is honored on the child — deny a whole MCP server in one rule instead of enumerating tools (v2.1.178). `WebSearch` works in subagents, so a delegated agent can rely on it (v2.1.178). Auth-capable MCP servers no longer leak auth-stub tools to headless / SDK children (v2.1.183). See `skills/agent-coordination/references/headless-dispatch.md`.
+> **Child tool restrictions**: when handing off to an external-plugin agent, a `disallowedTools` entry may use MCP **server-level** specs (`mcp__server`, `mcp__*`) and is honored on the child — deny a whole MCP server in one rule instead of enumerating tools. `WebSearch` works in subagents, so a delegated agent can rely on it. Auth-capable MCP servers do not leak auth-stub tools to headless / SDK children. See `skills/agent-coordination/references/headless-dispatch.md`.
 
 ### Context Overflow
 
@@ -111,4 +111,4 @@ If handoff exceeds token budget:
 
 > Agent frontmatter accepts full model IDs (e.g., `claude-opus-4-5`) in addition to aliases (`opus`). Cross-plugin handoffs can specify exact model versions when precision matters for provider-specific behavior.
 
-> As of CC 2.1.77, the Agent tool `resume` parameter is removed. Use `SendMessage` to communicate with running background agents. `SendMessage` auto-resumes stopped agents in the background.
+> The Agent tool `resume` parameter is removed. Use `SendMessage` to communicate with running background agents. `SendMessage` auto-resumes stopped agents in the background.

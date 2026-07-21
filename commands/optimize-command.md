@@ -188,7 +188,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 - **examples**: Coverage, diversity, practical scenarios
 - **output**: Format specification, clarity, completeness
 - **integration**: Related commands, agents, worktask stages
-- **frontmatter**: CC 2.1.86–2.1.142 frontmatter audit (description length, model fit, allowed-tools precision, argument-hint alignment) — see § Frontmatter Audit (CC 2.1.86+)
+- **frontmatter**: frontmatter audit (description length, model fit, allowed-tools precision, argument-hint alignment) — see § Frontmatter Audit
 
 ## Optimization Criteria
 
@@ -220,7 +220,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 - Agent relationships documented
 - Worktask stage usage noted
 
-### Frontmatter Audit (CC 2.1.86+)
+### Frontmatter Audit
 
 Run on every command regardless of focus area. Treat findings here as blocking on the "Must Apply" tier. Reference rubric: `skills/shared/model-selection.md § Cost Tiers`.
 
@@ -228,7 +228,7 @@ Run on every command regardless of focus area. Treat findings here as blocking o
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `description` | ≤250 characters (CC 2.1.86 cap). Same metric as agents. | P0 |
+| `description` | ≤250 characters. Same metric as agents. | P0 |
 | `model` | Strict membership: ∈ {`haiku`, `sonnet`, `opus`}. Tier per `model-selection.md`: meta-tooling and orchestration → `opus`; analysis/summary → `sonnet`; one-shot scans → `haiku`. Flag commands that optimize other prompts (`/optimize-*`, `/create-*`, `/prompt-audit`) running on `sonnet` or below — meta-optimization is opus tier. | P0 |
 
 #### Frontmatter Audit — P1 fields
@@ -242,7 +242,7 @@ Run on every command regardless of focus area. Treat findings here as blocking o
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `$ARGUMENTS` substitution | If the command body references `$ARGUMENTS`, the frontmatter `argument-hint` MUST be non-empty. If the body has no `$ARGUMENTS` but `argument-hint` is set, suggest removing the hint. | P2 |
+| `$ARGUMENTS` substitution | If the command body references `$ARGUMENTS`, the frontmatter `argument-hint` MUST be non-empty. If the body has no `$ARGUMENTS` but `argument-hint` is set, suggest removing the hint. Unmatched `$1`/`$2` positional placeholders are preserved verbatim in skill/command bodies (not silently stripped), so positional forms are safe to audit literally. | P2 |
 | Option-to-example coverage | Every documented `--option` in `## Options` should appear at least once in `## Examples`. Compute: `set(options) − set(options-used-in-examples)`. Flag the diff with one-line "missing example for `--<flag>`". | P2 |
 | Output-format consistency | Output samples should match the schema declared in prose. If the command claims "JSON output via `--format json`", flag if the Output Format section shows only Markdown samples. | P2 |
 | Related links | Cross-reference targets (`./create-agent.md`, `../agents/prompt-engineer.md`) must resolve. Flag dead links. | P2 |

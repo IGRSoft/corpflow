@@ -178,7 +178,7 @@ You are a QA engineer specializing in test strategy, test case design, and quali
 - **consistency**: Format, terminology, structure, conventions
 - **tools**: Tool access, permissions, integration
 - **model**: Model selection optimization (haiku/sonnet/opus)
-- **frontmatter**: CC 2.1.86–2.1.142 frontmatter audit (description length, hooks, effort, model, tools least-privilege) — see § Frontmatter Audit (CC 2.1.86+)
+- **frontmatter**: frontmatter audit (description length, hooks, effort, model, tools least-privilege) — see § Frontmatter Audit
 - **failure-modes**: Classify common failures (instruction misunderstanding, output format, context loss, tool misuse, constraint violations)
 
 ## Optimization Criteria
@@ -198,7 +198,7 @@ You are a QA engineer specializing in test strategy, test case design, and quali
 ### Model Selection
 Evaluate model fit against the canonical cost tiers and stage→model mapping: see `skills/shared/model-selection.md` and `skills/shared/stage-codes.md` (canonical).
 
-### Frontmatter Audit (CC 2.1.86+)
+### Frontmatter Audit
 
 Run on every agent regardless of focus area; treat findings here as blocking on the "Must Apply" tier. Reference rubric: `skills/shared/model-selection.md § Cost Tiers` for model/effort matrix; `skills/agent-coordination/references/hook-monitoring.md` for hook events.
 
@@ -206,7 +206,7 @@ Run on every agent regardless of focus area; treat findings here as blocking on 
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `description` | ≤250 characters total (CC 2.1.86 cap). Measure with `awk -F'description: ' '/^description:/{print length($2)}'`. Flag with exact char count if over. | P0 |
+| `description` | ≤250 characters total. Measure with `awk -F'description: ' '/^description:/{print length($2)}'`. Flag with exact char count if over. | P0 |
 | `model` | Strict membership: ∈ {`haiku`, `sonnet`, `opus`, `fable`}. Reject `claude-*`, `claude-sonnet-4-6`, version aliases, or omission. | P0 |
 
 #### Frontmatter audit — effort & tools
@@ -214,23 +214,23 @@ Run on every agent regardless of focus area; treat findings here as blocking on 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
 | `effort` | Present on every stage agent. Validate against model: `xhigh` requires `model: opus` or `model: fable` (Opus 4.8 / Fable 5 honor xhigh; Sonnet silently downgrades — see `skills/cost-optimization/SKILL.md § Per-Effort Thinking-Budget Ceilings`). Effort matches role tier per the model-selection matrix. | P1 |
-| `tools` | Least-privilege: explicit list, no bare wildcards. Flag bare `Bash` without scoped sub-matchers (`Bash(git:*)`, `Bash(swift test:*)`). Scoped pattern wildcards are fine — `WebFetch(domain:*.example.com)` subdomain rules and mid-pattern file rules (`Read(secrets-*/config.json)`) match correctly since CC 2.1.172; still flag unscoped `Bash(*)`/`Read(*)`. Flag `Write`/`Edit` on review-only agents (DR/SR/QA). Cross-check against the agent's documented constraints. | P1 |
+| `tools` | Least-privilege: explicit list, no bare wildcards. Flag bare `Bash` without scoped sub-matchers (`Bash(git:*)`, `Bash(swift test:*)`). Scoped pattern wildcards are fine — `WebFetch(domain:*.example.com)` subdomain rules and mid-pattern file rules (`Read(secrets-*/config.json)`) match correctly; still flag unscoped `Bash(*)`/`Read(*)`. Flag `Write`/`Edit` on review-only agents (DR/SR/QA). Cross-check against the agent's documented constraints. Also flag any single-segment `dir/**` allow-rule (cwd-anchored — require `**/dir/**` for any-depth) and any `Write(path)`/`NotebookEdit(path)`/`Glob(path)` rule (startup warning — use `Edit(path)`/`Read(path)`). | P1 |
 
 #### Frontmatter audit — hooks, maxTurns, disallowedTools
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `hooks:` (v2.1.116+) | Required on PL/FN/ST agents (gate notifications). Optional but recommended on stage agents that emit terminal artifacts (DV, DR, QA, SR, RE) once v3.11.0 ships the rollout. Until then, flag PL/FN/ST omissions only. | P1 (PL/FN/ST) / P2 (others) |
+| `hooks:` | Required on PL/FN/ST agents (gate notifications). Optional but recommended on stage agents that emit terminal artifacts (DV, DR, QA, SR, RE) once v3.11.0 ships the rollout. Until then, flag PL/FN/ST omissions only. | P1 (PL/FN/ST) / P2 (others) |
 | `maxTurns` | Present and proportional to role: coordinators (DV, AR) ≥60; reviewers (DR, QA, SR) 30–60; one-shot (haiku-tier) ≤30. | P2 |
-| `disallowedTools` (v2.1.78) | Consider for review-only agents to harden the constraint contract (e.g., DR with `disallowedTools: Write, Edit, mcp__XcodeBuildMCP__test_*`). Suggest, do not block. | P2 |
+| `disallowedTools` | Consider for review-only agents to harden the constraint contract (e.g., DR with `disallowedTools: Write, Edit, mcp__XcodeBuildMCP__test_*`). Suggest, do not block. | P2 |
 
 #### Frontmatter audit — isolation, color, mcpServers
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `isolation: worktree` (v2.1.98+) | Present on agents that mutate the working tree across split runs (DV, code-fixer). Flag missing on agents with both `Edit` and `git`-mutating Bash matchers. | P2 |
+| `isolation: worktree` | Present on agents that mutate the working tree across split runs (DV, code-fixer). Flag missing on agents with both `Edit` and `git`-mutating Bash matchers. | P2 |
 | `color` | Cosmetic; no enforcement. |
-| `mcpServers` (v2.1.142) | Optional. If absent, MCP scope must be enforced via inline `mcp__<server>__*` entries in `tools`. Do not flag unless the agent both lists no `mcp__*` tools AND uses `Skill(*)` wildcards — that combination silently broadens scope. | P2 |
+| `mcpServers` | Optional. If absent, MCP scope must be enforced via inline `mcp__<server>__*` entries in `tools`. Do not flag unless the agent both lists no `mcp__*` tools AND uses `Skill(*)` wildcards — that combination silently broadens scope. | P2 |
 
 #### Frontmatter audit — name uniqueness
 

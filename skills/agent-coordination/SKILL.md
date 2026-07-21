@@ -225,7 +225,7 @@ review, the audit tail is the single source of truth for what happened.
 #### Dedupe-key shapes — tool & subagent
 
 - `tool_invoked`: `"<session_id>:<tool_use_id>"`
-- `subagent_stopped`: `"<session_id>:<agent_id>:<task_id>:stop"` (v3.10.1+; the `<task_id>` segment disambiguates back-to-back DV0/DV1 split-task retries where `agent_id` is constant. Pre-v3.10.1 producers may emit the legacy shape `"<session_id>:<agent_id>:stop"` — readers MUST treat both prefixes as the same key for a single `(session, agent, task)` row to preserve dedupe across the upgrade. Orchestrator populates `task_id` in hook stdin where the runtime exposes it; on older CC builds the hook degrades to legacy shape automatically.)
+- `subagent_stopped`: `"<session_id>:<agent_id>:<task_id>:stop"` (v3.10.1+; the `<task_id>` segment disambiguates back-to-back DV0/DV1 split-task retries where `agent_id` is constant. Pre-v3.10.1 producers may emit the legacy shape `"<session_id>:<agent_id>:stop"` — readers MUST treat both prefixes as the same key for a single `(session, agent, task)` row to preserve dedupe across the upgrade. Orchestrator populates `task_id` in hook stdin where the runtime exposes it; the hook degrades to legacy shape automatically when it is absent.)
 
 #### Dedupe-key shapes — stage & issue
 
@@ -348,21 +348,25 @@ for full code patterns.
 
 > **Cross-plugin AR collaboration**: For Apple platform projects, `software-architector` consults `apple-developer:apple-architector` during AR stage for Swift app architecture (pattern selection, DI, navigation, concurrency). See `cross-plugin-handoff` skill for the full protocol.
 
-#### Nested delegation (CC ≥ 2.1.172)
+#### Nested delegation
 
-> **Nested delegation (CC ≥ 2.1.172)**: sub-agents spawn their own sub-agents, up to **5 levels deep**. Level-2 specialists reached via the table above may themselves delegate Level-3 — e.g. orchestrator → `developer` → `apple-developer:ios-developer` → `apple-developer:test-generator` is now a native chain; the orchestrator no longer needs to flatten Tier-2 dispatch into its own loop. Foreground and background subagents share the same 5-level depth budget (CC ≥ 2.1.181) — a foreground chain plus a backgrounded child count against one cap. Budget accordingly: each level summarizes results upward, and `/cost-report`'s `dispatch_depth` column makes depth visible.
+> **Nested delegation**: sub-agents spawn their own sub-agents, up to **5 levels deep**. Level-2 specialists reached via the table above may themselves delegate Level-3 — e.g. orchestrator → `developer` → `apple-developer:ios-developer` → `apple-developer:test-generator` is a native chain; the orchestrator does not flatten Tier-2 dispatch into its own loop. Foreground and background subagents share the same 5-level depth budget — a foreground chain plus a backgrounded child count against one cap. Budget accordingly: each level summarizes results upward, and `/cost-report`'s `dispatch_depth` column makes depth visible.
 
-#### Pre-launch spawn classification (CC ≥ 2.1.178)
+#### Pre-launch spawn classification
 
-> **Pre-launch spawn classification (CC ≥ 2.1.178)**: in auto mode the permission classifier evaluates a subagent spawn **before** it launches, so a dispatch can be denied up front (`PermissionDenied` hook fires). The orchestrator must handle a refused spawn — treat a denied dispatch like a failed stage and route per the retry/escalate matrix rather than assuming every `Task(...)` starts.
+> **Pre-launch spawn classification**: in auto mode the permission classifier evaluates a subagent spawn **before** it launches, so a dispatch can be denied up front (`PermissionDenied` hook fires). The orchestrator must handle a refused spawn — treat a denied dispatch like a failed stage and route per the retry/escalate matrix rather than assuming every `Task(...)` starts.
 
-#### Background-by-default dispatch (CC ≥ 2.1.198)
+#### Background-by-default dispatch
 
-> **Background-by-default dispatch (CC ≥ 2.1.198)**: subagents now run in the **background by default** — the dispatching agent keeps its turn and receives the child's result as a completion notification. Two consequences for the worktask loop: (1) a `Task()` launch acknowledgement is NOT stage completion — advance a stage (Step 6.5, `TaskUpdate(completed)`) only on the completion notification or the `subagent_stopped` audit row (`skills/worktask/SKILL.md § Orchestrator Execution Loop`); (2) unblocked sibling stages (parallel DVN tracks, DC+QA) genuinely overlap with no extra orchestration.
+> **Background-by-default dispatch**: subagents run in the **background by default** — the dispatching agent keeps its turn and receives the child's result as a completion notification. Two consequences for the worktask loop: (1) a `Task()` launch acknowledgement is NOT stage completion — advance a stage (Step 6.5, `TaskUpdate(completed)`) only on the completion notification or the `subagent_stopped` audit row (`skills/worktask/SKILL.md § Orchestrator Execution Loop`); (2) unblocked sibling stages (parallel DVN tracks, DC+QA) genuinely overlap with no extra orchestration.
 
 ##### Depth accounting & background permission prompts
 
-> Depth accounting stays correct across resume: resumed subagents restore their original spawn depth and forked subagents count toward the 5-level cap (CC ≥ 2.1.187). Permission prompts from background subagents surface in the main session — dialog names the asking agent; Esc denies just that tool — instead of being auto-denied (CC ≥ 2.1.186), so an unattended run parks on them (see the resume `waitingFor` branch table).
+> Depth accounting stays correct across resume: resumed subagents restore their original spawn depth and forked subagents count toward the 5-level cap. Permission prompts from background subagents surface in the main session — dialog names the asking agent; Esc denies just that tool — instead of being auto-denied, so an unattended run parks on them (see the resume `waitingFor` branch table).
+
+##### Per-session subagent spawn cap
+
+> A session caps total subagent spawns at **200** by default (`CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`; raise it before a run known to exceed the cap). Distinct from the 5-level nesting-depth budget above — this is a running *count* of every spawn in the session regardless of depth. `/clear` resets the counter. A single `/megatask` run is the plugin's most likely path to the default cap — see `skills/megatask/SKILL.md § Track Derivation` for the per-batch spawn estimate and when to raise the env var or split the batch.
 
 ### Model Selection
 
@@ -383,11 +387,11 @@ The Task tool `model` parameter allows per-invocation overrides:
 Task({ subagent_type: "igrsoft:developer", model: "opus" })
 ```
 
-> **Parameterized permission syntax (CC ≥ 2.1.178)**: permission rules accept a `Tool(param:value)` form with `*` wildcard support — e.g. `Agent(model:opus)` permits only opus-model spawns, `Agent(model:*)` permits any model override. Use this to constrain which dispatch overrides auto mode may take without hand-listing every agent. `Agent(type)` deny rules and `Agent(x,y)` allowed-types restrictions are enforced for **named** subagent spawns too as of CC 2.1.186 (previously leaked past named spawns).
+> **Parameterized permission syntax**: permission rules accept a `Tool(param:value)` form with `*` wildcard support — e.g. `Agent(model:opus)` permits only opus-model spawns, `Agent(model:*)` permits any model override. Use this to constrain which dispatch overrides auto mode may take without hand-listing every agent. `Agent(type)` deny rules and `Agent(x,y)` allowed-types restrictions are enforced for **named** subagent spawns too.
 
 #### Model aliases, allowlists & @-mentions
 
-> Agent teams inherit the leader's model. Teammates use the parent session's model unless explicitly overridden. Model aliases (`fable`/`opus`/`sonnet`/`haiku`) work correctly across all providers (Anthropic, Bedrock, Vertex, Foundry). Allowlist caveat (v2.1.172/v2.1.175): a managed `availableModels` list now constrains subagent model overrides too, and `enforceAvailableModels` constrains the Default model — a valid alias may silently resolve to a different model; see `skills/worktask/SKILL.md § Pre-Stage Validation` step 6.
+> Agent teams inherit the leader's model. Teammates use the parent session's model unless explicitly overridden. Model aliases (`fable`/`opus`/`sonnet`/`haiku`) work correctly across all providers (Anthropic, Bedrock, Vertex, Foundry). Allowlist caveat: a managed `availableModels` list constrains subagent model overrides too, and `enforceAvailableModels` constrains the Default model — a valid alias may silently resolve to a different model; see `skills/worktask/SKILL.md § Pre-Stage Validation` step 6.
 
 > Named subagents appear in `@`-mention typeahead suggestions, making it easier to reference and communicate with running agents via `SendMessage`.
 
@@ -397,7 +401,7 @@ Task({ subagent_type: "igrsoft:developer", model: "opus" })
 
 #### Skill discovery & subagent_type resolution
 
-> Subagents discover project + user + plugin skills natively. Orchestrators do not need to inline-load skill instructions before delegation — the child can resolve `Skill("name")` from any source the parent could. This holds at every nesting depth (CC ≥ 2.1.172): a Level-3 child resolves skills the same way a Level-1 child does.
+> Subagents discover project + user + plugin skills natively. Orchestrators do not need to inline-load skill instructions before delegation — the child can resolve `Skill("name")` from any source the parent could. This holds at every nesting depth: a Level-3 child resolves skills the same way a Level-1 child does.
 
 > `subagent_type` matching is case- and separator-insensitive. `Task({ subagent_type: "IGRSoft:Developer" })` resolves to the same agent as `igrsoft:developer`. Bare-name → `igrsoft:` prefix convention still applies for resolution priority, but typos in case/separator no longer fail-stop the call.
 
@@ -455,14 +459,23 @@ than hanging indefinitely. Monitor sessions inherit this guard — if the
 background process stops producing output for >10min, treat as failure and
 escalate per `Error Handling § Retry / Escalate Matrix`.
 
-Idle background shells may additionally be reaped under memory pressure
-(CC ≥ 2.1.193) — set `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` on hosts
+Idle background shells may additionally be reaped under memory pressure —
+set `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` on hosts
 where a long-lived monitor or `tee` pipe must survive; the `tee`'d
 `.context/logs/*.log` file remains the durable record either way.
 
 ### MCP Large Result Handling
 
 MCP servers can annotate tool results with `_meta["anthropic/maxResultSizeChars"]` to allow results up to 500K characters without truncation. Useful for large outputs like database schemas or build logs from XcodeBuildMCP.
+
+### MCP Auto-Background
+
+Any MCP tool call running past the auto-background threshold (default **2 minutes**; tune or disable with `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` — per-dispatch scoping is only real for an external headless dispatch launched with its own environment; in-process `Task()` dispatches share the session's setting) is moved to the background by Claude Code itself — the calling agent gets back a background-task handle, not the terminal result. Handle it exactly like a backgrounded `Task()` dispatch (`§ Background-by-default dispatch` above):
+
+- Do NOT parse the handle/acknowledgement as the build/test outcome — await the completion notification (or poll the task) before reading results.
+- Any completion gate that reads a log or artifact the MCP call produces (e.g., `developer § D1`'s `build-developer-*.log`) MUST wait for the real completion signal — a log still being written is not "done"; file presence alone proves nothing.
+- XcodeBuildMCP `build_sim` / `build_run_sim` / `test_sim` routinely exceed 2 minutes — DV/DR/QA flows that chain on their results must await between steps.
+- Raise or disable the threshold only when a run genuinely needs a synchronous result within one turn (e.g., DV's edit-batch-build fix-up cycle diagnosing a full log in one pass) — practical only for external headless dispatches with their own environment; avoid raising it session-wide, since every other MCP call in that session loses the safety net.
 
 ### MCP Tool Inheritance
 
@@ -492,11 +505,13 @@ Sub-agents in isolated worktrees automatically receive Read/Edit access to their
 
 Background subagents that fail report partial progress instead of returning nothing. Orchestrators can inspect partial results for recovery.
 
-Error propagation is trustworthy as of CC 2.1.199/2.1.200: a subagent cut off by a rate limit or server error returns its **partial work** to the parent; an API error (e.g. usage limit reached) is reported to the parent as an **error** rather than a successful-looking result; and a cutoff before any text now fails cleanly instead of returning an empty result. A teammate that dies on an API error reports `failed` to the lead (CC ≥ 2.1.198). Classify these as `transient` per § Retry / Escalate Matrix — never treat an errored return as stage completion (see `skills/worktask/SKILL.md` Step 6.5 completion-signal rule).
+Error propagation is trustworthy: a subagent cut off by a rate limit or server error returns its **partial work** to the parent; an API error (e.g. usage limit reached) is reported to the parent as an **error** rather than a successful-looking result; and a cutoff before any text fails cleanly instead of returning an empty result. A teammate that dies on an API error reports `failed` to the lead. Classify these as `transient` per § Retry / Escalate Matrix — never treat an errored return as stage completion (see `skills/worktask/SKILL.md` Step 6.5 completion-signal rule).
 
 ### Forked Subagents
 
 External builds of Claude Code can enable forked subagents by setting `CLAUDE_CODE_FORK_SUBAGENT=1`. This also works in non-interactive sessions (SDK and `claude -p`). Use forked subagents when a stage needs a deterministic snapshot of the parent's context rather than a fresh session.
+
+> Command-surface note: the `/fork` slash command copies the conversation into a new **background session** (its own row in `claude agents`); the in-session forked-subagent behavior it used to launch lives at `/subtask`. Neither replaces the env-var mechanism above.
 
 ### Subagent Worktree Isolation Reuse
 
@@ -701,9 +716,9 @@ Claude Code ships a native `/workflows` command and Workflow tool for **dynamic 
 
 They can compose: a DV agent inside an igrsoft worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
 
-> Naming note: the `/config` **"Dynamic workflow size"** setting (CC ≥ 2.1.202; advisory small/medium/large agent counts) governs **native dynamic workflows** only — it is unrelated to PL0 dynamic *sizing* (complexity-scored stage selection). Workflow-spawned agents carry `workflow.run_id`/`workflow.name` OpenTelemetry attributes (CC ≥ 2.1.202), so a composed DV fan-out can be reconstructed from OTel data alongside the plugin's audit trail.
+> Naming note: the `/config` **"Dynamic workflow size"** setting (advisory small/medium/large agent counts) governs **native dynamic workflows** only — it is unrelated to PL0 dynamic *sizing* (complexity-scored stage selection). Workflow-spawned agents carry `workflow.run_id`/`workflow.name` OpenTelemetry attributes, so a composed DV fan-out can be reconstructed from OTel data alongside the plugin's audit trail.
 
 ### Gate prompts (AskUserQuestion)
 
-> Claude reserves multiple-choice / AskUserQuestion prompts for genuine decisions that require user input. After the PL plan-approval gate, stage transitions are automatic — the PL gate itself is the one `AskUserQuestion` checkpoint; intra-loop transitions proceed without user confirmation. `AskUserQuestion` dialogs no longer auto-continue on idle by default (CC ≥ 2.1.200) — a PL/FN gate park holds indefinitely until the operator answers; the idle-timeout auto-continue is an explicit `/config` opt-in and MUST stay off on hosts running gated worktasks.
+> Claude reserves multiple-choice / AskUserQuestion prompts for genuine decisions that require user input. After the PL plan-approval gate, stage transitions are automatic — the PL gate itself is the one `AskUserQuestion` checkpoint; intra-loop transitions proceed without user confirmation. `AskUserQuestion` dialogs do not auto-continue on idle by default — a PL/FN gate park holds indefinitely until the operator answers; the idle-timeout auto-continue is an explicit `/config` opt-in and MUST stay off on hosts running gated worktasks.
 

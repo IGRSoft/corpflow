@@ -130,7 +130,7 @@ Estimated Remaining: ~$0.15
 
 - `bg_tasks_active` = max(`metadata.background_tasks_count`) observed across hook rows for that stage in `audit.jsonl` (writers: `hook:audit-subagent`, `hook:agent-stop`; field added v3.10.6).
 - `session_crons` = same, for `metadata.session_crons_count`.
-- `dispatch_depth` = computed from the `metadata.parent_agent_id` chain — 0 when `"none"`, otherwise `1 + depth(parent)`. Activates with CC ≥ 2.1.172 (sub-agents spawn sub-agents up to 5 levels deep) — depths ≥ 1 now appear whenever a stage agent delegates to a specialist; on older CC the column stays 0.
+- `dispatch_depth` = computed from the `metadata.parent_agent_id` chain — 0 when `"none"`, otherwise `1 + depth(parent)`. Sub-agents spawn sub-agents up to 5 levels deep — depths ≥ 1 appear whenever a stage agent delegates to a specialist.
 
 #### Background Activity — Notable Column & Dedup Mode
 

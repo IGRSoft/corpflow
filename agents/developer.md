@@ -154,6 +154,8 @@ When building or testing Apple platform code directly (not delegating to apple-d
 2. **Build.** Use `mcp__XcodeBuildMCP__build_sim` or `build_run_sim`. If warmup failed, substitute `xcodebuild -project … -scheme … -destination …` via Bash and tee output to the same `.context/logs/build-developer-<ts>.log` path so QA/DR are unaffected.
 3. **Test.** Use `mcp__XcodeBuildMCP__test_sim`. If warmup failed, substitute `xcodebuild test -project … -scheme … -destination …` via Bash and tee to `.context/logs/test-developer-<ts>.log`. **Test Selection Gate**: see step D2 below for the full protocol. The `test_sim` invocation receives positive `-only-testing:<TestID>` flags (one per Selected Test), or no `-only-testing:` when `test_mode=full`. Do **not** use blanket `-skip-testing:` — selection is positive, not negative.
 
+> MCP builds/tests past ~2 min auto-background — await the completion notification before reading `.context/logs/build-developer-*.log` / `test-developer-*.log`; the returned handle is not the result. See `agent-coordination § MCP Auto-Background`.
+
 ## Worktask Integration
 
 ### DV Stage (Development)
@@ -183,6 +185,8 @@ When building or testing Apple platform code directly (not delegating to apple-d
   3. **Build once**: run `build_sim` (or Bash fallback) AFTER all planned edits are applied.
   4. **Fix-up cycle**: if build fails, diagnose ALL errors from the log in one pass, apply ALL fixes, then rebuild. Do not fix one error, build, fix the next, build again.
   Every build attempt is captured via tee → `.context/logs/build-developer-<ts>.log` (filename grammar: `logging-conventions`)
+
+> `build_sim` past ~2 min auto-backgrounds — step 4's "diagnose ALL errors from the log in one pass" must wait for the completion notification, not the returned handle, before reading the log. An external headless dispatch that genuinely needs a synchronous fix-up cycle may raise `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` in its own environment; in-process dispatches share the session's setting. See `agent-coordination § MCP Auto-Background`.
 
 #### D1.5 — Write unit tests
 
@@ -259,11 +263,11 @@ Background subagents spawned via `claude agents` cannot escape their assigned wo
 
 ##### Out-of-tree confirmation guard
 
-On CC ≥ 2.1.206, `EnterWorktree` with a `path` **outside** `.claude/worktrees/` triggers a confirmation prompt. Unattended DV/resume flows should keep targets under `.claude/worktrees/`, pre-authorize via `bypassPermissions`/skip-permissions mode, or rely on the cwd-based pre-existing-worktree recognition above (2.1.206).
+`EnterWorktree` with a `path` **outside** `.claude/worktrees/` triggers a confirmation prompt. Unattended DV/resume flows should keep targets under `.claude/worktrees/`, pre-authorize via `bypassPermissions`/skip-permissions mode, or rely on the cwd-based pre-existing-worktree recognition above.
 
 ##### Background session lifecycle
 
-Background agents launched via `/bg` or `←←` preserve the active permission mode across retire/wake — a permissive `bypassPermissions` parent does not revert to `default` after the daemon hibernates. Sub-agents in isolated worktrees automatically get Read/Edit access to their own worktree. Stalled subagents fail with a clear error after 10 minutes — surface and retry rather than waiting. Subagents resumed via `SendMessage` restore their explicit spawn `cwd` correctly.
+Background agents launched via `/bg` or `←←` preserve the active permission mode across retire/wake — a permissive `bypassPermissions` parent does not revert to `default` after the daemon hibernates. Sub-agents in isolated worktrees automatically get Read/Edit access to their own worktree. Stalled subagents fail with a clear error after 10 minutes — surface and retry rather than waiting. Subagents resumed via `SendMessage` restore their explicit spawn `cwd` correctly. "Always allow" permission rules save at the repository root and persist across every worktree of that repo — a rule approved in one background/worktree session is not re-prompted in a sibling worktree.
 
 ### Worktree cwd discipline
 
@@ -299,7 +303,7 @@ Per `skills/logging-conventions/SKILL.md`, developer-owned log kinds and scopes:
 |------|-------|------|
 | `build` | `developer` (or platform tag e.g. `ios-sim`, `macos`) | Every compile/build invocation |
 | `test`  | `developer` | Every D1.5/D2 unit test run |
-| `monitor` | `developer` | Background MCP build/test attached via Monitor tool |
+| `monitor` | `developer` | Background MCP build/test attached via Monitor tool, or an auto-backgrounded MCP call awaited via completion notification |
 
 All stdout/stderr captured via the tee pattern (`logging-conventions § Bash Pattern`). Filename: `<kind>-<scope>-$(date -u +%Y%m%d-%H%M%S).log`. Never `/tmp` or sibling `log/`. Redact secrets before tee.
 
@@ -596,7 +600,7 @@ Before marking DV stage complete, verify:
 
 ### Completion checks — logs, audit & checklist
 
-- [ ] `.context/logs/build-developer-*.log` and `.context/logs/test-developer-*.log` exist with successful exit
+- [ ] `.context/logs/build-developer-*.log` and `.context/logs/test-developer-*.log` exist with successful exit — if the MCP call auto-backgrounded, confirm via the completion notification/poll, not file presence alone
 - [ ] `.context/logs/audit.jsonl` contains `approval_check`, `platform_detected`, and `artifact_created` entries (plus `delegation` if routed; `retry_attempt` per retry)
 - [ ] Append the completed checklist verbatim as `## DV Completion Checklist` in `.context/development-N.md` with `[x]` boxes ticked — orchestrator validation greps for this header
 
@@ -672,7 +676,7 @@ handoff:
 #### Field notes — worktree fields
 
 - `worktree`: MUST be true — DV always runs in an isolated worktree. DR treats `false` as a hard fail (`worktree_isolation_violation`) unless an explicit waiver exists (`worktree_isolation_waived` audit row or `task.metadata.worktree_waived`) — see § D0.0.
-- `worktree_path` (OPTIONAL, additive): the isolated worktree's absolute path — `state-patch.sh` maps it to `stages.DV.worktree.path`. Lets resume re-enter via `EnterWorktree(path)` (CC ≥ 2.1.157) and DR/QA run in the right dir. Set to the worktree you confirmed in D0.0 (WORKSPACE_ROOT when the workspace IS the worktree).
+- `worktree_path` (OPTIONAL, additive): the isolated worktree's absolute path — `state-patch.sh` maps it to `stages.DV.worktree.path`. Lets resume re-enter via `EnterWorktree(path)` and DR/QA run in the right dir. Set to the worktree you confirmed in D0.0 (WORKSPACE_ROOT when the workspace IS the worktree).
 - `worktree_branch` (OPTIONAL, additive): the worktree's git branch — maps to `stages.DV.worktree.branch`; gives fn-gate the branch without shelling `git rev-parse`.
 
 ### State.json Atomic Merge — REQUIRED before return
