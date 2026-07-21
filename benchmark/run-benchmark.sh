@@ -97,6 +97,27 @@ if [ "$LIVE" = "1" ]; then
   # The shell exit stays cosmetic (D6): the adapter already wrote the record
   # (incl. rc=4 partials) to $RECORD_PATH — read granularity from disk.
   [ "$rc" -eq 0 ] || fail "live dispatch returned rc=$rc (record, if any, at $RECORD_PATH)"
+  # Rotate the completed live record into per-mode latest-3 history + runs
+  # detail (the deterministic arm does this inside bench-deterministic).
+  # rotate() appends same-run_id entries, so a script rerun must skip ingest.
+  PYTHONPATH="$BENCH_DIR/harness${PYTHONPATH:+:$PYTHONPATH}" python3 -c '
+import json, sys
+from benchmarkkit import rotation
+record_path, history_path, runs_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(record_path) as f:
+    record = json.load(f)
+rid = record.get("run_id", "")
+try:
+    with open(history_path) as f:
+        existing = [r.get("run_id") for r in json.load(f).get(record.get("mode", "live"), [])]
+except (OSError, ValueError):
+    existing = []
+if rid and rid in existing:
+    sys.exit(0)
+rotation.rotate(history_path, record)
+rotation.rotate_detail(runs_dir, rid, record)
+' "$RECORD_PATH" "$HISTORY" "$RUNS_DIR" || fail "live history rotation failed"
+  note "live record rotated into history."
 else
   # ---------------------------------------------------------------------------
   # DETERMINISTIC path — build both real apps + write the comparison record.
