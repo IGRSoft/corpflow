@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with Task System integration, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 3.35.0 · Requires Claude Code 2.1.215+**
+**Plugin 3.35.1 · Requires Claude Code 2.1.215+**
 
 ## Features
 
@@ -288,10 +288,11 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/appstore-iap` | Set up App Store Connect in-app purchases |
 | `/appstore-screenshots` | Generate App Store screenshots |
 
-### Skills (24 total)
+### Skills (25 total)
 - `agent-coordination` — Multi-agent coordination, handoffs, parallel execution, error escalation
 - `appstore-screenshots` — App Store screenshot generation (device specs, layout, Pencil MCP)
 - `claude-constitution` — Constitutional principles and ethics framework
+- `code-comment-standard` — Compact source-comment standard (WHY/contract only); loadable skill wrapping code-documentation.md
 - `context-compression` — Context compression between agent handoffs
 - `cost-optimization` — Token and cost tracking/optimization
 - `cross-plugin-handoff` — Handoff protocol to external plugins (apple-developer, system-developer, …)
