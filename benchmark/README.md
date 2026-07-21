@@ -1,4 +1,4 @@
-# Plugin Benchmark — Dual-Path Tic-Tac-Toe A/B Test (Swift harness)
+# Plugin Benchmark — Dual-Path Tic-Tac-Toe A/B Test (Python harness)
 
 Measures plugin overhead via a real, runnable **SwiftUI multiplatform Tic-Tac-Toe
 app** (macOS 15+ / iOS 18+) built two ways: **WITH the plugin's staged worktask
@@ -7,9 +7,13 @@ it** (single-shot baseline). Each generated app ships its own passing **Swift
 Testing** suite; the harness runs the tests, captures all metrics, and stores the
 latest 3 results per mode as a rolling history.
 
-The harness itself is Swift (SwiftPM package `benchmark/harness/`, zero external
-dependencies). The plugin's skill scripts (`skills/**/scripts/*.py`) stay Python
-and are exercised via subprocess — python3 remains a host prerequisite.
+The harness itself is Python (stdlib-only package `benchmark/harness/` —
+`benchmarkkit` + `benchmarklive` + `bin/` entrypoints + `tests/`, zero external
+dependencies, no build step). It still subprocesses `swift build` / `swift test`
+against the generated apps and the `ttt-template` — that Swift toolchain call IS
+the measurement instrument, so swift stays a hard host prerequisite alongside
+python3, jq, and make. The plugin's skill scripts (`skills/**/scripts/*.py`) stay
+Python and are exercised in-process by the Python skill-script test suite.
 
 ## Quick Start
 
@@ -172,18 +176,22 @@ as defense-in-depth.
 ```
 benchmark/
   run-benchmark.sh              # Orchestrator (deterministic default, --live opt-in)
-  harness/                      # SwiftPM package "BenchmarkHarness" (Swift 6.2)
-    Sources/BenchmarkKit/       #   deterministic world: Metrics/Rotation/GenLib/
-                                #   Generators/DeterministicRun/Report
-    Sources/BenchmarkLive/      #   live world: Preamble/Dispatch/Credentials/
-                                #   Budget/Coverage (depends on BenchmarkKit)
-    Sources/bench-deterministic # executable — links BenchmarkKit ONLY (AC-8)
-    Sources/bench-report        # executable — links BenchmarkKit ONLY
-    Sources/bench-live          # executable — the only live-world linker
-    Tests/BenchmarkKitTests/    # 91 tests (schema/rotation/generators/report/
-                                #   history back-compat/package graph)
-    Tests/BenchmarkLiveTests/   # 49+ tests (live-gate/budget/credentials/
-                                #   prompt-assembly/SSOT/coverage/prompt lint)
+  harness/                      # Python package "benchmark harness" (stdlib-only)
+    benchmarkkit/               #   deterministic world: metrics/rotation/genlib/
+                                #   generators/deterministic_run/report (6 modules)
+    benchmarklive/              #   live world: preamble/dispatch/credentials/
+                                #   budget/capture (5 modules, depends on benchmarkkit)
+    bin/
+      bench-deterministic       # frozen-argv entrypoint (links benchmarkkit only, AC-8)
+      bench-report              # frozen-argv entrypoint (links benchmarkkit only)
+      bench-live                # frozen-argv entrypoint (only live-world linker)
+    tests/                      # 95 test methods (schema/rotation/generators/report/
+                                #   history back-compat/import-isolation + live-gate/
+                                #   budget/credentials/prompt-assembly/SSOT/coverage)
+      __init__.py               # makes tests/ a package (importlib discovery)
+      _helpers.py               # test fakes: Tripwire/RecordingFake/ThrowAtStage
+      fixtures/history.json     # vendored real history (byte-compat oracle)
+      test_*.py                 # 16 test modules
   ttt-template/                 # Canonical SwiftUI TTT fixture (SwiftPM package
                                 # "TicTacToe": TicTacToeKit + tictactoe exe,
                                 # 48 Swift Testing tests; macOS 15+ / iOS 18+)
@@ -224,17 +232,21 @@ Legacy records (3 token keys, no `app_path`) still decode.
 
 ## Test suites
 
-- `benchmark/ttt-template` — 48 fixture tests (engine/AI/leaderboard/settings/
-  router/view-model), also run on iOS Simulator via `make test-ios` (SKIPs
-  cleanly on hosts without an iOS runtime)
-- `benchmark/harness` — 140 harness self-tests, zero LLM calls (injected
-  fake/tripwire dispatcher), incl. `HistoryBackCompatTests` (vendored real
-  history.json) and the AC-8 package-graph assertion
-- `tests/swift` — 38 PluginScriptsTests shelling the unchanged Python skill
-  scripts
+- `benchmark/ttt-template` — 48 Swift Testing fixture tests (engine/AI/
+  leaderboard/settings/router/view-model), also run on iOS Simulator via
+  `make test-ios` (SKIPs cleanly on hosts without an iOS runtime)
+- `benchmark/harness` — 95 Python harness self-tests (16 modules), zero real
+  LLM calls (all dispatchers injected with fakes/tripwires), incl. schema
+  byte-compat (vendored real history.json), rotation, generators (real `swift test`
+  on generated apps), deterministic/live pipelines, budget/credential gates,
+  prompt assembly, and stage attribution
 
-**Reference:** `tests/COVERAGE.md` for the Swift coverage story (jq ≥85% line
-gate; `Sources/TicTacToeKit/Views/` excluded from the denominator).
+**Total:** 48 Swift TTT artifact tests + 95 Python harness tests + 37 Python
+skill-script tests = 180+ tests green.
+
+**Reference:** `tests/COVERAGE.md` for the Swift/Python coverage story (Python
+opportunistic via coverage.py; Swift jq ≥85% line gate with `Sources/TicTacToeKit/Views/`
+excluded from the denominator).
 
 ## Known Issues
 

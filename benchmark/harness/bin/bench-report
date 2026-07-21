@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""bench-report — render benchmark/results/history.json into result.html.
+
+Imports ONLY benchmarkkit (AC-8). Exit codes: 0 success, 64 bad argv.
+Argv: bench-report [--history <path>] [--out <path>] [--plugin-root <dir>]
+"""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from benchmarkkit import report
+
+
+def die(message, code):
+    sys.stderr.write(message + "\n")
+    sys.exit(code)
+
+
+def main(argv):
+    history = out = plugin_root = None
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("-h", "--help"):
+            print("bench-report [--history <path>] [--out <path>] [--plugin-root <dir>]")
+            sys.exit(0)
+        if a in ("--history", "--out", "--plugin-root"):
+            if i + 1 >= len(argv):
+                die(f"bench-report: {a} needs a value", 64)
+            value = argv[i + 1]
+            i += 2
+            if a == "--history":
+                history = value
+            elif a == "--out":
+                out = value
+            else:
+                plugin_root = value
+        else:
+            die(f"bench-report: unknown arg '{a}'", 64)
+
+    cwd = os.getcwd()
+    history_path = history or os.path.join(cwd, "benchmark", "results", "history.json")
+    out_path = out or os.path.join(cwd, "benchmark", "results", "result.html")
+    root = plugin_root or cwd
+
+    try:
+        written = report.build_report(history_path, out_path, plugin_root=root)
+    except Exception as exc:  # noqa: BLE001 — top-level CLI guard
+        die(f"[report] error: {exc}", 1)
+    print(f"[report] wrote {written}")
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

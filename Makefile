@@ -1,4 +1,4 @@
-# Makefile — igrsoft plugin test suite + dual-path TTT benchmark (Swift harness)
+# Makefile — igrsoft plugin test suite + dual-path TTT benchmark (Python harness)
 #
 # Targets:
 #   make bootstrap       vendored-bats present-check; swift toolchain check;
@@ -24,10 +24,10 @@ COVERAGE     ?= 0
 # Coverage line-coverage gate (per AC-3; 85 is the floor).
 COV_MIN      ?= 85
 
-# The three Swift packages.
+# The retained Swift artifact package (measurement instrument).
 TTT_PKG      := $(PLUGIN_ROOT)/benchmark/ttt-template
-HARNESS_PKG  := $(PLUGIN_ROOT)/benchmark/harness
-SCRIPTS_PKG  := $(PLUGIN_ROOT)/tests/swift
+# The Python harness directory (NOT a Swift package — stdlib-only entrypoints + tests).
+HARNESS_DIR  := $(PLUGIN_ROOT)/benchmark/harness
 
 # kcov instrumentation scope.
 KCOV_INCLUDE := $(PLUGIN_ROOT)/skills,$(PLUGIN_ROOT)/hooks,$(PLUGIN_ROOT)/.claude/hooks
@@ -106,9 +106,9 @@ coverage: bootstrap
 	    echo "[coverage] running bats uninstrumented so tests still gate; see tests/COVERAGE.md."; \
 	    "$(BATS)" $(SHELL_TESTS); \
 	  fi
-	@echo "[coverage] swift coverage phase (3 packages, gate >=$(COV_MIN)%)…"
+	@echo "[coverage] swift coverage phase (ttt-template artifact, gate >=$(COV_MIN)%)…"
 	@set -e; \
-	  for pkg in "$(TTT_PKG)" "$(HARNESS_PKG)" "$(SCRIPTS_PKG)"; do \
+	  for pkg in "$(TTT_PKG)"; do \
 	    echo "[coverage]   swift test --enable-code-coverage ($$pkg)"; \
 	    swift test --enable-code-coverage --package-path "$$pkg" >/dev/null || exit $$?; \
 	    cov=$$(swift test --show-codecov-path --package-path "$$pkg" 2>/dev/null | tail -1); \
@@ -124,6 +124,17 @@ coverage: bootstrap
 	    ok=$$(jq -n --argjson p "$$pct" --argjson m "$(COV_MIN)" '$$p >= $$m'); \
 	    [ "$$ok" = "true" ] || { echo "[coverage] FAIL: $$pkg below $(COV_MIN)%"; exit 1; }; \
 	  done
+	@echo "[coverage] python phase (opportunistic coverage.py; report-only, no clean-clone dep)…"
+	@if command -v coverage >/dev/null 2>&1; then \
+	    echo "[coverage]   coverage.py present — measuring the Python suites"; \
+	    coverage run -m unittest discover -s "$(PLUGIN_ROOT)/tests/python" -p 'test_*.py' >/dev/null 2>&1 || true; \
+	    ( cd "$(HARNESS_DIR)" && PYTHONPATH="$(HARNESS_DIR)/tests" coverage run -a -m unittest discover -s tests -t . -p 'test_*.py' >/dev/null 2>&1 ) || true; \
+	    coverage report || true; \
+	  else \
+	    echo "[coverage]   coverage.py absent — running the Python suites uninstrumented (behavioral gate)"; \
+	    python3 -m unittest discover -s "$(PLUGIN_ROOT)/tests/python" -p 'test_*.py'; \
+	    ( cd "$(HARNESS_DIR)" && PYTHONPATH="$(HARNESS_DIR)/tests" python3 -m unittest discover -s tests -t . -p 'test_*.py' ); \
+	  fi
 	@echo "[coverage] done."
 
 # ---------------------------------------------------------------------------
@@ -148,8 +159,8 @@ benchmark:
 	@echo "[benchmark] deterministic dual-path TTT (no --live, no network)…"
 	@"$(PLUGIN_ROOT)/benchmark/run-benchmark.sh"
 	@echo "[benchmark] running harness self-tests (schema / rotation / generators)…"
-	@swift test --package-path "$(HARNESS_PKG)"
-	@"$(HARNESS_PKG)/.build/release/bench-report" \
+	@( cd "$(HARNESS_DIR)" && PYTHONPATH="$(HARNESS_DIR)/tests" python3 -m unittest discover -s tests -t . -p 'test_*.py' )
+	@python3 "$(HARNESS_DIR)/bin/bench-report" \
 	  --history "$(PLUGIN_ROOT)/benchmark/results/history.json" \
 	  --out "$(PLUGIN_ROOT)/benchmark/results/result.html" \
 	  --plugin-root "$(PLUGIN_ROOT)"
@@ -171,8 +182,7 @@ benchmark-live:
 # report: render benchmark/results/history.json -> benchmark/results/result.html
 # ---------------------------------------------------------------------------
 report:
-	@swift build -c release --package-path "$(HARNESS_PKG)" >/dev/null
-	@"$(HARNESS_PKG)/.build/release/bench-report" \
+	@python3 "$(HARNESS_DIR)/bin/bench-report" \
 	  --history "$(PLUGIN_ROOT)/benchmark/results/history.json" \
 	  --out "$(PLUGIN_ROOT)/benchmark/results/result.html" \
 	  --plugin-root "$(PLUGIN_ROOT)"
@@ -185,6 +195,7 @@ clean:
 	@echo "[clean] removing workdirs / coverage / .build dirs / caches…"
 	@rm -rf "$(PLUGIN_ROOT)/benchmark/workdirs"/* 2>/dev/null || true
 	@rm -rf "$(COVDIR)" 2>/dev/null || true
-	@rm -rf "$(TTT_PKG)/.build" "$(HARNESS_PKG)/.build" "$(SCRIPTS_PKG)/.build" 2>/dev/null || true
+	@rm -rf "$(TTT_PKG)/.build" 2>/dev/null || true
+	@rm -f "$(PLUGIN_ROOT)/.coverage" "$(HARNESS_DIR)/.coverage" 2>/dev/null || true
 	@find "$(PLUGIN_ROOT)" -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
 	@echo "[clean] done (history.json + tests/vendor preserved)."

@@ -4,8 +4,9 @@
 # AC-1: on a clean clone with the Swift toolchain, python3, jq, and make present
 # (NO system bats / pytest / kcov), `./run-tests.sh` self-bootstraps the vendored
 # bats and runs the full deterministic suite green. No network. No live dispatch.
-# python3 remains a prerequisite because the plugin's skill scripts
-# (skills/**/scripts/*.py) stay Python and PluginScriptsTests shells out to them.
+# python3 remains a prerequisite: the plugin's skill scripts
+# (skills/**/scripts/*.py) stay Python, and both the skill-script tests and the
+# benchmark-harness tests are native Python (stdlib unittest; no system pytest).
 #
 # `make test` delegates here. A bare `./run-tests.sh` is equivalent.
 #
@@ -72,11 +73,9 @@ else
   warn "no .bats files found under tests/shell"
 fi
 
-# --- run swift test phases (ttt-template, harness, tests/swift) --------------
+# --- run swift test phases (ttt-template artifact only) ----------------------
 swift_packages=(
   "$PLUGIN_ROOT/benchmark/ttt-template"
-  "$PLUGIN_ROOT/benchmark/harness"
-  "$PLUGIN_ROOT/tests/swift"
 )
 for pkg in "${swift_packages[@]}"; do
   if [ -f "$pkg/Package.swift" ]; then
@@ -87,6 +86,15 @@ for pkg in "${swift_packages[@]}"; do
     rc=1
   fi
 done
+
+# --- run python test phases (skill-script tests + harness tests) -------------
+# stdlib unittest only (no system pytest) — preserves the AC-1 clean-clone guarantee.
+note "python3 -m unittest → tests/python (skill-script tests)"
+( cd "$PLUGIN_ROOT" && python3 -m unittest discover -s tests/python -p 'test_*.py' ) || rc=$?
+note "python3 -m unittest → benchmark/harness/tests (harness suite)"
+( cd "$PLUGIN_ROOT/benchmark/harness" \
+    && PYTHONPATH="$PLUGIN_ROOT/benchmark/harness/tests" \
+       python3 -m unittest discover -s tests -t . -p 'test_*.py' ) || rc=$?
 
 if [ "$rc" -eq 0 ]; then
   note "ALL GREEN"
