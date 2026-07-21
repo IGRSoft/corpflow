@@ -40,6 +40,7 @@ All available skills for the igrsoft worktask plugin.
 
 | Skill | Description | Effort |
 |-------|-------------|--------|
+| [code-comment-standard](code-comment-standard/SKILL.md) | Compact source-comment standard — comment the non-obvious WHY and the contract only; budgets + ban-list; wraps the shared code-documentation.md source of truth | low |
 | [request-plan](request-plan/SKILL.md) | Lightweight context-aware plan (goal, scope, phases, rough effort, risks) from a free-form request, with a worktask-trigger handoff | medium |
 | [senior-developer-review](senior-developer-review/SKILL.md) | Technical review framework for estimates by platform specialists | low |
 | [security-review-process](security-review-process/SKILL.md) | OWASP Top 10 security review checklist, dependency supply-chain triage, and secure coding patterns | medium |
@@ -59,6 +60,7 @@ Files in `shared/` are referenced by skills and agents, not loaded independently
 
 | File | Purpose |
 |------|---------|
+| [code-documentation.md](shared/code-documentation.md) | Compact source-code comment standard (frontmatter name code-comment-standard) — single source of truth for the /// and // budgets, doc-block shapes, and BEFORE→AFTER examples |
 | [constitutional-base.md](shared/constitutional-base.md) | Base constitutional principles |
 | [five-whys.md](shared/five-whys.md) | Five Whys root cause analysis technique |
 | [git-conventions.md](shared/git-conventions.md) | Conventional Commits format, PR template, git safety rules |

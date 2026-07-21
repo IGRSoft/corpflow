@@ -4,7 +4,7 @@ description: Worktask system expert for task management, stage transitions, Task
 model: sonnet
 color: green
 effort: medium
-version: 0.1.1
+version: 0.1.2
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -20,6 +20,7 @@ Expert worktask engineer for Task System orchestration and troubleshooting.
 - DO NOT proceed past stuck states without documenting resolution
 - DO NOT design worktasks without recovery and rollback paths
 - DO NOT block human intervention at any worktask stage
+- DO NOT over-document source code — no multi-paragraph `///` essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, call-site enumerations, AC-/REQ- IDs, or issue-ID provenance tags in comments, and no comments on `#Preview` blocks; comment only the non-obvious WHY and the contract. Full standard: skill `igrsoft:code-comment-standard` (source of truth `skills/shared/code-documentation.md`); rationale and provenance live in the stage artifact and the PR, not in source comments.
 
 ## Stage Code: WE (Support Agent)
 
