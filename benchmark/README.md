@@ -107,8 +107,9 @@ make benchmark-live
 - **NEVER CI** — credential-gated, real spend
 - Full pipeline PL→AR→TL→DV→DR→SR→QA→DC→FN→ST (10 stages — SR is in the
   benchmark's live pipeline even when a given worktask drops it as a stage),
-  one headless `claude -p` dispatch per stage, frozen argv:
-  `claude -p --model <m> --effort <e> --permission-mode default
+  one headless `claude -p` dispatch per stage, frozen argv (BOTH arms identical except `--agent`):
+  `claude -p --model <m> --effort <e> --permission-mode bypassPermissions
+  --settings benchmark/live/settings/benchmark-settings.json
   --output-format <json|stream-json> --agent <agent>`; prompt fed on stdin as
   the assembled `[1][2][3][4][5]` cache-prefix layout
 - `--stages CODE[,CODE…]` (or `make benchmark-live STAGES=…`) dispatches a
@@ -142,35 +143,37 @@ frozen stderr message, rc=3, no dispatch, no record.
 **bench-live exit codes:** 0 success · 2 pre-flight decline · 3 no credential ·
 4 running-tally breach/degraded (partial record on disk) · 64 bad usage.
 
-## WITHOUT-arm baseline (live)
+## Paired ±agent runner (live)
 
-A live run can also dispatch a single-shot, no-`--agent` baseline (`claude -p
---model claude-opus-4-8 --effort high ...`) that generates the SAME app
-single-shot, mirroring the deterministic WITHOUT path but with a real dispatch
-instead of a template copy:
+A live run dispatches **both a WITH-agent arm and a WITHOUT-agent arm**, each executing
+the full **10-stage prompt sequence** (PL→AR→TL→DV→DR→SR→QA→DC→FN→ST) in parallel:
 
-- **Policy default**: `real` on a full pipeline run, `skip` on a `--stages`
-  subset — `--without-arm real|skip` (`run-benchmark.sh --live` or `bench-live`)
-  overrides the default either way
-- **Dispatch order**: the arm is dispatched **FIRST**, before any WITH stage, and
-  its record is flushed to disk immediately — a later WITH-stage budget breach
-  still leaves a real WITH-vs-WITHOUT comparison point on disk
-- **Prompt**: `benchmark/live/prompts/without.txt` sent **verbatim** on stdin — no
-  `[1]-[4]` cache-prefix preamble, since there is no staged worktask contract to
-  remind a single-shot dispatch of
-- **Budget**: counts as one extra dispatch in the pre-flight projection
-  (`len(stages) + 1`) when `real`; the running-tally gate applies to it exactly
-  like any WITH stage
-- **Measurement**: wall-clock and `loc_produced`/`test_count`/`pass_fail` are
-  measured per arm from each arm's own generated app
-  (`benchmark/workdirs/<run_id>/{with,without}/`) — the WITH-side LOC count
-  excludes the sibling `without/` directory
-- **Failure handling**: a `DispatchFailure` from the arm is tolerated (the WITH
-  pipeline still runs); a degraded/failed arm sets `live_partial` and the
-  WITHOUT path's `pass_fail` to `"fail"`
-- **`without_arm="skip"` (mechanism default)**: reproduces the pre-existing
-  WITH-only placeholder byte-for-byte — WITHOUT tokens/cost `null`,
-  `wall_clock_s: 0.0`, `stage_count: 1`, `pass_fail: "pass"`, `app_path: null`
+- **Symmetric arm folders**: each arm runs under its own dedicated `benchmark/workdirs/<run_id>/{with,without}/`
+  directory; generated app, test results, and stage-context logs live inside each arm's folder
+- **Shared prompt files**: both arms consume the identical ordered 10-stage prompt files
+  (`benchmark/live/prompts/{pl,ar,tl,dv,dr,sr,qa,dc,fn,st}.txt`). Plugin-surface leakage
+  (e.g. agent IDs like `apple-developer:ios-developer` or commands like `/swiftui-review`) is
+  neutralized from the prompt text so the bare WITHOUT arm sees a fair identical ask
+- **Dispatch difference**: WITH arm adds `--agent <stage_name>` to each stage dispatch; WITHOUT
+  arm dispatches each stage bare (no `--agent`, no plugin dir) — otherwise frozen argv is identical
+- **Policy default**: `real` on a full pipeline run, `skip` on a `--stages` subset — `--without-arm real|skip`
+  (`run-benchmark.sh --live` or `bench-live`) overrides the default either way
+- **Dispatch order**: the WITHOUT arm is dispatched **FIRST** (all 10 stages), followed by the WITH arm;
+  the WITHOUT record is flushed to disk immediately — a later WITH-stage budget breach still leaves a
+  real WITH-vs-WITHOUT comparison point on disk
+- **Budget**: counts as 10 extra dispatches in the pre-flight projection (`2 * len(stages)`)
+  when `real`; the running-tally gate applies to each dispatch exactly like any WITH stage
+- **Measurement**: wall-clock and `loc_produced`/`test_count`/`pass_fail`/`stage_count`/tokens are
+  measured **per arm** from each arm's own generated app and run record, stored in separate
+  `paths.with` and `paths.without` objects in the metric schema
+- **Failure handling**: a `DispatchFailure` from an arm is tolerated (the other arm still runs);
+  a degraded/failed arm sets `live_partial` and that arm's `pass_fail` to `"fail"`
+- **Per-call token accounting**: input and output token counts are persisted for every prompt
+  execution in both arms, stored in each arm's run record and captured log, enabling per-prompt
+  WITH-vs-WITHOUT token comparison in the analysis output
+- **`without_arm="skip"` (mechanism default)**: reproduces the deterministic WITHOUT placeholder
+  byte-for-byte — WITHOUT tokens/cost `null`, `wall_clock_s: 0.0`, `stage_count: 1`,
+  `pass_fail: "pass"`, `app_path: null`
 
 ## Coverage manifest (live, per stage)
 
@@ -291,17 +294,46 @@ token payload, n=1), and a closing `## improvement-candidates` checklist built
 median, a failing arm, degraded capture) — never a fabricated recommendation.
 No live records yet → prints a message and exits 0.
 
+## Generated Project Surfacing (U2 visible output)
+
+After a live run, the analysis Markdown (`benchmark/results/analysis.md`) and HTML report
+(`benchmark/results/result.html`) each contain a **per-arm "Generated project" section**
+showing the Swift file tree, per-file LOC counts, and total LOC for each arm:
+
+```markdown
+### with arm — `/Users/…/benchmark/workdirs/live-20260722T053500Z/with`
+_total LOC: 165_
+
+| file | LOC |
+|---|---|
+| Sources/TicTacToeKit/AIOpponent.swift | 68 |
+| Sources/TicTacToeKit/Board.swift | 42 |
+| Sources/TicTacToeKit/GameViewModel.swift | 55 |
+
+### without arm — `/Users/…/benchmark/workdirs/live-20260722T053500Z/without`
+_total LOC: 91_
+
+| file | LOC |
+|---|---|
+| Sources/TicTacToeKit/AIOpponent.swift | 51 |
+| Sources/TicTacToeKit/Board.swift | 40 |
+```
+
+The arm folder path (`workdirs/<run_id>/{with,without}`) is the canonical location to inspect
+the full generated source and test suite post-run. A zero-spend fixture-driven test sample is
+committed to `benchmark/results/samples/analysis-paired-sample.md` demonstrating the rendering.
+
 ## Test suites
 
 - `benchmark/ttt-template` — 48 Swift Testing fixture tests (engine/AI/
   leaderboard/settings/router/view-model), also run on iOS Simulator via
   `make test-ios` (SKIPs cleanly on hosts without an iOS runtime)
-- `benchmark/harness` — 131 Python harness self-tests (19 modules), zero real
+- `benchmark/harness` — 156 Python harness self-tests (19 modules), zero real
   LLM calls (all dispatchers injected with fakes/tripwires), incl. schema
   byte-compat (vendored real history.json), rotation, generators (real `swift test`
   on generated apps), deterministic/live pipelines, budget/credential gates,
-  prompt assembly, stage attribution, app measurement, the WITHOUT-arm baseline,
-  and offline analysis
+  prompt assembly, stage attribution, app measurement, the paired ±agent arms,
+  per-call token accounting, arm symmetry, and offline analysis
 
 **Total:** 48 Swift TTT artifact tests + 131 Python harness tests + 37 Python
 skill-script tests = 216 tests green.
