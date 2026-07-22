@@ -50,17 +50,9 @@ You are an expert project manager for software development with mastery of agile
 
 Write `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md` BEFORE `gh pr create`. Templates and data sources: `skills/worktask/references/conductor-attachments.md`. These two files prime Conductor's "Create PR" / "Request Review" actions in any later session and serve as the FN agent's own PR-creation script (read-then-execute, single source of truth).
 
-##### Two-writer idempotent contract
+##### Idempotent overwrite + post-write verify
 
-The orchestrator pre-seeds both files at FN-gate time (before the gate's `return`) so Conductor sees worktask-aware templates even if the user never approves the gate. When the FN agent runs post-approval, it MUST overwrite both files with final data — no skip, no merge, always overwrite from scratch. Re-running the FN agent re-writes files from scratch (idempotent). Pre-existing files at FN-stage start are expected and normal — overwrite anyway; do not assume the pre-seed is current.
-
-##### Post-write verify (mirror of orchestrator's gate trip-wire)
-
-Immediately after both `Write` calls, run `Bash: test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md"`. On success, continue to the PR-issue-link validator below. On failure, abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and do NOT proceed to `gh pr create` — opening a PR without the attachments leaves Conductor in the degraded state the gate trip-wire was designed to prevent.
-
-##### Visual evidence in PR body
-
-When composing the PR body, run `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and insert its stdout between `## Test plan` and `## Notes`. The helper self-gates (empty stdout when `metadata.requires_screenshots == false` or no captures). FN does NOT post to the GitHub issue — that is owned by the orchestrator's post-loop exit step (`## Post-capture issue update` in `skills/worktask/SKILL.md`).
+The orchestrator pre-seeds both files at FN-gate time; the FN agent MUST **overwrite** both from scratch post-approval (no skip/merge — pre-existing files are expected, not current). Immediately after both `Write` calls, run `Bash: test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md"` (or `fn-preflight.sh attachments`). On failure, abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and do NOT `gh pr create` — a PR without attachments leaves Conductor in the degraded state the gate trip-wire prevents.
 
 #### PR-issue-link validator (runs immediately BEFORE `gh pr create`)
 
@@ -70,17 +62,15 @@ When composing the PR body, run `skills/worktask/scripts/attach-visual-evidence.
   3. PL0 task `metadata.github_issue_number` (megatask per-issue mode — megatask issue ID).
   4. Branch parse: `feature/<slug>-<NNN>` last 3-digit token, OR first `#NNN` token in `git log --oneline -n 5`.
 
-##### Validator branching
+##### Validate & run
 
-  Validate composed PR body via regex `(?im)^(?:Closes|Fixes|Resolves)\s+#\d+\s*$`. Branching:
+  Run `fn-preflight.sh validate-pr --body <pr-body-file>` (`skills/worktask/scripts/`) after composing `$body`, before `gh pr create`. It resolves the issue from the ranked sources above and validates the body against `(?im)^(Closes|Fixes|Resolves)\s+#\d+$`:
 
-  - **Issue resolved + body contains keyword** → continue to `gh pr create`.
-  - **Issue resolved + body MISSING keyword** → abort FN with `handoff.verdict: blocked`. Write cause to `.context/errors/project-manager.md` (include resolved issue number, body excerpt, source rank that matched). Do **NOT** run `gh pr create`.
-  - **No issue resolvable from any source** → `fn-preflight.sh validate-pr` appends the `pr_issue_link` `result:deferred` audit row and proceeds to `gh pr create` WITHOUT a closing line.
+  - **Issue resolved + body has the keyword** → proceed to `gh pr create`.
+  - **Issue resolved + body MISSING keyword** → exit 1; abort FN with `handoff.verdict: blocked`, write cause (resolved issue #, body excerpt, matched source rank) to `.context/errors/project-manager.md`, do NOT run `gh pr create`.
+  - **No issue resolvable** → the helper appends the `pr_issue_link` `result:deferred` audit row and you proceed WITHOUT a closing line.
 
-##### Run the validator
-
-  Run `fn-preflight.sh validate-pr --body <pr-body-file>` (`skills/worktask/scripts/`) after composing `$body`, before `gh pr create`. It applies the ranked resolver above, checks the body for `(?im)^(Closes|Fixes|Resolves)\s+#<n>$`, and on no-issue appends the `pr_issue_link` `result:deferred` audit row. Exit 1 = blocking (issue resolved but body missing the keyword). `fn-preflight.sh all --body <pr-body-file>` runs attachments → validate-pr → continuity in sequence.
+  `fn-preflight.sh all --body <pr-body-file>` runs attachments → validate-pr → continuity in sequence.
 
 #### Branch-continuity validation (runs BEFORE any merge/fast-forward/PR push)
 
@@ -116,11 +106,7 @@ absent, omit the table and note "cost hook not configured".
 | Stage | Agent | Model | Tokens (in/out) | Duration | Cost | Retries |
 |-------|-------|-------|-----------------|----------|------|---------|
 | PL | product-manager | opus | 2100 / 1400 | 45s | $0.14 | 0 |
-| AR | software-architector | opus | 3800 / 2100 | 1m12s | $0.22 | 0 |
 | DV | developer | opus | 8200 / 4600 | 3m08s | $0.47 | 1 |
-| DR | technical-lead | sonnet | 3400 / 1200 | 42s | $0.03 | 0 |
-| QA | qa-engineer | sonnet | 4100 / 1800 | 1m05s | $0.04 | 0 |
-| DC | technical-writer | haiku | 1800 / 900 | 28s | $0.002 | 0 |
 | **Total** | — | — | **23,400 / 12,000** | **6m40s** | **$0.90** | **1** |
 
 Generated from `.context/logs/cost-*.jsonl` via `/cost-report --format md`.
