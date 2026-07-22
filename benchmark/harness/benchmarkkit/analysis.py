@@ -60,6 +60,7 @@ def _stage_rows(stages: list) -> list:
         cache_hit = (cache_read / denom * 100.0) if denom > 0 else None
         cost_share = (cost / total_cost * 100.0) if (cost is not None and total_cost) else None
         out_share = (out_tok / total_out * 100.0) if (out_tok is not None and total_out) else None
+        cov = s.get("coverage") if isinstance(s.get("coverage"), dict) else {}
         rows.append({
             "stage": s.get("stage") or "?",
             "cost_usd": cost,
@@ -68,8 +69,76 @@ def _stage_rows(stages: list) -> list:
             "out_token_share_pct": out_share,
             "cache_hit_pct": cache_hit,
             "cache_creation": cache_creation,
+            "tool_calls": _num(cov.get("tool_calls")),
+            "nested_background": _num(cov.get("nested_background")) or 0,
         })
     return rows
+
+
+_TOOL_CALL_FLOOR = 40
+
+
+def _paired_tokens(stages: list) -> list:
+    """Per-stage WITH-vs-WITHOUT in/out token rows (U5). Empty unless stage rows carry
+    an ``arm`` tag (the paired path); order follows first WITH-arm appearance."""
+    by_stage: dict = {}
+    order: list = []
+    for s in stages:
+        arm = s.get("arm")
+        if arm not in ("with", "without"):
+            continue
+        name = s.get("stage") or "?"
+        if name not in by_stage:
+            by_stage[name] = {"stage": name, "with_in": None, "with_out": None,
+                              "without_in": None, "without_out": None}
+            order.append(name)
+        by_stage[name][f"{arm}_in"] = _num(s.get("fresh_in"))
+        by_stage[name][f"{arm}_out"] = _num(s.get("out"))
+    return [by_stage[n] for n in order]
+
+
+def scan_generated_project(arm_dir: str) -> Optional[dict]:
+    """Walk an arm folder for generated *.swift (U2): per-file LOC, total LOC, path.
+    Returns None when the folder is absent or holds no Swift outside build dirs."""
+    import os
+
+    if not os.path.isdir(arm_dir):
+        return None
+    ignore = {".build", ".swiftpm", ".context"}
+    files = []
+    for root, dirs, names in os.walk(arm_dir):
+        dirs[:] = [d for d in dirs if d not in ignore]
+        for name in sorted(names):
+            if not name.endswith(".swift"):
+                continue
+            full = os.path.join(root, name)
+            try:
+                with open(full, encoding="utf-8") as f:
+                    text = f.read()
+            except OSError:
+                continue
+            loc = sum(1 for ln in text.split("\n")
+                      if ln.strip() and not ln.strip().startswith("//"))
+            files.append((os.path.relpath(full, arm_dir), loc))
+    if not files:
+        return None
+    files.sort()
+    return {"path": arm_dir, "files": files, "total_loc": sum(loc for _, loc in files)}
+
+
+def generated_projects(record: dict, workdirs_root: Optional[str]) -> dict:
+    """Per-arm generated-project scans keyed by arm name; empty when no root given."""
+    import os
+
+    if not workdirs_root:
+        return {}
+    run_id = record.get("run_id") or ""
+    out = {}
+    for arm in ("with", "without"):
+        scan = scan_generated_project(os.path.join(workdirs_root, run_id, arm))
+        if scan is not None:
+            out[arm] = scan
+    return out
 
 
 def _cache_top(stages: list, top_n: int = 5) -> list:
@@ -133,6 +202,30 @@ def _outliers(stages: list, with_pm: dict, without_pm: dict) -> list:
                 "detail": "no usage captured for this stage (Layer-3 degradation)",
             })
 
+    def _tool_calls(s):
+        cov = s.get("coverage") if isinstance(s.get("coverage"), dict) else {}
+        return _num(cov.get("tool_calls"))
+
+    tcs = [(_tool_calls(s), s.get("stage") or "?") for s in stages]
+    tcs = [(t, name) for t, name in tcs if t is not None]
+    median_tc = _median([t for t, _ in tcs])
+    threshold = max(_TOOL_CALL_FLOOR, _OUTLIER_FACTOR * median_tc) if median_tc else _TOOL_CALL_FLOOR
+    for t, name in tcs:
+        if t > threshold:
+            flags.append({
+                "type": "tool_call_spike", "stage": name,
+                "detail": f"{t} tool calls exceeds max(40, 1.5x median) = {threshold:.0f}",
+            })
+
+    for s in stages:
+        cov = s.get("coverage") if isinstance(s.get("coverage"), dict) else {}
+        nested = _num(cov.get("nested_background")) or 0
+        if nested > 0:
+            flags.append({
+                "type": "background_nested_spawn", "stage": s.get("stage") or "?",
+                "detail": f"{nested} nested background subagent spawn(s) recorded",
+            })
+
     return flags
 
 
@@ -177,9 +270,11 @@ def _caveats(record: dict, with_pm: dict, without_pm: dict, reference: Optional[
     return caveats
 
 
-def analyze(record: dict, reference: Optional[dict] = None) -> dict:
+def analyze(record: dict, reference: Optional[dict] = None,
+            workdirs_root: Optional[str] = None) -> dict:
     """Pure derivation over one parsed BenchmarkRecord dict. Never fabricates a
-    value absent from the record — every None/omission flows through as None."""
+    value absent from the record — every None/omission flows through as None.
+    ``workdirs_root`` opts into the per-arm generated-project scan (U2)."""
     paths = record.get("paths") or {}
     with_pm = paths.get("with") or {}
     without_pm = paths.get("without") or {}
@@ -192,10 +287,12 @@ def analyze(record: dict, reference: Optional[dict] = None) -> dict:
         "timestamp_utc": record.get("timestamp_utc") or "?",
         "totals": _totals(comparison),
         "stages": _stage_rows(stages),
+        "paired_tokens": _paired_tokens(stages),
         "cache_top": _cache_top(stages),
         "quality": {"with": _arm_quality(with_pm), "without": _arm_quality(without_pm)},
         "outliers": _outliers(stages, with_pm, without_pm),
         "caveats": _caveats(record, with_pm, without_pm, reference),
+        "generated": generated_projects(record, workdirs_root),
     }
 
 
@@ -236,15 +333,25 @@ def render_markdown(analysis: dict) -> str:
 
     lines += ["", "## per-stage", ""]
     if analysis["stages"]:
-        lines.append("| stage | cost (USD) | cost share % | out tokens | out share % | cache-hit % |")
-        lines.append("|---|---|---|---|---|---|")
+        lines.append("| stage | cost (USD) | cost share % | out tokens | out share % | "
+                     "cache-hit % | tool calls |")
+        lines.append("|---|---|---|---|---|---|---|")
         for row in analysis["stages"]:
             lines.append(
                 f"| {row['stage']} | {_fmt(row['cost_usd'])} | {_pct(row['cost_share_pct'])} | "
                 f"{_fmt(row['out_tokens'])} | {_pct(row['out_token_share_pct'])} | "
-                f"{_pct(row['cache_hit_pct'])} |")
+                f"{_pct(row['cache_hit_pct'])} | {_fmt(row.get('tool_calls'))} |")
     else:
         lines.append("_no per-stage attribution on this record._")
+
+    if analysis.get("paired_tokens"):
+        lines += ["", "## paired-tokens", "",
+                  "| stage | WITH in | WITH out | WITHOUT in | WITHOUT out |",
+                  "|---|---|---|---|---|"]
+        for row in analysis["paired_tokens"]:
+            lines.append(
+                f"| {row['stage']} | {_fmt(row['with_in'])} | {_fmt(row['with_out'])} | "
+                f"{_fmt(row['without_in'])} | {_fmt(row['without_out'])} |")
 
     lines += ["", "## cache-economics", ""]
     if analysis["cache_top"]:
@@ -271,6 +378,22 @@ def render_markdown(analysis: dict) -> str:
         lines += [f"- {c}" for c in analysis["caveats"]]
     else:
         lines.append("_none._")
+
+    generated = analysis.get("generated") or {}
+    if generated:
+        lines += ["", "## generated-project", ""]
+        for arm in ("with", "without"):
+            proj = generated.get(arm)
+            if proj is None:
+                continue
+            lines.append(f"### {arm} arm — `{proj['path']}`")
+            lines.append(f"_total LOC: {proj['total_loc']}_")
+            lines.append("")
+            lines.append("| file | LOC |")
+            lines.append("|---|---|")
+            for rel, loc in proj["files"]:
+                lines.append(f"| {rel} | {loc} |")
+            lines.append("")
 
     lines += ["", "## improvement-candidates", ""]
     if analysis["outliers"]:

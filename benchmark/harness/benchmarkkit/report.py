@@ -13,6 +13,8 @@ import html as _html
 import os
 from typing import Optional
 
+from .analysis import scan_generated_project
+
 # (accessor, label, is_delta_numeric)
 METRIC_ROWS = [
     ("tokens.in", "tokens in", True),
@@ -174,14 +176,51 @@ def coverage_rows(rec: dict) -> list:
         skills.update(x for x in cov.get("skills", []) if isinstance(x, str))
         commands.update(x for x in cov.get("commands", []) if isinstance(x, str))
         tool_calls += cov.get("tool_calls") or 0
+    nested = 0
+    for s in rec.get("stages") or []:
+        cov = s.get("coverage")
+        if isinstance(cov, dict):
+            nested += cov.get("nested_background") or 0
     if not any_cov:
         return []
-    return [
+    rows = [
         ("agents exercised", _escape(", ".join(sorted(agents))) if agents else "&mdash;"),
         ("skills exercised", _escape(", ".join(sorted(skills))) if skills else "&mdash;"),
         ("commands exercised", _escape(", ".join(sorted(commands))) if commands else "&mdash;"),
         ("tool calls", str(tool_calls)),
     ]
+    if nested:
+        rows.append(("nested background spawns", str(nested)))
+    return rows
+
+
+def _generated_html(rec: dict, plugin_root: Optional[str]) -> str:
+    """Per-arm Generated-project section (U2): Swift file tree, per-file LOC, total,
+    arm path. Resolved from each arm's app_path under plugin_root; empty when absent."""
+    if not plugin_root:
+        return ""
+    blocks = []
+    for arm in ("with", "without"):
+        pm = (rec.get("paths") or {}).get(arm) or {}
+        app_path = pm.get("app_path")
+        if not app_path:
+            continue
+        scan = scan_generated_project(os.path.join(plugin_root, app_path))
+        if scan is None:
+            continue
+        rows = "".join(
+            f"<tr><td class='metric'><code>{_escape(rel)}</code></td>"
+            f"<td class='analysis' colspan='3'>{loc}</td></tr>"
+            for rel, loc in scan["files"]
+        )
+        blocks.append(
+            '<table class="analysis-table"><thead><tr>'
+            f"<th>generated project ({_escape(arm)}) &mdash; "
+            f"<code>{_escape(app_path)}</code>, total LOC {scan['total_loc']}</th>"
+            '<th colspan="3">LOC</th></tr></thead>'
+            f"<tbody>{rows}</tbody></table>"
+        )
+    return "".join(blocks)
 
 
 def declared_surface(plugin_root: str) -> tuple:
@@ -204,7 +243,7 @@ def declared_surface(plugin_root: str) -> tuple:
     return agents, skills, commands
 
 
-def _record_html(rec: dict) -> str:
+def _record_html(rec: dict, plugin_root: Optional[str] = None) -> str:
     run_id = _escape(rec.get("run_id") or "?")
     ts = _escape(rec.get("timestamp_utc") or "?")
     mode = _escape(rec.get("mode") or "?")
@@ -262,6 +301,7 @@ def _record_html(rec: dict) -> str:
         '<table class="analysis-table"><thead><tr><th>analysis (derived)</th>'
         f'<th colspan="3">value</th></tr></thead><tbody>{analysis}</tbody></table>'
         f"{coverage_section}"
+        f"{_generated_html(rec, plugin_root)}"
         '<div class="apps">'
         f'<div><span class="lbl">WITH app:</span> <code>{with_app}</code></div>'
         f'<div><span class="lbl">WITHOUT app:</span> <code>{without_app}</code></div>'
@@ -289,7 +329,7 @@ def render_html(history: dict, plugin_root: Optional[str] = None) -> str:
         for rec in reversed(recs):
             if not latest_ts:
                 latest_ts = rec.get("timestamp_utc") or ""
-            body_parts.append(_record_html(rec))
+            body_parts.append(_record_html(rec, plugin_root=plugin_root))
     if not body_parts:
         body_parts.append("<p class='empty'>No benchmark results yet. Run <code>make benchmark</code>.</p>")
 

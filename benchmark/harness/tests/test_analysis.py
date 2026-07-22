@@ -144,6 +144,39 @@ class Markdown(unittest.TestCase):
         self.assertNotIn("- [ ]", md)
 
 
+class CSurfacing(unittest.TestCase):
+    """C: per-stage tool-call column, tool_call_spike (> max(40, 1.5x median)),
+    background_nested_spawn (>0), and paired WITH/WITHOUT per-prompt token columns."""
+
+    def _cov_stage(self, name, tool_calls, nested=0, arm=None):
+        from benchmarkkit.metrics import StageCoverage
+        cov = StageCoverage(agents=[], skills=[], commands=[], tool_calls=tool_calls,
+                            nested_background=nested)
+        return StageAttribution(stage=name, fresh_in=100, cache_creation=0, cache_read=0,
+                                out=50, cost_usd=0.1, coverage=cov, arm=arm)
+
+    def test_tool_call_spike_and_nested_flags(self):
+        stages = [self._cov_stage("PL", 5), self._cov_stage("AR", 5),
+                  self._cov_stage("DV", 60, nested=2)]
+        rec = _paired_live_record(stages=stages)
+        result = analysis.analyze(rec)
+        types = {(f["type"], f["stage"]) for f in result["outliers"]}
+        self.assertIn(("tool_call_spike", "DV"), types)  # 60 > max(40, 1.5*5)
+        self.assertIn(("background_nested_spawn", "DV"), types)
+        self.assertNotIn(("tool_call_spike", "PL"), types)
+
+    def test_tool_calls_column_and_paired_tokens(self):
+        stages = [self._cov_stage("PL", 3, arm="with"), self._cov_stage("PL", 2, arm="without")]
+        rec = _paired_live_record(stages=stages)
+        result = analysis.analyze(rec)
+        self.assertEqual(len(result["paired_tokens"]), 1)
+        pt = result["paired_tokens"][0]
+        self.assertEqual((pt["with_in"], pt["without_in"]), (100, 100))
+        md = analysis.render_markdown(result)
+        self.assertIn("tool calls", md)
+        self.assertIn("## paired-tokens", md)
+
+
 class FixtureRecord(unittest.TestCase):
     def test_vendored_live_fixture_analyzes_without_error_cross_era_caveat(self):
         with open(_FIXTURE, encoding="utf-8") as f:

@@ -72,6 +72,16 @@ class ReportTests(unittest.TestCase):
         html = report.render_html({})
         self.assertIn("No benchmark results yet", html)
 
+    def test_nested_background_rollup_row(self):
+        from benchmarkkit.metrics import StageAttribution, StageCoverage
+        rec = _live_record_with_cache()
+        cov = StageCoverage(agents=["igrsoft:developer"], skills=[], commands=[],
+                            tool_calls=12, nested_background=3)
+        rec["stages"] = [StageAttribution("DV", 100, 0, 0, 50, 0.1, coverage=cov).to_dict()]
+        html = report.render_html({"live": [rec]})
+        self.assertIn("nested background spawns", html)
+        self.assertIn("tool calls", html)
+
     def test_build_report_writes_file_and_missing_safe(self):
         td = tempfile.mkdtemp(prefix="rep-")
         try:
