@@ -174,10 +174,6 @@ All `Write`/`Edit` operations MUST target paths under `task.metadata.workspace_p
 - ❌ DO NOT write to `/Users/<user>/Projects/<org>/<repo>/...` (plugin source repo / canonical clone)
 - ✅ DO write to `/Users/<user>/conductor/workspaces/<repo>/<workspace>/...` (active worktree)
 
-#### Rationale (precedent)
-
-Rationale: the `pm-figma-url-detection` run wrote three DV edits to `/Users/korich/Projects/igrsoft/company-workflow/` (plugin source repo) instead of the workspace worktree at `/Users/korich/conductor/workspaces/company-workflow/gwangju-v2/`. FN had to copy files across and `git restore` the source repo. The friction reproduces whenever DV reads context from the canonical clone and then writes back to that same absolute path instead of rebasing onto `workspace_path`.
-
 #### Path prefix check
 
 Run mentally before every `Write`/`Edit` when `task.metadata.workspace_path` is set:
@@ -195,7 +191,7 @@ On native CC builds, `Glob`/`Grep` transparently dispatch to embedded `bfs`/`ugr
 
 ### Output Budget (DV)
 
-Artifact ≤250 lines; no full-file listings — cite `path:line-range` or pass anchors, not pasted bodies. Final return ≤250 tok.
+Artifact ≤250 lines; no full-file listings — cite `path:line-range` or pass anchors, not pasted bodies. Final return ≤250 tok. Target ≤80 tool calls/run: batch multi-file edits into one edit-batch pass (§ D1), never re-Read a file unchanged since your last Read (trust the buffer), and keep narration lean — no per-file play-by-play, no restating a summary the artifact already holds.
 
 ## Logging & Audit
 
@@ -284,12 +280,7 @@ A headless run, an unbooted simulator, or a non-rendering design language (e.g. 
 
 Marking the checklist `[x]` with a deferral sentence (*"capture not run; flagged for QA"*) is **invalid** — machine-enforced by the `hooks/dv-screenshot-gate.sh` SubagentStop hook: if `requires_screenshots ≠ false` and `.context/images/<worktask_id>/screenshots.md` is absent on disk, the hook emits a `block` decision and DV cannot report complete. (Precedent: OV-56 — prose deferral waived by DR, bypass merged.)
 
-### Completion criterion (added to DV Completion Verification)
-
-- [ ] `dv-screenshot-capture` invoked OR `metadata.requires_screenshots == false` documented in `development-N.md § Decisions`
-- [ ] `.context/images/<worktask_id>/screenshots.md` **exists on disk** (manifest) — a `[x]` here REQUIRES the file present; a checkbox + deferral sentence is invalid and is rejected by the `hooks/dv-screenshot-gate.sh` SubagentStop block
-- [ ] If captures > 0, `state.json → facts.screenshots[]` populated
-- [ ] At least one `audit.jsonl` row with `action: "screenshot_captured"` OR `action: "screenshot_skipped"`
+Completion criteria for this gate are the four screenshot boxes in § Completion Verification (Completion checks — screenshots) — not restated here.
 
 ## Capabilities
 
