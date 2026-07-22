@@ -167,8 +167,8 @@ These automatic improvements compound across multi-stage worktasks — no agent 
 
 | Improvement | Version | Impact |
 |-------------|---------|--------|
-| `SendMessage` bodies no longer duplicated into replayed history and tool results | 2.1.212 | Direct token reduction on every reattach/nudge/relay path (teammate wake, resume nudges, cross-agent messaging) — the message body is carried once, not re-embedded each turn |
-| Prompt-cache mid-conversation system block works behind LLM gateways and custom base URLs (Bedrock, Vertex, 1P) | 2.1.212 | Gateway-routed deployments get the same cache-hit economics as direct API — the handoff-protocol AC-14 cache ratios now hold behind gateways too |
+| `SendMessage` bodies no longer duplicated into replayed history and tool results | 2.1.212 | Direct token reduction on every reattach/nudge/relay path — the message body is carried once, not re-embedded each turn |
+| Prompt-cache mid-conversation system block works behind LLM gateways and custom base URLs (Bedrock, Vertex, 1P) | 2.1.212 | Gateway-routed deployments get the same cache-hit economics as direct API |
 | Bedrock/Vertex/Mantle/Foundry prompt-caching regression fix (trailing system block billed as fresh input) | 2.1.211 | Corrects over-billing on cache trailing blocks; reconcile pre-fix cost dashboards against provider billing |
 | Session cost/token telemetry no longer double-counts on streams emitting multiple cumulative message_delta frames | 2.1.214 | /cost and cost-report numbers trustworthy on streaming turns |
 

@@ -15,11 +15,18 @@
 #                           Required unless --artifact is given with parseable frontmatter.
 # @arg --artifact <path>    Explicit artifact path.  When omitted, resolved from
 #                           --stage + run_index from state.json.
+# @arg --prev <CODE>        Previous stage code.  When present, ALSO writes
+#                           handoffs["<PREV>→<CODE>"] = "<summary> ref:<artifact basename>"
+#                           from the parsed frontmatter summary (the ledger edge the 13
+#                           stage agents used to hand-roll in inline jq).  ABSENT = today's
+#                           behavior exactly (stages patch only, byte-stable); hook callers
+#                           never pass it, so the SubagentStop path is untouched.
 # @arg --state <path>       state.json path (default: .context/state.json).
 # @arg --log <path>         Append log to this file (default: .context/logs/state-merge.log).
-# @arg --disk-check         Run the ENOSPC guard before writing.  Pass the workspace
-#                           filesystem root as the argument value (defaults to ".").
-#                           When the guard fires (halt), exits 2; on warn exits 0.
+# @arg --disk-check [root]  Run the ENOSPC guard before writing.  Optional filesystem-root
+#                           value (defaults to "."); a following token that begins with "-"
+#                           is NOT consumed as the root.  When the guard fires (halt), exits 2;
+#                           on warn exits 0.
 # @arg --via <hook|step6_5> Stamp stages.<CODE>.completed_via with the enforcement
 #                           layer that fired.  Omit for agent self-patch (Layer 1);
 #                           F3 stamps "f3" via its own patch.  Absence encodes Layer 1
@@ -275,6 +282,15 @@ trap '_lock_release' EXIT
 
 # Atomic state.json merge (read → merge → temp → fsync → rename), serialized by the
 # mkdir-spinlock so concurrent sibling writers cannot drop a patch.
+#
+# B3 state bounds are enforced HERE (the single write chokepoint, AD-7) rather than
+# scattered across the 13 stage agents: after the `. * $p` merge, the two unbounded
+# arrays are clamped so a long run cannot grow state.json past its ~500-token budget.
+#   facts.decisions          → newest 8 (tail, matches the eviction-order rule).
+#   facts.dispatched_agents  → 6, launched-survive-first (live agents resume needs are
+#                              retained ahead of terminal rows, which are eviction bait).
+# Both clamps fire ONLY when the array already exists AND exceeds its bound, so a normal
+# small state is byte-identical to the pre-bounds merge (idempotency + no-op paths hold).
 atomic_merge() {
   local state="$1" patch="$2"
   local tmp="${state%/*}/.state.json.$$.${RANDOM}.tmp"
@@ -283,7 +299,16 @@ atomic_merge() {
   _lock_acquire "$state" || true
 
   local rc=0
-  if jq --argjson p "$patch" '. * $p' "$state" > "$tmp" 2>> "$LOG_FILE"; then
+  if jq --argjson p "$patch" '
+      (. * $p)
+      | (if ((.facts.decisions? // []) | length) > 8
+         then .facts.decisions |= .[-8:] else . end)
+      | (if ((.facts.dispatched_agents? // []) | length) > 6
+         then .facts.dispatched_agents |=
+              (([ .[] | select(.status == "launched") ]
+              + [ .[] | select(.status != "launched") ])[0:6])
+         else . end)
+    ' "$state" > "$tmp" 2>> "$LOG_FILE"; then
     sync "$tmp" 2> /dev/null || sync 2> /dev/null || true
     mv -f "$tmp" "$state"
     rc=0
@@ -476,6 +501,77 @@ EOART
     exit 1
   fi
 
+  # ---- T8: --prev writes handoffs["PREV→CODE"] from the parsed summary + ref ----
+  make_state
+  cat > .context/analyzing-0.md << 'EOART'
+---
+handoff:
+  stage: AR
+  verdict: ok
+  summary: "approach validated; DV split confirmed"
+  refs: { plan: planning-0.md#requirements }
+---
+EOART
+  bash "$SELF" --stage AR --prev PL --artifact .context/analyzing-0.md \
+    || {
+      printf 'T8: state-patch returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '(.handoffs["PL→AR"] // "") | test("approach validated") and test("ref:analyzing-0.md")' \
+    .context/state.json > /dev/null; then
+    printf 'T8: --prev writes handoffs edge from summary+ref: ok\n'
+  else
+    printf 'T8: --prev handoffs edge: FAIL\n' >&2
+    jq '.handoffs' .context/state.json >&2
+    exit 1
+  fi
+  # Absent --prev must NOT synthesize a handoffs edge (byte-stable default path).
+  make_state
+  bash "$SELF" --stage AR --artifact .context/analyzing-0.md
+  if jq -e '(.handoffs | length) == 0' .context/state.json > /dev/null; then
+    printf 'T8: absent --prev leaves handoffs untouched: ok\n'
+  else
+    printf 'T8: absent --prev must not add handoffs: FAIL\n' >&2
+    exit 1
+  fi
+
+  # ---- T9: B3 bounds — decisions clamp to newest-8, dispatched_agents to 6 ----
+  # Seed 10 decisions (d0..d9) + 8 dispatched_agents (mix launched/completed), then
+  # patch any stage; atomic_merge must clamp both arrays at the single chokepoint.
+  jq -n '
+    {version:1, worktask_id:"selftest", plan_file:".context/planning-0.md",
+     platform:"all", run_index:0,
+     stages:{PL:{status:"completed", verdict:"ok"}},
+     facts:{
+       files_modified:[], tests_added:[], open_questions:[], verdicts:{PL:"ok"},
+       decisions:[ range(0;10) | {id:("d"+(.|tostring)), summary:("dec "+(.|tostring)), ref:"x.md#y"} ],
+       dispatched_agents:(
+         [ range(0;6) | {stage:"DV", task_id:("t"+(.|tostring)), subagent_type:"a", status:"completed"} ]
+         + [ range(6;8) | {stage:"DV", task_id:("t"+(.|tostring)), subagent_type:"a", status:"launched"} ])
+     },
+     handoffs:{}}' > .context/state.json
+  bash "$SELF" --stage DV --artifact .context/development-0.md \
+    || {
+      printf 'T9: state-patch returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '(.facts.decisions | length) == 8 and (.facts.decisions[-1].id == "d9") and (.facts.decisions[0].id == "d2")' \
+    .context/state.json > /dev/null; then
+    printf 'T9: facts.decisions clamped to newest-8: ok\n'
+  else
+    printf 'T9: decisions bound: FAIL\n' >&2
+    jq '.facts.decisions | map(.id)' .context/state.json >&2
+    exit 1
+  fi
+  if jq -e '(.facts.dispatched_agents | length) == 6 and ([.facts.dispatched_agents[] | select(.status == "launched")] | length) == 2' \
+    .context/state.json > /dev/null; then
+    printf 'T9: dispatched_agents clamped to 6, launched survive: ok\n'
+  else
+    printf 'T9: dispatched_agents bound: FAIL\n' >&2
+    jq '.facts.dispatched_agents | map({task_id, status})' .context/state.json >&2
+    exit 1
+  fi
+
   printf 'self-test: ALL PASS\n'
   exit 0
 }
@@ -483,6 +579,7 @@ EOART
 # ---------- Argument parsing ----------
 STAGE_ARG=""
 ARTIFACT_ARG=""
+PREV_ARG=""
 STATE_PATH=".context/state.json"
 LOG_FILE=".context/logs/state-merge.log"
 DISK_CHECK_ROOT=""
@@ -500,6 +597,11 @@ while [[ $# -gt 0 ]]; do
       ARTIFACT_ARG="${1:-}"
       shift
       ;;
+    --prev)
+      shift
+      PREV_ARG="${1:-}"
+      shift
+      ;;
     --state)
       shift
       STATE_PATH="${1:-}"
@@ -511,8 +613,14 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --disk-check)
-      DISK_CHECK_ROOT="."
       shift
+      # Optional root value: consume the next token only when it is NOT another flag.
+      if [[ $# -gt 0 && "${1:-}" != -* ]]; then
+        DISK_CHECK_ROOT="$1"
+        shift
+      else
+        DISK_CHECK_ROOT="."
+      fi
       ;;
     --via)
       shift
@@ -534,6 +642,12 @@ mkdir -p "$(dirname "$LOG_FILE")" 2> /dev/null || true
 # Validate --via (enum hook|step6_5). An unknown value is a caller bug — surface it.
 if [[ -n "$VIA_ARG" && "$VIA_ARG" != "hook" && "$VIA_ARG" != "step6_5" ]]; then
   printf >&2 'invalid --via value: %s (expected hook|step6_5)\n' "$VIA_ARG"
+  usage
+fi
+
+# Validate --prev (must be a known stage code). Unknown ⇒ caller bug — surface it.
+if [[ -n "$PREV_ARG" && -z "$(basename_for_stage "$PREV_ARG")" ]]; then
+  printf >&2 'invalid --prev value: %s (expected a stage code: PL AR TL DV DR SR QA DC RE FN ST IR ET)\n' "$PREV_ARG"
   usage
 fi
 
@@ -589,6 +703,10 @@ fi
 # ---------- Build patch + atomic write ----------
 # Base stage object; additive keys (completed_via, worktree) are folded in only when
 # present so absence stays absence (version:1, no renames, tolerant consumers).
+# When --prev is given, ALSO emit handoffs["<PREV>→<CODE>"] from the parsed summary +
+# artifact basename (schema: maxLength 300, must contain "ref:"). Absent --prev ⇒ no
+# handoffs key ⇒ byte-identical to the pre-flag patch.
+ART_BASE=$(basename "$ART")
 PATCH=$(jq -cn \
   --arg stage "$PARSED_STAGE" \
   --arg artifact "$ART" \
@@ -596,6 +714,9 @@ PATCH=$(jq -cn \
   --arg via "$VIA_ARG" \
   --arg wt_path "$PARSED_WT_PATH" \
   --arg wt_branch "$PARSED_WT_BRANCH" \
+  --arg prev "$PREV_ARG" \
+  --arg summary "$PARSED_SUMMARY" \
+  --arg ref "$ART_BASE" \
   '
   ({status: "completed", artifact: $artifact, verdict: $verdict}
     + (if $via != "" then {completed_via: $via} else {} end)
@@ -605,7 +726,10 @@ PATCH=$(jq -cn \
             + (if $wt_branch != "" then {branch: $wt_branch} else {} end))}
        else {} end)
   ) as $stageObj
-  | {stages: {($stage): $stageObj}}')
+  | {stages: {($stage): $stageObj}}
+  + (if $prev != ""
+     then {handoffs: {($prev + "→" + $stage): ((($summary) + " ref:" + $ref) | .[0:300])}}
+     else {} end)')
 
 if atomic_merge "$STATE_PATH" "$PATCH"; then
   log_msg INFO "merged stages.${PARSED_STAGE} artifact=${ART} verdict=${PARSED_VERDICT} (summary: ${PARSED_SUMMARY:0:80})"

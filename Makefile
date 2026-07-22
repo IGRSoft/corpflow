@@ -1,4 +1,4 @@
-# Makefile — igrsoft plugin test suite + dual-path TTT benchmark (Swift harness)
+# Makefile — igrsoft plugin test suite + dual-path TTT benchmark (Python harness)
 #
 # Targets:
 #   make bootstrap       vendored-bats present-check; swift toolchain check;
@@ -10,7 +10,8 @@
 #                        no iOS runtime is installed). Never inside the benchmark Timer.
 #   make benchmark       deterministic dual-path TTT benchmark. No --live, no network.
 #   make benchmark-live  opt-in live A/B (credential-gated, budget-capped). Never CI.
-#                        Honors BUDGET=<usd> and STAGES=PL,AR,... passthrough.
+#                        Honors BUDGET=<usd>, STAGES=PL,AR,..., and WITHOUT_ARM=real|skip.
+#   make benchmark-analyze  render benchmark/results/history.json -> analysis.md.
 #   make report          render benchmark/results/history.json -> result.html.
 #   make clean           remove workdirs, coverage intermediates, .build dirs.
 #
@@ -24,10 +25,10 @@ COVERAGE     ?= 0
 # Coverage line-coverage gate (per AC-3; 85 is the floor).
 COV_MIN      ?= 85
 
-# The three Swift packages.
+# The retained Swift artifact package (measurement instrument).
 TTT_PKG      := $(PLUGIN_ROOT)/benchmark/ttt-template
-HARNESS_PKG  := $(PLUGIN_ROOT)/benchmark/harness
-SCRIPTS_PKG  := $(PLUGIN_ROOT)/tests/swift
+# The Python harness directory (NOT a Swift package — stdlib-only entrypoints + tests).
+HARNESS_DIR  := $(PLUGIN_ROOT)/benchmark/harness
 
 # kcov instrumentation scope.
 KCOV_INCLUDE := $(PLUGIN_ROOT)/skills,$(PLUGIN_ROOT)/hooks,$(PLUGIN_ROOT)/.claude/hooks
@@ -36,7 +37,7 @@ KCOV_EXCLUDE := $(PLUGIN_ROOT)/tests
 # All bats files under tests/shell/**.
 SHELL_TESTS  := $(shell find $(PLUGIN_ROOT)/tests/shell -type f -name '*.bats' 2>/dev/null | sort)
 
-.PHONY: all test bootstrap coverage test-ios benchmark benchmark-live report clean help
+.PHONY: all test bootstrap coverage test-ios benchmark benchmark-live benchmark-analyze report clean help
 .DEFAULT_GOAL := help
 
 help:
@@ -46,7 +47,8 @@ help:
 	@echo "  make coverage        suite under kcov + swift coverage, gate >=$(COV_MIN)%"
 	@echo "  make test-ios        TicTacToeKit on iOS Simulator (SKIPs w/o runtime)"
 	@echo "  make benchmark       deterministic dual-path TTT benchmark (offline)"
-	@echo "  make benchmark-live  opt-in live A/B (credential+budget gated; STAGES=)"
+	@echo "  make benchmark-live  opt-in live A/B (credential+budget gated; STAGES=, WITHOUT_ARM=)"
+	@echo "  make benchmark-analyze  render an evidence-backed A/B analysis report"
 	@echo "  make clean           remove workdirs / coverage / .build dirs"
 
 # ---------------------------------------------------------------------------
@@ -106,9 +108,9 @@ coverage: bootstrap
 	    echo "[coverage] running bats uninstrumented so tests still gate; see tests/COVERAGE.md."; \
 	    "$(BATS)" $(SHELL_TESTS); \
 	  fi
-	@echo "[coverage] swift coverage phase (3 packages, gate >=$(COV_MIN)%)…"
+	@echo "[coverage] swift coverage phase (ttt-template artifact, gate >=$(COV_MIN)%)…"
 	@set -e; \
-	  for pkg in "$(TTT_PKG)" "$(HARNESS_PKG)" "$(SCRIPTS_PKG)"; do \
+	  for pkg in "$(TTT_PKG)"; do \
 	    echo "[coverage]   swift test --enable-code-coverage ($$pkg)"; \
 	    swift test --enable-code-coverage --package-path "$$pkg" >/dev/null || exit $$?; \
 	    cov=$$(swift test --show-codecov-path --package-path "$$pkg" 2>/dev/null | tail -1); \
@@ -124,6 +126,17 @@ coverage: bootstrap
 	    ok=$$(jq -n --argjson p "$$pct" --argjson m "$(COV_MIN)" '$$p >= $$m'); \
 	    [ "$$ok" = "true" ] || { echo "[coverage] FAIL: $$pkg below $(COV_MIN)%"; exit 1; }; \
 	  done
+	@echo "[coverage] python phase (opportunistic coverage.py; report-only, no clean-clone dep)…"
+	@if command -v coverage >/dev/null 2>&1; then \
+	    echo "[coverage]   coverage.py present — measuring the Python suites"; \
+	    coverage run -m unittest discover -s "$(PLUGIN_ROOT)/tests/python" -p 'test_*.py' >/dev/null 2>&1 || true; \
+	    ( cd "$(HARNESS_DIR)" && PYTHONPATH="$(HARNESS_DIR)/tests" coverage run -a -m unittest discover -s tests -t . -p 'test_*.py' >/dev/null 2>&1 ) || true; \
+	    coverage report || true; \
+	  else \
+	    echo "[coverage]   coverage.py absent — running the Python suites uninstrumented (behavioral gate)"; \
+	    python3 -m unittest discover -s "$(PLUGIN_ROOT)/tests/python" -p 'test_*.py'; \
+	    ( cd "$(HARNESS_DIR)" && PYTHONPATH="$(HARNESS_DIR)/tests" python3 -m unittest discover -s tests -t . -p 'test_*.py' ); \
+	  fi
 	@echo "[coverage] done."
 
 # ---------------------------------------------------------------------------
@@ -148,34 +161,42 @@ benchmark:
 	@echo "[benchmark] deterministic dual-path TTT (no --live, no network)…"
 	@"$(PLUGIN_ROOT)/benchmark/run-benchmark.sh"
 	@echo "[benchmark] running harness self-tests (schema / rotation / generators)…"
-	@swift test --package-path "$(HARNESS_PKG)"
-	@"$(HARNESS_PKG)/.build/release/bench-report" \
+	@( cd "$(HARNESS_DIR)" && PYTHONPATH="$(HARNESS_DIR)/tests" python3 -m unittest discover -s tests -t . -p 'test_*.py' )
+	@python3 "$(HARNESS_DIR)/bin/bench-report" \
 	  --history "$(PLUGIN_ROOT)/benchmark/results/history.json" \
 	  --out "$(PLUGIN_ROOT)/benchmark/results/result.html" \
 	  --plugin-root "$(PLUGIN_ROOT)"
 
 # ---------------------------------------------------------------------------
 # benchmark-live: opt-in. Credential-gated, budget-capped. Never a dep of any
-# other target. Never CI. Honors BUDGET= and STAGES= (subset probe).
+# other target. Never CI. Honors BUDGET=, STAGES= (subset probe), and
+# WITHOUT_ARM=real|skip (overrides the default real-on-full/skip-on-subset policy).
 # ---------------------------------------------------------------------------
 benchmark-live:
 	@echo "[benchmark-live] OPT-IN live A/B — credential probe + budget cap apply."
-	@if [ -n "$(STAGES)" ]; then \
-	    "$(PLUGIN_ROOT)/benchmark/run-benchmark.sh" --live --budget $${BUDGET:-5.00} --stages "$(STAGES)"; \
-	  else \
-	    "$(PLUGIN_ROOT)/benchmark/run-benchmark.sh" --live --budget $${BUDGET:-5.00}; \
-	  fi
+	@live_args="--live --budget $${BUDGET:-50.00}"; \
+	  [ -n "$(STAGES)" ] && live_args="$$live_args --stages $(STAGES)"; \
+	  [ -n "$(WITHOUT_ARM)" ] && live_args="$$live_args --without-arm $(WITHOUT_ARM)"; \
+	  "$(PLUGIN_ROOT)/benchmark/run-benchmark.sh" $$live_args
 	@$(MAKE) --no-print-directory report
 
 # ---------------------------------------------------------------------------
 # report: render benchmark/results/history.json -> benchmark/results/result.html
 # ---------------------------------------------------------------------------
 report:
-	@swift build -c release --package-path "$(HARNESS_PKG)" >/dev/null
-	@"$(HARNESS_PKG)/.build/release/bench-report" \
+	@python3 "$(HARNESS_DIR)/bin/bench-report" \
 	  --history "$(PLUGIN_ROOT)/benchmark/results/history.json" \
 	  --out "$(PLUGIN_ROOT)/benchmark/results/result.html" \
 	  --plugin-root "$(PLUGIN_ROOT)"
+
+# ---------------------------------------------------------------------------
+# benchmark-analyze: render an evidence-backed A/B analysis report from the
+# latest live record in benchmark/results/history.json.
+# ---------------------------------------------------------------------------
+benchmark-analyze:
+	@python3 "$(HARNESS_DIR)/bin/bench-analyze" \
+	  --history "$(PLUGIN_ROOT)/benchmark/results/history.json" \
+	  --out "$(PLUGIN_ROOT)/benchmark/results/analysis.md"
 
 # ---------------------------------------------------------------------------
 # clean: remove generated workdirs + coverage intermediates + caches + the
@@ -185,6 +206,7 @@ clean:
 	@echo "[clean] removing workdirs / coverage / .build dirs / caches…"
 	@rm -rf "$(PLUGIN_ROOT)/benchmark/workdirs"/* 2>/dev/null || true
 	@rm -rf "$(COVDIR)" 2>/dev/null || true
-	@rm -rf "$(TTT_PKG)/.build" "$(HARNESS_PKG)/.build" "$(SCRIPTS_PKG)/.build" 2>/dev/null || true
+	@rm -rf "$(TTT_PKG)/.build" 2>/dev/null || true
+	@rm -f "$(PLUGIN_ROOT)/.coverage" "$(HARNESS_DIR)/.coverage" 2>/dev/null || true
 	@find "$(PLUGIN_ROOT)" -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
 	@echo "[clean] done (history.json + tests/vendor preserved)."

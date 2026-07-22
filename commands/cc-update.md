@@ -1,6 +1,7 @@
 ---
 name: cc-update
 description: Update plugin agents, commands, and skills with new Claude Code features, then sync MEMORY.md and README.md version tracking
+version: 0.1.0
 argument-hint: '<version> [--notes <url|text>] [--dry-run]'
 allowed-tools: Read, Glob, Grep, Write, Edit, WebFetch
 model: sonnet
@@ -175,7 +176,7 @@ Output of the standing `## Worktask Efficiency Analysis (required pass)`. Behavi
 ```markdown
 ## MEMORY.md Update
 
-MEMORY.md is a lean rolling file (~5KB hard cap). Trim BEFORE writing — a memory write that leaves the index over its read limit errors explicitly instead of silently truncating; treat an oversized write as a hard failure. (Frontmatter is not truncated at an inline `#`, and an ISO `modified` timestamp is added automatically — no plugin action needed.) Update ONLY:
+MEMORY.md is a lean rolling file (~5KB hard cap). Trim BEFORE writing — an oversized write errors explicitly (a hard failure), never silently truncates. Update ONLY:
 1. `Plugin version:` line — keep the exact `- Plugin version: **X.Y.Z** (<one-line summary>)` shape (release tooling parses it)
 2. `Claude Code latest integrated band` line
 3. One new/extended row in `## CC Feature Band Index` — full categorized feature narratives go ONLY in the canonical band file (Batch step 5), never in MEMORY.md

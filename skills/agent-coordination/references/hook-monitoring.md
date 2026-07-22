@@ -113,8 +113,12 @@ Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved. With ne
 - `tool_decision` telemetry events carry a `tool_parameters` field — the decision span records *which* tool args were classified, not just the tool name. Lets cost/audit dashboards distinguish e.g. a `Bash git push` decision from a `Bash ls`.
 - `OTEL_RESOURCE_ATTRIBUTES` values surface as **metric-datapoint labels**, not only on spans. Tag `worktask_id` / `stage` there to slice collector dashboards (Honeycomb/Datadog) per-stage without parsing span attributes.
 - `claude_code.lines_of_code.count` carries a `model` attribute — per-model LoC attribution lands in collector dashboards for free; pairs with the fable/opus/sonnet/haiku stage split in `skills/shared/stage-codes.md` to show which tier wrote the code.
+#### Log correlation & content limits
+
 - OTEL log events carry `message.uuid`, `client_request_id`, and `tool_source` — message-level correlation and tool provenance across spans and audit rows without re-deriving IDs.
 - `CLAUDE_CODE_OTEL_CONTENT_MAX_LENGTH` configures the 60 KB truncation limit on OTEL content attributes — set it alongside `OTEL_RESOURCE_ATTRIBUTES` when a collector enforces a payload ceiling.
+#### Trace nesting & effort attribution
+
 - Log events emitted outside the turn's async context (background/notification-triggered) carry the interaction span's trace context — a background-agent completion nests under the originating trace instead of appearing as an orphan.
 - Session transcripts record the reasoning effort level on each assistant message, and the `subagentStatusLine` payload includes reasoning effort — effort attribution without parsing model metadata (pairs with `§ Hook Effort Visibility`).
 

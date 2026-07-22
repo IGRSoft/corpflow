@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""bench-live — live A/B dispatch executable (the ONLY entrypoint importing benchmarklive).
+
+Frozen seam argv (run-benchmark.sh --live):
+  bench-live --workdir <run_id> --budget <usd> --record <path>
+  [--stages CODE[,CODE...]] [--capture json|stream-json] [--benchmark-dir D] [--prompts-dir D]
+  [--without-arm real|skip]
+--without-arm overrides the default WITHOUT-baseline policy (real on a full run,
+skip on a --stages subset — see benchmarklive.baseline.resolve_arm_mode).
+Exit codes: 0 ok / 2 pre-flight decline / 3 no credential / 4 running-tally breach
+(partial written first) / 64 bad usage.
+"""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from benchmarklive import baseline as baseline_mod
+from benchmarklive import budget as budget_mod
+from benchmarklive import dispatch as dispatch_mod
+
+
+def die(message, code):
+    sys.stderr.write(message + "\n")
+    sys.exit(code)
+
+
+def main(argv):
+    workdir = record = stages_arg = benchmark_dir_arg = prompts_dir_arg = None
+    without_arm_arg = None
+    budget = None
+    capture_arg = "stream-json"
+
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("-h", "--help"):
+            print("bench-live --workdir <run_id> --budget <usd> --record <path> "
+                  "[--stages CODE[,CODE...]] [--capture json|stream-json] "
+                  "[--benchmark-dir <dir>] [--prompts-dir <dir>] "
+                  "[--without-arm real|skip]")
+            sys.exit(0)
+        if a in ("--workdir", "--budget", "--record", "--stages", "--capture",
+                 "--benchmark-dir", "--prompts-dir", "--without-arm"):
+            if i + 1 >= len(argv):
+                die(f"bench-live: {a} needs a value", 64)
+            value = argv[i + 1]
+            i += 2
+            if a == "--workdir":
+                workdir = value
+            elif a == "--budget":
+                try:
+                    budget = float(value)
+                except ValueError:
+                    die(f"bench-live: --budget must be a number, got '{value}'", 64)
+            elif a == "--record":
+                record = value
+            elif a == "--stages":
+                stages_arg = value
+            elif a == "--capture":
+                capture_arg = value
+            elif a == "--benchmark-dir":
+                benchmark_dir_arg = value
+            elif a == "--without-arm":
+                without_arm_arg = value
+            else:
+                prompts_dir_arg = value
+        else:
+            die(f"bench-live: unknown arg '{a}'", 64)
+
+    if workdir is None or budget is None or record is None:
+        die("bench-live: --workdir, --budget and --record are required", 64)
+
+    stages = budget_mod.PIPELINE_STAGES
+    if stages_arg is not None:
+        requested = [s.strip().upper() for s in stages_arg.split(",") if s.strip()]
+        if not requested:
+            die("bench-live: --stages needs at least one stage code", 64)
+        for code in requested:
+            if code not in dispatch_mod.STAGE_TABLE:
+                die(f"bench-live: unknown stage code '{code}' (valid: "
+                    + ",".join(budget_mod.PIPELINE_STAGES) + ")", 64)
+        # Preserve canonical pipeline order regardless of user order.
+        stages = [s for s in budget_mod.PIPELINE_STAGES if s in requested]
+
+    if capture_arg not in (dispatch_mod.CAPTURE_JSON, dispatch_mod.CAPTURE_STREAM_JSON):
+        die(f"bench-live: --capture must be json or stream-json, got '{capture_arg}'", 64)
+
+    if without_arm_arg is not None and without_arm_arg not in (baseline_mod.ARM_REAL, baseline_mod.ARM_SKIP):
+        die(f"bench-live: --without-arm must be real or skip, got '{without_arm_arg}'", 64)
+    without_arm = baseline_mod.resolve_arm_mode(without_arm_arg, stages_arg)
+
+    if benchmark_dir_arg is not None:
+        benchmark_dir = benchmark_dir_arg
+    else:
+        # <bench>/results/runs/<mode>/<id>.json → derive <bench>.
+        derived = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(record))))
+        benchmark_dir = derived if os.path.exists(os.path.join(derived, "live", "prompts")) \
+            else os.path.join(os.getcwd(), "benchmark")
+
+    try:
+        rc = dispatch_mod.dispatch(
+            workdir=workdir, budget=budget, record_path=record, benchmark_dir=benchmark_dir,
+            prompts_dir=prompts_dir_arg, stages=stages, capture_mode=capture_arg,
+            without_arm=without_arm)
+    except Exception as exc:  # noqa: BLE001 — top-level CLI guard
+        die(f"bench-live: dispatch failed: {exc}", 1)
+    sys.exit(rc)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

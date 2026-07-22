@@ -1,9 +1,10 @@
 # Plugin Test Suite
 
 Exhaustive unit tests for all deterministic plugin scripts and hooks: bats for
-bash, **Swift Testing** for the three Swift packages (TTT fixture, benchmark
-harness, PluginScriptsTests) — with kcov (bash) + `swift test
---enable-code-coverage` (Swift) line-coverage gating.
+bash, stdlib Python unittest for skill-script tests and benchmark harness, and
+Swift Testing for the TTT artifact package — with kcov (bash), opportunistic
+coverage.py (Python), and `swift test --enable-code-coverage` (Swift)
+line-coverage gating.
 
 ## Quick Start
 
@@ -29,11 +30,10 @@ tests/
     worktask/          # 9 bats files: state-patch, publish-pl-issue, cache-lint, …
     dv-screenshot/     # 4 bats files: apple-canvas, cli-fallback, size-budget, visual-diff
     skills/            # 11 bats files: build-orchestrator, scan-secrets, build-context-set, …
-  swift/               # SwiftPM package "PluginScriptsTests"
-    Sources/PluginScripts/          # subprocess + JSON helpers
-    Tests/PluginScriptsTests/
-      EstimateCalcTests.swift       # 21 behaviors (estimate-calc.py via python3)
-      LayoutCalcTests.swift         # 17 behaviors (layout-calc.py via python3)
+  python/              # Skill-script tests (stdlib unittest)
+    _scriptimport.py   # importlib loader for hyphenated scripts + JSON helpers
+    test_estimate_calc.py   # 21 behaviors via in-process import + CLI smoke
+    test_layout_calc.py     # 17 behaviors via in-process import + CLI smoke
   vendor/
     bats-core/         # v1.11.0 — pinned tag, no network after vendor
     bats-support/      # v0.3.0
@@ -48,30 +48,40 @@ tests/
   COVERAGE.md          # Per-file coverage report + proxy exemptions (AC-3 gate)
 ```
 
-The two other Swift suites live with their packages:
-`benchmark/ttt-template/Tests/TicTacToeKitTests` (48 fixture tests) and
-`benchmark/harness/Tests/{BenchmarkKitTests,BenchmarkLiveTests}` (140 harness
-tests, zero LLM calls). `make test` runs all three via `run-tests.sh`.
+Two other test suites live with their packages:
+`benchmark/ttt-template/Tests/TicTacToeKitTests` (48 fixture tests, Swift artifact)
+and `benchmark/harness/tests/` (95 Python harness self-tests, zero real LLM calls).
+`make test` runs all via `run-tests.sh`: bats + Python skill-script tests + Python
+harness tests + Swift ttt-template artifact tests.
 
 ## Test Coverage
 
-**Verdict: AC-3 MET** (Swift measured via llvm-cov, bash via assertion-density proxy).
+**Verdict: AC-3 MET** (Python measured via opportunistic coverage.py, Swift via
+llvm-cov, bash via assertion-density proxy).
 
-### Skill scripts (behavioral parity via tests/swift)
+### Skill scripts (in-process import + CLI smoke via tests/python)
 
 The plugin's skill runtime scripts STAY Python and are exercised by
-`tests/swift` PluginScriptsTests — 38 Swift Testing behaviors shelling
-`python3` at the unchanged scripts:
+`tests/python` via importlib in-process import (asserting real contracts) plus
+CLI smoke tests:
 
-| Script | Behaviors |
-|--------|-----------|
-| `skills/estimation-methodology/scripts/estimate-calc.py` | **21** (band boundaries, ai_cost arithmetic, hours, CLI shape, self-test) |
-| `skills/appstore-screenshots/scripts/layout-calc.py` | **17** (proportional geometry, full-bleed, errors, CLI shape, self-test) |
+| Script | Tests | Coverage approach |
+|--------|-------|-------------------|
+| `skills/estimation-methodology/scripts/estimate-calc.py` | **21** in-process behaviors | importlib + CLI argparse smoke |
+| `skills/appstore-screenshots/scripts/layout-calc.py` | **17** in-process behaviors | importlib + CLI argparse smoke |
 
-The retired in-process coverage.py measurement (94%/92%) went away with the
-Python test suite; the scripts themselves are unchanged and their documented
-contracts are pinned 1:1 by the subprocess behaviors above plus each script's
-built-in `--self-test`.
+In-process testing asserts true contracts (unknown-model → sonnet fallback,
+unknown-layout → ValueError) rather than approximating via subprocess; each
+script's built-in `--self-test` provides additional validation. Coverage
+measurement via coverage.py is opportunistic (present on host → reported,
+absent → behavioral gates remain the hard requirement).
+
+### Python harness tests (stdlib unittest via benchmark/harness/tests)
+
+Benchmark harness self-tests (95 methods across 16 modules) exercise schema
+byte-compat, rotation, generators, deterministic/live pipelines, budget/credential
+gates, and prompt assembly — all with injected fakes, zero real LLM calls. Measured
+via opportunistic coverage.py.
 
 ### Swift packages (measured via swift test --enable-code-coverage)
 
@@ -100,8 +110,9 @@ High-logic-density targets (14+ scenarios):
 ### Swift (measured, per package)
 
 - `benchmark/ttt-template` — 48 Swift Testing tests (engine, AI, models, router, view-model); the iOS slice runs via `make test-ios` (xcodebuild, iPhone simulator; SKIPs cleanly without a runtime)
-- `benchmark/harness` — 140 tests incl. schema byte-compat against the real `history.json`, AC-8 package-graph, budget/credential/prompt-assembly gates (all dispatchers injected — zero LLM calls)
-- `tests/swift` — 38 PluginScriptsTests behaviors
+
+**Total deterministic suite:** ~198 bats assertions (shell/hooks/skills) + 37
+Python skill-script tests + 95 Python harness tests + 48 Swift ttt-template tests = **180+ test methods** green.
 
 See `tests/COVERAGE.md` for per-file details and proxy exemption policy.
 

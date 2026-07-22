@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""bench-deterministic — deterministic dual-path benchmark executable.
+
+Imports ONLY benchmarkkit (AC-8 import isolation; never benchmarklive). Exit codes:
+0 success, 1 a generated app's tests failed, 64 bad argv. Frozen seam argv:
+  bench-deterministic --workdir D --run-id ID --timestamp TS --git-sha SHA
+    --record P --history P --runs-dir D [--template D] [--plugin-root D] [--estimate-calc P]
+"""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from benchmarkkit import deterministic_run
+
+_FLAGS = ["--workdir", "--run-id", "--timestamp", "--git-sha", "--record",
+          "--history", "--runs-dir", "--template", "--plugin-root", "--estimate-calc"]
+_HELP = ("bench-deterministic --workdir <dir> --run-id <id> --timestamp <ts> "
+         "--git-sha <sha> --record <path> --history <path> --runs-dir <dir>")
+
+
+def die(message, code):
+    sys.stderr.write(message + "\n")
+    sys.exit(code)
+
+
+def main(argv):
+    args = {}
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("-h", "--help"):
+            print(_HELP)
+            sys.exit(0)
+        if a in _FLAGS and i + 1 < len(argv):
+            args[a] = argv[i + 1]
+            i += 2
+        else:
+            die(f"bench-deterministic: unknown or incomplete arg '{a}'", 64)
+
+    def require(key):
+        if key not in args:
+            die(f"bench-deterministic: missing required {key}", 64)
+        return args[key]
+
+    workdir = require("--workdir")
+    run_id = require("--run-id")
+    timestamp = require("--timestamp")
+    git_sha = require("--git-sha")
+    record = require("--record")
+    history = require("--history")
+    runs_dir = require("--runs-dir")
+
+    bench_dir = os.path.dirname(os.path.dirname(history))  # <bench>/results/history.json
+    plugin_root = args.get("--plugin-root") or os.path.dirname(bench_dir)
+    template_dir = args.get("--template") or os.path.join(bench_dir, "ttt-template")
+    estimate_calc = args.get("--estimate-calc") or os.path.join(
+        plugin_root, "skills", "estimation-methodology", "scripts", "estimate-calc.py")
+
+    try:
+        result = deterministic_run.run(
+            workdir=workdir, run_id=run_id, timestamp=timestamp, git_sha=git_sha,
+            record_path=record, history=history, runs_dir=runs_dir,
+            template_dir=template_dir, plugin_root=plugin_root, estimate_calc_path=estimate_calc)
+    except Exception as exc:  # noqa: BLE001 — top-level CLI guard
+        die(f"[benchmark] error: {exc}", 1)
+
+    w = result.record.path_with
+    wo = result.record.path_without
+    if w and wo:
+        print(f"[benchmark] WITH:    loc={w.loc_produced} tests={w.test_count} "
+              f"pass={w.pass_fail} stages={w.stage_count} score={w.estimate_complexity_score}")
+        print(f"[benchmark] WITHOUT: loc={wo.loc_produced} tests={wo.test_count} "
+              f"pass={wo.pass_fail} stages={wo.stage_count} score={wo.estimate_complexity_score}")
+    print(f"[benchmark] record:  {record}")
+    print(f"[benchmark] history: {history}")
+    if result.exit_code != 0:
+        die("[benchmark] FAIL: a generated app's tests did not pass", 1)
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

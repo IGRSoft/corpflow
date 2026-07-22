@@ -4,7 +4,7 @@ description: Expert technical writer for source code documentation, README updat
 model: haiku
 color: white
 effort: low
-version: 0.1.3
+version: 0.2.0
 maxTurns: 25
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -122,13 +122,7 @@ Use PostgreSQL for relational data
 
 ### Diff-Only Read Rule (DC)
 
-Cheapest-first read order (when only verdict/decisions/refs or the delta is needed — full reads stay available whenever context requires them):
-
-1. **Frontmatter-first**: for an upstream artifact, read its `handoff:` frontmatter block (≤200 tok, `handoff-protocol.md#frontmatter-schema`) instead of the full artifact when only verdict/decisions/refs are needed (this is DC0's rule, formalized here for reuse).
-2. **Diff-only**: check `state.json → facts.files_read` for a source path. If the file was read by DV, use `git diff <base>..HEAD -- <path>` instead of `Read <path>` when only the delta is needed to update a doc reference.
-3. **Anchor-scoped**: when a single `## <anchor>` section suffices, `Read` that anchor's range instead of the whole file.
-
-Read the full file/artifact ONLY when the above is insufficient. If `facts.files_read` is absent (legacy worktask), fall back to normal reads.
+Cheapest-first when only the delta is needed to update a doc reference (full reads stay available): frontmatter-first, then **diff-only** via `git diff <base>..HEAD -- <path>` when `state.json → facts.files_read` lists the path, else anchor-scoped `Read`. Full-read only when insufficient; absent `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
 
 #### DC6 — Version-Ordering Verification
 
@@ -161,23 +155,12 @@ Before marking DC stage complete, verify:
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-dc`. Prev→this label: `QA→DC`.
+Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dc`. Prev→this label: `QA→DC`.
 
-Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dc`.
 
-### State.json Atomic Merge — REQUIRED before return
+### State Patch — REQUIRED before return
 
-```bash
-_sf=".context/state.json"
-_tmp="${_sf}.tmp.$$"
-jq --arg code "DC" --arg artifact "documentation-N.md" --arg verdict "<pass|fail>" \
-   --arg prev_code "DR" --arg summary "<≤300-char summary> ref:<artifact>" \
-   '.stages[$code] += {status:"completed", artifact:$artifact, verdict:$verdict} |
-    .handoffs[($prev_code + "→" + $code)] = $summary' \
-   "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
-```
-
-If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+Run `state-patch.sh --stage DC --prev QA` (`skills/worktask/scripts/`) to atomically patch `stages.DC` + the `QA→DC` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
 
 #### Mandatory Close (DC)
 
@@ -186,7 +169,7 @@ If `jq` is unavailable or state.json is absent, skip silently — the SubagentSt
 > # ⚠️ MANDATORY CLOSE — DO THIS BEFORE YOU RETURN ⚠️
 > **First-named closing action, non-optional.** Before returning from the DC stage:
 >
-> 1. **Write the `.context/state.json` stage-completion entry for `DC`** using the State.json Atomic Merge block above. This is the FIRST thing you do as you close — not the last, not "if there's time".
+> 1. **Write the `.context/state.json` stage-completion entry for `DC`** using the State Patch pointer above (`state-patch.sh --stage DC --prev QA`). This is the FIRST thing you do as you close — not the last, not "if there's time".
 > 2. **Do it even if the documentation artifact is partial or imperfect.** A partial artifact with a correct state patch is recoverable; a perfect artifact with no state patch forces a Layer-3 orchestrator recovery.
 > 3. **The orchestrator cannot auto-recover reliably without this.** The SubagentStop hook is a backstop, not a substitute — do not rely on it. Your explicit self-patch is the contract.
 >

@@ -42,6 +42,19 @@ coordinate lookups — in XCUITest, query by `accessibilityIdentifier` (set it i
 rather than by visible label or screen position, so tests survive copy changes and layout
 shifts.
 
+## Multi-substate UI screens (camera / photo / result)
+
+Screens that cycle a single view through several substates (e.g. capture → review → result, each with default/error/empty/loading variants) hide two defect classes that snapshot and state-machine tests miss: a control that overflows or is clipped in one substate, and a transition control that fails to return the prior state. Plan a **hittable-control-bounds UITest** for any such screen.
+
+### Hittable-control-bounds pattern
+
+For each substate the screen renders, assert:
+
+1. Every primary control is present AND hittable — on-screen, within window bounds, not clipped or overlapped. Query by `accessibilityIdentifier`, then assert `element.isHittable`, not mere existence.
+2. Each substate-transition control performs its transition AND its inverse returns the prior state — e.g. a RETAKE control from the review state returns the live-capture state.
+
+One method may sweep every substate or you may write one per substate; either way, assert every primary control hittable in every substate it should appear.
+
 ## Handoff to QA Stage
 
 QA stage receives from DV:

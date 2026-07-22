@@ -1,7 +1,7 @@
 You are the DR (Developer Review) stage of a worktask building a benchmark workload.
 
 TASK: Review the SwiftUI Tic-Tac-Toe implementation for correctness and code
-quality before QA. Run the /swiftui-review 10-step checklist over the Views;
+quality before QA. Run a SwiftUI 10-step review checklist over the Views;
 add a state-management review (@Observable/@MainActor usage, router-driven
 navigation, no engine logic leaking into Views) and an animation review
 (placement spring + winning-line highlight + screen transitions are driven by

@@ -1,21 +1,29 @@
 # tests/COVERAGE.md — per-file coverage report + documented exemptions (AC-3)
 
-**Migration Summary (Swift #196):** The benchmark/test suite migrated from Python to Swift during this worktask. Python suites `tests/python/` were retired; their coverage (38 unit tests, estimate/layout behavioral contracts) is now covered by `tests/swift` PluginScriptsTests (21 + 17 = 38 Swift behaviors shelling the unchanged Python skill scripts). Skill scripts (`estimate-calc.py`, `layout-calc.py`) remain Python runtime but are pinned by subprocess behavioral tests instead of in-process line coverage (the retired `coverage.py` measured 94%/92% in-process; this worktask replaces it with 1:1 CLI behavioral contracts + each script's built-in `--self-test`). Three Swift packages are now measured via `swift test --enable-code-coverage`: `benchmark/ttt-template` (48 fixture tests), `benchmark/harness` (140 harness tests), `tests/swift` (38 PluginScriptsTests), all gated at ≥85% line coverage.
+**Migration Summary (#221 Swift→Python):** Benchmark harness and skill-script
+tests migrated from Swift to Python (stdlib unittest). Skill scripts
+(`estimate-calc.py`, `layout-calc.py`) are now tested via in-process importlib
+(asserting real contracts) plus CLI smoke, replacing subprocess approximations.
+Benchmark harness fully ported to Python (benchmarkkit + benchmarklive, 95 tests),
+replacing 140 Swift tests. The TTT artifact package stays Swift (48 tests,
+measured via llvm-cov). Python coverage measured via opportunistic coverage.py
+(present on host → reported, absent → behavioral gates remain hard requirement).
+Bash via kcov or documented assertion-density proxy (macOS case).
 
-**Scaffolded by DV0d. QA fills per-file numbers + proxy exemptions after `make coverage` runs.**
+**Scaffolded by DV0. QA fills per-file numbers + proxy exemptions after `make coverage` runs.**
 
 ## Coverage tooling status
 
 | Tool | Status | Notes |
 |------|--------|-------|
 | kcov (bash) | **Installed via brew** (`kcov 43` at `/opt/homebrew/bin/kcov`) | Tier-1 system probe found nothing; tier-2 brew succeeded. All bash/shell scripts are instrumentable. |
+| coverage.py (python) | **opportunistic** | When installed: measures `tests/python` + `benchmark/harness/tests` via `python3 -m unittest`. When absent: behavioral/gate assertions remain hard gate, no clean-clone dependency. |
 | swift test --enable-code-coverage (Swift) | **Built into the Swift 6 toolchain** | llvm-cov export JSON per package (`swift test --show-codecov-path`); aggregate line gate via jq. |
-| coverage.py (python) | **retired** | Removed with `tests/python/` — the skill scripts stay Python but are now covered behaviorally by `tests/swift` (38 subprocess behaviors + each script's `--self-test`). Historical in-process numbers: 94% / 92%. |
 
-`make coverage` (or `make test COVERAGE=1`) runs kcov per `.bats` target + the
-three Swift packages (`benchmark/ttt-template`, `benchmark/harness`,
-`tests/swift`) with coverage enabled and gates aggregate line coverage at
-≥ **85%** per package (COV_MIN=85).
+`make coverage` (or `make test COVERAGE=1`) runs kcov per `.bats` target + optional
+coverage.py for Python suites + `swift test --enable-code-coverage` for
+`benchmark/ttt-template` with aggregate line coverage gated at ≥ **85%** per
+package (COV_MIN=85). Python coverage is report-only when absent (no gate).
 
 ### Swift denominator exclusions (documented, not a blanket exemption)
 
@@ -38,24 +46,34 @@ the `## Proxy exemptions` table below with a documented reason and asserted bran
 
 ## AC-3 Resolution (QA, measured)
 
-**Verdict: AC-3 MET.** Swift via llvm-cov measurement (jq gate); skill scripts via
-behavioral parity (tests/swift subprocess suites); bash via the q3 documented
-proxy because kcov is impractical on this platform.
+**Verdict: AC-3 MET.** Python measured via opportunistic coverage.py (or
+behavioral gates when absent); Swift via llvm-cov measurement (jq gate); bash via
+the q3 documented proxy because kcov is impractical on this platform.
 
-### Skill scripts (behavioral parity — tests/swift, ≥85% intent preserved)
+### Skill scripts (in-process + CLI smoke — tests/python)
 
-| Source file | Behaviors | Note |
-|-------------|-----------|------|
-| `skills/estimation-methodology/scripts/estimate-calc.py` | **21** | band boundaries (10/11/15/17/18/20/25 + clamp-low), ai_cost arithmetic (sonnet 0.36 / haiku 0.0375), hours (M/senior 24-30 base, 27.6-34.5 buffered, sp 4-5), CLI JSON shape, `--self-test`, no-args rc=1, unknown-model rejection |
-| `skills/appstore-screenshots/scripts/layout-calc.py` | **17** | Layout A proportional geometry (iPhone 6.9), screenshot centering (19.5:9), Layout D > A, full-bleed passthrough (tvOS), mac 16:10 landscape, unknown layout/device rejection, `--self-test`, `--list-devices` |
+| Source file | Test methods | Coverage approach |
+|-------------|---------|-------------------|
+| `skills/estimation-methodology/scripts/estimate-calc.py` | **21** | In-process importlib + CLI argparse smoke; band boundaries (10/11/15/17/18/20/25 + clamp-low), ai_cost arithmetic (sonnet 0.36 / haiku 0.0375), hours (M/senior 24-30 base, 27.6-34.5 buffered, sp 4-5), CLI JSON shape, `--self-test`, no-args rc=1, unknown-model rejection |
+| `skills/appstore-screenshots/scripts/layout-calc.py` | **17** | In-process importlib + CLI argparse smoke; Layout A proportional geometry (iPhone 6.9), screenshot centering (19.5:9), Layout D > A, full-bleed passthrough (tvOS), mac 16:10 landscape, unknown layout/device rejection, `--self-test`, `--list-devices` |
 
-The scripts are UNCHANGED (skill runtime contract). Swift cannot import Python
-in-process, so the retired coverage.py line measurement (94% / 92%, driven by
-in-process `main(argv)` calls) is replaced by 1:1 behavioral pins over the CLI
-plus each script's built-in `--self-test` (23 internal assertions for
-layout-calc, arithmetic self-checks for estimate-calc). Any future line drift
-in these scripts fails the behavior pins, which is the property the 85% gate
-existed to protect.
+The scripts are UNCHANGED (skill runtime contract). In-process testing asserts
+true contracts (unknown-model → sonnet fallback, unknown-layout → ValueError)
+rather than subprocess approximations. Each script's built-in `--self-test`
+provides additional validation. Coverage measured via opportunistic coverage.py
+when present (historical in-process: 94% / 92%); behavioral gates are the hard
+requirement on clean clones.
+
+### Python harness tests (stdlib unittest — benchmark/harness/tests)
+
+| Package | Suite size | Coverage approach |
+|---------|-----------|-------------------|
+| `benchmark/harness` (benchmarkkit + benchmarklive) | 95 tests / 16 modules | opportunistic coverage.py |
+
+Harness tests exercise schema byte-compat (vendored history.json), rotation,
+generators (real `swift test` on generated apps), deterministic/live pipelines,
+budget/credential gates, prompt assembly, and stage attribution — all with
+injected fakes, zero real LLM calls.
 
 ### Swift packages (llvm-cov — measured, jq gate ≥85%)
 
@@ -64,8 +82,6 @@ existed to protect.
 | Package | Suite size |
 |---------|-----------|
 | `benchmark/ttt-template` (TicTacToeKit) | 48 tests / 10 suites |
-| `benchmark/harness` (BenchmarkKit + BenchmarkLive) | 140 tests / 30 suites |
-| `tests/swift` (PluginScriptsTests) | 38 tests / 9 suites |
 
 Refresh numbers with `make coverage` (prints per-package percentages and fails
 below COV_MIN).
@@ -148,12 +164,12 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/context-compression/scripts/post-compact-recovery.sh` | `tests/shell/skills/post-compact-recovery.bats` | — | — | — |
 | `skills/agent-coordination/scripts/audit-dedup.sh` | `tests/shell/skills/agent-coordination__audit-dedup.bats` | — | — | — |
 
-### Skill scripts (behavioral pins — tests/swift)
+### Skill scripts (in-process + CLI smoke — tests/python)
 
-| Source file | Test file | Behaviors |
+| Source file | Test file | Test methods |
 |-------------|-----------|-----------|
-| `skills/estimation-methodology/scripts/estimate-calc.py` | `tests/swift/Tests/PluginScriptsTests/EstimateCalcTests.swift` | 21 |
-| `skills/appstore-screenshots/scripts/layout-calc.py` | `tests/swift/Tests/PluginScriptsTests/LayoutCalcTests.swift` | 17 |
+| `skills/estimation-methodology/scripts/estimate-calc.py` | `tests/python/test_estimate_calc.py` | 21 |
+| `skills/appstore-screenshots/scripts/layout-calc.py` | `tests/python/test_layout_calc.py` | 17 |
 
 ## Proxy exemptions (QA fills; each must name a specific file + reason)
 

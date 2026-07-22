@@ -1,6 +1,7 @@
 ---
 name: optimize-agent
 description: Analyze and optimize existing agent definitions for clarity, efficiency, and consistency
+version: 0.1.0
 argument-hint: <agent name or path>
 model: opus
 allowed-tools: Read, Glob, Grep, Write
@@ -209,11 +210,16 @@ Run on every agent regardless of focus area; treat findings here as blocking on 
 | `description` | ≤250 characters total. Measure with `awk -F'description: ' '/^description:/{print length($2)}'`. Flag with exact char count if over. | P0 |
 | `model` | Strict membership: ∈ {`haiku`, `sonnet`, `opus`, `fable`}. Reject `claude-*`, `claude-sonnet-4-6`, version aliases, or omission. | P0 |
 
-#### Frontmatter audit — effort & tools
+#### Frontmatter audit — effort
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
 | `effort` | Present on every stage agent. Validate against model: `xhigh` requires `model: opus` or `model: fable` (Opus 4.8 / Fable 5 honor xhigh; Sonnet silently downgrades — see `skills/cost-optimization/SKILL.md § Per-Effort Thinking-Budget Ceilings`). Effort matches role tier per the model-selection matrix. | P1 |
+
+#### Frontmatter audit — tools
+
+| Field | Audit Rule | Severity |
+|-------|------------|----------|
 | `tools` | Least-privilege: explicit list, no bare wildcards. Flag bare `Bash` without scoped sub-matchers (`Bash(git:*)`, `Bash(swift test:*)`). Scoped pattern wildcards are fine — `WebFetch(domain:*.example.com)` subdomain rules and mid-pattern file rules (`Read(secrets-*/config.json)`) match correctly; still flag unscoped `Bash(*)`/`Read(*)`. Flag `Write`/`Edit` on review-only agents (DR/SR/QA). Cross-check against the agent's documented constraints. Also flag any single-segment `dir/**` allow-rule (cwd-anchored — require `**/dir/**` for any-depth) and any `Write(path)`/`NotebookEdit(path)`/`Glob(path)` rule (startup warning — use `Edit(path)`/`Read(path)`). | P1 |
 
 #### Frontmatter audit — hooks, maxTurns, disallowedTools

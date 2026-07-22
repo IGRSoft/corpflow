@@ -168,6 +168,45 @@ constraints:
   total_tokens: { max: 200, tokenizer: cl100k_base-proxy }
 ```
 
+### Schema — subagents_spawned (B2 governance)
+
+```yaml
+# …continued: handoff.properties
+      subagents_spawned:
+        type: array
+        maxItems: 5
+        description: >
+          OPTIONAL (B2). Sub-agents this stage dispatched, so DR/orchestrator see the
+          fan-out without walking audit.jsonl. The cap of 5 is a policy tripwire: a stage
+          needing more should re-split (TL), not fan out unbounded. Nested spawns downshift
+          a model tier by default and never run background-nested in a headless run.
+        items:
+          type: object
+          required: [agent, task]
+          properties:
+            agent: { type: string, description: "resolved plugin:agent id" }
+            task: { type: string, maxLength: 120 }
+```
+
+### Schema — deep_reads (B4 FN fan-in tripwire)
+
+```yaml
+# …continued: handoff.properties
+      deep_reads:
+        type: array
+        description: >
+          OPTIONAL (B4). Artifacts a fan-in stage (FN primarily) read IN FULL beyond their
+          ≤200-token frontmatter, each with why the frontmatter was insufficient. Empty/
+          absent is healthy (frontmatter-first sufficed); a long list is the tripwire that
+          a producing stage's frontmatter is under-informative.
+        items:
+          type: object
+          required: [artifact, reason]
+          properties:
+            artifact: { type: string }
+            reason: { type: string, enum: [anchor-miss, flagged-verdict, retry, ambiguous] }
+```
+
 ### Per-stage required-field matrix
 
 #### Stages PL–DR
@@ -175,9 +214,9 @@ constraints:
 | Stage | Required (beyond base 4) | Optional | Verdict vocabulary |
 |-------|--------------------------|----------|--------------------|
 | PL | next_stage_focus, key_decisions | files_touched, open_questions | ok / blocked / escalate |
-| AR | key_decisions, next_stage_focus, open_questions | files_touched | ok / blocked / escalate |
+| AR | key_decisions, next_stage_focus, open_questions | files_touched, subagents_spawned | ok / blocked / escalate |
 | TL | next_stage_focus | key_decisions, files_touched | ok / blocked / escalate |
-| DV | files_touched, next_stage_focus | key_decisions, open_questions | ok / blocked / escalate |
+| DV | files_touched, next_stage_focus | key_decisions, open_questions, subagents_spawned | ok / blocked / escalate |
 | DR | key_decisions (= findings) | files_touched, open_questions | pass / fail |
 
 #### Stages SR–ET
@@ -188,7 +227,7 @@ constraints:
 | QA | files_touched (= tests added), key_decisions (= results) | open_questions | go / no-go |
 | DC | files_touched | key_decisions | ok / blocked / escalate |
 | RE | files_touched, key_decisions (= version) | open_questions | ok / blocked |
-| FN | next_stage_focus, files_touched | key_decisions | ok / blocked |
+| FN | next_stage_focus, files_touched | key_decisions, deep_reads | ok / blocked |
 | ST | key_decisions (= rationale) | open_questions | approve / reject |
 | IR | key_decisions (= root cause), next_stage_focus | files_touched | ok / escalate |
 | ET | key_decisions (= ethics findings) | open_questions | pass / fail |
@@ -593,6 +632,8 @@ properties:
       tests_added: { type: array, items: { type: string } }
       decisions:
         type: array
+        maxItems: 8
+        description: "Bounded (B3): newest 8 survive. Clamped at the single write chokepoint state-patch.sh atomic_merge() (AD-7), not by producers — matches eviction-order rule 3."
         items:
           type: object
           required: [id, summary, ref]
@@ -637,7 +678,8 @@ properties:
 # …continued: WorktaskStateLedger.properties.facts.properties
       dispatched_agents:
         type: array
-        description: "OPTIONAL (additive, version:1); writer: the orchestrator loop ONLY — see field notes"
+        maxItems: 6
+        description: "OPTIONAL (additive, version:1); writer: the orchestrator loop ONLY — see field notes. Bounded (B3): 6 survive, launched-survive-first (live agents resume needs are kept ahead of terminal rows). Clamped in state-patch.sh atomic_merge() (AD-7)."
         items:
           type: object
           required: [stage, task_id, subagent_type, status]

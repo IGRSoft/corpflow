@@ -4,7 +4,7 @@ description: Release engineering specialist for versioning, changelog generation
 model: haiku
 color: yellow
 effort: low
-version: 0.1.0
+version: 0.2.0
 maxTurns: 25
 tools: Read, Glob, Grep, Bash, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -256,20 +256,9 @@ IR → DV → DR → QA → [RE] → FN
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-re`. Prev→this label: `DC→RE`.
+Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-re`. Prev→this label: `DC→RE`.
 
-Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-re`.
 
-### State.json Atomic Merge — REQUIRED before return
+### State Patch — REQUIRED before return
 
-```bash
-_sf=".context/state.json"
-_tmp="${_sf}.tmp.$$"
-jq --arg code "RE" --arg artifact "release-N.md" --arg verdict "<pass|fail>" \
-   --arg prev_code "QA" --arg summary "<≤300-char summary> ref:<artifact>" \
-   '.stages[$code] += {status:"completed", artifact:$artifact, verdict:$verdict} |
-    .handoffs[($prev_code + "→" + $code)] = $summary' \
-   "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
-```
-
-If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+Run `state-patch.sh --stage RE --prev DC` (`skills/worktask/scripts/`) to atomically patch `stages.RE` + the `DC→RE` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.

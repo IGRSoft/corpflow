@@ -4,7 +4,7 @@ description: Ethics and constitutional compliance reviewer for AI agent decision
 model: opus
 color: white
 effort: xhigh
-version: 0.1.0
+version: 0.2.0
 maxTurns: 25
 tools: Read, Glob, Grep, Write, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -227,20 +227,9 @@ Before marking ET stage complete, verify:
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-et`. Prev→this label: `<invoker>→ET` (whichever stage triggered the ethics gate).
+Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-et`. Prev→this label: `<invoker>→ET` (whichever stage triggered the ethics gate).
 
-Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-et`.
 
-### State.json Atomic Merge — REQUIRED before return
+### State Patch — REQUIRED before return
 
-```bash
-_sf=".context/state.json"
-_tmp="${_sf}.tmp.$$"
-jq --arg code "ET" --arg artifact "ethics-review-N.md" --arg verdict "<pass|fail>" \
-   --arg prev_code "invoker" --arg summary "<≤300-char summary> ref:<artifact>" \
-   '.stages[$code] += {status:"completed", artifact:$artifact, verdict:$verdict} |
-    .handoffs[($prev_code + "→" + $code)] = $summary' \
-   "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
-```
-
-If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+Run `state-patch.sh --stage ET --prev <invoker>` (`skills/worktask/scripts/`; `<invoker>` = the stage that triggered the ethics gate) to atomically patch `stages.ET` + the `<invoker>→ET` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.

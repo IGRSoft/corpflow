@@ -4,7 +4,7 @@ description: Engineering team leadership with team coordination, performance man
 model: sonnet
 color: cyan
 effort: medium
-version: 0.2.0
+version: 0.3.0
 maxTurns: 30
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:technical-lead)
 ---
@@ -256,22 +256,11 @@ Before marking TL stage complete, verify:
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-tl`. Prev→this label: `AR→TL`.
+Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-tl`. Prev→this label: `AR→TL`.
 
 **Skip-exploration short-circuit**: If `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` as authoritative and rely on the AR-stage `analyzing-N.md` anchors for fan-out planning. Do NOT re-Glob/Grep files PL/AR already explored. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
 
-Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-tl`.
 
-### State.json Atomic Merge — REQUIRED before return
+### State Patch — REQUIRED before return
 
-```bash
-_sf=".context/state.json"
-_tmp="${_sf}.tmp.$$"
-jq --arg code "TL" --arg artifact "coordination-N.md" --arg verdict "<pass|fail>" \
-   --arg prev_code "AR" --arg summary "<≤300-char summary> ref:<artifact>" \
-   '.stages[$code] += {status:"completed", artifact:$artifact, verdict:$verdict} |
-    .handoffs[($prev_code + "→" + $code)] = $summary' \
-   "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
-```
-
-If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+Run `state-patch.sh --stage TL --prev AR` (`skills/worktask/scripts/`) to atomically patch `stages.TL` + the `AR→TL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.

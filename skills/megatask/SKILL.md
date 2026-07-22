@@ -2,7 +2,7 @@
 name: megatask
 description: Meta-orchestration of many worktasks across a GitHub milestone or explicit issue array — dependency/blocker DAG, priority ordering, isolated per-issue worktrees. Use for /megatask, multi-issue batches, or any dependency-ordered fan-out of worktasks.
 effort: high
-version: 0.3.0
+version: 0.4.0
 related:
   - ../../commands/megatask.md
   - references/dependency-graph.md
@@ -211,6 +211,8 @@ parallel_tracks = reduce_by_disk_capacity(parallel_tracks)   # each worktree dup
 ```
 
 Recorded in `orchestrator.json → configuration.parallel_tracks`. Never a flag/default.
+
+### Subagent spawn budget
 
 > **Subagent spawn budget**: each issue dispatches ~9–11 stage subagents (9-stage default, 11-stage `--secure`) from the single megatask orchestrator session, and the cap counts **every** spawn regardless of depth (`agent-coordination § Per-session subagent spawn cap`; default **200** via `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`) — nested delegation (DV routing to platform agents and Tier-2 specialists, QA spawning `test-generator`) adds several more spawns per issue on top of the stage count. Stage count alone puts the **best-case** ceiling at **~18 issues** (11-stage) / **~22 issues** (9-stage); with routine nested delegation and retries, expect to hit the default cap several issues sooner. For batches near that ceiling, raise `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` before starting, or split into multiple `/megatask --issues` batches.
 

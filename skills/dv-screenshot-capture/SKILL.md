@@ -61,6 +61,18 @@ Run this skill under any of the following conditions:
 Minimum: **1 screenshot** per worktask run (when `metadata.requires_screenshots: true`).
 Maximum: **5 screenshots** per run (skill enforces; 6th call returns `error: "screenshot_count_exceeded"`).
 
+## Live-drive verification (`ui_visual_check`)
+
+When the plan sets `ui_visual_check: true`, static evidence alone does NOT satisfy the DV exit gate. Unit/state-machine tests and host-rendered `#Preview` snapshots (the `apple-canvas` adapter) verify structure, not runtime presentation — same-frame SwiftUI update faults, control overflow, and dropped state transitions can pass both yet still fail on device. Before handoff to DR/QA, DV MUST live-drive the running app.
+
+### Live-drive steps
+
+1. Build and run on a live simulator (the sim-booting `apple` adapter) — never use `apple-canvas`/`#Preview` as the sole evidence source for a `ui_visual_check` row.
+2. Drive the app through EACH rendered substate the acceptance criteria name (default, error, empty, loading, success, and every result/review state), tapping through the real transitions rather than jumping to a state in isolation.
+3. Confirm each primary control is on-screen and hittable and that transition controls actually present the next state, THEN capture from that live-driven state.
+
+A `ui_visual_check` row whose only evidence is a `#Preview`/canvas render or a passing unit test is incomplete — recapture from a live-driven run.
+
 ## Adapters
 
 Uniform contract — all adapters implement the same return shape:

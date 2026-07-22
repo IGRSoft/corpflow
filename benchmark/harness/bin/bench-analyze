@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""bench-analyze — render an evidence-backed markdown analysis of the latest (or a
+given) live BenchmarkRecord. Imports ONLY benchmarkkit (AC-8). Exit codes: 0
+success (incl. "no live records yet"), 64 bad argv, 1 unexpected failure.
+Argv: bench-analyze [--history <path>] [--run <record.json>] [--reference <record.json>]
+                    [--out <md path>]
+"""
+
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from benchmarkkit import analysis
+
+
+def die(message, code):
+    sys.stderr.write(message + "\n")
+    sys.exit(code)
+
+
+def _load_json(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _latest_live_from_history(history_path):
+    try:
+        history = _load_json(history_path)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(history, dict):
+        return None
+    live = history.get("live")
+    if not isinstance(live, list) or not live:
+        return None
+    return live[-1]  # newest last (rolling history convention)
+
+
+def _latest_live_from_runs_dir(benchmark_dir):
+    runs_dir = os.path.join(benchmark_dir, "results", "runs", "live")
+    try:
+        names = [n for n in os.listdir(runs_dir) if n.endswith(".json")]
+    except OSError:
+        return None
+    if not names:
+        return None
+    names.sort(key=lambda n: os.path.getmtime(os.path.join(runs_dir, n)))
+    try:
+        return _load_json(os.path.join(runs_dir, names[-1]))
+    except (OSError, ValueError):
+        return None
+
+
+def main(argv):
+    history = run_path = reference_path = out = None
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("-h", "--help"):
+            print("bench-analyze [--history <path>] [--run <record.json>] "
+                  "[--reference <record.json>] [--out <md path>]")
+            sys.exit(0)
+        if a in ("--history", "--run", "--reference", "--out"):
+            if i + 1 >= len(argv):
+                die(f"bench-analyze: {a} needs a value", 64)
+            value = argv[i + 1]
+            i += 2
+            if a == "--history":
+                history = value
+            elif a == "--run":
+                run_path = value
+            elif a == "--reference":
+                reference_path = value
+            else:
+                out = value
+        else:
+            die(f"bench-analyze: unknown arg '{a}'", 64)
+
+    cwd = os.getcwd()
+    benchmark_dir = os.path.join(cwd, "benchmark")
+    history_path = history or os.path.join(benchmark_dir, "results", "history.json")
+    out_path = out or os.path.join(benchmark_dir, "results", "analysis.md")
+
+    try:
+        if run_path:
+            record = _load_json(run_path)
+        else:
+            record = _latest_live_from_history(history_path) or _latest_live_from_runs_dir(benchmark_dir)
+
+        if record is None:
+            print("[analyze] no live records yet — run `make benchmark-live` first")
+            sys.exit(0)
+
+        reference = _load_json(reference_path) if reference_path else None
+        result = analysis.analyze(record, reference=reference)
+        markdown = analysis.render_markdown(result)
+
+        out_dir = os.path.dirname(out_path)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(markdown)
+    except Exception as exc:  # noqa: BLE001 — top-level CLI guard
+        die(f"[analyze] error: {exc}", 1)
+
+    print(f"[analyze] wrote {out_path}")
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

@@ -56,7 +56,7 @@ The minimum recommended flag set per stage when dispatching from a headless runn
 |---|---|
 | **FN** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:project-manager < fn-prompt.txt` |
 | **RE** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:release-engineer < re-prompt.txt` |
-| **ST** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode acceptEdits -- igrsoft:stakeholder < st-prompt.txt` |
+| **ST** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort low --permission-mode acceptEdits -- igrsoft:stakeholder < st-prompt.txt` |
 
 ### Model & effort defaults
 

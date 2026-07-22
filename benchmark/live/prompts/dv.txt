@@ -1,9 +1,8 @@
 You are the DV (Development) stage of a worktask building a benchmark workload.
 
 TASK: Implement the real, runnable SwiftUI multiplatform Tic-Tac-Toe app per the
-design. Route platform work through apple-developer:macos-developer and
-apple-developer:ios-developer (the package targets macOS 15+ AND iOS 18+); use
-the swiftui-skills, swift-testing-entry, and accessibility-patterns skills.
+design. Implement the macOS and iOS platform layers (the package targets macOS 15+
+AND iOS 18+); apply SwiftUI, Swift Testing, and accessibility best practices.
 - Sources/TicTacToeKit: Engine (Board move-validation/win/draw, AIOpponent easy
   random + hard minimax with injectable RNG), Models (ScoreEntry/Leaderboard/
   GameSettings, Codable, injectable store URLs), Services (SoundPlaying protocol,

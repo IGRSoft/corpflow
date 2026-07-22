@@ -1,6 +1,7 @@
 ---
 name: stage-contracts
 description: Per-stage Inputs→Outputs→Validation contract for every worktask stage (PL/AR/TL/DV/DR/SR/QA/DC/RE/FN/ST/IR/ET). Use when authoring stage agents, implementing handoffs, or validating worktask completion.
+version: 0.2.0
 ---
 
 # Stage Contracts Reference
@@ -60,6 +61,18 @@ Two-step resolver (canonical), as in **Run Index Resolution** above: (1) `task.m
 
 See the F1 paragraph and bash snippet immediately above. Cross-references: `handoff-protocol.md#fallback-paths` (F1..F4 matrix), `/cost-report § Cache Performance` (operator surface).
 
+### #diff-only-read
+
+Canonical cheapest-first read order for review/finalization stages (DR/SR/QA/DC/FN) when only a verdict, decisions, refs, or the delta is needed — full reads stay available whenever context requires them:
+
+1. **Frontmatter-first**: read an upstream artifact's `handoff:` block (≤200 tok, `#f1-telemetry` schema) instead of the whole artifact when only verdict/decisions/refs are needed.
+2. **Diff-only**: if `state.json → facts.files_read` lists a source path (read by DV or a prior stage), use `git diff <base>..HEAD -- <path>` for changed-file context, NOT `Read <path>`.
+3. **Anchor-scoped**: when a single `## <anchor>` section suffices, `Read` that anchor's range, not the whole file.
+
+#### Diff-only — full-read escape hatch
+
+Read the full file/artifact ONLY when the above is insufficient (document the reason in the stage artifact's `§ Findings`/`§ Notes`); for files >200 lines, use `Read` with `offset`/`limit` on the changed region. Absent `facts.files_read` (legacy worktask) → normal reads. Stage agents cite this anchor and keep a ~1-line steady-path reminder inline; they MUST NOT restate this full text.
+
 ## Required Outputs (handoff-protocol)
 
 Every stage's output artifact MUST:
@@ -89,14 +102,14 @@ All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolve
 
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
-| **DV** | developer | opus | `.context/<plan_file>` (resolved per AR rule), `.context/analyzing-N.md`, `.context/coordination-N.md` (if present) | `.context/development-N.md` with sections: Files Changed, Approach, Tests Added, Verification Command + actual code changes | `development-N.md` exists + git diff is non-empty + `.context/logs/build-*.log` shows success | `.context/errors/developer.md` |
-| **DR** | technical-lead | sonnet | `.context/development-N.md` + source diff | `.context/developer-review-N.md` with sections: Code Quality, Test Coverage, Issues Found, Approval Status | `developer-review-N.md` exists + Approval Status ∈ {approved, needs-changes, rejected} | `.context/errors/technical-lead.md` |
+| **DV** | developer | opus | `.context/<plan_file>` (resolved per AR rule), `.context/analyzing-N.md`, `.context/coordination-N.md` (if present) | `.context/development-N.md` with sections: Files Changed, Approach, Tests Added, Verification Command + actual code changes | `development-N.md` exists + git diff is non-empty + every `handoff.files_touched` path passes `test -e` (write landed, not chat text) + `.context/logs/build-*.log` shows success | `.context/errors/developer.md` |
+| **DR** | technical-lead | opus | `.context/development-N.md` + source diff | `.context/developer-review-N.md` with sections: Code Quality, Test Coverage, Issues Found, Approval Status | `developer-review-N.md` exists + Approval Status ∈ {approved, needs-changes, rejected} | `.context/errors/technical-lead.md` |
 
 ### SR
 
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
-| **SR** | security-reviewer | fable | `.context/development-N.md` + source diff | `.context/security-review-N.md` with sections: Threat Model, Findings, Severity, Remediation | `security-review-N.md` exists + no High/Critical findings unresolved | `.context/errors/security-reviewer.md` |
+| **SR** | security-reviewer | opus | `.context/development-N.md` + source diff | `.context/security-review-N.md` with sections: Threat Model, Findings, Severity, Remediation | `security-review-N.md` exists + no High/Critical findings unresolved | `.context/errors/security-reviewer.md` |
 
 ### QA
 
@@ -108,14 +121,14 @@ All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolve
 
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
-| **DC** | technical-writer | haiku | `.context/development-N.md`, `.context/analyzing-N.md` | `.context/documentation-N.md` with sections: Doc Changes, README Updates, API Docs | `documentation-N.md` exists + docs diff present | `.context/errors/technical-writer.md` |
+| **DC** | technical-writer | haiku | `.context/development-N.md`, `.context/analyzing-N.md` **frontmatter-first** (`Read <artifact> limit:30`); deep-read a body ONLY on anchor-miss, a section-flagging `verdict`/`next_stage_focus`, or `retry_count > 0` | `.context/documentation-N.md` with sections: Doc Changes, README Updates, API Docs | `documentation-N.md` exists + docs diff present | `.context/errors/technical-writer.md` |
 | **RE** | release-engineer | haiku | `.context/development-N.md`, `.context/testing-N.md`, `.context/documentation-N.md` | `.context/release-N.md` with sections: Version Bump, Changelog, Deployment Checklist | `release-N.md` exists + version bump proposed + changelog entry drafted | `.context/errors/release-engineer.md` |
 
 ### FN
 
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
-| **FN** | project-manager | opus | All upstream `.context/*-N.md` | `.context/complete-summary-N.md` with sections: Summary, Files Changed, Stage Timings, Next Actions + `.context/attachments/PR instructions.md` + `.context/attachments/Review request.md` (templates per `skills/worktask/references/conductor-attachments.md`) + commit/PR created | `complete-summary-N.md` exists + both attachments exist + commit created OR PR opened | `.context/errors/project-manager.md` |
+| **FN** | project-manager | sonnet | Upstream `.context/*-N.md` **frontmatter-first** (`Read <artifact> limit:30`) + `state.json` facts. Deep-read a body ONLY on anchor-miss, a section-flagging `verdict`/`next_stage_focus`, or `retry_count > 0`; log each in the `deep_reads` tripwire (`handoff-protocol.md#frontmatter-schema`). | `.context/complete-summary-N.md` (Summary, Files Changed, Stage Timings, Next Actions) + `.context/attachments/{PR instructions,Review request}.md` (`conductor-attachments.md`) + commit/PR. FN preflight via `skills/worktask/scripts/fn-preflight.sh`. | `complete-summary-N.md` exists + both attachments exist + commit created OR PR opened | `.context/errors/project-manager.md` |
 
 ### ST
 
@@ -127,8 +140,8 @@ All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolve
 
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
-| **IR** | incident-responder | sonnet | User incident report | `.context/incident-N.md` with sections: Required Fix, Constraints, Blast Radius, Verification Command | `incident-N.md` exists + all 4 sections non-empty | `.context/errors/incident-responder.md` |
-| **ET** | ethics-reviewer | fable | `.context/<plan_file>` (resolved per AR rule) + high-risk keyword match | `.context/ethics-review-N.md` with sections: Risk Assessment, Mitigation, Decision | `ethics-review-N.md` exists + Decision ∈ {pass, block, conditional} | `.context/errors/ethics-reviewer.md` |
+| **IR** | incident-responder | opus | User incident report | `.context/incident-N.md` with sections: Required Fix, Constraints, Blast Radius, Verification Command | `incident-N.md` exists + all 4 sections non-empty | `.context/errors/incident-responder.md` |
+| **ET** | ethics-reviewer | opus | `.context/<plan_file>` (resolved per AR rule) + high-risk keyword match | `.context/ethics-review-N.md` with sections: Risk Assessment, Mitigation, Decision | `ethics-review-N.md` exists + Decision ∈ {pass, block, conditional} | `.context/errors/ethics-reviewer.md` |
 
 ## Validation Protocol
 
@@ -202,6 +215,7 @@ handoff:
   stage: PL
   verdict: ok                  # ok / blocked / escalate
   summary: "<one-line summary ≤200 chars>"
+  rejection_reason: "<gate feedback, revisions only; omit on first draft>"
   key_decisions:
     - { id: pd1, summary: "<decision>", anchor: "planning-N.md#scope" }
   next_stage_focus: "<imperative: what AR must grep/design>"
@@ -214,6 +228,8 @@ handoff:
 ```
 
 Prev→this label: `USER→PL`.
+
+After a plan-gate rejection, the revised `planning-N.md` MUST set `rejection_reason:` to the user's gate feedback (verbatim or condensed) — distinct from the `## Key Decisions` narrative — so downstream stages and ST retrospectives can cite it without reconstructing it from `audit.jsonl`. Omit the field on a first, un-rejected draft.
 
 ### #tpl-ar — Architecture (software-architector)
 
