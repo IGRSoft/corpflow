@@ -222,16 +222,6 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 
 Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-sr`.
 
-### State.json Atomic Merge — REQUIRED before return
+### State Patch — REQUIRED before return
 
-```bash
-_sf=".context/state.json"
-_tmp="${_sf}.tmp.$$"
-jq --arg code "SR" --arg artifact "security-review-N.md" --arg verdict "<pass|fail>" \
-   --arg prev_code "DR" --arg summary "<≤300-char summary> ref:<artifact>" \
-   '.stages[$code] += {status:"completed", artifact:$artifact, verdict:$verdict} |
-    .handoffs[($prev_code + "→" + $code)] = $summary' \
-   "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
-```
-
-If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+Run `state-patch.sh --stage SR --prev DR` (`skills/worktask/scripts/`) to atomically patch `stages.SR` + the `DR→SR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.

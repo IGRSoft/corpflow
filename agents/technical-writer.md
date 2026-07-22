@@ -165,19 +165,9 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 
 Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dc`.
 
-### State.json Atomic Merge — REQUIRED before return
+### State Patch — REQUIRED before return
 
-```bash
-_sf=".context/state.json"
-_tmp="${_sf}.tmp.$$"
-jq --arg code "DC" --arg artifact "documentation-N.md" --arg verdict "<pass|fail>" \
-   --arg prev_code "DR" --arg summary "<≤300-char summary> ref:<artifact>" \
-   '.stages[$code] += {status:"completed", artifact:$artifact, verdict:$verdict} |
-    .handoffs[($prev_code + "→" + $code)] = $summary' \
-   "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
-```
-
-If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+Run `state-patch.sh --stage DC --prev QA` (`skills/worktask/scripts/`) to atomically patch `stages.DC` + the `QA→DC` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
 
 #### Mandatory Close (DC)
 
@@ -186,7 +176,7 @@ If `jq` is unavailable or state.json is absent, skip silently — the SubagentSt
 > # ⚠️ MANDATORY CLOSE — DO THIS BEFORE YOU RETURN ⚠️
 > **First-named closing action, non-optional.** Before returning from the DC stage:
 >
-> 1. **Write the `.context/state.json` stage-completion entry for `DC`** using the State.json Atomic Merge block above. This is the FIRST thing you do as you close — not the last, not "if there's time".
+> 1. **Write the `.context/state.json` stage-completion entry for `DC`** using the State Patch pointer above (`state-patch.sh --stage DC --prev QA`). This is the FIRST thing you do as you close — not the last, not "if there's time".
 > 2. **Do it even if the documentation artifact is partial or imperfect.** A partial artifact with a correct state patch is recoverable; a perfect artifact with no state patch forces a Layer-3 orchestrator recovery.
 > 3. **The orchestrator cannot auto-recover reliably without this.** The SubagentStop hook is a backstop, not a substitute — do not rely on it. Your explicit self-patch is the contract.
 >

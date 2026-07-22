@@ -679,19 +679,9 @@ handoff:
 - `worktree_path` (OPTIONAL, additive): the isolated worktree's absolute path — `state-patch.sh` maps it to `stages.DV.worktree.path`. Lets resume re-enter via `EnterWorktree(path)` and DR/QA run in the right dir. Set to the worktree you confirmed in D0.0 (WORKSPACE_ROOT when the workspace IS the worktree).
 - `worktree_branch` (OPTIONAL, additive): the worktree's git branch — maps to `stages.DV.worktree.branch`; gives fn-gate the branch without shelling `git rev-parse`.
 
-### State.json Atomic Merge — REQUIRED before return
+### State Patch — REQUIRED before return
 
-```bash
-_sf=".context/state.json"
-_tmp="${_sf}.tmp.$$"
-jq --arg code "DV" --arg artifact "development-N.md" --arg verdict "<pass|fail>" \
-   --arg prev_code "TL" --arg summary "<≤300-char summary> ref:<artifact>" \
-   '.stages[$code] += {status:"completed", artifact:$artifact, verdict:$verdict} |
-    .handoffs[($prev_code + "→" + $code)] = $summary' \
-   "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
-```
-
-If `jq` is unavailable or state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your artifact's frontmatter.
+Run `state-patch.sh --stage DV --prev TL` (`skills/worktask/scripts/`) to atomically patch `stages.DV` + the `TL→DV` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
 
 ### Files Read Registry (token optimization)
 
