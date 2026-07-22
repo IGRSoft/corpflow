@@ -112,6 +112,15 @@ Use the `Read` tool to load both the design screenshot and the implementation sc
 - **Major**: Noticeable visual difference — wrong colors, spacing off by > 8px, wrong copy
 - **Minor**: Subtle spacing or color difference, typography nuance
 
+## Evidence integrity (direct-read before accepting)
+
+Caption and manifest metadata are self-reported and can be wrong — a stale, placeholder, or unrelated image can carry a plausible caption. Whenever a prior stage offers a screenshot as acceptance-criteria proof, QA MUST open the image with the `Read` tool and confirm it actually shows the claimed state BEFORE marking the AC accepted — never accept on caption, filename, or `screenshots.md` row alone.
+
+### High-risk artifacts
+
+- Scrutinize captures that assert their own validity — `dv-*-VERIFIED.*` names, remediation/re-capture images, and any "fixed"/"after" pair — that is exactly where a mislabeled or duplicated capture hides.
+- If two captures for different states are byte-identical, or a capture shows an unrelated screen (home screen, springboard, wrong app), treat the evidence as `flagged`, not `accepted`, and record it in `testing-N.md § Notes`.
+
 ## Verdict reconciliation
 
 When a row has both an RMSE pre-pass result and a multimodal vision result, reconcile
