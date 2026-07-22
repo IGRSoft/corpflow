@@ -60,59 +60,7 @@ Entry point for all development tasks that intelligently selects the appropriate
 
 ### Detection Rules
 
-#### App platforms (apple / android / web)
-
-| Markers | Platform | Route To |
-|---------|----------|----------|
-| `.swift`, `.xcodeproj`, `Package.swift`, `.xcworkspace` | apple | apple-developer → specialized |
-| `.kt`, `.kts`, `build.gradle(.kts)` **with `AndroidManifest.xml`**, `settings.gradle(.kts)` + `app/` module, `*.compose.kt` | android | `android-developer:android-developer` (routes internally) |
-| `.ts`, `.tsx`, `.js`, `.jsx`, `.vue`, `.svelte`, `package.json`, `tsconfig.json`, `vite/next/nuxt/svelte/angular config` | web | `frontend-developer:frontend-developer` (routes internally) |
-
-#### Systems platforms
-
-| Markers | Platform | Route To |
-|---------|----------|----------|
-| `.cpp`, `.cc`, `.hpp`, `CMakeLists.txt`, `meson.build`, `vcpkg.json`, `conanfile.*` | systems | `system-developer:cpp-developer` |
-| `.c`/`.h` only (no C++ sources), `configure.ac`, C-only `Makefile` | systems | `system-developer:c-developer` |
-| `.py`, `pyproject.toml`, `uv.lock` | systems | `system-developer:python-developer` |
-| `.sh`, `.bash`, `.bats` | systems | `system-developer:bash-developer` |
-| Mixed systems languages / FFI boundaries | systems | `system-developer:system-developer` (router) |
-
-#### Backend platforms — languages
-
-| Markers | Platform | Route To |
-|---------|----------|----------|
-| `go.mod` / `*.go` | backend | `backend-developer:go-developer` |
-| `pom.xml` / `build.gradle(.kts)` / `*.java` / `*.kt` (no `AndroidManifest.xml`) | backend | `backend-developer:jvm-backend-developer` |
-| `package.json` **with a server dep** (express/nest/fastify/hono) | backend | `backend-developer:node-developer` |
-| `requirements.txt` / `pyproject.toml` **with fastapi/django/flask** | backend | `backend-developer:python-backend-developer` |
-| `Gemfile` | backend | `backend-developer:backend-developer` (router → ruby) |
-| `composer.json` | backend | `backend-developer:backend-developer` (router → php) |
-| `*.csproj` | backend | `backend-developer:backend-developer` (router → dotnet) |
-
-#### Backend platforms — contracts, data & polyglot
-
-| Markers | Platform | Route To |
-|---------|----------|----------|
-| REST/GraphQL/gRPC contract work (OpenAPI/SDL/`.proto`) | backend | `backend-developer:api-designer` |
-| schema / migration / index / query / ORM work | backend | `backend-developer:database-engineer` |
-| Mixed / polyglot / cross-service back-end | backend | `backend-developer:backend-developer` (router) |
-
-#### Mixed-repo precedence
-
-Precedence on mixed repos: apple/android/web (UI) markers win over systems/backend markers when both are present and the task targets the app layer; systems markers win for native libraries, build tooling, or scripts; backend markers win when the task targets HTTP/RPC services, API contracts, or the persistence layer. Ambiguous → ask (Priority Order rule 4).
-
-Three precedence notes resolve the only non-trivial collisions:
-
-- **Python language vs Python web.** Pure Python *language* depth (typing, asyncio internals, free-threading, packaging) → `system-developer:python-developer`. The Python *web* layer (FastAPI/Django/Flask + persistence) → `backend-developer:python-backend-developer`. The backend agent itself delegates language depth back to system-developer, so this is a routing entry point, not a fork.
-
-#### Precedence — front-end vs back-end `package.json`
-
-- **Front-end vs back-end `package.json`** (inspect dependencies, not just the extension). A UI framework (react/vue/svelte/angular) → web/`frontend-developer:*`; a server framework (express/nest/fastify/hono) → `backend-developer:node-developer`; **both present → ask** (Priority Order rule 4). The same rule is documented in `skills/_shared/language-detection.md` of the backend-developer (and frontend-developer) plugin — keep them in sync. JVM Kotlin has the analogous collision: `AndroidManifest.xml` present → android; otherwise `build.gradle(.kts)`/`*.kt` → `backend-developer:jvm-backend-developer`.
-
-#### Precedence — web UI vs native (Apple)
-
-- **Web UI vs native (Apple).** When web markers (`.ts`/`.tsx`/`.jsx`/`package.json`/framework configs) and native markers (`.swift`/`.xcodeproj`/`Package.swift`/native module dirs) co-occur, the deciding question is *which layer the change targets*: UI/component/state/styling/build-tooling work → `frontend-developer:frontend-developer` (front-end wins); a native module, bridging header, or platform-API binding → `apple-developer:*` (Apple wins). React Native / Expo splits the same way — the JS/TS surface goes to the (optional) `react-native-developer`, native modules deferred to `apple-developer:*`. Default to `frontend-developer` for ambiguous pure-JS/TS web work.
+Marker→platform routing tables (App / Systems / Backend / Mixed-repo precedence, plus the front-end-vs-back-end `package.json` and web-vs-native precedence notes) live in `skills/shared/platform-detection.md § Detection Rules (markers → platform)`. Read that section when the Priority Order above and the common-rows table below don't resolve the target.
 
 ### Detection Logging
 
@@ -152,7 +100,7 @@ When building or testing Apple platform code directly (not delegating to apple-d
 ### Steps 2–3 — Build & test
 
 2. **Build.** Use `mcp__XcodeBuildMCP__build_sim` or `build_run_sim`. If warmup failed, substitute `xcodebuild -project … -scheme … -destination …` via Bash and tee output to the same `.context/logs/build-developer-<ts>.log` path so QA/DR are unaffected.
-3. **Test.** Use `mcp__XcodeBuildMCP__test_sim`. If warmup failed, substitute `xcodebuild test -project … -scheme … -destination …` via Bash and tee to `.context/logs/test-developer-<ts>.log`. **Test Selection Gate**: see step D2 below for the full protocol. The `test_sim` invocation receives positive `-only-testing:<TestID>` flags (one per Selected Test), or no `-only-testing:` when `test_mode=full`. Do **not** use blanket `-skip-testing:` — selection is positive, not negative.
+3. **Test.** Use `mcp__XcodeBuildMCP__test_sim`. If warmup failed, substitute `xcodebuild test -project … -scheme … -destination …` via Bash and tee to `.context/logs/test-developer-<ts>.log`. **Test Selection Gate**: see step D2 below for the full protocol. The `test_sim` invocation receives positive `-only-testing:<TestID>` flags (one per Selected Test), or none when `test_mode=full`. Never use blanket `-skip-testing:`.
 
 > MCP builds/tests past ~2 min auto-background — await the completion notification before reading `.context/logs/build-developer-*.log` / `test-developer-*.log`; the returned handle is not the result. See `agent-coordination § MCP Auto-Background`.
 
@@ -186,6 +134,8 @@ When building or testing Apple platform code directly (not delegating to apple-d
   4. **Fix-up cycle**: if build fails, diagnose ALL errors from the log in one pass, apply ALL fixes, then rebuild. Do not fix one error, build, fix the next, build again.
   Every build attempt is captured via tee → `.context/logs/build-developer-<ts>.log` (filename grammar: `logging-conventions`)
 
+##### Build auto-background note (D1)
+
 > `build_sim` past ~2 min auto-backgrounds — step 4's "diagnose ALL errors from the log in one pass" must wait for the completion notification, not the returned handle, before reading the log. An external headless dispatch that genuinely needs a synchronous fix-up cycle may raise `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` in its own environment; in-process dispatches share the session's setting. See `agent-coordination § MCP Auto-Background`.
 
 #### D1.5 — Write unit tests
@@ -197,19 +147,7 @@ When building or testing Apple platform code directly (not delegating to apple-d
 
   Compute the **Selected Tests** list from `<plan_file>` metadata + inline source markers, then run tests per `test_mode`. Tee output → `.context/logs/test-developer-<ts>.log`. See `skills/shared/testing-strategy.md § Test Selection Gate` and `skills/shared/test-selection-syntax.md` for the full protocol.
 
-##### Selection algorithm (steps 1–4)
-
-  Per `test-selection-syntax.md § Parser algorithm`:
-  1. Read `metadata.test_mode` (effective default: `scoped`), `metadata.always_required_tests`, `metadata.ui_visual_check` from `<plan_file>` frontmatter.
-  2. Apply legacy alias (compat-only, one release cycle): if only `requires_ui_tests` is present, map per `testing-strategy.md § Backward compatibility`.
-  3. `git diff --name-only` against base; extract changed top-level symbols from each Swift source file (types, funcs, enums).
-  4. Glob test files; parse `// @test-required`, `// @depends-on: <Symbol>`, `// @test-tag: <tag>` markers (and Swift Testing `.tags(...)` traits).
-
-##### Selection algorithm (steps 5–7)
-
-  5. Selected = (`@test-required` set ∪ `@test-tag: smoke` set) ∪ (`@depends-on:` matches changed symbols) ∪ (covers-changed-files per the rule in `test-selection-syntax.md`) ∪ `metadata.always_required_tests`. Add module-level tests only if `test_mode=scoped`.
-  6. Write `.context/development-N.md § Selected Tests` with the list (always-required, dependency-matched, excluded-with-reason).
-  7. Write any parser warnings to `.context/logs/test-selection-warnings.md` (see schema in `test-selection-syntax.md § Warning log schema`).
+  The Selected-Tests parser algorithm (marker parse, changed-symbol extraction, selection set union) is canonical in `skills/shared/test-selection-syntax.md § Parser algorithm` and `skills/shared/testing-strategy.md § Test Selection Gate` — do not restate it. Compute `Selected Tests` per that spec, write it to `development-N.md § Selected Tests`, then derive the Executed subset below.
 
 ##### Executed Tests (DV) derivation
 
@@ -247,27 +185,7 @@ When building or testing Apple platform code directly (not delegating to apple-d
 
 #### Worktree Mode
 
-All DV operations use worktree path prefix — isolation is always active. Use `EnterWorktree`/`ExitWorktree` tools to programmatically enter/leave worktree contexts. `EnterWorktree` accepts a `path` parameter to target a specific worktree directory when multiple exist; it can also **switch between Claude-managed worktrees mid-session** (re-target without `ExitWorktree` first). Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. Stale worktrees are auto-cleaned (including those with untracked files); fresh worktree per delegation (no reuse of prior-session worktrees). For large repos, `worktree.sparsePaths` reduces checkout size. See `skills/megatask/SKILL.md`.
-
-##### Base-ref resolution
-
-Base-branch resolution is controlled by the `worktree.baseRef` setting: `head` (default — branch from local HEAD) or `fresh` (branch from base ref, drops unpushed work). The plugin assumes `head` semantics; do not set `fresh` without coordinating with workflow-engineer. `worktree.baseRef:"head"` resolves the *current* linked worktree's HEAD (not the main checkout's HEAD) when spawning subagents or `EnterWorktree` from inside a worktree — no diverged bases in nested-worktree flows.
-
-##### Per-task base override
-
-When the merge target is not the worktask default (e.g. shipping into `origin/release/v2` instead of `origin/master`), PL0 sets `task.metadata.base_ref: "origin/release/v2"`. The DV agent honours `task.metadata.base_ref` (when present) over the session-level `worktree.baseRef` for both `git diff` ranges in test selection (D2) and `EnterWorktree` base resolution; the orchestrator passes `--base-ref` to `EnterWorktree` when invoked from a higher-level dispatcher (see `skills/agent-coordination/references/headless-dispatch.md`). When neither is set, the `worktree.baseRef` setting governs.
-
-##### Background & shared-checkout rules
-
-Background subagents spawned via `claude agents` cannot escape their assigned worktree scope (the worktree-isolation guard covers them). Background-session dispatch recognises pre-existing git worktrees (e.g., Conductor `.context` workspaces, externally-managed worktree shells) instead of refusing to spawn with a duplicate-creation error — `Edit` is not blocked when `EnterWorktree` would have collided. A background session on a *shared* checkout (no isolated worktree of its own) is told upfront that edits are blocked until it runs `EnterWorktree` — the worktree contract is enforced at the start of the session rather than surfacing as a rejected edit mid-work.
-
-##### Out-of-tree confirmation guard
-
-`EnterWorktree` with a `path` **outside** `.claude/worktrees/` triggers a confirmation prompt. Unattended DV/resume flows should keep targets under `.claude/worktrees/`, pre-authorize via `bypassPermissions`/skip-permissions mode, or rely on the cwd-based pre-existing-worktree recognition above.
-
-##### Background session lifecycle
-
-Background agents launched via `/bg` or `←←` preserve the active permission mode across retire/wake — a permissive `bypassPermissions` parent does not revert to `default` after the daemon hibernates. Sub-agents in isolated worktrees automatically get Read/Edit access to their own worktree. Stalled subagents fail with a clear error after 10 minutes — surface and retry rather than waiting. Subagents resumed via `SendMessage` restore their explicit spawn `cwd` correctly. "Always allow" permission rules save at the repository root and persist across every worktree of that repo — a rule approved in one background/worktree session is not re-prompted in a sibling worktree.
+All DV operations run in the isolated worktree (D0.0 gate above). Use `EnterWorktree`/`ExitWorktree`; build/test with `--package-path {workdir}`, git with `git -C {workdir}`. Base-ref resolution (`worktree.baseRef` head/fresh + `task.metadata.base_ref` per-task override), background & shared-checkout rules, the out-of-tree `EnterWorktree` confirmation guard, and background-session lifecycle live in `skills/worktask/references/workspace-modes.md § DV Worktree Mechanics`.
 
 ### Worktree cwd discipline
 
@@ -347,18 +265,7 @@ The skill returns one `{path, bytes, ok, error}` per requested capture and rewri
 
 ### Adapter routing
 
-DV does not call platform tools directly. The skill routes by `state.platform`:
-
-| `state.platform` | Adapter | Backing tool |
-|------------------|---------|--------------|
-| `apple` | `apple_adapter` | `mcp__XcodeBuildMCP__screenshot` |
-| `web` | `web_adapter` | Playwright (`npx playwright screenshot`) or Chrome MCP |
-| `android` | `android_adapter` | `adb exec-out screencap -p` |
-| `systems` | `cli_fallback_adapter` | terminal transcripts (`silicon` → ImageMagick → `.txt` placeholder) |
-| `backend` | `cli_fallback_adapter` | API request/response transcripts (curl/httpie), test output, k6 load reports, migration logs (`silicon` → ImageMagick → `.txt` placeholder) |
-| `all` / unknown / meta-work | `cli_fallback_adapter` | `silicon` → ImageMagick → `.txt` placeholder |
-
-Unknown platform → `cli_fallback_adapter` automatically. Audit row `screenshot_platform_fallback` is emitted by the skill, not DV.
+DV does not call platform tools directly — the skill routes by `state.platform`: apple/web/android → native capture tools; systems/backend/`all`/unknown → `cli_fallback_adapter` (`silicon` → ImageMagick → `.txt` floor), which also emits the `screenshot_platform_fallback` audit row. Full adapter→backing-tool table: `skills/dv-screenshot-capture/SKILL.md`.
 
 ### How many screenshots
 
@@ -374,14 +281,7 @@ jq --argjson sc '<the captures array from skill output>' \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
-Schema: `[{slug, path, bytes, platform, ok, design_ref?}, …]`.
-
-`design_ref` is **optional** (auditability only): the `figma-registry.md` row `ID`
-this capture maps to (e.g. `design-002`), or `—` when no registry / no unique
-Screen+State match. It mirrors the `Design Ref` column the skill writes into
-`screenshots.md` (see `skills/dv-screenshot-capture/SKILL.md § Registry tagging`).
-QA reads the **manifest** (`screenshots.md`) for the join, not `facts` — this field
-is cosmetic/audit-only and does NOT change DV's capture trigger.
+Schema: `[{slug, path, bytes, platform, ok, design_ref?}, …]`. `design_ref` is optional (audit-only): the `figma-registry.md` `ID` this capture maps to, mirroring the `Design Ref` column the skill writes into `screenshots.md`; QA joins via the manifest, not `facts`, so it never changes DV's capture trigger. See `skills/dv-screenshot-capture/SKILL.md § Registry tagging`.
 
 ### Failure handling
 
@@ -394,23 +294,11 @@ is cosmetic/audit-only and does NOT change DV's capture trigger.
 
 ### Anti-pattern — "skip on headless" is NOT a skip reason (hook-enforced)
 
-A headless run, an unavailable/unbooted simulator, or a design language that
-does not render in the simulator (e.g. Liquid Glass) are **NOT** reasons to skip
-capture. The `dv-screenshot-capture` adapter chain handles exactly those
-conditions without booting a sim or rendering glass: `apple-canvas` (host-side
-ImageRenderer/SnapshotHost) → `cli/fallback` (`git diff … | silicon`) → `.txt`
-floor. The skill **always yields ≥1 artifact and rewrites `screenshots.md`**.
-Only `metadata.requires_screenshots == false` permits zero captures.
+A headless run, an unbooted simulator, or a non-rendering design language (e.g. Liquid Glass) are **NOT** skip reasons — the adapter chain handles them without a sim (`apple-canvas` → `cli/fallback` `git diff … | silicon` → `.txt` floor) and **always yields ≥1 artifact and rewrites `screenshots.md`**. Only `metadata.requires_screenshots == false` permits zero captures.
 
 #### Checkbox-plus-deferral prose is invalid (hook-blocked)
 
-Marking the checklist `[x]` with prose such as *"Screenshot capture not run (no
-MCP sim UI session); flagged for QA"* is **invalid** — a checkbox plus a
-deferral sentence does not satisfy the gate. This is now machine-enforced by the
-`hooks/dv-screenshot-gate.sh` SubagentStop hook: if `requires_screenshots ≠
-false` and `.context/images/<worktask_id>/screenshots.md` is absent on disk, the
-hook emits a `block` decision and the DV agent cannot report complete. (Precedent
-this closes: OV-56 — DV deferred to QA in prose, DR waived it, the bypass merged.)
+Marking the checklist `[x]` with a deferral sentence (*"capture not run; flagged for QA"*) is **invalid** — machine-enforced by the `hooks/dv-screenshot-gate.sh` SubagentStop hook: if `requires_screenshots ≠ false` and `.context/images/<worktask_id>/screenshots.md` is absent on disk, the hook emits a `block` decision and DV cannot report complete. (Precedent: OV-56 — prose deferral waived by DR, bypass merged.)
 
 ### Completion criterion (added to DV Completion Verification)
 
@@ -490,50 +378,17 @@ After the chronological run, append one final row when test coverage is availabl
 If the platform has no coverage tool wired, emit one row with `result: skipped` + `coverage_pct: n/a (no coverage tool)` so DR/QA can see the absence is deliberate, not a write miss.
 
 ### Selected Tests
-Required when `<plan_file>` declares `metadata.test_mode` (or effective value from legacy `requires_ui_tests` alias — see step 2 above). Schema per `skills/shared/testing-strategy.md § Selected Tests`.
+Required when `<plan_file>` declares `metadata.test_mode`. Schema per `skills/shared/testing-strategy.md § Selected Tests`.
 
-#### Template — mode & selection
+Write it with four sub-sections per `skills/shared/testing-strategy.md § Selected Tests`, under a mode/auto-promotion header row:
 
-```markdown
-| Mode | <build-only|scoped|full> |
-| Reason | <metadata source or auto-promotion> |
-| Auto-promoted? | <none|build-only→scoped|scoped→full> + reason |
+- **Always Required** — `@test-required` hits + `metadata.always_required_tests`.
+- **Dependency-Matched** — `| Test | Matched on | Source |`.
+- **Excluded (with reason)** — `| Test | Reason |` (no marker / `mode=build-only` / …).
+- **Executed at DV** — `| Test | Source | Status |`, Source ∈ {Added, Modified, always_required, smoke_safety_net}, Status ∈ {pass, fail}. Empty when `test_mode=build-only`.
+- **Warnings** — first 3 lines of `.context/logs/test-selection-warnings.md`, if any.
 
-#### Always Required
-- <Target>/<Type>/<method> — `@test-required` at <file:line>
-- <Target>/<Type>/<method> — `metadata.always_required_tests`
-
-#### Dependency-Matched
-| Test | Matched on | Source |
-| ---- | ---------- | ------ |
-| ...  | ...        | ...    |
-```
-
-#### Template — exclusions & execution
-
-```markdown
-<!-- …continued: Selected Tests template -->
-#### Excluded (with reason)
-| Test | Reason |
-| ---- | ------ |
-| ...  | <no marker / mode=build-only / etc.> |
-
-#### Executed at DV
-List of tests that actually ran at DV (subset of Selected Tests). One row per test.
-
-| Test | Source | Status |
-| ---- | ------ | ------ |
-| <Target>/<Type>/<method> | Added \| Modified \| always_required \| smoke_safety_net | pass \| fail |
-
-Empty if `test_mode=build-only` (no tests at DV). When the safety net fires, `Source` is `smoke_safety_net` and `§ Decisions` carries `auto_executed: smoke_set`.
-
-#### Warnings (copy first 3 lines from .context/logs/test-selection-warnings.md if any)
-- ...
-```
-
-#### How QA/DR read this section
-
-QA reads `Always Required`, `Dependency-Matched`, and `Excluded` verbatim and executes the full Selected scope. DR reads `Warnings` to surface silent test drops and `Executed at DV` to confirm scope adherence.
+QA reads Always Required / Dependency-Matched / Excluded and executes the full Selected scope; DR reads Warnings (silent test drops) and Executed at DV (scope adherence).
 
 ### Blockers (omit section if empty)
 
@@ -580,11 +435,11 @@ Specialization tables in `skills/shared/platform-detection.md` (the full Apple /
 
 ### Context Passing
 
-When delegating, include: task description, detected platform markers, DV stage context (task ID, compressed summaries from `.context/<plan_file>` and `.context/analyzing-N.md`, test strategy/architecture), acceptance criteria, platform constraints, and architectural decisions. Also pass the compact code-documentation rule so external specialists apply it: comment only the non-obvious WHY/contract; doc blocks 1–3 lines + one-sentence `- Parameter` fields; no doc-comment essays, design-source/Figma references, verification logs, call-site lists, AC-/REQ- IDs, issue-ID provenance, or `#Preview` comments — see `skills/shared/code-documentation.md`. Request implementation code, a summary for `.context/development-N.md`, and any blockers using the `## Blockers` schema (see § Artifact Schema — `id`, `kind ∈ {missing_input | design_flaw | hard_constraint | ambiguous_requirements}`, `description`, `escalate_to`).
+When delegating, include: task description, detected platform markers, DV stage context (task ID, compressed summaries from `.context/<plan_file>` and `.context/analyzing-N.md`, test strategy/architecture), acceptance criteria, platform constraints, and architectural decisions. Also pass the code-documentation rule (`skills/shared/code-documentation.md`) so specialists apply it: comment only the non-obvious WHY/contract, `///` blocks 1–3 lines, no essays/provenance/AC-IDs/`#Preview` comments. Request implementation code, a summary for `.context/development-N.md`, and any blockers using the `## Blockers` schema (see § Artifact Schema — `id`, `kind ∈ {missing_input | design_flaw | hard_constraint | ambiguous_requirements}`, `description`, `escalate_to`).
 
 ### Routing Audit
 
-On every `Task(specialist)` invocation, append one `audit.jsonl` line: `action: "delegation"`, `metadata: {to_agent: "<qualified subagent_type>", platform: "<apple|android|web|systems|backend>", markers: [<matched globs>], reason: "<one-line why>", task_id: "<DV task id>"}`. The receiving specialist writes its own retry/error narrative to `.context/errors/<basename>.md` (e.g., `errors/ios-developer.md`, `errors/c-developer.md`, `errors/node-developer.md`) per `stage-contracts § Cross-Plugin Stages`. The Routing Audit confirms back-end service files reached a `backend-developer:*` specialist (not the generic developer) — a back-end DV task whose `delegation` row points at `self`/generic is a routing miss. Likewise, a web UI DV task (`.tsx`/`.vue`/`.svelte`/component/state/styling work) whose `delegation` row points at `self`/generic or a non-web specialist is a routing miss — UI/app-layer work belongs to `frontend-developer:*`.
+On every `Task(specialist)` invocation, append one `audit.jsonl` line: `action: "delegation"`, `metadata: {to_agent: "<qualified subagent_type>", platform: "<apple|android|web|systems|backend>", markers: [<matched globs>], reason: "<one-line why>", task_id: "<DV task id>"}`. The receiving specialist writes its own retry/error narrative to `.context/errors/<basename>.md` (e.g., `errors/ios-developer.md`) per `stage-contracts § Cross-Plugin Stages`. A `delegation` row pointing at `self`/generic for a back-end (→ `backend-developer:*`) or web-UI (`.tsx`/`.vue`/`.svelte`/component/state/styling → `frontend-developer:*`) DV task is a routing miss.
 
 ## Completion Verification
 
@@ -613,14 +468,15 @@ Before marking DV stage complete, verify:
 
 ### Artifact-Complete Gate (MANDATORY before final return)
 
-A DV invocation is **not** complete until the work is finished AND the artifact reflects it. Returning mid-run with a progress update — instead of a completed artifact/summary — forces the orchestrator to resume the agent and breaks the handoff contract. Before producing your final response, confirm all four:
+A DV invocation is **not** complete until the work is finished AND the artifact reflects it. Returning mid-run with a progress update — instead of a completed artifact/summary — forces the orchestrator to resume the agent and breaks the handoff contract. Before producing your final response, confirm all five:
 
-#### Artifact-Complete Gate — the four boxes
+#### Artifact-Complete Gate — the five boxes
 
-- [ ] **All planned sub-batches applied AND verified** — every batch in the plan (e.g. B1/B2/B3) is implemented and individually checked; no batch left "in progress" or deferred without an explicit `## Blockers` entry
-- [ ] **Stage artifact written** — `development-N.md` exists on disk in `.context/` (N = `task.metadata.run_index`); do not rely on a pre-seed or intend-to-write
+- [ ] **All planned sub-batches applied AND verified** — every batch (e.g. B1/B2/B3) implemented and individually checked; none left "in progress" without a `## Blockers` entry
+- [ ] **Stage artifact written** — `development-N.md` exists on disk in `.context/` (N = `task.metadata.run_index`)
 - [ ] **Test gate confirmed differentially** — `Executed Tests (DV)` show a real pass for tests Added/Modified this run plus `always_required_tests`; "tests ran" or "build started" is not a pass
-- [ ] **Final response is the completed handoff, never a progress narration** — if any box above is unchecked, keep working; only return once the artifact is written. A mid-run status update is never a valid final message for the DV stage.
+- [ ] **Final response is the completed handoff, never a progress narration** — if any box above is unchecked, keep working; only return once the artifact is written.
+- [ ] **Every `handoff.files_touched` path landed on disk** — each passes `test -e`; empty/zero `files_touched` = nothing written → `verdict: blocked` (`class: hard_constraint`, `reason: write_denied`). NEVER emit code as chat text instead of writing the file.
 
 ### Budget-Aware Checkpointing (multi-batch runs)
 

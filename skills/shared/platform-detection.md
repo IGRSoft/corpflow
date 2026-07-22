@@ -77,3 +77,61 @@ When platform is `web`, further route based on context:
 ### Web DV evidence and review specialists
 
 Web work is UI by default: set/forward `metadata.requires_screenshots: true` on DV tasks (captured via the `web_adapter` → Playwright `npx playwright screenshot` / Chrome MCP); the screenshot manifest at `.context/images/<worktask_id>/screenshots.md` plus Lighthouse/axe reports are the Build Evidence. Review-only specialists (`frontend-developer:fe-performance-engineer`, `frontend-developer:fe-accessibility-auditor`, `frontend-developer:fe-security-auditor`) are reached through the stage flow (DR/SR/QA), not as direct DV `Task(...)` targets.
+
+## Detection Rules (markers → platform)
+
+Canonical marker→platform routing tables, extracted from `agents/developer.md § Platform Detection` (Phase-4 Worktask-Integration diet). The developer agent keeps the Priority Order + common-rows table inline and points here for the long tail.
+
+#### App platforms (apple / android / web)
+
+| Markers | Platform | Route To |
+|---------|----------|----------|
+| `.swift`, `.xcodeproj`, `Package.swift`, `.xcworkspace` | apple | apple-developer → specialized |
+| `.kt`, `.kts`, `build.gradle(.kts)` **with `AndroidManifest.xml`**, `settings.gradle(.kts)` + `app/` module, `*.compose.kt` | android | `android-developer:android-developer` (routes internally) |
+| `.ts`, `.tsx`, `.js`, `.jsx`, `.vue`, `.svelte`, `package.json`, `tsconfig.json`, `vite/next/nuxt/svelte/angular config` | web | `frontend-developer:frontend-developer` (routes internally) |
+
+#### Systems platforms
+
+| Markers | Platform | Route To |
+|---------|----------|----------|
+| `.cpp`, `.cc`, `.hpp`, `CMakeLists.txt`, `meson.build`, `vcpkg.json`, `conanfile.*` | systems | `system-developer:cpp-developer` |
+| `.c`/`.h` only (no C++ sources), `configure.ac`, C-only `Makefile` | systems | `system-developer:c-developer` |
+| `.py`, `pyproject.toml`, `uv.lock` | systems | `system-developer:python-developer` |
+| `.sh`, `.bash`, `.bats` | systems | `system-developer:bash-developer` |
+| Mixed systems languages / FFI boundaries | systems | `system-developer:system-developer` (router) |
+
+#### Backend platforms — languages
+
+| Markers | Platform | Route To |
+|---------|----------|----------|
+| `go.mod` / `*.go` | backend | `backend-developer:go-developer` |
+| `pom.xml` / `build.gradle(.kts)` / `*.java` / `*.kt` (no `AndroidManifest.xml`) | backend | `backend-developer:jvm-backend-developer` |
+| `package.json` **with a server dep** (express/nest/fastify/hono) | backend | `backend-developer:node-developer` |
+| `requirements.txt` / `pyproject.toml` **with fastapi/django/flask** | backend | `backend-developer:python-backend-developer` |
+| `Gemfile` | backend | `backend-developer:backend-developer` (router → ruby) |
+| `composer.json` | backend | `backend-developer:backend-developer` (router → php) |
+| `*.csproj` | backend | `backend-developer:backend-developer` (router → dotnet) |
+
+#### Backend platforms — contracts, data & polyglot
+
+| Markers | Platform | Route To |
+|---------|----------|----------|
+| REST/GraphQL/gRPC contract work (OpenAPI/SDL/`.proto`) | backend | `backend-developer:api-designer` |
+| schema / migration / index / query / ORM work | backend | `backend-developer:database-engineer` |
+| Mixed / polyglot / cross-service back-end | backend | `backend-developer:backend-developer` (router) |
+
+#### Mixed-repo precedence
+
+Precedence on mixed repos: apple/android/web (UI) markers win over systems/backend markers when both are present and the task targets the app layer; systems markers win for native libraries, build tooling, or scripts; backend markers win when the task targets HTTP/RPC services, API contracts, or the persistence layer. Ambiguous → ask (Priority Order rule 4).
+
+Three precedence notes resolve the only non-trivial collisions:
+
+- **Python language vs Python web.** Pure Python *language* depth (typing, asyncio internals, free-threading, packaging) → `system-developer:python-developer`. The Python *web* layer (FastAPI/Django/Flask + persistence) → `backend-developer:python-backend-developer`. The backend agent itself delegates language depth back to system-developer, so this is a routing entry point, not a fork.
+
+#### Precedence — front-end vs back-end `package.json`
+
+- **Front-end vs back-end `package.json`** (inspect dependencies, not just the extension). A UI framework (react/vue/svelte/angular) → web/`frontend-developer:*`; a server framework (express/nest/fastify/hono) → `backend-developer:node-developer`; **both present → ask** (Priority Order rule 4). The same rule is documented in `skills/_shared/language-detection.md` of the backend-developer (and frontend-developer) plugin — keep them in sync. JVM Kotlin has the analogous collision: `AndroidManifest.xml` present → android; otherwise `build.gradle(.kts)`/`*.kt` → `backend-developer:jvm-backend-developer`.
+
+#### Precedence — web UI vs native (Apple)
+
+- **Web UI vs native (Apple).** When web markers (`.ts`/`.tsx`/`.jsx`/`package.json`/framework configs) and native markers (`.swift`/`.xcodeproj`/`Package.swift`/native module dirs) co-occur, the deciding question is *which layer the change targets*: UI/component/state/styling/build-tooling work → `frontend-developer:frontend-developer` (front-end wins); a native module, bridging header, or platform-API binding → `apple-developer:*` (Apple wins). React Native / Expo splits the same way — the JS/TS surface goes to the (optional) `react-native-developer`, native modules deferred to `apple-developer:*`. Default to `frontend-developer` for ambiguous pure-JS/TS web work.
