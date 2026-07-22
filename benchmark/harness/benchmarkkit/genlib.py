@@ -47,7 +47,7 @@ class Subprocess:
 
     @staticmethod
     def run(argv: list, cwd: Optional[str] = None, input: Optional[str] = None,
-            env: Optional[dict] = None) -> "Subprocess":
+            env: Optional[dict] = None, timeout: Optional[float] = None) -> "Subprocess":
         try:
             # No input → stdin is /dev/null (never inherit the caller's stdin; a
             # nested/headless child can block forever on an inherited tty).
@@ -59,7 +59,11 @@ class Subprocess:
                 stdin=None if input is not None else subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
+                timeout=timeout,
             )
+        except subprocess.TimeoutExpired:
+            # rc 124 (shell/coreutils `timeout` convention); never leak the prompt.
+            return Subprocess(124, "", f"timed out after {timeout}s")
         except (OSError, ValueError) as exc:
             return Subprocess(127, "", f"spawn failed: {exc}")
         return Subprocess(r.returncode, r.stdout, r.stderr)
@@ -136,11 +140,19 @@ def copy_template_staged(template_dir: str, dest: str) -> int:
     return stages
 
 
-def count_loc(app_dir: str) -> int:
-    """REAL loc_produced: non-blank, non-pure-comment lines across generated *.swift."""
+def count_loc(app_dir: str, exclude_dirs: Optional[set] = None) -> int:
+    """REAL loc_produced: non-blank, non-pure-comment lines across generated *.swift.
+
+    ``exclude_dirs`` names (not paths) are pruned at the app_dir root only, so a
+    WITH-root count can skip a sibling ``without/`` arm directory.
+    """
+    skip = {".build", ".swiftpm"} | (exclude_dirs or set())
     total = 0
     for root, dirs, files in os.walk(app_dir):
-        dirs[:] = [d for d in dirs if d not in (".build", ".swiftpm")]
+        if root == app_dir:
+            dirs[:] = [d for d in dirs if d not in skip]
+        else:
+            dirs[:] = [d for d in dirs if d not in (".build", ".swiftpm")]
         for name in files:
             if not name.endswith(".swift"):
                 continue

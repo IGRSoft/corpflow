@@ -1,0 +1,34 @@
+Build a real, runnable SwiftUI multiplatform Tic-Tac-Toe app (macOS 15+ / iOS
+18+) as a Swift package in the current directory.
+
+Requirements:
+- Screens: main menu, game (3x3 board with animated piece placement and a
+  winning-line highlight), leaderboard (persisted scores, sorted standings),
+  and settings (sound toggle, AI difficulty picker, player names). Cover
+  navigation between all four screens.
+- Package layout: Package.swift at the root; library target TicTacToeKit
+  under Sources/TicTacToeKit with:
+  - Engine: board move validation, win/draw detection, an AI opponent with
+    an easy random mode and a hard mode using minimax, with an injectable
+    random number generator for determinism.
+  - Models: score entry, leaderboard, and settings types, all Codable, with
+    injectable persistence file URLs (never a hardcoded absolute path) so
+    tests can redirect where data is written.
+  - Services: a sound-playing protocol with a real platform implementation
+    and a silent no-op implementation usable in a headless test environment.
+  - Navigation: an observable app router/screen enum driving the four
+    screens.
+  - ViewModels: a main-actor game view model wiring the engine to the views.
+  - Views: SwiftUI views for each of the four screens, with accessibility
+    labels and animated transitions on the game board.
+  - An executable target under Sources/tictactoe: a SwiftUI app by default,
+    plus a --cli text-mode game loop for headless play.
+- Tests: a Swift Testing suite (@Test / #expect) under Tests/ covering the
+  engine, models, router, and view model. swift test must pass in a headless
+  environment (no display, no audio device) — never rely on hardware
+  audio/graphics being present.
+- Constraints: Swift 6, SwiftPM, and Apple SDKs only — no third-party
+  dependencies, no network access.
+
+Write the complete, real source and test files now, in this working
+directory, and make sure the package builds and its test suite passes.

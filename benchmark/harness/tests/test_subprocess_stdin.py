@@ -26,6 +26,11 @@ class SubprocessStdin(unittest.TestCase):
         r = Subprocess.run([sys.executable, "-c", code], input="hello-stdin")
         self.assertEqual(r.stdout, "hello-stdin")
 
+    def test_timeout_returns_124(self):
+        r = Subprocess.run([sys.executable, "-c", "import time;time.sleep(5)"], timeout=0.05)
+        self.assertEqual(r.exit_code, 124)
+        self.assertIn("timed out after", r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
