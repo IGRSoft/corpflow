@@ -2,7 +2,7 @@
 name: worktask
 description: Initialize a new worktask task with proper folder structure and Task System integration
 argument-hint: '<task description> [--secure] [--emergency] [--auto-plan] [--auto-finalization]'
-version: 0.1.0
+version: 0.2.0
 model: opus
 allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager)
 ---
@@ -93,42 +93,9 @@ See `skills/shared/stage-codes.md` for stage details.
 
 3a. **Initialize state.json (handoff-protocol)**: Atomic-write `.context/state.json` seed using temp+fsync+rename per `skills/worktask/references/handoff-protocol.md#atomic-write`. PL0 stage marked `in_progress`. Schema per `handoff-protocol.md#state-json-schema`. **Re-run aware**: the seed MUST compute the next free planning index from any pre-existing `.context/planning-*.md` (NOT hard-code `0`) — on a re-run in a populated `.context/`, hard-coding `planning-0.md` would pin the old plan and cause PL0 to overwrite it. Backward-compat: if creation fails (e.g. read-only filesystem), log a warning and continue — F1 fallback (legacy `metadata.context_files` mode) keeps the worktask operational.
 
-#### Step 3a snippet — next free planning index
+#### Step 3a snippets — init procedure
 
-   ```bash
-   # Re-run aware: next free planning index (0 on a fresh .context/)
-   # nullglob: empty glob expands to nothing instead of erroring under zsh
-   # ("no matches found") or staying literal under bash.
-   setopt null_glob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
-   N=0
-   for f in .context/planning-*.md; do
-     [ -e "$f" ] || continue
-     i="${f##*planning-}"; i="${i%.md}"
-     case "$i" in *[!0-9]*) continue ;; esac
-     [ "$i" -ge "$N" ] && N=$((i + 1))
-   done
-   ```
-
-#### Step 3a snippet — atomic state.json write
-
-   ```bash
-   # …continued: Step 3a seed — write state.json atomically
-   tmp=".context/.state.json.$$.${RANDOM}.tmp"
-   cat > "$tmp" <<EOF
-   {
-     "version": 1,
-     "worktask_id": "<slug>",
-     "plan_file": ".context/planning-${N}.md",
-     "platform": "<platform>",
-     "run_index": ${N},
-     "stages": { "PL": { "status": "in_progress" } },
-     "facts": { "files_modified": [], "tests_added": [], "decisions": [], "open_questions": [], "verdicts": {}, "dispatched_agents": [] },
-     "handoffs": {}
-   }
-   EOF
-   sync "$tmp" 2>/dev/null || true
-   mv -f "$tmp" .context/state.json
-   ```
+   The re-run-aware next-free-planning-index resolver (N=0 on a fresh `.context/`, nullglob-safe) and the atomic `state.json` seed write are canonical in `skills/worktask/references/initialization-patterns.md`. Compute N, then atomic-write the seed (`{version:1, worktask_id, plan_file: .context/planning-${N}.md, platform, run_index:N, stages.PL.status:in_progress, empty facts incl. dispatched_agents:[], handoffs:{}}`) per `handoff-protocol.md#atomic-write`.
 
 #### Step 3a field notes
 
@@ -172,11 +139,7 @@ Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOP
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative.
 #### Step 6 — record dropped stages
 
-   - **Record dropped stages**: when PL0's dynamic sizing omits any stage from the full 9-stage
-     pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PM MUST stamp the PL0 task's
-     `metadata.skipped_stages` — a list of `{ "stage": "<CODE>", "reason": "<short reason>" }` —
-     so `state.json` self-documents which standard stages were dropped and why. See
-     `agents/product-manager.md § Dynamic Worktask Sizing (PL0 Stage)`.
+   - **Record dropped stages**: when PL0's dynamic sizing omits any of the full 9-stage pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PM stamps the PL0 task's `metadata.skipped_stages` (`{stage, reason}` list) so `state.json` self-documents the drops. See `agents/product-manager.md § Dynamic Worktask Sizing (PL0 Stage)`.
 ### Steps 7–8 — Complete PL0 and present the plan
 
 7. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
@@ -396,23 +359,9 @@ returning to the orchestrator.
 
 External orchestrators (CI, cron, the user's shell) can invoke a single stage via `claude agents run …` instead of the in-process Task() path. PL0 populates the optional dispatch fields documented in `skills/shared/task-system.md § Dispatch metadata`; the runner reads them and builds the flag string. Full table and per-stage examples live in `skills/agent-coordination/references/headless-dispatch.md`.
 
-### Canonical one-liner
+### Canonical one-liner & runner rules
 
-Assumes `task.json` is one task's metadata blob and `prompt.txt` is the rendered stage prompt:
-
-```bash
-claude agents run \
-  --cwd "$(jq -r '.metadata.workspace_path // "."' task.json)" \
-  --plugin-dir "$PLUGIN_DIR" \
-  --model "$(jq -r '.metadata.model // "sonnet"' task.json)" \
-  --effort "$(jq -r '.metadata.effort // "high"' task.json)" \
-  --permission-mode "$(jq -r '.metadata.permission_mode // "default"' task.json)" \
-  -- "$(jq -r .metadata.agent task.json)" < prompt.txt
-```
-
-### Runner rules (model alias, audit, permissions)
-
-The `sonnet` fallback is an alias on purpose — it tracks the current Sonnet tier (Sonnet 5) and stays deprecation-proof per `skills/shared/model-selection.md`. `--permission-mode manual` is the current name for `default`; both are accepted. The runner MUST append one `audit.jsonl` line `action: "external_dispatch"` per `skills/agent-coordination/SKILL.md § Audit Trail`. Do NOT pass `--dangerously-skip-permissions` from an interactive shell — it is reserved for CI batches with a deny-list in `settings.json`.
+The copy-paste `claude agents run` one-liner (reads a task's `task.json` metadata + rendered `prompt.txt`), the `sonnet`-alias / `--permission-mode manual`↔`default` equivalence, the mandatory `external_dispatch` audit line, and the CI-only `--dangerously-skip-permissions` caveat all live in `skills/agent-coordination/references/headless-dispatch.md`.
 
 ## See Also
 
