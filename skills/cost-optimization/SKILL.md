@@ -2,6 +2,7 @@
 name: cost-optimization
 description: Cost tracking and optimization strategies for AI agent worktasks. Apply for budget management, model selection, and efficiency analysis.
 effort: medium
+version: 0.1.0
 related:
   - skills/worktask/SKILL.md
   - skills/agent-coordination/SKILL.md
@@ -29,7 +30,7 @@ Effort levels (`low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛) map 
 | `low` | ≤ 4K tokens | Mechanical tasks, formatting, routing, status updates | haiku-tier supports |
 | `medium` | ≤ 16K tokens | Standard implementation, code review, coordination | qa-engineer, technical-writer, release-engineer |
 | `high` | ≤ 32K tokens | Multi-step reasoning, default for sonnet/opus on API/Team plans | developer, technical-lead, project-manager |
-| `xhigh` | ≤ 50K tokens | Hard tradeoffs, meta-optimization, architecture | software-architector, security-reviewer, prompt-engineer |
+| `xhigh` | ≤ 50K tokens | Hard tradeoffs, meta-optimization, ethics/security review | security-reviewer, ethics-reviewer, prompt-engineer |
 | `max` | ≤ 64K tokens | Reserved for novel-domain research; cap risk of runaway thinking | (none assigned by default) |
 
 ### Effort Tuning Rule

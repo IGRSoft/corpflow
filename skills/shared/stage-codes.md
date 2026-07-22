@@ -22,7 +22,7 @@ Single source of truth for worktask stage codes.
 | RE | Release Engineering | release-engineer | haiku |
 | FN | Finalization | project-manager | sonnet |
 | ST | Stakeholder | stakeholder | sonnet |
-| IR | Incident Response | incident-responder | sonnet |
+| IR | Incident Response | incident-responder | opus |
 
 ### DV routing note
 

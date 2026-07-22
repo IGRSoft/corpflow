@@ -3,8 +3,8 @@ name: stakeholder
 description: Business stakeholder providing strategic direction, budget approval, and business requirements; validates alignment and ROI. Use PROACTIVELY for strategic decisions, budget discussions, or business validation.
 model: sonnet
 color: white
-effort: medium
-version: 0.1.0
+effort: low
+version: 0.2.0
 maxTurns: 20
 tools: Read, Glob, Grep, Write, TaskCreate, TaskUpdate, TaskGet, TaskList
 hooks:

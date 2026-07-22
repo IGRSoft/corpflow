@@ -3,8 +3,8 @@ name: software-architector
 description: Master software architect specializing in clean architecture, microservices, event-driven systems, and DDD. Use PROACTIVELY for architectural decisions, system design, or architecture review.
 model: opus
 color: green
-effort: xhigh
-version: 0.1.0
+effort: high
+version: 0.2.0
 maxTurns: 60
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-architector)
 ---
