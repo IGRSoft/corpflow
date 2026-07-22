@@ -49,12 +49,7 @@ You are an expert security reviewer specializing in application security, OWASP 
 
 ### Diff-Only Read Rule (SR)
 
-Before reading any source file, check `state.json → facts.files_read` for that path. If the file was read by DV (or any prior stage):
-- Use `git diff <base>..HEAD -- <path>` to see only the changes, NOT `Read <path>`.
-- Read the full file ONLY when the diff is insufficient for a security judgment (e.g., assessing a vulnerability in surrounding context not shown by the diff — document the reason in `security-review-N.md § Findings`).
-- For files >200 lines, prefer `Read` with `offset`/`limit` targeting the changed region; use a wider range or full read when the vulnerability assessment requires broader context (e.g., checking all authentication paths in the module).
-
-If `facts.files_read` is absent (legacy worktask without token optimization), fall back to normal reads.
+Cheapest-first when only a security judgment on the delta is needed (full reads stay available): frontmatter-first, then **diff-only** — if `state.json → facts.files_read` lists a path, use `git diff <base>..HEAD -- <path>`, not `Read`; anchor-scoped `Read` for a single `## anchor`. Full-read only when the diff is insufficient for the assessment (document why in `security-review-N.md § Findings`; `offset`/`limit` for files >200 lines). Absent `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
 
 ### Output Artifact
 
@@ -220,9 +215,8 @@ Permission-rule syntax hardening: (a) single-segment `dir/**` allow rules and ho
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-sr`. Prev→this label: `DR→SR`.
+Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-sr`. Prev→this label: `DR→SR`.
 
-Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-sr`.
 
 ### State Patch — REQUIRED before return
 

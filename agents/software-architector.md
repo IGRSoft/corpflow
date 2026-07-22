@@ -189,11 +189,10 @@ Before marking AR stage complete, verify:
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-ar`. Prev→this label: `PL→AR`.
+Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-ar`. Prev→this label: `PL→AR`.
 
 **Skip-exploration short-circuit**: If `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` (list of `<file>#<anchor>` refs) as the authoritative pre-explored set. Do NOT re-Glob/Grep the source tree for files already covered. Read only the listed anchors and start architecture work from those facts. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
 
-Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-ar`.
 `next_stage_focus` should enumerate the work streams and the requirement(s) each
 covers, so TL can skip a redundant planning read.
 

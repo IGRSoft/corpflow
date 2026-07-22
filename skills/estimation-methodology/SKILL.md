@@ -177,7 +177,9 @@ PL0 (`agents/product-manager.md § Dynamic Worktask Sizing` and `§ Test Selecti
 | 31–40 | High | AR0, TL0, DV0, DR0, QA0, DC0, FN0, ST0 |
 | 41–50 | Critical | AR0, TL0, DV0, DR0, SR0, QA0, DC0, RE0, FN0, ST0 |
 
-**Default `test_mode` by score** (combine with marker coverage; PL0 stamps `metadata.test_mode`):
+### Default test_mode by score
+
+Combine with marker coverage; PL0 stamps `metadata.test_mode`:
 
 | Score | Default `test_mode` | Override |
 |-------|---------------------|----------|

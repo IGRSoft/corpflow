@@ -122,13 +122,7 @@ Use PostgreSQL for relational data
 
 ### Diff-Only Read Rule (DC)
 
-Cheapest-first read order (when only verdict/decisions/refs or the delta is needed — full reads stay available whenever context requires them):
-
-1. **Frontmatter-first**: for an upstream artifact, read its `handoff:` frontmatter block (≤200 tok, `handoff-protocol.md#frontmatter-schema`) instead of the full artifact when only verdict/decisions/refs are needed (this is DC0's rule, formalized here for reuse).
-2. **Diff-only**: check `state.json → facts.files_read` for a source path. If the file was read by DV, use `git diff <base>..HEAD -- <path>` instead of `Read <path>` when only the delta is needed to update a doc reference.
-3. **Anchor-scoped**: when a single `## <anchor>` section suffices, `Read` that anchor's range instead of the whole file.
-
-Read the full file/artifact ONLY when the above is insufficient. If `facts.files_read` is absent (legacy worktask), fall back to normal reads.
+Cheapest-first when only the delta is needed to update a doc reference (full reads stay available): frontmatter-first, then **diff-only** via `git diff <base>..HEAD -- <path>` when `state.json → facts.files_read` lists the path, else anchor-scoped `Read`. Full-read only when insufficient; absent `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
 
 #### DC6 — Version-Ordering Verification
 
@@ -161,9 +155,8 @@ Before marking DC stage complete, verify:
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-dc`. Prev→this label: `QA→DC`.
+Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dc`. Prev→this label: `QA→DC`.
 
-Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dc`.
 
 ### State Patch — REQUIRED before return
 

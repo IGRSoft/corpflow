@@ -64,17 +64,7 @@ For documentation lookup, use Context7 (`resolve-library-id` → `query-docs`) o
 
 ### Diff-Only Read Rule (QA)
 
-Cheapest-first read order (when only verdict/decisions/refs or the delta is needed — full reads stay available whenever context requires them):
-
-1. **Frontmatter-first**: for an upstream artifact, read its `handoff:` frontmatter block (≤200 tok, `handoff-protocol.md#frontmatter-schema`) instead of the full artifact when only verdict/decisions/refs are needed.
-2. **Diff-only**: check `state.json → facts.files_read` for a source path. If the file was read by DV, use `git diff <base>..HEAD -- <path>` for changed-file context instead of `Read <path>`.
-3. **Anchor-scoped**: when a single `## <anchor>` section suffices, `Read` that anchor's range instead of the whole file.
-
-#### Full-Read Escape Hatch (QA)
-
-Read the full file/artifact ONLY when writing new tests that need the complete type/API surface, or when the above is insufficient. For files >200 lines needing a full read, ALWAYS use `Read` with `offset`/`limit` targeting the relevant section.
-
-If `facts.files_read` is absent (legacy worktask), fall back to normal reads.
+Cheapest-first when only verdict/decisions/refs or the delta is needed (full reads stay available): (1) frontmatter-first — read an upstream `handoff:` block, not the whole artifact; (2) diff-only — if `state.json → facts.files_read` lists a source path, use `git diff <base>..HEAD -- <path>`, not `Read`; (3) anchor-scoped `Read` for a single `## anchor`. Full-read only when writing new tests that need the complete type/API surface or when the above is insufficient (`offset`/`limit` for files >200 lines). Absent `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
 
 **Tool-call budget**: target ≤35 tool calls for a QA pass. If you exceed it, record an over-budget line in `testing-N.md § Notes` (count + cause) so DR/ST can see where the read/verify effort went.
 
@@ -196,9 +186,8 @@ Before marking QA stage complete, verify:
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage template: `stage-contracts.md#tpl-qa`. Prev→this label: `DR→QA` (or `SR→QA` when SR runs).
+Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-qa`. Prev→this label: `DR→QA` (or `SR→QA` when SR runs).
 
-Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-qa`.
 
 ### State Patch — REQUIRED before return
 

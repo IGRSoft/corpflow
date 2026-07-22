@@ -61,6 +61,18 @@ Two-step resolver (canonical), as in **Run Index Resolution** above: (1) `task.m
 
 See the F1 paragraph and bash snippet immediately above. Cross-references: `handoff-protocol.md#fallback-paths` (F1..F4 matrix), `/cost-report § Cache Performance` (operator surface).
 
+### #diff-only-read
+
+Canonical cheapest-first read order for review/finalization stages (DR/SR/QA/DC/FN) when only a verdict, decisions, refs, or the delta is needed — full reads stay available whenever context requires them:
+
+1. **Frontmatter-first**: read an upstream artifact's `handoff:` block (≤200 tok, `#f1-telemetry` schema) instead of the whole artifact when only verdict/decisions/refs are needed.
+2. **Diff-only**: if `state.json → facts.files_read` lists a source path (read by DV or a prior stage), use `git diff <base>..HEAD -- <path>` for changed-file context, NOT `Read <path>`.
+3. **Anchor-scoped**: when a single `## <anchor>` section suffices, `Read` that anchor's range, not the whole file.
+
+#### Diff-only — full-read escape hatch
+
+Read the full file/artifact ONLY when the above is insufficient (document the reason in the stage artifact's `§ Findings`/`§ Notes`); for files >200 lines, use `Read` with `offset`/`limit` on the changed region. Absent `facts.files_read` (legacy worktask) → normal reads. Stage agents cite this anchor and keep a ~1-line steady-path reminder inline; they MUST NOT restate this full text.
+
 ## Required Outputs (handoff-protocol)
 
 Every stage's output artifact MUST:
