@@ -36,7 +36,7 @@ class LiveGate(unittest.TestCase):
 
     def test_stage_table_dr_row(self):
         agent, model, effort = STAGE_TABLE["DR"]
-        self.assertEqual((_family(model), effort), ("opus", "xhigh"))
+        self.assertEqual((_family(model), effort), ("opus", "high"))
 
     def test_run_benchmark_deterministic_branch_is_live_free(self):
         if not os.path.exists(_RUN_BENCHMARK):

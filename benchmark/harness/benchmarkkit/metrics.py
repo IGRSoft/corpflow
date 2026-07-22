@@ -77,14 +77,18 @@ class StageCoverage:
     skills: list
     commands: list
     tool_calls: int
+    nested_background: int = 0  # emitted only when >0; preserves the 4-key byte shape
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "agents": list(self.agents),
             "skills": list(self.skills),
             "commands": list(self.commands),
             "tool_calls": self.tool_calls,
         }
+        if self.nested_background:
+            d["nested_background"] = self.nested_background
+        return d
 
     @classmethod
     def from_dict(cls, d) -> Optional["StageCoverage"]:
@@ -95,6 +99,7 @@ class StageCoverage:
             skills=[x for x in d.get("skills", []) if isinstance(x, str)],
             commands=[x for x in d.get("commands", []) if isinstance(x, str)],
             tool_calls=d.get("tool_calls") or 0,
+            nested_background=d.get("nested_background") or 0,
         )
 
 
@@ -107,6 +112,7 @@ class StageAttribution:
     out: Optional[int]
     cost_usd: Optional[float]
     coverage: Optional[StageCoverage] = None  # D2: encoded only when present
+    arm: Optional[str] = None  # "with"/"without"; encoded only on the paired path
 
     def to_dict(self) -> dict:
         d = {
@@ -119,6 +125,8 @@ class StageAttribution:
         }
         if self.coverage is not None:
             d["coverage"] = self.coverage.to_dict()
+        if self.arm is not None:
+            d["arm"] = self.arm
         return d
 
     @classmethod
@@ -131,6 +139,7 @@ class StageAttribution:
             out=d.get("out"),
             cost_usd=d.get("cost_usd"),
             coverage=StageCoverage.from_dict(d.get("coverage")),
+            arm=d.get("arm"),
         )
 
 

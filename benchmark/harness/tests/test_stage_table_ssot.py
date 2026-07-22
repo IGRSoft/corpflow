@@ -28,11 +28,19 @@ class StageTableSSOT(unittest.TestCase):
         self.assertIn("SR", STAGE_TABLE)  # SR is in the live pipeline (D3)
         self.assertEqual(len(STAGE_TABLE), 10)
 
-    def test_dr_row_is_technical_lead_opus_xhigh(self):
+    def test_dr_row_is_technical_lead_opus_high(self):
         agent, model, effort = STAGE_TABLE["DR"]
         self.assertIn("technical-lead", agent)
         self.assertEqual(_family(model), "opus")
-        self.assertEqual(effort, "xhigh")
+        self.assertEqual(effort, "high")
+
+    def test_reconciled_efforts_and_models(self):
+        self.assertEqual(STAGE_TABLE["AR"][2], "high")
+        self.assertEqual(STAGE_TABLE["DV"][2], "high")
+        self.assertEqual(STAGE_TABLE["DR"][2], "high")
+        self.assertEqual(STAGE_TABLE["QA"][2], "medium")
+        self.assertEqual(STAGE_TABLE["ST"][2], "low")
+        self.assertEqual(_family(STAGE_TABLE["FN"][1]), "sonnet")
 
     def test_efforts_are_valid(self):
         for _, _, effort in STAGE_TABLE.values():

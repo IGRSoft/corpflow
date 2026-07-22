@@ -20,7 +20,7 @@ Single source of truth for worktask stage codes.
 | QA | QA Testing | qa-engineer | sonnet |
 | DC | Documentation | technical-writer | haiku |
 | RE | Release Engineering | release-engineer | haiku |
-| FN | Finalization | project-manager | opus |
+| FN | Finalization | project-manager | sonnet |
 | ST | Stakeholder | stakeholder | sonnet |
 | IR | Incident Response | incident-responder | sonnet |
 

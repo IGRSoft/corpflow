@@ -86,15 +86,16 @@ class DispatchFillsAppMetrics(unittest.TestCase):
             git_sha_runner=stub_git_sha, without_arm="real")
         return rc
 
-    def test_fills_with_app_excluding_without_dir(self):
-        _write_min_package(self.sb.workdir_path, n_lines=3)
+    def test_fills_with_app_from_arm_folder(self):
+        # Per-arm folders: each arm is measured in its own with/ or without/ dir.
+        _write_min_package(os.path.join(self.sb.workdir_path, "with"), n_lines=3)
         _write_min_package(os.path.join(self.sb.workdir_path, "without"), n_lines=50)
         self._dispatch()
         rec = load_json(self.sb.record_path)
         self.assertEqual(rec["paths"]["with"]["loc_produced"], 4)  # Main.swift(3) + Package.swift(1)
 
     def test_fills_without_app(self):
-        _write_min_package(self.sb.workdir_path, n_lines=1)
+        _write_min_package(os.path.join(self.sb.workdir_path, "with"), n_lines=1)
         _write_min_package(os.path.join(self.sb.workdir_path, "without"), n_lines=4)
         self._dispatch()
         rec = load_json(self.sb.record_path)

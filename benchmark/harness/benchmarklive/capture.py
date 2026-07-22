@@ -20,6 +20,7 @@ from benchmarkkit.metrics import StageCoverage
 
 class FieldPaths:
     TASK_TOOL_NAME = "Task"
+    AGENT_TOOL_NAME = "Agent"  # alias emitted by newer CLIs for a subagent spawn
     SUBAGENT_TYPE_KEY = "subagent_type"
     SKILL_TOOL_NAME = "Skill"
     SKILL_KEY = "skill"
@@ -86,7 +87,7 @@ def collect_tool_uses(event: dict, agents: set, skills: set, commands: set,
         tool_calls += 1
         name = block.get("name") or ""
         inp = block.get("input") or {}
-        if name == FieldPaths.TASK_TOOL_NAME:
+        if name in (FieldPaths.TASK_TOOL_NAME, FieldPaths.AGENT_TOOL_NAME):
             sub = inp.get(FieldPaths.SUBAGENT_TYPE_KEY)
             if sub:
                 agents.add(sub)

@@ -83,5 +83,44 @@ class CaptureParser(unittest.TestCase):
         self.assertGreater(keys.index("coverage"), keys.index("cost_usd"))  # after cost_usd
 
 
+class AgentAliasAndNestedSpawns(unittest.TestCase):
+    """A4: the `Agent` tool aliases `Task`; nested background spawns are counted from
+    the per-arm audit (canonical rows only, deduped) and emitted only when >0."""
+
+    def test_agent_tool_name_aliases_task(self):
+        s = stream_json(tool_uses=[("Agent", {"subagent_type": "system-developer:python-developer"})])
+        p = capture.parse(s)
+        self.assertEqual(p.coverage.agents, ["system-developer:python-developer"])
+
+    def _audit(self, tmp, rows):
+        audit = os.path.join(tmp, "audit.jsonl")
+        with open(audit, "w", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(r) + "\n")
+        return audit
+
+    def test_nested_background_counted_canonical_only_deduped(self):
+        tmp = tempfile.mkdtemp(prefix="nest-")
+        try:
+            audit = self._audit(tmp, [
+                {"action": "subagent_stopped", "metadata": {"stage": "DV", "dedupe_key": "a"}},
+                {"action": "subagent_stopped", "metadata": {"stage": "DV", "dedupe_key": "a"}},  # dup
+                {"action": "subagent_stopped", "metadata": {"stage": "DV", "dedupe_key": "b"}},
+                {"action": "subagent_stopped", "metadata": {"stage": "DV", "advisory": True}},    # mirror
+                {"action": "subagent_stopped", "metadata": {"stage": "PL", "dedupe_key": "c"}},   # other stage
+            ])
+            stdout = stream_json(tool_uses=[("Task", {"subagent_type": "x"})], result_usage=True)
+            u = dispatch.capture_stage_usage(stdout, audit, "DV")
+            self.assertEqual(u.coverage.nested_background, 2)  # a + b, advisory+dup+PL excluded
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_nested_background_byte_shape(self):
+        from benchmarkkit.metrics import StageCoverage
+        self.assertEqual(list(StageCoverage([], [], [], 0).to_dict().keys()),
+                         ["agents", "skills", "commands", "tool_calls"])  # 4-key preserved
+        self.assertIn("nested_background", StageCoverage([], [], [], 0, nested_background=3).to_dict())
+
+
 if __name__ == "__main__":
     unittest.main()
