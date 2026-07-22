@@ -164,6 +164,10 @@ Use the **Unified Complexity Assessment** from `skills/worktask/SKILL.md § Dyna
 
 Model selection is **complexity-driven** — see `skills/shared/model-selection.md`. Check task metadata for `model_hint` set by PL stage; override only if complexity reassessment warrants it. For complexity score 31+, include "ultrathink" in reasoning prompts to trigger high effort.
 
+### Output Budget (AR)
+
+Artifact ≤250 lines; no full-file listings — pass anchors, not pasted bodies. Final return ≤250 tok.
+
 ## Cross-Plugin Invocation Context
 
 When invoked from apple-developer commands (`code-review`, `analyze-tech-debt`, `code-refactor`, `code-legacy-modernize`, `code-to-package`, `mock-api`), apply architecture review with Apple platform awareness:

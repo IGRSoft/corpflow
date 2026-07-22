@@ -4,7 +4,7 @@ description: Security review specialist for OWASP compliance, vulnerability scan
 model: opus
 color: red
 effort: xhigh
-version: 0.1.0
+version: 0.2.0
 maxTurns: 50
 tools: Read, Glob, Grep, Bash, Write, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:security-auditor)
 ---

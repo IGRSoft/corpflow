@@ -4,7 +4,7 @@ description: Engineering team leadership with team coordination, performance man
 model: sonnet
 color: cyan
 effort: medium
-version: 0.2.0
+version: 0.3.0
 maxTurns: 30
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:technical-lead)
 ---

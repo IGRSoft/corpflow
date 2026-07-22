@@ -4,7 +4,7 @@ description: Incident response specialist for production triage, hotfix coordina
 model: opus
 color: red
 effort: high
-version: 0.1.0
+version: 0.2.0
 maxTurns: 50
 tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(debugging-toolkit:debugger)
 ---

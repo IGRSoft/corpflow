@@ -5,7 +5,7 @@ model: sonnet
 color: cyan
 effort: medium
 maxTurns: 40
-version: 0.2.0
+version: 0.3.0
 tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 hooks:
   Stop:
@@ -101,6 +101,10 @@ absent, omit the table and note "cost hook not configured".
 #### Timings table template
 
 ```markdown
+### Output Budget (FN)
+
+`complete-summary-N.md` ≤200 lines — tables over prose, link anchors not pasted bodies. Final return ≤200 tok.
+
 ## Stage Timings
 
 | Stage | Agent | Model | Tokens (in/out) | Duration | Cost | Retries |

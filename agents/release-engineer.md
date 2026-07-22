@@ -4,7 +4,7 @@ description: Release engineering specialist for versioning, changelog generation
 model: haiku
 color: yellow
 effort: low
-version: 0.1.0
+version: 0.2.0
 maxTurns: 25
 tools: Read, Glob, Grep, Bash, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---

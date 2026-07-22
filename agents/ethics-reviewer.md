@@ -4,7 +4,7 @@ description: Ethics and constitutional compliance reviewer for AI agent decision
 model: opus
 color: white
 effort: xhigh
-version: 0.1.0
+version: 0.2.0
 maxTurns: 25
 tools: Read, Glob, Grep, Write, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---

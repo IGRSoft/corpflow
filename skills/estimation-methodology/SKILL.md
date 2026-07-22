@@ -1,6 +1,7 @@
 ---
 name: estimation-methodology
 description: Standardized complexity scoring (0-50 scale) and T-shirt sizing for project estimation. Use when estimating task complexity, effort, or determining worktask tier.
+version: 0.1.0
 effort: low
 related:
   - cost-optimization.md

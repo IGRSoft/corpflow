@@ -2,7 +2,7 @@
 name: megatask
 description: Meta-orchestration of many worktasks across a GitHub milestone or explicit issue array — dependency/blocker DAG, priority ordering, isolated per-issue worktrees. Use for /megatask, multi-issue batches, or any dependency-ordered fan-out of worktasks.
 effort: high
-version: 0.3.0
+version: 0.4.0
 related:
   - ../../commands/megatask.md
   - references/dependency-graph.md

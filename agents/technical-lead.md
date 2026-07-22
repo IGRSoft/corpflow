@@ -4,7 +4,7 @@ description: Technical excellence champion for code quality, technical decisions
 model: opus
 color: magenta
 effort: high
-version: 0.3.1
+version: 0.4.0
 maxTurns: 60
 tools: Read, Glob, Grep, Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(pandoc:*), TaskCreate, TaskUpdate, TaskGet, TaskList, mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 disallowedTools: mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__test_dev, mcp__XcodeBuildMCP__test_macos, mcp__XcodeBuildMCP__test_device, mcp__XcodeBuildMCP__swift_package_test, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__build_run_dev, mcp__XcodeBuildMCP__build_run_macos, mcp__XcodeBuildMCP__build_run_device, mcp__XcodeBuildMCP__launch_app_sim, mcp__XcodeBuildMCP__launch_app_dev, mcp__XcodeBuildMCP__launch_mac_app
@@ -141,6 +141,10 @@ This agent also serves as a **support agent** (stage TC), invokable on-demand:
 | Standard review | sonnet | Code quality assessment |
 | Complex decision | opus | Multi-factor trade-offs, novel patterns |
 | Debt prioritization | opus | Impact analysis, remediation planning |
+
+### Output Budget (DR)
+
+Artifact ≤300 lines; findings table ≤2 lines/row; no diff hunks >5 lines — cite `path:line-range`. Final return ≤200 tok.
 
 ## Code Quality Framework
 

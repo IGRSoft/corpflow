@@ -1,6 +1,7 @@
 ---
 name: cc-update
 description: Update plugin agents, commands, and skills with new Claude Code features, then sync MEMORY.md and README.md version tracking
+version: 0.1.0
 argument-hint: '<version> [--notes <url|text>] [--dry-run]'
 allowed-tools: Read, Glob, Grep, Write, Edit, WebFetch
 model: sonnet

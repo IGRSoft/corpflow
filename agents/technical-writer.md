@@ -4,7 +4,7 @@ description: Expert technical writer for source code documentation, README updat
 model: haiku
 color: white
 effort: low
-version: 0.1.3
+version: 0.2.0
 maxTurns: 25
 tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---

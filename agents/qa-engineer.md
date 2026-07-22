@@ -5,7 +5,7 @@ model: sonnet
 color: yellow
 effort: medium
 maxTurns: 40
-version: 0.3.0
+version: 0.4.0
 tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__get_coverage_report, mcp__XcodeBuildMCP__get_file_coverage, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -128,6 +128,10 @@ When the gate is open, follow the registry-driven comparison procedure in `skill
 Required section when `.context/images/<worktask_id>/screenshots.md` exists. Schema:
 
 ```markdown
+### Output Budget (QA)
+
+Artifact ≤250 lines; failing-test excerpts ≤40 lines (full logs → `.context/logs/`). Final return ≤250 tok.
+
 ## Visual Evidence
 
 | # | File | Caption | Verdict | AC ref |

@@ -1,6 +1,7 @@
 ---
 name: optimize-command
 description: Analyze and optimize existing command definitions for usability, consistency, and completeness
+version: 0.1.0
 argument-hint: <command name or path>
 model: opus
 allowed-tools: Read, Glob, Grep, Write
