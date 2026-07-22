@@ -149,6 +149,16 @@
             "continueOnBlock": true
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/comment-standard-context.sh",
+            "continueOnBlock": true
+          }
+        ]
       }
     ],
     "SubagentStop": [

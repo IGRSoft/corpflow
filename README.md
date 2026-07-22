@@ -288,10 +288,11 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/appstore-iap` | Set up App Store Connect in-app purchases |
 | `/appstore-screenshots` | Generate App Store screenshots |
 
-### Skills (24 total)
+### Skills (25 total)
 - `agent-coordination` — Multi-agent coordination, handoffs, parallel execution, error escalation
 - `appstore-screenshots` — App Store screenshot generation (device specs, layout, Pencil MCP)
 - `claude-constitution` — Constitutional principles and ethics framework
+- `code-comment-standard` — Compact source-comment standard (WHY/contract only); loadable skill wrapping code-documentation.md
 - `context-compression` — Context compression between agent handoffs
 - `cost-optimization` — Token and cost tracking/optimization
 - `cross-plugin-handoff` — Handoff protocol to external plugins (apple-developer, system-developer, …)
