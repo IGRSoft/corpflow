@@ -45,39 +45,22 @@ Before executing any megatask run, validate:
 
 ### Pre-Execution Checks
 
-- [ ] orchestrator.json exists or will be created at `.worktrees/<group>/orchestrator.json`
-- [ ] Each issue checked for existing PRs (skip if found)
-- [ ] Each issue has unique branch name
-- [ ] Base branch is clean (no uncommitted changes)
-- [ ] No branch naming conflicts
-- [ ] Git version >= 2.15 (worktree support)
-- [ ] `.worktrees/` directory is writable
-- [ ] No existing worktree for the same branch (`git worktree list`)
-- [ ] Sufficient disk space for worktree copies
-- [ ] No stale worktrees (auto-cleaned on startup, including those with untracked files; `git worktree prune` as fallback)
-- [ ] If `worktree.sparsePaths` configured, validate paths exist in repo
-- [ ] orchestrator.json version is 3.0 with `isolation: "worktree"`
+orchestrator.json exists or will be created at `.worktrees/<group>/orchestrator.json` (version 3.0, `isolation: "worktree"`); each issue is checked for existing PRs (skip if found) and has a unique branch name with no naming conflicts; base branch is clean; git >= 2.15 with a writable `.worktrees/`; no existing worktree for the same branch (`git worktree list`) and no stale worktrees (auto-cleaned on startup incl. untracked; `git worktree prune` fallback); sufficient disk for worktree copies; if `worktree.sparsePaths` is set, its paths exist in the repo.
 
 ### Per-Issue Checks (CRITICAL)
 
-- [ ] Branch created from correct base (develop/master)
-- [ ] Branch name follows pattern: `feature/{issue#}-{slug}`
-- [ ] Workspace directory created
-- [ ] orchestrator.json updated with status
+Branch created from the correct base (develop/master), named `feature/{issue#}-{slug}`; workspace directory created; orchestrator.json updated with status.
 
 ### Completion Checks
 
-- [ ] All changes committed to issue branch
-- [ ] Branch pushed to origin
-- [ ] PR created with "Closes #{issue}" in body
-- [ ] orchestrator.json status set to "completed"
+All changes committed to the issue branch, branch pushed to origin, PR created with "Closes #{issue}" in the body, orchestrator.json status set to `"completed"`.
 
 ### Common Validation Failures
 
 | Failure | Cause | Fix |
 |---------|-------|-----|
 | Single branch for all issues | Missing branch-per-issue logic | Each issue MUST get own branch |
-| Branch from wrong base | Not using remote ref | Use `git fetch origin develop && git checkout -b ... origin/develop` (manual override; the `EnterWorktree` tool branches from local HEAD by default, configurable via `worktree.baseRef` = `head`\|`fresh`) |
+| Branch from wrong base | Not using remote ref | Use `git fetch origin develop && git checkout -b ... origin/develop` (manual override; `EnterWorktree` branches from local HEAD by default, set via `worktree.baseRef`=`head`\|`fresh`) |
 | Missing orchestrator.json | Init skipped | Run megatask init before issues |
 | No PR created | FN stage incomplete | Ensure `gh pr create` runs per issue |
 | Duplicate PR for issue | PR check skipped | Check issue timeline for existing PRs first |
@@ -86,77 +69,45 @@ Before executing any megatask run, validate:
 
 ### Task Status Not Updating
 
-**Solutions**:
-1. Verify state: `TaskGet({ taskId: "X" })`
-2. Check task subject prefix (PL0, AR0, DV0, QA0, etc.) — IDs are dynamic
-3. Check `blockedBy` - task blocked if dependencies incomplete
-4. Use `TaskList()` to see all tasks
+**Solutions**: `TaskGet({ taskId: "X" })` to verify state; check the task subject prefix (PL0/AR0/DV0/QA0 — IDs are dynamic); check `blockedBy` (blocked if deps incomplete); `TaskList()` to see all tasks.
 
 ### PL0 Didn't Create Stages
 
-**Solutions**:
-1. Verify PL0 task is `completed`
-2. Check if complexity score was assessed
-3. Manually create missing stage tasks with `TaskCreate` and `metadata.agent`
-4. Set dependency chain between tasks
+**Solutions**: Verify PL0 is `completed` and the complexity score was assessed; manually create missing stage tasks with `TaskCreate` + `metadata.agent`, then set the dependency chain.
 
 ### Task in Error State
 
-**Solutions**:
-1. Check `.context/errors/<agent>.md` for context (per-agent file; use the failing task's `metadata.agent` basename)
-2. If `metadata.retry_count` < 3: Fix issue, keep `in_progress`, increment counter
-3. If `metadata.retry_count` = 3: Escalate to previous stage per escalation chain
-4. Append resolution section to the same `.context/errors/<agent>.md` file
+**Solutions**: Check `.context/errors/<agent>.md` (per-agent file, keyed by the failing task's `metadata.agent` basename). If `retry_count` < 3, fix, keep `in_progress`, increment; if = 3, escalate to the previous stage per chain. Append the resolution section to the same file.
 
 ### Escalation Occurred
 
 **What Happened**: Agent failed 3 times, escalated per chain.
 
-**Solutions**:
-1. Check `.context/errors/<agent>.md` for the originating agent's retry history
-2. Previous agent reviews issue
-3. Fix root cause, reset `metadata.retry_count` to 0 on the retried task
-4. Transition back when ready
+**Solutions**: Read `.context/errors/<agent>.md` for the originating agent's retry history; the previous agent reviews the issue, fixes root cause, resets `retry_count` to 0 on the retried task, and transitions back when ready.
 
 ### Dependency Blocking Task
 
-**Solutions**:
-1. Check `blockedBy` via `TaskGet`
-2. Verify blocking tasks are `completed`
-3. Remove dependency if needed: `TaskUpdate({ taskId: "X", removeBlockedBy: ["Y"] })`
+**Solutions**: Check `blockedBy` via `TaskGet`; verify blocking tasks are `completed`; remove if needed (`TaskUpdate({ taskId: "X", removeBlockedBy: ["Y"] })`).
 
 ### Workspace Not Initialized
 
-**Solutions**:
-1. Verify `/megatask` milestone/issues argument was provided
-2. Check `.worktrees/<group>/orchestrator.json` exists
-3. Verify GitHub CLI auth: `gh auth status`
-4. Check milestone has open issues
+**Solutions**: Verify a `/megatask` milestone/issues argument was given; check `.worktrees/<group>/orchestrator.json` exists; verify `gh auth status`; check the milestone has open issues.
 
 ### Track Not Assigned
 
-**Solutions**:
-1. Check `orchestrator.json` for available tracks
-2. Verify orchestrator-derived parallel_tracks in orchestrator.json (= min(open issues in scope, 5), reduced by disk capacity; single-issue ⇒ 1) — never a flag/default
-3. Wait for track completion or manually free
+**Solutions**: Check `orchestrator.json` for available tracks; verify orchestrator-derived parallel_tracks (= min(open issues in scope, 5), reduced by disk; single-issue ⇒ 1) — never a flag/default; wait for a track to free or free one manually.
 
 ### Orchestrator Out of Sync
 
-**Solutions**:
-1. Run monitoring loop to sync state
-2. Compare orchestrator.json with Task System
-3. Check each workspace.json for current_stage
-4. Inspect `.context/errors/*.md` (per-agent) for failed-but-unsynced stages
-5. Cross-check `.context/logs/` for the most recent run artifacts (raw captures outlive task state)
-6. Manually update if needed
+**Solutions**: Run the monitoring loop to sync; compare orchestrator.json with the Task System and each workspace.json `current_stage`; inspect `.context/errors/*.md` for failed-but-unsynced stages and `.context/logs/` for the latest run artifacts (raw captures outlive task state); update manually if needed.
 
-**Trust but verify "done" claims.** A task marked `completed` in the Task System, or a `status: "completed"` in state.json, is a claim — not proof. Reconcile it against the artifact actually present on disk (`.context/<stage>-N.md` and its handoff frontmatter) before trusting it: a stage can report done while its artifact write silently failed, and taking the claim at face value is how the ledger drifts out of sync in the first place.
+**Trust but verify "done" claims.** A `completed` task or a `status: "completed"` in state.json is a claim, not proof — reconcile it against the on-disk artifact (`.context/<stage>-N.md` + handoff frontmatter) first: a stage can report done while its artifact write silently failed, drifting the ledger out of sync.
 
 ### state.json Stuck at PL.in_progress
 
 **Symptoms**: Worktask ran through multiple stages, but `.context/state.json` still shows `stages.PL.status: "in_progress"` and empty `handoffs`.
 
-**Root cause**: All three state.json enforcement layers failed — agents skipped self-patching (Layer 1), SubagentStop hook was not installed (Layer 2), and orchestrator Step 6.5 was not executed (Layer 3).
+**Root cause**: All three state.json enforcement layers failed — agents skipped self-patching (L1), SubagentStop hook not installed (L2), orchestrator Step 6.5 not run (L3).
 
 #### Plugin-Root Resolution
 
@@ -172,8 +123,7 @@ Before executing any megatask run, validate:
 
 3. **Manual repair** — run the hook for each stage artifact:
    ```bash
-   # nullglob: unmatched globs expand to nothing instead of erroring under zsh
-   # ("no matches found") or staying literal under bash.
+   # nullglob: unmatched globs expand to nothing, not error (zsh) or stay literal (bash)
    setopt null_glob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
    for artifact in .context/{planning,analyzing,coordination,development,developer-review,security-review,testing,documentation,release,complete-summary,retrospective,incident,ethics-review}-*.md; do
      [[ -f "$artifact" ]] || continue
@@ -189,54 +139,39 @@ Before executing any megatask run, validate:
    mv .context/state.json ".context/state.json.bad.$(date +%s)"
    # Re-run PL0 initialization to re-seed, then run step 3 above
    ```
-5. **Validate artifact filenames**: `bash "<plugin-root>/skills/worktask/scripts/cache-lint.sh" --filename-lint .context/` — non-canonical names (e.g. `architecture-0.md` instead of `analyzing-0.md`) prevent the hook from resolving artifacts
+5. **Validate artifact filenames**: `bash "<plugin-root>/skills/worktask/scripts/cache-lint.sh" --filename-lint .context/` — non-canonical names (e.g. `architecture-0.md` not `analyzing-0.md`) block hook artifact resolution
 
-**Prevention**: Ensure `commands/worktask.md` Phase 1 step 3b runs at worktask start. The plugin.json hook registration (v3.11.0+) provides automatic Layer 2 coverage without project-local installation.
+**Prevention**: Ensure `commands/worktask.md` Phase 1 step 3b runs at worktask start. The plugin.json hook registration (v3.11.0+) gives automatic Layer 2 coverage without project-local install.
 
 ## Worktree Troubleshooting
 
 ### Worktree Not Created
 
-**Symptoms**: `git worktree add` fails or `.worktrees/` directory missing.
+**Symptoms**: `git worktree add` fails or `.worktrees/` missing.
 
-**Solutions**:
-1. Check git version: `git --version` (requires >= 2.15)
-2. Check for bare repo: worktrees not supported in bare repositories
-3. Verify disk space: each worktree duplicates the working tree
-4. Check permissions on project directory
-5. Ensure `.worktrees/` parent directory exists
+**Solutions**: Check git version (`git --version` >= 2.15), not a bare repo, disk space (each worktree duplicates the tree), project-dir permissions, and that the `.worktrees/` parent exists.
 
 ### Branch Already Checked Out
 
 **Symptoms**: `fatal: '{branch}' is already checked out at '{path}'`
 
-**Solutions**:
-1. Check existing worktrees: `git worktree list`
-2. Remove stale worktree: `git worktree remove {path}` then `git worktree prune`
-3. If branch is checked out in main tree, switch main to a different branch first
-4. Use a different branch name for the issue
+**Solutions**: `git worktree list` to locate it; remove stale (`git worktree remove {path}` then `git worktree prune`); if checked out in main tree, switch main to another branch first; or use a different branch name.
 
 ### Worktree Cleanup Failed
 
 **Symptoms**: `git worktree remove` fails with uncommitted changes.
 
-**Solutions**:
-1. Check for uncommitted work: `git -C {worktree_path} status`
-2. Commit or stash changes: `git -C {worktree_path} stash`
-3. Force remove if truly unneeded: `git worktree remove --force {path}`
-4. Run `git worktree prune` to clean stale references (auto-cleaned on startup, handles untracked files correctly)
+**Solutions**: `git -C {worktree_path} status` to inspect; commit or stash (`git -C {worktree_path} stash`); force-remove if unneeded (`git worktree remove --force {path}`); `git worktree prune` for stale refs (auto-cleaned on startup, handles untracked files).
 
 ### Worktree Partial-Failure Matrix
 
-When a worktree operation partially succeeds, the orchestrator state can drift
-from the filesystem. Diagnose by comparing `git worktree list` to
-`orchestrator.json`, and match the symptom below.
+When a worktree op partially succeeds, orchestrator state drifts from the filesystem. Diagnose by comparing `git worktree list` to `orchestrator.json`; match the symptom below.
 
 #### Creation and Fetch Failures
 
 | Symptom | Cause | Recovery |
 |---------|-------|----------|
-| `git worktree add` returned 0 but `.context/` dir absent | mkdir race or disk-full after branch creation | `git -C {path} status` to confirm worktree integrity → `mkdir -p {path}/.context/{errors,logs,designs,images}` → update orchestrator.json `initialized: true` |
+| `git worktree add` returned 0 but `.context/` dir absent | mkdir race or disk-full after branch creation | `git -C {path} status` to confirm integrity → `mkdir -p {path}/.context/{errors,logs,designs,images}` → set orchestrator.json `initialized: true` |
 | Worktree created, branch fetch fails (auth/network) | Network loss between `worktree add` and `git fetch` | `git -C {path} fetch origin` retry → if persistent, `git worktree remove --force {path}` and retry from `workflow-engineer` init |
 
 #### Ledger Drift and Stale Files
@@ -244,52 +179,40 @@ from the filesystem. Diagnose by comparing `git worktree list` to
 | Symptom | Cause | Recovery |
 |---------|-------|----------|
 | orchestrator.json lists issue #N with worktree_path, but `git worktree list` does not include it | Prior manual `git worktree remove` or disk cleanup | Re-create: `git worktree add -b feature/{N}-{slug} {path} origin/{base}` → restore `.context/` from `workspace.json` if present |
-| `git worktree list` shows path, but orchestrator.json has no entry for it | Orphaned worktree from cancelled worktask | If `.context/` empty or task archived: `git worktree remove {path}`. Otherwise resume via Task System, then remove on FN |
+| `git worktree list` shows path, but orchestrator.json has no entry for it | Orphaned worktree from cancelled worktask | If `.context/` empty or archived: `git worktree remove {path}`. Else resume via Task System, remove on FN |
 | Stale untracked files block `worktree remove` | Build output, log files, editor swap files | Auto-cleanup handles most; fallback: `git -C {path} clean -fd` → retry `worktree remove` |
 
 #### Branch Locks, Disk, Lost Paths
 
 | Symptom | Cause | Recovery |
 |---------|-------|----------|
-| Branch locked by another worktree (`fatal: 'X' is already checked out`) | Same branch active in two worktrees (usually main) | `git worktree list` locate existing → switch main to different branch OR use a new branch name for the new worktree |
-| Disk full during `worktree add` | Filesystem exhausted | `git worktree prune` to reclaim stale space → free disk → retry. Do NOT leave partial worktree entries in orchestrator.json — remove the broken entry first |
-| `workspace.json` references path that no longer exists | External cleanup or symlink break | Treat worktask as lost. Archive `.context/` if recoverable (`git cat-file` for committed state), then remove orchestrator entry and restart the issue track |
+| Branch locked by another worktree (`fatal: 'X' is already checked out`) | Same branch active in two worktrees (usually main) | `git worktree list` to locate → switch main to another branch OR use a new branch name |
+| Disk full during `worktree add` | Filesystem exhausted | `git worktree prune` to reclaim → free disk → retry. Remove any partial orchestrator.json entry first |
+| `workspace.json` references path that no longer exists | External cleanup or symlink break | Treat worktask as lost. Archive `.context/` if recoverable (`git cat-file`), remove the orchestrator entry, restart the issue track |
 
 ### Plugin Management
 
-- `/reload-plugins` picks up new skills without requiring restart
-- Plugin skills use frontmatter `name` field for invocation, not directory basename
-- Plugins can declare background monitors via `monitors` manifest key; these stream events without occupying a foreground tool call
-- `EnterWorktree` accepts a `path` parameter to target a specific worktree directory; it can switch between Claude-managed worktrees mid-session (re-target without an `ExitWorktree` first). A background session on a shared checkout is told upfront that edits are blocked until it runs `EnterWorktree` (worktree contract enforced at session start, not via a rejected mid-work edit)
-- Subagents stalled for more than 10 minutes fail with a clear error — escalate or retry rather than waiting indefinitely
+- `/reload-plugins` picks up new skills without restart
+- Plugin skills invoke by frontmatter `name`, not directory basename
+- Plugins declare background monitors via the `monitors` manifest key; these stream events without a foreground tool call
+- `EnterWorktree` takes a `path` to target/switch between Claude-managed worktrees mid-session (no `ExitWorktree` first). A background session on a shared checkout is told upfront that edits are blocked until it runs `EnterWorktree` (contract enforced at session start, not a rejected mid-work edit)
+- Subagents stalled >10 min fail with a clear error — escalate or retry, don't wait indefinitely
 
 ### EnterWorktree out-of-tree confirmation
 
-An `EnterWorktree` `path` **outside** `.claude/worktrees/` triggers a confirmation prompt. Keep unattended resume/megatask targets under `.claude/worktrees/`, pre-authorize the prompt via auto/skip-permissions mode, or rely on cwd-based pre-existing-worktree recognition (see `agents/developer.md:262`). Worktree creation does not follow a repository-committed symlink at `.claude/worktrees`, so such a symlink cannot redirect worktree creation outside the repository (informational; no plugin action needed).
+An `EnterWorktree` `path` **outside** `.claude/worktrees/` triggers a confirmation prompt. Keep unattended resume/megatask targets under `.claude/worktrees/`, pre-authorize via auto/skip-permissions mode, or rely on cwd-based pre-existing-worktree recognition (`agents/developer.md:262`). A repository-committed symlink at `.claude/worktrees` cannot redirect worktree creation outside the repo (informational).
 
-In megatask's per-issue worktree fan-out, an "Always allow" rule approved in one issue's worktree persists to every other worktree of the same repo (rules save at the repository root) — the operator approves a given tool/command pattern once per milestone, not once per lane.
+In megatask's per-issue fan-out, an "Always allow" rule approved in one worktree persists to every other worktree of the same repo (rules save at repo root) — the operator approves each tool/command pattern once per milestone, not per lane.
 
 ### Orchestrator / Worktree Mismatch
 
 **Symptoms**: orchestrator.json shows worktree mode but paths don't match filesystem.
 
-**Solutions**:
-1. Compare `git worktree list` output with orchestrator.json issue entries
-2. Check each issue's `worktree_path` field against actual filesystem
-3. Re-create missing worktrees: `git worktree add -b {branch} {path} origin/{base}`
-4. Update orchestrator.json to reflect actual state
+**Solutions**: Compare `git worktree list` with the issue entries' `worktree_path`, re-create missing worktrees (`git worktree add -b {branch} {path} origin/{base}`), update orchestrator.json to actual state. See the Partial-Failure Matrix above for symptom-specific recovery.
 
 ### Worktree Mode (Always Active)
 
-All megatask runs use worktree isolation. Expected state:
-
-| Check | Expected Value |
-|-------|----------------|
-| orchestrator.json version | `"3.0"` |
-| `configuration.isolation` | `"worktree"` |
-| workspace.json `isolation` | `"worktree"` |
-| Issue directory location | `.worktrees/milestone-{N}/{issue#}/` |
-| Source files in issue dir | Yes (full worktree copy) |
+All megatask runs use worktree isolation. Expected state: orchestrator.json version `"3.0"`, `configuration.isolation` and workspace.json `isolation` both `"worktree"`, issue dir at `.worktrees/milestone-{N}/{issue#}/`, source files present (full worktree copy).
 
 ## Worktask Operations
 
@@ -302,23 +225,23 @@ All megatask runs use worktree isolation. Expected state:
 
 ### Stage Transition
 1. Complete: `TaskUpdate({ taskId: "X", status: "completed" })`
-2. Verify `blockedBy` resolved (the PL gate is handled once at Step A.5 before the loop; the FN gate is handled mid-loop at loop step 4.9 before the FN delegation; all other intra-loop transitions are unattended)
+2. Verify `blockedBy` resolved (PL gate handled once at Step A.5 before the loop; FN gate mid-loop at step 4.9 before FN delegation; all other intra-loop transitions unattended)
 3. Start next: `TaskUpdate({ taskId: "Y", status: "in_progress", owner: "..." })`
 
 ### Handle Error
 1. Keep `in_progress` during retries
 2. Retries < 3: Fix and retry
 3. Retries = 3: Escalate to previous stage
-4. Append to `.context/errors/<agent>.md` — per-agent narrative, one file per `metadata.agent` basename (collision fallback: join plugin prefix with `-`). Raw background/Monitor capture belongs in `.context/logs/` — see `logging-conventions` skill.
+4. Append to `.context/errors/<agent>.md` — per-agent narrative, one file per `metadata.agent` basename (collision fallback: join plugin prefix with `-`). Raw background/Monitor capture goes in `.context/logs/` (`logging-conventions` skill).
 
 ### Batch-Completion Discipline (DV execution)
 
-Finish the atomic unit. Complete the **current edit theme** — every file in the theme group — before yielding the turn. Do NOT stop at the tool-call budget boundary mid-theme; a half-applied theme loses in-flight context and forces orchestrator manual resumption.
+Finish the atomic unit: complete the **current edit theme** (every file in the group) before yielding — never stop at the tool-call budget mid-theme, which loses in-flight context and forces manual resumption.
 
-1. Group edits by theme before starting; treat each theme as one indivisible unit.
+1. Group edits by theme up front; treat each theme as indivisible.
 2. Apply all files in the active theme, then yield only at a theme boundary.
-3. If tool/budget pressure is imminent mid-theme, write a checkpoint into `development-N.md` listing the remaining files (paths + the edit each still needs) — never stop silently.
-4. Resume from the checkpoint on the next turn; clear it once the theme completes.
+3. If budget pressure hits mid-theme, checkpoint the remaining files (paths + pending edit) into `development-N.md` — never stop silently.
+4. Resume from the checkpoint next turn; clear it once the theme completes.
 
-Mirrors the "finish the atomic unit" principle for DV in `skills/worktask/SKILL.md`.
+Mirrors the DV "finish the atomic unit" principle in `skills/worktask/SKILL.md`.
 

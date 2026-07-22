@@ -40,12 +40,12 @@ All available skills for the igrsoft worktask plugin.
 
 | Skill | Description | Effort |
 |-------|-------------|--------|
-| [code-comment-standard](code-comment-standard/SKILL.md) | Compact source-comment standard — comment the non-obvious WHY and the contract only; budgets + ban-list; wraps the shared code-documentation.md source of truth | low |
-| [request-plan](request-plan/SKILL.md) | Lightweight context-aware plan (goal, scope, phases, rough effort, risks) from a free-form request, with a worktask-trigger handoff | medium |
-| [senior-developer-review](senior-developer-review/SKILL.md) | Technical review framework for estimates by platform specialists | low |
-| [security-review-process](security-review-process/SKILL.md) | OWASP Top 10 security review checklist, dependency supply-chain triage, and secure coding patterns | medium |
-| [self-improvement](self-improvement/SKILL.md) | ST-stage retrospective: diff-based learning from user edits; writes `.context/learnings.md` with per-proposal approval checklist | medium |
-| [task-folder-organization](task-folder-organization/SKILL.md) | Context folder structure (.context/) with artifact naming and path resolution | medium |
+| [code-comment-standard](code-comment-standard/SKILL.md) | Compact source-comment standard — WHY + contract only; budgets + ban-list; wraps code-documentation.md | low |
+| [request-plan](request-plan/SKILL.md) | Context-aware plan (goal, scope, phases, effort, risks) from a request; worktask-trigger handoff | medium |
+| [senior-developer-review](senior-developer-review/SKILL.md) | Review framework for platform-specialist estimates | low |
+| [security-review-process](security-review-process/SKILL.md) | OWASP Top 10 checklist, supply-chain triage, secure coding | medium |
+| [self-improvement](self-improvement/SKILL.md) | ST retrospective: diff-based learning from user edits → `.context/learnings.md` (approval checklist) | medium |
+| [task-folder-organization](task-folder-organization/SKILL.md) | `.context/` folder structure: artifact naming + path resolution | medium |
 
 ### Self-improvement, tasks & worktask
 
@@ -56,15 +56,15 @@ All available skills for the igrsoft worktask plugin.
 
 ## Shared Utilities
 
-Files in `shared/` are referenced by skills and agents, not loaded independently — **except `milestone-helpers/`**, which ships its own `SKILL.md` and loads as the `igrsoft:milestone-helpers` skill.
+Files in `shared/` are referenced by skills/agents, not loaded independently — **except `milestone-helpers/`**, which ships its own `SKILL.md` (`igrsoft:milestone-helpers`).
 
 | File | Purpose |
 |------|---------|
-| [code-documentation.md](shared/code-documentation.md) | Compact source-code comment standard (frontmatter name code-comment-standard) — single source of truth for the /// and // budgets, doc-block shapes, and BEFORE→AFTER examples |
+| [code-documentation.md](shared/code-documentation.md) | Compact comment standard (frontmatter name code-comment-standard) — source of truth for /// and // budgets, doc-block shapes, examples |
 | [constitutional-base.md](shared/constitutional-base.md) | Base constitutional principles |
-| [five-whys.md](shared/five-whys.md) | Five Whys root cause analysis technique |
-| [git-conventions.md](shared/git-conventions.md) | Conventional Commits format, PR template, git safety rules |
-| [stage-codes.md](shared/stage-codes.md) | Worktask stage code definitions |
-| [task-system.md](shared/task-system.md) | Task System integration patterns |
-| [worktask-invocation.md](shared/worktask-invocation.md) | Worktask invocation rule + execution model |
-| [milestone-helpers/](shared/milestone-helpers/) | Milestone worktask helper utilities |
+| [five-whys.md](shared/five-whys.md) | Five Whys root-cause analysis |
+| [git-conventions.md](shared/git-conventions.md) | Conventional Commits, PR template, git safety |
+| [stage-codes.md](shared/stage-codes.md) | Worktask stage codes |
+| [task-system.md](shared/task-system.md) | Task System integration |
+| [worktask-invocation.md](shared/worktask-invocation.md) | Invocation rule + execution model |
+| [milestone-helpers/](shared/milestone-helpers/) | Milestone helpers |
