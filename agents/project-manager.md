@@ -76,38 +76,11 @@ When composing the PR body, run `skills/worktask/scripts/attach-visual-evidence.
 
   - **Issue resolved + body contains keyword** → continue to `gh pr create`.
   - **Issue resolved + body MISSING keyword** → abort FN with `handoff.verdict: blocked`. Write cause to `.context/errors/project-manager.md` (include resolved issue number, body excerpt, source rank that matched). Do **NOT** run `gh pr create`.
-  - **No issue resolvable from any source** → append one audit row to `.context/logs/audit.jsonl` and proceed to `gh pr create` WITHOUT a closing line:
+  - **No issue resolvable from any source** → `fn-preflight.sh validate-pr` appends the `pr_issue_link` `result:deferred` audit row and proceeds to `gh pr create` WITHOUT a closing line.
 
-    ```json
-    {"ts":"<iso8601>","actor":"project-manager","action":"pr_issue_link","subject":"FN0","result":"deferred","task_id":"<id>","metadata":{"reason":"no_issue_resolved","dedupe_key":"<worktask_id>:<run_index>:pr_issue_link"}}
-    ```
+##### Run the validator
 
-##### Validator one-liner (bash) — issue resolver
-
-  Copy-pasteable bash one-liner (run after composing `$body` and before `gh pr create`):
-
-  ```bash
-  issue_n=$(jq -r '.metadata.github_issue_url // empty' .context/state.json | grep -oE '[0-9]+$') \
-    || issue_n=$(jq -r 'if .url then .url elif .number then (.number|tostring) else empty end' .context/gh-issue.json 2>/dev/null | grep -oE '[0-9]+$') \
-    || issue_n=$(jq -r '.metadata.github_issue_number // empty' .context/state.json) \
-    || issue_n=$(git rev-parse --abbrev-ref HEAD | grep -oE '[0-9]+$') \
-    || issue_n=$(git log --oneline -n 5 | grep -oE '#[0-9]+' | head -1 | tr -d '#')  # first-match among #NNN tokens in last 5 commits
-  ```
-
-##### Validator one-liner (bash) — check + audit fallback
-
-  ```bash
-  # …continued: validation + audit row, uses $issue_n from the resolver above
-  if [ -n "$issue_n" ]; then
-    printf '%s\n' "$body" | grep -E -i -q "^(Closes|Fixes|Resolves)[[:space:]]+#${issue_n}[[:space:]]*$" \
-      || { echo "BLOCKED: PR body missing Closes #${issue_n}" >&2; exit 1; }
-  else
-    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); wid=$(jq -r '.worktask_id' .context/state.json); ri=$(jq -r '.run_index' .context/state.json)
-    tid=$(jq -r '.stages.FN.task_id // "FN0"' .context/state.json 2>/dev/null || echo "FN0")
-    printf '{"ts":"%s","actor":"project-manager","action":"pr_issue_link","subject":"FN0","result":"deferred","task_id":"%s","metadata":{"reason":"no_issue_resolved","dedupe_key":"%s:%s:pr_issue_link"}}\n' \
-      "$ts" "$tid" "$wid" "$ri" >> .context/logs/audit.jsonl
-  fi
-  ```
+  Run `fn-preflight.sh validate-pr --body <pr-body-file>` (`skills/worktask/scripts/`) after composing `$body`, before `gh pr create`. It applies the ranked resolver above, checks the body for `(?im)^(Closes|Fixes|Resolves)\s+#<n>$`, and on no-issue appends the `pr_issue_link` `result:deferred` audit row. Exit 1 = blocking (issue resolved but body missing the keyword). `fn-preflight.sh all --body <pr-body-file>` runs attachments → validate-pr → continuity in sequence.
 
 #### Branch-continuity validation (runs BEFORE any merge/fast-forward/PR push)
 
@@ -120,20 +93,9 @@ When composing the PR body, run `skills/worktask/scripts/attach-visual-evidence.
   2. **Diverged → explicit cherry-pick fallback** — if the worktree HEAD is NOT reachable, log a clear diagnostic before falling back: `worktree branch diverged — falling back to cherry-pick; verify commits are complete.` Append one `audit.jsonl` row (`action: "branch_continuity"`, `result: "diverged_cherry_pick"`, `metadata: {worktree_head, integration_branch, commit_count}`). Cherry-pick the worktree commits onto the integration branch and confirm the commit count matches the worktree's unmerged set.
   3. **Document the fallback** — record the outcome (fast-forward vs cherry-pick fallback, with commit count) in `complete-summary-N.md` so ST can confirm every worktree commit is accounted for in the final merge.
 
-##### Continuity check (bash)
+##### Run the continuity check
 
-  ```bash
-  wt_head=$(git rev-parse HEAD)
-  int_branch="$(jq -r '.git.base_branch // "main"' .context/state.json 2>/dev/null || echo main)"
-  if git merge-base --is-ancestor "$wt_head" "$int_branch" 2>/dev/null; then
-    : # continuous — fast-forward / merge is safe
-  else
-    echo "worktree branch diverged — falling back to cherry-pick; verify commits are complete." >&2
-    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); n=$(git rev-list --count "$int_branch..$wt_head" 2>/dev/null || echo 0)
-    printf '{"ts":"%s","actor":"project-manager","action":"branch_continuity","subject":"FN0","result":"diverged_cherry_pick","metadata":{"worktree_head":"%s","integration_branch":"%s","commit_count":%s}}\n' \
-      "$ts" "$wt_head" "$int_branch" "$n" >> .context/logs/audit.jsonl
-  fi
-  ```
+  Run `fn-preflight.sh continuity` (`skills/worktask/scripts/`) — ancestor check (`git merge-base --is-ancestor <worktree-HEAD> <integration-branch>`), and on divergence the `worktree branch diverged — falling back to cherry-pick` diagnostic + `branch_continuity` audit row (never blocks; then cherry-pick and document per above).
 
 #### Final FN steps
 
