@@ -92,17 +92,9 @@ metadata:
 | `scoped` (effective default if omitted) | Bug fixes, small features, anything touching a known set of modules. Default for untagged or partially-tagged repos. | DV + QA run Selected Tests + tests in any module the diff touches. |
 | `full` | Release candidate, multi-module feature, post-major-dep-upgrade, stakeholder-requested full regression. | DV runs Selected Tests; QA runs the entire project test suite. |
 
-##### Heuristic — default `test_mode` by complexity score
+##### Default `test_mode` by complexity score
 
-Combine with the complexity score from `skills/estimation-methodology/SKILL.md`:
-
-| Complexity score | Default `test_mode` | Override conditions |
-|------------------|---------------------|---------------------|
-| 0–10 (Low) | `build-only` if marker coverage ≥ 50%, else `scoped` | `full` only if stakeholder requests |
-| 11–25 (Medium) | `scoped` | `full` if multi-module diff |
-| 26–50 (High/Critical) | `full` | — |
-
-When uncertain between `scoped` and `full`, choose `scoped` and let the auto-promotion safety net (DV warns + QA promotes if Selected list is empty) catch under-selection.
+The complexity-score → default `test_mode` table lives in `skills/estimation-methodology/SKILL.md § PL0 Stage-Set & Test-Mode by Complexity Score`. When uncertain between `scoped` and `full`, choose `scoped` — the auto-promotion safety net (DV warns, QA promotes on an empty Selected list) catches under-selection.
 
 #### `always_required_tests` — explicit override
 
@@ -233,28 +225,7 @@ Throughout this document, `<plan_file>` denotes the resolved plan filename for t
 
 ### Stage Artifact Naming
 
-Every stage (AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) writes its artifact as `<basename>-N.md` where N is the same integer as `planning-N.md` for this run.
-
-#### Artifact base names
-
-| Stage | Basename | Full artifact (run N) |
-|-------|----------|-----------------------|
-| AR | analyzing | `analyzing-N.md` |
-| TL | coordination | `coordination-N.md` |
-| DV | development | `development-N.md` |
-| DR | developer-review | `developer-review-N.md` |
-| SR | security-review | `security-review-N.md` |
-| QA | testing | `testing-N.md` |
-| DC | documentation | `documentation-N.md` |
-| RE | release | `release-N.md` |
-| FN | complete-summary | `complete-summary-N.md` |
-| ST | retrospective | `retrospective-N.md` |
-| IR | incident | `incident-N.md` |
-| ET | ethics-review | `ethics-review-N.md` |
-
-**Two-step resolver** (every stage agent uses this):
-1. `task.metadata.run_index` → `<basename>-${N}.md`.
-2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
+Every stage writes `<basename>-N.md` where N = the `planning-N.md` index for this run. Canonical stage→basename map: `skills/worktask/references/handoff-protocol.md#stage-artifact-map` (mirrored in `skills/shared/stage-codes.md`). Two-step resolver: (1) `task.metadata.run_index` → `<basename>-${N}.md`; (2) newest glob `<basename>-*.md` (highest N) when metadata is absent.
 
 ### PL0 Stage (Planning)
 - **Detect workspace context** from task metadata
@@ -278,38 +249,16 @@ When the flag is **absent** (default), PL0 leaves the field unset and the helper
 
 #### Anchor-content hygiene (GitHub publish safety)
 
-The `## requirements`, `## acceptance-criteria`, `## scope`, and `## complexity` anchors of `<plan_file>` are **externally published** to a GitHub issue body by `publish-pl-issue.sh` after the user approves the plan. PL0 authors MUST keep these four sections free of:
+The `## requirements`, `## acceptance-criteria`, `## scope`, and `## complexity` anchors of `<plan_file>` (plus `## summary`) are **published to a GitHub issue** by `publish-pl-issue.sh` after the user approves the plan. PL0 authors MUST keep them free of:
 
-- `.context/` paths or numbered artifact filenames (`planning-N.md`, `analyzing-N.md`, `coordination-N.md`, `development-N.md`, `developer-review-N.md`, `testing-N.md`, `documentation-N.md`, `release-N.md`, `complete-summary-N.md`, `retrospective-N.md`, `incident-N.md`, `ethics-review-N.md`)
-- Absolute or relative source paths (`/Users/`, `/home/`, `/tmp/`, `/var/`, `/opt/`, `/etc/`, `/root/`, `~/`, `./`, `../`)
-- Conductor workspace identifiers (`conductor/workspaces/<id>`)
-- The literal tokens `workspace_path`, `plan_file`, `run_index`, `artifact_path`
+- `.context/` paths or numbered artifact filenames (`planning-N.md` … `ethics-review-N.md`);
+- absolute/relative source paths (`/Users/`, `/home/`, `/tmp/`, `~/`, `./`, `../`, …) and Conductor workspace ids (`conductor/workspaces/<id>`);
+- the literal tokens `workspace_path`, `plan_file`, `run_index`, `artifact_path`;
+- raw plugin-qualified identifiers (token shape `lowercase-prefix:lowercase-name`, e.g. `igrsoft:developer`) — rewrite to human-readable prose ("the iOS developer", "Complexity breakdown:").
 
-##### Sanitiser safety net
+##### Identifiers, backticks & the sanitiser
 
-The two-pass sanitiser in `publish-pl-issue.sh` is a **safety net, not a substitute** for authoring hygiene. When more than 50% of the combined anchor bodies is stripped, the helper aborts with `reason: "sanitiser_aborted"` and the operator must amend the plan — which costs a review round-trip. Keep file references in narrative ("the AuthCoordinator class", "the HTTP client") rather than path form ("`src/Auth/AuthCoordinator.swift`", "`./src/http/Client.swift`"). When a code identifier must appear, wrap it in inline backticks or place it inside a fenced code block — Pass 2's allow-list will preserve it.
-
-##### Plan-output hygiene: no raw plugin identifiers
-
-The four published anchors (`## requirements`, `## acceptance-criteria`, `## scope`, `## complexity`) plus `## summary` are user-facing prose. **Never** emit a raw plugin-qualified identifier (token shape `lowercase-prefix:lowercase-name`, e.g. `igrsoft:estimation-methodology`, `igrsoft:developer`, `apple-developer:ios-developer`) into those sections.
-
-Identifiers ARE allowed in two places only:
-1. Inside inline backticks or fenced code blocks (Pass 2 allow-list passes them through).
-2. Inside the `## stages` anchor (consumed by the orchestrator from the plan file — never rendered to the GitHub issue).
-
-###### Human-readable rewrites
-
-For narrative prose in the published anchors, rewrite to human-readable phrasings:
-
-| Before (leaks identifier) | After (human-readable) |
-|---|---|
-| `Breakdown using igrsoft:estimation-methodology:` | `Complexity breakdown:` |
-| `Routed to igrsoft:developer (apple-developer:ios-developer).` | `Implementation handled by the iOS developer.` |
-| `DR uses igrsoft:technical-lead at opus/high effort.` | `The technical-lead reviews the diff and posts the gate decision.` |
-
-###### Sanitiser defense-in-depth passes
-
-The publish helper has a defense-in-depth Pass-2 rule that strips plugin-qualified identifiers outside backticks (allow-list of known prefixes: `igrsoft`, `apple-developer`, `debugging-toolkit`, `security-scanning`, `skill-creator`, `conductor`, `claude-in-chrome`) and a Pass-1 line-drop for lines whose body starts with a phrase like `Routed to <prefix>:...` or `Breakdown using <prefix>:...`. Authoring discipline above is the first defense — the sanitiser is the second.
+Identifiers/paths are allowed ONLY inside inline backticks / fenced code, or in the `## stages` anchor (consumed by the orchestrator, never rendered to the issue). Keep file references narrative ("the AuthCoordinator class"), not path form. The `publish-pl-issue.sh` two-pass sanitiser (Pass-1 line-drop of `Routed to <prefix>:`/`.context/` lines + Pass-2 identifier strip over the known-prefix allow-list) is a **safety net, not a substitute** for authoring hygiene — it aborts with `reason: "sanitiser_aborted"` when >50% of the combined anchor bodies is stripped, costing a review round-trip.
 
 ##### Design Preview anchor (Figma URL capture)
 
@@ -320,13 +269,9 @@ When the user's task description contains a Figma URL — regex `https?://(?:www
 3. Self-patch `state.json:facts.design_url` with the URL (string for one URL, array for multiple).
 4. Note the URL in the `## scope` "In" list for reviewer visibility.
 
-###### Rendering & strip-ratio exclusion
+###### Rendering & post-capture rewrite
 
-This anchor is **excluded** from the strip-ratio denominator (short URL bodies would skew the guard) and renders, when populated, between `## Scope` and `## Complexity` in the published GitHub issue with a single-sentence reviewer instruction ("Compare implementation (DV) and screenshots (QA) against this design."). DV and QA agents do not yet auto-consume `facts.design_url`; that follow-up is tracked separately.
-
-###### Post-capture rewrite (companion to Figma Design Capture)
-
-The Figma screenshot capture worktask under `### Figma Design Capture` persists per-frame PNGs to the canonical `.context/designs/` directory and tracks them via figma-registry.md. The `## design-preview` anchor is the URL-surfacing companion (URL in the published issue body); after capture, the PM's **Post-Capture Plan Update** step rewrites `## design-preview` to name each persisted per-frame file with an **asset placeholder token** plus its state mapping and build notes (see `skills/shared/figma-capture.md § Capture Workflow` and `§ Post-Capture Plan Update`).
+This anchor is **excluded from the strip-ratio denominator** (short URL bodies would skew the guard) and renders between `## Scope` and `## Complexity` with a one-sentence reviewer instruction. After the `### Figma Design Capture` step persists per-frame PNGs to `.context/designs/` (tracked in `figma-registry.md`), the PM's **Post-Capture Plan Update** rewrites `## design-preview` to name each persisted frame via an asset-placeholder token + state mapping (see `skills/shared/figma-capture.md § Post-Capture Plan Update`).
 
 ###### Asset-placeholder grammar (host-and-rewrite contract)
 
@@ -392,16 +337,7 @@ Use the **Unified Complexity Assessment** from `skills/worktask/SKILL.md § Dyna
 
 #### Stage set by score (step 3)
 
-3. **Create stage tasks** based on score (each with `metadata.agent` for executor resolution):
-   - Score 0-10 (Low): Create DV0, DR0, QA0
-   - Score 11-20 (Medium): Create AR0, DV0, DR0, QA0
-   - Score 21-30 (Moderate): Create AR0, TL0, DV0, DR0, QA0
-   - Score 31-40 (High): Create AR0, TL0, DV0, DR0, QA0, DC0, FN0, ST0
-   - Score 41-50 (Critical): Create AR0, TL0, DV0, DR0, SR0, QA0, DC0, RE0, FN0, ST0
-   - **Record dropped stages**: stamp the PL0 task's `metadata.skipped_stages` with a list of
-     `{ "stage": "<CODE>", "reason": "<short reason>" }` for every stage in the full 9-stage
-     pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`) that the chosen tier did NOT create — so `state.json`
-     self-documents which standard stages were dropped and why.
+3. **Create stage tasks** by score (each with `metadata.agent`) per the tier table in `skills/estimation-methodology/SKILL.md § PL0 Stage-Set & Test-Mode by Complexity Score`. Stamp `metadata.skipped_stages` (`{stage, reason}`) for every stage of the full `PL→AR→TL→DV→DR→QA→DC→FN→ST` pipeline the chosen tier did NOT create, so `state.json` self-documents which standard stages were dropped and why.
 
 #### Dependency chain & run-index stamping (steps 4–5)
 
@@ -431,26 +367,11 @@ Always emit fully-qualified `plugin:agent` form. The plugin prefix follows the a
 
 ##### DV0 routing override — plugin worktask-infrastructure
 
-Single source of truth —
-do NOT duplicate this decision table elsewhere. The DV0 default `igrsoft:developer`
-is a *platform app-code* router. Route DV to `metadata.agent: "igrsoft:workflow-engineer"`
-(model `opus`, error_file = `.context/errors/workflow-engineer.md`) instead when the
-change touches any of the following — platform/app code (Swift, server, web, other
-product source) stays `igrsoft:developer` (or the `apple-developer:*` variant); when a
-worktask mixes both, split DV sub-tasks by scope and route each independently
-(`skills/shared/stage-codes.md` keeps its single unconditional DV default and points
-here for the conditional rule):
+Single source of truth — do NOT duplicate elsewhere. The DV0 default `igrsoft:developer` routes *platform app-code*. Route DV to `metadata.agent: "igrsoft:workflow-engineer"` (model `opus`, error_file `.context/errors/workflow-engineer.md`) when the change touches worktask infrastructure — `skills/worktask/scripts/*.sh`, the state-machine / Task-System glue under `skills/worktask/**`, or `hooks/**`. Platform/app code (Swift, server, web, product source) stays `igrsoft:developer` (or the `apple-developer:*` variant); a mixed worktask splits DV sub-tasks by scope and routes each independently. `stage-codes.md` keeps the unconditional DV default and points here.
 
-- `skills/worktask/scripts/*.sh` (worktask helper scripts, e.g. `publish-pl-issue.sh`)
-- the worktask state-machine / stage transitions / Task-System glue under `skills/worktask/**`
-- `hooks/**` (worktask runtime hooks)
+###### Worked example
 
-###### Worked example — worktask-infrastructure fix
-
-Example: a `publish-pl-issue.sh` change routes as:
-- DV0 → `agent: "igrsoft:workflow-engineer"` (model `opus`, error_file = `.context/errors/workflow-engineer.md`)
-- DR0 → `agent: "igrsoft:technical-lead"`
-- QA0 → `agent: "igrsoft:qa-engineer"`
+Example: a `publish-pl-issue.sh` change → DV0 `workflow-engineer`, DR0 `technical-lead`, QA0 `qa-engineer`.
 
 **See**: `skills/worktask/SKILL.md` for full assessment table. `skills/worktask/references/initialization-patterns.md § PL Creates Subsequent Tasks` for code pattern.
 
@@ -489,7 +410,7 @@ When design detection threshold is met, invoke Designer via `Task(subagent_type:
 
 ##### Placement guard (non-negotiable)
 
-> **Placement guard (non-negotiable):** Figma frames are persisted ONLY to `.context/designs/` with a `figma-registry.md` — that is the artifact QA's design-comparison gate consumes (`agents/qa-engineer.md § Design Comparison`). NEVER write Figma frames to `.context/images/`; that directory is reserved for DV implementation screenshots + user attachments, and a Figma PNG landing there both disables the QA design gate (no `.context/designs/`) and masks an absent DV `screenshots.md`. See `skills/task-folder-organization/SKILL.md:104`. (Precedent: OV-56 misfiled 4 Figma frames in `images/`, silently skipping the QA design gate.)
+> **Placement guard (non-negotiable):** persist Figma frames ONLY to `.context/designs/` with a `figma-registry.md` — that is the artifact QA's design-comparison gate consumes. NEVER write them to `.context/images/` (DV screenshots + user attachments only): a Figma PNG there disables the QA design gate (no `.context/designs/`) and masks an absent DV `screenshots.md`. Precedent: OV-56 misfiled 4 frames in `images/`, silently skipping the QA design gate.
 
 ### Figma Design Capture
 
@@ -501,13 +422,9 @@ When a Figma URL is provided in the task description or user input, capture desi
 figma\.com/(?:file|design|proto)/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
 ```
 
-#### Trigger path forms
+#### Trigger path forms & capture doc
 
-`(?:file|design|proto)` is non-capturing (Group 1 `fileKey`, Group 4 `nodeId` unchanged) and must match both the `§ design-preview` trigger above and `skills/shared/figma-capture.md § Figma URL Detection`. If the sites drift, a `/file/` or `/proto/` URL surfaces in `design-preview` but never fires capture (no PNGs, no `figma-registry.md`, QA design gate silently skipped). Do **not** add `/board/` or `/slides/` — `get_metadata` is design-file-only and rejects FigJam/Slides.
-
-#### On match — read the capture doc
-
-When this trigger fires, **Read `skills/shared/figma-capture.md`** for the full capture mechanics: URL detection, State Input Contract, Auth Probe, Capture Workflow, Registry Generation (`figma-registry.md` schema), Post-Capture Plan Update, and Coexistence with Pencil mockups. A no-Figma PL run does NOT Read that doc — this trigger never fires and the steady path proceeds without it. The `{{asset:<basename>}}` grammar the capture workflow emits into `## design-preview` stays inline above (§ Asset-placeholder grammar).
+`(?:file|design|proto)` is non-capturing (Group 1 `fileKey`, Group 4 `nodeId`); it must match both the `§ design-preview` trigger and `skills/shared/figma-capture.md § Figma URL Detection` — do not add `/board/` or `/slides/` (`get_metadata` is design-file-only). When the trigger fires, **Read `skills/shared/figma-capture.md`** for the full capture mechanics (URL detection, auth probe, capture workflow, `figma-registry.md` schema, post-capture plan update, Pencil coexistence). A no-Figma PL run never fires it and skips the Read.
 
 ### PL Stage: Automatic Ethics Gate Detection
 
@@ -538,29 +455,7 @@ tuned and negative indicators deduct.
 
 #### ET0 Insertion Pattern
 
-When threshold met, PL0:
-
-```typescript
-// 1. Create ET0 before AR0
-const et = TaskCreate({
-  subject: "ET0: Ethics review",
-  description: `Review ${planFile} for ethical risks per detected keywords. Produce .context/ethics-review-${N}.md with Decision ∈ {pass, block, conditional}.`,
-  metadata: {
-    stage: "ET",
-    agent: "igrsoft:ethics-reviewer",
-    model: "opus",
-    error_file: ".context/errors/ethics-reviewer.md",
-    context_files: `${planFile},.context/errors/ethics-reviewer.md`,
-    plan_file: planFile,  // e.g. "planning-0.md"
-    run_index: N,
-    worktask_id: "<current>"
-  }
-});
-
-// 2. AR0 now blocked by ET0 (instead of PL0 directly)
-TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] });
-```
-
+When threshold met, PL0: (1) `TaskCreate` an `ET0: Ethics review` task *before* AR0 with `metadata` `{stage: ET, agent: "igrsoft:ethics-reviewer", model: "opus", error_file: ".context/errors/ethics-reviewer.md", plan_file, run_index: N, worktask_id}`; its description asks for `.context/ethics-review-${N}.md` with `Decision ∈ {pass, block, conditional}`. (2) `TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] })` so AR0 blocks on ET0 instead of PL0.
 **Decision cascade**:
 - `Decision: pass` → AR0 unblocks, worktask continues
 - `Decision: conditional` → AR0 unblocks with ethics constraints injected into prompt

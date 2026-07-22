@@ -163,6 +163,30 @@ Notes:
 - XL must be split into ≤ L sub-tasks before tier selection runs.
 - Security-sensitive work still routes through the full pipeline — request `--secure` for the 11-stage worktask.
 
+## PL0 Stage-Set & Test-Mode by Complexity Score
+
+PL0 (`agents/product-manager.md § Dynamic Worktask Sizing` and `§ Test Selection Gate`) uses the 0–50 complexity score to pick the stage set and the default `test_mode`.
+
+**Stage set by score** — each created stage task carries `metadata.agent`; stamp `metadata.skipped_stages` (`{stage, reason}`) for every stage of the full `PL→AR→TL→DV→DR→QA→DC→FN→ST` pipeline the tier does NOT create:
+
+| Score | Tier | Stages created |
+|-------|------|----------------|
+| 0–10 | Low | DV0, DR0, QA0 |
+| 11–20 | Medium | AR0, DV0, DR0, QA0 |
+| 21–30 | Moderate | AR0, TL0, DV0, DR0, QA0 |
+| 31–40 | High | AR0, TL0, DV0, DR0, QA0, DC0, FN0, ST0 |
+| 41–50 | Critical | AR0, TL0, DV0, DR0, SR0, QA0, DC0, RE0, FN0, ST0 |
+
+**Default `test_mode` by score** (combine with marker coverage; PL0 stamps `metadata.test_mode`):
+
+| Score | Default `test_mode` | Override |
+|-------|---------------------|----------|
+| 0–10 (Low) | `build-only` if marker coverage ≥ 50%, else `scoped` | `full` only if stakeholder requests |
+| 11–25 (Medium) | `scoped` | `full` if multi-module diff |
+| 26–50 (High/Critical) | `full` | — |
+
+When uncertain between `scoped` and `full`, choose `scoped` and let the auto-promotion safety net (DV warns, QA promotes if the Selected list is empty) catch under-selection.
+
 ## Re-estimation Triggers
 
 Re-run the estimate (e.g. via `/estimate --update`, an out-of-scope follow-up command) when **any** of the following occur:
