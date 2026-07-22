@@ -285,10 +285,11 @@ Pure, offline, `benchmarkkit`-only (never imports `benchmarklive` — AC-8). Rea
 the latest `live`-mode record (from `--history`, default
 `benchmark/results/history.json`; falls back to the newest file under
 `results/runs/live/` when history has no live entries yet) and renders
-`## totals` (tokens/cost with WITH-vs-WITHOUT premium %), `## per-stage` (cost
-share, out-token share, cache-hit %), `## cache-economics` (top
-`cache_creation` stages), `## quality-delta` (loc/tests/pass_fail/tokens-per-LOC
-per arm), `## validity-caveats` (`live_partial`, placeholder-WITHOUT, cross-era
+`## totals` (tokens/cost with WITH-vs-WITHOUT premium %), `## per-stage` (arm,
+cost share, out-token share, cache-hit %), `## cache-economics` (top
+`cache_creation` stages, per arm), `## quality-delta` (loc/tests/pass_fail/
+tokens-per-LOC per arm, plus coverage % when measured — omitted when absent),
+`## validity-caveats` (`live_partial`, placeholder-WITHOUT, cross-era
 token payload, n=1), and a closing `## improvement-candidates` checklist built
 **only** from mechanical, threshold-based flags (stage cost/out-token >1.5×
 median, a failing arm, degraded capture) — never a fabricated recommendation.

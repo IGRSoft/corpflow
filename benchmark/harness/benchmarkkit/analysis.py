@@ -63,6 +63,7 @@ def _stage_rows(stages: list) -> list:
         cov = s.get("coverage") if isinstance(s.get("coverage"), dict) else {}
         rows.append({
             "stage": s.get("stage") or "?",
+            "arm": s.get("arm"),
             "cost_usd": cost,
             "cost_share_pct": cost_share,
             "out_tokens": out_tok,
@@ -89,10 +90,17 @@ def _paired_tokens(stages: list) -> list:
             continue
         name = s.get("stage") or "?"
         if name not in by_stage:
-            by_stage[name] = {"stage": name, "with_in": None, "with_out": None,
-                              "without_in": None, "without_out": None}
+            by_stage[name] = {"stage": name, "with_in": None, "with_cached": None,
+                              "with_out": None, "without_in": None, "without_cached": None,
+                              "without_out": None}
             order.append(name)
+        cc = _num(s.get("cache_creation"))
+        cr = _num(s.get("cache_read"))
+        # Cached input mass (cache_creation + cache_read); None only when both absent, so a
+        # cross-era stage lacking cache tracking stays "—" rather than a fabricated 0.
+        cached = None if (cc is None and cr is None) else (cc or 0) + (cr or 0)
         by_stage[name][f"{arm}_in"] = _num(s.get("fresh_in"))
+        by_stage[name][f"{arm}_cached"] = cached
         by_stage[name][f"{arm}_out"] = _num(s.get("out"))
     return [by_stage[n] for n in order]
 
@@ -142,10 +150,12 @@ def generated_projects(record: dict, workdirs_root: Optional[str]) -> dict:
 
 
 def _cache_top(stages: list, top_n: int = 5) -> list:
-    entries = [(s.get("stage") or "?", _num(s.get("cache_creation")) or 0) for s in stages]
-    entries = [e for e in entries if e[1] > 0]
-    entries.sort(key=lambda e: e[1], reverse=True)
-    return [{"stage": name, "cache_creation": val} for name, val in entries[:top_n]]
+    entries = [(s.get("stage") or "?", s.get("arm"), _num(s.get("cache_creation")) or 0)
+               for s in stages]
+    entries = [e for e in entries if e[2] > 0]
+    entries.sort(key=lambda e: e[2], reverse=True)
+    return [{"stage": name, "arm": arm, "cache_creation": val}
+            for name, arm, val in entries[:top_n]]
 
 
 def _arm_quality(pm: dict) -> dict:
@@ -158,47 +168,49 @@ def _arm_quality(pm: dict) -> dict:
         "test_count": pm.get("test_count"),
         "pass_fail": pm.get("pass_fail"),
         "tokens_per_loc": tpl,
+        "coverage_pct": _num(pm.get("coverage_pct")),
     }
 
 
 def _outliers(stages: list, with_pm: dict, without_pm: dict) -> list:
     flags = []
 
-    costs = [(_num(s.get("cost_usd")), s.get("stage") or "?") for s in stages]
-    costs = [(c, name) for c, name in costs if c is not None]
-    median_cost = _median([c for c, _ in costs])
+    costs = [(_num(s.get("cost_usd")), s.get("stage") or "?", s.get("arm")) for s in stages]
+    costs = [(c, name, arm) for c, name, arm in costs if c is not None]
+    median_cost = _median([c for c, _, _ in costs])
     if median_cost:
-        for c, name in costs:
+        for c, name, arm in costs:
             if c > _OUTLIER_FACTOR * median_cost:
                 flags.append({
-                    "type": "stage_cost_outlier", "stage": name,
+                    "type": "stage_cost_outlier", "stage": name, "arm": arm,
                     "detail": f"cost ${c:.4f} is {c / median_cost:.2f}x the per-stage "
                              f"median (${median_cost:.4f})",
                 })
 
-    outs = [(_num(s.get("out")), s.get("stage") or "?") for s in stages]
-    outs = [(o, name) for o, name in outs if o is not None]
-    median_out = _median([o for o, _ in outs])
+    outs = [(_num(s.get("out")), s.get("stage") or "?", s.get("arm")) for s in stages]
+    outs = [(o, name, arm) for o, name, arm in outs if o is not None]
+    median_out = _median([o for o, _, _ in outs])
     if median_out:
-        for o, name in outs:
+        for o, name, arm in outs:
             if o > _OUTLIER_FACTOR * median_out:
                 flags.append({
-                    "type": "out_token_spike", "stage": name,
+                    "type": "out_token_spike", "stage": name, "arm": arm,
                     "detail": f"out-tokens {o} is {o / median_out:.2f}x the per-stage "
                              f"median ({median_out:.0f})",
                 })
 
     for label, pm in (("with", with_pm), ("without", without_pm)):
         if pm.get("pass_fail") == "fail":
+            # Arm-level flag: the "stage" IS the arm, so no separate arm label is added.
             flags.append({
-                "type": "missing_app_verdict", "stage": label,
+                "type": "missing_app_verdict", "stage": label, "arm": None,
                 "detail": f"{label} arm pass_fail=fail (no verified app / failing tests)",
             })
 
     for s in stages:
         if s.get("cost_usd") is None and s.get("fresh_in") is None and s.get("out") is None:
             flags.append({
-                "type": "degraded_capture", "stage": s.get("stage") or "?",
+                "type": "degraded_capture", "stage": s.get("stage") or "?", "arm": s.get("arm"),
                 "detail": "no usage captured for this stage (Layer-3 degradation)",
             })
 
@@ -206,14 +218,14 @@ def _outliers(stages: list, with_pm: dict, without_pm: dict) -> list:
         cov = s.get("coverage") if isinstance(s.get("coverage"), dict) else {}
         return _num(cov.get("tool_calls"))
 
-    tcs = [(_tool_calls(s), s.get("stage") or "?") for s in stages]
-    tcs = [(t, name) for t, name in tcs if t is not None]
-    median_tc = _median([t for t, _ in tcs])
+    tcs = [(_tool_calls(s), s.get("stage") or "?", s.get("arm")) for s in stages]
+    tcs = [(t, name, arm) for t, name, arm in tcs if t is not None]
+    median_tc = _median([t for t, _, _ in tcs])
     threshold = max(_TOOL_CALL_FLOOR, _OUTLIER_FACTOR * median_tc) if median_tc else _TOOL_CALL_FLOOR
-    for t, name in tcs:
+    for t, name, arm in tcs:
         if t > threshold:
             flags.append({
-                "type": "tool_call_spike", "stage": name,
+                "type": "tool_call_spike", "stage": name, "arm": arm,
                 "detail": f"{t} tool calls exceeds max(40, 1.5x median) = {threshold:.0f}",
             })
 
@@ -223,6 +235,7 @@ def _outliers(stages: list, with_pm: dict, without_pm: dict) -> list:
         if nested > 0:
             flags.append({
                 "type": "background_nested_spawn", "stage": s.get("stage") or "?",
+                "arm": s.get("arm"),
                 "detail": f"{nested} nested background subagent spawn(s) recorded",
             })
 
@@ -310,6 +323,10 @@ def _pct(v: Optional[float]) -> str:
     return f"{v:.1f}%" if v is not None else "—"
 
 
+def _arm(v) -> str:
+    return v if v in ("with", "without") else "—"
+
+
 def render_markdown(analysis: dict) -> str:
     lines = [
         f"# Benchmark Analysis — {analysis['run_id']} ({analysis['mode']})",
@@ -333,32 +350,36 @@ def render_markdown(analysis: dict) -> str:
 
     lines += ["", "## per-stage", ""]
     if analysis["stages"]:
-        lines.append("| stage | cost (USD) | cost share % | out tokens | out share % | "
+        lines.append("| stage | arm | cost (USD) | cost share % | out tokens | out share % | "
                      "cache-hit % | tool calls |")
-        lines.append("|---|---|---|---|---|---|---|")
+        lines.append("|---|---|---|---|---|---|---|---|")
         for row in analysis["stages"]:
             lines.append(
-                f"| {row['stage']} | {_fmt(row['cost_usd'])} | {_pct(row['cost_share_pct'])} | "
-                f"{_fmt(row['out_tokens'])} | {_pct(row['out_token_share_pct'])} | "
-                f"{_pct(row['cache_hit_pct'])} | {_fmt(row.get('tool_calls'))} |")
+                f"| {row['stage']} | {_arm(row.get('arm'))} | {_fmt(row['cost_usd'])} | "
+                f"{_pct(row['cost_share_pct'])} | {_fmt(row['out_tokens'])} | "
+                f"{_pct(row['out_token_share_pct'])} | {_pct(row['cache_hit_pct'])} | "
+                f"{_fmt(row.get('tool_calls'))} |")
     else:
         lines.append("_no per-stage attribution on this record._")
 
     if analysis.get("paired_tokens"):
         lines += ["", "## paired-tokens", "",
-                  "| stage | WITH in | WITH out | WITHOUT in | WITHOUT out |",
-                  "|---|---|---|---|---|"]
+                  "| stage | WITH in | WITH cached-in | WITH out | WITHOUT in | "
+                  "WITHOUT cached-in | WITHOUT out |",
+                  "|---|---|---|---|---|---|---|"]
         for row in analysis["paired_tokens"]:
             lines.append(
-                f"| {row['stage']} | {_fmt(row['with_in'])} | {_fmt(row['with_out'])} | "
-                f"{_fmt(row['without_in'])} | {_fmt(row['without_out'])} |")
+                f"| {row['stage']} | {_fmt(row['with_in'])} | {_fmt(row.get('with_cached'))} | "
+                f"{_fmt(row['with_out'])} | {_fmt(row['without_in'])} | "
+                f"{_fmt(row.get('without_cached'))} | {_fmt(row['without_out'])} |")
 
     lines += ["", "## cache-economics", ""]
     if analysis["cache_top"]:
-        lines.append("| stage | cache_creation |")
-        lines.append("|---|---|")
+        lines.append("| stage | arm | cache_creation |")
+        lines.append("|---|---|---|")
         for row in analysis["cache_top"]:
-            lines.append(f"| {row['stage']} | {_fmt(row['cache_creation'])} |")
+            lines.append(f"| {row['stage']} | {_arm(row.get('arm'))} | "
+                         f"{_fmt(row['cache_creation'])} |")
     else:
         lines.append("_no cache-creation activity recorded._")
 
@@ -372,6 +393,10 @@ def render_markdown(analysis: dict) -> str:
         f"| pass_fail | {qw['pass_fail'] or '—'} | {qo['pass_fail'] or '—'} |",
         f"| tokens per LOC | {_fmt(qw['tokens_per_loc'])} | {_fmt(qo['tokens_per_loc'])} |",
     ]
+    # Coverage row only when at least one arm measured it; an all-absent (live) record omits
+    # the row entirely so "not measured" never reads as a real 0.0%.
+    if qw.get("coverage_pct") is not None or qo.get("coverage_pct") is not None:
+        lines.append(f"| coverage % | {_pct(qw.get('coverage_pct'))} | {_pct(qo.get('coverage_pct'))} |")
 
     lines += ["", "## validity-caveats", ""]
     if analysis["caveats"]:
@@ -397,8 +422,11 @@ def render_markdown(analysis: dict) -> str:
 
     lines += ["", "## improvement-candidates", ""]
     if analysis["outliers"]:
-        lines += [f"- [ ] ({flag['type']}) {flag['stage']}: {flag['detail']}"
-                  for flag in analysis["outliers"]]
+        for flag in analysis["outliers"]:
+            arm = flag.get("arm")
+            arm_label = f" [{arm}]" if arm in ("with", "without") else ""
+            lines.append(
+                f"- [ ] ({flag['type']}) {flag['stage']}{arm_label}: {flag['detail']}")
     else:
         lines.append("_no mechanical outliers flagged on this record._")
     lines.append("")

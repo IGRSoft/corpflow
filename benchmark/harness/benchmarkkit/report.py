@@ -142,10 +142,14 @@ def analysis_rows(rec: dict) -> list:
         fi = int(_num_or_nil(s.get("fresh_in")) or 0)
         cc = int(_num_or_nil(s.get("cache_creation")) or 0)
         cr = int(_num_or_nil(s.get("cache_read")) or 0)
-        stage_totals.append((s.get("stage") or "?", fi + cc + cr))
-    grand = sum(t for _, t in stage_totals)
+        stage_totals.append((s.get("stage") or "?", s.get("arm"), fi + cc + cr))
+    grand = sum(t for _, _, t in stage_totals)
     if stage_totals and grand != 0:
-        parts = [f"{_escape(name)} {_ratio_fmt(t / grand * 100)}%" for name, t in stage_totals]
+        # Arm tag disambiguates the paired path, where each stage name appears once per arm.
+        parts = []
+        for name, arm, t in stage_totals:
+            label = f"{name} ({arm})" if arm in ("with", "without") else name
+            parts.append(f"{_escape(label)} {_ratio_fmt(t / grand * 100)}%")
         rows.append(("per-stage token share", " &middot; ".join(parts)))
     else:
         rows.append(("per-stage token share", "&mdash;"))
@@ -257,6 +261,10 @@ def _record_html(rec: dict, plugin_root: Optional[str] = None) -> str:
     for accessor, label, _ in METRIC_ROWS:
         wv = _get(with_pm, accessor)
         ov = _get(without_pm, accessor)
+        # Coverage is unmeasured on the live path (both arms None): omit the row so absent
+        # never renders as a real 0. A measured 0.0 (deterministic) still shows a 0 row.
+        if accessor == "coverage_pct" and wv is None and ov is None:
+            continue
         rows += (
             f"<tr><td class='metric'>{_escape(label)}</td>"
             f"<td class='with'>{_fmt(wv)}</td>"

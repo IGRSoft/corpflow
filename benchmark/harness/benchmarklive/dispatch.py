@@ -440,6 +440,9 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
     byte shape exactly; paired mode aggregates the WITHOUT arm's own 10-stage tokens
     and tags every stage row with its arm (both additive/emit-only)."""
     paired = without_usages is not None
+    # Live coverage is never measured; None marks it absent so renderers tell it apart
+    # from a real 0.0. Skip mode keeps the byte-stable 0.0 placeholder (asserted by test).
+    with_coverage = None if paired else 0.0
 
     in_total, out_total, tok_total, cost_total, cr_total, cc_total, with_wall = _arm_tokens(usages)
 
@@ -456,7 +459,7 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
         tokens=Tokens(input=in_total, output=out_total, total=tok_total,
                       cache_read=cr_total, cache_creation=cc_total),
         cost_usd=cost_total, wall_clock_s=with_wall, loc_produced=with_loc, test_count=with_test,
-        coverage_pct=0.0, estimate_complexity_score=0, stage_count=stages_dispatched,
+        coverage_pct=with_coverage, estimate_complexity_score=0, stage_count=stages_dispatched,
         pass_fail=with_pass, app_path=with_app_path)
 
     if not paired:
@@ -482,7 +485,7 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
     without_p = PathMetrics(
         tokens=Tokens(input=o_in, output=o_out, total=o_tok, cache_read=o_cr, cache_creation=o_cc),
         cost_usd=o_cost, wall_clock_s=o_wall, loc_produced=without_loc, test_count=without_test,
-        coverage_pct=0.0, estimate_complexity_score=0, stage_count=without_dispatched,
+        coverage_pct=None, estimate_complexity_score=0, stage_count=without_dispatched,
         pass_fail=without_pass, app_path=without_app_path)
 
     stages_all = (_stage_attributions(usages, arm="with")

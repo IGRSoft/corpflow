@@ -120,6 +120,18 @@ class PairedDispatch(unittest.TestCase):
         # Skip mode leaves stage rows untagged (byte-stable): no "arm" key.
         self.assertTrue(all("arm" not in s for s in rec["stages"]))
 
+    def test_paired_coverage_is_absent_not_zero(self):
+        # Live coverage is never measured: the paired path emits None (absent) for BOTH arms
+        # so a renderer can tell it apart from a real 0.0. Skip mode keeps the 0.0 placeholder.
+        fake = SequencedFakeDispatcher([single_object_usage(), single_object_usage()])
+        rc = self._dispatch(fake)
+        self.assertEqual(rc, 0)
+        rec = load_json(self.sb.record_path)
+        self.assertIsNone(rec["paths"]["with"]["coverage_pct"])
+        self.assertIsNone(rec["paths"]["without"]["coverage_pct"])
+        self.assertIsNone(rec["comparison"]["coverage_pct"]["with"])
+        self.assertIsNone(rec["comparison"]["coverage_pct"]["delta"])
+
     def test_preflight_counts_both_arms_when_real(self):
         # est=0.5, stages=["PL"]: real preflight count = 2 => 1.0 > 0.6 declines.
         rc_real = self._dispatch(SequencedFakeDispatcher([single_object_usage()]),

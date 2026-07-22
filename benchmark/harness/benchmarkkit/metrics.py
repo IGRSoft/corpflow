@@ -150,7 +150,7 @@ class PathMetrics:
     wall_clock_s: float
     loc_produced: int
     test_count: int
-    coverage_pct: float
+    coverage_pct: Optional[float]  # None marks unmeasured (live); a real 0.0 is measured-zero
     estimate_complexity_score: int
     stage_count: int
     pass_fail: str          # "pass" | "fail"
@@ -178,7 +178,7 @@ class PathMetrics:
             wall_clock_s=_num_or(d, "wall_clock_s", 0.0),
             loc_produced=_num_or(d, "loc_produced", 0),
             test_count=_num_or(d, "test_count", 0),
-            coverage_pct=_num_or(d, "coverage_pct", 0.0),
+            coverage_pct=d.get("coverage_pct"),  # preserve None so absent stays distinct from 0.0
             estimate_complexity_score=_num_or(d, "estimate_complexity_score", 0),
             stage_count=_num_or(d, "stage_count", 0),
             pass_fail=d.get("pass_fail") or "",

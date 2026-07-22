@@ -124,6 +124,25 @@ class MetricsSchema(unittest.TestCase):
                               out=1, cost_usd=None).to_dict()
         self.assertNotIn("coverage", d2)
 
+    def test_coverage_pct_none_survives_round_trip(self):
+        # Absent coverage (live) must serialize as null and decode back to None, never 0.0.
+        d = _live_pm(coverage_pct=None).to_dict()
+        self.assertIsNone(d["coverage_pct"])
+        self.assertIsNone(PathMetrics.from_dict(d).coverage_pct)
+
+    def test_legacy_record_missing_coverage_key_decodes_none(self):
+        # An old record that omits coverage_pct decodes to None (not a fabricated 0.0), keeping
+        # "absent" distinct from a measured zero for the renderer.
+        d = _det_pm().to_dict()
+        del d["coverage_pct"]
+        self.assertIsNone(PathMetrics.from_dict(d).coverage_pct)
+
+    def test_paired_live_comparison_coverage_is_null(self):
+        rec = make_record("r", "t", "live", "s", None,
+                          _live_pm(coverage_pct=None), _live_pm(coverage_pct=None))
+        cov = rec.to_dict()["comparison"]["coverage_pct"]
+        self.assertEqual(cov, {"with": None, "without": None, "delta": None})
+
     def test_round_trips(self):
         rec = make_record("r", "2026-07-05T18:48:06Z", "live", "sha", 5.0,
                           _live_pm(), _live_pm(), live_partial=True,

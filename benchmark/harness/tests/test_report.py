@@ -95,5 +95,43 @@ class ReportTests(unittest.TestCase):
             shutil.rmtree(td, ignore_errors=True)
 
 
+class CoverageAbsentVsZero(unittest.TestCase):
+    """Item 3 (HTML side): a live record whose coverage is unmeasured (both arms None) drops
+    the coverage row; a deterministic record with a measured 0.0 keeps it."""
+
+    def _live_no_coverage(self):
+        wt = Tokens(input=1000, output=500, total=1500, cache_read=300, cache_creation=100)
+        with_pm = PathMetrics(wt, 0.2, 10.0, 400, 10, None, 0, 3, "pass",
+                              "benchmark/workdirs/live-nc/with")
+        without_pm = PathMetrics(Tokens(input=400, output=200, total=600), 0.1, 5.0, 300, 8,
+                                 None, 0, 3, "pass", "benchmark/workdirs/live-nc/without")
+        return make_record("live-nc", "2026-07-22T00:00:00Z", "live", "sha", None,
+                           with_pm, without_pm).to_dict()
+
+    def test_absent_coverage_row_omitted(self):
+        html = report.render_html({"live": [self._live_no_coverage()]})
+        self.assertNotIn("coverage %", html)
+
+    def test_measured_zero_coverage_row_present(self):
+        html = report.render_html({"deterministic": [_det_record()]})  # coverage_pct 0.0
+        self.assertIn("coverage %", html)
+
+
+class PerStageArmAttribution(unittest.TestCase):
+    """Item 2 (HTML side): the per-stage token-share line tags each entry with its arm so the
+    paired path no longer lists a bare stage name twice."""
+
+    def test_token_share_labels_arm(self):
+        from benchmarkkit.metrics import StageAttribution
+        rec = _live_record_with_cache()
+        rec["stages"] = [
+            StageAttribution("DV", 900, 0, 0, 100, 0.1, arm="with").to_dict(),
+            StageAttribution("DV", 100, 0, 0, 10, 0.1, arm="without").to_dict(),
+        ]
+        html = report.render_html({"live": [rec]})
+        self.assertIn("DV (with)", html)
+        self.assertIn("DV (without)", html)
+
+
 if __name__ == "__main__":
     unittest.main()

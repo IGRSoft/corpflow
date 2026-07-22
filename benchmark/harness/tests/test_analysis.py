@@ -177,6 +177,94 @@ class CSurfacing(unittest.TestCase):
         self.assertIn("## paired-tokens", md)
 
 
+class ArmAttribution(unittest.TestCase):
+    """Item 2: per-stage rows, cache-economics rows, and improvement-candidate lines carry an
+    explicit arm label on the paired path; records without an ``arm`` tag degrade to '—'."""
+
+    def _armed(self, name, arm, cost=0.1, out=50, cache_creation=0):
+        return StageAttribution(stage=name, fresh_in=100, cache_creation=cache_creation,
+                                cache_read=0, out=out, cost_usd=cost, arm=arm)
+
+    def test_per_stage_rows_and_table_carry_arm(self):
+        stages = [self._armed("DV", "with", cost=9.0, out=900, cache_creation=500),
+                  self._armed("DV", "without", cost=1.0, out=100, cache_creation=50)]
+        result = analysis.analyze(_paired_live_record(stages=stages))
+        self.assertEqual([r["arm"] for r in result["stages"]], ["with", "without"])
+        md = analysis.render_markdown(result)
+        self.assertIn("| stage | arm | cost (USD)", md)
+        self.assertIn("| DV | with |", md)
+        self.assertIn("| DV | without |", md)
+        # cache-economics disambiguates the twin DV rows by arm.
+        self.assertIn("| stage | arm | cache_creation |", md)
+        self.assertEqual([e["arm"] for e in result["cache_top"]], ["with", "without"])
+
+    def test_improvement_candidate_lines_name_the_arm(self):
+        # DV(with) cost 9.0 is the lone outlier vs the [9,1,1,1] median of 1.
+        stages = [self._armed("DV", "with", cost=9.0), self._armed("PL", "with", cost=1.0),
+                  self._armed("DV", "without", cost=1.0), self._armed("PL", "without", cost=1.0)]
+        md = analysis.render_markdown(analysis.analyze(_paired_live_record(stages=stages)))
+        self.assertIn("(stage_cost_outlier) DV [with]:", md)
+
+    def test_untagged_record_shows_em_dash_arm(self):
+        stages = [_stage("PL", cost=1.0, out=10)]  # no arm
+        md = analysis.render_markdown(analysis.analyze(_paired_live_record(stages=stages)))
+        self.assertIn("| PL | — |", md)
+
+
+class PairedCachedInput(unittest.TestCase):
+    """Item 1: the paired-tokens table exposes per-arm cached-input mass (cache_creation +
+    cache_read) so input columns are no longer a fresh-only understatement."""
+
+    def _stage(self, name, arm, fresh_in, cc, cr):
+        return StageAttribution(stage=name, fresh_in=fresh_in, cache_creation=cc,
+                                cache_read=cr, out=10, cost_usd=0.1, arm=arm)
+
+    def test_cached_in_derived_and_rendered(self):
+        stages = [self._stage("PL", "with", 45, cc=100, cr=1_241_703),
+                  self._stage("PL", "without", 8, cc=5, cr=200)]
+        result = analysis.analyze(_paired_live_record(stages=stages))
+        pt = result["paired_tokens"][0]
+        self.assertEqual(pt["with_cached"], 100 + 1_241_703)
+        self.assertEqual(pt["without_cached"], 205)
+        md = analysis.render_markdown(result)
+        self.assertIn("WITH cached-in", md)
+        self.assertIn("WITHOUT cached-in", md)
+        self.assertIn(f"| PL | 45 | {100 + 1_241_703} |", md)
+
+    def test_cross_era_stage_without_cache_keys_stays_em_dash(self):
+        stages = [StageAttribution(stage="PL", fresh_in=45, cache_creation=None,
+                                   cache_read=None, out=10, cost_usd=0.1, arm="with")]
+        result = analysis.analyze(_paired_live_record(stages=stages))
+        self.assertIsNone(result["paired_tokens"][0]["with_cached"])
+        self.assertIn("| PL | 45 | — |", analysis.render_markdown(result))
+
+
+class CoverageAbsentVsZero(unittest.TestCase):
+    """Item 3: an unmeasured (None) coverage arm omits the quality-delta coverage row, so absent
+    never reads as a measured 0.0%; a real 0.0 keeps the row."""
+
+    def _record(self, with_cov, without_cov):
+        wt = Tokens(input=1000, output=500, total=1500, cache_read=300, cache_creation=100)
+        with_pm = PathMetrics(wt, 0.20, 10.0, 400, 10, with_cov, 15, 1, "pass",
+                              "benchmark/workdirs/x/with")
+        without_pm = PathMetrics(Tokens(input=400, output=200, total=600), 0.10, 5.0, 300, 8,
+                                 without_cov, 0, 1, "pass", "benchmark/workdirs/x/without")
+        return make_record("r", "t", "live", "s", None, with_pm, without_pm).to_dict()
+
+    def test_absent_coverage_omits_row(self):
+        result = analysis.analyze(self._record(None, None))
+        self.assertIsNone(result["quality"]["with"]["coverage_pct"])
+        self.assertNotIn("| coverage % |", analysis.render_markdown(result))
+
+    def test_measured_zero_keeps_row(self):
+        md = analysis.render_markdown(analysis.analyze(self._record(0.0, 0.0)))
+        self.assertIn("| coverage % | 0.0% | 0.0% |", md)
+
+    def test_one_measured_arm_keeps_row(self):
+        md = analysis.render_markdown(analysis.analyze(self._record(85.0, None)))
+        self.assertIn("| coverage % | 85.0% | — |", md)
+
+
 class FixtureRecord(unittest.TestCase):
     def test_vendored_live_fixture_analyzes_without_error_cross_era_caveat(self):
         with open(_FIXTURE, encoding="utf-8") as f:
