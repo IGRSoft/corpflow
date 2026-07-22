@@ -34,3 +34,14 @@ offline, and the live manifest verifies the invocations actually happened.
 
 These prompts are deterministic and contain NO secrets. They are only
 ever read on an opt-in `--live` run (never `make benchmark` / `make test`).
+
+## `without.txt` — the WITHOUT baseline prompt
+
+`without.txt` is a different kind of asset: it is sent **verbatim**, with NO
+`[1]-[4]` cache-prefix preamble prepended, as the single-shot WITHOUT-arm
+baseline (`--without-arm real`). It is fully self-contained — it names no
+plugin surface (no agent/skill/command names, no `.context/` paths, no
+`<<<...>>>` markers) — so the baseline measures what a bare `claude -p`
+invocation produces from the same real task spec the WITH pipeline works
+from, with none of the plugin's own scaffolding in the prompt. See
+`benchmark/README.md` for the WITHOUT-arm argv and dispatch order.

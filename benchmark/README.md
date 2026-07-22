@@ -28,11 +28,15 @@ make benchmark-live BUDGET=10.00 STAGES=PL,AR,DV   # subset probe
 # Render an HTML report (auto-run after a benchmark)
 make report        # -> benchmark/results/result.html
 
+# Render an evidence-backed markdown analysis of the latest live run
+./benchmark/harness/bin/bench-analyze   # -> benchmark/results/analysis.md
+
 # Or explicitly:
 ./benchmark/run-benchmark.sh                        # deterministic
 ./benchmark/run-benchmark.sh --live                 # live, --budget 50.00 default
 ./benchmark/run-benchmark.sh --live --budget 2.50
 ./benchmark/run-benchmark.sh --live --stages PL,AR,DV   # targeted stage subset
+./benchmark/run-benchmark.sh --live --without-arm skip  # force-skip the WITHOUT baseline
 ```
 
 ## What It Does
@@ -138,6 +142,36 @@ frozen stderr message, rc=3, no dispatch, no record.
 **bench-live exit codes:** 0 success · 2 pre-flight decline · 3 no credential ·
 4 running-tally breach/degraded (partial record on disk) · 64 bad usage.
 
+## WITHOUT-arm baseline (live)
+
+A live run can also dispatch a single-shot, no-`--agent` baseline (`claude -p
+--model claude-opus-4-8 --effort high ...`) that generates the SAME app
+single-shot, mirroring the deterministic WITHOUT path but with a real dispatch
+instead of a template copy:
+
+- **Policy default**: `real` on a full pipeline run, `skip` on a `--stages`
+  subset — `--without-arm real|skip` (`run-benchmark.sh --live` or `bench-live`)
+  overrides the default either way
+- **Dispatch order**: the arm is dispatched **FIRST**, before any WITH stage, and
+  its record is flushed to disk immediately — a later WITH-stage budget breach
+  still leaves a real WITH-vs-WITHOUT comparison point on disk
+- **Prompt**: `benchmark/live/prompts/without.txt` sent **verbatim** on stdin — no
+  `[1]-[4]` cache-prefix preamble, since there is no staged worktask contract to
+  remind a single-shot dispatch of
+- **Budget**: counts as one extra dispatch in the pre-flight projection
+  (`len(stages) + 1`) when `real`; the running-tally gate applies to it exactly
+  like any WITH stage
+- **Measurement**: wall-clock and `loc_produced`/`test_count`/`pass_fail` are
+  measured per arm from each arm's own generated app
+  (`benchmark/workdirs/<run_id>/{with,without}/`) — the WITH-side LOC count
+  excludes the sibling `without/` directory
+- **Failure handling**: a `DispatchFailure` from the arm is tolerated (the WITH
+  pipeline still runs); a degraded/failed arm sets `live_partial` and the
+  WITHOUT path's `pass_fail` to `"fail"`
+- **`without_arm="skip"` (mechanism default)**: reproduces the pre-existing
+  WITH-only placeholder byte-for-byte — WITHOUT tokens/cost `null`,
+  `wall_clock_s: 0.0`, `stage_count: 1`, `pass_fail: "pass"`, `app_path: null`
+
 ## Coverage manifest (live, per stage)
 
 With `stream-json` capture, each dispatched stage's `stages[]` entry may carry
@@ -178,27 +212,32 @@ benchmark/
   run-benchmark.sh              # Orchestrator (deterministic default, --live opt-in)
   harness/                      # Python package "benchmark harness" (stdlib-only)
     benchmarkkit/               #   deterministic world: metrics/rotation/genlib/
-                                #   generators/deterministic_run/report (6 modules)
+                                #   generators/deterministic_run/report/analysis (7 modules)
     benchmarklive/              #   live world: preamble/dispatch/credentials/
-                                #   budget/capture (5 modules, depends on benchmarkkit)
+                                #   budget/capture/baseline (6 modules, depends on benchmarkkit)
     bin/
       bench-deterministic       # frozen-argv entrypoint (links benchmarkkit only, AC-8)
       bench-report              # frozen-argv entrypoint (links benchmarkkit only)
+      bench-analyze              # frozen-argv entrypoint (links benchmarkkit only)
       bench-live                # frozen-argv entrypoint (only live-world linker)
-    tests/                      # 95 test methods (schema/rotation/generators/report/
+    tests/                      # 131 test methods (schema/rotation/generators/report/
                                 #   history back-compat/import-isolation + live-gate/
-                                #   budget/credentials/prompt-assembly/SSOT/coverage)
+                                #   budget/credentials/prompt-assembly/SSOT/coverage/
+                                #   app-measure/without-arm/analysis)
       __init__.py               # makes tests/ a package (importlib discovery)
-      _helpers.py               # test fakes: Tripwire/RecordingFake/ThrowAtStage
+      _helpers.py               # test fakes: Tripwire/RecordingFake/ThrowAtStage/Sequenced
       fixtures/history.json     # vendored real history (byte-compat oracle)
-      test_*.py                 # 16 test modules
+      test_*.py                 # 19 test modules
   ttt-template/                 # Canonical SwiftUI TTT fixture (SwiftPM package
                                 # "TicTacToe": TicTacToeKit + tictactoe exe,
                                 # 48 Swift Testing tests; macOS 15+ / iOS 18+)
   live/prompts/                 # pl.txt … st.txt — section [5] task bodies only
-                                # ([1]-[4] prepended by Preamble at dispatch)
+                                # ([1]-[4] prepended by Preamble at dispatch);
+                                # without.txt — WITHOUT-arm prompt, sent verbatim
+                                # (no preamble, no --agent)
   results/
     history.json                # Rolling latest-3 per mode (tracked in git)
+    analysis.md                 # bench-analyze output (evidence-backed markdown)
     runs/{deterministic,live}/  # Per-run detail records (rotated, latest-3)
   workdirs/<run_id>/{with,without}/   # Generated apps per run (gitignored)
 ```
@@ -230,19 +269,42 @@ siblings, never summed into `total`. `comparison.<metric>` =
 `{"with": …, "without": …, "delta": …}` (`delta` null when either side null).
 Legacy records (3 token keys, no `app_path`) still decode.
 
+## bench-analyze (evidence-backed markdown)
+
+```bash
+./benchmark/harness/bin/bench-analyze                       # latest live record -> results/analysis.md
+./benchmark/harness/bin/bench-analyze --run <record.json>    # analyze a specific record
+./benchmark/harness/bin/bench-analyze --reference <record.json>  # flag cross-era comparisons
+./benchmark/harness/bin/bench-analyze --history <path> --out <md path>
+```
+
+Pure, offline, `benchmarkkit`-only (never imports `benchmarklive` — AC-8). Reads
+the latest `live`-mode record (from `--history`, default
+`benchmark/results/history.json`; falls back to the newest file under
+`results/runs/live/` when history has no live entries yet) and renders
+`## totals` (tokens/cost with WITH-vs-WITHOUT premium %), `## per-stage` (cost
+share, out-token share, cache-hit %), `## cache-economics` (top
+`cache_creation` stages), `## quality-delta` (loc/tests/pass_fail/tokens-per-LOC
+per arm), `## validity-caveats` (`live_partial`, placeholder-WITHOUT, cross-era
+token payload, n=1), and a closing `## improvement-candidates` checklist built
+**only** from mechanical, threshold-based flags (stage cost/out-token >1.5×
+median, a failing arm, degraded capture) — never a fabricated recommendation.
+No live records yet → prints a message and exits 0.
+
 ## Test suites
 
 - `benchmark/ttt-template` — 48 Swift Testing fixture tests (engine/AI/
   leaderboard/settings/router/view-model), also run on iOS Simulator via
   `make test-ios` (SKIPs cleanly on hosts without an iOS runtime)
-- `benchmark/harness` — 95 Python harness self-tests (16 modules), zero real
+- `benchmark/harness` — 131 Python harness self-tests (19 modules), zero real
   LLM calls (all dispatchers injected with fakes/tripwires), incl. schema
   byte-compat (vendored real history.json), rotation, generators (real `swift test`
   on generated apps), deterministic/live pipelines, budget/credential gates,
-  prompt assembly, and stage attribution
+  prompt assembly, stage attribution, app measurement, the WITHOUT-arm baseline,
+  and offline analysis
 
-**Total:** 48 Swift TTT artifact tests + 95 Python harness tests + 37 Python
-skill-script tests = 180+ tests green.
+**Total:** 48 Swift TTT artifact tests + 131 Python harness tests + 37 Python
+skill-script tests = 216 tests green.
 
 **Reference:** `tests/COVERAGE.md` for the Swift/Python coverage story (Python
 opportunistic via coverage.py; Swift jq ≥85% line gate with `Sources/TicTacToeKit/Views/`
