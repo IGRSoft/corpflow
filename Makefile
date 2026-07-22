@@ -10,7 +10,8 @@
 #                        no iOS runtime is installed). Never inside the benchmark Timer.
 #   make benchmark       deterministic dual-path TTT benchmark. No --live, no network.
 #   make benchmark-live  opt-in live A/B (credential-gated, budget-capped). Never CI.
-#                        Honors BUDGET=<usd> and STAGES=PL,AR,... passthrough.
+#                        Honors BUDGET=<usd>, STAGES=PL,AR,..., and WITHOUT_ARM=real|skip.
+#   make benchmark-analyze  render benchmark/results/history.json -> analysis.md.
 #   make report          render benchmark/results/history.json -> result.html.
 #   make clean           remove workdirs, coverage intermediates, .build dirs.
 #
@@ -36,7 +37,7 @@ KCOV_EXCLUDE := $(PLUGIN_ROOT)/tests
 # All bats files under tests/shell/**.
 SHELL_TESTS  := $(shell find $(PLUGIN_ROOT)/tests/shell -type f -name '*.bats' 2>/dev/null | sort)
 
-.PHONY: all test bootstrap coverage test-ios benchmark benchmark-live report clean help
+.PHONY: all test bootstrap coverage test-ios benchmark benchmark-live benchmark-analyze report clean help
 .DEFAULT_GOAL := help
 
 help:
@@ -46,7 +47,8 @@ help:
 	@echo "  make coverage        suite under kcov + swift coverage, gate >=$(COV_MIN)%"
 	@echo "  make test-ios        TicTacToeKit on iOS Simulator (SKIPs w/o runtime)"
 	@echo "  make benchmark       deterministic dual-path TTT benchmark (offline)"
-	@echo "  make benchmark-live  opt-in live A/B (credential+budget gated; STAGES=)"
+	@echo "  make benchmark-live  opt-in live A/B (credential+budget gated; STAGES=, WITHOUT_ARM=)"
+	@echo "  make benchmark-analyze  render an evidence-backed A/B analysis report"
 	@echo "  make clean           remove workdirs / coverage / .build dirs"
 
 # ---------------------------------------------------------------------------
@@ -167,15 +169,15 @@ benchmark:
 
 # ---------------------------------------------------------------------------
 # benchmark-live: opt-in. Credential-gated, budget-capped. Never a dep of any
-# other target. Never CI. Honors BUDGET= and STAGES= (subset probe).
+# other target. Never CI. Honors BUDGET=, STAGES= (subset probe), and
+# WITHOUT_ARM=real|skip (overrides the default real-on-full/skip-on-subset policy).
 # ---------------------------------------------------------------------------
 benchmark-live:
 	@echo "[benchmark-live] OPT-IN live A/B — credential probe + budget cap apply."
-	@if [ -n "$(STAGES)" ]; then \
-	    "$(PLUGIN_ROOT)/benchmark/run-benchmark.sh" --live --budget $${BUDGET:-50.00} --stages "$(STAGES)"; \
-	  else \
-	    "$(PLUGIN_ROOT)/benchmark/run-benchmark.sh" --live --budget $${BUDGET:-50.00}; \
-	  fi
+	@live_args="--live --budget $${BUDGET:-50.00}"; \
+	  [ -n "$(STAGES)" ] && live_args="$$live_args --stages $(STAGES)"; \
+	  [ -n "$(WITHOUT_ARM)" ] && live_args="$$live_args --without-arm $(WITHOUT_ARM)"; \
+	  "$(PLUGIN_ROOT)/benchmark/run-benchmark.sh" $$live_args
 	@$(MAKE) --no-print-directory report
 
 # ---------------------------------------------------------------------------
@@ -186,6 +188,15 @@ report:
 	  --history "$(PLUGIN_ROOT)/benchmark/results/history.json" \
 	  --out "$(PLUGIN_ROOT)/benchmark/results/result.html" \
 	  --plugin-root "$(PLUGIN_ROOT)"
+
+# ---------------------------------------------------------------------------
+# benchmark-analyze: render an evidence-backed A/B analysis report from the
+# latest live record in benchmark/results/history.json.
+# ---------------------------------------------------------------------------
+benchmark-analyze:
+	@python3 "$(HARNESS_DIR)/bin/bench-analyze" \
+	  --history "$(PLUGIN_ROOT)/benchmark/results/history.json" \
+	  --out "$(PLUGIN_ROOT)/benchmark/results/analysis.md"
 
 # ---------------------------------------------------------------------------
 # clean: remove generated workdirs + coverage intermediates + caches + the

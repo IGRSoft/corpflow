@@ -14,6 +14,7 @@
 # Usage:
 #   benchmark/run-benchmark.sh                                  # deterministic
 #   benchmark/run-benchmark.sh --live [--budget U] [--stages PL,AR,DV]
+#                              [--without-arm real|skip]
 #
 # Wall-clock note: a ttt-template warm-up build happens BEFORE any timing; per-arm
 # app builds/tests stay INSIDE the harness Timer. The Python harness itself needs
@@ -28,6 +29,7 @@ MODE="deterministic"
 LIVE=0
 BUDGET="50.00"
 STAGES=""
+WITHOUT_ARM=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -36,6 +38,8 @@ while [ "$#" -gt 0 ]; do
     --budget=*) BUDGET="${1#*=}"; shift ;;
     --stages)   STAGES="${2:?--stages needs a comma-separated code list}"; shift 2 ;;
     --stages=*) STAGES="${1#*=}"; shift ;;
+    --without-arm)   WITHOUT_ARM="${2:?--without-arm needs real or skip}"; shift 2 ;;
+    --without-arm=*) WITHOUT_ARM="${1#*=}"; shift ;;
     -h|--help)
       grep '^#' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "run-benchmark.sh: unknown arg '$1'" >&2; exit 64 ;;
@@ -44,6 +48,10 @@ done
 
 if [ -n "$STAGES" ] && [ "$LIVE" != "1" ]; then
   echo "run-benchmark.sh: --stages requires --live" >&2; exit 64
+fi
+
+if [ -n "$WITHOUT_ARM" ] && [ "$LIVE" != "1" ]; then
+  echo "run-benchmark.sh: --without-arm requires --live" >&2; exit 64
 fi
 
 note() { printf '\033[1;36m[benchmark]\033[0m %s\n' "$*"; }
@@ -78,20 +86,12 @@ if [ "$LIVE" = "1" ]; then
   # ---------------------------------------------------------------------------
   note "LIVE mode (opt-in). budget=\$$BUDGET run_id=$RUN_ID"
   note "dispatching via frozen seam…"
-  # FROZEN SEAM: exactly this argv (+ optional --stages passthrough).
+  # FROZEN SEAM: exactly this argv (+ optional --stages / --without-arm passthrough).
   set +e
-  if [ -n "$STAGES" ]; then
-    python3 "$HARNESS_BIN/bench-live" \
-      --workdir "$RUN_ID" \
-      --budget "$BUDGET" \
-      --record "$RECORD_PATH" \
-      --stages "$STAGES"
-  else
-    python3 "$HARNESS_BIN/bench-live" \
-      --workdir "$RUN_ID" \
-      --budget "$BUDGET" \
-      --record "$RECORD_PATH"
-  fi
+  live_args=(--workdir "$RUN_ID" --budget "$BUDGET" --record "$RECORD_PATH")
+  [ -n "$STAGES" ] && live_args+=(--stages "$STAGES")
+  [ -n "$WITHOUT_ARM" ] && live_args+=(--without-arm "$WITHOUT_ARM")
+  python3 "$HARNESS_BIN/bench-live" "${live_args[@]}"
   rc=$?
   set -e
   # The shell exit stays cosmetic (D6): the adapter already wrote the record
