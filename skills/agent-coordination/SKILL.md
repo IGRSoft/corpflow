@@ -472,8 +472,12 @@ MCP servers can annotate tool results with `_meta["anthropic/maxResultSizeChars"
 
 Any MCP tool call running past the auto-background threshold (default **2 minutes**; tune or disable with `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` — per-dispatch scoping is only real for an external headless dispatch launched with its own environment; in-process `Task()` dispatches share the session's setting) is moved to the background by Claude Code itself — the calling agent gets back a background-task handle, not the terminal result. Handle it exactly like a backgrounded `Task()` dispatch (`§ Background-by-default dispatch` above):
 
+#### Handling a backgrounded MCP call
+
 - Do NOT parse the handle/acknowledgement as the build/test outcome — await the completion notification (or poll the task) before reading results.
 - Any completion gate that reads a log or artifact the MCP call produces (e.g., `developer § D1`'s `build-developer-*.log`) MUST wait for the real completion signal — a log still being written is not "done"; file presence alone proves nothing.
+#### MCP auto-background threshold tuning
+
 - XcodeBuildMCP `build_sim` / `build_run_sim` / `test_sim` routinely exceed 2 minutes — DV/DR/QA flows that chain on their results must await between steps.
 - Raise or disable the threshold only when a run genuinely needs a synchronous result within one turn (e.g., DV's edit-batch-build fix-up cycle diagnosing a full log in one pass) — practical only for external headless dispatches with their own environment; avoid raising it session-wide, since every other MCP call in that session loses the safety net.
 

@@ -90,7 +90,7 @@ All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolve
 
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
-| **DV** | developer | opus | `.context/<plan_file>` (resolved per AR rule), `.context/analyzing-N.md`, `.context/coordination-N.md` (if present) | `.context/development-N.md` with sections: Files Changed, Approach, Tests Added, Verification Command + actual code changes | `development-N.md` exists + git diff is non-empty + every `handoff.files_touched` path passes `test -e` (write landed on disk, never emitted as chat text) + `.context/logs/build-*.log` shows success | `.context/errors/developer.md` |
+| **DV** | developer | opus | `.context/<plan_file>` (resolved per AR rule), `.context/analyzing-N.md`, `.context/coordination-N.md` (if present) | `.context/development-N.md` with sections: Files Changed, Approach, Tests Added, Verification Command + actual code changes | `development-N.md` exists + git diff is non-empty + every `handoff.files_touched` path passes `test -e` (write landed, not chat text) + `.context/logs/build-*.log` shows success | `.context/errors/developer.md` |
 | **DR** | technical-lead | opus | `.context/development-N.md` + source diff | `.context/developer-review-N.md` with sections: Code Quality, Test Coverage, Issues Found, Approval Status | `developer-review-N.md` exists + Approval Status ∈ {approved, needs-changes, rejected} | `.context/errors/technical-lead.md` |
 
 ### SR

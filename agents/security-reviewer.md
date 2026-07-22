@@ -203,6 +203,8 @@ the sole directive), then triage:
 
 When reviewing CC-managed worktasks, check for: bash bypass patterns, compound-command injection (`&&`/`||` chains), env-var prefix bypasses (`FOO=bar cmd`), `/dev/tcp` redirects, over-broad wildcard allow rules, deny-rule precedence, subagent permission scope, and LSP `which` fallback injection. Wildcard nuance: `WebFetch(domain:*.example.com)` subdomain rules and mid-pattern file rules (`Read(secrets-*/config.json)`) match correctly — scoped pattern wildcards are legitimate; flag only unscoped forms (`Bash(*)`, `Read(*)`).
 
+### Permission-rule syntax hardening
+
 Permission-rule syntax hardening: (a) single-segment `dir/**` allow rules and hook `if:` conditions are cwd-anchored — they match only `<cwd>/dir`; require `**/dir/**` for any-depth matching (`deny`/`ask` rules are unaffected and keep any-depth matching); (b) a `Write(path)`/`NotebookEdit(path)`/`Glob(path)` permission rule triggers a startup warning — those tools do not take a path predicate the way Edit/Read do; flag and recommend `Edit(path)`/`Read(path)` instead; (c) Bash permission analysis fail-closes on previously-permissive shapes (file-descriptor redirects, commands over 10k characters, zsh subscript syntax in [[ ]], `help`/`man` forms that could run unsafe options) — expect more ask prompts on those shapes; a detection improvement, not a regression.
 
 ## Escalation Rules

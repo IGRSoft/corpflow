@@ -244,6 +244,10 @@ Run on every command regardless of focus area. Treat findings here as blocking o
 |-------|------------|----------|
 | `$ARGUMENTS` substitution | If the command body references `$ARGUMENTS`, the frontmatter `argument-hint` MUST be non-empty. If the body has no `$ARGUMENTS` but `argument-hint` is set, suggest removing the hint. Unmatched `$1`/`$2` positional placeholders are preserved verbatim in skill/command bodies (not silently stripped), so positional forms are safe to audit literally. | P2 |
 | Option-to-example coverage | Every documented `--option` in `## Options` should appear at least once in `## Examples`. Compute: `set(options) − set(options-used-in-examples)`. Flag the diff with one-line "missing example for `--<flag>`". | P2 |
+#### Frontmatter Audit — P2 (output & links)
+
+| Field | Audit Rule | Severity |
+|-------|------------|----------|
 | Output-format consistency | Output samples should match the schema declared in prose. If the command claims "JSON output via `--format json`", flag if the Output Format section shows only Markdown samples. | P2 |
 | Related links | Cross-reference targets (`./create-agent.md`, `../agents/prompt-engineer.md`) must resolve. Flag dead links. | P2 |
 
