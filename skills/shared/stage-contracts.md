@@ -116,7 +116,7 @@ All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolve
 
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
-| **FN** | project-manager | opus | All upstream `.context/*-N.md` | `.context/complete-summary-N.md` with sections: Summary, Files Changed, Stage Timings, Next Actions + `.context/attachments/PR instructions.md` + `.context/attachments/Review request.md` (templates per `skills/worktask/references/conductor-attachments.md`) + commit/PR created | `complete-summary-N.md` exists + both attachments exist + commit created OR PR opened | `.context/errors/project-manager.md` |
+| **FN** | project-manager | opus | Upstream `.context/*-N.md` **frontmatter-first** (`Read <artifact> limit:30`) + `state.json` facts. Deep-read a body ONLY on anchor-miss, a section-flagging `verdict`/`next_stage_focus`, or `retry_count > 0`; log each in the `deep_reads` tripwire (`handoff-protocol.md#frontmatter-schema`). | `.context/complete-summary-N.md` (Summary, Files Changed, Stage Timings, Next Actions) + `.context/attachments/{PR instructions,Review request}.md` (`conductor-attachments.md`) + commit/PR. FN preflight via `skills/worktask/scripts/fn-preflight.sh`. | `complete-summary-N.md` exists + both attachments exist + commit created OR PR opened | `.context/errors/project-manager.md` |
 
 ### ST
 
