@@ -77,10 +77,11 @@ All notable changes to this project are documented here. The format is based on 
 
 - Deny-list enforcement prevents accidental spend/network calls in benchmark harness (both arms)
 - `bypassPermissions` mode with deny-list in settings file for transparent safety validation
+- **SR-M1 fail-closed**: live dispatch now raises `BenchmarkSettingsMissing` before any `claude -p` call when `benchmark-settings.json` is absent, instead of silently dropping the deny-list under `bypassPermissions`.
 
 ### Known Considerations
 
-- **SR-M1 advisory**: Settings fail-open if `benchmark-settings.json` absent (frozen-seam degrade); fail-closed recommended for pre-paid-run validation.
+- **SR-M1 resolved**: the prior fail-open frozen-seam degrade is now fail-closed (`require_settings` guard); a missing `benchmark-settings.json` refuses to dispatch rather than running with no deny-list.
 
 ---
 

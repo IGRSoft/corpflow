@@ -1,12 +1,15 @@
-"""A1 permission fix: both arms dispatch under bypassPermissions (never
-permission-mode default), the deny-list settings file is threaded into BOTH argvs
-when present and degrades silently when absent, and dispatch.PERMISSION_MODE is
-mirrored verbatim in baseline.py with no cross-import.
+"""A1 permission fix + SR-M1 fail-closed: both arms dispatch under bypassPermissions
+(never permission-mode default), the deny-list settings file is threaded into BOTH
+argvs when present, and — because headless has no interactive guardrail — a MISSING
+settings file fails closed (BenchmarkSettingsMissing) BEFORE any dispatch instead of
+silently dropping the deny-list. dispatch.PERMISSION_MODE is mirrored verbatim in
+baseline.py with no cross-import.
 """
 
 import inspect
 import json
 import os
+import shutil
 import tempfile
 import unittest
 
@@ -15,7 +18,19 @@ from benchmarklive.dispatch import (
     CAPTURE_JSON,
     CAPTURE_STREAM_JSON,
     PERMISSION_MODE,
+    BenchmarkSettingsMissing,
     build_arm_stage_argv,
+    dispatch,
+    require_settings,
+)
+
+import sys as _sys
+_sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # _helpers under any runner
+from _helpers import (  # noqa: E402 — path shim must precede import
+    TripwireDispatcher,
+    fake_estimate_runner,
+    make_live_sandbox,
+    stub_git_sha,
 )
 
 
@@ -46,7 +61,9 @@ class SettingsThreading(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="perm-")
         self.settings = os.path.join(self.tmp, "benchmark-settings.json")
 
-    def test_absent_settings_degrades_silently(self):
+    def test_builder_is_bytestable_when_settings_absent(self):
+        # The low-level argv builder stays byte-stable (no --settings) for callers
+        # that pass no path; fail-closed enforcement is dispatch-level, not here.
         argv = build_arm_stage_argv("PL", settings_path=self.settings)
         self.assertNotIn("--settings", argv)
 
@@ -77,6 +94,44 @@ class DenyListContent(unittest.TestCase):
         blob = " ".join(deny)
         for token in ("git push", "gh", "curl", "wget", "WebFetch", "WebSearch"):
             self.assertIn(token, blob, f"deny-list missing {token!r}")
+
+
+class FailClosed(unittest.TestCase):
+    """SR-M1: a missing deny-list under bypassPermissions must raise, not fail open."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="failclosed-")
+        self.settings = os.path.join(self.tmp, "benchmark-settings.json")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_require_settings_raises_when_missing_under_bypass(self):
+        with self.assertRaises(BenchmarkSettingsMissing) as ctx:
+            require_settings(self.settings)
+        self.assertIn(self.settings, str(ctx.exception))  # actionable: names the path
+
+    def test_require_settings_ok_when_present(self):
+        with open(self.settings, "w", encoding="utf-8") as f:
+            f.write("{}")
+        self.assertIsNone(require_settings(self.settings))  # no raise
+
+    def test_require_settings_ignores_non_bypass_mode(self):
+        # Other modes carry their own guardrail; the fail-closed check is scoped
+        # strictly to bypassPermissions and must not fire for them.
+        self.assertIsNone(require_settings(self.settings, permission_mode="default"))
+
+    def test_dispatch_fails_closed_before_any_dispatch(self):
+        sb = make_live_sandbox(self.tmp)
+        os.remove(os.path.join(sb.benchmark_dir, "live", "settings", "benchmark-settings.json"))
+        # TripwireDispatcher raises AssertionError if ANY stage is dispatched; the
+        # guard must raise BenchmarkSettingsMissing first, proving pre-dispatch order.
+        with self.assertRaises(BenchmarkSettingsMissing):
+            dispatch(
+                workdir=sb.run_id, budget=100.0, record_path=sb.record_path,
+                benchmark_dir=sb.benchmark_dir, dispatcher=TripwireDispatcher(),
+                env={"ANTHROPIC_API_KEY": "k"}, estimate_runner=fake_estimate_runner(0.001),
+                stages=["PL"], git_sha_runner=stub_git_sha)
 
 
 if __name__ == "__main__":

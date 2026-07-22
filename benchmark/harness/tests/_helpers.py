@@ -134,6 +134,13 @@ def make_live_sandbox(tmp: str, run_id: str = "live-test", state_json: str = "{}
             f.write(f"[5] task body for {s}\n")
     with open(os.path.join(prompts_dir, "without.txt"), "w", encoding="utf-8") as f:
         f.write("build the app, verbatim, no preamble\n")
+    # Deny-list settings file: present in the real repo, so the sandbox mirrors it
+    # and dispatch() clears its fail-closed guard (require_settings). Tests that
+    # exercise the missing-file raise remove it explicitly.
+    settings_dir = os.path.join(benchmark_dir, "live", "settings")
+    os.makedirs(settings_dir, exist_ok=True)
+    with open(os.path.join(settings_dir, "benchmark-settings.json"), "w", encoding="utf-8") as f:
+        f.write('{"permissions": {"deny": []}}')
     record_path = os.path.join(benchmark_dir, "results", "runs", "live", f"{run_id}.json")
     return SimpleNamespace(
         benchmark_dir=benchmark_dir, workdir_path=workdir_path,

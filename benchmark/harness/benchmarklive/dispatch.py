@@ -74,10 +74,36 @@ def settings_path_for(benchmark_dir: str) -> str:
 
 
 def _settings_argv(settings_path: Optional[str]) -> list:
-    # Absent file → frozen-seam degrade (no --settings), byte-stable for old callers.
+    # Low-level argv builder: byte-stable, no I/O policy. Fail-closed enforcement
+    # lives in require_settings() at the dispatch entry, NOT here, so the argv
+    # shape stays pure/injectable for tests that don't care about the deny-list.
     if settings_path and os.path.exists(settings_path):
         return ["--settings", settings_path]
     return []
+
+
+class BenchmarkSettingsMissing(Exception):
+    """Raised when a bypassPermissions dispatch would otherwise run with no deny-list.
+
+    Headless ``claude -p`` has no interactive prompt, so under ``bypassPermissions``
+    the ONLY guardrail is the deny-list settings file. If it is absent we fail closed
+    rather than dispatch fail-open; the message names the expected path.
+    """
+
+
+def require_settings(settings_path: str, permission_mode: str = PERMISSION_MODE) -> None:
+    """Fail closed BEFORE any dispatch when the deny-list settings file is missing.
+
+    Enforced only under ``bypassPermissions`` (the sole headless mode); any other
+    mode carries its own interactive guardrail and is left untouched. Pure and
+    injectable — raises :class:`BenchmarkSettingsMissing` or returns ``None``.
+    """
+    if permission_mode == "bypassPermissions" and not os.path.exists(settings_path):
+        raise BenchmarkSettingsMissing(
+            "deny-list settings file is required under bypassPermissions but is "
+            f"missing: {settings_path} — create it (see benchmark/live/settings/) "
+            "before dispatching; refusing to run fail-open with no deny-list."
+        )
 
 
 # Production dispatcher per-stage ceiling (D5); a hung child never blocks a run forever.
@@ -516,6 +542,9 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     estimate_calc = os.path.join(plugin_root, "skills", "estimation-methodology",
                                  "scripts", "estimate-calc.py")
     settings_path = settings_path_for(benchmark_dir)
+    # Fail closed: headless dispatch runs under bypassPermissions, so a missing
+    # deny-list would run fail-open. Refuse BEFORE any dispatch (SR-M1).
+    require_settings(settings_path)
     captures_dir = os.path.join(workdir_path, "captures")
     real_arm = without_arm == baseline_mod.ARM_REAL
 
