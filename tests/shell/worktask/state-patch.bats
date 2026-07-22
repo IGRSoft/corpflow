@@ -68,14 +68,23 @@ setup() {
 
 @test "failure: disk-guard hard-halt exits 2 below DISK_MIN_GB" {
   cd "$WD"
-  # CONTRACT NOTE: --disk-check takes NO value (the parser sets root="." and shifts
-  # once). The analyzing-0.md worked example's `--disk-check .` is WRONG — the
-  # trailing "." is then parsed as an unknown argument and exits 2 via usage. The
-  # real disk-guard halt is exercised with a bare --disk-check.
+  # --disk-check accepts an OPTIONAL root value. A bare --disk-check (last arg, or
+  # followed by another -flag) defaults root=".". The real disk-guard halt fires
+  # when DISK_MIN_GB exceeds free space on that root.
   DISK_MIN_GB=99999999 run bash "$PLUGIN_ROOT/$SCRIPT" \
     --stage DV --artifact .context/development-0.md --disk-check
   assert_failure 2
   assert_output --partial "HALT"
+}
+
+@test "disk-check: explicit root value is consumed (documented contract)" {
+  cd "$WD"
+  # An unparseable root (df fails) degrades silently → guard returns 0, patch applies.
+  run bash "$PLUGIN_ROOT/$SCRIPT" \
+    --stage DV --artifact .context/development-0.md --disk-check /no_such_mount_xyz
+  assert_success
+  run jq -r '.stages.DV.status' .context/state.json
+  assert_output "completed"
 }
 
 @test "failure: unknown argument exits 2 via usage" {
@@ -85,18 +94,81 @@ setup() {
   assert_output --partial "unknown argument"
 }
 
-@test "contract: --self-test runs T1-T5 green but T6 fails (KNOWN BUG, smoke, NON-counting)" {
-  # CONTRACT SURPRISE: the in-script self-test T6 invokes
-  #   --disk-check /nonexistent_mountpoint_selftest
-  # but --disk-check ignores its value argument, so "/nonexistent..." is parsed as
-  # an unknown argument and the self-test aborts at exit 2 -> self-test exits 1.
-  # T1-T5 all pass ("ok"); the suite never reaches "ALL PASS" in this environment.
-  # We assert the REAL current behavior (do not fix the script per plan scope).
+@test "contract: --self-test runs T1-T9 green and reaches ALL PASS (AC-5)" {
+  # --disk-check now consumes its optional root value, so T6's unparseable-mount
+  # path degrades gracefully instead of aborting. T8 (--prev) and T9 (bounds) are
+  # the new self-tests. The suite must reach "ALL PASS" (exit 0).
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
-  assert_failure 1
+  assert_success
   assert_output --partial "T1: explicit artifact"
-  assert_output --partial "T5: absent artifact"
-  refute_output --partial "ALL PASS"
+  assert_output --partial "T6: disk-guard degrade"
+  assert_output --partial "T8: --prev writes handoffs"
+  assert_output --partial "T9: facts.decisions clamped"
+  assert_output --partial "T9: dispatched_agents clamped"
+  assert_output --partial "ALL PASS"
+}
+
+# ---------------------------------------------------------------------------
+# Phase 2.0 --prev + B3 bounds (issue #221). --prev writes the handoffs edge the
+# 13 stage agents used to hand-roll; bounds are enforced in atomic_merge (AD-7).
+# ---------------------------------------------------------------------------
+
+@test "prev: --prev writes handoffs[PREV→CODE] from summary + artifact basename" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev TL --artifact .context/development-0.md
+  assert_success
+  run jq -r '.handoffs["TL→DV"]' .context/state.json
+  assert_output --partial "ref:development-0.md"
+  # Stage patch still lands alongside the handoffs edge.
+  run jq -r '.stages.DV.status' .context/state.json
+  assert_output "completed"
+}
+
+@test "prev: absent --prev leaves handoffs untouched (byte-stable default)" {
+  cd "$WD"
+  cp .context/state.json snap
+  bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md
+  run jq -r '.handoffs | length' .context/state.json
+  assert_output "0"
+}
+
+@test "prev: invalid --prev value exits 2 via usage" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --prev ZZ
+  assert_failure 2
+  assert_output --partial "invalid --prev value"
+}
+
+@test "bounds: facts.decisions clamps to newest-8, dispatched_agents to 6 (launched survive)" {
+  cd "$WD"
+  jq -n '
+    {version:1, worktask_id:"b", plan_file:".context/planning-0.md", platform:"all",
+     run_index:0, stages:{PL:{status:"completed", verdict:"ok"}},
+     facts:{files_modified:[], tests_added:[], open_questions:[], verdicts:{PL:"ok"},
+       decisions:[ range(0;11) | {id:("d"+(.|tostring)), summary:"s", ref:"x.md#y"} ],
+       dispatched_agents:(
+         [ range(0;6) | {stage:"DV", task_id:("t"+(.|tostring)), subagent_type:"a", status:"completed"} ]
+         + [ range(6;9) | {stage:"DV", task_id:("t"+(.|tostring)), subagent_type:"a", status:"launched"} ])},
+     handoffs:{}}' > .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md
+  assert_success
+  run jq -r '.facts.decisions | length' .context/state.json
+  assert_output "8"
+  run jq -r '.facts.decisions[-1].id' .context/state.json
+  assert_output "d10"
+  run jq -r '.facts.dispatched_agents | length' .context/state.json
+  assert_output "6"
+  run jq -r '[.facts.dispatched_agents[] | select(.status=="launched")] | length' .context/state.json
+  assert_output "3"
+}
+
+@test "bounds: small arrays are untouched (no clamp, byte-stable)" {
+  cd "$WD"
+  # The fixture state has short decisions/dispatched_agents; a patch must not perturb them.
+  before_dec="$(jq -c '.facts.decisions // []' .context/state.json)"
+  bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md
+  run jq -c '.facts.decisions // []' .context/state.json
+  assert_output "$before_dec"
 }
 
 # ---------------------------------------------------------------------------
