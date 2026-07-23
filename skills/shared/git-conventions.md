@@ -106,6 +106,18 @@ Title: `<type>[scope][!]: <summary>`
 [Additional context, testing instructions, etc.]
 ```
 
+## Merge Strategy
+
+Integrate PRs with a **merge commit** — never squash, never rebase-merge.
+
+```bash
+gh pr merge <number> --merge
+```
+
+- `--squash` and `--rebase` are forbidden: they collapse or rewrite the branch history that carries per-stage worktask context.
+- Individual commit boundaries (one per stage/logical change) must survive on the target branch.
+- Keep the auto-generated merge commit subject (`Merge pull request #N from <branch>`); the PR title/body carries the summary.
+
 ## GitHub Issue Types
 
 | Type | Keywords                                  |
