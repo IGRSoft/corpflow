@@ -6,6 +6,7 @@
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
   },
+  "license": "Apache-2.0",
   "keywords": [
     "worktask",
     "task-management",
