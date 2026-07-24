@@ -46,7 +46,8 @@ a copy drifts and lies the moment the source changes.
 | Inline `//` rationale | One short trailing line per non-obvious literal |
 | Longer discussion (multi-line) | Reserved strictly for a genuinely non-obvious **algorithm** — not for restating design, color, history, or callers |
 
-Target comment-to-code density well below 1:1. A file that is ~half prose is over-documented.
+Target comment-to-code density well below 1:1, and ≤40% of a change's *added* lines
+(`dv-comment-density-gate.sh` gates this). A file that is ~half prose is over-documented.
 
 ## Doc block shape
 
@@ -80,6 +81,8 @@ parameter may use `- Parameter x:` on one line instead:
 | Design source (Figma board, rgba/hex) | **design spec / `.context/designs`** (`igrsoft:design-specs`) |
 | `AC-n` / `REQ-n` requirement traceability | **PR description / `.context/` stage artifacts** — never source comments |
 | Resolved token value | **the asset catalog** (the single source of truth) — trust the semantic token |
+| Answer to a DR/SR finding; threshold derivation; calibration data | **`.context/development-N.md`** — source keeps a one-line WHY at most |
+| QA runbook ("if QA measures X, raise to Y") | **`docs/` runbook / QA checklist** |
 
 ## DO NOT
 
