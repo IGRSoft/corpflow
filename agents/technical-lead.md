@@ -82,6 +82,10 @@ Verify that modified production files contain a `// MARK: - Test Info` footer (`
 
 Read the DV handoff frontmatter `worktree:` field (`.context/development-N.md`). Isolation is **always required**. A `worktree: false` handoff means DV wrote to the shared checkout instead of an isolated worktree: set `verdict: fail` and record `worktree_isolation_violation` in `§ Findings`, UNLESS the orchestrator explicitly waived isolation for this run via a `worktree_isolation_waived` audit row or `task.metadata.worktree_waived === true` (keep the waiver as the only escape valve). Rationale and DV-side enforcement: `agents/developer.md § D0.0`. Friction precedent: `tokamak-reconciler-unification` (#14, dv6) ran DV in the main workspace, risking cross-contamination.
 
+#### Test-Scope Check (advisory)
+
+Confirm `development-N.md § Decisions` records the resolved `test_mode` and that DV's logged test invocations carry `-only-testing:` flags (`agents/developer.md § Test execution`). A missing `dv_test_scope_enforced` audit row for this DV dispatch means the injection loop was bypassed. Record either gap in `§ Findings`; **never** `verdict: fail` — the row is produced by the orchestrator, so a stale version-keyed plugin cache serving the pre-4.8a loop would otherwise block a blameless DV. See `worktask/SKILL.md` Step 4.8a.
+
 #### Visual Evidence Review
 
 Read `.context/images/<worktask_id>/screenshots.md` if present (path resolves from `state.json.worktask_id`). In `developer-review-N.md § Findings`, cite (a) the total count of screenshots from the manifest, (b) the first filename, and (c) any `Fallbacks invoked` or `Out-of-budget files` notes from the manifest — these are review signals (silent tool failures, repo bloat). When `metadata.requires_screenshots: false` and the manifest records skip, record one line `Visual evidence skipped per plan (metadata.requires_screenshots=false)` in `§ Findings` and proceed. DR does NOT re-capture; that is DV's responsibility.
@@ -145,6 +149,8 @@ This agent also serves as a **support agent** (stage TC), invokable on-demand:
 ### Output Budget (DR)
 
 Artifact ≤300 lines; findings table ≤2 lines/row; no diff hunks >5 lines — cite `path:line-range`. Final return ≤200 tok.
+
+**Context**: Use progressive loading and compression per `skills/context-compression/SKILL.md`.
 
 ## Code Quality Framework
 

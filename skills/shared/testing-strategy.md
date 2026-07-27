@@ -271,17 +271,23 @@ The change is strictly additive:
 
 ### Skip mechanics — Apple platforms
 
-When DV/QA runs Selected Tests via XcodeBuildMCP, the list is translated to positive `-only-testing:` arguments (one per test ID), not negative `-skip-testing:`:
+When DV/QA runs Selected Tests via XcodeBuildMCP, the list is translated to positive `-only-testing:` arguments (one per owning suite, deduplicated), not negative `-skip-testing:`:
 
 ```bash
-# Selected Tests = [PaymentRefundTests/testRefundFlow, AppLaunchTests/testLaunchSucceeds]
+# Selected Tests = [PaymentRefundTests.testRefundFlow, AppLaunchTests.testLaunchSucceeds]
+# → flags collapse to the owning suite (suite-terminal); never per-function
 xcodebuild test \
   -project MyApp.xcodeproj \
   -scheme MyApp \
   -destination 'platform=iOS Simulator,name=iPhone 16' \
-  -only-testing:MyAppTests/PaymentRefundTests/testRefundFlow \
-  -only-testing:MyAppTests/AppLaunchTests/testLaunchSucceeds
+  -only-testing:MyAppTests/PaymentRefundTests \
+  -only-testing:MyAppTests/AppLaunchTests
 ```
+
+#### Skip mechanics — granularity, full mode, recording
+
+Identifiers are **suite-terminal** (`<Target>/<Suite>`) per `test-selection-syntax.md § Apple
+identifier grammar — suite-terminal`. A per-function segment selects nothing under Swift Testing.
 
 When `test_mode=full`, the entire suite runs without `-only-testing:`. UI test bundles run unless explicitly excluded (no implicit `-skip-testing:` — UI tests run because `ui_visual_check` or `test_mode=full` opted into them).
 

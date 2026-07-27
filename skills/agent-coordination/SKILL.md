@@ -127,6 +127,21 @@ stateDiagram-v2
 | `hard_constraint` (ethics/security) | No | 0 | — | Abort + block human intervention | `error_escalated_to = "ST"` |
 | `exhausted` (`retry_count == 3`) | No | — | — | Previous stage per chain | `error_escalated_to` set, `retry_count` reset on handoff |
 
+#### Retry / Escalate Matrix — environmental contention
+
+**QA-only** — DV's handful of executed tests cannot establish the trigger.
+
+| Classification | Retry? | Max | Backoff | Escalation Target | Metadata Update |
+|----------------|--------|-----|---------|-------------------|-----------------|
+| `environmental_contention` | No | 0 | — | None — re-baseline once on a quiet machine | None; note in `testing-N.md § Notes`, no defect, no escalation |
+
+**Trigger — all three, conjunctively:** failures confined to wall-clock/async-timing suites;
+failing-set **membership** differs between two consecutive runs; no source change between them.
+
+**Voiding branch (mandatory exit).** Membership "shifts" means the *set* differs — a member added
+or dropped — not ordering, not duration. If the re-baseline run fails with the same members as the
+previous run, the classification is **void**: reclassify as `logic` and escalate to DV.
+
 ### Escalation Chains
 
 ```
@@ -144,7 +159,7 @@ Append to `.context/errors/<agent>.md` (per-agent, one file per `metadata.agent`
 ## [STAGE][N] Retry [X/max] — [TIMESTAMP]
 **Agent**: [agent name]
 **Task ID**: [task_id]
-**Classification**: [transient | logic | missing_input | ambiguous_requirements | design_flaw | hard_constraint | exhausted]
+**Classification**: [transient | logic | missing_input | ambiguous_requirements | design_flaw | hard_constraint | exhausted | environmental_contention]
 ### Problem
 [Description]
 ### Resolution Path
@@ -197,8 +212,15 @@ review, the audit tail is the single source of truth for what happened.
 | Actor | Action Examples |
 |-------|-----------------|
 | Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned`, `github_issue_created` |
-| Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation` |
+| Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run` |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
+
+`full_test_run` / `scoped_test_run` are one row per test **invocation**, keyed on the invocation's
+shape rather than the plan's mode: ≥1 `-only-testing:` flag → scoped, zero selection flags → full.
+`build-only` runs invoke no tests and emit no row. `metadata: {stage, plan_mode, suites_selected,
+run_index}` — carrying `plan_mode` alongside the shape is what makes "how often did we actually run
+everything" answerable. **Audit-only, never a gate**: absence of a counter row must not block a
+stage and must not appear in any completion checklist.
 
 #### Writers — plugin hooks (authoritative)
 
@@ -266,7 +288,7 @@ The hook authority + dedupe rule from the previous paragraph still applies — `
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run",
+  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run",
   "subject": "task ID or artifact path",
   "result": "ok|error|deferred|blocked",
   "task_id": "optional — Task System ID",
