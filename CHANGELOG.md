@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [3.37.0] - 2026-07-27
+## [3.36.1] - 2026-07-27
 
 ### Added
 
