@@ -197,9 +197,30 @@ The marker grammar is platform-agnostic (line comments are universally parseable
 
 | Platform | Test ID format used in `-only-testing:` / equivalent | Implementation |
 |----------|------------------------------------------------------|----------------|
-| Apple (Swift Testing / XCTest) | `<TargetName>/<TypeName>/<methodName>` | `apple-developer:swift-testing-entry` skill |
-| Android (JUnit) | `<package>.<ClassName>#<methodName>` (TBD) | Stub — handler not yet implemented |
+| Apple (Swift Testing / XCTest) | `<TargetName>/<SuiteName>` — suite-terminal [^apple] | `apple-developer:swift-testing-entry` skill [^divergence] |
+| Android (JUnit) | `<package>.<ClassName>#<methodName>` (TBD) [^android] | Stub — handler not yet implemented |
 | Web (Vitest/Jest) | file-path + test-name pattern (TBD) | Stub — handler not yet implemented |
+
+### Apple identifier grammar — suite-terminal
+
+[^apple]: The identifier ends at a **type**, never at a function. `<SuiteName>` is an
+`XCTestCase` subclass or a Swift Testing suite type, spelled as in source. Nested suites
+legitimately add a segment (`Target/Outer/Inner`) — the terminal segment is still a type.
+Per-function forms (`/testRefundFlow`, `/testRefundFlow()`, `/testRefundFlow(amount:)`) are
+**forbidden**: a Swift Testing `@Test` identifier includes the function's parentheses and
+`@Test(arguments:)` appends a per-argument suffix, so `Target/Type/methodName` matches zero
+Swift Testing tests — xcodebuild selects nothing and the run degrades to a full-suite fallback.
+A suite flag runs the whole suite; that widening is intended, and is strictly cheaper than the
+full-suite fallback it replaces. Do not "optimize" it back to per-function.
+
+### Apple identifier grammar — platform asymmetries
+
+[^android]: Android keeps a per-method form on purpose. JUnit's filter grammar has neither the
+parenthesis nor the parameterized-suffix problem, so per-method selection is correct there; and
+the handler is a stub whose runs auto-promote to `full`, so the string is never executed today.
+
+[^divergence]: The linked skill still documents the per-function form and lives in a separate
+repository. Until that follow-up lands, **this table is authoritative** for igrsoft stages.
 
 ### Auto-promotion when no handler
 

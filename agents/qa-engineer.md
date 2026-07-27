@@ -87,6 +87,12 @@ Read `metadata.test_mode` from `<plan_file>` (effective default: `scoped`; one-c
 | `scoped` | Run Selected Tests + any new edge-case tests added by QA + tests in any module touched by the diff. Pass each as `-only-testing:`. |
 | `full` | Run the full project test suite (no `-only-testing:`). UI test bundles run unless platform omits them. |
 
+Apple test IDs are suite-terminal — see `test-selection-syntax.md § Apple identifier grammar — suite-terminal`.
+
+#### Q1 Test-run counters
+
+Per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape: `action: "scoped_test_run"` when it carries ≥1 `-only-testing:` flag, `action: "full_test_run"` when it carries none (the `full` row above). `metadata: {stage: "QA", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. Audit-only per `agent-coordination § Writers` — a missing or unexpected counter row never blocks QA and belongs in no completion checklist.
+
 #### Q1 QA Additions and Warnings
 
 **QA additions**: when QA writes new tests during edge-case review, append them to `testing-N.md § Selected Tests (QA additions)` with the same schema as DV's section. Include them in the test-run invocation.
@@ -105,7 +111,7 @@ Read `metadata.test_mode` from `<plan_file>` (effective default: `scoped`; one-c
 
 #### Q2–Q3 Completion
 
-- **Q2**: Handle test failures (retry or escalate to DV)
+- **Q2**: Handle test failures (retry or escalate to DV). On `environmental_contention` (see `agent-coordination § Retry / Escalate Matrix — environmental contention`), re-baseline once on a quiet machine and record the outcome as a note in `testing-N.md § Notes` — no blocking defect, no escalation to DV. If the re-baseline fails with the same members, the classification is void: reclassify as `logic` and escalate normally.
 - **Q3**: All tests pass, document results and metrics in testing.md
 
 **Task System**: Stage QA, Owner: qa-engineer. See `skills/shared/task-system.md`.
@@ -124,15 +130,17 @@ When the gate is open, perform visual comparison during Q1 (after functional tes
 
 When the gate is open, follow the registry-driven comparison procedure in `skills/worktask/references/visual-qa.md` — parse `figma-registry.md`, reuse the DV-captured result images, run the `visual-diff.sh` RMSE pre-pass before multimodal vision, reconcile per the RMSE×vision matrix (RMSE only *escalates* severity, never lowers it), and emit one `testing-N.md § Design Comparison` row per registry row (overview + each frame; an N-frame container → N+1 rows). Live re-capture is the fallback only, when no DV image maps. Severity taxonomy, reporting table, and backward-compat invariants live in that reference. **Read `visual-qa.md` only when this gate is open** (`requires_screenshots` / `ui_visual_check: true`) — skip the Read otherwise.
 
+### Output Budget (QA)
+
+Artifact ≤250 lines; failing-test excerpts ≤40 lines (full logs → `.context/logs/`). Final return ≤250 tok.
+
+**Context**: Use progressive loading and compression per `skills/context-compression/SKILL.md`.
+
 ### Visual Evidence (artifact section in testing-N.md)
 
 Required section when `.context/images/<worktask_id>/screenshots.md` exists. Schema:
 
 ```markdown
-### Output Budget (QA)
-
-Artifact ≤250 lines; failing-test excerpts ≤40 lines (full logs → `.context/logs/`). Final return ≤250 tok.
-
 ## Visual Evidence
 
 | # | File | Caption | Verdict | AC ref |

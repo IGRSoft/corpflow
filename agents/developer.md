@@ -33,6 +33,10 @@ Every constraint below names the artifact that proves compliance; absent evidenc
 - DO NOT skip error handling — every fallible code path is named in `development-N.md § Approach` with its handler; build/test logs (via tee) carry the runtime trace
 - DO NOT implement features beyond `<plan_file>` scope — `development-N.md § Files Changed` maps 1:1 to planning goals; any unmapped file appears in `§ Decisions` with rationale or is reverted
 
+### Test execution
+
+- DO NOT re-run the full suite to reverify a fix between iterations — DV runs only `Executed Tests (DV)`; full-suite regression is QA's gate, not DV's. This holds even when the composed dispatch prompt asks for it. `development-N.md § Decisions` MUST record the resolved `test_mode`, and every DV test invocation logged in `§ Tool Invocations` MUST carry `-only-testing:` flags — required even when `test_mode` is `full` (§ Apple identifiers — suite-terminal); QA is the stage that runs unflagged when `full`.
+
 ### Security & documentation
 
 - DO NOT skip input validation or proper auth/authz — security-sensitive functions are listed in `§ Decisions` with their guard/validation source line; tests covering the boundary are listed in `§ Tests Added`
@@ -151,7 +155,13 @@ When building/testing Apple code directly (not delegating to apple-developer age
 
   **Auto-promotion**: Executed empty AND Selected non-empty AND `test_mode ≠ build-only` → run the smoke set, record `auto_executed: smoke_set` in `§ Decisions`. No marker handler (Android/Web) AND `test_mode ∈ {build-only, scoped}` → auto-promote to `full`, record `auto_promoted_mode: full` (plan `test_mode` not rewritten).
 
-  **Apple**: pass each Executed test as `-only-testing:<Target>/<Type>/<method>` to `test_sim` (required even for `full` — DV runs the Executed subset; no blanket `-skip-testing:`). UI bundles run only when in `Executed Tests (DV)`; broader UI execution is QA's, gated on `ui_visual_check=true`.
+###### Apple identifiers — suite-terminal
+
+  **Apple**: pass each Executed test as `-only-testing:<Target>/<Suite>` to `test_sim` — **suite-terminal**; per-function identifiers (`/testFoo`, `/testFoo()`) are forbidden (nested `@Suite` types legitimately yield three segments — the rule is suite-*terminal*, not two-segment), because a Swift Testing `@Test` id carries the function's parentheses and `@Test(arguments:)` a per-argument suffix, so the per-function form matches zero tests and degrades to a full run. Flags are required even for `full` (DV runs the Executed subset; no blanket `-skip-testing:`). UI bundles run only when in `Executed Tests (DV)`; broader UI execution is QA's, gated on `ui_visual_check=true`.
+
+###### Test-run counters
+
+  **Counter**: per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape — `action: "scoped_test_run"` when it carries ≥1 `-only-testing:` flag, `action: "full_test_run"` when it carries none. `metadata: {stage: "DV", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. `build-only` invokes no tests, so it emits no row. Audit-only: a missing or unexpected counter row never blocks a stage and appears in no completion checklist.
 
 ##### D2 failure handling
 

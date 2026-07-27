@@ -98,7 +98,7 @@ The complexity-score → default `test_mode` table lives in `skills/estimation-m
 
 #### `always_required_tests` — explicit override
 
-Test IDs that must always run (every mode, every run). Format: `<TargetName>/<TypeName>/<methodName>` for Apple; platform-specific elsewhere. Use sparingly for cross-cutting smoke tests not annotated with `@test-required` in source.
+Test IDs that must always run (every mode, every run). Format: `<TargetName>/<SuiteName>` for Apple — suite-terminal; per-function IDs are rejected by the runner (`test-selection-syntax.md § Apple identifier grammar — suite-terminal`). Platform-specific elsewhere. Use sparingly for cross-cutting smoke tests not annotated with `@test-required` in source.
 
 #### `ui_visual_check` — Visual QA gate
 

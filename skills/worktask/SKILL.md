@@ -685,6 +685,52 @@ while (tasks.some(t => t.status !== "completed")) {
 
 ```
 
+#### Step 4.8a
+
+```typescript
+    // 4.8a. DV test-scope enforcement — DV-only, never QA (QA's full-suite run IS the
+    //       sanctioned regression gate, see agents/qa-engineer.md § Q1 Three-Mode Dispatcher).
+    //       The scoped-test rule already lived in agent prose and was still violated, because
+    //       the composed DV prompt asked for full-suite reverification and overrode the agent
+    //       file. Prose loses to the dispatch surface, so the rule is injected here — the same
+    //       mechanism that makes worktree isolation (4.8) hold.
+    if (full.metadata.stage === "DV") {
+```
+
+##### Step 4.8a — test-scope banner
+
+```typescript
+      const mode = full.metadata.test_mode ?? state.metadata?.test_mode ?? "scoped";
+      const scope =
+        `TEST SCOPE (mode: ${mode}): run ONLY \`Executed Tests (DV)\` per ` +
+        `agents/developer.md D2. DO NOT re-run the full suite to reverify a fix between ` +
+        `iterations — full-suite regression is QA's gate, not DV's. Apple test identifiers ` +
+        `are suite-terminal (\`-only-testing:<Target>/<Suite>\`); per-function identifiers ` +
+        `are forbidden — they select nothing and degrade to a full run. Record the resolved ` +
+        `mode in \`development-N.md § Decisions\`.`;
+      full.description = full.description + "\n\n" + scope;
+```
+
+##### Step 4.8a — scope audit
+
+```typescript
+      // …continued: step 4.8a body
+      appendAudit({
+        actor: "orchestrator",
+        action: "dv_test_scope_enforced",
+        subject: "DV",
+        result: "ok",
+        metadata: { test_mode: mode }
+      });
+    }
+
+```
+
+The audit row is what makes injection observable: its absence for a DV dispatch proves the loop
+was bypassed. DR surfaces that as an **advisory** finding — never a hard fail, because the row is
+produced by the orchestrator, so a stale version-keyed plugin cache serving the pre-4.8a loop
+would otherwise block a blameless DV.
+
 #### Step 4.9
 
 ```typescript
