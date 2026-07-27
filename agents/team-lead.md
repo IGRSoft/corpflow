@@ -96,7 +96,7 @@ TL is the **canonical and sole owner** of the intra-issue async decision: TL dec
        stage: "DV", agent: "igrsoft:developer", model: "opus",
        error_file: ".context/errors/developer.md",
        context_files: `${resolvedPlanFile},analyzing-${runIndex}.md,coordination-${runIndex}.md,.context/errors/developer.md`,
-       plan_file: resolvedPlanFile,
+       plan_file: resolvedPlanFile,  // basename shape; state.json holds the path shape
        run_index: runIndex,
        worktask_id: "{id}", priority: "medium"
      }

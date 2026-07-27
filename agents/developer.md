@@ -147,7 +147,7 @@ When building/testing Apple code directly (not delegating to apple-developer age
 
 ##### Executed Tests (DV) derivation & execution
 
-  `Executed Tests (DV)` = (`Selected Tests` ∩ test files Added/Modified/renamed-to in `git diff --diff-filter=AMR <base>...HEAD`) ∪ `metadata.always_required_tests`. Tests matched only by `@depends-on:` / covers-changed-files / module-level that this run did NOT touch stay in the `Selected Tests` artifact for QA. `<base>` = the worktask base branch (`origin/master`; honors `task.metadata.base_ref` — see § Worktree Mode).
+  `Executed Tests (DV)` = (`Selected Tests` ∩ test files Added/Modified/renamed-to in `git diff --diff-filter=AMR <base>...HEAD`) ∪ `metadata.always_required_tests`. Tests matched only by `@depends-on:` / covers-changed-files / module-level that this run did NOT touch stay in the `Selected Tests` artifact for QA. `<base>` = the worktask base branch. `task.metadata.base_ref` (stamped by PL0) is **authoritative** when present; only when it is absent does the session-level `worktree.baseRef` govern. Full resolution order: `handoff-protocol.md § state.json schema`. See § Worktree Mode.
 
 ###### Execution per mode & auto-promotion
 
@@ -175,7 +175,7 @@ When building/testing Apple code directly (not delegating to apple-developer age
 
 #### Worktree Mode
 
-All DV operations run in the isolated worktree (D0.0 gate above). Use `EnterWorktree`/`ExitWorktree`; build/test with `--package-path {workdir}`, git with `git -C {workdir}`. Base-ref resolution (`worktree.baseRef` head/fresh + `task.metadata.base_ref` per-task override), background & shared-checkout rules, the out-of-tree `EnterWorktree` confirmation guard, and background-session lifecycle live in `skills/worktask/references/workspace-modes.md § DV Worktree Mechanics`.
+All DV operations run in the isolated worktree (D0.0 gate above). Use `EnterWorktree`/`ExitWorktree`; build/test with `--package-path {workdir}`, git with `git -C {workdir}`. Base-ref resolution (`task.metadata.base_ref` is authoritative when stamped; `worktree.baseRef` head/fresh governs only in its absence — order in `handoff-protocol.md § state.json schema`), background & shared-checkout rules, the out-of-tree `EnterWorktree` confirmation guard, and background-session lifecycle live in `skills/worktask/references/workspace-modes.md § DV Worktree Mechanics`.
 
 ### Worktree cwd discipline
 

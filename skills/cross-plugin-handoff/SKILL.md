@@ -234,7 +234,7 @@ TaskCreate({
     model: "opus",
     error_file: ".context/errors/ios-developer.md",
     context_files: `${planFile},analyzing-${runIndex}.md,.context/errors/ios-developer.md`,
-    plan_file: planFile,  // e.g. "planning-0.md"
+    plan_file: planFile,  // bare basename, e.g. "planning-0.md" — state.json holds the path shape (handoff-protocol.md § state.json schema)
     worktask_id: worktaskId
   }
 });

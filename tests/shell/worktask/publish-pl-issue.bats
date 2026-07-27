@@ -106,6 +106,36 @@ EOS
   assert_failure 1
 }
 
+# PP1/PP2 — plan_file shape boundary (REQ-1/REQ-3). state.json may carry either a
+# workspace-relative path or a bare basename; both must resolve, and a genuinely
+# absent plan must name every candidate on stderr.
+@test "PP1: bare-basename plan_file resolves against the state dir (REQ-1)" {
+  cd "$WD"
+  cp "$FIXTURES/worktask/mostly-paths-plan.md" "$WD/.context/planning-2.md"
+  jq '.plan_file = "planning-2.md"' .context/state.json > s2 && mv s2 .context/state.json
+  run env PATH="$WD/bin:$PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 \
+    ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="https://mock.gist/raw" \
+    bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  # Reaching the strip-ratio abort proves the plan was read: plan_unreadable exits
+  # 1 several guards earlier and never produces this reason.
+  run jq -r '.metadata.reason' <(tail -1 "$WD/.context/logs/audit.jsonl")
+  assert_output "sanitiser_aborted"
+}
+
+@test "PP2: absent plan_file exits 1 and names both candidates on stderr (REQ-3)" {
+  cd "$WD"
+  jq '.plan_file = "ghost-plan.md"' .context/state.json > s2 && mv s2 .context/state.json
+  run env PATH="$WD/bin:$PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 \
+    bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_failure 1
+  assert_output --partial "FATAL plan_unreadable"
+  assert_output --partial "ghost-plan.md"
+  assert_output --partial ".context/ghost-plan.md"
+  run jq -r '.metadata.reason' <(tail -1 "$WD/.context/logs/audit.jsonl")
+  assert_output "plan_unreadable"
+}
+
 @test "contract: --self-test passes (smoke, NON-counting)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success

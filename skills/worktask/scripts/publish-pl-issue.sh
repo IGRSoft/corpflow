@@ -26,6 +26,14 @@
 #     dedupe_key=<worktask_id>:<run_index>:gh_issue.
 #   - Exit codes: 0 all operational paths, 1 catastrophic, 2 --self-test failure.
 #
+# **`plan_file` shape boundary** — `state.json.plan_file` holds a **workspace-relative
+# path** (`.context/planning-N.md`); `task.metadata.plan_file` holds a **bare
+# basename** (`planning-N.md`). Both shapes are legal. Every reader MUST accept
+# either: try the value as given, then its basename resolved against the directory
+# holding `state.json`. Canonical statement: skills/worktask/references/handoff-protocol.md
+# § state.json schema. This script implements exactly that two-candidate resolution
+# at the PLAN_FILE block below, and names both candidates on the fatal path.
+#
 # Asset host-and-rewrite contract (Figma image embed — REQ-1..REQ-6):
 #   The PM authors the `## design-preview` anchor with placeholder tokens of the
 #   shape `{{asset:<basename>}}` on their own line (basename only — NO `.context/`
@@ -142,6 +150,9 @@ ISSUE_ANCHOR="${GH_ISSUE_ANCHOR:-$(dirname "$STATE_FILE")/gh-issue.json}"
 # GitHub-side recovery search when no local anchor resolves (fresh clone / lost
 # .context/). Default on; exact-title single-hit only (guarded against false matches).
 GH_ISSUE_SEARCH="${GH_ISSUE_SEARCH:-1}"
+# Human-readable suffix for the next fatal() diagnostic. Declared here so `set -u`
+# is satisfied at every fatal() call; callers set it immediately before failing.
+FATAL_DETAIL=""
 
 # ---------- asset-hosting env hooks (Figma image embed) ---------------------
 # Roots used to resolve {{asset:<basename>}} tokens and to stage hosted copies.
@@ -227,6 +238,10 @@ fatal() {
   # $1=reason; appends audit row with result=error, exits 1.
   local reason="$1"
   local wid run_index dk
+  # The audit row alone is machine-only: an operator watching the orchestrator sees
+  # nothing at all when this path fires. Emit the reason (plus any FATAL_DETAIL the
+  # caller staged) on stderr before exiting.
+  printf >&2 'publish-pl-issue: FATAL %s%s\n' "$reason" "${FATAL_DETAIL:+ — $FATAL_DETAIL}"
   wid=$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo "unknown")
   run_index=$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo "0")
   dk="$wid:$run_index:gh_issue"
@@ -1748,6 +1763,16 @@ jq -e . "$STATE_FILE" >/dev/null 2>&1 || fatal "state_corrupt"
 WORKTASK_ID=$(jq -r '.worktask_id // "unknown"' "$STATE_FILE")
 RUN_INDEX=$(jq -r '.run_index // 0' "$STATE_FILE")
 PLAN_FILE=$(jq -r '.plan_file // ""' "$STATE_FILE")
+# Two legal shapes reach this field (see the plan_file shape boundary in the header):
+# a workspace-relative path, or a bare basename written from the task-metadata
+# convention. Resolve the second against the state file's own directory — the same
+# fallback ISSUE_ANCHOR performs above. PLAN_CANDIDATES feeds the fatal diagnostic.
+PLAN_CANDIDATES="${PLAN_FILE:-<empty .plan_file>}"
+if [ -n "$PLAN_FILE" ] && [ ! -r "$PLAN_FILE" ]; then
+  _plan_alt="$(dirname "$STATE_FILE")/$(basename "$PLAN_FILE")"
+  PLAN_CANDIDATES="$PLAN_FILE, $_plan_alt"
+  [ -r "$_plan_alt" ] && PLAN_FILE="$_plan_alt"
+fi
 DEDUPE_KEY="$WORKTASK_ID:$RUN_INDEX:gh_issue"
 
 # Strict mode: CLI --strict wins; else read metadata.gh_issue.strict from state.
@@ -1804,7 +1829,10 @@ if [ "$DRY_RUN" != "1" ]; then
 fi
 
 # Plan readable?
-[ -r "$PLAN_FILE" ] || fatal "plan_unreadable"
+[ -r "$PLAN_FILE" ] || {
+  FATAL_DETAIL="plan unreadable; tried: $PLAN_CANDIDATES"
+  fatal "plan_unreadable"
+}
 
 # ---------- extract + sanitise + render -------------------------------------
 SUMMARY_RAW=$(jq -r '.facts.goal // ""' "$STATE_FILE")

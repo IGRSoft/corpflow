@@ -27,6 +27,18 @@ for f in .context/planning-*.md; do
 done
 ```
 
+### plan_file shape boundary
+
+**`plan_file` shape boundary** — `state.json.plan_file` holds a **workspace-relative
+path** (`.context/planning-N.md`); `task.metadata.plan_file` holds a **bare
+basename** (`planning-N.md`). Both shapes are legal. Every reader MUST accept
+either: try the value as given, then its basename resolved against the directory
+holding `state.json`.
+
+Both shapes appear in this file: the state seed below writes the **path** shape; every
+`TaskCreate` snippet further down writes the **basename** shape. Canonical statement:
+`handoff-protocol.md § plan_file shape boundary`.
+
 ### Seed snippet — atomic write
 
 ```bash
@@ -96,6 +108,8 @@ Before continuing to TaskCreate, verify:
 If hook source is not found (e.g. plugin root unresolved — the fallback line left unsubstituted), log a warning and continue — the plugin.json-registered hook will still fire via the plugin hook system. The project-local copy is a belt-and-suspenders fallback for environments where plugin hooks are not supported.
 
 ### Sample TaskCreate using context_refs (handoff-protocol mode)
+
+`planFile` is the **basename** shape — see § plan_file shape boundary.
 
 ```typescript
 const ar0 = TaskCreate({

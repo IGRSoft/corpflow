@@ -97,6 +97,8 @@ See `skills/shared/stage-codes.md` for stage details.
 
    The re-run-aware next-free-planning-index resolver (N=0 on a fresh `.context/`, nullglob-safe) and the atomic `state.json` seed write are canonical in `skills/worktask/references/initialization-patterns.md`. Compute N, then atomic-write the seed (`{version:1, worktask_id, plan_file: .context/planning-${N}.md, platform, run_index:N, stages.PL.status:in_progress, empty facts incl. dispatched_agents:[], handoffs:{}}`) per `handoff-protocol.md#atomic-write`.
 
+   The seeded `plan_file` is the **path** shape (`.context/planning-${N}.md`), not a bare basename — task metadata carries the basename shape instead. Both are legal; see the `plan_file` shape boundary in `handoff-protocol.md § state.json schema`.
+
 #### Step 3a field notes
 
    `facts.dispatched_agents: []` is seeded (additive, version:1) so the orchestrator loop appends per-`task_id` dispatch entries in place. The other v1 additive fields (`stages.<CODE>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are written on demand — do NOT seed them; their absence is meaningful. See `handoff-protocol.md#state-json-schema`.
@@ -157,7 +159,7 @@ index `N` from `state.json.run_index` (default `0`).
 #### Plan gate checkpoint path
 
 **If `plan_gate == "checkpoint"`** (default — plain `worktask` with no bypass flag):
-1. Read `state.json.plan_file` to locate the planning document.
+1. Read `state.json.plan_file` to locate the plan; accept either shape (`handoff-protocol.md § plan_file shape boundary`).
 2. Present the plan summary to the user: complexity score, stages created (with agents),
    dependency chain, and key decisions.
 3. Call `AskUserQuestion`:
