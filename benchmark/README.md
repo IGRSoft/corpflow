@@ -175,11 +175,24 @@ the full **10-stage prompt sequence** (PL→AR→TL→DV→DR→SR→QA→DC→F
   byte-for-byte — WITHOUT tokens/cost `null`, `wall_clock_s: 0.0`, `stage_count: 1`,
   `pass_fail: "pass"`, `app_path: null`
 
+## Baseline cut-over (v3.37.1)
+
+`STAGE_TABLE` was repinned from the prior Opus/Sonnet generation to
+`claude-opus-5` / `claude-sonnet-5` in plugin **v3.37.1**. Runs from that version
+onward are **not comparable** to the stored baselines in `results/history.json`,
+`results/analysis.md`, and `results/token-findings-*.md`, which were measured on
+the previous pins. Compare like-for-like or re-baseline before drawing a
+regression conclusion across that boundary. `DC` still dispatches
+`claude-haiku-4-5`, which is unchanged.
+
 ## Coverage manifest (live, per stage)
 
 With `stream-json` capture, each dispatched stage's `stages[]` entry may carry
 an additive `coverage` object **after** `cost_usd` (omitted when nothing was
-captured — never fabricated):
+captured — never fabricated). Nested subagents at depth 2+ are visible in the
+stream when `--forward-subagent-text` is set, keyed by their spawning Agent
+`tool_use` id — Tier-2 specialist work can be attributed to the stage that
+spawned it rather than disappearing into the parent's totals:
 
 ```json
 {

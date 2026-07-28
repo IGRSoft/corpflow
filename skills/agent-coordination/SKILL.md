@@ -372,7 +372,13 @@ for full code patterns.
 
 #### Nested delegation
 
-> **Nested delegation**: sub-agents spawn their own sub-agents, up to **5 levels deep**. Level-2 specialists reached via the table above may themselves delegate Level-3 — e.g. orchestrator → `developer` → `apple-developer:ios-developer` → `apple-developer:test-generator` is a native chain; the orchestrator does not flatten Tier-2 dispatch into its own loop. Foreground and background subagents share the same 5-level depth budget — a foreground chain plus a backgrounded child count against one cap. Budget accordingly: each level summarizes results upward, and `/cost-report`'s `dispatch_depth` column makes depth visible.
+> **Nested delegation**: sub-agents spawn their own sub-agents, up to **3 levels deep** by default (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`; `=1` disables nesting entirely). Depth counts **from the session root**, so the main session is depth 0 and its directly-dispatched stage agent is depth 1. The canonical DV chain — session → `developer` (1) → `apple-developer:ios-developer` (2) → `apple-developer:test-generator` (3) — sits exactly on the default ceiling; the orchestrator does not flatten Tier-2 dispatch into its own loop.
+
+##### Depth budget sharing
+
+> Foreground and background subagents share the same depth budget — a foreground chain plus a backgrounded child count against one cap. Budget accordingly: each level summarizes results upward, and `/cost-report`'s `dispatch_depth` column makes depth visible.
+
+> **`/megatask` consumes a level**: a batch run dispatches a per-issue `/worktask` orchestrator as its own sub-agent (depth 1), pushing that same DV chain to depth 4 — one past the default. Raise `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` before the batch, or accept a flattened Tier-2 dispatch. See `skills/megatask/SKILL.md § Nesting-depth budget`.
 
 #### Pre-launch spawn classification
 
@@ -384,11 +390,29 @@ for full code patterns.
 
 ##### Depth accounting & background permission prompts
 
-> Depth accounting stays correct across resume: resumed subagents restore their original spawn depth and forked subagents count toward the 5-level cap. Permission prompts from background subagents surface in the main session — dialog names the asking agent; Esc denies just that tool — instead of being auto-denied, so an unattended run parks on them (see the resume `waitingFor` branch table).
+> Depth accounting stays correct across resume: resumed subagents restore their original spawn depth and forked subagents count toward the depth cap. A resumed background agent also restores its **own prompt and tool restrictions** rather than reverting to the default agent, so a reattached stage row is still that stage's agent — reattach is safe, re-dispatch is not required for identity reasons alone. Permission prompts from background subagents surface in the main session — dialog names the asking agent; Esc denies just that tool — instead of being auto-denied, so an unattended run parks on them (see the resume `waitingFor` branch table).
 
 ##### Per-session subagent spawn cap
 
-> A session caps total subagent spawns at **200** by default (`CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`; raise it before a run known to exceed the cap). Distinct from the 5-level nesting-depth budget above — this is a running *count* of every spawn in the session regardless of depth. `/clear` resets the counter. A single `/megatask` run is the plugin's most likely path to the default cap — see `skills/megatask/SKILL.md § Track Derivation` for the per-batch spawn estimate and when to raise the env var or split the batch.
+> A session caps total subagent spawns at **200** by default (`CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`; raise it before a run known to exceed the cap). Distinct from the nesting-depth budget above — this is a running *count* of every spawn in the session regardless of depth. `/clear` resets the counter. A single `/megatask` run is the plugin's most likely path to the default cap — see `skills/megatask/SKILL.md § Track Derivation` for the per-batch spawn estimate and when to raise the env var or split the batch.
+
+##### Three independent ceilings
+
+> A dispatch can be refused by any one of three caps; they are counted separately and raised separately. Check all three before a wide fan-out, not just the one that bit last time.
+
+| Ceiling | Default | Env override | Counts |
+|---------|---------|--------------|--------|
+| Nesting depth | 3 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` | Levels below the session root; `=1` disables nesting |
+| Concurrently running | 20 | `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` | Agents alive *right now*, at every depth |
+| Total per session | 200 | `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` | Every spawn since session start; `/clear` resets |
+
+###### Concurrency is the easy one to hit
+
+> Background-by-default dispatch keeps stage agents alive simultaneously that would once have been sequential, and each nested Tier-2 specialist counts while it runs. `/megatask` is the worst case — `parallel_tracks` per-issue orchestrators, each with a live stage agent and its nested children. Project peak concurrency, not just the total, at the R1 gate.
+
+###### Budget halts are not stage failures
+
+> When `--max-budget-usd` trips, new spawns are denied *and running background subagents are halted*. A stage that disappears mid-work under a budget stop must be re-dispatched after the budget is raised — it must **not** consume one of that stage's 3 retries, which are reserved for genuine stage failures (see `skills/worktask/references/resume.md`).
 
 ### Model Selection
 
@@ -526,6 +550,12 @@ This is a **closed list of known-transient outages**, not a catch-all. Errors ou
 ### Subagent Worktree Access
 
 Sub-agents in isolated worktrees automatically receive Read/Edit access to their own worktree directory. No explicit tool grant needed.
+
+#### Git isolation is runtime-enforced
+
+> A worktree-isolated subagent **cannot** redirect git at the shared checkout — `git -C <shared path>`, `--git-dir`, `GIT_DIR`, and `GIT_WORK_TREE` are all blocked. Worktree isolation is an enforced boundary, not a convention the DV agent is trusted to honor, so an escape attempt fails loudly instead of silently polluting the parent tree.
+>
+> The inverse direction is still allowed: a **parent** session may reach into a worktree with `git -C .worktrees/…` (that is what `skills/shared/milestone-helpers/SKILL.md § Git Commands Reference` documents). Inside a worktree, use plain `git` against the inherited cwd. A worktree session also no longer lands in another project's leftover worktree when the working directory does not match the selected project.
 
 ### Background Subagent Partial Progress
 
@@ -742,7 +772,11 @@ Claude Code ships a native `/workflows` command and Workflow tool for **dynamic 
 
 They can compose: a DV agent inside an igrsoft worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
 
-> Naming note: the `/config` **"Dynamic workflow size"** setting (advisory small/medium/large agent counts) governs **native dynamic workflows** only — it is unrelated to PL0 dynamic *sizing* (complexity-scored stage selection). Workflow-spawned agents carry `workflow.run_id`/`workflow.name` OpenTelemetry attributes, so a composed DV fan-out can be reconstructed from OTel data alongside the plugin's audit trail.
+#### Workflow size guideline
+
+> Naming note: the `/config` **"Dynamic workflow size"** setting (advisory agent counts) governs **native dynamic workflows** only — it is unrelated to PL0 dynamic *sizing* (complexity-scored stage selection). It defaults to **medium** (aim for fewer than 15 agents), is settable from any settings file via `workflowSizeGuideline`, and the active default appears in the running-workflow status line. An 11-stage worktask is not "oversized" by this guideline — but a DV fan-out composed *on top of* a worktask is, and it spends from the same 20-concurrent / 200-total spawn budgets.
+
+> Workflow-spawned agents carry `workflow.run_id`/`workflow.name` OpenTelemetry attributes, so a composed DV fan-out can be reconstructed from OTel data alongside the plugin's audit trail.
 
 ### Gate prompts (AskUserQuestion)
 

@@ -121,7 +121,7 @@ One markdown report; emit the fenced chunks below concatenated in order.
 |---------|----------|-------------|
 | PostToolUse hook added | Hooks | High |
 | ExitWorktree now GA | Tools | Medium |
-| Opus 4.7 model alias registered | Model | Medium |
+| Opus 5 model alias registered | Model | Medium |
 | Sparse worktree path filtering | Context | Low |
 ```
 

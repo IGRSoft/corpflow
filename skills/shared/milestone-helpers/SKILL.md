@@ -57,6 +57,8 @@ All subcommands accept pre-fetched JSON via `--file` so they are network-free an
 
 ## Git Commands Reference
 
+> **Orchestrator-side only.** The `git -C` forms below run from the **parent** session reaching *into* a worktree. Inside a worktree use plain `git` — the runtime blocks an isolated subagent from redirecting git at the shared checkout (`git -C`, `--git-dir`, `GIT_DIR`, `GIT_WORK_TREE`), so copying these there fails.
+
 | Operation | Legacy Command | Worktree Command |
 |-----------|----------------|------------------|
 | Fetch base | `git fetch origin develop` | `git fetch origin develop` |

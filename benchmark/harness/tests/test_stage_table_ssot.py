@@ -18,7 +18,7 @@ _ROW = re.compile(r"^\|\s*([A-Z]{2})\s*\|[^|]*\|[^|]*\|\s*(opus|sonnet|haiku)\s*
 
 
 def _family(model_id: str) -> str:
-    # "claude-opus-4-8" -> "opus"
+    # "claude-opus-5" -> "opus"
     return model_id.split("-")[1]
 
 

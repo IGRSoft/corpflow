@@ -125,18 +125,32 @@ least one of the two MUST be present. When both are present, `--issues` filters 
    - the resolved issue set (number, title, priority, `blocked_by`),
    - the DAG as an ordered/levelled list (which issues start immediately vs. wait on blockers),
    - the derived `parallel_tracks` and the **total PR count** this run will open,
-   - the estimated subagent spawn count (`issue_count × ~9–11 stages`, plus nested-delegation spawns — the cap counts every depth) against the session's `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` cap (default 200; see `skills/megatask/SKILL.md § Track Derivation`),
+   - the three spawn-budget projections (next sub-section),
    - any `external_dependency` warnings and `skipped_has_pr` issues.
 
    Then call `AskUserQuestion`:
    *"Megatask will execute N issues across M dependency levels, opening N PRs unattended (each
    per-issue worktask auto-approves its plan and finalization). Approve to begin, or adjust scope."*
 
+#### R1 spawn-budget projections
+
+All three are warn-and-continue, never a hard gate. See `skills/megatask/SKILL.md § Track Derivation`.
+
+| Projection | Formula | Cap (default) |
+|---|---|---|
+| Total spawns | `issue_count × ~9–11 stages` + nested-delegation spawns (counted at every depth) | `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` (200) |
+| Max chain depth | megatask spends one level on the per-issue orchestrator, so DV → platform-router → Tier-2 lands at **4** | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (3) |
+| Peak concurrent | `parallel_tracks × (orchestrator + stage agent + nested children)` | `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` (20) |
+
+When depth exceeds its cap, name both remediations — raise the env var, or flatten Tier-2 dispatch (`skills/megatask/SKILL.md § Depth remediations`).
+
 #### R1 outcomes
 
    - **On approval** → append `{"actor":"megatask","action":"batch_approved","subject":"<group>","result":"ok"}` to `.context/logs/audit.jsonl`; continue to Phase 2.
    - **On rejection** → append `batch_rejected`; STOP. Surface feedback; do not create worktrees.
    - **`--dry-run`** → print the plan and STOP here regardless (no gate, no execution).
+
+   > A **free-text** R1 answer is delivered with neutral wording — it no longer arrives framed as "continue". An operator who replies "wait, explain the depth warning first" is asking a question, not approving the batch: answer it and re-present the gate. Only an explicit approval is approval.
 
 ## Phase 2: Execute (proceeds after R1 approval)
 
@@ -145,11 +159,14 @@ least one of the two MUST be present. When both are present, `--issues` filters 
 ```
 parallel_tracks = min( count(currently-ready issues), 5 )      # ready = blocked_by is empty/all-merged
 parallel_tracks = reduce_by_disk_capacity(parallel_tracks)     # each worktree duplicates the working tree
+parallel_tracks = reduce_by_concurrency_cap(parallel_tracks)   # CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS (20)
 # single explicit issue ( /megatask --issues 12 )  ⇒  1
 ```
 
 Never a flag, never a fixed default. Re-derived as the ready-set grows when blockers merge.
-See `skills/megatask/SKILL.md § Track Derivation` for the subagent spawn budget this implies (`CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`, default 200).
+See `skills/megatask/SKILL.md § Track Derivation` for the three ceilings this implies: total spawns
+(`CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`, 200), concurrent agents (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`, 20),
+and chain depth (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, 3 — megatask spends one level on the per-issue orchestrator).
 
 ### Phase 2 loop · Steps 1–2 — Select ready issues & assign tracks
 
