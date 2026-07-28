@@ -109,6 +109,6 @@ If handoff exceeds token budget:
 
 ## Model Configuration
 
-> Agent frontmatter accepts full model IDs (e.g., `claude-opus-4-5`) in addition to aliases (`opus`). Cross-plugin handoffs can specify exact model versions when precision matters for provider-specific behavior.
+> Agent frontmatter accepts full model IDs (e.g., `claude-opus-5`) in addition to aliases (`opus`). Cross-plugin handoffs can specify exact model versions when precision matters for provider-specific behavior.
 
 > The Agent tool `resume` parameter is removed. Use `SendMessage` to communicate with running background agents. `SendMessage` auto-resumes stopped agents in the background.

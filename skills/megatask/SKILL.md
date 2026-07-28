@@ -207,6 +207,7 @@ Per-issue changes are reviewable as per-issue PRs.
 ```
 parallel_tracks = min( count(currently-ready issues), 5 )
 parallel_tracks = reduce_by_disk_capacity(parallel_tracks)   # each worktree duplicates the tree
+parallel_tracks = reduce_by_concurrency_cap(parallel_tracks) # CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS (20)
 # single explicit issue ( /megatask --issues 12 ) ⇒ 1
 ```
 
@@ -214,7 +215,32 @@ Recorded in `orchestrator.json → configuration.parallel_tracks`. Never a flag/
 
 ### Subagent spawn budget
 
-> **Subagent spawn budget**: each issue dispatches ~9–11 stage subagents (9-stage default, 11-stage `--secure`) from the single megatask orchestrator session, and the cap counts **every** spawn regardless of depth (`agent-coordination § Per-session subagent spawn cap`; default **200** via `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`) — nested delegation (DV routing to platform agents and Tier-2 specialists, QA spawning `test-generator`) adds several more spawns per issue on top of the stage count. Stage count alone puts the **best-case** ceiling at **~18 issues** (11-stage) / **~22 issues** (9-stage); with routine nested delegation and retries, expect to hit the default cap several issues sooner. For batches near that ceiling, raise `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` before starting, or split into multiple `/megatask --issues` batches.
+> **Subagent spawn budget**: each issue dispatches ~9–11 stage subagents (9-stage default, 11-stage `--secure`) from the single megatask orchestrator session, and the cap counts **every** spawn regardless of depth (`agent-coordination § Three independent ceilings`; default **200** via `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`) — nested delegation (DV routing to platform agents and Tier-2 specialists, QA spawning `test-generator`) adds several more spawns per issue on top of the stage count. Stage count alone puts the **best-case** ceiling at **~18 issues** (11-stage) / **~22 issues** (9-stage); with routine nested delegation and retries, expect to hit the default cap several issues sooner. For batches near that ceiling, raise `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` before starting, or split into multiple `/megatask --issues` batches.
+
+### Nesting-depth budget
+
+> **`/megatask` spends one depth level before any stage runs.** Phase 2 Step 3 delegates a per-issue `/worktask` orchestrator as its own sub-agent, so the chain is one level deeper than a standalone worktask at every point:
+
+| Level | Standalone `/worktask` | Under `/megatask` |
+|-------|------------------------|-------------------|
+| 0 | session | session |
+| 1 | stage agent (`igrsoft:developer`) | per-issue `/worktask` orchestrator |
+| 2 | platform router (`apple-developer:apple-developer`) | stage agent (`igrsoft:developer`) |
+| 3 | Tier-2 specialist (`apple-developer:test-generator`) | platform router |
+| 4 | — | Tier-2 specialist ⚠️ **past the default ceiling** |
+
+#### Depth remediations
+
+> The default depth cap is **3** (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`). A batch whose DV stages route through a platform router to a Tier-2 specialist loses that last delegation — the specialist is never spawned, and the platform agent completes the work itself. Two remediations:
+>
+> 1. **Raise the cap** (preferred — preserves routing): export `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=4` (or higher for `--secure` batches that also nest under SR) before starting the batch.
+> 2. **Flatten Tier-2** (no config required): have DV dispatch the platform specialist directly (`apple-developer:ios-developer`) instead of the router, reclaiming one level at the cost of the router's platform-detection step.
+>
+> The R1 gate reports the batch's projected max depth so the choice is made before any worktree exists.
+
+### Concurrency budget
+
+> Distinct from both the total-spawn and depth caps: **20 subagents may run concurrently** by default (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`). Because subagents are background-by-default, a megatask run's live population is roughly `parallel_tracks × (1 orchestrator + 1 stage agent + its nested children)` — at `parallel_tracks = 5` with routine Tier-2 delegation that approaches the cap. `parallel_tracks` derivation bounds itself against this ceiling; raise the env var only when the disk and rate budgets also allow it.
 
 ## Status Transitions
 

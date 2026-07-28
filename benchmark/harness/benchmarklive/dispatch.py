@@ -40,16 +40,16 @@ from . import capture, preamble
 
 # Per-stage dispatch table: stage -> (agent, model_id, effort).
 STAGE_TABLE = {
-    "PL": ("igrsoft:product-manager", "claude-opus-4-8", "high"),
-    "AR": ("igrsoft:software-architector", "claude-opus-4-8", "high"),
-    "TL": ("igrsoft:team-lead", "claude-sonnet-4-6", "medium"),
-    "DV": ("igrsoft:developer", "claude-opus-4-8", "high"),
-    "DR": ("igrsoft:technical-lead", "claude-opus-4-8", "high"),
-    "SR": ("igrsoft:security-reviewer", "claude-opus-4-8", "xhigh"),
-    "QA": ("igrsoft:qa-engineer", "claude-sonnet-4-6", "medium"),
+    "PL": ("igrsoft:product-manager", "claude-opus-5", "high"),
+    "AR": ("igrsoft:software-architector", "claude-opus-5", "high"),
+    "TL": ("igrsoft:team-lead", "claude-sonnet-5", "medium"),
+    "DV": ("igrsoft:developer", "claude-opus-5", "high"),
+    "DR": ("igrsoft:technical-lead", "claude-opus-5", "high"),
+    "SR": ("igrsoft:security-reviewer", "claude-opus-5", "xhigh"),
+    "QA": ("igrsoft:qa-engineer", "claude-sonnet-5", "medium"),
     "DC": ("igrsoft:technical-writer", "claude-haiku-4-5", "low"),
-    "FN": ("igrsoft:project-manager", "claude-sonnet-4-6", "medium"),
-    "ST": ("igrsoft:stakeholder", "claude-sonnet-4-6", "low"),
+    "FN": ("igrsoft:project-manager", "claude-sonnet-5", "medium"),
+    "ST": ("igrsoft:stakeholder", "claude-sonnet-5", "low"),
 }
 
 CAPTURE_JSON = "json"

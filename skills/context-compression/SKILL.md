@@ -236,7 +236,7 @@ Maximum tokens to pass between stages:
 
 ### Extended Context Budget (1M Window)
 
-When running on Opus 4.6/4.7/4.8 with Max/Team/Enterprise plans — or on **Fable 5, which includes 1M context by default with no plan qualifier** — the context window is 1M tokens. Handoff budgets scale proportionally:
+When running on **Opus 5** (the default Opus — 1M context, no plan qualifier, no credit gate), **Sonnet 5** (native 1M), or **Fable 5** (1M by default but *credit-gated at dispatch*), the context window is 1M tokens. Handoff budgets scale proportionally:
 
 | Handoff | Standard Budget | Extended Budget (1M) |
 |---------|----------------|---------------------|
@@ -253,11 +253,11 @@ When running on Opus 4.6/4.7/4.8 with Max/Team/Enterprise plans — or on **Fabl
 
 > Use extended budgets only when complexity warrants it — standard budgets are still preferred for cost efficiency. Compression remains a best practice regardless of window size.
 >
-> **WARNING**: a 1M session on an account **without 1M usage credits** auto-compacts back under the standard limit — extended handoff budgets are NOT guaranteed just because the model nominally has a 1M window (Fable 5 always does). Plan stage handoffs against the **standard** column unless the account's 1M credits are confirmed; fable-tier *dispatch* on such accounts fails outright (see `skills/shared/model-selection.md`).
+> **WARNING**: a 1M session on an account **without 1M usage credits** auto-compacts back under the standard limit — extended handoff budgets are NOT guaranteed just because the model nominally has a 1M window (Fable 5 always does). Plan stage handoffs against the **standard** column unless the account's 1M credits are confirmed; fable-tier *dispatch* on such accounts fails outright (see `skills/shared/model-selection.md`). **Opus 5 is the exception**: its 1M window carries no credit gate, so opus-tier stages on the `opus` alias can plan against the extended column unconditionally.
 
 #### Compaction fallback & thinking
 
-> **`--fallback-model`**: compaction honors the session `--fallback-model`. A credit-gated 1M Fable compaction falls back to the configured fallback model instead of failing — the degrade above becomes a graceful fallback rather than an error, provided a `--fallback-model` (e.g. `claude-sonnet-4-6`) is set on the session.
+> **`--fallback-model`**: compaction honors the session `--fallback-model`. A credit-gated 1M Fable compaction falls back to the configured fallback model instead of failing — the degrade above becomes a graceful fallback rather than an error, provided a `--fallback-model` (e.g. `claude-sonnet-5`) is set on the session.
 >
 > **Compaction thinking inheritance**: context compaction inherits the session's extended-thinking configuration — compaction on a high-effort orchestrator session gets the same thinking budget as the session itself, improving summary fidelity and PostCompact recovery. Also note Sonnet 5 carries a native 1M window on the default `sonnet` alias — the credit caveat above still applies to account tiers without 1M usage credits.
 
@@ -314,7 +314,13 @@ When context exceeds budget:
 | Auto-compact thrash | CC detects when context refills immediately after compaction 3 times and stops with actionable error instead of burning API calls |
 | Focus mode | Focus view (Ctrl+O) generates self-contained summaries |
 | Compaction duplicates | Compaction does not produce duplicate transcript entries |
-| 1M without credits | Sessions on a 1M-window model without usage credits auto-compact back under the standard limit — treat as a standing trigger on Fable 5 (1M by default) when credits are absent |
+
+#### Window-size triggers
+
+| Trigger | Action |
+|---------|--------|
+| 1M without credits | Sessions on a credit-gated 1M-window model without usage credits auto-compact back under the standard limit — a standing trigger on Fable 5 (1M by default) when credits are absent. Not a trigger on Opus 5, whose 1M window is ungated |
+| Context overflow | `/context` warns explicitly when the conversation exceeds the window, and a failed `/compact` renders as an error rather than a silent no-op — an overflow no longer has to be inferred from a failing turn |
 
 ### PreCompact & PostCompact Hooks
 

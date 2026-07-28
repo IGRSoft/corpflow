@@ -15,7 +15,7 @@ External orchestrators (CI runners, batch schedulers, the user's own shell) that
 
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
-| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-4-8`; QA→`claude-sonnet-4-6`; FN→`claude-sonnet-4-6`. Caveat: a managed `availableModels` allowlist also constrains subagent model overrides, and `enforceAvailableModels` constrains the Default model too — a requested id may silently down-resolve; audit, don't assume |
+| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-5`; QA→`claude-sonnet-5`; FN→`claude-sonnet-5` (benchmark-parity snapshots — see § Alias note). Caveat: a managed `availableModels` allowlist also constrains subagent model overrides, and `enforceAvailableModels` constrains the Default model too — a requested id may silently down-resolve; audit, don't assume |
 | `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN/RE→`medium`. `ultracode` is an additional dispatch-surface value accepted by `claude agents --effort` and delivered to the dispatched session — it is NOT a plugin `metadata.effort` tier; the plugin enum stays `low/medium/high/xhigh/max` |
 
 ### Translation table — permission, workspace & MCP
@@ -45,26 +45,38 @@ The minimum recommended flag set per stage when dispatching from a headless runn
 
 | Stage | Canonical headless one-liner |
 |---|---|
-| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` |
-| **DR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode acceptEdits -- igrsoft:technical-lead < dr-prompt.txt` |
-| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-4-8 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` |
-| **QA** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort high --permission-mode acceptEdits -- igrsoft:qa-engineer < qa-prompt.txt` |
+| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-5 --effort xhigh --permission-mode bypassPermissions -- igrsoft:developer < dv-prompt.txt` |
+| **DR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-5 --effort xhigh --permission-mode acceptEdits -- igrsoft:technical-lead < dr-prompt.txt` |
+| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-5 --effort xhigh --permission-mode default -- igrsoft:security-reviewer < sr-prompt.txt` |
+| **QA** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-5 --effort high --permission-mode acceptEdits -- igrsoft:qa-engineer < qa-prompt.txt` |
 
 ### FN / RE / ST one-liners
 
 | Stage | Canonical headless one-liner |
 |---|---|
-| **FN** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:project-manager < fn-prompt.txt` |
-| **RE** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort medium --permission-mode default -- igrsoft:release-engineer < re-prompt.txt` |
-| **ST** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-4-6 --effort low --permission-mode acceptEdits -- igrsoft:stakeholder < st-prompt.txt` |
+| **FN** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-5 --effort medium --permission-mode default -- igrsoft:project-manager < fn-prompt.txt` |
+| **RE** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-5 --effort medium --permission-mode default -- igrsoft:release-engineer < re-prompt.txt` |
+| **ST** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-5 --effort low --permission-mode acceptEdits -- igrsoft:stakeholder < st-prompt.txt` |
 
 ### Model & effort defaults
 
 The model/effort defaults track `skills/shared/model-selection.md`. Override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **opus/xhigh** (matches `skills/shared/stage-codes.md` and the stage table in `benchmark/harness/Sources/BenchmarkLive/Dispatch.swift`, the machine-checked SSOT — the Python `dispatch.py` predecessor was retired in v3.29.0); the agent's `model: opus` frontmatter default applies to both the DR stage dispatch and direct TC consults.
 
-### Sonnet 5 alias note
+### Alias note
 
-> The pinned `claude-sonnet-4-6` ids above are benchmark-parity snapshots, not a tier recommendation — the `sonnet` **alias** resolves to Claude Sonnet 5 (CC default; native 1M context). Prefer aliases in ad-hoc runner scripts (deprecation-proof per `skills/shared/model-selection.md`); keep pinned ids only where byte-reproducibility against the benchmark SSOT matters.
+> The pinned ids above exist for **SSOT parity** — they match `STAGE_TABLE` in the live-dispatch table so a benchmark run is byte-reproducible. They currently coincide with the defaults the aliases resolve to (`opus` → Claude Opus 5, `sonnet` → Claude Sonnet 5), but that is a coincidence of timing, not a guarantee. Prefer **aliases** in ad-hoc runner scripts — they are deprecation-proof (`skills/shared/model-selection.md`); keep pinned ids only where byte-reproducibility matters.
+
+> Re-pinning the SSOT to a newer model is a **benchmark change, not a docs refresh**: measurements taken before the repin are no longer comparable to those taken after. Record the cut-over in `benchmark/README.md` when it happens.
+
+### Stream-json init & MCP error surfacing
+
+> The headless `stream-json` **init event** carries `mcp_server_errors`, listing `--mcp-config` entries the config validator skipped; terminal runs also print a startup warning. A runner that depends on a scoped MCP set (`metadata.mcp_config_path`) should read this at init rather than discovering the gap at the first `mcp__<server>__*` call. `claude mcp list` and `/mcp` likewise report HTTP status and error text on a failed connection, and warn about config values carrying hidden leading/trailing whitespace.
+
+### Nested-subagent forwarding & partial output
+
+> With `--forward-subagent-text`, subagents spawned at depth 2+ now appear in the stream, keyed by their spawning Agent `tool_use` id. Per-stage token attribution can therefore see nested Tier-2 work instead of folding it into the parent stage.
+
+> A turn that dies on a mid-stream API error no longer discards the text `claude -p` had already produced — partial output survives the failure, so a runner can salvage a stage's work instead of treating the whole dispatch as empty.
 
 ### Background-worker & env reliability
 

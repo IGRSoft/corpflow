@@ -33,7 +33,7 @@ These automatic improvements compound across multi-stage worktasks — no agent 
 | Skill listing not re-injected on `--resume` | 2.1.70 | ~600 tokens saved per session resume |
 | Prompt cache fix (up to 12x input cost reduction) | 2.1.72 | SDK query() calls benefit automatically |
 | Failed Read/Glob/WebFetch no longer cancel parallel siblings | 2.1.72 | Safer parallel tool use in agents |
-| 1M context window for Opus 4.6 (Max/Team/Enterprise) | 2.1.75 | 10x larger context window |
+| 1M context window on the top Opus (Max/Team/Enterprise) | 2.1.75 | 10x larger context window |
 
 ### v2.1.76–2.1.84
 
@@ -41,7 +41,7 @@ These automatic improvements compound across multi-stage worktasks — no agent 
 |-------------|---------|--------|
 | Auto-compaction circuit breaker (stops after 3 failures) | 2.1.76 | Prevents infinite compaction loops |
 | Deferred tool schemas preserved after compaction | 2.1.76 | Array/number params work post-compaction |
-| Opus 4.6 max output 64k default (128k upper bound) | 2.1.77 | Larger agent outputs possible |
+| Opus-tier max output 64k default (128k upper bound) | 2.1.77 | Larger agent outputs possible |
 | `${CLAUDE_PLUGIN_DATA}` for persistent plugin state | 2.1.78 | Plugin-level state without disk management |
 | `effort` frontmatter for skills/commands | 2.1.80 | Fine-grained cost control per invocation |
 | ~80MB memory reduction on large repos | 2.1.80 | More agents per machine |
@@ -114,7 +114,7 @@ These automatic improvements compound across multi-stage worktasks — no agent 
 
 | Improvement | Version | Impact |
 |-------------|---------|--------|
-| 1M-context autocompact threshold respected (no premature "Prompt is too long") | 2.1.128 | Keeps full context budget usable on Opus 4.7 |
+| 1M-context autocompact threshold respected (no premature "Prompt is too long") | 2.1.128 | Keeps full context budget usable on the 1M-window tier |
 | 1h prompt cache TTL no longer silently downgrades to 5min | 2.1.129 | Long-running sessions actually realize 1h cache benefit; pairs with `ENABLE_PROMPT_CACHING_1H` (v2.1.108) |
 | `deniedMcpServers` supports `*://host` patterns | 2.1.129 | Tighter MCP egress control without per-scheme duplication |
 | `claude_code.pull_request.count` OTEL counter tallies MCP-tool-initiated PRs/MRs | 2.1.129 | Observability for MCP-driven worktask output |
@@ -136,8 +136,8 @@ These automatic improvements compound across multi-stage worktasks — no agent 
 |-------------|---------|--------|
 | `MCP_TOOL_TIMEOUT` honoured by remote HTTP/SSE MCP servers | 2.1.142 | Long-running MCP tool calls no longer fail at the silent 60s cap; reduces retry token churn for slow XcodeBuildMCP/Pencil ops |
 | Background sessions survive macOS sleep/wake (daemon clock-jump detection) | 2.1.142 | Long-running `claude agents` dispatch no longer loses state to false-positive idle timeouts |
-| Fast mode (`/fast`) defaults to Opus 4.8 | 2.1.154 | Opus 4.8 fast mode delivers **2x rate for 2.5x speed**; pin fast mode via `/model` selection |
-| Auto mode on Bedrock/Vertex/Foundry (`CLAUDE_CODE_ENABLE_AUTO_MODE=1`) | 2.1.158 | Auto model/effort selection for Opus 4.7/4.8 on third-party providers; opt-in, explicit `--model`/`--effort` overrides stay authoritative |
+| Fast mode (`/fast`) defaults to the top Opus | 2.1.154 | Opus fast mode delivers **2x rate for 2.5x speed**; pin fast mode via `/model` selection |
+| Auto mode on Bedrock/Vertex/Foundry (`CLAUDE_CODE_ENABLE_AUTO_MODE=1`) | 2.1.158 | Auto model/effort selection for opus-tier models on third-party providers; opt-in, explicit `--model`/`--effort` overrides stay authoritative |
 
 ### v2.1.152–2.1.154
 
@@ -145,7 +145,7 @@ These automatic improvements compound across multi-stage worktasks — no agent 
 |-------------|---------|--------|
 | `cache_creation_input_tokens` nested-breakdown fix | 2.1.152 | Nested API calls now correctly attribute cache_creation tokens to sub-call layer; was previously double-counted in parent layer |
 | Dynamic workflows background orchestration | 2.1.154 | Native `/workflows` Workflow tool spawns lightweight background agents (tens–hundreds); no worktask state overhead — complementary to igrsoft staged pipeline |
-| Lean system prompt default on Opus 4.8 | 2.1.154 | Opus 4.8 uses shorter system prompt by default (Haiku/Sonnet/Opus ≤4.7 unchanged); reduces input token cost per request |
+| Lean system prompt default on the top Opus | 2.1.154 | The top Opus uses a shorter system prompt by default (Haiku/Sonnet unchanged); reduces input token cost per request |
 
 ### v2.1.172–2.1.173
 
@@ -171,6 +171,24 @@ These automatic improvements compound across multi-stage worktasks — no agent 
 | Prompt-cache mid-conversation system block works behind LLM gateways and custom base URLs (Bedrock, Vertex, 1P) | 2.1.212 | Gateway-routed deployments get the same cache-hit economics as direct API |
 | Bedrock/Vertex/Mantle/Foundry prompt-caching regression fix (trailing system block billed as fresh input) | 2.1.211 | Corrects over-billing on cache trailing blocks; reconcile pre-fix cost dashboards against provider billing |
 | Session cost/token telemetry no longer double-counts on streams emitting multiple cumulative message_delta frames | 2.1.214 | /cost and cost-report numbers trustworthy on streaming turns |
+
+### v2.1.216–2.1.220 — model & spawn budgets
+
+| Improvement | Version | Impact |
+|-------------|---------|--------|
+| Opus 5 (`claude-opus-5`) becomes the default Opus | 2.1.219 | The `opus` alias lands on 1M context with **no usage-credit gate** — opus-tier stages get the extended handoff column unconditionally; fast mode $10/$50 per Mtok |
+| Concurrent-subagent cap (20, `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`) | 2.1.217 | Second ceiling beside the 200/session total — bounds `/megatask` peak parallelism regardless of remaining spawn budget |
+| `--max-budget-usd` halts **running** background subagents | 2.1.217 | A budget trip kills in-flight stages, not just new spawns. Re-dispatch after a halt must not consume a stage retry |
+| Dynamic workflows default to medium (<15 agents) via `workflowSizeGuideline` | 2.1.219 | Caps ad-hoc `/workflows` fan-out composed on a worktask — it spends the same budgets |
+
+### v2.1.216–2.1.220 — runtime & attribution
+
+| Improvement | Version | Impact |
+|-------------|---------|--------|
+| Message normalization no longer grows quadratically with turn count | 2.1.216 | Removes multi-second stalls and slow resumes on long worktask sessions — wall-clock only, no token effect |
+| Truncated MCP tool outputs no longer retain the full untruncated result in memory | 2.1.217 | Fixes a session-lifetime memory leak on MCP-heavy stages (XcodeBuildMCP, Pencil) |
+| `claude -p` keeps text already produced when a turn dies on a mid-stream API error | 2.1.219 | A failed headless stage yields salvageable partial work instead of an empty result — fewer full re-runs |
+| Nested-subagent forwarding in stream-json (`--forward-subagent-text`, depth 2+) | 2.1.219 | Per-stage token attribution can see Tier-2 specialist spawns instead of folding them into the parent stage |
 
 ## Calendar Month Billing
 

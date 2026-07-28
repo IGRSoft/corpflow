@@ -222,7 +222,7 @@ fi
 - Validate artifacts created
 - `PostCompact` hook fires after auto-compaction — use to re-inject critical worktask state
 
-> On Opus 4.6/4.7/4.8 with Max/Team/Enterprise, context window is 1M tokens. Compression still recommended at stage boundaries for cost efficiency even with larger windows.
+> On Opus 5, Sonnet 5, and Fable 5 the context window is 1M tokens. Compression still recommended at stage boundaries for cost efficiency even with larger windows.
 
 See references/ for initialization code, stage details, and agent teams integration.
 
@@ -515,7 +515,9 @@ while (tasks.some(t => t.status !== "completed")) {
     // Resolve plugin: bare → "igrsoft:<name>"; 2-part "plugin:name" → as-is;
     //   3-part "a:b:c" → UNSUPPORTED, throw (message below). The .context/errors/<basename>.md
     //   basename is the last `:`-segment. Applies at every nesting depth (the runtime allows
-    //   5-deep sub-agent spawning) — depth never legitimizes a 3-part name.
+    //   3-deep sub-agent spawning by default) — depth never legitimizes a 3-part name.
+    //   CC also rejects a `:` in an agent file's own frontmatter `name:` (reserved for plugin
+    //   namespacing), so the qualified form only ever appears at the call site, never in the file.
     const colonCount = (agentType.match(/:/g) ?? []).length;
     if (colonCount > 1) {
       throw new Error(`Invalid agent reference '${agentType}': only bare or plugin-qualified names supported.`);
@@ -989,8 +991,8 @@ would otherwise block a blameless DV.
     // 5f. Model resolution — consult facts.capabilities BEFORE a fable-tier dispatch (v1 additive).
     //     Fable 5 dispatch fails hard without 1M credits (observed live per
     //     model-selection.md). A prior hard-fail is cached in facts.capabilities — skip re-hitting
-    //     the same error and fall back to the auto-mode best-Opus target,
-    //     recording model_requested/model_resolved on the dispatch entry below.
+    //     the same error and fall back to the auto-mode best-Opus target ("opus" = Opus 5: 1M,
+    //     ungated), recording model_requested/model_resolved on the dispatch entry below.
     const modelRequested = model;
     let effectiveModel = model;
     if (model === "fable" && state.facts?.capabilities?.fable_dispatch === "credit_blocked") {

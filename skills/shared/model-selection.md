@@ -14,6 +14,24 @@ effort: low
 | **sonnet** | ~10x haiku | ~$3.00 | Implementation, analysis, code review, coordination |
 | **opus** | ~50x haiku | ~$15.00 | Architecture decisions, complex reasoning, meta-optimization |
 
+### Opus 5
+
+> **Opus 5** (`claude-opus-5`) is the **default Opus model** — the `opus` alias resolves here, so every opus-tier stage (PL, AR, DV, DR, SR, ET, IR, PE) gets it with no plugin change. It ships **1M context by default** with no plan qualifier and no usage-credit gate, and fast mode prices at **$10/$50 per Mtok**. Pull current steady-state pricing from `/model` or the `claude-api` skill.
+
+#### Opus 5 effort levels
+
+> `low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛. **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans; Pro plan retains `medium` default on older models. The keyword "ultrathink" still triggers high effort. `/effort auto` resets; `/effort` opens an interactive slider with **Faster/Smarter** labels. Use `/effort xhigh` for the hardest reasoning.
+
+#### Fast mode & system prompt
+
+> **Fast mode** (`/fast`) applies to Opus 5. It delivers a higher token rate for a higher price multiplier; pin it via `/model` selection.
+
+> **Lean system prompt**: Opus 5 uses a lean (shorter) system prompt by default; Haiku and Sonnet use the standard one — a small standing input-token saving on opus-tier stages.
+
+#### Prefer the alias over a pinned id
+
+> Frontmatter and `metadata.model` should carry the **alias** (`opus`/`sonnet`/`haiku`/`fable`), not a full model id. An alias tracks the current default; a pinned id strands the stage on whatever it names once that model is superseded, and surfaces a deprecation warning at load (see § Frontmatter model-deprecation warnings).
+
 ### Fable 5 availability
 
 > **Fable 5** (`claude-fable-5`) is the Mythos-class top reasoning model. The `fable` alias resolves on every supported CC. This plugin defaults its highest-reasoning stages (AR, DV, SR, ET, PE) to `opus`; `fable` remains a valid CC model alias for operators who choose to override. Pull the exact `$/1M` pricing from `/model` (or the `claude-api` skill) when needed.
@@ -24,7 +42,7 @@ effort: low
 
 ### Fable-5 auto-mode Opus fallback
 
-> **Fable-5 auto-mode Opus fallback**: in auto mode, when an org's allowlist lacks Opus 4.8, a Fable-5 selection falls back to the **best available Opus** for that org rather than failing or down-resolving to a lower tier. So on Opus-4.8-less orgs, auto-mode `xhigh` stages land on the strongest Opus the org has instead of erroring.
+> **Fable-5 auto-mode Opus fallback**: in auto mode, when an org's allowlist lacks the current top Opus, a Fable-5 selection falls back to the **best available Opus** for that org rather than failing or down-resolving to a lower tier. So on restricted orgs, auto-mode `xhigh` stages land on the strongest Opus the org has instead of erroring.
 
 ### Managed model allowlists
 
@@ -40,19 +58,15 @@ effort: low
 
 ### Sonnet 5
 
-> **Sonnet 5**: the `sonnet` alias resolves to **Claude Sonnet 5** — the Claude Code default model, with a **native 1M-token context window** and promotional pricing ($2/$10 per Mtok through 2026-08-31; steady-state pricing via `/model` or the `claude-api` skill). Sonnet-tier stages (TL, QA, RE, FN, ST) get the capability uplift with no plugin change — this is exactly why the alias rule above exists. The `xhigh` rule is unchanged: route `xhigh` work to **Opus 4.8 or Fable 5**; do not assume Sonnet 5 accepts `xhigh` without verifying.
+> **Sonnet 5**: the `sonnet` alias resolves to **Claude Sonnet 5** — the Claude Code default model, with a **native 1M-token context window** and promotional pricing ($2/$10 per Mtok through 2026-08-31; steady-state pricing via `/model` or the `claude-api` skill). Sonnet-tier stages (TL, QA, RE, FN, ST) get the capability uplift with no plugin change — this is exactly why the alias rule above exists. The `xhigh` rule is unchanged: route `xhigh` work to **Opus 5 or Fable 5**; do not assume Sonnet 5 accepts `xhigh` without verifying.
 
 ### Org default & model restrictions
 
 > Admins can set an **org default model** (shows as "Org default"/"Role default" in `/model` when you haven't picked one), and org-configured model **restrictions** cover the picker, `--model`, `/model`, and `ANTHROPIC_MODEL` with a "restricted by your organization's settings" message — one more way a stage alias may resolve differently under management (audit per Pre-Stage Validation step 6).
 
-### Opus 4.8 effort levels
+### Context-window accounting
 
-> **Opus 4.8 Effort Levels**: `low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛. **Default effort is `high`** for API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans. Pro/Max subscribers also get `high` default on **Opus 4.6 and Sonnet 4.6**; Pro plan retains `medium` default on older models. The keyword "ultrathink" still triggers high effort. Use `/effort auto` to reset; `/effort` opens an interactive slider with **Faster/Smarter** labels. Opus 4.6 and Opus 4.7 remain supported. Use `/effort xhigh` for hardest tasks requiring maximum reasoning.
-
-### Opus 4.8 context window
-
-> **Opus 4.8 context window**: Opus 4.8 has a native **1M context window** (same as Opus 4.7). Claude Code computes `/context` percentages against the full 1M window — eliminates premature autocompacting on long Opus 4.8 sessions.
+> Claude Code computes `/context` percentages against the **full 1M window** on models that have one (Opus 5, Sonnet 5, Fable 5) — no premature autocompacting on long opus-tier sessions. See `skills/context-compression/SKILL.md` for how the extended window changes stage handoff budgets, and for the without-credits caveat that applies to Fable 5.
 
 ### Hook effort visibility
 
@@ -62,21 +76,17 @@ effort: low
 
 > **Thinking-config inheritance**: subagents and context compaction inherit the session's extended-thinking configuration — a stage dispatched without an explicit `effort` override now gets the orchestrator's thinking budget instead of a flat default, improving delegated output quality. Keep passing per-stage `metadata.model` + `effort` regardless: explicit beats inherited for stage determinism and cost attribution.
 
-### Fast mode on Opus 4.8
+### xhigh routing
 
-> **Fast Mode on Opus 4.8**: fast mode on Opus 4.8 delivers **2x rate for 2.5x speed**; pin fast mode via `/model` selection. Plugin agents that rely on `xhigh` effort require **Opus 4.8 or Fable 5** — and Fable 5 carries the 1M-credit dispatch caveat above; on credit-gated accounts route `xhigh` work to Opus 4.8.
+> Plugin agents that rely on `xhigh` effort require **Opus 5 or Fable 5** — Sonnet silently downgrades the thinking budget. Prefer the `opus` alias (→ Opus 5): Fable 5 carries the 1M-credit dispatch caveat above and hard-fails on credit-gated accounts.
 
 ### Auto mode on Bedrock/Vertex/Foundry
 
-> **Auto mode on Bedrock/Vertex/Foundry**: auto model/effort selection is available on Bedrock, Vertex AI, and Foundry without an opt-in — disable it with `disableAutoMode` in settings. These providers (plus Claude-Platform-on-AWS) **default to Opus 4.8**. Explicit `--model`/`--effort` (and `metadata.model`) overrides stay authoritative when set. Bedrock also resolves its region from `~/.aws` config when `AWS_REGION` is unset, and GovCloud inference profiles get the correct `us-gov` prefix — headless runners do not need to export region env explicitly on configured machines.
+> **Auto mode on Bedrock/Vertex/Foundry**: auto model/effort selection is available on Bedrock, Vertex AI, and Foundry without an opt-in — disable it with `disableAutoMode` in settings. These providers (plus Claude-Platform-on-AWS) **default to the newest Opus they carry**, which lags the first-party default — do not assume `opus` resolves to Opus 5 on Bedrock/Vertex/Foundry; confirm via `/model`. Explicit `--model`/`--effort` (and `metadata.model`) overrides stay authoritative when set. Bedrock also resolves its region from `~/.aws` config when `AWS_REGION` is unset, and GovCloud inference profiles get the correct `us-gov` prefix — headless runners do not need to export region env explicitly on configured machines.
 
 ### Auto-mode permission classifier
 
 > The auto-mode **permission classifier** (the small model that classifies permission decisions in auto mode) defaults to **Sonnet 5** for external sessions — validated on the session's first request and pinned for the session. This is a permission-classification detail, unrelated to the session-model defaults above.
-
-### Lean system prompt default
-
-> **Lean system prompt default**: Opus 4.8 uses a lean (shorter) system prompt by default. Haiku, Sonnet, and Opus ≤4.7 continue to use the standard system prompt.
 
 ## Selection Criteria
 

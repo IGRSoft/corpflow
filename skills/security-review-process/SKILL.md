@@ -159,6 +159,22 @@ then triage the findings — don't equate a clean audit with a safe dependency.
 | Logging | Audit trails enabled, log integrity protected |
 | Secrets | No plaintext secrets, rotation policies in place |
 
+### Claude Code sandbox settings
+
+Settings that harden the agent's own execution surface. Review them when a worktask runs unattended (`/megatask`, `--auto-finalization`) or on a shared runner.
+
+| Setting | Effect |
+|---------|--------|
+| `sandbox.network.strictAllowlist` | Denies non-allowlisted hosts for sandboxed commands **without prompting**, rather than asking. Prefer for unattended batches — a prompt in an unattended run is an indefinite stall |
+| `sandbox.filesystem.disabled` | Skips filesystem isolation while **keeping** network egress control. Narrow escape hatch; document the justification, never set it to silence a failing command |
+
+### Claude Code path & config hardening
+
+| Behavior | Effect |
+|----------|--------|
+| Symlink hardening | Workflow saves and scheduled-task writes no longer follow a symlink at `.claude`, and `/rewind` no longer restores or deletes through symlinks or hard links at tracked paths (it reports how many paths it skipped). A repo with a symlinked `.claude` no longer redirects writes outside the project |
+| Managed MCP allowlist `${VAR}` | Resolves from the **startup environment** and managed-settings env — not the settings-file env. A settings-file variable will not expand there |
+
 ## Integration Points
 
 - **security-reviewer agent**: Uses this checklist for SR stage

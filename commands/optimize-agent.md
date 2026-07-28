@@ -208,13 +208,13 @@ Run on every agent regardless of focus area; treat findings here as blocking on 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
 | `description` | ≤250 characters total. Measure with `awk -F'description: ' '/^description:/{print length($2)}'`. Flag with exact char count if over. | P0 |
-| `model` | Strict membership: ∈ {`haiku`, `sonnet`, `opus`, `fable`}. Reject `claude-*`, `claude-sonnet-4-6`, version aliases, or omission. | P0 |
+| `model` | Strict membership: ∈ {`haiku`, `sonnet`, `opus`, `fable`}. Reject `claude-*`, `claude-sonnet-5`, version aliases, or omission. | P0 |
 
 #### Frontmatter audit — effort
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `effort` | Present on every stage agent. Validate against model: `xhigh` requires `model: opus` or `model: fable` (Opus 4.8 / Fable 5 honor xhigh; Sonnet silently downgrades — see `skills/cost-optimization/SKILL.md § Per-Effort Thinking-Budget Ceilings`). Effort matches role tier per the model-selection matrix. | P1 |
+| `effort` | Present on every stage agent. Validate against model: `xhigh` requires `model: opus` or `model: fable` (Opus 5 and Fable 5 honor xhigh; Sonnet silently downgrades — see `skills/cost-optimization/SKILL.md § Per-Effort Thinking-Budget Ceilings`). Effort matches role tier per the model-selection matrix. | P1 |
 
 #### Frontmatter audit — tools
 
@@ -226,7 +226,7 @@ Run on every agent regardless of focus area; treat findings here as blocking on 
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `hooks:` | Required on PL/FN/ST agents (gate notifications). Optional but recommended on stage agents that emit terminal artifacts (DV, DR, QA, SR, RE) once v3.11.0 ships the rollout. Until then, flag PL/FN/ST omissions only. | P1 (PL/FN/ST) / P2 (others) |
+| `hooks:` | Required on PL/FN/ST agents (gate notifications). Optional but recommended on stage agents that emit terminal artifacts (DV, DR, QA, SR, RE) once v3.11.0 ships the rollout. Until then, flag PL/FN/ST omissions only. **Trust precondition**: frontmatter hooks run only when the agent file's own folder has accepted workspace trust — otherwise they are silently skipped, so never treat a missing hook artifact as proof the hook passed (`skills/agent-coordination/references/hook-monitoring.md`). | P1 (PL/FN/ST) / P2 (others) |
 | `maxTurns` | Present and proportional to role: coordinators (DV, AR) ≥60; reviewers (DR, QA, SR) 30–60; one-shot (haiku-tier) ≤30. | P2 |
 | `disallowedTools` | Consider for review-only agents to harden the constraint contract (e.g., DR with `disallowedTools: Write, Edit, mcp__XcodeBuildMCP__test_*`). Suggest, do not block. | P2 |
 
@@ -242,7 +242,14 @@ Run on every agent regardless of focus area; treat findings here as blocking on 
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `name` | Globally unique. Collision risk when generic (`developer`, `qa-engineer`, `incident-responder`, etc.) — CC keys installed agents by frontmatter `name`, so two plugins shipping the same name silently overwrite each other. Flag HIGH if igrsoft agent shares name with a known marketplace plugin (cross-check `apple-developer:`, `security-scanning:`, `debugging-toolkit:` agent stems). For new agents, prefer `<plugin>-<role>` form. Source: ai-research PR #554. | P1 |
+| `name` | Globally unique, and **must not contain `:`** — CC rejects the agent file outright, since `:` is reserved for plugin namespacing and only ever appears at the call site (`igrsoft:developer`), never in the file. Collision risk when generic (`developer`, `qa-engineer`, `incident-responder`, etc.) — CC keys installed agents by frontmatter `name`, so two plugins shipping the same name silently overwrite each other. Flag HIGH if igrsoft agent shares name with a known marketplace plugin (cross-check `apple-developer:`, `security-scanning:`, `debugging-toolkit:` agent stems). For new agents, prefer the hyphenated `<plugin>-<role>` form. Source: ai-research PR #554. | P0 (`:` present) / P1 (collision) |
+
+#### Frontmatter audit — boolean & skill-execution forms
+
+| Field | Audit Rule | Severity |
+|-------|------------|----------|
+| boolean fields | Skill and plugin frontmatter booleans accept `yes`/`no`/`on`/`off`/`1`/`0` (case-insensitive) alongside `true`/`false`. Do not flag a non-`true`/`false` spelling as invalid; do flag inconsistent spellings within one file. | P3 |
+| `context: fork` | A skill declaring `context: fork` runs **in the background by default**; add `background: false` to opt out. Flag when a forked skill's caller depends on its result inline — the caller must handle a completion notification instead of a return value. | P2 |
 
 #### Frontmatter findings report
 

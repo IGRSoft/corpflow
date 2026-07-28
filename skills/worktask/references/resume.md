@@ -48,6 +48,7 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 |----------------|------------|--------|
 | `agent_id` for an `in_progress` stage shows `state: blocked` | — | Alive but parked. Reattach via `SendMessage` — do not re-delegate |
 | `agent_id` absent from `claude agents --json --all` (or `state: done`) for an `in_progress` stage | — | Agent gone. Re-delegate from the first incomplete stage |
+| **Several** `agent_id`s absent at once, all vanishing at the same timestamp, session run under `--max-budget-usd` | no per-stage failure rows | **Budget halt, not stage failure.** Reaching the cap denies new spawns *and* halts running background subagents, so healthy in-flight stages die together with no error of their own. Raise the budget, then re-dispatch — and do **not** increment `metadata.retry_count`: those 3 retries are reserved for genuine stage failures, and spending them on an external stop escalates a run that never actually failed |
 
 ## Resume Procedure
 
@@ -76,7 +77,9 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 
 ### Step 0 notes — state-signal reliability
 
-   The `state` signal is trustworthy — a background sub-agent no longer sticks as `active` after a nested child it spawned was stopped. With nested spawning (5 levels), only match **top-level** dispatched agents from `facts.dispatched_agents[]`; rows whose `parent_agent_id` points at another live row are the stage agent's own children — never reattach or re-delegate those directly.
+   The `state` signal is trustworthy — a background sub-agent no longer sticks as `active` after a nested child it spawned was stopped. With nested spawning (3 levels by default), only match **top-level** dispatched agents from `facts.dispatched_agents[]`; rows whose `parent_agent_id` points at another live row are the stage agent's own children — never reattach or re-delegate those directly.
+
+   A resumed background agent restores its **own prompt and tool restrictions** instead of reverting to the default agent, so a live row matched to a stage is still that stage's agent. Prefer reattach over defensive re-dispatch: identity is no longer a reason to re-delegate.
 
 ### Step 0 notes — authority caveat
 

@@ -257,6 +257,8 @@ Plugin skills use the frontmatter `name` field for invocation instead of directo
 
 `/reload-plugins` picks up new skills without requiring a full restart. Use after plugin updates to make new skills available immediately.
 
+> Skills and commands **changed during a session** now appear in the slash menu without a restart, and a plugin skill carrying a frontmatter `name` keeps its plugin prefix in autocomplete. This eases local plugin development, but it does **not** relax the version-keyed cache rule: the installed-marketplace path still resolves under `~/.claude/plugins/cache/<owner>/<plugin>/<version>/`, so renaming or adding a skill/command/agent still requires a version bump for installed consumers (`skills/shared/plugin-root-resolution.md`). Verify against the cache path before relying on in-session pickup.
+
 ### MCP Dynamic Server Inheritance
 
 Subagents inherit MCP tools from dynamically-injected servers. Cross-plugin handoffs to external agents that rely on MCP tools (e.g., XcodeBuildMCP) work without explicit MCP tool grants in the subagent's `tools:` list, as long as the parent session has the MCP server connected.

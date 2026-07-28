@@ -14,6 +14,13 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 | `FileChanged` | Monitored file modified | — | File path |
 | `TaskCreated` | TaskCreate tool called | — | Task ID, subject |
 | `WorktreeCreate` | Worktree created | — | Worktree path |
+| `DirectoryAdded` | A working directory is registered mid-session (`/add-dir`, or the SDK `register_repo_root` control request) | — | Added directory path |
+
+#### Workspace trust is a precondition for agent-frontmatter hooks
+
+> Hooks declared in an **agent file's own frontmatter** run only when that agent file's folder has accepted workspace trust. In an untrusted plugin folder they are **silently skipped** — no error, no audit row, the stage simply completes without its gate. Three igrsoft agents declare frontmatter hooks and are affected: `agents/product-manager.md`, `agents/project-manager.md`, `agents/stakeholder.md`.
+>
+> Consequence for gate reasoning: absence of a hook-emitted audit row is **not** evidence the hook passed — it is equally consistent with the hook never having run. When a stage's completion depends on a frontmatter hook, confirm trust was granted for the plugin folder rather than inferring success from a clean run. Hooks installed via `plugin.json` (the `hooks` block) and the repo's own `hooks/` scripts are unaffected.
 
 ### Later lifecycle events
 
@@ -365,7 +372,7 @@ Use cases: stop teammate when its issue is complete, when megatask budget is exh
 | Coordination | Task dependencies (blockedBy) | Shared task list + messaging |
 | Tool restrictions | `tools` frontmatter per agent | Inherits lead's permissions |
 | Token cost | Lower (results summarized) | Higher (N context windows) |
-| Nesting | Up to 5 levels deep, foreground and background sharing one depth budget | Cannot spawn sub-teams |
+| Nesting | Up to 3 levels deep by default (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`), foreground and background sharing one depth budget | Cannot spawn sub-teams |
 | Source isolation | None by default; `isolation: worktree` in frontmatter | None by default; worktree mode recommended for megatask |
 
 ### When to Use Each
@@ -381,7 +388,7 @@ Use cases: stop teammate when its issue is complete, when megatask budget is exh
 
 ### Limitations
 
-- Teammates cannot spawn their own teams (runtime-enforced). Foreground and background subagents share one 5-level nesting depth budget; whether the teammate runtime inherits that nesting is unverified — treat teammate→sub-agent spawning as unsupported until observed
+- Teammates cannot spawn their own teams (runtime-enforced). Foreground and background subagents share one nesting depth budget (default 3, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`); whether the teammate runtime inherits that nesting is unverified — treat teammate→sub-agent spawning as unsupported until observed
 - One implicit team per session — no create/teardown; spawn teammates with `Agent(name: …)` (`team_name` accepted but ignored)
 - No session resumption for in-process teammates
 - Higher token cost (~Nx for N teammates)
