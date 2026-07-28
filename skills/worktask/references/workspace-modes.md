@@ -70,6 +70,10 @@ Base-branch resolution is controlled by the `worktree.baseRef` setting: `head` (
 
 When the merge target is not the worktask default (e.g. shipping into `origin/release/v2` instead of `origin/master`), PL0 sets `task.metadata.base_ref: "origin/release/v2"`. The DV agent honours `task.metadata.base_ref` (when present) over the session-level `worktree.baseRef` for both `git diff` ranges in test selection (D2) and `EnterWorktree` base resolution; the orchestrator passes `--base-ref` to `EnterWorktree` when invoked from a higher-level dispatcher (see `skills/agent-coordination/references/headless-dispatch.md`). When neither is set, the `worktree.baseRef` setting governs.
 
+##### Base-ref resolution order
+
+PL0 also mirrors the detected branch to `state.json .metadata.base_ref` unconditionally, because shell helpers cannot read Task-System metadata. Every reader — DV, `fn-preflight.sh continuity`, `fn-preflight.sh branch-name` — resolves through one order, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`, `state.json .git.base_branch`, `workspace.json .git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. There is no hardcoded literal at the end of that chain; an unresolved base is reported and the caller degrades non-blocking. Canonical statement: `handoff-protocol.md § metadata.base_ref`.
+
 ##### Background & shared-checkout rules
 
 Background subagents spawned via `claude agents` cannot escape their assigned worktree scope (the worktree-isolation guard covers them). Background-session dispatch recognises pre-existing git worktrees (e.g., Conductor `.context` workspaces, externally-managed worktree shells) instead of refusing to spawn with a duplicate-creation error — `Edit` is not blocked when `EnterWorktree` would have collided. A background session on a *shared* checkout (no isolated worktree of its own) is told upfront that edits are blocked until it runs `EnterWorktree` — the worktree contract is enforced at the start of the session rather than surfacing as a rejected edit mid-work.

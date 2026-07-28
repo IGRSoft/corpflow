@@ -70,7 +70,21 @@ The orchestrator pre-seeds both files at FN-gate time; the FN agent MUST **overw
   - **Issue resolved + body MISSING keyword** → exit 1; abort FN with `handoff.verdict: blocked`, write cause (resolved issue #, body excerpt, matched source rank) to `.context/errors/project-manager.md`, do NOT run `gh pr create`.
   - **No issue resolvable** → the helper appends the `pr_issue_link` `result:deferred` audit row and you proceed WITHOUT a closing line.
 
-  `fn-preflight.sh all --body <pr-body-file>` runs attachments → validate-pr → continuity in sequence.
+##### Body-composition gate
+
+  Run `fn-preflight.sh pr-body --body <pr-body-file>` after composing `$body`. It proves the body came out of the mandated pipeline rather than being hand-authored:
+
+  - **Sanitises the body in place**, reusing `publish-pl-issue.sh`'s own `sanitise_body` rule set, so a working-folder path cannot reach a published PR. The pre-sanitise text is snapshotted to `.context/logs/pr-body-<run_index>.presanitise.md`. Because the file is rewritten, this runs BEFORE `validate-pr` — the body whose `Closes #<n>` line is validated is the byte-identical body that reaches `gh pr create`.
+  - **Requires a `Test plan` heading** (ATX, any level, case-insensitive).
+  - **On a `requires_screenshots` run, requires the `visual_evidence_pr_emitted` audit row for the CURRENT run index**, and — when that row reports `result: "ok"` — a `## Visual evidence` section in the body. A row reporting `skipped` legitimately produced nothing, so no section is required.
+
+##### Body-composition gate — failure & scope
+
+  A non-zero exit means abort FN with `handoff.verdict: blocked`, write the cause (the helper's stderr line and the `pr_body_gate` audit reason) to `.context/errors/project-manager.md`, and do NOT run `gh pr create` — the same handling the missing-keyword arm above gets.
+
+  The gate **self-disables** under batch (`/megatask`) and incident (`--emergency`) routing: it emits a `pr_body_gate` `result: "skipped"` row with the detected reason, leaves the body untouched, and exits 0. Those pipelines keep their current behaviour byte-for-byte.
+
+  `fn-preflight.sh all --body <pr-body-file>` runs attachments → pr-body → validate-pr → continuity in sequence.
 
 #### Branch-continuity validation (runs BEFORE any merge/fast-forward/PR push)
 
@@ -89,6 +103,7 @@ The orchestrator pre-seeds both files at FN-gate time; the FN agent MUST **overw
 
 #### Final FN steps
 
+- **Branch name**: run `fn-preflight.sh branch-name` **before** the push — it renames an anonymous worktree branch to `<type>/<ticket>-<slug>`. Renaming after the push orphans the remote ref, which is why this is not part of `all` (that battery runs post-push, immediately before `gh pr create`). Never blocks: every outcome exits 0.
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
 

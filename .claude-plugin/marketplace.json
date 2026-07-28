@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Comprehensive 11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with developer review, security review, release engineering, incident response, and /megatask dependency-DAG batch orchestration",
-    "version": "3.36.1"
+    "version": "3.36.2"
   },
   "plugins": [
     {
       "name": "igrsoft",
       "source": "./",
       "description": "11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) with Task System integration, developer review, security review, release engineering, incident response, cross-plugin handoffs, and /megatask dependency-DAG batch orchestration",
-      "version": "3.36.1",
+      "version": "3.36.2",
       "author": {
         "name": "igrsoft",
         "url": "https://github.com/igrsoft"

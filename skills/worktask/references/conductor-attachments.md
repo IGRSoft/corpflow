@@ -67,7 +67,8 @@ On `OK`, run `gh pr create` using the data from `PR instructions.md`. On failure
 | Field | Source |
 |-------|--------|
 | Current branch | `git rev-parse --abbrev-ref HEAD` |
-| Target / base branch | `workspace.json § git.base_branch` (milestone/worktree mode); else `git symbolic-ref refs/remotes/origin/HEAD` (repo default) |
+| Renamed branch (pre-push) | `fn-preflight.sh branch-name` — `<type>/<ticket>-<slug>`; run between step 1 and `## 2. Push`. Idempotent no-op when already conventional, upstream-tracked, or on the integration branch |
+| Target / base branch | One resolution order, highest first: `$FN_BASE_REF`, `state.json § metadata.base_ref`, `state.json § git.base_branch`, `workspace.json § git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then unresolved (no literal fallback). Canonical: `handoff-protocol.md § state.json schema`; implemented in `fn-preflight.sh` `resolve_base_ref` |
 | Uncommitted change count | `git status --porcelain \| wc -l` |
 | Upstream tracked? | `git rev-parse --abbrev-ref --symbolic-full-name @{u}` (non-zero exit = no upstream) |
 
@@ -75,7 +76,8 @@ On `OK`, run `gh pr create` using the data from `PR instructions.md`. On failure
 
 | Field | Source |
 |-------|--------|
-| Conventional-commit type | Derived from `.context/<plan_file> § Goal` (resolve via `FN0.metadata.plan_file`; fallback: newest `.context/planning-*.md`) — feat/fix/refactor/perf/docs/chore/test/ci/build/style; falls back to `feat` |
+| Conventional-commit type | `state.json § facts.goal` via `fn-preflight.sh derive_type`; falls back to `feat`. Not the plan — no template emits a `## Goal` anchor |
+| Plan document (other fields) | `FN0.metadata.plan_file` (basename; `handoff-protocol.md § plan_file shape boundary`), fallback newest `.context/planning-*.md` |
 | Issue ref | `workspace.json § issue_number` (milestone mode) or `metadata.issue_ref` from PL0; else omit |
 | DR verdict | First "Approval Status" line in `.context/developer-review-N.md` (N from `run_index`) |
 | QA verdict | First "GO/NO-GO" line in `.context/testing-N.md` (N from `run_index`) |
@@ -134,6 +136,7 @@ If you have any skill related to creating PRs, invoke it now. Instructions there
 ~~~markdown
 - Self-review the diff with `mcp__conductor__GetWorkspaceDiff` (start `stat: true`, then drill into hot files). Look for: debug prints, commented-out code, hardcoded secrets/keys, unintended large binaries, unrelated formatting churn. If any are found, fix them and add a follow-up commit before continuing — do not push junk.
 - Confirm working tree is clean: `git status --porcelain` should be empty (or only intentional WIP). The worktask reports `<N>` uncommitted changes; reconcile any drift before pushing.
+- Rename the branch **before pushing**: `fn-preflight.sh branch-name` → `<type>/<ticket>-<slug>`. Renaming after a push orphans the remote ref. No-op when already conventional or upstream-tracked.
 
 ## 2. Push
 
@@ -176,7 +179,7 @@ Run `gh pr create --base <BASE_BRANCH>` with:
 #### Template part 5
 
 ~~~markdown
-  **Visual evidence section** (between `## Test plan` and `## Notes`): on a UI-change run, run `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and insert its stdout verbatim. The helper self-gates — it prints the `## Visual evidence` block (hosted image refs + manifest reference) when `metadata.requires_screenshots == true` AND captures exist, and prints **nothing** otherwise (flag false / no captures). Insert the block only when stdout is non-empty; never hand-author the section. Image hosting reuses the publish-helper host tiers (private/internal repos degrade to a non-broken note — no relative `.context/` refs ever reach the body). Invoke it unconditionally; the empty-stdout case cleanly omits the section.
+  **Visual evidence section** (between `## Test plan` and `## Notes`): on a UI-change run, run `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and insert its stdout verbatim. The helper self-gates — it prints the `## Visual evidence` block (hosted image refs + manifest reference) when `metadata.requires_screenshots == true` AND captures exist, and prints **nothing** otherwise (flag false / no captures). Insert the block only when stdout is non-empty; never hand-author the section. Image hosting reuses the publish-helper host tiers (private/internal repos degrade to a non-broken note — no relative `.context/` refs ever reach the body). Invoke it unconditionally; the empty-stdout case omits the section. `fn-preflight.sh pr-body` verifies the helper's `visual_evidence_pr_emitted` row for **this** run and blocks a body that dropped the block — a hand-authored body will not pass.
 
 ~~~
 

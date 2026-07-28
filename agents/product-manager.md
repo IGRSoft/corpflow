@@ -170,7 +170,11 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 
 #### Step 4 — state.json reset
 
-4. **state.json reset** (new run in existing `.context/`): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, `metadata.requires_screenshots` set to the detector's value (the channel `hooks/dv-screenshot-gate.sh` and `attach-visual-evidence.sh` read), and empty `facts.*` (preserves `version`, `worktask_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
+4. **state.json reset** (new run in existing `.context/`): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, `metadata.requires_screenshots` set to the detector's value (the channel `hooks/dv-screenshot-gate.sh` and `attach-visual-evidence.sh` read), `metadata.base_ref` set to the detected integration branch (see **Integration-branch detection** below), and empty `facts.*` (preserves `version`, `worktask_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
+
+##### Step 4 — plan_file shape
+
+Write the **path** shape into `state.json.plan_file` — `".context/planning-${N}.md"`, not the bare `<plan_file>` notation value. `<plan_file>` is a **basename** everywhere in this document; writing it here unprefixed is exactly how the prefix goes missing and the issue-publish helper loses the plan. See the `plan_file` shape boundary in `handoff-protocol.md`.
 
 #### Downstream propagation
 
@@ -178,7 +182,7 @@ When PL creates downstream stage tasks via `TaskCreate`, stamp **all** of the fo
 
 | Key | Value | Purpose |
 |---|---|---|
-| `metadata.plan_file` | `"planning-${N}.md"` | Pin active plan |
+| `metadata.plan_file` | `"planning-${N}.md"` | Pin active plan — **bare basename**, deliberately a different shape from `state.json.plan_file` (a workspace-relative path). See the `plan_file` shape boundary in `handoff-protocol.md § state.json schema`. |
 | `metadata.run_index` | `N` (integer) | Resolve `<basename>-${N}.md` artifacts |
 | `metadata.isolation` | `"worktree"` | File-writing stages (DV; megatask per-issue AR/DR/QA) always run in an isolated worktree (consumed by developer § D0.0, technical-lead DR check, workspace-modes.md). |
 
@@ -221,7 +225,7 @@ Reuse the complexity score from `### Dynamic Worktask Sizing`; stage code = the 
 
 ##### Notation
 
-Throughout this document, `<plan_file>` denotes the resolved plan filename for the current PL invocation (e.g. `planning-0.md`, `planning-3.md`).
+Throughout this document, `<plan_file>` denotes the resolved plan **basename** for the current PL invocation (e.g. `planning-0.md`, `planning-3.md`) — never a path. Wherever a path is needed, write `.context/<plan_file>`; that includes `state.json.plan_file`, which stores the path shape. See the `plan_file` shape boundary in `skills/worktask/references/handoff-protocol.md § state.json schema`.
 
 ### Stage Artifact Naming
 
@@ -235,7 +239,27 @@ Every stage writes `<basename>-N.md` where N = the `planning-N.md` index for thi
 - Write `.context/<plan_file>` with requirements and acceptance criteria
 - **Define test strategy** (what needs to be tested, existing tests to update)
 - Define scope, priorities, and dependencies
+- **Detect the integration branch once** and stamp it (see below) — DV must never silently fork from the wrong branch
 - **Create subsequent stage tasks** based on complexity assessment (see below) — set `metadata.plan_file` on each
+
+#### Integration-branch detection
+
+Run once, at PL0. Detection order — the remote's default-branch pointer, then the batch workspace record, then `master`:
+
+```bash
+BASE=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
+[ -z "$BASE" ] && BASE=$(jq -r '.git.base_branch // ""' workspace.json 2>/dev/null)
+[ -z "$BASE" ] && BASE=master
+```
+
+##### Where to stamp the detected branch
+
+Stamp the result in **two** places:
+
+- `task.metadata.base_ref` on PL0 and on every downstream task — **only when `$BASE` is not `master`**. DV reads this as the authoritative per-task base override (`agents/developer.md § Worktree Mode`).
+- `state.json .metadata.base_ref` — **unconditionally**, in the step-4 state reset. No shell script can read Task-System metadata, so this mirror is the only way `fn-preflight.sh resolve_base_ref` (rank 2) sees the value. Stamping it even in the `master` case keeps the field present for every reader.
+
+Reader resolution order is canonical in `handoff-protocol.md § metadata.base_ref`.
 
 #### `--no-gh-issue` opt-out
 

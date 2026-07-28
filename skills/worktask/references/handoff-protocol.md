@@ -560,6 +560,27 @@ properties:
   run_index: { type: integer, minimum: 0, default: 0 }
 ```
 
+#### plan_file shape boundary
+
+**`plan_file` shape boundary** — `state.json.plan_file` holds a **workspace-relative
+path** (`.context/planning-N.md`); `task.metadata.plan_file` holds a **bare
+basename** (`planning-N.md`). Both shapes are legal. Every reader MUST accept
+either: try the value as given, then its basename resolved against the directory
+holding `state.json`.
+
+This paragraph is the canonical statement; every other writer and reader site
+points here rather than restating the rule.
+
+#### metadata.base_ref
+
+The integration branch, mirrored by PL0 from `task.metadata.base_ref` so shell
+helpers (which cannot read Task-System metadata) can reach it. Resolution order for
+any reader, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`,
+`state.json .git.base_branch`, `workspace.json .git.base_branch`,
+`git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. There is no literal
+fallback: readers report unresolved and degrade non-blocking. Implemented in
+`skills/worktask/scripts/fn-preflight.sh` `resolve_base_ref`.
+
 #### stages
 
 ```yaml
@@ -793,6 +814,9 @@ computation) lives in `commands/worktask.md` Phase 1 step 3a — use it verbatim
 the JSON below shows the resulting shape:
 
 #### Seed shape (resulting JSON)
+
+`plan_file` here is the **path** shape; task metadata carries the basename shape. See
+the `plan_file` shape boundary under § state.json schema.
 
 ```json
 {
