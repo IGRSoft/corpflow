@@ -7,10 +7,26 @@ shared across assertions; temp dirs cleaned in tearDownClass.
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import unittest
 
 from benchmarkkit import generators
+
+
+def _swift_toolchain_usable():
+    """A swiftly shim stays on PATH after its toolchain is uninstalled, so
+    presence on PATH does not imply a usable toolchain."""
+    if not shutil.which("swift"):
+        return False
+    try:
+        return subprocess.run(
+            ["swift", "--version"],
+            capture_output=True,
+            timeout=60,
+        ).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 _HARNESS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PLUGIN_ROOT = os.path.dirname(os.path.dirname(_HARNESS))  # <root>/benchmark/harness -> <root>
@@ -18,7 +34,7 @@ _TEMPLATE = os.path.join(_PLUGIN_ROOT, "benchmark", "ttt-template")
 _ESTIMATE = os.path.join(_PLUGIN_ROOT, "skills", "estimation-methodology", "scripts", "estimate-calc.py")
 
 
-@unittest.skipUnless(shutil.which("swift"), "swift toolchain required (measurement instrument)")
+@unittest.skipUnless(_swift_toolchain_usable(), "working swift toolchain required (measurement instrument)")
 class Generators(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
