@@ -35,11 +35,14 @@
 # gist_raw_url_reachable, with every ASSET_* env mock inherited for free. Relative
 # .context/ refs are REJECTED (never render in PR/issue bodies; camo can't fetch
 # private/internal raw). none-tier emits note line, never broken ![](). Both
-# --post modes share public-gist privacy posture: ASSET_GIST_PUBLIC=1 (default)
-# creates world-readable gist; =0 opt-out creates secret/unlisted gist (still
-# URL-readable for camo). Neither preserves screenshot confidentiality; do not
-# capture secrets/tokens/PII (C3 capture policy). See publish-pl-issue.sh header
-# § AC1 Privacy posture for full rationale.
+# --post modes share the gist privacy posture: ASSET_GIST_PUBLIC is tri-state —
+# 1 forces a world-readable gist, 0 forces secret/unlisted, and empty (the
+# default) auto-derives from repo visibility, declining --public on a
+# PRIVATE/INTERNAL repo where it adds indexing without improving rendering.
+# Neither kind preserves screenshot confidentiality (camo fetches anonymously);
+# do not capture secrets/tokens/PII (C3 capture policy), and use
+# ASSET_HOST_MODE=none for material that must not leave the org. See
+# publish-pl-issue.sh header § AC1 Privacy posture for full rationale.
 #
 # Idempotency:
 #   --post issue: marked with <!-- visual-evidence:<worktask_id>:<run_index> -->
@@ -158,6 +161,16 @@ build_block() {
 
   local img_dir; img_dir=$(dirname "$mf")
   local out="" embed_count=0 num path cap kind src url bullets=""
+  # Per-bullet text stays short; the WHY is emitted once below (host_fail_note) so
+  # a 5-capture run does not repeat a paragraph five times.
+  local HOST_FAIL_HINT="not embeddable; see note below." host_fail=0
+  local host_fail_note
+  case "$(repo_visibility 2>/dev/null || printf '')" in
+    PRIVATE|INTERNAL)
+      host_fail_note="Could not host these inline. On a private/internal repo the raw tier is refused (camo fetches anonymously and would 404) and gists reject binary files, so the working path is GitHub's user-attachments store — install the uploader with \`gh extension install drogers0/gh-image\` and re-run, or drag the files into this body via the web UI. The captures are on disk at the manifest path." ;;
+    *)
+      host_fail_note="Hosting failed for the captures above; they remain on disk at the manifest path." ;;
+  esac
 
   while IFS="$(printf '\t')" read -r num path cap kind; do
     [ -z "$path" ] && continue
@@ -181,7 +194,8 @@ build_block() {
         url=$(WORKTASK_ID="$WORKTASK_ID" host_one_asset "$(basename "$path")" "$src" 2>/dev/null || true)
         if [ -z "$url" ]; then
           # Hosting miss for this asset → degrade to bullet (never a broken embed).
-          bullets="${bullets}- ${path} — inline hosting unavailable; see manifest."$'\n'
+          bullets="${bullets}- ${path} — ${HOST_FAIL_HINT}"$'\n'
+          host_fail=1
           continue
         fi
         out="${out}![dv-${num} ${cap}](${url})"$'\n'
@@ -205,11 +219,41 @@ EOF
   if [ "$HOST_TIER" = "none" ] || { [ -z "$out" ] && [ -z "$bullets" ]; }; then
     # none-tier (or nothing hostable): single note line, zero broken image refs.
     printf 'Screenshots persisted on disk; inline hosting unavailable — see manifest.\n'
+  elif [ "$host_fail" = "1" ]; then
+    # Explain the degradation once, in terms an operator can act on.
+    printf '\n%s\n' "$host_fail_note"
   fi
   # Manifest reference as a code-span path (relative links never resolve in
   # PR/issue bodies — ad7); emitted, not linked.
   printf '\nManifest: `%s`\n' "${BLOCK_MANIFEST_REF:-.context/images/$WORKTASK_ID/screenshots.md}"
   return 0
+}
+
+# Classify a zero-row outcome. "no_captures" means DV genuinely produced nothing;
+# "manifest_unparseable" means a manifest exists AND image files sit beside it, but
+# no table row parsed — i.e. the manifest does not follow the canonical schema
+#   | NN | slug | path | bytes | platform | adapter | caption | captured | ref |
+# (col2 MUST be two digits: `01`, not `1`). That case is a silent-evidence-loss
+# trap: the screenshots gate passes on file presence while the attach step no-ops,
+# so the PR ships with the evidence missing and nothing says so. Warn loudly and
+# audit distinguishably instead of reporting it as "no captures".
+manifest_diagnosis() {
+  local mf="$1"
+  [ -f "$mf" ] || { printf 'no_captures'; return 0; }
+  local dir imgs
+  dir=$(dirname "$mf")
+  imgs=$(find "$dir" -maxdepth 1 -type f \
+           \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) 2>/dev/null | wc -l | tr -d ' ')
+  if [ "${imgs:-0}" -gt 0 ]; then
+    printf 'manifest_unparseable'
+    echo "attach-visual-evidence: WARNING — $mf has $imgs image file(s) beside it but zero parseable table rows." >&2
+    echo "attach-visual-evidence: the manifest must use the canonical 9-column schema with a TWO-DIGIT index:" >&2
+    echo "attach-visual-evidence:   | # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |" >&2
+    echo "attach-visual-evidence:   | 01 | header | dv-01-header.png | 78683 | apple | apple_sim | after | <ts> | — |" >&2
+    echo "attach-visual-evidence: evidence was NOT attached. See skills/dv-screenshot-capture/references/examples/README.md" >&2
+    return 0
+  fi
+  printf 'no_captures'
 }
 
 # ---------- mode: --emit pr -------------------------------------------------
@@ -236,10 +280,12 @@ emit_pr() {
          '{worktask_id:$w, run_index:$r, captures:$c, host_tier:$t, reason:"emitted", dedupe_key:$dk}')"
   else
     rm -f "$_tier_tmp"
-    # No captures → empty emission.
+    # Zero rows → empty emission. Distinguish "nothing captured" from "captures on
+    # disk that the manifest failed to describe" (manifest_diagnosis warns on stderr).
+    local reason; reason=$(manifest_diagnosis "$mf")
     audit_av "visual_evidence_pr_emitted" "skipped" \
-      "$(jq -cn --arg w "$WORKTASK_ID" --argjson r "$RUN_INDEX" --arg dk "$dk" \
-         '{worktask_id:$w, run_index:$r, captures:0, host_tier:"none", reason:"no_captures", dedupe_key:$dk}')"
+      "$(jq -cn --arg w "$WORKTASK_ID" --argjson r "$RUN_INDEX" --arg dk "$dk" --arg reason "$reason" \
+         '{worktask_id:$w, run_index:$r, captures:0, host_tier:"none", reason:$reason, dedupe_key:$dk}')"
   fi
   return 0
 }
