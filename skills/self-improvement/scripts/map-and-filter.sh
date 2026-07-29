@@ -229,24 +229,69 @@ map_path() {
   esac
 
   # Rule 15 — tests
+  # Naming conventions are per-ecosystem, so the patterns have to be too: a
+  # Kotlin, TS, Go or Rust test file matched none of these and fell through to
+  # rule 17 DISCARD, dropping the QA signal it should have produced.
   case "$p" in
-    tests/* | spec/*)
+    tests/* | spec/* | test/*)
       printf '15\tagents/qa-engineer.md\n'
       return 0
       ;;
-    *Tests.swift | *_test.py)
+    *Tests.swift | *Test.swift)
+      printf '15\tagents/qa-engineer.md\n'
+      return 0
+      ;;
+    *_test.py | test_*.py)
+      printf '15\tagents/qa-engineer.md\n'
+      return 0
+      ;;
+    *Test.kt | *Tests.kt | *Spec.kt | *Test.java | *Tests.java)
+      printf '15\tagents/qa-engineer.md\n'
+      return 0
+      ;;
+    *.test.ts | *.test.tsx | *.test.js | *.test.jsx)
+      printf '15\tagents/qa-engineer.md\n'
+      return 0
+      ;;
+    *.spec.ts | *.spec.tsx | *.spec.js | *.spec.jsx)
+      printf '15\tagents/qa-engineer.md\n'
+      return 0
+      ;;
+    *_test.go | *_test.rs | *_test.sh | *.bats)
       printf '15\tagents/qa-engineer.md\n'
       return 0
       ;;
   esac
 
   # Rule 16 — config; special-case plugin.json
+  # Manifests and lockfiles across the stacks we build for; Package.swift was
+  # the only one named, so a gradle/go/cargo build change read as unclassified.
   case "$p" in
     plugin.json)
       printf '16\tagents/workflow-engineer.md\n'
       return 0
       ;;
-    *.json | *.toml | *.yml | *.yaml | Makefile | Package.swift)
+    *.json | *.toml | *.yml | *.yaml | *.ini | *.cfg | *.properties)
+      printf '16\t%s\n' "$dv_agent"
+      return 0
+      ;;
+    Makefile | CMakeLists.txt | *.cmake | Dockerfile)
+      printf '16\t%s\n' "$dv_agent"
+      return 0
+      ;;
+    Package.swift | Package.resolved | Podfile | *.podspec)
+      printf '16\t%s\n' "$dv_agent"
+      return 0
+      ;;
+    *.gradle | *.gradle.kts)
+      printf '16\t%s\n' "$dv_agent"
+      return 0
+      ;;
+    go.mod | go.sum | Cargo.lock | pom.xml | Gemfile | Gemfile.lock)
+      printf '16\t%s\n' "$dv_agent"
+      return 0
+      ;;
+    setup.py | setup.cfg | requirements.txt | requirements-*.txt)
       printf '16\t%s\n' "$dv_agent"
       return 0
       ;;
@@ -504,6 +549,28 @@ run_self_test() {
     "tests/foo_test.py	7	2" \
     "tests/foo_test.py	15	agents/qa-engineer.md	7	2" \
     "rule-15 test file"
+
+  # T10b — Rule 15: Kotlin test file outside tests/. Before the ecosystem
+  # broadening this fell through to rule 17 DISCARD and produced no row.
+  _run_test \
+    "agents/qa-engineer.md" \
+    "feature/profile/ProfileViewModelTest.kt	9	1" \
+    "feature/profile/ProfileViewModelTest.kt	15	agents/qa-engineer.md	9	1" \
+    "rule-15 kotlin test file"
+
+  # T10c — Rule 15: Go test file beside its source.
+  _run_test \
+    "agents/qa-engineer.md" \
+    "internal/server/handler_test.go	5	3" \
+    "internal/server/handler_test.go	15	agents/qa-engineer.md	5	3" \
+    "rule-15 go test file"
+
+  # T10d — Rule 16: Gradle build script reaches the DV agent, not DISCARD.
+  _run_test \
+    "agents/developer.md" \
+    "build.gradle.kts	6	2" \
+    "build.gradle.kts	16	agents/developer.md	6	2" \
+    "rule-16 gradle build script"
 
   # T11 — Multiple rows: one kept, one discarded
   _run_test \

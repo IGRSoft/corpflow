@@ -61,7 +61,7 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 
 ### Operable
 - Keyboard accessibility
-- Touch target sizes (44x44pt min)
+- Touch target sizes (platform minimum — see Common Issues Reference)
 - Focus management
 - Navigation consistency
 
@@ -78,7 +78,12 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 
 ## Platform-Specific Checks
 
-### iOS/macOS
+Run only the sections selected by `--platform`; `all` runs every section. This command
+covers the three UI platforms — `systems`, `backend`, and `ai` work has no user-facing
+surface to audit and is out of scope.
+
+### Apple
+
 - VoiceOver support
 - Dynamic Type support
 - Reduce Motion respect
@@ -86,7 +91,17 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 - Increase Contrast support
 - Switch Control compatibility
 
+### Android
+
+- TalkBack support — announcements, custom actions, live regions
+- `contentDescription` on every non-decorative image and icon-only control
+- Touch targets at least 48x48dp
+- Focus order and traversal (`accessibilityTraversalBefore` / `After`)
+- Compose `semantics {}` on custom composables — merged vs. cleared semantics
+- Font-scale and display-size respect: `sp` for text, no fixed-`dp` type
+
 ### Web
+
 - Screen reader compatibility
 - Keyboard navigation
 - ARIA implementation
@@ -145,11 +160,9 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 <!-- …continued: findings, recommendations, next steps -->
 ## Platform-Specific Findings
 
-### iOS
+<!-- one subsection per platform in scope; emit nothing for platforms --platform excluded -->
+### [Platform in scope]
 - [Finding]
-- [Finding]
-
-### macOS
 - [Finding]
 
 ## Recommendations
@@ -184,17 +197,25 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 - UI components: 3:1
 
 ### Touch Targets
-- Minimum: 44x44pt
-- Recommended: 48x48pt with spacing
+
+| Platform | Minimum | Recommended |
+|----------|---------|-------------|
+| Apple | 44x44pt | 44x44pt plus 8pt spacing |
+| Android | 48x48dp | 48x48dp plus 8dp spacing |
+| Web | 24x24 CSS px (WCAG 2.2 AA) | 44x44 CSS px (AAA) |
 
 ### Focus Management
 - Visible focus indicator
 - Logical focus order
 - Focus trap in modals
 
-### Dynamic Type
-- Support all text sizes
-- Layout adapts gracefully
+### Text Scaling
+
+Dynamic Type on Apple, font scale / display size on Android, browser zoom and `rem`-based
+type on web. Same three checks everywhere:
+
+- Support the full user-selectable size range
+- Layout adapts gracefully (reflow, no clipping)
 - No truncation of critical content
 
 ## Worktask Integration

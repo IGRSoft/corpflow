@@ -91,10 +91,14 @@ byte-equivalent to the pre-change behaviour (R1) — same tools, same `source="l
 
 `build_run_sim` past ~2 min auto-backgrounds — await the completion notification before navigating/screenshotting (`agent-coordination § MCP Auto-Background`).
 
+### Per-platform capture
+
 | Platform | Worktask |
 |----------|----------|
-| iOS | `mcp__XcodeBuildMCP__build_run_sim` → navigate to target screen → `mcp__XcodeBuildMCP__screenshot` |
+| Apple | `mcp__XcodeBuildMCP__build_run_sim` (or `build_run_macos`) → navigate to target screen → `mcp__XcodeBuildMCP__screenshot` |
 | Web | Load chrome tools via `ToolSearch({ query: "select:mcp__claude-in-chrome__computer" })` → screenshot |
+| Android | `adb devices` to confirm an attached emulator/device → launch the app → navigate to target screen → `adb exec-out screencap -p > <path>` |
+| Other (systems / backend / ai) | No live UI surface to drive. Reuse the DV capture recorded in `screenshots.md`; if none maps, render the change via `skills/dv-screenshot-capture/scripts/cli-fallback.sh` and compare behaviour, not pixels |
 
 ## Visual Comparison
 

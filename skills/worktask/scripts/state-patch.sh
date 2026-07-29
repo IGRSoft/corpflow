@@ -210,11 +210,13 @@ disk_guard() {
 
   if ((avail_gb < DISK_MIN_GB)); then
     log_msg ERROR "DISK_HALT: only ${avail_gb}GB free (< ${DISK_MIN_GB}GB) on $root"
-    printf >&2 'HALT: only %dGB free (< %dGB) on %s.\nReclaim space:\n  swift package clean\n  rm -rf ~/Library/Developer/Xcode/DerivedData/*\n' \
+    # The guard runs on every platform, so the advice names the build-cache class
+    # rather than one stack: the reader picks the line that matches their tree.
+    printf >&2 'HALT: only %dGB free (< %dGB) on %s.\nReclaim space from this project stack build caches, e.g.\n  node_modules/, .gradle/, target/, build/, __pycache__/, .venv/\n  Apple: swift package clean; rm -rf ~/Library/Developer/Xcode/DerivedData/*\n' \
       "$avail_gb" "$DISK_MIN_GB" "$root"
     exit 2
   elif ((avail_gb < DISK_WARN_GB)); then
-    log_msg WARN "DISK_WARN: ${avail_gb}GB free (< ${DISK_WARN_GB}GB) on $root — consider swift package clean"
+    log_msg WARN "DISK_WARN: ${avail_gb}GB free (< ${DISK_WARN_GB}GB) on $root — consider clearing this project stack build caches"
   fi
 }
 

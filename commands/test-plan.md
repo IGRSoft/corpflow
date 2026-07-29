@@ -27,7 +27,7 @@ Generate a comprehensive test plan from requirements or code changes. Creates st
 - `--from-file <path>` - Generate from requirements file
 - `--coverage` - Include coverage targets
 - `--automation` - Focus on automation-ready test cases
-- `--platform <apple|android|web|all>` - Target platform context (default: all)
+- `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all; detected per `skills/shared/platform-detection.md`)
 
 ## Examples
 
@@ -60,17 +60,38 @@ Generate a comprehensive test plan from requirements or code changes. Creates st
 
 ### Template — testing framework
 
+Fill the table with the **detected platform's** row only — one framework column per plan, not a
+survey. Detect the platform per `skills/shared/platform-detection.md`, then take the row from
+`skills/shared/testing-strategy.md § Framework by platform`. If the repo already uses a
+different framework than the row suggests, the repo wins; note the deviation.
+
 ```markdown
 <!-- …continued: testing framework -->
 ## Testing Framework
 
 | Test Type | Framework | Example |
 |-----------|-----------|---------|
-| Unit Tests | Swift Testing | `@Suite`, `@Test`, `#expect` |
-| UI Tests | XCTest | `XCUIApplication`, `XCTestCase` |
-
-**Note**: XCUITest requires XCTest framework; all other tests should use Swift Testing.
+| Unit Tests | <project unit framework> | <canonical syntax> |
+| Integration Tests | <project integration framework> | <canonical syntax> |
+| UI / E2E Tests | <project UI framework, or "n/a — no UI layer"> | <canonical syntax> |
 ```
+
+#### Framework rows by platform
+
+```markdown
+<!-- …continued: framework rows to choose from -->
+| Platform | Unit | Integration | UI / E2E |
+|----------|------|-------------|----------|
+| apple | Swift Testing (`@Suite`, `@Test`, `#expect`) | Swift Testing + in-memory doubles | XCTest (`XCUIApplication`) |
+| android | JUnit 5 + MockK, Turbine | Robolectric, in-memory Room | Espresso / Compose UI test |
+| web | Vitest or Jest | Testing Library + MSW | Playwright |
+| systems | GoogleTest/Catch2, Unity/CMocka, pytest, bats | `ctest` targets | n/a |
+| backend | Go `testing`+testify, JUnit 5, Vitest, pytest | Testcontainers | Contract tests, k6 |
+| ai | pytest | pytest + recorded fixtures | Eval harness with thresholds |
+```
+
+**Note (Apple only)**: XCUITest requires the XCTest framework, so UI tests stay on XCTest while
+unit tests use Swift Testing. No other platform has this split.
 
 ### Template — test cases and selection markers
 

@@ -62,7 +62,7 @@ See `skills/shared/stage-codes.md` for stage details.
 | Option | Effect |
 |--------|--------|
 | `--priority [High\|Medium\|Low]` | Task priority |
-| `--platform <apple\|android\|web\|all>` | Target platform |
+| `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 11-stage worktask |

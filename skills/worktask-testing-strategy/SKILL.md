@@ -14,7 +14,10 @@ related:
 
 Guidance for planning tests during PL and AR stages of the igrsoft worktask, before implementation begins.
 
-Note: This skill focuses on worktask-integrated testing planning. For platform-specific testing patterns (Swift Testing, XCTest), see `apple-developer:testing-strategy`.
+Note: This skill focuses on worktask-integrated test *planning*. Framework and syntax specifics
+for every platform live in one place — `${CLAUDE_SKILL_DIR}/../shared/testing-strategy.md`
+(§ Framework by platform). Deeper per-framework guidance is the dev plugin's job, reached via
+`/<plugin>:gen-tests`.
 
 For per-stage test templates (PL, AR, DV), see `${CLAUDE_SKILL_DIR}/references/stage-templates.md`
 
@@ -24,7 +27,7 @@ Ensure developers know WHAT tests to write before coding begins, so tests are de
 
 ## Testing Framework
 
-For Swift Testing and XCTest framework syntax, AAA pattern, and DV/QA boundary, see `${CLAUDE_SKILL_DIR}/../shared/testing-strategy.md`.
+For the per-platform framework matrix, AAA pattern, naming conventions, and DV/QA boundary, see `${CLAUDE_SKILL_DIR}/../shared/testing-strategy.md`. Name the concrete framework in the plan — never leave it implied.
 
 ## Test Strategy by Feature Type
 
@@ -35,12 +38,19 @@ For Swift Testing and XCTest framework syntax, AAA pattern, and DV/QA boundary, 
 | Refactor | Verify existing pass | No new | No |
 | Logic update | Update affected + new edge cases | If boundaries change | No |
 | API endpoint | Request/response validation | Contract tests | Optional |
-| UI component | ViewModel tests | Snapshot tests | Optional |
+| UI component | State-holder tests (view model, store, hook) | Snapshot tests | Optional |
 
-**UI test selectors:** prefer stable accessibility identifiers over brittle text or
-coordinate lookups — in XCUITest, query by `accessibilityIdentifier` (set it in the view)
-rather than by visible label or screen position, so tests survive copy changes and layout
-shifts.
+### UI test selectors
+
+Prefer a stable, explicitly-set identifier over brittle text or coordinate lookups, so tests
+survive copy changes and layout shifts. Set the identifier in the view; never query by visible
+label or screen position.
+
+| Platform | Set in the view | Query by |
+|----------|-----------------|----------|
+| apple | `accessibilityIdentifier` | XCUITest element queries |
+| android | `Modifier.testTag(...)` | `onNodeWithTag` (Compose), `withTagValue` (Espresso) |
+| web | `data-testid` (or an ARIA role + accessible name) | `getByTestId` / `getByRole` |
 
 ## Multi-substate UI screens (camera / photo / result)
 
@@ -50,7 +60,7 @@ Screens that cycle a single view through several substates (e.g. capture → rev
 
 For each substate the screen renders, assert:
 
-1. Every primary control is present AND hittable — on-screen, within window bounds, not clipped or overlapped. Query by `accessibilityIdentifier`, then assert `element.isHittable`, not mere existence.
+1. Every primary control is present AND hittable — on-screen, within window bounds, not clipped or overlapped. Query by the platform's stable identifier (table above), then assert hittability, not mere existence: `element.isHittable` (XCUITest), `assertIsDisplayed()` + `assertHasClickAction()` (Compose), `toBeVisible()` + `toBeEnabled()` (Playwright).
 2. Each substate-transition control performs its transition AND its inverse returns the prior state — e.g. a RETAKE control from the review state returns the live-capture state.
 
 One method may sweep every substate or you may write one per substate; either way, assert every primary control hittable in every substate it should appear.

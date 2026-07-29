@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with Task System integration, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 3.38.0 · Requires Claude Code 2.1.220+**
+**Plugin 3.39.0 · Requires Claude Code 2.1.220+**
 
 ## Features
 
@@ -127,7 +127,7 @@ Scope and pipeline flags:
 | `--with-design` | Invoke `designer` during PL (without the flag, Designer is skipped even for UI work) |
 | `--sequential` | DC waits for QA instead of running in parallel |
 | `--priority High\|Medium\|Low` | Task priority |
-| `--platform apple\|android\|web\|all` | Target platform context |
+| `--platform apple\|android\|web\|systems\|backend\|ai\|all` | Target platform context |
 | `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish step |
 
 ### `/megatask`
@@ -138,7 +138,7 @@ Scope and pipeline flags:
 | `/megatask N --issues 12,15` | Subset of milestone N |
 | `/megatask --issues 12,15,18` | Explicit issue array, milestone-agnostic |
 | `--secure` | Run each per-issue worktask on the 11-stage path |
-| `--platform apple\|android\|web\|all` | Target platform context |
+| `--platform apple\|android\|web\|systems\|backend\|ai\|all` | Target platform context |
 | `--dry-run` | Stop after the DAG is built — no worktrees, no PRs |
 
 ## Pipeline Sizing
@@ -317,11 +317,18 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/prompt-audit` | Audit prompt effectiveness |
 
 #### App Store / Publishing (`appstore-`)
+
+**These three commands are Apple-specific and are the only ones that are.** They target
+App Store Connect and the Apple listing format, and have no cross-platform equivalent.
+Every other command in this plugin is platform-neutral and routes through
+`skills/shared/platform-detection.md`. `/appstore-screenshots` takes `--apple-platform`
+(an Apple device class), deliberately distinct from the plugin-wide `--platform`.
+
 | Command | Description |
 |---------|-------------|
-| `/appstore-info` | Scaffold App Store listing content from README |
-| `/appstore-iap` | Set up App Store Connect in-app purchases |
-| `/appstore-screenshots` | Generate App Store screenshots |
+| `/appstore-info` | Scaffold App Store listing content from README (Apple-only) |
+| `/appstore-iap` | Set up App Store Connect in-app purchases (Apple-only) |
+| `/appstore-screenshots` | Generate App Store screenshots (Apple-only) |
 
 ### Skills (25 total)
 - `agent-coordination` — Multi-agent coordination, handoffs, parallel execution, error escalation

@@ -41,9 +41,14 @@ PLAN_FILE=""
 DESIGNS_DIR="${DESIGNS_DIR:-.context/designs}"
 
 # UI keyword set (S3) — word-boundary, case-insensitive.
-UI_KEYWORDS='SwiftUI|UIKit|AppKit|storyboard|xib|screen|layout|styling|CSS|HTML|component|animation|theme|view'
-# UI path classes (S4).
-UI_PATH_CLASSES='Views/|Screens/|UI/|Components/|\.storyboard|\.xib|\.tsx|\.jsx|\.vue|\.svelte|\.css|\.scss|\.html'
+# Android terms carry their own weight here: S4 admits `android` as a platform,
+# so without them an Android UI change produced no signal at all and
+# requires_screenshots never fired.
+UI_KEYWORDS='SwiftUI|UIKit|AppKit|storyboard|xib|screen|layout|styling|CSS|HTML|component|animation|theme|view|Compose|Composable|Jetpack|RecyclerView|ViewBinding|drawable'
+# UI path classes (S4). Android resource dirs and the lowercase `ui/` package
+# convention are listed explicitly — the match is case-sensitive, so `UI/` alone
+# never matched an Android tree.
+UI_PATH_CLASSES='Views/|Screens/|UI/|Components/|\.storyboard|\.xib|\.tsx|\.jsx|\.vue|\.svelte|\.css|\.scss|\.html|res/layout|res/drawable|res/values|res/menu|/ui/|\.kt'
 
 emit() {
   # $1=bool ("true"/"false"), $2=signals-json-array, $3=rationale
@@ -231,6 +236,35 @@ MD
   cp /dev/null "$td/.context/designs/figma-registry.md"
   out=$(DESIGNS_DIR="$td/.context/designs" bash "$0" "$td/nonui.md" --platform all)
   _assert "t6-S2-designs" true "$out"
+
+  # t7 — S4 on Android: an Android UI path with no S3 keyword in the prose. This
+  # is the case that used to return false and skip capture entirely.
+  cat > "$td/android-path.md" <<'MD'
+---
+ui_visual_check: false
+---
+# Plan
+## requirements
+- REQ-1: move the profile package under app/src/main/java/com/acme/ui/Profile.kt
+## scope
+In: app/src/main/java/com/acme/ui/Profile.kt. Out: server.
+MD
+  out=$(DESIGNS_DIR="$td/.context/designs.absent" bash "$0" "$td/android-path.md" --platform android)
+  _assert "t7-android-S4-pathclass" true "$out"
+
+  # t8 — S3 on Android: Compose vocabulary with no path class named.
+  cat > "$td/android-kw.md" <<'MD'
+---
+ui_visual_check: false
+---
+# Plan
+## requirements
+- REQ-1: add a Composable for the profile summary
+## scope
+In: profile feature. Out: networking.
+MD
+  out=$(DESIGNS_DIR="$td/.context/designs.absent" bash "$0" "$td/android-kw.md" --platform android)
+  _assert "t8-android-S3-keyword" true "$out"
 
   rm -rf "$td"
   echo "detect-ui-change: self-test summary — pass=$pass fail=$fail"

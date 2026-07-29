@@ -28,7 +28,7 @@ Generate a comprehensive QA summary report for completed work, including test re
 - `--include-screenshots` - Include test failure screenshots
 - `--verbose` - Include all test details
 - `--summary-only` - Executive summary only
-- `--platform <apple|android|web|all>` - Target platform context (default: all)
+- `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all; detected per `skills/shared/platform-detection.md`)
 
 ## Examples
 
@@ -88,10 +88,10 @@ Generate a comprehensive QA summary report for completed work, including test re
 | Source | Count | Examples |
 |--------|-------|----------|
 | `@test-required` | N | AppLaunchTests.testLaunchSucceeds |
-| `metadata.always_required_tests` | N | AuthSmokeTests.testLoginRoundtrip |
+| `metadata.always_required_tests` | N | test_auth_smoke.py::test_login_roundtrip |
 | `@depends-on:` matches | N | PaymentRefundTests.testRefundFlow ← `PaymentService` |
-| `covers-changed-files` | N | UserRepositoryTests ← `UserRepository.swift` |
-| Module-level (scoped only) | N | All NetworkingTests/* |
+| `covers-changed-files` | N | userRepository.test.ts ← `userRepository.ts` |
+| Module-level (scoped only) | N | All `:core:networking` tests |
 | QA additions | N | <new edge-case tests> |
 | **Excluded** | N | <reason summary; e.g., "no marker, mode=build-only"> |
 ```

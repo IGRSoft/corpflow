@@ -64,9 +64,28 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
+# comment_style_for <path>: the comment syntax family of a file, by extension.
+#
+# A single C-family regex scored every `#`-commented language at 0% comments, so
+# a wholly-commented .py sailed through the gate it was supposed to trip. The
+# style must track the extension, not the majority language in the repo.
+# ---------------------------------------------------------------------------
+comment_style_for() {
+  case "${1##*.}" in
+    py) printf 'hash' ;;
+    *) printf 'cfamily' ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
 # density_of <file>: echoes the integer comment percentage, or nothing when the
 # file has no countable body. Line-based on purpose — it must agree with the
 # ratio a human gets from grep, not with a Swift parser.
+#
+# Python docstrings are deliberately NOT counted. Recognizing them needs a
+# multi-line toggle, and the diff arm only ever sees added lines: one unpaired
+# `"""` in a hunk would score every later line as comment and block an author
+# for prose they did not write. A `#` undercount is the safe direction here.
 #
 # The leading contiguous comment block (license header) is skipped: counting it
 # would push every short file over the ceiling for boilerplate nobody wrote.
@@ -74,6 +93,7 @@ fi
 added_density_of() {
   _root="$1"
   _file="$2"
+  _style=$(comment_style_for "$_file")
   # Added lines only — the agent owns what it wrote, not what it inherited.
   # Whole-file density would block an agent for touching one of the many
   # pre-existing files already over the ceiling (measured: 85 of 341 in a real
@@ -83,25 +103,27 @@ added_density_of() {
   # An untracked file has no diff, so its whole body is "added" — correct: a
   # new file is entirely the author's.
   if git -C "$_root" ls-files --error-unmatch "$_file" >/dev/null 2>&1; then
-    git -C "$_root" diff HEAD -- "$_file" 2>/dev/null | awk '
+    git -C "$_root" diff HEAD -- "$_file" 2>/dev/null | awk -v style="$_style" '
+      BEGIN { pat = (style == "hash") ? "^#" : "^(//|/\\*|\\*/|\\*)" }
       /^\+\+\+/ { next }
       /^\+/ {
         line = substr($0, 2)
         sub(/^[ \t]+/, "", line)
         if (line == "") { next }
         total++
-        if (line ~ /^(\/\/|\/\*|\*\/|\*)/) { comment++ }
+        if (line ~ pat) { comment++ }
       }
       END { if (total > 0) { printf "%d %d", (comment * 100) / total, total } }
     '
   else
-    awk '
+    awk -v style="$_style" '
+      BEGIN { pat = (style == "hash") ? "^#" : "^(//|/\\*|\\*/|\\*)" }
       {
         line = $0
         sub(/^[ \t]+/, "", line)
         if (line == "") { next }
         total++
-        if (line ~ /^(\/\/|\/\*|\*\/|\*)/) { comment++ }
+        if (line ~ pat) { comment++ }
       }
       END { if (total > 0) { printf "%d %d", (comment * 100) / total, total } }
     ' "$_root/$_file" 2>/dev/null
@@ -253,6 +275,38 @@ if [ "$SELF_TEST" -eq 1 ]; then
   echo 'struct Tiny { let v: Int }' >>"$_tmp/Tiny.swift"
   _out=$(run_gate "$(read_stdin)" "$_tmp/.context" "$_tmp")
   [ -z "$_out" ] || { echo "dv-comment-density-gate: self-test FAIL (small edit blocked)"; _fail=1; }
+
+  rm -f "$_tmp/Bloated.swift" "$_tmp/Tiny.swift"
+
+  # 5. Hash-comment language: a bloated .py must block. Under the C-family-only
+  #    regex this file scored 0% and passed, which is the defect these two cases
+  #    pin down.
+  {
+    printf '# Essay line %s narrating history the standard bans.\n' 1 2 3 4 5 6 7 8 9 10
+    printf '# Contract prose %s restating the signature.\n' 1 2 3 4 5 6 7 8 9 10
+    printf '# Provenance %s: AC-1, REQ-2, issue tag.\n' 1 2 3 4 5 6 7 8 9 10
+    echo 'class Bloated:'
+    printf '    field%s = 0\n' 1 2 3 4 5 6 7 8
+    printf '    def calc%s(self): return self.field1 * %s\n' 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8
+  } >"$_tmp/bloated.py"
+  _out=$(run_gate "$(read_stdin)" "$_tmp/.context" "$_tmp")
+  printf '%s' "$_out" | jq -e '
+    .decision == "block" and (.reason | test("bloated\\.py"))
+  ' >/dev/null 2>&1 || { echo "dv-comment-density-gate: self-test FAIL (bloated .py did not block)"; _fail=1; }
+
+  # 6. Lean .py -> must pass. Guards the other direction: Python code lines must
+  #    not be miscounted as comments.
+  rm -f "$_tmp/bloated.py"
+  {
+    printf '# Terse WHY on a non-obvious literal %s.\n' 1 2 3 4 5 6
+    echo 'class Lean:'
+    printf '    field%s = 0\n' 1 2 3 4 5 6 7 8 9 10
+    printf '    def calc%s(self): return self.field1 * %s\n' 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10 10
+    printf '    def derived%s(self): return self.field1 + %s\n' 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10 10
+    printf '    def extra%s(self): pass\n' 1 2 3
+  } >"$_tmp/lean.py"
+  _out=$(run_gate "$(read_stdin)" "$_tmp/.context" "$_tmp")
+  [ -z "$_out" ] || { echo "dv-comment-density-gate: self-test FAIL (lean .py blocked)"; _fail=1; }
 
   [ "$_fail" -eq 0 ] || exit 1
   echo "dv-comment-density-gate: self-test OK"

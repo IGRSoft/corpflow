@@ -63,15 +63,29 @@ Maximum: **5 screenshots** per run (skill enforces; 6th call returns `error: "sc
 
 ## Live-drive verification (`ui_visual_check`)
 
-When the plan sets `ui_visual_check: true`, static evidence alone does NOT satisfy the DV exit gate. Unit/state-machine tests and host-rendered `#Preview` snapshots (the `apple-canvas` adapter) verify structure, not runtime presentation — same-frame SwiftUI update faults, control overflow, and dropped state transitions can pass both yet still fail on device. Before handoff to DR/QA, DV MUST live-drive the running app.
+When the plan sets `ui_visual_check: true`, static evidence alone does NOT satisfy the DV exit gate.
+
+The principle is platform-independent: **a static or host-rendered snapshot verifies structure, not runtime presentation.** A component rendered outside the running app never executes the app's real update, layout and navigation path, so same-frame update faults, control overflow, and dropped state transitions survive it — as they survive a passing unit or state-machine test. Before handoff to DR/QA, DV MUST drive the real running app.
 
 ### Live-drive steps
 
-1. Build and run on a live simulator (the sim-booting `apple` adapter) — never use `apple-canvas`/`#Preview` as the sole evidence source for a `ui_visual_check` row.
+1. Build and run the app on its real runtime surface (booted simulator, emulator, device, or browser session) — a host/static render is never the sole evidence for a `ui_visual_check` row.
 2. Drive the app through EACH rendered substate the acceptance criteria name (default, error, empty, loading, success, and every result/review state), tapping through the real transitions rather than jumping to a state in isolation.
 3. Confirm each primary control is on-screen and hittable and that transition controls actually present the next state, THEN capture from that live-driven state.
 
-A `ui_visual_check` row whose only evidence is a `#Preview`/canvas render or a passing unit test is incomplete — recapture from a live-driven run.
+A `ui_visual_check` row whose only evidence is a static render or a passing unit test is incomplete — recapture from a live-driven run.
+
+### What does not count, per platform
+
+Each row is the same rule instantiated; the left column is never sufficient on its own.
+
+| Platform | Not sufficient alone | Required |
+|----------|---------------------|----------|
+| apple | `#Preview` / `ImageRenderer` canvas render (the `apple-canvas` adapter) | app running on a booted simulator or device |
+| web | a Storybook or other static component render | the page driven in a real browser session |
+| android | a Compose `@Preview` render | app running on an emulator or device |
+
+Platforms with no rendered UI surface (systems, backend, ai) do not set `ui_visual_check` — this gate does not apply to them.
 
 ## Adapters
 
@@ -90,60 +104,84 @@ capture(slug: string, platform: string, args: object) → {
 
 ### Adapter selection rule
 
+One table lookup for every platform. A platform whose primary adapter can be unusable registers a **degraded-mode predicate** — a hook the dispatcher calls without knowing what it tests. No platform gets a branch of its own here.
+
+#### Dispatch table
+
 ```python
-# When state.platform == "apple", choose between sim-booting `apple` adapter
-# and host-rendering `apple-canvas` adapter (no sim boot, ImageRenderer-based).
-# Canonical pseudocode — see references/apple-canvas.md for the full contract.
-if state.platform == "apple":
-    if args.get("force_canvas") or sim_unavailable(state):
-        adapter = apple_canvas_adapter
-    else:
-        adapter = apple_adapter
-else:
-    adapter = ({
-        "web":     web_adapter,
-        "android": android_adapter,
-    }).get(state.platform, cli_fallback_adapter)
+# Entry = the adapter that normally runs + an optional degraded pair. The
+# predicate belongs to the platform adapter, keeping platform-specific
+# evidence out of this layer.
+ADAPTERS = {
+    "apple":   {"primary": apple_adapter,
+                "degraded_if": apple_adapter.degraded,
+                "degraded":    apple_canvas_adapter},
+    "web":     {"primary": web_adapter},
+    "android": {"primary": android_adapter},
+}
+
+def select_adapter(state, args):
+    entry = ADAPTERS.get(state.platform)
+    if entry is None:
+        return cli_fallback_adapter
+    predicate = entry.get("degraded_if")
+    if predicate and predicate(state, args):
+        return entry["degraded"]
+    return entry["primary"]
 ```
 
 Unknown or `"all"` platform → `cli_fallback_adapter`. Emit audit row `screenshot_platform_fallback` with `reason: "unknown_platform"`.
 
-#### sim_unavailable(state) definition
+#### Degraded-mode predicate contract
 
-Boolean, evaluated per `apple-canvas` selection:
+`degraded_if(state, args) → bool`. Total, side-effect free, and safe to call when its platform's tooling is absent — a predicate that cannot decide returns `False` (run the primary adapter and let the normal fallback ladder handle a real failure).
 
-```python
-def sim_unavailable(state) -> bool:
-    # True when ANY of:
-    #   1. state.facts.simulator_blocked == True (explicit project marker)
-    #   2. Most recent xcodebuild log under .context/logs/ contains the regex
-    #      r"framework not found .* iphonesimulator" (xcframework missing sim slice — C1)
-    #   3. state.facts.last_sim_boot_failed == True (set by adapter on prior boot failure)
-    return (
-        state.facts.get("simulator_blocked") is True
-        or _grep_recent_log(r"framework not found .* iphonesimulator")
-        or state.facts.get("last_sim_boot_failed") is True
-    )
-```
-
-#### force_canvas trigger inputs
-
-Trigger inputs for `force_canvas`: `metadata.requires_canvas_screenshot` (plan-level) or `args.force_canvas` (skill-call-level). When both unset and `sim_unavailable(state)` is False, the legacy `apple_adapter` runs unchanged.
+Only `apple` registers one today; `web` and `android` have no degraded adapter to fall to, so they omit the pair and go straight to the ladder. A platform gains degraded mode by adding the two keys — no dispatcher change.
 
 ### Per-adapter behavior
 
 #### apple, web, android adapters
 
-| Adapter | Backing tool | Concrete behavior | Failure → fallback |
-|---------|-------------|-------------------|--------------------|
-| `apple` | `mcp__XcodeBuildMCP__screenshot` | Boot/locate simulator (per `args.simulator`), navigate best-effort, call MCP screenshot tool. Save to target path. | XcodeBuildMCP unavailable → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "xcodebuildmcp_unavailable"`. |
-| `web` | Playwright (`npx playwright screenshot <url>`) or Chrome MCP | Launch headless browser, navigate to `args.url`, capture at `args.viewport`. | Playwright not installed → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "playwright_unavailable"`. |
-| `android` | `adb exec-out screencap -p` | Verify device via `adb devices`, then `adb exec-out screencap -p > <path>`. | `adb` not on PATH → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "adb_unavailable"`. |
+These three **delegate the capture to the platform's own agent**. igrsoft no longer holds direct platform tool grants (XcodeBuildMCP and friends); the platform plugin does. So this skill asks that agent to produce a file at the target path, then stats the path itself to fill the `{path, bytes, ok, error}` contract — the return shape is unchanged.
+
+##### Platform delegation table
+
+| Adapter | Delegate to | Requested behavior | No file → fallback |
+|---------|-------------|--------------------|--------------------|
+| `apple` | `Task(apple-developer:ios-developer)` or the matching `macos-`/`tvos-`/`watchos-`/`visionos-developer` | Boot/locate sim (per `args.simulator`), navigate best-effort, screenshot to target path. | → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "xcodebuildmcp_unavailable"`. |
+| `web` | `Task(frontend-developer:frontend-developer)` | Launch headless browser (Playwright or Chrome MCP), navigate to `args.url`, capture at `args.viewport` to target path. | → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "playwright_unavailable"`. |
+| `android` | `Task(android-developer:android-developer)` | Verify a device (`adb devices`), then `adb exec-out screencap -p > <target path>`. | → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "adb_unavailable"`. |
+
+##### Delegated-capture result handling
+
+The delegate's prose reply is never the evidence — **the file is**. After the `Task` returns, stat the target path:
+
+- File exists, non-empty → `{path, bytes: <stat>, ok: true, error: null}`. Apply the size budget as usual.
+- No file, empty file, or the `Task` itself errored → fall through the ladder to `cli_fallback` exactly as a missing tool did before. When the platform agent could not be reached at all, use `reason: "delegation_unavailable"` instead of the tool-specific reason above.
+
+The error enum is unchanged: a delegated capture that fails still surfaces as `"capture_failed"` (or `"tool_missing"` once `cli_fallback` also bottoms out).
 
 #### apple-canvas adapter
 
 - **Backing tool**: `swift run SnapshotHost` (host-side SPM executable) + `Skill("preview-ensurer")`.
 - **Behavior**: Scaffold `tools/SnapshotHost/` from template if missing → invoke `preview-ensurer` to auto-add `#Preview` macros to modified View files → `swift run --package-path tools/SnapshotHost SnapshotHost --view <ModuleType> --output <path> [--size WxH] [--scheme light|dark]`. macOS host first (`metadata.canvas_destination=macos-host`, default); iOS sim opt-in (`canvas_destination=ios-sim`). Emits `canvas_render` + `preview_added` audit rows. See `references/apple-canvas.md` for the full recipe and `references/preview-ensurer.md` for the heuristics summary.
+
+##### apple degraded-mode predicate
+
+Registered as `ADAPTERS["apple"]["degraded_if"]`. It is Apple-adapter-owned on purpose: the xcodebuild log scrape below is exactly the platform detail the generic dispatcher must not carry.
+
+```python
+def degraded(state, args) -> bool:
+    return bool(
+        args.get("force_canvas")                         # skill-call-level opt-in
+        or state.metadata.get("requires_canvas_screenshot")   # plan-level opt-in
+        or state.facts.get("simulator_blocked") is True       # explicit project marker
+        or _grep_recent_log(r"framework not found .* iphonesimulator")
+        or state.facts.get("last_sim_boot_failed") is True    # set on a prior boot failure
+    )
+```
+
+The log scrape reads the most recent xcodebuild log under `.context/logs/` and catches the xcframework-missing-sim-slice case (C1). When every clause is false, the sim-booting `apple` adapter runs unchanged.
 
 ##### apple-canvas failure → fallback
 
@@ -165,6 +203,20 @@ Trigger inputs for `force_canvas`: `metadata.requires_canvas_screenshot` (plan-l
 | `scripts/size-budget.sh` | `bash scripts/size-budget.sh --path <file> --worktask-id <id> [--slug <kebab>] [--project-root <dir>]` | Enforces the 5-step size budget (stat→pngquant→oversize/→warn→audit). Emits `size_audit: path=… bytes=… verdict=…` to stdout. |
 
 Both scripts implement `--self-test` (no network, no git required). Exit codes and stdout contract are documented in each script's shdoc header.
+
+### Adapter maturity (read the tables honestly)
+
+The adapters are **not** at parity, and the tables above should not be read as if they were. What actually ships:
+
+| Adapter | Shipped as | Notes |
+|---------|-----------|-------|
+| `cli/fallback` | Executable script (`scripts/cli-fallback.sh`) + `references/cli-fallback.md` | The floor; always available |
+| `apple-canvas` | Templates + `Skill("preview-ensurer")` + a 237-line `references/apple-canvas.md` | The most specified adapter |
+| `apple` | Prose procedure (delegated `Task`) | No script |
+| `web` | Prose procedure (delegated `Task`), one table row | No script, no reference doc |
+| `android` | Prose procedure (delegated `Task`), one table row | No script, no reference doc |
+
+`web` and `android` are one row of described procedure each. Nothing in this skill executes or verifies them — treat a failure there as under-specified tooling, not agent error, and fall through to `cli_fallback`.
 
 ### Scripts vs reference docs
 
@@ -282,7 +334,7 @@ Budget constants: **warn ≥200 KB**, **hard fail ≥500 KB**, **cap 5 files/run
 |---------|-----------|-------------------|
 | `metadata.requires_screenshots: false` AND zero captures | DV completion checklist | Write `screenshots.md` with skip rationale. DV proceeds. NO `missing_screenshot_artifact` error. |
 | `metadata.requires_screenshots: true` (default) AND zero captures | DV completion checklist | DV FAILS with `missing_screenshot_artifact`. Append `## DV[N] Retry [X/3]` block to `.context/errors/developer.md` (classification: `logic`). Retry: attempt `cli_fallback` once. |
-| Platform tool missing (XcodeBuildMCP / Playwright / adb) | `error: "tool_missing"` from adapter | Fall back to `cli_fallback`. Audit `screenshot_platform_fallback`. Continue. |
+| Platform capture produced no file (delegate unreachable, or its tooling — XcodeBuildMCP / Playwright / adb — missing) | Target path absent or empty after the delegated `Task`; `error: "tool_missing"` from adapter | Fall back to `cli_fallback`. Audit `screenshot_platform_fallback`. Continue. |
 
 ### Fallback-floor, budget, and invocation failures
 
@@ -343,6 +395,13 @@ Array max 5 items. Eviction: cleared on worktask archival (FN/ST), not within a 
 
 | `action` | When | Required `metadata` keys |
 |----------|------|--------------------------|
-| `canvas_render` | Each `apple-canvas` adapter invocation (one row per phase) | `phase ∈ {"scaffold","complete","retry"}`, `view`, `destination ∈ {"macos-host","ios-sim"}`, `output_path`, `bytes`, `duration_ms`, `swift_version`, `swift_syntax_version` (optional) |
+| `canvas_render` | Each canvas-adapter invocation (one row per phase) | `phase ∈ {"scaffold","complete","retry"}`, `view`, `destination`, `output_path`, `bytes`, `duration_ms` |
 | `preview_added` | `preview-ensurer` added a `#Preview` block to source | `file`, `view_type`, `mock_strategy ∈ {"binding-constant","optional-nil","mock-found","preview-tbd"}`, `lines_added` |
 | `visual_diff_run` | QA executes RMSE diff (via `scripts/visual-diff.sh`) | `reference`, `candidate`, `metric: "RMSE"`, `value_percent`, `threshold_percent`, `verdict ∈ {"pass","fail_visual_diff"}` |
+
+##### Adapter-scoped `canvas_render` extras
+
+The keys above are the contract every canvas adapter satisfies. Toolchain identifiers are the reporting adapter's own business and are optional additions, never contract-level:
+
+- `apple-canvas` also records `swift_version` and `swift_syntax_version`, and uses `destination ∈ {"macos-host","ios-sim"}`.
+- A future canvas adapter on another platform records its own toolchain keys and its own `destination` values instead.

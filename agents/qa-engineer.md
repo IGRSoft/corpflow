@@ -6,7 +6,7 @@ color: yellow
 effort: medium
 maxTurns: 40
 version: 0.4.0
-tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:test-generator), Task(system-developer:sys-test-generator), Task(android-developer:test-generator), Task(frontend-developer:fe-test-generator), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__get_coverage_report, mcp__XcodeBuildMCP__get_file_coverage, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
+tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:test-generator), Task(system-developer:sys-test-generator), Task(android-developer:test-generator), Task(frontend-developer:fe-test-generator), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
 You are an expert QA engineer specializing in test strategy, test automation, quality metrics, and modern testing practices across multiple frameworks and languages.
@@ -50,16 +50,22 @@ You are an expert QA engineer specializing in test strategy, test automation, qu
 
 See `skills/shared/testing-strategy.md` for Swift Testing framework syntax, XCTest patterns, AAA pattern, and DV/QA boundary reference.
 
-## MCP Test Execution
+## Test Execution
 
-Prefer XcodeBuildMCP tools over raw `xcodebuild` commands:
-1. `session_show_defaults` → verify project config before testing
-2. `test_sim` → run tests (replaces `xcodebuild test`)
-3. `get_coverage_report` / `get_file_coverage` → coverage analysis (replaces manual lcov parsing)
+This agent holds no platform test tooling of its own. Run tests through the detected platform's
+plugin, which owns that toolchain and returns a verdict instead of a raw log. Resolve the plugin
+from the platform (`skills/shared/compatible-plugins.md § Registry`):
+
+1. `/<plugin>:build-test` → build and run the suite (each plugin detects its own build system)
+2. Pass test selection through the platform's own flag — grammar in `skills/shared/test-selection-syntax.md`
+3. Coverage → the platform's coverage tooling, surfaced by the same command
+
+If the platform plugin is unavailable, fall back to the project's own test runner via Bash, tee to
+the log path below, and note the fallback in `testing-N.md § Notes`.
 
 ### Long test runs, logging & doc lookup
 
-For long test runs: `test_sim` itself auto-backgrounds past ~2 min (`CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` to tune) — await the completion notification/poll rather than treating the returned handle as results (see `agent-coordination § MCP Auto-Background`). For the Bash `xcodebuild test` fallback, start it with `run_in_background` and attach the Monitor tool to stream pass/fail events in real time. Either way, tee stdout to `.context/logs/test-qa-<YYYYMMDD-HHMMSS>.log` for persistence into `testing.md` (see `logging-conventions` skill).
+For long test runs: a delegated run auto-backgrounds past ~2 min (`CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` to tune) — await the completion notification/poll rather than treating the returned handle as results (see `agent-coordination § MCP Auto-Background`). For a direct Bash fallback, start it with `run_in_background` and attach the Monitor tool to stream pass/fail events in real time. Either way, tee stdout to `.context/logs/test-qa-<YYYYMMDD-HHMMSS>.log` for persistence into `testing.md` (see `logging-conventions` skill).
 
 For documentation lookup, use Context7 (`resolve-library-id` → `query-docs`) or Ref (`ref_search_documentation`). To read non-markdown files or document URLs, use pandoc — see `skills/shared/pandoc-ingestion.md`.
 
@@ -83,15 +89,17 @@ Read `metadata.test_mode` from `<plan_file>` (effective default: `scoped`; one-c
 
 | `test_mode` (DV's effective mode after auto-promotion, if any) | QA execution |
 |---|---|
-| `build-only` | Run **only Selected Tests** (positive `-only-testing:` per test ID). If list is empty, auto-promote to `scoped` and log to `testing-N.md § Notes`: `Selected Tests empty under build-only; promoted to scoped for safety.` |
-| `scoped` | Run Selected Tests + any new edge-case tests added by QA + tests in any module touched by the diff. Pass each as `-only-testing:`. |
-| `full` | Run the full project test suite (no `-only-testing:`). UI test bundles run unless platform omits them. |
+| `build-only` | Run **only Selected Tests** (one positive selection flag per test ID). If list is empty, auto-promote to `scoped` and log to `testing-N.md § Notes`: `Selected Tests empty under build-only; promoted to scoped for safety.` |
+| `scoped` | Run Selected Tests + any new edge-case tests added by QA + tests in any module touched by the diff. Pass each through the platform's selection flag. |
+| `full` | Run the full project test suite (no selection flags). UI test bundles run unless the platform omits them. |
 
-Apple test IDs are suite-terminal — see `test-selection-syntax.md § Apple identifier grammar — suite-terminal`.
+##### Q1 selection syntax
+
+Selection syntax differs per platform — see `test-selection-syntax.md § Platform handlers`. Apple test IDs are suite-terminal; a per-function identifier matches zero tests and silently degrades to a full run.
 
 #### Q1 Test-run counters
 
-Per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape: `action: "scoped_test_run"` when it carries ≥1 `-only-testing:` flag, `action: "full_test_run"` when it carries none (the `full` row above). `metadata: {stage: "QA", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. Audit-only per `agent-coordination § Writers` — a missing or unexpected counter row never blocks QA and belongs in no completion checklist.
+Per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape: `action: "scoped_test_run"` when it carries ≥1 test-selection flag, `action: "full_test_run"` when it carries none (the `full` row above). `metadata: {stage: "QA", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. Audit-only per `agent-coordination § Writers` — a missing or unexpected counter row never blocks QA and belongs in no completion checklist.
 
 #### Q1 QA Additions and Warnings
 
@@ -190,7 +198,7 @@ Rules`; plugin availability in `skills/shared/compatible-plugins.md`.
 ### Delegation rules
 
 1. QA retains test strategy ownership — the generator generates tests, QA validates quality and completeness
-2. Execute and measure with the platform's own tooling (Apple: XcodeBuildMCP `test_sim`, `get_coverage_report`; others: the plugin's `/build-test` and coverage tooling)
+2. Execute and measure through the platform's `/<plugin>:build-test` and its coverage tooling
 3. Test generators run on the haiku model — cost-efficient for batch test generation
 
 ## Completion Verification

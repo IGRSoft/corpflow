@@ -121,12 +121,13 @@ live in `skills/shared/platform-detection.md § Detection Rules`; plugin availab
 | backend | `backend-developer:be-security-auditor` | OWASP API Top 10, authz boundaries, injection, secret handling |
 | ai | `ai-engineer:ai-security-auditor` | Prompt injection, training/inference data leakage, model supply chain |
 
+#### Ownership and merge
+
 SR stage retains ownership and sign-off authority in every case. Auditor findings merge into
-`security-review.md` under a per-platform subsection.
+`security-review-N.md` under a per-platform subsection. The domain checklists below are what you
+hand the auditor and what you verify came back covered — one per platform, all equal weight.
 
-### Apple detail
-
-When reviewing Apple platform projects (`.xcodeproj`, `.xcworkspace`, `Package.swift` with SwiftUI/UIKit), consult `apple-developer:security-auditor` for platform-specific analysis:
+### Platform detail — Apple
 
 | Domain | What to Review |
 |--------|---------------|
@@ -138,7 +139,60 @@ When reviewing Apple platform projects (`.xcodeproj`, `.xcworkspace`, `Package.s
 | Privacy Manifest | Required reason APIs, tracking domains |
 | Data Protection | File protection classes for sensitive data |
 
-SR stage retains ownership and sign-off authority. Apple security-auditor findings merge into `security-review.md` under an **Apple Platform** subsection.
+### Platform detail — Android
+
+| Domain | What to Review |
+|--------|---------------|
+| Keystore | Key/credential storage, StrongBox, biometric-bound keys |
+| Exported components | `android:exported` on activities/services/receivers/providers, permission guards |
+| Intents | Intent redirection, implicit-intent leakage, PendingIntent mutability |
+| Network security config | Cleartext traffic, trust anchors, pinning |
+| Storage | Scoped storage, EncryptedSharedPreferences, backup/extraction rules |
+| Permissions | Runtime-permission flow, minimal manifest set, graceful denial |
+| WebView | JavaScript interfaces, file access, loaded-URL validation |
+
+### Platform detail — Web
+
+| Domain | What to Review |
+|--------|---------------|
+| XSS | Output encoding, `dangerouslySetInnerHTML`/`v-html`, DOM sinks, sanitizer use |
+| CSP & headers | CSP directives and nonce strategy, HSTS, frame-ancestors, CORS scope |
+| Token storage | Access/refresh token location, cookie flags (HttpOnly, SameSite, Secure) |
+| Supply chain | Advisories against the committed lockfile, install scripts, CDN + SRI |
+| Client trust boundary | No authorization decided in the browser; server re-validates everything |
+| Build output | Secrets inlined at build time, published source maps |
+
+### Platform detail — Backend
+
+| Domain | What to Review |
+|--------|---------------|
+| Authz boundaries | Per-endpoint checks, object ownership (IDOR), tenant isolation |
+| Injection | SQL/NoSQL/command/template injection, parameterized queries, ORM escape hatches |
+| OWASP API Top 10 | BOLA/BFLA, mass assignment, unrestricted resource consumption |
+| Secrets | Sourcing and rotation; none in images, config commits, or logs |
+| Sessions & tokens | JWT validation (alg, aud, exp), refresh/rotation, revocation path |
+| Data handling | Encryption at rest and in transit, PII in logs and error bodies |
+
+### Platform detail — Systems
+
+| Domain | What to Review |
+|--------|---------------|
+| Memory safety | Bounds, ownership/lifetime, use-after-free, uninitialized reads |
+| Sanitizers | ASan/UBSan/TSan/MSan findings triaged rather than suppressed |
+| CWE Top 25 | Each finding mapped to a CWE with an exploitability judgment |
+| Integer safety | Overflow, signedness, truncation on size and length arithmetic |
+| Hardening flags | `_FORTIFY_SOURCE`, stack protector, RELRO, PIE, CFI |
+| Process & paths | argv/env injection, TOCTOU, path traversal, temp-file creation |
+
+### Platform detail — AI/ML
+
+| Domain | What to Review |
+|--------|---------------|
+| Prompt injection | Untrusted content reaching instructions; tool-call gating and allow-lists |
+| Data leakage | Secrets/PII in prompts, traces, logs, eval sets, fine-tuning data |
+| Model supply chain | Weight and dataset provenance, unsafe deserialization (pickle), registry integrity |
+| Output handling | Model output treated as untrusted input before execution or rendering |
+| Access & cost | Key scoping, per-tenant quotas, rate limits on inference paths |
 
 ## Differentiation from Related Roles
 

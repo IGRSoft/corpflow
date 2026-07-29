@@ -1,7 +1,7 @@
 ---
 name: appstore-screenshots
-description: Generate professional App Store screenshots from AppStore/ folder for iOS, macOS, tvOS, watchOS
-argument-hint: '[--platform ios|macos|tvos|watchos|all] [--lang en|ua]'
+description: 'Apple-only. Generate professional App Store screenshots from the AppStore/ folder for iOS, macOS, tvOS, and watchOS.'
+argument-hint: '[--apple-platform ios|macos|tvos|watchos|all] [--lang en|ua]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write, Bash, mcp__pencil__open_document, mcp__pencil__batch_design, mcp__pencil__batch_get, mcp__pencil__get_screenshot, mcp__pencil__snapshot_layout, mcp__pencil__find_empty_space_on_canvas, mcp__pencil__get_variables, mcp__pencil__set_variables, mcp__pencil__get_guidelines, mcp__pencil__get_style_guide_tags, mcp__pencil__get_style_guide
 related:
@@ -15,21 +15,25 @@ related:
 
 # App Store Screenshots Command
 
+> **Apple-only.** This command targets App Store listing assets and has no equivalent on
+> other platforms. Its `--apple-platform` flag selects an Apple device class and is
+> deliberately *not* the plugin-wide `--platform <apple|android|web|systems|backend|ai>`.
+
 Generate professional App Store screenshots as `.pen` files using Pencil MCP. Reads features from `AppStore/{lang}/info.md`, uses screenshots from `AppStore/images/`, and applies `bg.png` as background.
 
 ## Usage
 
 ```
 /appstore-screenshots
-/appstore-screenshots --platform ios
-/appstore-screenshots --platform macos --lang ua
-/appstore-screenshots --platform all
+/appstore-screenshots --apple-platform ios
+/appstore-screenshots --apple-platform macos --lang ua
+/appstore-screenshots --apple-platform all
 /appstore-screenshots --dry-run
 ```
 
 ## Options
 
-- `--platform <ios|macos|tvos|watchos|all>` — Target platform (default: `ios`)
+- `--apple-platform <ios|macos|tvos|watchos|all>` — Target platform (default: `ios`)
 - `--lang <en|ua>` — Language for feature copy from info.md (default: `en`)
 - `--path <dir>` — Project root directory (default: current working directory)
 - `--dry-run` — Preview slide plan without generating .pen files
@@ -101,10 +105,10 @@ For each screenshot, generate a **Headline** (3-6 words) and **Subtitle** (6-12 
 
 ### Step 5 — Select Platform Devices
 
-Based on `--platform` flag, select device sets from the `appstore-screenshots` skill:
+Based on `--apple-platform` flag, select device sets from the `appstore-screenshots` skill:
 
-| Platform | Devices | Orientation | Layout | .pen file |
-|----------|---------|-------------|--------|-----------|
+| Apple platform | Devices | Orientation | Layout | .pen file |
+|----------------|---------|-------------|--------|-----------|
 | `ios` | 7 iPhones + 7 iPads | portrait | screenshot with text | `ios-phones.pen` + `ios-ipads.pen` |
 | `macos` | 3 Mac sizes | landscape | screenshot with text | `macos.pen` |
 | `tvos` | 2 Apple TV sizes | landscape | full-bleed image | `tvos.pen` |
@@ -162,11 +166,11 @@ Print summary:
 ## Examples
 
 ```bash
-/appstore-screenshots                              # iOS (default)
-/appstore-screenshots --platform all               # all Apple platforms
-/appstore-screenshots --platform macos --lang ua   # macOS, Ukrainian copy
-/appstore-screenshots --dry-run                    # plan only, no files
-/appstore-screenshots --path ~/projects/MyApp      # specific project dir
+/appstore-screenshots                                    # iOS (default)
+/appstore-screenshots --apple-platform all               # all Apple device classes
+/appstore-screenshots --apple-platform macos --lang ua   # macOS, Ukrainian copy
+/appstore-screenshots --dry-run                          # plan only, no files
+/appstore-screenshots --path ~/projects/MyApp            # specific project dir
 ```
 
 ## Integration
@@ -175,6 +179,6 @@ This command is used:
 - At the **RE stage** — generate screenshots before App Store submission
 - After `/appstore-info` scaffolds the AppStore/ folder
 - When preparing a new app release or major version update
-- When adding platform support (e.g., adding macOS screenshots to an iOS app)
+- When adding an Apple device class (e.g., adding macOS screenshots to an iOS app)
 
 Target: $ARGUMENTS

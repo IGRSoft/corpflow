@@ -7,7 +7,7 @@ effort: high
 maxTurns: 80
 isolation: worktree
 version: 0.8.0
-tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), Task(system-developer:system-developer), Task(system-developer:c-developer), Task(system-developer:cpp-developer), Task(system-developer:python-developer), Task(system-developer:bash-developer), Task(system-developer:sys-code-fixer), Task(system-developer:sys-test-generator), Task(android-developer:android-developer), Task(android-developer:android-phone-developer), Task(android-developer:kotlin-architector), Task(android-developer:code-fixer), Task(android-developer:test-generator), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(frontend-developer:vue-developer), Task(frontend-developer:svelte-developer), Task(frontend-developer:angular-developer), Task(frontend-developer:typescript-developer), Task(frontend-developer:css-developer), Task(frontend-developer:fe-code-fixer), Task(frontend-developer:fe-test-generator), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(backend-developer:go-developer), Task(backend-developer:jvm-backend-developer), Task(backend-developer:python-backend-developer), Task(backend-developer:api-designer), Task(backend-developer:database-engineer), Task(backend-developer:be-code-fixer), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-engineer), Task(ai-engineer:llm-engineer), Task(ai-engineer:ml-engineer), Task(ai-engineer:mlops-engineer), Task(ai-engineer:ai-code-fixer), Task(ai-engineer:ai-test-generator), mcp__XcodeBuildMCP__session_show_defaults, mcp__XcodeBuildMCP__session_set_defaults, mcp__XcodeBuildMCP__discover_projs, mcp__XcodeBuildMCP__list_schemes, mcp__XcodeBuildMCP__build_sim, mcp__XcodeBuildMCP__build_run_sim, mcp__XcodeBuildMCP__test_sim, mcp__XcodeBuildMCP__clean, mcp__XcodeBuildMCP__list_sims, mcp__XcodeBuildMCP__boot_sim, mcp__XcodeBuildMCP__screenshot, mcp__XcodeBuildMCP__show_build_settings, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
+tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), Task(system-developer:system-developer), Task(system-developer:c-developer), Task(system-developer:cpp-developer), Task(system-developer:python-developer), Task(system-developer:bash-developer), Task(system-developer:sys-code-fixer), Task(system-developer:sys-test-generator), Task(android-developer:android-developer), Task(android-developer:android-phone-developer), Task(android-developer:kotlin-architector), Task(android-developer:code-fixer), Task(android-developer:test-generator), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(frontend-developer:vue-developer), Task(frontend-developer:svelte-developer), Task(frontend-developer:angular-developer), Task(frontend-developer:typescript-developer), Task(frontend-developer:css-developer), Task(frontend-developer:fe-code-fixer), Task(frontend-developer:fe-test-generator), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(backend-developer:go-developer), Task(backend-developer:jvm-backend-developer), Task(backend-developer:python-backend-developer), Task(backend-developer:api-designer), Task(backend-developer:database-engineer), Task(backend-developer:be-code-fixer), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-engineer), Task(ai-engineer:llm-engineer), Task(ai-engineer:ml-engineer), Task(ai-engineer:mlops-engineer), Task(ai-engineer:ai-code-fixer), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
 You are a dynamic platform developer that analyzes context and routes to the appropriate specialized developer agent based on the target platform.
@@ -35,7 +35,7 @@ Every constraint below names the artifact that proves compliance; absent evidenc
 
 ### Test execution
 
-- DO NOT re-run the full suite to reverify a fix between iterations — DV runs only `Executed Tests (DV)`; full-suite regression is QA's gate, not DV's. This holds even when the composed dispatch prompt asks for it. `development-N.md § Decisions` MUST record the resolved `test_mode`, and every DV test invocation logged in `§ Tool Invocations` MUST carry `-only-testing:` flags — required even when `test_mode` is `full` (§ Apple identifiers — suite-terminal); QA is the stage that runs unflagged when `full`.
+- DO NOT re-run the full suite to reverify a fix between iterations — DV runs only `Executed Tests (DV)`; full-suite regression is QA's gate, not DV's. This holds even when the composed dispatch prompt asks for it. `development-N.md § Decisions` MUST record the resolved `test_mode`, and every DV test invocation logged in `§ Tool Invocations` MUST carry the platform's test-selection flags (`-only-testing:` on Apple, `--tests` on Gradle, `-t`/`-k`/`-run` elsewhere — see `skills/shared/test-selection-syntax.md`) — required even when `test_mode` is `full`; QA is the stage that runs unflagged when `full`.
 
 ### Security & documentation
 
@@ -88,26 +88,53 @@ Read `skills/shared/platform-detection.md` on platform ambiguity or when you nee
 
 UI vs non-UI defaults: apple/android/web work is UI by default (set `metadata.requires_screenshots: true`, capture via the platform adapter); systems/backend/ai work is non-UI by default (`requires_screenshots: false`, build/test transcripts under `.context/logs/` are the Build Evidence — for ai, eval reports and metric tables). Per-platform adapter detail and review-only specialists are in `skills/shared/platform-detection.md`.
 
-## MCP Build Verification
+## Build Verification
 
-When building/testing Apple code directly (not delegating to apple-developer agents):
+This agent holds **no platform build tooling of its own**. Every build and test runs through the
+detected platform's plugin, which owns that platform's toolchain, MCP servers, and log handling.
+Resolve the plugin from the platform (`skills/shared/compatible-plugins.md § Registry`).
 
-### Step 1 — Warmup + verify
+### Step 1 — Resolve the build entry point
 
-1. **Warmup + verify.** Read `state.json → mcp_session.xcode_defaults`. If present AND `mcp_session.warmed_at` is within the last 30 minutes, skip `session_show_defaults` — the orchestrator already warmed and cached the result. Otherwise, call `mcp__XcodeBuildMCP__session_show_defaults` once to verify project/scheme/simulator. The orchestrator should already have warmed XcodeBuildMCP before delegating (see `worktask § Pre-DV MCP warmup`); this call is the second line of defence for older orchestrator versions or any path where the warmup did not fire.
-   - **Never call `list_sims` or `list_schemes`** unless `session_show_defaults` returns incomplete data (missing scheme or simulator). If you must call them, cache the result in `state.json → mcp_session.schemes` / `mcp_session.simulators` for downstream stages.
+Each registered dev plugin exposes `/<plugin>:build-test`, which detects the project's build
+system, builds it, and runs its tests in one call. It absorbs the build log and returns a verdict
+plus the relevant error — which is why this agent must not run the toolchain directly. Raw build
+output is the largest avoidable context cost in the pipeline.
 
-#### Step 1 failure handling
+| Platform | Build & test entry point |
+|----------|--------------------------|
+| apple | `/apple-developer:build-test` |
+| android | `/android-developer:build-test` |
+| web | `/frontend-developer:build-test` |
+| systems | `/system-developer:build-test` |
+| backend | `/backend-developer:build-test` |
+| ai | `/ai-engineer:build-test` |
 
-   - If the call fails and the error message matches the canonical `MCP_UNAVAILABLE_RE` pattern (see `agent-coordination § MCP Unavailability Detection`), retry up to **2×** with 8-second waits between attempts (covers `npx -y xcodebuildmcp@latest` cold-start; total budget ~16 s). Errors that do NOT match the pattern are real bugs — do not retry, re-raise.
-   - After exhausting all 3 attempts (1 + 2 retries), write one `audit.jsonl` line `action: "mcp_unavailable"` with `metadata: {server: "XcodeBuildMCP", reason: <error>}`, switch to the Bash fallback for the rest of the stage, and record the fallback in `.context/development-N.md § Decisions` (one line: `XcodeBuildMCP unreachable; using Bash xcodebuild fallback — <reason>`) so QA/DR see it. Do NOT abort the stage.
+Invoke it through the platform's implementation agent (the `Task(...)` grants above), or via the
+`Skill` tool when the command is directly reachable. Pass the target path, and `--no-test` when
+only a compile check is needed.
 
-### Steps 2–3 — Build & test
+### Step 2 — Build and test
 
-2. **Build.** Use `mcp__XcodeBuildMCP__build_sim` or `build_run_sim`. If warmup failed, substitute `xcodebuild -project … -scheme … -destination …` via Bash and tee output to the same `.context/logs/build-developer-<ts>.log` path so QA/DR are unaffected.
-3. **Test.** Use `mcp__XcodeBuildMCP__test_sim`. If warmup failed, substitute `xcodebuild test -project … -scheme … -destination …` via Bash and tee to `.context/logs/test-developer-<ts>.log`. **Test Selection Gate**: see step D2 below for the full protocol. The `test_sim` invocation receives positive `-only-testing:<TestID>` flags (one per Selected Test), or none when `test_mode=full`. Never use blanket `-skip-testing:`.
+1. **Build.** Call the platform's `build-test` with `--no-test` for a compile-only gate, or without
+   it to build and test in one pass. Tee any direct Bash invocation you do make to
+   `.context/logs/build-developer-<ts>.log` so QA/DR read the same path regardless of platform.
+2. **Test.** Use the same entry point without `--no-test`. **Test Selection Gate**: see step D2
+   below. Pass the Selected Tests through the platform's own selection syntax — the per-platform
+   grammar is in `skills/shared/test-selection-syntax.md`; never use a blanket skip flag.
+3. **Record.** Note the entry point used in `.context/development-N.md § Decisions`.
 
-> MCP builds/tests past ~2 min auto-background — await the completion notification before reading `.context/logs/build-developer-*.log` / `test-developer-*.log`; the returned handle is not the result. See `agent-coordination § MCP Auto-Background`.
+### Step 3 — When the platform plugin is unavailable
+
+If the platform's plugin is not installed, fall back to the project's own build command via scoped
+Bash (its manifest names it), tee to the same log paths, and record one line in
+`.context/development-N.md § Decisions`: `<plugin> unavailable; used direct <tool> — <reason>`.
+Write one `audit.jsonl` line `action: "plugin_unavailable"` with
+`metadata: {plugin: "<name>", reason: <error>}`. Do NOT abort the stage.
+
+> Delegated builds past ~2 min auto-background — await the completion notification before reading
+> `.context/logs/build-developer-*.log` / `test-developer-*.log`; the returned handle is not the
+> result. See `agent-coordination § MCP Auto-Background`.
 
 ## Worktask Integration
 
@@ -157,15 +184,19 @@ When building/testing Apple code directly (not delegating to apple-developer age
 
   DV runs ONLY `Executed Tests (DV)`; QA runs the broader Selected list. `build-only`: build only, no tests at DV. `scoped`/`full`: build + run `Executed Tests (DV)` (sanity check on what DV touched); QA runs the module/full scope.
 
-  **Auto-promotion**: Executed empty AND Selected non-empty AND `test_mode ≠ build-only` → run the smoke set, record `auto_executed: smoke_set` in `§ Decisions`. No marker handler (Android/Web) AND `test_mode ∈ {build-only, scoped}` → auto-promote to `full`, record `auto_promoted_mode: full` (plan `test_mode` not rewritten).
+  **Auto-promotion**: Executed empty AND Selected non-empty AND `test_mode ≠ build-only` → run the smoke set, record `auto_executed: smoke_set` in `§ Decisions`. No marker handler for the platform AND `test_mode ∈ {build-only, scoped}` → auto-promote to `full`, record `auto_promoted_mode: full` (plan `test_mode` not rewritten).
 
-###### Apple identifiers — suite-terminal
+###### Selection syntax is per platform
 
-  **Apple**: pass each Executed test as `-only-testing:<Target>/<Suite>` to `test_sim` — **suite-terminal**; per-function identifiers (`/testFoo`, `/testFoo()`) are forbidden (nested `@Suite` types legitimately yield three segments — the rule is suite-*terminal*, not two-segment), because a Swift Testing `@Test` id carries the function's parentheses and `@Test(arguments:)` a per-argument suffix, so the per-function form matches zero tests and degrades to a full run. Flags are required even for `full` (DV runs the Executed subset; no blanket `-skip-testing:`). UI bundles run only when in `Executed Tests (DV)`; broader UI execution is QA's, gated on `ui_visual_check=true`.
+  Pass each Executed test through the platform's own selection flag. The per-platform grammar — including which identifier forms are valid — is canonical in `skills/shared/test-selection-syntax.md § Platform handlers`; do not infer it from another platform's shape. Flags are required even for `full` (DV runs the Executed subset); never use a blanket skip flag. UI bundles run only when in `Executed Tests (DV)`; broader UI execution is QA's, gated on `ui_visual_check=true`.
+
+###### Apple caveat — suite-terminal identifiers
+
+  The selection rule that most often bites: Apple identifiers are **suite-terminal** — `-only-testing:<Target>/<Suite>`. Per-function forms (`/testFoo`, `/testFoo()`) are forbidden, because a Swift Testing `@Test` id carries the function's parentheses and `@Test(arguments:)` a per-argument suffix, so the per-function form matches zero tests and silently degrades to a full run. Nested `@Suite` types legitimately yield three segments — the rule is suite-*terminal*, not two-segment.
 
 ###### Test-run counters
 
-  **Counter**: per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape — `action: "scoped_test_run"` when it carries ≥1 `-only-testing:` flag, `action: "full_test_run"` when it carries none. `metadata: {stage: "DV", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. `build-only` invokes no tests, so it emits no row. Audit-only: a missing or unexpected counter row never blocks a stage and appears in no completion checklist.
+  **Counter**: per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape — `action: "scoped_test_run"` when it carries ≥1 test-selection flag, `action: "full_test_run"` when it carries none. `metadata: {stage: "DV", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. `build-only` invokes no tests, so it emits no row. Audit-only: a missing or unexpected counter row never blocks a stage and appears in no completion checklist.
 
 ##### D2 failure handling
 
@@ -179,7 +210,7 @@ When building/testing Apple code directly (not delegating to apple-developer age
 
 #### Worktree Mode
 
-All DV operations run in the isolated worktree (D0.0 gate above). Use `EnterWorktree`/`ExitWorktree`; build/test with `--package-path {workdir}`, git with `git -C {workdir}`. Base-ref resolution (`task.metadata.base_ref` is authoritative when stamped; `worktree.baseRef` head/fresh governs only in its absence — order in `handoff-protocol.md § state.json schema`), background & shared-checkout rules, the out-of-tree `EnterWorktree` confirmation guard, and background-session lifecycle live in `skills/worktask/references/workspace-modes.md § DV Worktree Mechanics`.
+All DV operations run in the isolated worktree (D0.0 gate above). Use `EnterWorktree`/`ExitWorktree`; git with `git -C {workdir}`. Point build/test at the worktree with the toolchain's own directory flag rather than `cd`-chaining — `--package-path` (SwiftPM), `-p`/`--project-dir` (Gradle), `--prefix` (npm), `-C` (make), `--rootdir` (pytest); the platform's `/<plugin>:build-test` takes the path directly. Base-ref resolution (`task.metadata.base_ref` is authoritative when stamped; `worktree.baseRef` head/fresh governs only in its absence — order in `handoff-protocol.md § state.json schema`), background & shared-checkout rules, the out-of-tree `EnterWorktree` confirmation guard, and background-session lifecycle live in `skills/worktask/references/workspace-modes.md § DV Worktree Mechanics`.
 
 ### Worktree cwd discipline
 

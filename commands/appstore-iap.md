@@ -1,9 +1,9 @@
 ---
 name: appstore-iap
-description: Set up App Store Connect in-app purchases and subscriptions for a new app from its bundle ID
+description: 'Apple-only. Set up App Store Connect in-app purchases and subscriptions for a new app from its bundle ID, driving App Store Connect via browser automation.'
 argument-hint: <bundle ID>
 model: sonnet
-allowed-tools: Read, Glob, Grep, Write
+allowed-tools: Read, Glob, Grep, Write, mcp__claude-in-chrome__tabs_context_mcp, mcp__claude-in-chrome__tabs_create_mcp, mcp__claude-in-chrome__navigate, mcp__claude-in-chrome__get_page_text, mcp__claude-in-chrome__read_page, mcp__claude-in-chrome__find, mcp__claude-in-chrome__form_input, mcp__claude-in-chrome__computer, mcp__claude-in-chrome__javascript_tool
 related:
   - commands/appstore-info.md
   - commands/docs-release-notes.md
@@ -12,6 +12,9 @@ related:
 ---
 
 # App Store IAP Setup Command
+
+> **Apple-only.** This command targets App Store Connect and has no equivalent on other
+> platforms. The rest of the igrsoft plugin is platform-neutral.
 
 Set up all In-App Purchases and Subscription Groups in App Store Connect for a new app.
 Provide only the bundle ID — the command locates or generates the `Products.plist` automatically

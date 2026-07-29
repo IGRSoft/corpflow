@@ -169,16 +169,34 @@ class UserService {
 | Blockers | Input validation must be added |
 ~~~
 
-## Apple Platform Detection
+## Architect Delegation (dual-pass)
 
-When reviewing Apple platform projects (`.xcodeproj`, `.xcworkspace`, or `Package.swift` with `import SwiftUI`/`import UIKit`), run a dual-pass review:
+Detect the platform using `skills/shared/platform-detection.md § Detection Rules`. Whenever
+the detected platform has an architect agent, run a dual-pass review:
 
 1. **General review** — SOLID, scalability, security, error handling (this command)
-2. **Swift architecture review** — delegate to `apple-developer:apple-architector` for pattern compliance, boundary violations, Swift concurrency review
+2. **Platform architecture review** — delegate to that platform's architect for pattern
+   compliance, boundary violations, and language/runtime-specific concerns
 
-Combine both passes into the output. The Swift-specific findings appear under a `### Swift Architecture` subsection within Pattern Analysis, with severity ratings (P0-P3) from apple-architector mapped to Must Fix/Should Fix/Consider.
+### Resolving the architect agent
 
-For server-side Swift (`Package.swift` without UI imports), skip the apple-architector delegation.
+Read the architect from `skills/shared/compatible-plugins.md § Functional-role agents`
+(`apple-architector`, `kotlin-architector`, `frontend-architector`, `system-architector`,
+`backend-architector`, `ai-architector`) — take the plugin prefix from that table rather
+than hardcoding it here.
+
+If the platform is ambiguous, or its plugin is not installed, run the general pass alone and
+say so in the output. Never silently downgrade to single-pass.
+
+### Combining the passes
+
+Merge both passes into one report. The architect's findings appear as a
+`### <Platform> Architecture` subsection within Pattern Analysis, with its P0-P3 severities
+mapped to Must Fix / Should Fix / Consider.
+
+**Apple nuance**: for server-side Swift (`Package.swift` with no UI imports), skip the
+apple-architector delegation — the work is backend-shaped, so `backend-architector` is the
+correct second pass when that plugin is present.
 
 ## Review Checklist
 
@@ -191,7 +209,7 @@ The command evaluates against:
 - [ ] Scalability considerations
 - [ ] Testability
 - [ ] Documentation
-- [ ] Swift architecture pattern compliance (Apple projects only)
+- [ ] Platform architecture pattern compliance (when the platform has an architect agent)
 
 ## Integration
 

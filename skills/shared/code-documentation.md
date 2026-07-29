@@ -42,7 +42,7 @@ a copy drifts and lies the moment the source changes.
 | Function doc block | 1–3-line info block; one line is the norm; only when the name/signature isn't already clear |
 | `- Parameters:` entries / Returns / Throws | One short-to-average sentence each; only when non-obvious — omit when the signature already says it |
 | Var / constant doc | One average sentence, only when the name alone isn't clear; otherwise nothing |
-| SwiftUI `#Preview` | Never commented — no doc line, no inline note, ever |
+| Preview / story block — SwiftUI `#Preview`, Compose `@Preview`, Storybook story, snapshot fixture | Never commented — no doc line, no inline note, ever |
 | Inline `//` rationale | One short trailing line per non-obvious literal |
 | Longer discussion (multi-line) | Reserved strictly for a genuinely non-obvious **algorithm** — not for restating design, color, history, or callers |
 
@@ -50,6 +50,12 @@ Target comment-to-code density well below 1:1, and ≤40% of a change's *added* 
 (`dv-comment-density-gate.sh` gates this). A file that is ~half prose is over-documented.
 
 ## Doc block shape
+
+Shapes below are DocC (`///`). The identical budget governs every other doc grammar —
+TSDoc/JSDoc `@param`, KDoc `@param`, Python docstring `Args:`, Doxygen `\param`: one short
+sentence per entry, omitted entirely when the signature already says it.
+
+### DocC (Swift)
 
 No parameters — summary lines only (1–3):
 
@@ -69,6 +75,21 @@ parameter may use `- Parameter x:` on one line instead:
 ///   - message: The message to announce.
 ///   - delay: Optional delay before announcing, so the announcement lands
 ///     after view transitions complete.
+```
+
+### Other grammars
+
+Same budget, different syntax. TSDoc, and a Python docstring documenting only the
+non-obvious unit:
+
+```ts
+/** Posts the announcement only while a screen reader is active.
+ *  @param delay ms to wait so the announcement lands after the route transition. */
+```
+
+```python
+def retry_after(response: Response) -> float:
+    """Seconds to wait before retrying; clamps a hostile Retry-After to 60s."""
 ```
 
 ## Where rationale belongs instead
@@ -93,7 +114,7 @@ parameter may use `- Parameter x:` on one line instead:
 - DO NOT enumerate call sites or callers — rely on the compiler and "find usages".
 - DO NOT sprinkle issue/ticket IDs as provenance — tag a function only where that issue materially changed its business logic; the issue link belongs in the PR.
 - DO NOT write acceptance-criteria or requirement IDs (`AC-2`, `REQ-5`) into source comments — traceability lives in the PR and `.context/` artifacts.
-- DO NOT comment SwiftUI `#Preview` blocks — ever.
+- DO NOT comment preview/story blocks in any framework — ever (see Length budget).
 - DO NOT restate the symbol name, signature, or body in prose; if the comment echoes the code, delete it.
 
 ## Examples (BEFORE → AFTER)
@@ -144,6 +165,25 @@ logic change):
 /// session, reconstruction, or network call.
 /// - Parameter analysisID: The persisted analysis to display.
 func openPersistedSkinMap(analysisID: AnalysisID) { … }
+```
+
+### Cross-language example
+
+The failure mode is identical outside Swift. BEFORE — history, provenance, and a restated
+signature on a TypeScript hook:
+
+```ts
+/**
+ * useCartTotal (added in PR #812, refactored from the old `getTotal` helper in v3).
+ * Takes the cart items and returns the total. Previously this lived in the reducer.
+ * @param items The cart items.
+ */
+```
+
+AFTER — one line for the one thing the signature cannot say; the PR keeps the history:
+
+```ts
+/** Total in minor units; excludes shipping, which is quoted per-address at checkout. */
 ```
 
 ## Reconciliation

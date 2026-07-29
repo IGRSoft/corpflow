@@ -62,46 +62,56 @@ architecture while retaining AR stage ownership for system-level decisions.
 Platform detection markers: `skills/shared/platform-detection.md § Detection Rules`. Plugin
 availability and version floors: `skills/shared/compatible-plugins.md`.
 
-The Apple flow below is the worked example; the same consultation model, boundary table, and
-merge protocol apply to every row above with the agent and artifact substituted.
+The consultation model, boundary table, and merge protocol below are platform-parameterized:
+substitute the row's architect agent and artifact for the detected platform.
 
 ### Detection (AR0)
 
-During AR0, detect Apple platform context:
+During AR0, detect the platform from repo markers. The marker→platform tables are canonical in
+`skills/shared/platform-detection.md § Detection Rules` — read them there, do not restate them
+here. Then:
 
-1. **Glob** for `**/*.xcodeproj`, `**/*.xcworkspace` — high confidence Apple project
-2. **Glob** for `**/Package.swift` + **Grep** for `import SwiftUI` or `import UIKit` — Apple app with UI
-3. `Package.swift` only with no UI imports and no `.xcodeproj` — server-side Swift, handle without delegation
+1. Marker match → route to that platform's row in § Architect routing.
+2. Detected platform has no installed dev plugin → § Graceful Degradation.
+3. Mixed markers → apply `platform-detection.md § Mixed-repo precedence` before routing.
+
+One AR-specific carve-out the marker tables do not express: a `Package.swift` with no UI imports
+and no `.xcodeproj` is server-side Swift — handle it directly, without delegating to
+`apple-developer:apple-architector`.
 
 ### Responsibility Boundary
 
 | Domain | Owner |
 |--------|-------|
 | System architecture (API, backend, infra, data, security) | software-architector |
-| Swift app architecture (MVVM/TCA/MVI, DI, navigation, concurrency) | apple-architector |
+| App architecture (pattern choice, DI, navigation, concurrency) | the platform's architect |
 | System test architecture | software-architector |
-| Swift app test architecture | apple-architector |
+| App test architecture | the platform's architect |
 | Final artifact (analyzing.md) | software-architector (merges both) |
 | Conflict resolution | software-architector (system constraints win) |
 
 ### Delegation Flow
 
 1. Complete system-level architecture decisions first
-2. Delegate to `apple-developer:apple-architector` with planning context and system constraints
-3. apple-architector writes `.context/swift-architecture.md` and returns compressed summary
-4. Read `.context/swift-architecture.md`, merge into `analyzing.md` under `## Swift App Architecture`
+2. Delegate to the platform's architect (§ Architect routing) with planning context and system constraints
+3. The architect writes the artifact named in its § Architect routing row (e.g. `.context/swift-architecture.md` for apple) and returns a compressed summary
+4. Read that artifact, merge into `analyzing-N.md` under `## <Platform> App Architecture` (`## Swift App Architecture` for apple)
 5. If conflicts exist between system and app architecture, resolve in favor of system constraints and document trade-off in ADR
 
 See `skills/cross-plugin-handoff/SKILL.md` for delegation prompt template and merge protocol.
 
 ### Graceful Degradation
 
-If the matching dev plugin is not available, complete AR with general architecture patterns and add a note (Apple shown; substitute the platform):
+If the detected platform's dev plugin is not available, complete AR with general architecture
+patterns and add a note naming that platform's own selection command — every dev plugin exposes
+`/<plugin>:arch-select`:
 
 ```markdown
-## Swift App Architecture
-> **Note**: Apple-specific architecture review pending. Consider running `/arch-apple-select` separately.
+## <Platform> App Architecture
+> **Note**: <platform>-specific architecture review pending. Consider running `/<plugin>:arch-select` separately.
 ```
+
+Apple instance: heading `## Swift App Architecture`, command `/apple-developer:arch-select`.
 
 ## Test Architecture Design
 
@@ -177,7 +187,7 @@ Model selection is **complexity-driven** — see `skills/shared/model-selection.
 
 #### Low-Complexity Gate (AR)
 
-When the validated complexity score is in the **Low** band (0–10 per `skills/estimation-methodology/SKILL.md § PL0 Stage-Set` — the tier where PL0 normally drops AR, so you land here only via direct invocation, a forced stage set, or a down-revision), do NOT delegate to `apple-developer:apple-architector`: pick the app pattern (MVVM/TCA/MVI) straight from the playbook and write a compact `analyzing-N.md` (≤150 lines — pattern choice + DI/navigation + test boundaries, no full ADR set). Delegate to apple-architector only at **Medium**+ (score ≥ 11), where deeper Swift-architecture review earns its cost.
+When the validated complexity score is in the **Low** band (0–10 per `skills/estimation-methodology/SKILL.md § PL0 Stage-Set` — the tier where PL0 normally drops AR, so you land here only via direct invocation, a forced stage set, or a down-revision), do NOT delegate to the platform's architect — on any platform: pick the app pattern straight from that platform's playbook and write a compact `analyzing-N.md` (≤150 lines — pattern choice + DI/navigation + test boundaries, no full ADR set). Delegate to the platform architect only at **Medium**+ (score ≥ 11), where deeper platform-architecture review earns its cost.
 
 ### Output Budget (AR)
 
@@ -185,7 +195,9 @@ Artifact ≤250 lines; no full-file listings — pass anchors, not pasted bodies
 
 ## Cross-Plugin Invocation Context
 
-When invoked from apple-developer commands (`review-code`, `analyze-tech-debt`, `fix-refactor`, `fix-modernize`, `gen-mock-api`), apply architecture review with Apple platform awareness: SwiftUI patterns (MVVM/TCA/MVI) and trade-offs, Swift concurrency (actors, Sendable, structured concurrency), framework boundaries (UIKit/AppKit vs pure SwiftUI), platform constraints (App Sandbox, entitlements, privacy manifest). The command's prompt supplies platform context — use it to inform decisions.
+When invoked from a dev plugin's commands (`review-code`, `analyze-tech-debt`, `fix-refactor`, `fix-modernize`, and any plugin extras), apply architecture review with that platform's awareness. The command's prompt supplies the platform context — use it to inform decisions rather than assuming a platform.
+
+Apple as the worked example: SwiftUI patterns (MVVM/TCA/MVI) and trade-offs, Swift concurrency (actors, Sendable, structured concurrency), framework boundaries (UIKit/AppKit vs pure SwiftUI), platform constraints (App Sandbox, entitlements, privacy manifest). Each other platform substitutes its own equivalents — pattern set, concurrency model, framework boundaries, and deployment constraints.
 
 ## Completion Verification
 
@@ -195,7 +207,7 @@ Before marking AR stage complete, verify:
 - [ ] Component dependencies mapped
 - [ ] PL complexity score validated or adjusted
 - [ ] No unresolved technical risks blocking DV stage
-- [ ] Apple platform detected? → apple-architector consulted, Swift App Architecture section merged
+- [ ] Platform detected? → that platform's architect consulted, its App Architecture section merged into analyzing-N.md
 - [ ] Conflicts between system and app architecture resolved and documented
 
 

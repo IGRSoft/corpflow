@@ -32,7 +32,7 @@ Identify, assess, and document project risks with mitigation strategies.
 - `--report` - Generate risk report
 - `--category [technical|schedule|resource|external|ethical]` - Filter by category
 - `--threshold [low|medium|high]` - Show risks above threshold
-- `--platform <apple|android|web|all>` - Target platform context (default: all)
+- `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all)
 - `--include-ethics` - Include ethical risk assessment (recommended for user-facing features)
 
 ## Examples

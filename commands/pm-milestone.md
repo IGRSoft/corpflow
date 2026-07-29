@@ -80,19 +80,42 @@ Select based on `--platform` flag and ticket content:
 | `--platform ai` | `ai-engineer` | ai-engineer |
 | `all` / omitted | `developer` | igrsoft |
 
-##### Content-Based Routing
+##### Content-Based Routing — platform-neutral roles
 
-| Platform / Content | Agent | Plugin |
-|--------------------|-------|--------|
-| macOS-specific ticket | `macos-developer` | apple-developer |
-| watchOS-specific ticket | `watchos-developer` | apple-developer |
-| tvOS-specific ticket | `tvos-developer` | apple-developer |
-| visionOS-specific ticket | `visionos-developer` | apple-developer |
-| Swift concurrency / language | `apple-developer` | apple-developer |
-| Automated batch fix | `code-fixer` | apple-developer |
+| Content | Agent | Plugin |
+|---------|-------|--------|
+| Automated batch fix | the detected platform's code-fixer | resolves per platform |
 | Documentation-only ticket | `technical-writer` | igrsoft |
 | Agent/command/skill ticket | `prompt-engineer` | igrsoft |
 | Design system / UI design | `designer` | igrsoft |
+
+Batch fix resolves through `skills/shared/compatible-plugins.md § Test generator and code
+fixer` — never unconditionally Apple. When the platform is ambiguous, assign `developer`
+(igrsoft) and let it route at runtime.
+
+##### Content-Based Routing — app-platform specialization
+
+When a ticket names a specific target inside a platform, assign the specialist rather than
+the platform entry agent. Canonical marker→specialist tables live in
+`skills/shared/platform-detection.md`; these are the rows milestone tickets hit most.
+
+| Content | Agent | Plugin |
+|---------|-------|--------|
+| macOS / watchOS / tvOS / visionOS ticket | `macos-` / `watchos-` / `tvos-` / `visionos-developer` | apple-developer |
+| Swift concurrency / language | `apple-developer` | apple-developer |
+| Compose UI / phone-tablet ticket | `android-phone-developer` | android-developer |
+| React / Vue / Svelte / Angular ticket | `react-` / `vue-` / `svelte-` / `angular-developer` | frontend-developer |
+| CSS / styling / design-token ticket | `css-developer` | frontend-developer |
+
+##### Content-Based Routing — backend, systems, and AI specialization
+
+| Content | Agent | Plugin |
+|---------|-------|--------|
+| API contract (OpenAPI, gRPC) ticket | `api-designer` | backend-developer |
+| Schema / migration / query ticket | `database-engineer` | backend-developer |
+| C / C++ / Python / Bash ticket | `c-` / `cpp-` / `python-` / `bash-developer` | system-developer |
+| RAG / prompt / eval ticket | `llm-engineer` | ai-engineer |
+| Training / data-pipeline ticket | `ml-engineer` | ai-engineer |
 
 The `developer` agent auto-routes to platform specialists at runtime, so it's the safe default when platform is ambiguous.
 

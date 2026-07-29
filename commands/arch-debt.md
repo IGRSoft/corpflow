@@ -30,7 +30,7 @@ Analyze, document, and prioritize technical debt in the codebase.
 - `--report` - Generate full tech debt report
 - `--prioritize` - Re-prioritize existing debt
 - `--category [code|architecture|testing|docs|security]` - Filter by category
-- `--platform <apple|android|web|all>` - Target platform context (default: all)
+- `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all)
 
 ## Examples
 

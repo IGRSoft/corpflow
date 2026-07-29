@@ -134,14 +134,48 @@ Cheapest-first when only the delta is needed to update a doc reference (full rea
 
 **Task System**: Stage DC, Owner: technical-writer. See `skills/shared/task-system.md`.
 
-## Apple Platform Documentation
+## Platform Documentation Pipelines
 
-For Apple projects (`.xcodeproj`, `.xcworkspace`, `Package.swift` with SwiftUI/UIKit):
+Route API-reference generation to the detected platform's own command — every dev plugin exposes
+`/<plugin>:gen-docs` — and keep doc comments in the language's native style. Platform→plugin map:
+`skills/shared/compatible-plugins.md`; marker→platform detection: `skills/shared/platform-detection.md`.
 
-- Use DocC documentation catalogs for API reference (generated via `/apple-developer:gen-docs`)
+### Apple (Swift)
+
+- DocC documentation catalogs for API reference, generated via `/apple-developer:gen-docs`
 - Swift documentation comments use `///` with `- Parameters:`, `- Returns:`, `- Throws:`
 - Include `@available` annotations for API versioning
 - Follow Apple's documentation style: concise summary line, then detailed discussion
+
+### Web (TypeScript/JavaScript)
+
+- TSDoc comments (`/** … */` with `@param`, `@returns`, `@throws`); typedoc renders the reference site
+- Generated via `/frontend-developer:gen-docs`
+- Document component props, public hooks, and exported types — the props table is the API reference
+
+### Android (Kotlin)
+
+- KDoc (`/** … */` with `@param`, `@return`, `@throws`); Dokka renders the reference site
+- Generated via `/android-developer:gen-docs`
+- Note `@Deprecated` replacements and any minimum API-level constraint on public declarations
+
+### Systems (C/C++/Python/Bash)
+
+- Python: PEP 257 docstrings, one style per repo (Google or NumPy), rendered by Sphinx
+- C/C++: Doxygen `/** … */` with `@param`/`@return`; header comments carry ownership and lifetime contracts
+- Bash: a header block per script — usage, arguments, exit codes
+- Generated via `/system-developer:gen-docs`
+
+### Backend
+
+- Go: godoc comments beginning with the identifier name; JVM: Javadoc
+- HTTP surfaces: the OpenAPI document *is* the API reference — keep it beside the handlers and in sync
+- Generated via `/backend-developer:gen-docs`
+
+### AI/ML
+
+- Python docstring rules above apply; additionally document model and dataset cards, prompt-template contracts, and eval-harness inputs/outputs
+- `ai-engineer` keeps its own command set and ships no `gen-docs` — write the reference directly
 
 ## Completion Verification
 
