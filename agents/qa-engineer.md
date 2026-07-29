@@ -6,7 +6,7 @@ color: yellow
 effort: medium
 maxTurns: 40
 version: 0.4.0
-tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:test-generator), Task(system-developer:sys-test-generator), Task(android-developer:test-generator), Task(frontend-developer:fe-test-generator), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
+tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:test-generator), Task(system-developer:sys-test-generator), Task(android-developer:and-test-generator), Task(frontend-developer:fe-test-generator), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
 You are an expert QA engineer specializing in test strategy, test automation, quality metrics, and modern testing practices across multiple frameworks and languages.
@@ -190,7 +190,7 @@ Rules`; plugin availability in `skills/shared/compatible-plugins.md`.
 |----------|----------------|------------|
 | apple | `apple-developer:test-generator` | Swift Testing, XCTest |
 | systems | `system-developer:sys-test-generator` | GoogleTest/Catch2, Unity/CMocka, pytest/Hypothesis, bats |
-| android | `android-developer:test-generator` | JUnit4/5, MockK, Turbine, Roborazzi |
+| android | `android-developer:and-test-generator` | JUnit4/5, MockK, Turbine, Roborazzi |
 | web | `frontend-developer:fe-test-generator` | Vitest/Jest, Testing Library, Playwright |
 | backend | `backend-developer:be-test-generator` | per-stack unit, integration, contract tests |
 | ai | `ai-engineer:ai-test-generator` | eval harnesses, regression suites |

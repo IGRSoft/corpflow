@@ -146,11 +146,17 @@ These three **delegate the capture to the platform's own agent**. igrsoft no lon
 
 ##### Platform delegation table
 
-| Adapter | Delegate to | Requested behavior | No file → fallback |
-|---------|-------------|--------------------|--------------------|
-| `apple` | `Task(apple-developer:ios-developer)` or the matching `macos-`/`tvos-`/`watchos-`/`visionos-developer` | Boot/locate sim (per `args.simulator`), navigate best-effort, screenshot to target path. | → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "xcodebuildmcp_unavailable"`. |
-| `web` | `Task(frontend-developer:frontend-developer)` | Launch headless browser (Playwright or Chrome MCP), navigate to `args.url`, capture at `args.viewport` to target path. | → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "playwright_unavailable"`. |
-| `android` | `Task(android-developer:android-developer)` | Verify a device (`adb devices`), then `adb exec-out screencap -p > <target path>`. | → `cli_fallback`. Audit: `screenshot_platform_fallback`, `reason: "adb_unavailable"`. |
+Every no-file case below emits `screenshot_platform_fallback` and routes to `cli_fallback`; the last column is that row's audit `reason`.
+
+| Adapter | Delegate to | Requested behavior | `reason` |
+|---------|-------------|--------------------|----------|
+| `apple` | `Task(apple-developer:ios-developer)` or the matching `macos-`/`tvos-`/`watchos-`/`visionos-developer` | Boot/locate sim (per `args.simulator`), navigate best-effort, screenshot to target path. | `xcodebuildmcp_unavailable` |
+| `web` | `Task(frontend-developer:frontend-developer)` | Run `scripts/web-capture.sh --url <args.url> --viewport <args.viewport>`. | `playwright_unavailable` |
+| `android` | `Task(android-developer:android-developer)` | Run `scripts/android-capture.sh [--serial <args.serial>]`. | `adb_unavailable` |
+
+##### Scripts are the executable procedure, not a second delegation path
+
+`web-capture.sh` and `android-capture.sh` are the executable form of the `web`/`android` rows above. They are plain CLI (`npx`, `adb`) and hold no MCP grant, so the delegated platform agent runs them exactly as a direct caller would — the delegation model is unchanged, and igrsoft still needs no platform tool grant.
 
 ##### Delegated-capture result handling
 
@@ -197,26 +203,82 @@ The log scrape reads the most recent xcodebuild log under `.context/logs/` and c
 
 ## Scripts (canonical executables)
 
-| Script | Invocation | Purpose |
-|--------|-----------|---------|
-| `scripts/cli-fallback.sh` | `bash scripts/cli-fallback.sh --worktask-id <id> --slug <kebab> [--base-ref <ref>] [--platform <p>] [--run-index <N>] [--files <path>]` | Runs the silicon→magick→.txt chain; emits `path=… bytes=… ok=… error=…` to stdout. Replaces the happy-path need to read `references/cli-fallback.md`. |
-| `scripts/size-budget.sh` | `bash scripts/size-budget.sh --path <file> --worktask-id <id> [--slug <kebab>] [--project-root <dir>]` | Enforces the 5-step size budget (stat→pngquant→oversize/→warn→audit). Emits `size_audit: path=… bytes=… verdict=…` to stdout. |
+Five shipped executables. Every one takes `--worktask-id` and `--slug`, resolves the next `NN` itself, and writes to `.context/images/<worktask_id>/dv-NN-<slug>.png`.
 
-Both scripts implement `--self-test` (no network, no git required). Exit codes and stdout contract are documented in each script's shdoc header.
+### `scripts/web-capture.sh`
+
+```bash
+bash scripts/web-capture.sh --worktask-id <id> --slug <kebab> --url <url> \
+  [--viewport WxH] [--browser chromium|firefox|webkit] [--timeout <ms>] \
+  [--wait-ms <ms>] [--full-page] [--platform <p>] [--run-index <N>] [--allow-npx-install]
+```
+
+Drives Playwright's `screenshot` CLI. Playwright absent → exit 2, audit `reason: "playwright_unavailable"`; navigation failure or timeout → exit 3, `reason: "playwright_navigation_failed"` / `"playwright_timeout"`.
+
+Playwright is resolved as a `playwright` binary on PATH, else the local package via `npx --no-install`. `--allow-npx-install` opts into `npx --yes` fetching it; without that flag a missing package degrades down the ladder instead of reaching the network mid-DV.
+
+### `scripts/android-capture.sh`
+
+```bash
+bash scripts/android-capture.sh --worktask-id <id> --slug <kebab> \
+  [--serial <serial>] [--platform <p>] [--run-index <N>]
+```
+
+Resolves exactly one online device from `adb devices`, then `adb exec-out screencap -p`. `adb` absent → exit 2, `reason: "adb_unavailable"`. Exit 3 covers `no_device_attached`, `multiple_devices` (pass `--serial`), `serial_not_found`, `screencap_failed`, and `screencap_corrupt`.
+
+Offline and unauthorized entries are not counted as devices — they cannot be captured from, so counting them would turn "authorize the device" into a spurious ambiguity error. The result is verified against the 8-byte PNG signature: a mangled stream is deleted rather than indexed into the manifest.
+
+### `scripts/apple-canvas.sh`
+
+```bash
+bash scripts/apple-canvas.sh --worktask-id <id> --modified-files <path> \
+  [--view <Module.Type>] [--destination macos-host|ios-sim] \
+  [--size WxH] [--scheme light|dark] [--slug <kebab>]
+```
+
+Scaffolds `tools/SnapshotHost/` from template, invokes `preview-ensurer`, renders via `swift run SnapshotHost`. Prints the PNG path on success. Exit 2 = preview-ensurer errors (`missing_input`), 3 = render failed (escalate to the sim adapter), 4 = scaffold failed, 5 = argument error.
+
+### `scripts/cli-fallback.sh`
+
+```bash
+bash scripts/cli-fallback.sh --worktask-id <id> --slug <kebab> \
+  [--base-ref <ref>] [--platform <p>] [--run-index <N>] [--files <path>]
+```
+
+Runs the silicon→magick→`.txt` chain; emits `path=… bytes=… ok=… error=…` to stdout. Replaces the happy-path need to read `references/cli-fallback.md`.
+
+### `scripts/size-budget.sh`
+
+```bash
+bash scripts/size-budget.sh --path <file> --worktask-id <id> \
+  [--slug <kebab>] [--project-root <dir>]
+```
+
+Enforces the 5-step size budget (stat→pngquant→`oversize/`→warn→audit). Emits `size_audit: path=… bytes=… verdict=…` to stdout.
+
+### Script conventions
+
+`cli-fallback.sh`, `web-capture.sh`, `android-capture.sh`, and `size-budget.sh` implement `--self-test` — fixture-driven, needing no network, git, browser, or device. Exit codes and the stdout contract are documented in each script's shdoc header.
+
+The three capture scripts share one exit-code grammar: **0** success, **1** bad arguments, **2** `tool_missing`, **3** `capture_failed`. Exits 2 and 3 still print a well-formed contract line carrying the intended `path` with `bytes=0`, and emit a `screenshot_platform_fallback` audit row — a missing tool degrades down the ladder, it never hard-fails DV.
 
 ### Adapter maturity (read the tables honestly)
 
-The adapters are **not** at parity, and the tables above should not be read as if they were. What actually ships:
+Every adapter except `apple` now ships an executable. What actually ships:
 
 | Adapter | Shipped as | Notes |
 |---------|-----------|-------|
 | `cli/fallback` | Executable script (`scripts/cli-fallback.sh`) + `references/cli-fallback.md` | The floor; always available |
-| `apple-canvas` | Templates + `Skill("preview-ensurer")` + a 237-line `references/apple-canvas.md` | The most specified adapter |
-| `apple` | Prose procedure (delegated `Task`) | No script |
-| `web` | Prose procedure (delegated `Task`), one table row | No script, no reference doc |
-| `android` | Prose procedure (delegated `Task`), one table row | No script, no reference doc |
+| `apple-canvas` | Executable script (`scripts/apple-canvas.sh`) + templates + `Skill("preview-ensurer")` + a 237-line `references/apple-canvas.md` | The most specified adapter |
+| `web` | Executable script (`scripts/web-capture.sh`), self-tested | Playwright CLI; no reference doc |
+| `android` | Executable script (`scripts/android-capture.sh`), self-tested | `adb` CLI; no reference doc |
+| `apple` | Prose procedure (delegated `Task`) | No script — the only remaining prose-only adapter |
 
-`web` and `android` are one row of described procedure each. Nothing in this skill executes or verifies them — treat a failure there as under-specified tooling, not agent error, and fall through to `cli_fallback`.
+#### Parity status
+
+`web` and `android` reached parity with `cli/fallback`: each is a real script with a `--self-test`, the shared exit-code grammar, and an audit row on every degradation path. A failure there is now a reportable tool or device condition, not under-specified tooling.
+
+`apple` remains prose on purpose: booting a simulator and driving the running app needs the XcodeBuildMCP grant this skill deliberately does not hold. Treat an `apple` failure as before — fall through to `cli_fallback`.
 
 ### Scripts vs reference docs
 

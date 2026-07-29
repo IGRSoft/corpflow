@@ -33,12 +33,12 @@ When platform is `android`, further route based on context:
 | General Android, Kotlin, app-layer, ambiguous android | `android-developer:android-developer` | Index/router; routes internally to phone/architecture/test specialists |
 | Phone/tablet app, Jetpack Compose UI, lifecycle, Activities/Fragments | `android-developer:android-phone-developer` | Compose screens, navigation, ViewModel/StateFlow, Material 3 |
 | Architecture, modularization, Hilt DI, Clean Architecture, data layer | `android-developer:kotlin-architector` | Pattern selection, module graph, repository/offline-first design |
-| Test generation | `android-developer:test-generator` | JUnit4/5, MockK, Turbine, Roborazzi screenshot tests |
-| Code fixes | `android-developer:code-fixer` | ktlint/detekt remediation, minimal-diff fixes |
+| Test generation | `android-developer:and-test-generator` | JUnit4/5, MockK, Turbine, Roborazzi screenshot tests |
+| Code fixes | `android-developer:and-code-fixer` | ktlint/detekt remediation, minimal-diff fixes |
 
 ### Android DV evidence and review specialists
 
-Android work is UI by default: set/forward `metadata.requires_screenshots: true` on DV tasks (captured via the `android_adapter` → `adb exec-out screencap -p`); the screenshot manifest at `.context/images/<worktask_id>/screenshots.md` plus Gradle build/test transcripts under `.context/logs/` are the Build Evidence. There is no Android build MCP — builds and device interaction run through scoped `Bash(gradle:*|./gradlew|adb:*|ktlint:*|detekt:*)`. Review-only specialists (`android-developer:security-auditor`, `android-developer:dependency-manager`) are reached through the stage flow (DR/SR/QA), not as direct DV `Task(...)` targets.
+Android work is UI by default: set/forward `metadata.requires_screenshots: true` on DV tasks (captured via the `android_adapter` → `adb exec-out screencap -p`); the screenshot manifest at `.context/images/<worktask_id>/screenshots.md` plus Gradle build/test transcripts under `.context/logs/` are the Build Evidence. There is no Android build MCP — builds and device interaction run through scoped `Bash(gradle:*|./gradlew|adb:*|ktlint:*|detekt:*)`. Review-only specialists (`android-developer:and-security-auditor`, `android-developer:and-dependency-manager`) are reached through the stage flow (DR/SR/QA), not as direct DV `Task(...)` targets.
 
 ## Systems Platform Specialization
 

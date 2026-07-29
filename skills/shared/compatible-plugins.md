@@ -14,10 +14,10 @@ live in `skills/shared/platform-detection.md`; this file references that map and
 |--------|------|--------------|---------------|-------------|
 | `apple-developer` | Apple platforms (Swift, SwiftUI, UIKit, AppKit) | `apple` | >=1.25.0 | `apple-developer:apple-developer` |
 | `system-developer` | C, C++, Python, Bash systems code | `systems` | >=1.5.0 | `system-developer:system-developer` |
-| `android-developer` | Android (Kotlin, Compose, Gradle) | `android` | >=1.3.0 | `android-developer:android-developer` |
+| `android-developer` | Android (Kotlin, Compose, Gradle) | `android` | >=1.4.0 | `android-developer:android-developer` |
 | `frontend-developer` | Web UI (React, Vue, Svelte, Angular, TS, CSS) | `web` | >=1.2.0 | `frontend-developer:frontend-developer` |
 | `backend-developer` | Services, APIs, persistence | `backend` | >=1.3.0 | `backend-developer:backend-developer` |
-| `ai-engineer` | AI/ML, LLM applications, MLOps | `ai` | >=1.1.0 | `ai-engineer:ai-engineer` |
+| `ai-engineer` | AI/ML, LLM applications, MLOps | `ai` | >=1.2.0 | `ai-engineer:ai-engineer` |
 
 ### Command set and workflow skill
 
@@ -28,7 +28,7 @@ live in `skills/shared/platform-detection.md`; this file references that map and
 | `android-developer` | core-parity | `android-developer:workflow-integration` |
 | `frontend-developer` | core-parity + `gen-component` | `frontend-developer:workflow-integration` |
 | `backend-developer` | core-parity + `gen-api`, `db-migrate`, `analyze-security` | `backend-developer:workflow-integration` |
-| `ai-engineer` | **own set** (documented exception) | *(add when available)* |
+| `ai-engineer` | **own set** + `build-test` (documented exception) | `ai-engineer:workflow-integration` |
 
 Apple extras: `analyze-issue`, `analyze-localization`, `gen-mock-api`, `fix-security-hardening`,
 `review-swiftui`, `review-uikit`, `review-appkit`.
@@ -44,7 +44,7 @@ SR (`security-reviewer`), QA (`qa-engineer`), DR remediation.
 |--------|----------------|-----------------------|
 | `apple-developer` | `apple-architector` | `security-auditor` *(unprefixed)* |
 | `system-developer` | `system-architector` | `sys-security-auditor` |
-| `android-developer` | `kotlin-architector` | `security-auditor` *(unprefixed — collision, see § Naming)* |
+| `android-developer` | `kotlin-architector` | `and-security-auditor` |
 | `frontend-developer` | `frontend-architector` | `fe-security-auditor` |
 | `backend-developer` | `backend-architector` | `be-security-auditor` |
 | `ai-engineer` | `ai-architector` | `ai-security-auditor` |
@@ -55,7 +55,7 @@ SR (`security-reviewer`), QA (`qa-engineer`), DR remediation.
 |--------|---------------------|-----------------|
 | `apple-developer` | `test-generator` *(unprefixed)* | `code-fixer` *(unprefixed)* |
 | `system-developer` | `sys-test-generator` | `sys-code-fixer` |
-| `android-developer` | `test-generator` *(unprefixed — collision)* | `code-fixer` *(unprefixed — collision)* |
+| `android-developer` | `and-test-generator` | `and-code-fixer` |
 | `frontend-developer` | `fe-test-generator` (+ `fe-accessibility-auditor`) | `fe-code-fixer` |
 | `backend-developer` | `be-test-generator` | `be-code-fixer` |
 | `ai-engineer` | `ai-test-generator` | `ai-code-fixer` |
@@ -76,9 +76,13 @@ Naming grammar: `analyze-*` read-only assessment (never Write/Edit) · `arch-*` 
 selection and review · `review-*` code review · `fix-*` mutating remediation · `gen-*` artifact
 generation · bare verbs for lifecycle (`deps`, `debug`, `build-test`, `develop-feature`).
 
-**ai-engineer exception**: keeps its domain set — `review-code`, `analyze-security`, `data-audit`,
-`deploy-check`, `eval-run`, `finetune-plan`, `prompt-optimize`, `rag-audit`. Only the two names
-overlapping the standard were aligned. A future core-parity pass is optional, not required.
+### ai-engineer exception
+
+Keeps its domain set — `review-code`, `analyze-security`, `data-audit`, `deploy-check`,
+`eval-run`, `finetune-plan`, `prompt-optimize`, `rag-audit` — plus `build-test`, the one core
+command the orchestrator structurally requires for a platform to be routable at all (DV/DR/QA
+delegate their build gate to it). Only the two names overlapping the standard were renamed.
+A wider core-parity pass is optional, not required.
 
 ## Handoff defaults
 
@@ -99,19 +103,20 @@ The plugin-prefix regex in `skills/worktask/scripts/publish-pl-issue.sh` MUST eq
 united with the Plugin column of § Registry. Changing either without the other lets internal
 agent identifiers leak into published GitHub issues.
 
-## § Naming — agent-name collision warning
+## § Naming — plugin-unique agent prefixes
 
-`android-developer` ships `security-auditor`, `test-generator`, and `code-fixer` under the same
-bare names as `apple-developer`. Qualified `Task(plugin:agent)` IDs disambiguate at the call site,
-but two things still break:
+Functional-role agents MUST carry a plugin-unique prefix: `sys-`, `and-`, `fe-`, `be-`, `ai-`.
+Every registered plugin now complies except `apple-developer`, which predates the convention and
+keeps the bare names `security-auditor`, `test-generator`, `code-fixer`, `dependency-manager`.
 
-1. `error_file` derives from the agent basename, so both plugins write
-   `.context/errors/test-generator.md` — a same-worktask collision.
-2. Bare-name tables (e.g. `commands/pm-milestone.md`) become ambiguous without a Plugin column.
+Two things break when two plugins ship the same bare name. Claude Code keys installed agents by
+frontmatter `name`, so one silently overwrites the other. And `error_file` derives from the agent
+basename, so both would write to the same `.context/errors/test-generator.md` inside one worktask.
 
-**Rule for new or replacement plugins**: functional-role agents MUST carry a plugin-unique prefix
-(the `sys-` / `fe-` / `be-` / `ai-` pattern). Renaming android's three agents is a tracked
-migration owned by that plugin, not by igrsoft.
+`android-developer` held exactly that collision with `apple-developer` and was renamed to the
+`and-` prefix in its 1.4.0 release. Since apple-developer is now the only plugin using bare names,
+no collision remains — but a *new* plugin using them would re-create one, which is why the prefix
+rule is binding for anything added from here.
 
 ## Adding or replacing a dev plugin
 

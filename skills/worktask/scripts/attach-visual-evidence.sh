@@ -807,6 +807,26 @@ if [ "${1:-}" = "--self-test" ]; then
   exit 0
 fi
 
+usage() {
+  echo "usage: $0 {--emit pr | --post issue | --post completion [<pr-ref>] | --self-test}" >&2
+}
+
+# Argv is validated BEFORE the library/state load so a caller error reports the
+# caller error — a missing state.json must not mask a bad or absent mode.
+MODE="${1:-}"; TARGET="${2:-}"
+case "$MODE" in
+  --emit)
+    [ "$TARGET" = "pr" ] || { echo "usage: $0 --emit pr" >&2; exit 1; } ;;
+  --post)
+    case "$TARGET" in
+      issue|completion) ;;
+      *) echo "usage: $0 --post {issue | completion [<pr-ref>]}" >&2; exit 1 ;;
+    esac ;;
+  *)
+    usage
+    exit 1 ;;
+esac
+
 # Source the tier library (after self-test branch so tests fork fresh processes).
 if [ -f "$_LIB" ]; then
   # shellcheck disable=SC1090
@@ -818,19 +838,12 @@ fi
 
 load_context
 
-MODE="${1:-}"; TARGET="${2:-}"
 case "$MODE" in
-  --emit)
-    [ "$TARGET" = "pr" ] || { echo "usage: $0 --emit pr" >&2; exit 1; }
-    emit_pr ;;
+  --emit) emit_pr ;;
   --post)
     case "$TARGET" in
       issue) post_issue ;;
       completion) post_completion "${3:-}" ;;
-      *) echo "usage: $0 --post {issue | completion [<pr-ref>]}" >&2; exit 1 ;;
     esac ;;
-  *)
-    echo "usage: $0 {--emit pr | --post issue | --post completion [<pr-ref>] | --self-test}" >&2
-    exit 1 ;;
 esac
 exit 0

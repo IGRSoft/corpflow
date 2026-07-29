@@ -93,9 +93,23 @@ EOF
   assert_output --partial "no drift"
 }
 
-@test "edge: --filename-lint on our .context dir passes (exit 0, 'canonical')" {
-  # The live .context dir has development-0.md and coordination-0.md — both canonical.
-  run bash "$PLUGIN_ROOT/$SCRIPT" --filename-lint "$PLUGIN_ROOT/.context"
+@test "happy: --filename-lint on canonical artifacts passes (exit 0, 'canonical')" {
+  # Fixture dir, not the live .context: nothing under .context/ is tracked
+  # (git ls-files .context is empty), so its contents are runtime state that any
+  # worktask run may add to or clear.
+  mkdir -p "$WD/ctx"
+  cp "$WD/development-0.md" "$WD/ctx/development-0.md"
+  cat > "$WD/ctx/coordination-0.md" <<'EOF'
+---
+handoff:
+  stage: TL
+  verdict: ok
+  summary: "canonical TL artifact"
+  refs: { plan: planning-0.md#requirements }
+---
+# Coordination
+EOF
+  run bash "$PLUGIN_ROOT/$SCRIPT" --filename-lint "$WD/ctx"
   assert_success
   assert_output --partial "canonical"
 }
