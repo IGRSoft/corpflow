@@ -97,7 +97,7 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 ### 5. Command: worktask
 **Issue**: Inconsistent option format
 **Current**: `--platform [iOS|macOS|All]`
-**Expected**: `--platform <apple|android|web|all>`
+**Expected**: `--platform <apple|android|web|systems|backend|ai|all>`
 **Fix**: Standardize to ecosystem convention
 
 ### 6. Command: test-plan
@@ -243,7 +243,7 @@ With `--fix` flag, these issues can be automatically resolved:
 6. Consistent option format
 
 ### Consistency Rules
-1. Platform values: `<apple|android|web|all>`
+1. Platform values: `<apple|android|web|systems|backend|ai|all>` — the canonical set, matching `skills/shared/platform-detection.md`. A command whose scope genuinely excludes some platforms may list a subset (the `design-*` commands are UI-only, so `<apple|android|web|all>` is correct there); what is flagged is Apple sub-platforms leaking in (`iOS|macOS`) or a platform being advertised with no content path behind it.
 2. Option syntax: `--option <value>` or `--flag`
 3. Section ordering: Usage → Options → Examples → Output → Integration → Related
 4. Terminology standardized

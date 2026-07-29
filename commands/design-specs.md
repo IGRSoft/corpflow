@@ -113,13 +113,14 @@ Generate developer-ready design specifications for components, screens, or featu
 
 ## Responsive Behavior
 
-### Compact (< 375pt)
+<!-- widths in the platform's own unit: pt (Apple), dp (Android), CSS px (web) -->
+### Compact (< 375)
 - [Adjustments]
 
-### Regular (375-768pt)
+### Regular (375-768)
 - [Default behavior]
 
-### Large (> 768pt)
+### Large (> 768)
 - [Adjustments]
 ```
 
@@ -129,7 +130,7 @@ Generate developer-ready design specifications for components, screens, or featu
 <!-- …continued: accessibility, animation, implementation notes, assets -->
 ## Accessibility
 
-- Min touch target: 44x44pt
+- Min touch target: [44x44pt Apple / 48x48dp Android / 24x24 CSS px web]
 - Color contrast: [ratio]
 - Screen reader label: [text]
 - Focus indicator: [description]
@@ -161,13 +162,24 @@ Generate developer-ready design specifications for components, screens, or featu
 
 ## Platform-Specific Sections
 
-### iOS/macOS
+Emit only the sections selected by `--platform`; `all` emits every section.
+
+### Apple
+
 - SwiftUI component mapping
-- UIKit considerations
+- UIKit / AppKit considerations
 - Dynamic Type support
 - Safe area handling
 
+### Android
+
+- Jetpack Compose composable and Material 3 component mapping
+- Units: `dp` for layout and sizing, `sp` for type
+- Theming: `MaterialTheme` color roles, typography scale, shape scale
+- Window size classes (compact / medium / expanded) and insets handling
+
 ### Web
+
 - CSS tokens
 - Breakpoint values
 - Browser support notes

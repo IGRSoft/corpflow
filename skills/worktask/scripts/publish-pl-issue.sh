@@ -303,7 +303,11 @@ sanitise_body() {
       # non-bullet token (e.g. "* Routed to igrsoft:developer ...",
       # "Breakdown using igrsoft:estimation-methodology:"). Strict prefix
       # allow-list keeps this from false-positive on http:// / git:// / etc.
-      if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(igrsoft|apple-developer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next
+      # The prefix list MUST mirror skills/shared/compatible-plugins.md
+      # (Registry plugins + Support plugins) and stay identical at every
+      # occurrence in this file. A missing prefix leaks the agent identifiers
+      # of that plugin into the published issue.
+      if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next
 
       # ---- Pass 2 token-strip (with allow-list) -------------------------
       # Track fenced code block state (A1).
@@ -348,7 +352,8 @@ sanitise_body() {
         # A6: plugin-qualified identifier token (igrsoft:foo, apple-developer:bar,
         # etc.). Narrow known-prefix allow-list to avoid false positives on
         # http:, git:, file:, etc. Backtick spans already passed through above.
-        if (match(rest, /^(igrsoft|apple-developer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/)) {
+        # Prefix list MUST mirror skills/shared/compatible-plugins.md and L275.
+        if (match(rest, /^(igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/)) {
           i = i + RLENGTH
           continue
         }
@@ -1413,9 +1418,9 @@ MOCK
     if printf '%s' "$leak_out" | grep -qF 'Routed to'; then f02b_ok=0; fi
     # The mid-sentence reference should have the identifier stripped by A6
     # (narrative remains, token gone).
-    if printf '%s' "$leak_out" | grep -qE '(igrsoft|apple-developer):[a-z]' | grep -v '`'; then
+    if printf '%s' "$leak_out" | grep -qE '(igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]' | grep -v '`'; then
       # Allow backticked occurrences only (one is intentionally kept).
-      if printf '%s' "$leak_out" | grep -vE '^[^`]*`[^`]*`[^`]*$' | grep -qE '(igrsoft|apple-developer):[a-z]'; then
+      if printf '%s' "$leak_out" | grep -vE '^[^`]*`[^`]*`[^`]*$' | grep -qE '(igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]'; then
         f02b_ok=0
       fi
     fi

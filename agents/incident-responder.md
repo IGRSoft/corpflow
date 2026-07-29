@@ -167,13 +167,43 @@ Do NOT rollback when:
 - Data migration already applied
 - Rollback would cause worse issues
 
-### Apple Platform Rollback Limitations
+### Platform Rollback Constraints
+
+The decision tree above asks "is rollback safe and fast?" — the honest answer is platform-dependent,
+and on store-distributed clients it is neither. Check the constraint set for the affected platform
+before committing to ROLLBACK.
+
+#### Apple platforms
 
 - **iOS/tvOS/watchOS/visionOS**: Published App Store builds cannot be rolled back — only forward-fix via new submission
 - **macOS (direct distribution)**: Can replace download immediately
 - **TestFlight**: Distribute hotfix build immediately for beta validation (no review required)
 - **Expedited App Store review**: Request via App Store Connect for P0/P1 — typical 24-48 hours
 - **Server-side mitigation**: Use feature flags or API changes to disable broken client functionality while fix is in review
+
+#### Android (Play Store)
+
+- **Halt rollout**: A staged release can be stopped immediately in Play Console — but users already updated stay on the bad build; there is no downgrade
+- **Forward fix**: Ship a higher version code; the halted rollout percentage can be raised again once it is validated
+- **Internal/closed tracks**: Validate the hotfix without waiting on full review
+- **Server-side mitigation**: Same as Apple — flags or API changes reach already-updated clients faster than any store path
+
+#### Web / SaaS
+
+- **Instant revert**: Redeploy the previous build or shift traffic back at the CDN/load balancer — the fastest rollback of any platform
+- **Caches lie**: CDN TTLs and service workers can keep serving the bad bundle after the origin is reverted; invalidate explicitly and verify from a cold client
+- **Forward-only after migration**: If a schema migration already ran, the § Rollback Criteria "do NOT rollback" rule applies as written
+
+#### Package registries (npm, PyPI, Maven, SPM/CocoaPods)
+
+- **Deprecate, do not unpublish**: Yank/unpublish windows are narrow and break consumers' locked builds; publishing a patched version is the safe path
+- **Versions are immutable**: Never republish the same version with different content
+- **Consumers are pinned**: Lockfile-pinned users are unaffected until they resolve again, so the fix propagates slowly — say so in the release notes
+
+#### Containers / server images
+
+- **Redeploy by digest**, not a floating tag, and revert configuration and feature flags in the same step
+- **Irreversible with forward-only migrations**: Mitigate behind a flag instead of rolling the image back
 
 ## Communication Templates
 

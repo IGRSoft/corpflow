@@ -1,10 +1,16 @@
 ---
 name: testing-strategy
-description: Swift Testing and XCTest framework syntax, AAA pattern, testing pyramid, and DV/QA boundary. Reference when implementing or planning unit/UI tests on Apple platforms.
+description: Cross-platform testing reference — testing pyramid, AAA pattern, per-platform framework and naming map, DV/QA boundary, and the Test Selection Gate. Reference when planning or implementing tests on any platform (apple, android, web, systems, backend, ai).
 effort: low
 ---
 
 # Testing Strategy
+
+Canonical testing reference for **every** platform a worktask routes to. The pyramid, AAA
+pattern, DV/QA boundary, and Test Selection Gate below are platform-neutral and apply
+everywhere. Framework and syntax specifics are gated per platform in § Framework by platform —
+an Apple rule never applies off Apple, and vice versa. Platform→plugin routing is canonical in
+`skills/shared/platform-detection.md`.
 
 ## Testing Pyramid
 
@@ -14,9 +20,50 @@ effort: low
 | Integration (20%) | Component interactions | DB/API integration, service-to-service | PR and merge |
 | E2E (10%) | Critical user journeys | Real browser/device | Before release |
 
-## Swift Testing (Primary — Unit Tests)
+## Framework by platform
 
-All unit tests MUST use Swift Testing framework:
+Use the **project's established framework**. Detect it before writing a single test — test
+directory layout, manifest dependencies, CI config. Never introduce a second framework into a
+repo that already has one; when a repo has none, pick from the matrix below and record the
+choice in `<plan_file> § Test Strategy`.
+
+### Framework matrix — app platforms
+
+| Platform | Unit | Integration | UI / E2E |
+|----------|------|-------------|----------|
+| `apple` | Swift Testing (`@Suite`/`@Test`/`#expect`) | Swift Testing + in-memory doubles | XCTest / XCUITest |
+| `android` | JUnit 5 + MockK, Turbine for flows | JUnit + Robolectric, in-memory Room | Espresso / Compose UI test, Roborazzi screenshots |
+| `web` | Vitest or Jest | Testing Library + MSW | Playwright (or Cypress) |
+
+### Framework matrix — systems, backend, ai
+
+| Platform | Unit | Integration | UI / E2E |
+|----------|------|-------------|----------|
+| `systems` | GoogleTest / Catch2 (C++), Unity / CMocka (C), pytest (Python), bats (Bash) | `ctest` targets driving real I/O | No UI layer — CLI transcripts are the evidence |
+| `backend` | Stack-native: Go `testing`+testify, JUnit 5, Vitest/Jest, pytest | Testcontainers for DB/broker/cache | Contract tests (Pact/OpenAPI), k6 for load |
+| `ai` | pytest for pipeline and tooling code | pytest + recorded fixtures / VCR | Eval harness (promptfoo, DeepEval, in-repo runner) with scored thresholds |
+
+### Framework detail and test generation
+
+Deeper per-framework guidance lives in the platform plugin, not here. Every registered dev
+plugin exposes the same two entry points (`skills/shared/compatible-plugins.md`):
+
+| Need | Command |
+|------|---------|
+| Generate tests in the project's framework | `/<plugin>:gen-tests` |
+| Build and run the suite | `/<plugin>:build-test` |
+
+Prefer delegating execution to `/<plugin>:build-test` over hand-rolling a runner invocation —
+it already knows the repo's build system, and its output is the Build Evidence QA reads.
+
+## Framework examples
+
+One minimal example per UI platform. Systems, backend, and AI/ML use the same shapes in their
+stack-native framework — see the matrix above and the plugin's `gen-tests` command.
+
+### Apple — Swift Testing (unit)
+
+On Apple platforms, unit tests use Swift Testing; XCTest is reserved for UI tests.
 
 ```swift
 import Testing
@@ -25,8 +72,7 @@ import Testing
 struct FeatureTests {
     @Test("happy path returns expected result")
     func happyPath() {
-        let result = feature.execute()
-        #expect(result == .success)
+        #expect(feature.execute() == .success)
     }
 
     @Test("error cases throw appropriate error")
@@ -46,17 +92,13 @@ struct FeatureTests {
 }
 ```
 
-### @MainActor for MainActor-Isolated Tests
+### Apple — MainActor-isolated suites
 
 ```swift
 @Suite("ViewModel Tests")
 @MainActor
 struct ViewModelTests {
-    let sut: ViewModel
-
-    init() {
-        sut = ViewModel()
-    }
+    let sut = ViewModel()
 
     @Test("state updates on action")
     func stateUpdates() {
@@ -66,9 +108,9 @@ struct ViewModelTests {
 }
 ```
 
-## XCTest (UI Tests Only)
+### Apple — XCTest (UI tests only)
 
-XCUITest requires XCTest framework:
+XCUITest requires XCTest; this is the one place `test`-prefixed method names are mandatory.
 
 ```swift
 import XCTest
@@ -87,7 +129,45 @@ final class FlowUITests: XCTestCase {
 }
 ```
 
+### Android — JUnit 5 + MockK
+
+```kotlin
+class SessionStoreTest {
+    private val repository = mockk<SessionRepository>()
+
+    @Test
+    fun `login with valid credentials returns session`() = runTest {
+        coEvery { repository.authenticate(any()) } returns Session.valid
+
+        val result = SessionStore(repository).login(Credentials.valid)
+
+        assertEquals(SessionState.Active, result)
+    }
+}
+```
+
+### Web — Vitest + Testing Library
+
+```ts
+describe('SessionStore', () => {
+  it('returns a session for valid credentials', async () => {
+    const repository = { authenticate: vi.fn().mockResolvedValue(validSession) }
+
+    const result = await new SessionStore(repository).login(validCredentials)
+
+    expect(result.state).toBe('active')
+  })
+})
+```
+
 ## AAA Pattern
+
+Every test, in every framework, has three phases: **Arrange** the inputs and doubles, **Act**
+once on the unit under test, **Assert** on the observable result. One logical act per test —
+a test that acts twice is two tests. Blank lines (or explicit `// Arrange` / `// Act` /
+`// Assert` comments in longer tests) keep the phases legible.
+
+### AAA example — Swift
 
 ```swift
 @Test("login with valid credentials succeeds")
@@ -103,7 +183,37 @@ func loginValid() {
 }
 ```
 
-Test method names: descriptive, no `test_` prefix. Example: `loginValidCredentialsReturnsSession()`.
+### AAA example — pytest
+
+```python
+def test_login_valid_credentials_returns_session():
+    # Arrange
+    credentials = Credentials.valid()
+
+    # Act
+    result = auth_service.login(credentials)
+
+    # Assert
+    assert result.state == "active"
+```
+
+## Test naming conventions
+
+The **runner's collection rule wins** — it is not a style choice. Where the runner is agnostic,
+prefer a descriptive sentence naming behavior and expected outcome, not the method called.
+
+### Naming by framework
+
+| Framework | Convention | Example |
+|-----------|------------|---------|
+| Swift Testing | Descriptive func name, **no** `test_` prefix; prose title in `@Test("…")` | `loginValidCredentialsReturnsSession()` |
+| XCTest / XCUITest | `test` prefix **required** by the runner | `testLoginFlow()` |
+| JUnit 5 (Kotlin/Java) | Backtick sentence (Kotlin) or camelCase + `@DisplayName` | `` `login with valid credentials returns session`() `` |
+| Vitest / Jest | `describe` + `it` sentences | `it('returns a session for valid credentials')` |
+| pytest | `test_` prefix **required** for collection | `test_login_valid_credentials_returns_session` |
+| Go | Exported `Test<Thing>` **required** | `TestLoginValidCredentials` |
+| Rust | snake_case `#[test] fn` inside `mod tests` | `fn login_valid_credentials()` |
+| bats | `@test "<sentence>"` | `@test "login with valid credentials"` |
 
 ## DV vs QA Boundary
 
@@ -142,7 +252,7 @@ When `<plan_file>` omits `metadata.test_mode`, agents resolve to `scoped` (not `
 
 DV/QA enforce these even if PL set a tighter mode:
 - Selected Tests list is empty AND `test_mode = build-only` → DV warns and runs the smoke set; QA promotes to `scoped` with a logged note in `testing-N.md § Notes`.
-- Platform has no marker parser handler (e.g., Android/Web until handlers ship) AND `test_mode ∈ {build-only, scoped}` → DV auto-promotes to `full` for that platform with a logged warning. The mode stays as the PL-declared value in metadata; the promotion is recorded in `development-N.md § Decisions` with `auto_promoted_mode: full`.
+- Platform has no wired marker-parser handler (every platform except Apple today — see `test-selection-syntax.md § Identifier grammar by platform`) AND `test_mode ∈ {build-only, scoped}` → DV auto-promotes to `full` for that platform with a logged warning. The mode stays as the PL-declared value in metadata; the promotion is recorded in `development-N.md § Decisions` with `auto_promoted_mode: full`.
 
 ### Contract
 
@@ -197,7 +307,7 @@ DV's `Selected Tests` is the **handoff artifact** consumed by QA; DV's `Executed
 ### `ui_visual_check` (was: `requires_ui_tests` for visual QA)
 
 Set to `true` when at least one applies:
-- New SwiftUI/UIKit views or screens
+- New user-facing views or screens (SwiftUI/UIKit, Compose, React/Vue/Svelte/Angular components)
 - Visual design artifacts in `.context/designs/` need verification
 - Layout/styling/animation changes require screen capture
 - Stakeholder requests UI verification
@@ -269,6 +379,14 @@ The change is strictly additive:
 - No registry → existing Glob Discovery fallback untouched, vision-only.
 - Old manifest lacking the `Design Ref` column parses fine (missing ≡ `—` → live-capture).
 
+### Skip mechanics — positive selection everywhere
+
+Every platform translates the Selected Tests list into **positive** include flags, never negative
+excludes: an exclude list silently grows stale as tests are added, an include list fails loudly.
+The per-platform flag syntax and identifier grammar are tabulated in
+`test-selection-syntax.md § Platform handlers`; the two sections below cover the mechanics that
+differ enough to matter.
+
 ### Skip mechanics — Apple platforms
 
 When DV/QA runs Selected Tests via XcodeBuildMCP, the list is translated to positive `-only-testing:` arguments (one per owning suite, deduplicated), not negative `-skip-testing:`:
@@ -291,7 +409,25 @@ identifier grammar — suite-terminal`. A per-function segment selects nothing u
 
 When `test_mode=full`, the entire suite runs without `-only-testing:`. UI test bundles run unless explicitly excluded (no implicit `-skip-testing:` — UI tests run because `ui_visual_check` or `test_mode=full` opted into them).
 
-DV records `test_mode`, `selected_tests_count`, and `ui_visual_check` in `.context/development-N.md § Decisions`. QA records the resolved mode and any `Selected Tests (QA additions)` in `testing-N.md § Notes`.
+### Skip mechanics — other platforms
+
+Same rule, different flag. Drop the filter entirely for `test_mode=full`; the full suite is the
+regression gate. Prefer `/<plugin>:build-test`, which applies the correct form for the repo.
+
+| Platform / runner | Include flag |
+|-------------------|--------------|
+| Android (Gradle + JUnit) | `./gradlew test --tests 'com.app.SessionStoreTest'` (repeatable) |
+| Web (Vitest / Jest) | `vitest run <path>` + `-t '<name pattern>'`; `jest <path> -t '<pattern>'` |
+| Web E2E (Playwright) | `npx playwright test <file>` + `-g '<title pattern>'` |
+| Python (pytest) | `pytest tests/test_session.py::test_login` (nodeid) or `-k '<expr>'` |
+| Go | `go test ./pkg/session -run '^TestLogin'` |
+| Rust | `cargo test session::login` (substring match on the test path) |
+| C/C++ (CTest / GoogleTest) | `ctest -R '<regex>'`; `./suite --gtest_filter='SessionStore.*'` |
+| Bash (bats) | `bats tests/session.bats -f '<name regex>'` |
+
+### Recording the resolved selection
+
+DV records `test_mode`, `selected_tests_count`, and `ui_visual_check` in `.context/development-N.md § Decisions`. QA records the resolved mode and any `Selected Tests (QA additions)` in `testing-N.md § Notes`. This applies on every platform, including runs auto-promoted to `full`.
 
 ### Marker grammar reference
 
@@ -299,4 +435,4 @@ See `skills/shared/test-selection-syntax.md` for the full marker grammar (`@test
 
 ### Footer markers (bidirectional traceability)
 
-Source files carry `// MARK: - Test Info` footers with `@test-file:` (primary test path), `@related-tests:` (cross-dependency tests), and `@test-coverage:` (description). Test files carry `// MARK: - Source Info` footers with `@source-file:` (source path) and `@doc-refs:` (documentation links). These are advisory — they do not affect test selection — but enable reviewers and tooling to verify coverage intent bidirectionally. See `test-selection-syntax.md § Footer Markers` for grammar, platform variants, and examples.
+Source files carry a `Test Info` footer block with `@test-file:` (primary test path), `@related-tests:` (cross-dependency tests), and `@test-coverage:` (description). Test files carry a `Source Info` footer with `@source-file:` (source path) and `@doc-refs:` (documentation links). The sentinel words are fixed; the comment decoration around them is language-native (`// MARK: -` on Swift, `# region` on Python, a plain banner elsewhere). These are advisory — they do not affect test selection — but enable reviewers and tooling to verify coverage intent bidirectionally. See `test-selection-syntax.md § Footer Markers` for grammar, platform variants, and examples.

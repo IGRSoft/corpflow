@@ -102,10 +102,11 @@ Create `.context/release-N.md` (N = `task.metadata.run_index`; resolver: metadat
 - Data recovery: [if applicable]
 
 ### Platform-Specific
-- [ ] App Store metadata updated
-- [ ] Screenshots current
+<!-- Fill from the matching § Platform-Specific Checklists block for this platform -->
+- [ ] Store or registry listing metadata updated (store/registry platforms)
+- [ ] Store assets current — screenshots, graphics (store platforms)
 - [ ] Release notes written
-- [ ] Privacy policy current
+- [ ] Privacy policy / data-safety disclosure current (store platforms)
 ```
 
 ### Invocation

@@ -814,96 +814,14 @@ would otherwise block a blameless DV.
 #### Step 5c
 
 ```typescript
-    // 5c. Pre-warm XcodeBuildMCP for Apple DV/DR/QA stages.
-    //     XcodeBuildMCP (`npx -y xcodebuildmcp@latest mcp`, stdio lazy-spawn) is only
-    //     inherited by subagents if ALREADY RUNNING in the parent at delegation time;
-    //     otherwise the child's first tool call fails with "tool not available". Warm it
-    //     in the parent ONCE per worktask before the first Apple-platform stage.
-    const APPLE_STAGES = new Set(["DV","DR","QA"]);
-    const APPLE_AGENTS = /^(developer|technical-lead|qa-engineer)$/;
-    const isAppleStage =
-      APPLE_STAGES.has(full.metadata.stage) &&
-      ( full.metadata.platform === "apple" ||
-        ( !full.metadata.platform &&
-          APPLE_AGENTS.test(agentType.split(":").pop()) &&
-          // workspace contains Apple markers
-          ["*.xcodeproj","*.xcworkspace","Package.swift"]
-            .some(g => glob.sync(g, { cwd: process.cwd(), dot: false }).length > 0)
-        )
-      );
-```
-
-##### Step 5c — warmup attempts
-
-```typescript
-    if (isAppleStage && !state.xcodeMcpWarmed) {
-      // See `agent-coordination § MCP Unavailability Detection` for the canonical regex.
-      const MCP_UNAVAILABLE_RE = /(tool not available|server (not reachable|unavailable)|connection refused|ECONNREFUSED|EPIPE|ETIMEDOUT|timed? ?out|spawn ENOENT|command not found|InputValidationError)/i;
-      let warmed = false;
-      for (let attempt = 1; attempt <= 3 && !warmed; attempt++) {
-        try {
-          await mcp__XcodeBuildMCP__session_show_defaults({});
-          warmed = true;
-          appendAudit({ action: "mcp_warmup_attempt",
-                        metadata: { server: "XcodeBuildMCP", attempt, result: "ok" } });
-```
-
-##### Step 5c — failure classification & backoff
-
-```typescript
-        } catch (err) {
-          const reason = String(err?.message ?? err).slice(0, 500);
-          const classified = MCP_UNAVAILABLE_RE.test(reason) ? "transient" : "fatal";
-          appendAudit({ action: "mcp_warmup_attempt",
-                        metadata: { server: "XcodeBuildMCP", attempt, result: "fail",
-                                    classified, reason: reason.slice(0, 200) } });
-          if (classified === "fatal") throw err;        // real bug — don't burn the budget
-          if (attempt < 3) await sleep(8000);            // npx cold-start budget (P95 ~16s over 2 sleeps)
-        }
-      }
-      state.xcodeMcpWarmed = warmed;
+    // 5c. Platform tooling is the dev plugin's concern, not the orchestrator's.
+    //     igrsoft holds no platform build/test tool grants: DV/DR/QA delegate to
+    //     `/<plugin>:build-test`, and each plugin owns its own toolchain lifecycle,
+    //     including MCP cold-start and any raw-CLI fallback. Nothing to warm here.
+    //     Plugin resolution: skills/shared/compatible-plugins.md § Registry.
 
 ```
 
-##### Step 5c — session-state cache
-
-```typescript
-      // Cache session state in state.json so DV/DR/QA skip redundant queries
-      if (warmed && fs.existsSync(".context/state.json")) {
-        try {
-          const defaults = await mcp__XcodeBuildMCP__session_show_defaults({});
-          atomicMergeStateJson({
-            mcp_session: {
-              xcode_defaults: defaults,
-              warmed_at: new Date().toISOString()
-            }
-          });
-        } catch (_) { /* non-critical — agents fall back to live calls */ }
-      }
-
-```
-
-##### Step 5c — fallback banner
-
-```typescript
-      if (!warmed) {
-        appendAudit({ action: "mcp_warmup_failed",
-                      metadata: { server: "XcodeBuildMCP" } });
-        const runIndex = full.metadata.run_index ?? 0;
-        const banner =
-          `IMPORTANT: XcodeBuildMCP warmup failed in the orchestrator. ` +
-          `Treat mcp__XcodeBuildMCP__* as UNAVAILABLE. Fall back to ` +
-          `xcodebuild via Bash for build/test (tee output to the same ` +
-          `.context/logs/* paths) and record the fallback in ` +
-          `.context/development-${runIndex}.md § Decisions so QA/DR see it.`;
-        // handoff-protocol: SUFFIX banner (section [7]) — preserves the
-        // cache prefix boundary at the [1][2][3][4][5] line.
-        full.description = full.description + "\n\n" + banner;
-      }
-      // warmup succeeded → child inherits a live XcodeBuildMCP server.
-    }
-
-```
 
 #### Step 5d
 
@@ -1243,50 +1161,31 @@ When the worktask runs under a `/megatask` batch (state.json `metadata.milestone
 
 Helper exit 1 (catastrophic), exit 0 with `result: "deferred"` (any reason), `gh` hang past `GH_TIMEOUT` (default 30s), or `state.json` write failure after a successful `gh` call — none of these cause the orchestrator to halt, retry the publish step, or branch to a different code path. After the helper returns, the orchestrator's only post-helper action is to read one optional `published_url=<url>` line from helper stdout (for terminal UX) and unconditionally continue to the stage-loop entry. See `analyzing-0.md#sequence-diagram` for the canonical sequence.
 
-### Pre-DV MCP warmup
+### Platform tooling ownership
 
-XcodeBuildMCP (and any MCP server registered as `npx -y …` over stdio) is
-**lazy-spawned**: Claude Code only starts the process on the first tool
-call. Subagents inherit MCP servers that were already running in the
-parent at delegation time (`agent-coordination § MCP Tool Inheritance`)
-— but they do NOT trigger a spawn on inheritance. If the orchestrator
-delegates DV before issuing any XcodeBuildMCP call, the child agent
-(especially in `isolation: worktree`) inherits an unstarted reference
-and the first `mcp__XcodeBuildMCP__*` call fails with "tool not
-available."
+The orchestrator holds **no platform build or test tooling**. DV, DR, and QA each delegate to the
+detected platform's `/<plugin>:build-test`, and every dev plugin owns its own toolchain: build-system
+detection, MCP servers, cold-start handling, and the raw-CLI fallback when its MCP server is absent.
+Plugin resolution: `skills/shared/compatible-plugins.md § Registry`.
 
-Step `5c` in the execution loop above warms the server in the parent
-session before the first Apple-platform stage. Contract:
+#### Why the orchestrator no longer pre-warms
 
-#### Warmup contract — trigger & action
+A lazy-spawn stdio MCP server (`npx -y …`) is only inherited by a subagent if it is **already
+running** in the parent at delegation time (`agent-coordination § MCP Tool Inheritance`); inheritance
+alone does not trigger a spawn. The orchestrator used to warm XcodeBuildMCP itself so Apple DV/DR/QA
+children would inherit a live server.
 
-- **Trigger**: `metadata.stage ∈ {DV,DR,QA}` AND
-  (`metadata.platform === "apple"` OR
-   `metadata.subagent` matches `^(developer|technical-lead|qa-engineer)$`
-   AND the workspace contains an Apple marker — `*.xcodeproj`,
-   `*.xcworkspace`, or `Package.swift`).
-- **Action**: up to 3 calls to `mcp__XcodeBuildMCP__session_show_defaults`,
-  with 8-second backoffs between attempts (covers npx first-fetch P95).
-  Failure messages are classified against
-  `agent-coordination § MCP Unavailability Detection` — only matches retry,
-  non-matches re-throw immediately as real bugs.
+That warm-up required the orchestrator to hold Apple tool grants, which made one platform structurally
+privileged inside a platform-neutral pipeline. The grants are gone, so the warm-up cannot and should
+not live here. Cold-start is now absorbed where the tooling is owned: each plugin's `build-test`
+retries its own MCP server and falls back to the raw CLI, reporting which path it took.
 
-#### Warmup contract — audit, failure, idempotency
+#### Consequence to expect
 
-- **Audit**: every attempt writes one
-  `audit.jsonl` line `action: "mcp_warmup_attempt"` with
-  `metadata: {server, attempt, result, classified, reason?}`. On final failure,
-  one additional `action: "mcp_warmup_failed"` line.
-- **Failure mode**: do NOT abort the stage. Inject a banner at the
-  top of `full.description` instructing the agent to use Bash
-  `xcodebuild` fallback and to record the fallback in
-  `.context/development-N.md § Decisions`.
-- **Idempotency**: cache `state.xcodeMcpWarmed = true` after the
-  first successful call so the orchestrator does not re-warm on each
-  Apple stage in the same worktask run.
-
-This pattern generalises to any lazy-spawn `npx`-based MCP. Add a
-new trigger block when introducing one (e.g., Pencil, Sosumi).
+The first delegated build in a worktask may pay a cold-start retry inside the plugin, or take the
+plugin's CLI fallback path. Both are reported by the plugin in its own output; neither aborts the
+stage. If a plugin is missing entirely, the stage agent falls back to the project's own build command
+and records a `plugin_unavailable` audit row.
 
 ### DV Batch Checkpointing
 

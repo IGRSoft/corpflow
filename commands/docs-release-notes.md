@@ -30,7 +30,7 @@ Generate release notes from completed work, git history, or worktask artifacts.
 - `--from-worktask` - Generate from worktask artifacts
 - `--format <type>` - Output format (default: markdown)
 - `--audience [internal|external|all]` - Target audience
-- `--platform <apple|android|web|all>` - Target platform context (default: all)
+- `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all)
 
 ## Examples
 

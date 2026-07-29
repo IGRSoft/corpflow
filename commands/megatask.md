@@ -1,7 +1,7 @@
 ---
 name: megatask
 description: Orchestrate many worktasks across a GitHub milestone or an explicit issue array, ordered by a dependency/blocker DAG and priority, each issue in its own isolated worktree.
-argument-hint: '<milestone-N> | --issues N,N,N [--secure] [--platform apple|android|web|all] [--dry-run]'
+argument-hint: '<milestone-N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
 version: 0.1.0
 model: opus
 allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager), Task(igrsoft:workflow-engineer), Task(igrsoft:project-manager)
@@ -57,7 +57,7 @@ least one of the two MUST be present. When both are present, `--issues` filters 
 | `N` (positional) | GitHub milestone number — execute its open issues |
 | `--issues N,N,N` | Explicit issue array (comma-separated). May span milestones or have none |
 | `--secure` | Forward `--secure` to every per-issue worktask (11-stage pipeline) |
-| `--platform <apple\|android\|web\|all>` | Forward `--platform` to every per-issue worktask |
+| `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Forward `--platform` to every per-issue worktask |
 | `--dry-run` | Resolve issues, build the DAG, print the execution plan — create no worktrees, no PRs |
 | `--secure`, `--platform` and other per-issue worktask flags are forwarded verbatim into each issue's `/worktask` invocation. |
 

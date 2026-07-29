@@ -19,18 +19,24 @@ Technical review of estimates by platform specialists.
 
 ## Adjustment Matrix
 
+Capability-keyed and platform-neutral — it applies whatever the stack. The concrete APIs
+behind each capability live in the per-platform tables below.
+
 | Category | Trigger | Min Increase | Max Increase |
 |----------|---------|-------------|-------------|
-| AR/Camera SDKs | Metal, AVFoundation, face tracking | +3 SP | +5 SP |
-| API Integration | Image processing, async handling | +1 SP | +2 SP |
-| BLE/Hardware | State machines, background modes | +2 SP | +3 SP |
-| Vision Framework | Face detection, landmarks | +2 SP | +3 SP |
-| Offline Sync | Conflict resolution, Core Data | +2 SP | +3 SP |
+| Realtime graphics / camera | GPU pipeline, capture session, marker or face tracking | +3 SP | +5 SP |
+| API integration | Media processing, async orchestration, retry/backoff | +1 SP | +2 SP |
+| Hardware / peripheral I/O | Connection state machines, background execution | +2 SP | +3 SP |
+| On-device inference | Detection, landmarks, model loading and warm-up | +2 SP | +3 SP |
+| Offline sync | Conflict resolution, local persistence | +2 SP | +3 SP |
 | Third-party SDKs | Unknown documentation quality | +15% buffer | +20% buffer |
 
 ## Platform-Specific Adjustments
 
-### iOS/SwiftUI
+Apply the table matching the reviewed platform. Rows name that platform's concrete APIs;
+the capability they instantiate is the matching Adjustment Matrix row above.
+
+### Apple/SwiftUI
 | Feature | Min Adjustment | Max Adjustment |
 |---------|---------------|---------------|
 | Metal rendering | +3 SP | +5 SP |
@@ -58,6 +64,32 @@ Technical review of estimates by platform specialists.
 | WebRTC integration | +3 SP | +5 SP |
 | Service workers | +2 SP | +3 SP |
 | IndexedDB sync | +2 SP | +3 SP |
+
+### Backend
+| Feature | Min Adjustment | Max Adjustment |
+|---------|---------------|---------------|
+| Cross-service transaction / idempotency | +3 SP | +5 SP |
+| Schema migration against live data | +2 SP | +3 SP |
+| Public API contract + versioning | +2 SP | +3 SP |
+| AuthN/AuthZ and tenant isolation | +2 SP | +3 SP |
+| Queue / event-driven fan-out | +2 SP | +3 SP |
+
+### Systems (C/C++/Python/Bash)
+| Feature | Min Adjustment | Max Adjustment |
+|---------|---------------|---------------|
+| Manual memory ownership redesign | +3 SP | +5 SP |
+| FFI / language-boundary bindings | +2 SP | +3 SP |
+| Cross-platform build + toolchain matrix | +2 SP | +3 SP |
+| Sanitizer / UB triage on existing code | +1 SP | +2 SP |
+| ABI-stable public interface | +2 SP | +3 SP |
+
+### AI/ML
+| Feature | Min Adjustment | Max Adjustment |
+|---------|---------------|---------------|
+| Fine-tuning or training run | +5 SP | +8 SP |
+| RAG pipeline (ingest, chunk, retrieve) | +3 SP | +5 SP |
+| Eval harness + regression baselines | +2 SP | +3 SP |
+| Inference serving under a cost/latency budget | +2 SP | +3 SP |
 
 ## Review Process
 
@@ -97,7 +129,7 @@ Before finalizing estimates, verify:
 - [ ] Analytics integration
 - [ ] Deep linking if required
 - [ ] Push notification handling
-- [ ] App Store/Play Store requirements
+- [ ] Distribution-channel requirements (App Store, Play Store, package registry, deploy target)
 - [ ] Localization requirements
 - [ ] Accessibility requirements
 
@@ -107,9 +139,9 @@ Watch for these during review:
 
 | Flag | Action |
 |------|--------|
-| Third-party SDK without iOS 18+ support | Add contingency phase |
-| Bluetooth background requirements | Test on real devices early |
-| AR face tracking | Check App Store guidelines |
+| Third-party SDK not supporting the target platform version | Add contingency phase |
+| Bluetooth or peripheral background requirements | Test on real devices early |
+| AR / face tracking | Check the distribution channel's review guidelines |
 | Health/financial data | Security audit required |
 | Real-time sync | Load testing required |
 

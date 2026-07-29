@@ -8,7 +8,7 @@
 | DV (Development) | ios-developer, macos-developer, etc. | planning + architecture context |
 | SR (Security) | security-auditor | development context + Apple security checklist (Keychain, ATS, entitlements, TCC, privacy manifest) |
 | QA (Quality) | test-generator | development context + test requirements |
-| DC (Documentation) | generate-dooc (command) | development context + API surface |
+| DC (Documentation) | gen-docs (command) | development context + API surface |
 | RE (Release) | ios-developer, macos-developer | App Store/TestFlight submission data, notarization |
 | IR (Incident) | All platform agents | incident context + hotfix constraints (no App Store rollback) |
 
@@ -50,6 +50,65 @@
 | QA (Quality) | test-generator | development context + test requirements; JUnit4/5, MockK, Turbine, Roborazzi screenshot tests |
 | DV-support (dependencies) | dependency-manager | version catalog (`libs.versions.toml`) + Gradle dependency CVE audit scope |
 
+## frontend-developer Plugin
+
+### frontend-developer — architecture & development handoffs
+
+| igrsoft Stage | frontend-developer Agent | Handoff Data |
+|---------------|--------------------------|--------------|
+| AR (Architecture) | frontend-architector | planning context + rendering-strategy constraints (CSR/SSR/SSG/ISR, state management, design system — consultation model, like apple-architector) |
+| DV (Development) | frontend-developer (router), react-developer, vue-developer, svelte-developer, angular-developer, typescript-developer, css-developer | planning + architecture context; `requires_screenshots: true` (Build Evidence = `web_adapter` → Playwright / Chrome MCP + Lighthouse and axe reports) |
+
+### frontend-developer — review, QA & support handoffs
+
+| igrsoft Stage | frontend-developer Agent | Handoff Data |
+|---------------|--------------------------|--------------|
+| DR (Developer Review) | fe-code-fixer | gate blockers (`metadata.gate_blockers[]`) + ESLint/Biome minimal-diff remediation |
+| SR (Security) | fe-security-auditor | development context + web security checklist (XSS, CSP, auth-token storage, dependency supply chain) |
+| QA (Quality) | fe-test-generator | development context + test requirements; Vitest/Jest, Testing Library, Playwright |
+| QA-support (accessibility) | fe-accessibility-auditor | WCAG 2.2 audit scope + axe/Lighthouse reports |
+| DV-support (performance) | fe-performance-engineer | Lighthouse, Core Web Vitals, bundle-analysis artifacts under `.context/logs/` |
+| DV-support (dependencies) | fe-dependency-manager | `package.json` + lockfile paths + CVE audit scope |
+
+## backend-developer Plugin
+
+### backend-developer — architecture & development handoffs
+
+| igrsoft Stage | backend-developer Agent | Handoff Data |
+|---------------|-------------------------|--------------|
+| AR (Architecture) | backend-architector | planning context + service decomposition and data constraints (consultation model, like apple-architector) |
+| DV (Development) | backend-developer (router), node-developer, go-developer, jvm-backend-developer, python-backend-developer, api-designer, database-engineer | planning + architecture context; `requires_screenshots: false` (Build Evidence = API request/response transcripts, test output, k6 load reports, migration logs) |
+
+### backend-developer — review, QA & support handoffs
+
+| igrsoft Stage | backend-developer Agent | Handoff Data |
+|---------------|-------------------------|--------------|
+| DR (Developer Review) | be-code-fixer | gate blockers (`metadata.gate_blockers[]`) + minimal-diff remediation |
+| SR (Security) | be-security-auditor | development context + OWASP API Top 10 checklist (authz boundaries, injection, secret handling, dependency CVEs) |
+| QA (Quality) | be-test-generator | development context + test requirements; unit, integration (Testcontainers), contract tests |
+| DV-support (performance) | be-performance-engineer | k6 load reports, hot-path profiles, slow-query analysis under `.context/logs/` |
+| DV-support (dependencies) | be-dependency-manager | per-ecosystem manifests + CVE audit scope |
+
+## ai-engineer Plugin
+
+### ai-engineer — architecture & development handoffs
+
+| igrsoft Stage | ai-engineer Agent | Handoff Data |
+|---------------|-------------------|--------------|
+| AR (Architecture) | ai-architector | planning context + model/pipeline constraints (consultation model, like apple-architector) |
+| DV (Development) | ai-engineer (router), llm-engineer, ml-engineer, mlops-engineer | planning + architecture context; `requires_screenshots: false` (Build Evidence = eval reports, metric tables, training transcripts under `.context/logs/`) |
+
+### ai-engineer — review, QA & support handoffs
+
+| igrsoft Stage | ai-engineer Agent | Handoff Data |
+|---------------|-------------------|--------------|
+| DR (Developer Review) | ai-code-fixer | gate blockers (`metadata.gate_blockers[]`) + minimal-diff remediation |
+| SR (Security) | ai-security-auditor | development context + AI security checklist (prompt injection, training/inference data leakage, model supply chain) |
+| QA (Quality) | ai-test-generator | development context + eval/test requirements |
+| DV-support (performance) | ai-performance-engineer | inference latency and throughput profiles under `.context/logs/` |
+| DV-support (prompts) | ai-prompt-engineer | prompt-tuning scope + eval baselines |
+| DV-support (dependencies) | ai-dependency-manager | ML dependency manifests + CVE audit scope |
+
 ## security-scanning Plugin
 
 | igrsoft Stage | security-scanning Agent | Handoff Data |
@@ -67,7 +126,7 @@
 
 ## Future Plugin Integration (Not Yet Installed)
 
-The following marketplace plugins are planned but not currently installed. Do NOT invoke these agents until the corresponding plugin is added to the project configuration.
+The following marketplace plugins are planned but not currently installed. Do NOT invoke these agents until the corresponding plugin is added to the project configuration. `frontend-developer`, `backend-developer`, and `ai-engineer` have graduated out of this table — their stage handoffs are documented above and their registry entries are in `skills/shared/compatible-plugins.md`.
 
 | Plugin | Agent | Use Case |
 |--------|-------|----------|

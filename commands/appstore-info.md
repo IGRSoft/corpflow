@@ -1,6 +1,6 @@
 ---
 name: appstore-info
-description: Scaffold App Store publishing folder and generate bilingual EN/UA listing content from README
+description: 'Apple-only. Scaffold the App Store publishing folder and generate bilingual EN/UA listing content from README.'
 argument-hint: <app name or bundle ID>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
@@ -13,6 +13,9 @@ related:
 ---
 
 # App Store Info Command
+
+> **Apple-only.** This command targets the Apple App Store listing format and has no
+> equivalent on other platforms. The rest of the igrsoft plugin is platform-neutral.
 
 Scaffold the `AppStore/` publishing folder and generate all required App Store listing fields in English and Ukrainian, sourced from the project README. If no README exists, it is generated from source code before proceeding.
 

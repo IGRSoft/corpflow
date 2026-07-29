@@ -2,6 +2,80 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.40.0] - 2026-07-29
+
+Follow-through on 3.39.0: closes the gaps that release left open and clears the suite. Min CC unchanged at **2.1.220**. The test suite is now **fully green** for the first time in this series — 281 bats assertions passing, 0 failures, and the Swift-dependent benchmark tests skipping honestly rather than failing.
+
+### Added
+
+- **`tests/shell/skills/cross-plugin-refs.bats`** — a contract test asserting that every `/<plugin>:<command>` and `Task(<plugin>:<agent>)` this plugin names resolves to a real file in that sibling plugin. It immediately caught two live defects nothing else in the suite could see: the 3.39.0 build-delegation table promised `/ai-engineer:build-test` while ai-engineer shipped no such command, and an android agent rename left three `Task(android-developer:*)` grants pointing at deleted files. Skips cleanly when sibling repos are not checked out beside this one. Also freezes the registry ↔ `publish-pl-issue.sh` prefix-list lockstep that only prose asserted before.
+- **`web-capture.sh` and `android-capture.sh`** — the DV screenshot system had one shipped capture script (Apple) and two prose procedures. All three platforms now have executable, self-tested scripts, closing the last structural asymmetry in the adapter layer.
+
+### Fixed (test robustness)
+
+- **The suite could not pass on a host without a working Apple toolchain** — in a plugin that now explicitly orchestrates six platforms. Two guards tested presence rather than usability: `test_generators.py` gated on `shutil.which("swift")`, and `run-tests.sh` hard-`fail`ed on `command -v swift` and then ran `swift test` unconditionally. A swiftly shim stays on PATH after its selected toolchain is uninstalled, so the binary resolved, no skip fired, and the run failed underneath. Both now probe that `swift --version` exits zero; Swift is downgraded from a hard prerequisite to an optional phase that skips with a warning. Same defect shape as the `cache-lint` test above — a guard testing for the wrong thing — and the same shape as the platform coupling this series set out to remove.
+
+### Fixed
+
+- **The suite's three long-standing red tests.** `skills/code-comment-standard/SKILL.md` carried a composed plugin-root token (the bare `${CLAUDE_PLUGIN_ROOT}` form with a path appended) outside the whitelist that contract protects (drift, now using the plain relative path); `attach-visual-evidence.sh` printed no usage message when invoked with no mode, and validated argv only after loading state, so a caller error was masked by a missing `state.json`; and the `cache-lint --filename-lint` test asserted against the live untracked `.context/` directory, so its result depended on whatever runtime state a worktask happened to leave behind — it now uses a fixture and tests the same behavior deterministically.
+- **`android-developer`'s four functional-role agents collided with `apple-developer`'s.** Both shipped bare `code-fixer`, `security-auditor`, `test-generator`, and `dependency-manager`. Claude Code keys installed agents by frontmatter `name`, so one silently overwrote the other, and `error_file` derives from the basename, so both wrote to the same `.context/errors/test-generator.md` inside one worktask. android-developer renamed to the `and-` prefix (its 1.4.0); all references here follow, and `§ Naming` now records that apple-developer is the sole remaining bare-name plugin.
+- **`deps --upgrade` could silently run a read-only audit.** Dispatch selects the mode from the first token, so a flag naming a mutating mode fell through to `audit` — the caller asked for an upgrade and was handed an audit report, reading "no action taken" as "nothing to do". backend-developer even documented the flag as an alias. All four affected plugins now stop with an explicit error; apple-developer was already safe.
+
+### Changed
+
+- `ai-engineer` gains `build-test` — the one core command the orchestrator structurally requires for a platform to be routable, since DV/DR/QA delegate their build gate to it. This is not a reversal of its documented command-set exception; the rest of the core set is still deliberately absent.
+- `ai-engineer` gains the `workflow-integration` skill the compatibility contract requires. It was the only registered plugin without one, so it could be routed to but could not properly take over a stage. Registry updated: version floors, the ai-engineer command-set note, and the workflow-skill column.
+
+## [3.39.0] - 2026-07-29
+
+Platform-agnostic orchestration. Min CC unchanged at **2.1.220**. The registry landed in 3.38.0 made Apple *one of six* on paper; this release makes the pipeline behave that way.
+
+### Changed
+
+- **BREAKING (behavioral): the orchestrator no longer holds platform build tooling.** All 36 `mcp__XcodeBuildMCP__*` grants are removed from `developer`, `qa-engineer`, and `technical-lead`. DV/DR/QA now delegate to the detected platform's `/<plugin>:build-test`, which every dev plugin gained in its own release. Each plugin owns its toolchain lifecycle — MCP cold-start, retry, and raw-CLI fallback — so the first delegated build in a worktask may pay a cold-start retry or take the plugin's CLI fallback path. Neither aborts the stage; both are reported by the plugin. A missing plugin falls back to the project's own build command and writes a `plugin_unavailable` audit row.
+- **The Apple XcodeBuildMCP pre-warm is deleted** (execution-loop step 5c and its contract section). It existed because a lazy-spawn stdio MCP server is only inherited by a subagent when already running in the parent — but warming it required the orchestrator to hold Apple tool grants, which is precisely what made one platform structurally privileged. `state.mcp_session` is now deprecated in the state-ledger schema rather than removed, so ledgers written by earlier versions still validate.
+- **Screenshot capture delegates too.** The `apple`/`web`/`android` adapters now ask the platform's own agent to produce the file and stat the result, keeping the `{path, bytes, ok, error}` contract and the existing fallback ladder unchanged.
+
+### Fixed
+
+- **`skills/shared/testing-strategy.md` mandated Swift Testing for every platform.** Under a platform-neutral filename, it stated "All unit tests MUST use Swift Testing framework" with no guard, and it is the canonical testing reference for all six platforms — so a Go or React worktask was instructed to use Swift Testing. Rewritten as a genuine cross-platform reference with a per-platform framework and naming map. `agents/product-manager.md` carried the same unguarded rule under **Key Rules**; framework selection is now derived from the repo and the detected platform.
+- **The state-ledger schema rejected four supported platforms.** `handoff-protocol.md` enumerated `[all, apple, ios, macos, watchos, tvos, visionos, web, server]` — five Apple sub-platforms, while `android`, `systems`, `backend`, and `ai` were absent, so a ledger for any of those failed its own documented schema. Now the canonical six keys.
+- **`commands/test-coverage.md` could not run tests off Apple.** Its only executable grant was `Bash(swift test:*)`, and its compliance table marked Swift Testing "✅ Required" — unsatisfiable elsewhere. Now grants 16 ecosystems and checks against the project's established framework.
+- **The comment-density gate never counted Python comments.** `hooks/dv-comment-density-gate.sh` detected comments with a C-family-only regex while its extension gate accepted `.py`, so a fully-commented Python file measured 0% density and always passed. Comment style is now keyed on file extension, with self-test cases for the hash-comment path.
+- **Android UI changes were invisible to the screenshot gate.** `detect-ui-change.sh` carried Apple and web markers but none for Android (no Compose, `@Composable`, `res/layout`, `.kt`) while accepting `--platform android`, so `requires_screenshots` never fired for Android UI work.
+- **`dv-screenshot-gate.sh` told every platform to run `apple-canvas`.** The gate logic was already neutral; only its remediation message was Apple-only, so a Go backend that tripped it got Apple instructions.
+- **`commands/appstore-iap.md` could not perform its own procedure** — it granted no browser tool while its Phases 2-4 are pure App Store Connect browser automation. Now grants the Chrome MCP tools it actually calls.
+- `map-and-filter.sh` classified only `*Tests.swift`/`*_test.py` as tests, silently discarding Kotlin/TS/Go/Rust/Java test files; `state-patch.sh` advised `swift package clean` on every platform's disk-space halt.
+- **Advertised-but-unimplemented `--platform` values.** `design-accessibility` and `design-specs` offered `android` with no Android content; `estimate` offered web/backend/systems/ai with no adjustment rows. Each either gained the content or had its enum narrowed to its honest scope — the `design-*` commands stay `apple|android|web|all` because they are UI-only by nature.
+
+### Added
+
+- Per-platform depth where Apple previously had a private drill-down: security domain checklists for all six platforms (`security-reviewer`), documentation pipelines beyond DocC (`technical-writer`), rollback constraints beyond the App Store (`incident-responder`), architect routing and dual-pass architecture review for every platform (`software-architector`, `arch-review`, `arch-decision`).
+- The three `appstore-*` commands are retained and now **labelled Apple-only** in their descriptions and in README, so the plugin's neutrality claim is honest. `appstore-screenshots` renames its Apple-device flag to `--apple-platform` so it stops colliding with the plugin-wide `--platform` vocabulary.
+
+## [3.38.0] - 2026-07-29
+
+Compatible dev-plugin registry. Min CC unchanged at **2.1.220**.
+
+### Added
+
+- **`skills/shared/compatible-plugins.md`** — the registry the orchestrator lacked. Carries plugin-level metadata only (role, platform key, version floor, entry agent, command-set tier, workflow skill), the functional-role agent roster used by AR/SR/QA/DR, the core-parity command set, and per-plugin handoff defaults. Agent routing stays canonical in `platform-detection.md`, which the registry points at rather than duplicating; the two files now cross-reference each other.
+- **`skills/cross-plugin-handoff/references/plugin-onboarding.md`** — the compatibility contract a dev plugin must satisfy (command set, agent roster with plugin-unique prefixes, full handoff schema, workflow-integration skill, evidence declaration, AR consultation model) plus the ordered 14-row touchpoint checklist for adding a plugin and the procedure for replacing one.
+- **`ai-engineer` is wired in.** Previously it had zero references anywhere in the plugin. It now has an `ai` platform key: specialization section and marker table in `platform-detection.md` (`.ipynb`, ML/LLM dependency detection, model artifacts, dvc/mlflow/wandb), six `Task(ai-engineer:*)` grants on `developer`, a common-row, stage tables in `plugin-protocols.md`, and rows in the AR/SR/QA consultation tables.
+- **Stage handoff tables for `frontend-developer`, `backend-developer`, and `ai-engineer`** in `plugin-protocols.md`. All three were routed to by `developer.md` but had no protocol table; the three "graduated" plugins are noted under the Future Plugin Integration table.
+
+### Fixed
+
+- **`publish-pl-issue.sh` scrubbed only one dev plugin.** The plugin-prefix allow-list named `apple-developer` alone among the dev plugins, so `system-developer:`, `android-developer:`, `frontend-developer:`, `backend-developer:`, and `ai-engineer:` agent identifiers passed through into published PL issues — and the two leak-check greps that are supposed to catch exactly that shared the same blind spot. All four occurrences now carry the full list, with a comment binding them to the registry.
+- **`pm-milestone.md` routed Android and web work to `igrsoft:developer`** rather than the plugins that now exist; `systems`, `backend`, and `ai` had no row at all. The Test Agent table gains rows for all five non-Apple platforms, with a note that the Plugin column disambiguates the `test-generator` name that apple-developer and android-developer both ship.
+- **`software-architector`, `security-reviewer`, and `qa-engineer` could only reach apple-developer.** Each granted exactly one `Task(apple-developer:*)` target while the equivalent architect / security-auditor / test-generator existed in all six plugins. Grants and consultation tables now cover every platform; the Apple flow is retained as the worked example.
+- **`developer.md` was missing a backend row** in its common-rows table despite routing backend work, and its `--platform` enum omitted `backend` at three sites.
+
+### Changed
+
+- Dev-plugin command references across `README.md`, `agents/technical-writer.md`, `agents/software-architector.md`, `commands/worktask.md`, `skills/cross-plugin-handoff/`, and `skills/self-improvement/` migrate to the unified command names (`code-refactor`→`fix-refactor`, `code-modernize`/`code-legacy-modernize`→`fix-modernize`, `generate-dooc`→`gen-docs`, `code-review`→`review-code`, `mock-api`→`gen-mock-api`). Several referenced apple commands that no longer exist under any name.
+- The AR-collaboration text in `cross-plugin-handoff/SKILL.md` and `agent-coordination/SKILL.md` is generalized from Apple-only to all platform architects; the agent-coordination model table now points at the registry instead of enumerating a second copy of the roster.
+
 ## [3.37.2] - 2026-07-29
 
 Visual evidence reaches the PR again. Min CC unchanged at **2.1.220**.

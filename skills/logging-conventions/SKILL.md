@@ -26,12 +26,14 @@ Two artifacts — two purposes — two locations.
 
 ### Kind Taxonomy
 
+The kind names what the log **is**, not which tool made it.
+
 | Kind | Source | Example |
 |------|--------|---------|
-| `build` | `build_sim`, SwiftPM, CI builds | `build-ios-sim-20260420-141522.log` |
-| `test` | `test_sim`, XCTest, test suites | `test-qa-20260420-143008.log` |
+| `build` | Any compile/package run — xcodebuild/SwiftPM, Gradle, cargo, `go build`, bundlers, CI | `build-ios-sim-20260420-141522.log` |
+| `test` | Any test-runner run — XCTest, JUnit, pytest, `go test`, jest, bats | `test-qa-20260420-143008.log` |
 | `monitor` | `Monitor`-tool streams | `monitor-developer-20260420-142250.log` |
-| `sim` | `launch_app_logs_sim`, `start_sim_log_cap` | `sim-iphone15-20260420-143201.log` |
+| `sim` | Simulator/emulator device-log streams (Apple `launch_app_logs_sim`, Android `adb logcat`). No device surface ⇒ no `sim` logs | `sim-iphone15-20260420-143201.log` |
 | `incident` | IR background tails | `incident-20260420-090512.log` |
 | `hotfix` | Emergency DV stream | `hotfix-auth-20260420-103344.log` |
 | `cost` | `SubagentStop` hook JSONL | `cost-dv-20260420-141522.jsonl` |
@@ -47,12 +49,24 @@ Free-form short tag identifying the owner or target. Prefer: agent name (`develo
 
 ## Bash Pattern
 
+The shape is the same on every platform — make the directory, name the file, tee the merged stream. Only the build command changes.
+
 ```bash
 # Ensure .context/logs/ exists, then pipe background stdout+stderr.
 mkdir -p .context/logs
-LOG=".context/logs/build-ios-sim-$(date -u +%Y%m%d-%H%M%S).log"
-xcodebuild -scheme App -destination 'platform=iOS Simulator,name=iPhone 15' \
-  build 2>&1 | tee "$LOG"
+LOG=".context/logs/build-<scope>-$(date -u +%Y%m%d-%H%M%S).log"
+<build-command> 2>&1 | tee "$LOG"
+```
+
+Filled in for a few stacks:
+
+```bash
+# Apple
+xcodebuild -scheme App -destination 'platform=iOS Simulator,name=iPhone 15' build 2>&1 | tee "$LOG"
+# Android
+./gradlew :app:assembleDebug 2>&1 | tee "$LOG"
+# Go
+go build ./... 2>&1 | tee "$LOG"
 ```
 
 When called from Claude Code's `Bash` tool with `run_in_background: true`, use the same `tee` so the stream persists even if the session closes.

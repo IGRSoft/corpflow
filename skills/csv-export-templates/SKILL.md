@@ -35,23 +35,35 @@ For all 13 CSV template definitions, see `${CLAUDE_SKILL_DIR}/references/templat
 | 07 | budget_estimate.csv | Cost breakdown |
 | 08 | success_metrics.csv | KPIs, acceptance criteria |
 | 09 | competitive_analysis.csv | Market positioning |
-| 10 | ios_specifics.csv | Platform details |
-| 11 | swiftui_specifics.csv | Framework details |
+| 10 | `<platform>_specifics.csv` | Platform details — name resolves per `--platform` |
+| 11 | `<framework>_specifics.csv` | Framework/runtime details — name resolves per `--platform` |
 | 12 | integration_specifics.csv | SDK/API details |
 | 13 | phase_summary.csv | Phase rollup |
 
 ### Platform Variants (files 10 and 11)
 
-Files 10 and 11 are platform-specific. The exact filename and column schema depend on `--platform`:
+Files 10 and 11 have no fixed name. Both the filename and the column schema resolve from
+`--platform`; no platform is the default. Keys match `skills/shared/compatible-plugins.md § Registry`.
 
 | `--platform` | File 10 | File 11 |
 |--------------|---------|---------|
 | `apple`      | `10_ios_specifics.csv` | `11_swiftui_specifics.csv` |
 | `android`    | `10_android_specifics.csv` | `11_jetpack_specifics.csv` |
 | `web`        | `10_web_specifics.csv` | `11_framework_specifics.csv` |
-| `all` (default) | All three platform sets emitted side-by-side | — |
+| `systems`    | `10_systems_specifics.csv` | `11_toolchain_specifics.csv` |
+| `backend`    | `10_backend_specifics.csv` | `11_runtime_specifics.csv` |
+| `ai`         | `10_ai_specifics.csv` | `11_model_stack_specifics.csv` |
+| `all` (default) | one set per platform in scope | — |
 
-File 12 (`integration_specifics.csv`) keeps a stable filename across platforms but its rows enumerate platform-relevant SDKs/APIs (Apple SDKs for `apple`, Android/Jetpack APIs for `android`, web SDKs for `web`).
+### File 12 and column schemas
+
+File 12 (`integration_specifics.csv`) keeps a stable filename across platforms; its rows
+enumerate whatever that platform integrates against — Apple SDKs, Android/Jetpack APIs, web
+SDKs, system libraries and toolchains, upstream services and datastores, or model/inference
+providers.
+
+`references/templates.md` spells out the column schema for files 10 and 11 using the `apple`
+variant as its worked example. Other platforms reuse that column shape with their own rows.
 
 ## Validator Script
 

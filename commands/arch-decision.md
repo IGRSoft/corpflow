@@ -354,15 +354,27 @@ these weighted criteria:
 | Implementation | How to implement |
 | Related | Connected decisions |
 
-## Apple Architecture Consultation
+## Platform Architect Consultation
 
-When an ADR involves Swift/Apple platform architecture decisions (app architecture pattern, navigation strategy, state management, Swift concurrency approach), consult `apple-developer:apple-architector` for options evaluation. The apple-architector provides:
+When an ADR turns on a platform-level architecture decision — app architecture pattern,
+navigation strategy, state management, concurrency model, module or service boundaries —
+consult the detected platform's architect for options evaluation. Detect the platform with
+`skills/shared/platform-detection.md § Detection Rules`; resolve the agent from
+`skills/shared/compatible-plugins.md § Functional-role agents` (`apple-architector`,
+`kotlin-architector`, `frontend-architector`, `system-architector`, `backend-architector`,
+`ai-architector`), taking the plugin prefix from that table.
 
-- Swift-specific pros/cons for each architecture option
-- Pattern compatibility assessment (e.g., TCA vs MVVM trade-offs for the specific use case)
-- Implementation complexity estimates for the team's Swift expertise level
+### What the architect contributes
 
-Include the apple-architector's analysis in the ADR's "Options Considered" section alongside system-level evaluation from software-architector.
+- Platform-specific pros and cons for each option
+- Pattern compatibility for the specific use case (e.g. TCA vs. MVVM on Apple, Clean vs.
+  MVI on Android, CSR/SSR/ISR on web, layered vs. hexagonal on systems)
+- Implementation complexity relative to the team's expertise in that stack
+
+Include the architect's analysis in the ADR's "Options Considered" section alongside the
+system-level evaluation from `software-architector`. If the platform is ambiguous or its
+plugin is not installed, record the ADR with the system-level evaluation only and note the
+missing consultation.
 
 ## Integration
 
@@ -371,4 +383,4 @@ This command is used:
 - During DV stage / technical-debt discussions - Document implementation choices (TDR)
 - When introducing new patterns, technologies, libraries, or tools
 - For significant technical choices
-- For Apple platform architecture pattern selection (with apple-architector consultation)
+- For platform architecture pattern selection (with the platform architect consulted)

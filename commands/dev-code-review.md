@@ -75,7 +75,7 @@ A change is worth flagging when:
 
 ## Options
 
-- `--platform <apple|android|web|all>` - Platform context (default: auto-detect)
+- `--platform <apple|android|web|systems|backend|ai|all>` - Platform context (default: auto-detect)
 - `--path <dir>` - Review a specific directory (diff scoped to that path)
 - `--pr <number>` - Review the changes in a PR
 ### Depth and focus options
@@ -188,7 +188,7 @@ If verification is **BLOCKED** — the caller/consumer/threading-model is not re
 ##### Ripple risks and the style bar
 
 - **KEEP** a clearly-reasoned cross-file / integration / ripple risk even if you cannot *prove* the break, **provided you name the specific other code you suspect and why**. Hedge the wording; do not silently drop it.
-- **RAISE THE BAR** only for low-severity style / maintainability / preference items: apply a strict "would a competent reviewer clearly endorse this" test, and skip trivial style unless it obscures meaning or violates a documented standard. Over-documentation that violates the compact code-documentation standard (`skills/shared/code-documentation.md`) — doc-comment essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, call-site enumerations, AC-/REQ- IDs, issue-ID provenance tags, or commented `#Preview` blocks — is a flaggable **P2** maintainability finding.
+- **RAISE THE BAR** only for low-severity style / maintainability / preference items: apply a strict "would a competent reviewer clearly endorse this" test, and skip trivial style unless it obscures meaning or violates a documented standard. Over-documentation that violates the compact code-documentation standard (`skills/shared/code-documentation.md`) — doc-comment essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, call-site enumerations, AC-/REQ- IDs, issue-ID provenance tags, or a commented-out preview/story/fixture block in any framework (SwiftUI `#Preview`, Compose `@Preview`, Storybook stories, snapshot fixtures) — is a flaggable **P2** maintainability finding.
 ##### Inference, pre-existing cap, systemic defects
 
 - A finding may rely on a **reasonable, stated inference** about intent ("this is presumably meant to return a sorted list") — say the inference out loud and flag it; do not veto it for being inferential.

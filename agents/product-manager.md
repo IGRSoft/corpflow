@@ -69,7 +69,7 @@ When planning features, define the test strategy in the plan file. Include: test
 ### Key Rules
 
 1. **DV writes unit tests** as part of implementation; QA validates integration/E2E
-2. **Framework selection**: Swift Testing (`@Suite`, `@Test`, `#expect`) for unit tests; XCTest for UI tests
+2. **Framework selection is platform-derived**: adopt whatever the repo's existing test targets already use; with no existing tests, take the default of the detected platform's test generator (`skills/shared/compatible-plugins.md § Test generator and code fixer`). Name the chosen framework in the plan. Never carry one platform's framework into another — Apple's Swift Testing (unit) / XCTest (UI) split is documented in `skills/shared/testing-strategy.md` and applies to Apple only.
 3. **Coverage expectations**: New features require 3+ unit test scenarios; bug fixes require regression tests; refactors must identify all affected existing tests
 
 ### Required Metadata: Test Selection Gate
@@ -98,12 +98,12 @@ The complexity-score → default `test_mode` table lives in `skills/estimation-m
 
 #### `always_required_tests` — explicit override
 
-Test IDs that must always run (every mode, every run). Format: `<TargetName>/<SuiteName>` for Apple — suite-terminal; per-function IDs are rejected by the runner (`test-selection-syntax.md § Apple identifier grammar — suite-terminal`). Platform-specific elsewhere. Use sparingly for cross-cutting smoke tests not annotated with `@test-required` in source.
+Test IDs that must always run (every mode, every run). The ID grammar is per-platform and canonical in `skills/shared/test-selection-syntax.md § Platform handlers`: Apple uses `<TargetName>/<SuiteName>` (suite-terminal — per-function IDs are rejected by the runner), Android the JUnit `<package>.<ClassName>#<methodName>` form, web a file-path + test-name pattern. Platforms whose selective-test handler is still a stub auto-promote the run to `full`, so entries are recorded but not used for selection. Use sparingly for cross-cutting smoke tests not annotated with `@test-required` in source.
 
 #### `ui_visual_check` — Visual QA gate
 
 Independent of `test_mode`. Set `true` when at least one applies:
-- New SwiftUI/UIKit views or screens are introduced
+- New views, screens, or UI components are introduced in the platform's view layer (SwiftUI/UIKit, Compose, React/Vue/Svelte/Angular components, …)
 - Visual design artifacts exist in `.context/designs/` (Figma registry, mockups) that need verification
 - Layout, styling, or animation changes require screen capture to validate
 - Stakeholder explicitly requests UI verification
@@ -372,18 +372,20 @@ Every `TaskCreate` for a downstream stage MUST include `metadata.run_index = N` 
 
 #### Agent mapping for `metadata.agent`
 
-Always emit fully-qualified `plugin:agent` form. The plugin prefix follows the agent's owning plugin: `igrsoft:` for orchestration/process agents (product-manager, software-architector, developer, qa-engineer, …), `apple-developer:` for Apple platform agents (ios-developer, macos-developer, apple-architector, test-generator, performance-engineer, security-auditor, localizator, code-fixer, dependency-manager), or the relevant prefix for any other installed plugin. Bare names still work via a back-compat shim that prepends `igrsoft:` and warns — emit qualified form at the call site.
+Always emit fully-qualified `plugin:agent` form. The prefix follows the agent's owning plugin: `igrsoft:` for orchestration/process agents (product-manager, software-architector, developer, qa-engineer, …), and the detected platform's own dev-plugin prefix for platform work. Resolve platform agents from the registry, never from memory: entry agents in `skills/shared/compatible-plugins.md § Registry`, functional roles (architect, security auditor, test generator, code fixer) in `§ Functional-role agents`, DV specialists in `skills/shared/platform-detection.md`. Bare names still work via a back-compat shim that prepends `igrsoft:` and warns — emit qualified form at the call site.
 
 ##### Stage → agent table
 
-| Stage | Default Agent | Apple Platform Variant |
-|-------|---------------|------------------------|
-| AR0 | `igrsoft:software-architector` | `apple-developer:apple-architector` |
+Platform variant = the same role drawn from the detected platform's plugin, resolved via the registry pointers above. Do not hardcode any one platform's roster here.
+
+| Stage | Default agent | Platform variant |
+|-------|---------------|------------------|
+| AR0 | `igrsoft:software-architector` | that platform's architect |
 | TL0 | `igrsoft:team-lead` | (same) |
-| DV0 | `igrsoft:developer` | `apple-developer:ios-developer` (or `:macos-developer`, `:watchos-developer`, `:tvos-developer`, `:visionos-developer`) |
+| DV0 | `igrsoft:developer` | that platform's entry agent or specialist |
 | DR0 | `igrsoft:technical-lead` | (same — invokes /dev-code-review) |
-| SR0 | `igrsoft:security-reviewer` | `apple-developer:security-auditor` (or `security-scanning:security-auditor`) |
-| QA0 | `igrsoft:qa-engineer` | (same — may delegate to `apple-developer:test-generator`) |
+| SR0 | `igrsoft:security-reviewer` | that platform's security auditor (or `security-scanning:security-scanning-security-auditor` cross-platform) |
+| QA0 | `igrsoft:qa-engineer` | (same — may delegate to that platform's test generator) |
 | DC0 | `igrsoft:technical-writer` | (same) |
 | RE0 | `igrsoft:release-engineer` | (same) |
 | FN0 | `igrsoft:project-manager` | (same) |
@@ -414,7 +416,7 @@ Weighted-score the task description for design indicators:
 | UI Components | 2 | button, form, screen, layout, modal, dialog, menu, navigation, tab, card, list, table, grid |
 | User Experience | 3 | user flow, accessibility, a11y, usability, interaction, gesture, wireframe, prototype |
 | Visual Design | 2 | color, theme, dark mode, typography, font, icon, animation, responsive |
-| Platform UI | 2 | swiftui, uikit, view, component, widget, navigationstack, tabview |
+| Platform UI | 2 | view, widget, swiftui, uikit, navigationstack, tabview, compose, @composable, jetpack, material3, react, vue, svelte, angular, jsx, tsx, dom |
 | High-Confidence | 5 | "redesign", "new ui", "ui/ux", "design system", "user interface", "visual refresh" |
 
 **Negative Indicators** (-3 each): backend, api only, database, migration, infrastructure, no ui

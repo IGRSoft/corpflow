@@ -556,7 +556,7 @@ properties:
   version: { type: integer, const: 1 }
   worktask_id: { type: string, pattern: '^[a-z0-9\-]+$' }
   plan_file: { type: string }
-  platform: { type: string, enum: [all, apple, ios, macos, watchos, tvos, visionos, web, server] }
+  platform: { type: string, enum: [all, apple, android, web, systems, backend, ai] }  # canonical keys — skills/shared/platform-detection.md
   run_index: { type: integer, minimum: 0, default: 0 }
 ```
 
@@ -737,7 +737,7 @@ fallback: readers report unresolved and degrade non-blocking. Implemented in
 # …continued: WorktaskStateLedger.properties
   mcp_session:
     type: object
-    description: "Cached XcodeBuildMCP session state (orchestrator warmup step 5c) — see field notes"
+    description: "DEPRECATED — legacy Apple MCP session cache. No longer written; see field notes"
     properties:
       xcode_defaults: { type: object, description: "Result of session_show_defaults" }
       schemes: { type: array, items: { type: string } }
@@ -785,7 +785,11 @@ OPTIONAL (additive, version:1). Probe cache for account-level hard-fails so ever
 
 #### Field notes — mcp_session
 
-Cached XcodeBuildMCP session state. Written by orchestrator warmup (step 5c); read by DV/DR/QA to skip redundant session_show_defaults / list_schemes / list_sims calls. If absent or stale (>30min), agents fall back to live calls.
+**Deprecated.** This cached the orchestrator's XcodeBuildMCP warm-up so Apple DV/DR/QA could skip
+redundant session queries. Platform tooling now belongs to the dev plugins (`worktask § Platform
+tooling ownership`), so nothing writes this field and no stage reads it. Retained in the schema only
+so state ledgers written by earlier versions still validate; treat it as absent. A future MAJOR may
+remove it.
 
 ### Eviction order on overflow
 

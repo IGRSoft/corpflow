@@ -1,12 +1,12 @@
 ---
 name: cross-plugin-handoff
-description: Protocol for handoffs between igrsoft worktask and external plugins (apple-developer, system-developer, security-scanning, etc.). Use when delegating work to external plugins.
+description: Protocol for handoffs between igrsoft worktask and external plugins (apple-developer, system-developer, android-developer, frontend-developer, backend-developer, ai-engineer, security-scanning, etc.). Use when delegating work to external plugins.
 effort: medium
 ---
 
 ## Orchestrator Implementation Gate (BINDING)
 
-When the orchestrator receives results from ANY external plugin command (apple-developer:analyze-error, apple-developer:code-debug, debugging-toolkit:smart-debug, security-scanning:*, etc.) that include fix suggestions, code changes, or implementation recommendations:
+When the orchestrator receives results from ANY external plugin command (apple-developer:debug, apple-developer:review-code, debugging-toolkit:smart-debug, security-scanning:*, etc.) that include fix suggestions, code changes, or implementation recommendations:
 
 1. **PRESENT** the analysis results and proposed fix to the user
 2. **DO NOT** call Write, Edit, or any file-modifying Bash command
@@ -22,7 +22,7 @@ For plugin-specific protocol tables and error handling, see `${CLAUDE_SKILL_DIR}
 
 ## Frontmatter Schema (BINDING for cross-plugin agents)
 
-The canonical schema lives at `skills/worktask/references/handoff-protocol.md` (frontmatter + state.json + cache layout). Cross-plugin agents (e.g. `apple-developer:ios-developer`, `apple-developer:macos-developer`, `system-developer:c-developer`, `system-developer:cpp-developer`, `system-developer:python-developer`, `system-developer:bash-developer`, `android-developer:android-phone-developer`, `android-developer:kotlin-architector`, `debugging-toolkit:*`, `security-scanning:*`) MUST adopt the **full schema** when they take over a worktask stage:
+The canonical schema lives at `skills/worktask/references/handoff-protocol.md` (frontmatter + state.json + cache layout). Cross-plugin agents (e.g. `apple-developer:ios-developer`, `apple-developer:macos-developer`, `system-developer:c-developer`, `system-developer:cpp-developer`, `system-developer:python-developer`, `system-developer:bash-developer`, `android-developer:android-phone-developer`, `android-developer:kotlin-architector`, `frontend-developer:react-developer`, `frontend-developer:fe-test-generator`, `backend-developer:go-developer`, `backend-developer:database-engineer`, `ai-engineer:llm-engineer`, `debugging-toolkit:*`, `security-scanning:*`) MUST adopt the **full schema** when they take over a worktask stage. The registry of compatible plugins and their functional-role agents is `skills/shared/compatible-plugins.md`:
 
 ### Required schema elements
 
@@ -57,11 +57,19 @@ handoff:
 
 #### error_file derivation
 
-The `error_file` for an apple-developer agent is `.context/errors/ios-developer.md` (last segment of qualified name) per `task-system.md § error_file derivation`. The same rule applies to system-developer agents (e.g., `.context/errors/c-developer.md`, `.context/errors/sys-code-fixer.md`) and android-developer agents (e.g., `.context/errors/android-phone-developer.md`, `.context/errors/kotlin-architector.md`).
+The `error_file` for an apple-developer agent is `.context/errors/ios-developer.md` (last segment of qualified name) per `task-system.md § error_file derivation`. The same rule applies to every other dev plugin: `.context/errors/c-developer.md`, `.context/errors/kotlin-architector.md`, `.context/errors/react-developer.md`, `.context/errors/be-test-generator.md`, `.context/errors/llm-engineer.md`.
+
+##### Basename collisions
+
+Because the basename is the whole key, two plugins shipping the same bare agent name write to the same error file. `apple-developer` and `android-developer` both ship `security-auditor`, `test-generator`, and `code-fixer` — see `skills/shared/compatible-plugins.md § Naming` before routing both in one worktask.
 
 #### Build evidence defaults
 
 system-developer DV takeovers follow the identical frontmatter shape; note that systems work defaults `metadata.requires_screenshots: false` and supplies Build Evidence (terminal transcripts under `.context/logs/`) via the `cli_fallback_adapter` instead of UI screenshots. android-developer DV takeovers default `metadata.requires_screenshots: true` and supply Build Evidence via the `android_adapter` (`adb exec-out screencap -p`) plus Gradle build/test transcripts under `.context/logs/`; there is no Android build MCP, so builds run through scoped `Bash(gradle:*|./gradlew|adb:*)`.
+
+##### Web, back-end and AI evidence
+
+frontend-developer DV takeovers default `metadata.requires_screenshots: true` via the `web_adapter` (Playwright / Chrome MCP) plus Lighthouse and axe reports. backend-developer and ai-engineer DV takeovers default `false`: back-end evidence is API request/response transcripts, test output, k6 reports, and migration logs; AI evidence is eval reports, metric tables, and training transcripts — all under `.context/logs/`. Full table: `skills/shared/compatible-plugins.md § Handoff defaults`.
 
 ## #relaxed-profile
 
@@ -71,9 +79,11 @@ Reserved subsection for a future relaxed-profile schema in case the apple-develo
 
 If/when relaxed profile is negotiated, this section will define the minimum fields (likely `stage + verdict + summary + refs`) and the parser switch logic (e.g. presence of `profile: relaxed` flag in the frontmatter). Until then, cross-plugin agents follow the full schema above.
 
-## When AR Stage Collaborates with apple-architector
+## When AR Stage Collaborates with Platform Architectors
 
 Unlike DV stage delegation where task ownership transfers, the AR stage uses a **consultation model** — `software-architector` retains task ownership and merges results.
+
+The protocol below is written against `apple-developer:apple-architector` as the worked example. It applies unchanged to `system-developer:system-architector`, `android-developer:kotlin-architector`, `frontend-developer:frontend-architector`, `backend-developer:backend-architector`, and `ai-engineer:ai-architector`, substituting the agent and its `.context/<platform>-architecture.md` artifact (per-platform table in `agents/software-architector.md § Platform Architecture Collaboration`).
 
 ### Collaboration Protocol
 

@@ -42,12 +42,23 @@ See tests/vendor/VENDOR.md."
 fi
 
 # Hard prerequisites that the host MUST provide (per AC-1 environment contract).
-command -v swift   >/dev/null 2>&1 || fail "swift toolchain not found (required)"
 command -v python3 >/dev/null 2>&1 || fail "python3 not found (required — skill scripts stay Python)"
 command -v jq      >/dev/null 2>&1 || fail "jq not found (required)"
 
+# Swift is optional: this plugin orchestrates six platforms and must be testable
+# on a host with no Apple toolchain. Presence on PATH is not usability — a
+# swiftly shim outlives the toolchain it selects — so probe the binary.
+SWIFT_USABLE=0
+if command -v swift >/dev/null 2>&1 && swift --version >/dev/null 2>&1; then
+  SWIFT_USABLE=1
+fi
+
 note "vendored bats: $("$BATS" --version 2>/dev/null || echo '?')"
-note "swift:         $(swift --version 2>/dev/null | head -1)"
+if [ "$SWIFT_USABLE" -eq 1 ]; then
+  note "swift:         $(swift --version 2>/dev/null | head -1)"
+else
+  note "swift:         unusable or absent — Swift phases will be skipped"
+fi
 note "python3:       $(python3 --version 2>&1)"
 
 # --- collect shell test files ------------------------------------------------
@@ -78,12 +89,14 @@ swift_packages=(
   "$PLUGIN_ROOT/benchmark/ttt-template"
 )
 for pkg in "${swift_packages[@]}"; do
-  if [ -f "$pkg/Package.swift" ]; then
+  if [ ! -f "$pkg/Package.swift" ]; then
+    warn "swift package missing at $pkg"
+    rc=1
+  elif [ "$SWIFT_USABLE" -eq 1 ]; then
     note "swift test → ${pkg#$PLUGIN_ROOT/}"
     ( cd "$pkg" && swift test ) || rc=$?
   else
-    warn "swift package missing at $pkg"
-    rc=1
+    warn "SKIP swift test → ${pkg#$PLUGIN_ROOT/} (no usable swift toolchain)"
   fi
 done
 

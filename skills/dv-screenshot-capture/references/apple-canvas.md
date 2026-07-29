@@ -6,7 +6,7 @@ Reference for the `apple-canvas` adapter in `dv-screenshot-capture`. Renders Swi
 
 ## When this adapter runs
 
-Selected by the Adapter Selection Rule when `state.platform == "apple"` AND (`args.force_canvas` OR `sim_unavailable(state)`). See `SKILL.md § Adapter selection rule`.
+Selected when `state.platform == "apple"` and the Apple adapter's degraded-mode predicate fires. The dispatcher only calls `ADAPTERS["apple"]["degraded_if"]`; the conditions below are this adapter's own, not the dispatcher's. See `SKILL.md § Adapter selection rule` and `§ apple degraded-mode predicate`.
 
 Trigger inputs:
 
@@ -14,7 +14,7 @@ Trigger inputs:
 |---|---|---|
 | Plan metadata | `metadata.requires_canvas_screenshot: true` | Force canvas for the whole worktask |
 | Skill call args | `args.force_canvas: true` | Force canvas for this specific invocation |
-| State inference | `sim_unavailable(state) == True` | Auto-route to canvas (xcframework-without-sim-slice, etc.) |
+| State inference | sim-unavailable clauses of `degraded()` | Auto-route to canvas (xcframework-without-sim-slice, etc.) |
 | Plan metadata | `metadata.canvas_destination ∈ {"macos-host","ios-sim"}` | Pick render destination (default `macos-host`, ad5) |
 
 ## Cross-skill contract with preview-ensurer

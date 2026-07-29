@@ -4,9 +4,9 @@
 
 ### What to Include in `<plan_file>` (e.g. `planning-0.md`)
 
-Concatenate the two template parts below into the plan file's `## Test Strategy` block.
+Concatenate the three template parts below into the plan file's `## Test Strategy` block.
 
-#### Plan Template — Scope, Framework & Criteria
+#### Plan Template — Scope & Framework
 
 ```markdown
 ## Test Strategy
@@ -19,9 +19,18 @@ Concatenate the two template parts below into the plan file's `## Test Strategy`
 | E2E Tests | [Critical user journeys only] | If applicable |
 
 ### Testing Framework
-- **Unit Tests**: Swift Testing (`@Suite`, `@Test`, `#expect`)
-- **UI Tests**: XCTest (XCUITest requirement)
+Fill from the detected platform's row in `skills/shared/testing-strategy.md § Framework by
+platform`; if the repo already uses another framework, the repo wins — note the deviation.
+- **Unit Tests**: <framework + canonical syntax, e.g. Swift Testing (`@Suite`/`@Test`/`#expect`),
+  JUnit 5 + MockK, Vitest, pytest>
+- **Integration Tests**: <framework, e.g. Testcontainers, Robolectric, MSW>
+- **UI / E2E Tests**: <framework, or "n/a — no UI layer">
+  (Apple only: XCUITest requires XCTest, so UI tests stay on XCTest.)
+```
 
+#### Plan Template — Acceptance Criteria
+
+```markdown
 ### Test Acceptance Criteria
 Derived from acceptance criteria - each should be testable:
 - [ ] Given [precondition], when [action], then [expected result]
@@ -37,7 +46,7 @@ When changing existing logic, identify affected tests:
 | Test File | Reason for Update | Impact |
 |-----------|-------------------|--------|
 | tests/UserServiceTests.swift | Login logic changed | Update mocks |
-| tests/AuthFlowTests.swift | New OAuth parameter | Add test case |
+| src/auth/authFlow.test.ts | New OAuth parameter | Add test case |
 
 ### Test Effort Estimate
 | Type | Hours |
@@ -63,7 +72,7 @@ Concatenate the two template parts below into the `## Test Architecture` block.
 | Pattern | Applied To | Benefit |
 |---------|------------|---------|
 | Dependency Injection | Services, ViewModels | Mockable dependencies |
-| Protocol Abstractions | Network, Storage | Swappable implementations |
+| Protocol / interface abstractions | Network, Storage | Swappable implementations |
 | Pure Functions | Business logic | Deterministic testing |
 
 ### Test Doubles Strategy
@@ -128,7 +137,7 @@ The developer MUST implement unit tests alongside production code during the DV 
 
 ### Footer Marker Examples (DV Output)
 
-After implementing tests at D1.5, DV appends footer blocks to modified files. Grammar defined in `skills/shared/test-selection-syntax.md § Footer Markers`.
+After implementing tests at D1.5, DV appends footer blocks to modified files. Grammar defined in `skills/shared/test-selection-syntax.md § Footer Markers`. Shown below in Swift — the `Test Info` / `Source Info` sentinel words are fixed, but the comment decoration is language-native (`# region` in Python, `// #region` in TypeScript, …); take it from § Platform Variants.
 
 **Production source file** (`Sources/Services/PaymentService.swift`):
 
@@ -140,6 +149,8 @@ After implementing tests at D1.5, DV appends footer blocks to modified files. Gr
 // @related-tests: Tests/Integration/PaymentFlowTests.swift, Tests/Services/NetworkClientTests.swift
 // @test-coverage: Unit tests for charge(), refund(), and validateCard(). Integration tests for end-to-end payment flow.
 ```
+
+#### Footer Marker Examples — test file
 
 **Test file** (`Tests/UnitTests/Services/PaymentServiceTests.swift`):
 

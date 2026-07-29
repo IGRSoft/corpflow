@@ -1,7 +1,7 @@
 ---
 name: pm-milestone
 description: Generate GitHub milestone tickets with agent assignments for implementation, test, and review
-argument-hint: '<feature description or --from-prd path> [--milestone N] [--platform apple|android|web] [--dry-run] [--secure]'
+argument-hint: '<feature description or --from-prd path> [--milestone N] [--platform apple|android|web|systems|backend|ai] [--dry-run] [--secure]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash
 related:
@@ -32,7 +32,7 @@ Generate GitHub milestone tickets with agent assignments for implementation, tes
 | `<description>` | Feature description to decompose into tickets |
 | `--milestone N` | Assign to existing milestone N. If omitted, create new milestone from feature title |
 | `--from-prd <path>` | Read PRD file (output of `/pm-requirements`) as input |
-| `--platform <apple\|android\|web\|all>` | Route implementation agent (default: infer from codebase) |
+| `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Route implementation agent (default: infer from codebase) |
 | `--dry-run` | Preview tickets as markdown without creating GitHub issues |
 | `--secure` | Add `security-reviewer` to Review assignment on all tickets |
 | `--labels <extra>` | Additional labels beyond auto-assigned priority |
@@ -73,23 +73,49 @@ Select based on `--platform` flag and ticket content:
 | Platform / Content | Agent | Plugin |
 |--------------------|-------|--------|
 | `--platform apple` | `ios-developer` | apple-developer |
-| `--platform android` | `developer` | igrsoft |
-| `--platform web` | `developer` | igrsoft |
+| `--platform android` | `android-developer` | android-developer |
+| `--platform web` | `frontend-developer` | frontend-developer |
+| `--platform systems` | `system-developer` | system-developer |
+| `--platform backend` | `backend-developer` | backend-developer |
+| `--platform ai` | `ai-engineer` | ai-engineer |
 | `all` / omitted | `developer` | igrsoft |
 
-##### Content-Based Routing
+##### Content-Based Routing — platform-neutral roles
 
-| Platform / Content | Agent | Plugin |
-|--------------------|-------|--------|
-| macOS-specific ticket | `macos-developer` | apple-developer |
-| watchOS-specific ticket | `watchos-developer` | apple-developer |
-| tvOS-specific ticket | `tvos-developer` | apple-developer |
-| visionOS-specific ticket | `visionos-developer` | apple-developer |
-| Swift concurrency / language | `apple-developer` | apple-developer |
-| Automated batch fix | `code-fixer` | apple-developer |
+| Content | Agent | Plugin |
+|---------|-------|--------|
+| Automated batch fix | the detected platform's code-fixer | resolves per platform |
 | Documentation-only ticket | `technical-writer` | igrsoft |
 | Agent/command/skill ticket | `prompt-engineer` | igrsoft |
 | Design system / UI design | `designer` | igrsoft |
+
+Batch fix resolves through `skills/shared/compatible-plugins.md § Test generator and code
+fixer` — never unconditionally Apple. When the platform is ambiguous, assign `developer`
+(igrsoft) and let it route at runtime.
+
+##### Content-Based Routing — app-platform specialization
+
+When a ticket names a specific target inside a platform, assign the specialist rather than
+the platform entry agent. Canonical marker→specialist tables live in
+`skills/shared/platform-detection.md`; these are the rows milestone tickets hit most.
+
+| Content | Agent | Plugin |
+|---------|-------|--------|
+| macOS / watchOS / tvOS / visionOS ticket | `macos-` / `watchos-` / `tvos-` / `visionos-developer` | apple-developer |
+| Swift concurrency / language | `apple-developer` | apple-developer |
+| Compose UI / phone-tablet ticket | `android-phone-developer` | android-developer |
+| React / Vue / Svelte / Angular ticket | `react-` / `vue-` / `svelte-` / `angular-developer` | frontend-developer |
+| CSS / styling / design-token ticket | `css-developer` | frontend-developer |
+
+##### Content-Based Routing — backend, systems, and AI specialization
+
+| Content | Agent | Plugin |
+|---------|-------|--------|
+| API contract (OpenAPI, gRPC) ticket | `api-designer` | backend-developer |
+| Schema / migration / query ticket | `database-engineer` | backend-developer |
+| C / C++ / Python / Bash ticket | `c-` / `cpp-` / `python-` / `bash-developer` | system-developer |
+| RAG / prompt / eval ticket | `llm-engineer` | ai-engineer |
+| Training / data-pipeline ticket | `ml-engineer` | ai-engineer |
 
 The `developer` agent auto-routes to platform specialists at runtime, so it's the safe default when platform is ambiguous.
 
@@ -99,6 +125,15 @@ The `developer` agent auto-routes to platform specialists at runtime, so it's th
 |-------------|-------|--------|
 | Default | `qa-engineer` | igrsoft |
 | Apple platform tests | `test-generator` | apple-developer |
+| Android tests | `test-generator` | android-developer |
+| Web tests | `fe-test-generator` | frontend-developer |
+| Systems tests | `sys-test-generator` | system-developer |
+| Back-end tests | `be-test-generator` | backend-developer |
+| AI evals | `ai-test-generator` | ai-engineer |
+
+The Plugin column is load-bearing: `apple-developer` and `android-developer` both ship an agent
+named `test-generator`, so the bare name alone is ambiguous. Always dispatch the qualified
+`plugin:agent` ID (`skills/shared/compatible-plugins.md § Naming`).
 
 #### Review Agent
 

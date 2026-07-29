@@ -2,7 +2,7 @@
 name: test-coverage
 description: Analyze test coverage gaps and generate recommendations for improving test quality
 argument-hint: '[--path dir] [--threshold N]'
-allowed-tools: Read, Glob, Grep, Bash(swift test:*)
+allowed-tools: Read, Glob, Grep, Bash(swift test:*), Bash(xcodebuild:*), Bash(gradle:*), Bash(./gradlew:*), Bash(npm:*), Bash(npx:*), Bash(pnpm:*), Bash(yarn:*), Bash(jest:*), Bash(vitest:*), Bash(pytest:*), Bash(uv:*), Bash(go test:*), Bash(cargo:*), Bash(ctest:*), Bash(bats:*)
 model: haiku
 related:
   - agents/qa-engineer.md
@@ -28,7 +28,7 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 - `--threshold <n>` - Set coverage threshold (default: 80)
 - `--report` - Generate detailed HTML report
 - `--critical-only` - Focus on critical/high-risk areas
-- `--platform <apple|android|web|all>` - Target platform context (default: all)
+- `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all; detected per `skills/shared/platform-detection.md`)
 
 ## Examples
 
@@ -37,6 +37,13 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 /test-coverage --path src/auth --threshold 90
 /test-coverage --critical-only
 ```
+
+## Running the suite
+
+Coverage numbers need a run. Prefer delegating to `/<plugin>:build-test` for the detected
+platform — it knows the repo's build system, coverage flags, and report location. Fall back to
+the scoped runners in `allowed-tools` (`swift test`, `./gradlew`, `vitest`, `pytest`, `go test`,
+`ctest`, …) only when no plugin covers the repo. Never assume a Swift toolchain.
 
 ## Output Format
 
@@ -147,25 +154,48 @@ Reports the percentage of test files annotated with markers from `skills/shared/
 | **Any marker** | **22** | **44%** | ⚠️ Below 50% target — `test_mode: build-only` will warn |
 ```
 
-#### Untagged tests and framework compliance
+#### Untagged tests
 
 ```markdown
-<!-- …continued: untagged tests, framework compliance -->
+<!-- …continued: untagged tests -->
 ### Untagged Tests (warn-only on first release; block once project sets `selective_tests_ready: true`)
 
 | File | Tests | Recommendation |
 |------|-------|----------------|
-| Tests/UserRepositoryTests.swift | 8 | Add `@depends-on: UserRepository` |
-| Tests/NetworkClientTests.swift | 12 | Add `@depends-on: NetworkClient` and `@test-tag: regression` |
+| tests/test_user_repository.py | 8 | Add `@depends-on: UserRepository` |
+| src/net/networkClient.test.ts | 12 | Add `@depends-on: NetworkClient` and `@test-tag: regression` |
 | Tests/AppLaunchTests.swift | 1 | Add `@test-required` (smoke test) |
+```
 
+#### Framework compliance
+
+```markdown
+<!-- …continued: framework compliance -->
 ## Testing Framework Compliance
 
-| Framework | Usage | Status |
-|-----------|-------|--------|
-| Swift Testing | Unit tests | ✅ Required |
-| XCTest | UI tests only | ✅ Allowed |
-| XCTest | Unit tests | ⚠️ Migrate to Swift Testing |
+"Required" means **the project's established framework** for that layer — resolved from
+`skills/shared/testing-strategy.md § Framework by platform` and from what the repo already uses.
+Flag divergence from it, never divergence from a specific vendor's framework.
+
+| Layer | Expected (this repo) | Found | Status |
+|-------|----------------------|-------|--------|
+| Unit | <e.g. Vitest / Swift Testing / JUnit 5 / pytest> | <actual> | ✅ / ⚠️ mixed frameworks |
+| Integration | <e.g. Testcontainers / Robolectric / MSW> | <actual> | ✅ |
+| UI / E2E | <e.g. Playwright / XCUITest / Compose UI test> | <actual> | ✅ |
+```
+
+#### Framework compliance — per-platform expectations
+
+```markdown
+<!-- …continued: expected frameworks by platform -->
+| Platform | Unit | UI / E2E | Common divergence to flag |
+|----------|------|----------|---------------------------|
+| apple | Swift Testing | XCTest / XCUITest | New unit tests still written in XCTest |
+| android | JUnit 5 + MockK | Espresso / Compose UI test | JUnit 4 runner left on new modules |
+| web | Vitest or Jest | Playwright | Both Vitest and Jest present in one package |
+| systems | GoogleTest/Catch2, pytest, bats | n/a | Ad-hoc `main()` test binaries outside `ctest` |
+| backend | Stack-native + Testcontainers | Contract tests | Integration tests hitting a shared live DB |
+| ai | pytest | Eval harness with thresholds | Evals with no recorded threshold to regress against |
 ```
 
 ## Integration

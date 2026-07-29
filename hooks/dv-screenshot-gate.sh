@@ -117,8 +117,11 @@ run_gate() {
   # adding hookSpecificOutput.additionalContext (gate-feedback contract) so
   # the remediation flows into the re-run's context. The decision:block verb
   # + exit-0 discipline are unchanged.
-  _reason="missing screenshots.md — run dv-screenshot-capture (apple-canvas/cli-fallback); headless is not a skip reason"
-  _additional_context="run dv-screenshot-capture (apple-canvas/cli-fallback); headless is not a skip reason; expected manifest $_manifest"
+  # The gate is platform-agnostic; so is the remediation. Naming a concrete
+  # adapter here told a Go or web DV to run the Apple canvas. The skill resolves
+  # its own adapter from state.platform and always has cli/fallback under it.
+  _reason="missing screenshots.md — run the dv-screenshot-capture skill (it selects the adapter for state.platform, with cli/fallback under it); headless is not a skip reason"
+  _additional_context="run the dv-screenshot-capture skill; it selects the adapter for state.platform and falls back to cli/fallback, so headless is not a skip reason; expected manifest $_manifest"
   _block=$(jq -cn \
     --arg reason "$_reason" --arg ac "$_additional_context" '
     {
@@ -141,7 +144,7 @@ run_gate() {
       metadata: {
         worktask_id: $wid,
         missing_manifest: $manifest,
-        reason: "missing screenshots.md — run dv-screenshot-capture (apple-canvas/cli-fallback); headless is not a skip reason",
+        reason: "missing screenshots.md — run the dv-screenshot-capture skill (it selects the adapter for state.platform, with cli/fallback under it); headless is not a skip reason",
         dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":screenshot-gate"),
         dedupe_key_extended: ((.parent_agent_id // "none") + ":" + (.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":screenshot-gate")
       }

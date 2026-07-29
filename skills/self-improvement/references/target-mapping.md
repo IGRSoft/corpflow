@@ -94,7 +94,7 @@ Each stage artifact may include a trailer like:
 ---
 metadata:
   agent: igrsoft:developer
-  embedded_commands: apple-developer:code-refactor
+  embedded_commands: apple-developer:fix-refactor
 ---
 ```
 
