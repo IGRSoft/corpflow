@@ -45,6 +45,45 @@ of the current session, NOT paths under the canonical plugin source.
 
 Failure mode: edits in the sibling repo land on the wrong branch, are not visible to `git diff` in the workspace, require manual `cp` surgery, and corrupt the source repo's working tree.
 
+### Branch naming under a host workspace
+
+A host that provisions the workspace also names its branch, and that name carries no
+ticket and no type (Conductor uses `<city>-v<n>` — `amman-v1`, `perth-v2`). Such a
+branch reaching `gh pr create` unchanged produces a PR whose head says nothing about
+the work.
+
+Conductor additionally injects a session rule: *"Do not rename the current branch
+unless the user explicitly tells you to do so."* **Invoking `/worktask` satisfies that
+condition.** A conventionally-named branch and a ticket-referencing PR are part of what
+the pipeline was asked to deliver, so FN's `fn-preflight.sh branch-name` step is
+authorized work rather than an unprompted change. Neither the orchestrator nor FN
+should suspend the pipeline to re-ask.
+
+#### Scope of the authorization
+
+It covers exactly the rename `branch-name` performs, and nothing further. It does NOT
+authorize renaming a branch the user named themselves, deleting branches, force-pushing,
+or rewriting history. Run `branch-name` **before** the push; the `all` battery runs
+post-push and deliberately excludes it.
+
+The step's own guard ladder stays the safety boundary — every arm exits 0:
+
+| Guard | Behaviour |
+|---|---|
+| Name already conventional | no-op — a deliberate name is never churned |
+| Upstream already tracked | no-op — renaming post-push orphans the remote ref |
+| On the integration branch | refuses |
+| Target name already exists | no-op |
+| Detached HEAD / not a repo | skipped |
+
+#### Host mapping caveat
+
+Surface this once; do not act on it. The host may map the workspace to its original
+branch name, so a rename can leave that mapping stale. If the host's mapping matters
+more than the branch name, the equivalent without a local rename is to push under the
+target name (`git push origin <current>:<target>`) — the PR gets the conventional head
+and the local branch is untouched.
+
 ## Task ID Namespacing
 
 | Track | Task IDs |

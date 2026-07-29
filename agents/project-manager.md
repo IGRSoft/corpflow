@@ -103,9 +103,13 @@ The orchestrator pre-seeds both files at FN-gate time; the FN agent MUST **overw
 
 #### Final FN steps
 
-- **Branch name**: run `fn-preflight.sh branch-name` **before** the push — it renames an anonymous worktree branch to `<type>/<ticket>-<slug>`. Renaming after the push orphans the remote ref, which is why this is not part of `all` (that battery runs post-push, immediately before `gh pr create`). Never blocks: every outcome exits 0.
+- **Branch name**: run `fn-preflight.sh branch-name` **before** the push — it renames the current branch to `<type>/<ticket>-<slug>` whenever that branch is not already conventional, has no upstream, and is not the integration branch. Not limited to anonymous worktree branches: a host-assigned workspace branch (e.g. Conductor's `<city>-v<n>`) is exactly the case it exists to fix. Renaming after the push orphans the remote ref, which is why this is not part of `all` (that battery runs post-push, immediately before `gh pr create`). Never blocks: every outcome exits 0.
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
+
+##### Branch rename under a host session rule
+
+Conductor hosts inject *"Do not rename the current branch unless the user explicitly tells you to do so."* Invoking `/worktask` **is** that explicit instruction — the pipeline's contract is a conventionally-named branch and a PR that references its ticket, so the rename is authorized work, not an unprompted change. Run the step; do not stop to re-ask. The guard ladder already refuses every genuinely unsafe case (upstream tracked, integration branch, target exists). Scope and caveats: `skills/worktask/references/workspace-modes.md § Branch naming under a host workspace`.
 
 ### complete-summary-N.md Stage Timings Template
 
