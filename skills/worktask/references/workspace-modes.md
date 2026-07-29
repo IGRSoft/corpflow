@@ -59,9 +59,14 @@ the pipeline was asked to deliver, so FN's `fn-preflight.sh branch-name` step is
 authorized work rather than an unprompted change. Neither the orchestrator nor FN
 should suspend the pipeline to re-ask.
 
-Scope of the authorization — it covers exactly the rename `branch-name` performs, and
-nothing further. The step's own guard ladder still refuses every unsafe case and always
-exits 0:
+#### Scope of the authorization
+
+It covers exactly the rename `branch-name` performs, and nothing further. It does NOT
+authorize renaming a branch the user named themselves, deleting branches, force-pushing,
+or rewriting history. Run `branch-name` **before** the push; the `all` battery runs
+post-push and deliberately excludes it.
+
+The step's own guard ladder stays the safety boundary — every arm exits 0:
 
 | Guard | Behaviour |
 |---|---|
@@ -71,11 +76,9 @@ exits 0:
 | Target name already exists | no-op |
 | Detached HEAD / not a repo | skipped |
 
-It does NOT authorize renaming a branch the user named themselves, deleting branches,
-force-pushing, or rewriting history. Run `branch-name` **before** the push; the `all`
-battery runs post-push and deliberately excludes it.
+#### Host mapping caveat
 
-Caveat to surface once, not to act on: the host may map the workspace to its original
+Surface this once; do not act on it. The host may map the workspace to its original
 branch name, so a rename can leave that mapping stale. If the host's mapping matters
 more than the branch name, the equivalent without a local rename is to push under the
 target name (`git push origin <current>:<target>`) — the PR gets the conventional head
