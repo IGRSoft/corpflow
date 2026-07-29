@@ -45,16 +45,20 @@
 #   faces L1 and no local path ever reaches the issue body.
 #
 #   Tier order (REQ-3, highest priority first):
-#     0. user-attachments (OPT-IN, env-gated) — GitHub's native
+#     0. user-attachments (PREFERRED, live) — GitHub's native
 #        github.com/user-attachments/assets/<uuid> store the web composer uses.
-#        These URLs render for authenticated viewers of PRIVATE/INTERNAL repos
-#        (camo-proxied). DISABLED BY DEFAULT. See "q1 spike outcome" below: the
-#        upload-policy flow (`POST github.com/upload/policies/assets` + S3 PUT) is
-#        NOT drivable with a `gh` OAuth/PAT token — it requires a browser session
-#        cookie (`_gh_sess`) + CSRF authenticity_token. So this tier ships gated
-#        off and is exercised only via the USER_ATTACH_URL_BASE mock in self-tests
-#        (or a future ASSET_UA_ENABLE=1 opt-in once a token-driven path is proven).
-#        It NEVER becomes a hard runtime dependency and degrades silently.
+#        GitHub rewrites these to private-user-images.githubusercontent.com with a
+#        short-lived scoped JWT, so they render for authenticated viewers of
+#        PRIVATE/INTERNAL repos. This is the ONLY tier that satisfies all three
+#        constraints at once: private-repo rendering, BINARY payloads, and no
+#        commit to the repository. Selected automatically whenever usable.
+#        Requires the `drogers0/gh-image` gh extension (`gh extension install
+#        drogers0/gh-image`), which supplies the browser session token the
+#        upload-policy flow needs — see "q1 spike outcome" below for why a PAT
+#        cannot. Availability is probed via `gh image check-token`; pin it with
+#        ASSET_GH_IMAGE=1/0 in tests. Still NEVER a hard runtime dependency —
+#        when the extension is absent or its token is stale, selection falls
+#        through to the tiers below and ultimately degrades silently.
 #     1. raw (verified to RENDER, not merely to exist) — raw.githubusercontent.com.
 #        REQ-1: the gate now approximates GitHub's camo image proxy, which fetches
 #        the URL ANONYMOUSLY. A private/internal repo's raw URL 404s for an
@@ -86,7 +90,13 @@
 #   https://github.com/upload/policies/assets` returns HTTP 422 (malformed) rather
 #   than 401/403 — i.e. the Bearer token is NOT accepted as an authenticated web
 #   session; the flow needs the browser `_gh_sess` cookie + CSRF token. VERDICT:
-#   NOT viable with gh auth → tier-0 stays opt-in/mock-only; REQ-1
+#   NOT viable with gh auth ALONE. SUPERSEDED: the `drogers0/gh-image` extension
+#   supplies exactly that browser session token (it extracts `_gh_sess` from the
+#   local browser, or takes GH_SESSION_TOKEN) and drives the same upload-policy
+#   flow, printing `![base](url)`. Tier-0 is therefore LIVE whenever that
+#   extension is installed and its token is valid. The spike's finding stands as
+#   written — a PAT still cannot do this; what changed is that the session token
+#   is now obtainable from the CLI. REQ-1
 #   render-verification is the shipped cure (it fixes the broken-image symptom by
 #   degrading instead of emitting a dead raw URL).
 #
@@ -112,23 +122,33 @@
 # GIST_RAW_URL_BASE (mock gist raw base), USER_ATTACH_URL_BASE (mock
 # user-attachments asset base, mirrors GIST_RAW_URL_BASE), ASSET_REPO_VISIBILITY
 # (mock `gh repo view` visibility: PUBLIC|PRIVATE|INTERNAL — drives REQ-1
-# render-verification offline). ASSET_UA_ENABLE=1 is the (currently inert, see q1)
-# live opt-in for tier-0. ASSET_GIST_PUBLIC (default 1; set to 0 for policy
-# opt-out to secret/unlisted gist) controls gist-tier visibility (AC1).
+# render-verification offline). ASSET_UA_ENABLE=1 + USER_ATTACH_URL_BASE is the
+# OFFLINE MOCK for tier-0; the LIVE tier-0 path needs no opt-in and is probed via
+# `gh image check-token` (pin with ASSET_GH_IMAGE=1/0).
+# ASSET_GIST_PUBLIC (tri-state: 1 forces public, 0 forces
+# secret/unlisted, empty/unset = auto-derive from repo visibility) controls
+# gist-tier visibility (AC1).
 # GIST_VERIFY_FORCE (pass|fail) short-circuits the gist render-verify HEAD for
 # offline self-tests. When unset, real git/gh probes drive tier selection.
 #
 # AC1 Privacy posture (C2 operator guidance):
-#   ASSET_GIST_PUBLIC=1 (default) creates a PUBLIC, world-readable-by-URL gist
-#   whose raw asset URL is anonymously fetchable. This is required for GitHub's
-#   camo image proxy to render DV screenshots inside a PRIVATE repo's issue/PR body.
-#   The exposure (screenshot bytes accessible by URL) is inherent to camo's
-#   anonymous-fetch design and is no-regression vs the prior secret-gist tier
-#   (also URL-readable, less discoverable). ASSET_GIST_PUBLIC=0 opt-out creates
-#   a secret/unlisted gist (still URL-readable anonymously for camo render).
-#   NEITHER tier preserves confidentiality — camo requires URL-reachability without
-#   auth. Do not capture screenshots containing secrets, tokens, PII (C3 capture
-#   policy). The FN gate provides human disclosure before merge (C1 gate condition).
+#   The gist tier uploads screenshot bytes to a URL that GitHub's camo image proxy
+#   can fetch ANONYMOUSLY — that is what makes an embed render inside a PRIVATE
+#   repo's issue/PR body at all. NEITHER gist kind preserves confidentiality:
+#   public and secret/unlisted gists are both anonymously readable by URL. Do not
+#   capture screenshots containing secrets, tokens, or PII (C3 capture policy).
+#
+#   What the two kinds actually differ on is DISCOVERABILITY, not access:
+#   a public gist is search-indexed and listed on the authoring account's gist
+#   profile; a secret one is neither. Since rendering works either way, `--public`
+#   has no upside on a closed repo — so the default is auto (see ASSET_GIST_PUBLIC
+#   below): PRIVATE/INTERNAL → secret, PUBLIC/unknown → public. Set the variable
+#   explicitly to override in either direction.
+#
+#   Auto narrows exposure; it does not remove it. Operators handling material that
+#   must not leave the org should skip hosting entirely (ASSET_HOST_MODE=none,
+#   which emits bullets instead of embeds) rather than rely on unlisted URLs.
+#   The FN gate provides human disclosure before merge (C1 gate condition).
 
 set -u
 
@@ -170,18 +190,29 @@ USER_ATTACH_URL_BASE="${USER_ATTACH_URL_BASE:-}"      # mock user-attachments as
 ASSET_REPO_VISIBILITY="${ASSET_REPO_VISIBILITY:-}"    # mock PUBLIC|PRIVATE|INTERNAL (REQ-1)
 # Live opt-in for the user-attachments tier. Currently inert: q1 spike found the
 # upload-policy flow needs a browser session cookie, not a gh token (see header).
-# Kept as a forward hook so a future token-driven implementation can flip it on
-# without re-plumbing. When "1" AND a token-driven uploader is implemented, the
-# tier is attempted live; any failure still degrades. Default off.
+# This flag now ONLY gates the offline mock path (with USER_ATTACH_URL_BASE) used
+# by self-tests. The live tier-0 path is not gated by it — it activates whenever
+# `gh image` is installed and authed. Default off (mock disabled).
 ASSET_UA_ENABLE="${ASSET_UA_ENABLE:-0}"
-# Gist visibility opt-out (AC1, q2 decision: default-on). When "1" (default) the
-# gist tier creates a `--public` gist whose raw URL camo can fetch anonymously,
-# so the image renders inline even inside a PRIVATE repo's issue/PR body. Set to
-# "0" for policy-restricted environments that forbid public gists: the tier then
-# creates a secret/unlisted gist (also anonymously fetchable by URL, so it still
-# renders) — the only loss is "public-indexed" vs "unlisted". Both paths
-# render-verify before emitting a URL (see gist_raw_url_reachable).
-ASSET_GIST_PUBLIC="${ASSET_GIST_PUBLIC:-1}"
+# Pin tier-0 availability for deterministic tests: 1 = force available, 0 = force
+# unavailable, empty = probe `gh image check-token` live.
+ASSET_GH_IMAGE="${ASSET_GH_IMAGE:-}"
+# Gist visibility. Tri-state: "1" forces public, "0" forces secret/unlisted, and
+# EMPTY (the default) means auto — derived from repo visibility by
+# gist_public_effective(): PRIVATE/INTERNAL → secret, everything else → public.
+#
+# Why auto rather than a flat default-on: both gist kinds are anonymously
+# fetchable by URL (camo requires that to render at all), so on a PRIVATE or
+# INTERNAL repo `--public` buys NOTHING — it cannot improve rendering, which
+# already works — while adding search indexing and a listing on the authoring
+# account's public gist profile. That is pure downside exactly where the source
+# repo is closed, so auto declines it. On a PUBLIC repo the listing costs
+# nothing and public stays the default.
+#
+# This narrows discoverability only. It does NOT make the bytes confidential —
+# see the AC1 privacy posture note in the header. Both paths render-verify
+# before emitting a URL (see gist_raw_url_reachable).
+ASSET_GIST_PUBLIC="${ASSET_GIST_PUBLIC:-}"
 # Offline render-verify test hook for gist_raw_url_reachable. When set to "pass"
 # the anonymous HEAD probe is short-circuited to success; "fail" forces failure
 # (caller degrades). Empty (production default) → a real anonymous curl HEAD.
@@ -395,6 +426,28 @@ repo_visibility() {
 #   HOST_OWNER_REPO, HOST_REF   (for raw tier)
 # Honors ASSET_HOST_MODE override (self-tests); otherwise probes git/gh.
 # NON-BLOCKING: any probe failure degrades the tier, never errors.
+# Is the `gh image` extension (drogers0/gh-image) usable right now? It uploads to
+# GitHub's user-attachments CDN using a browser SESSION token — the flow a PAT
+# cannot authenticate — and prints `![base](url)`.
+# ASSET_GH_IMAGE pins the answer for deterministic tests: 1 = force available,
+# 0 = force unavailable, empty = probe live. The probe is cached because
+# check-token does network I/O and select_host_tier can be called per asset.
+GH_IMAGE_OK_CACHE=""
+gh_image_available() {
+  case "${ASSET_GH_IMAGE:-}" in
+    1) return 0 ;;
+    0) return 1 ;;
+  esac
+  [ -n "$GH_IMAGE_OK_CACHE" ] && { [ "$GH_IMAGE_OK_CACHE" = "1" ] && return 0 || return 1; }
+  GH_IMAGE_OK_CACHE=0
+  command -v "$GH_BIN" >/dev/null 2>&1 || return 1
+  # check-token exits non-zero when the extension is absent or the token is stale.
+  if "$GH_BIN" image check-token >/dev/null 2>&1; then
+    GH_IMAGE_OK_CACHE=1; return 0
+  fi
+  return 1
+}
+
 HOST_TIER=""
 HOST_OWNER_REPO=""
 HOST_REF=""
@@ -414,11 +467,19 @@ select_host_tier() {
     *) ;;  # fall through to live probes
   esac
 
-  # Tier-0 (user-attachments) — OPT-IN, env-gated. q1 spike: not viable with gh
-  # auth (session-cookie only), so this stays off by default and is only selected
-  # when a future token-driven uploader is proven AND opted in. Mock-only in tests
-  # (ASSET_HOST_MODE=user-attachments). Never a hard dependency.
+  # Tier-0 (user-attachments) — now LIVE via the `gh image` extension, which
+  # drives the browser-session upload the q1 spike found `gh` itself cannot do.
+  # This is the PREFERRED tier and the only one that satisfies all three
+  # constraints at once: it works on PRIVATE/INTERNAL repos (GitHub serves the
+  # asset from private-user-images.githubusercontent.com with a scoped JWT, so no
+  # camo 404), it accepts BINARY files (unlike gists), and it does not commit
+  # anything to the repository (unlike raw). Preconditions: the extension is
+  # installed AND holds a valid session token.
+  #   Mock path: ASSET_UA_ENABLE=1 + USER_ATTACH_URL_BASE (offline self-tests).
   if [ "$ASSET_UA_ENABLE" = "1" ] && [ -n "$USER_ATTACH_URL_BASE" ]; then
+    HOST_TIER="user-attachments"; return 0
+  fi
+  if gh_image_available; then
     HOST_TIER="user-attachments"; return 0
   fi
 
@@ -440,9 +501,17 @@ select_host_tier() {
       return 0
     fi
   fi
-  # Tier-2 (gist): available iff gh is present + authed. AC1: this is now the
-  # EFFECTIVE PRIMARY tier for PRIVATE/INTERNAL repos (raw refused above) — it
-  # creates a render-verified PUBLIC gist (ASSET_GIST_PUBLIC=1) whose raw URL
+  # Tier-2 (gist): available iff gh is present + authed. NOTE — this tier CANNOT
+  # host images: `gh gist create` rejects binary content ("binary file not
+  # supported"), so every PNG/JPG fails the guard in host_one_asset and degrades
+  # to a bullet. It was previously documented as the effective primary tier for
+  # PRIVATE/INTERNAL repos; that claim was wrong. It remains selectable for text
+  # assets. Consequence: on a PRIVATE/INTERNAL repo WITHOUT the `gh image`
+  # extension there is no working inline-embed tier (raw refused above, tier-0
+  # unavailable, gist binary-blocked) — the visual-evidence block degrades to
+  # bullets and inline rendering needs a manual web-UI attach. Installing
+  # `drogers0/gh-image` activates tier-0 and removes that limitation. It
+  # creates a render-verified gist (visibility per gist_public_effective) whose raw URL
   # camo can fetch anonymously. host_one_asset render-verifies before emitting.
   if command -v "$GH_BIN" >/dev/null 2>&1 && \
      "$GH_BIN" auth status >/dev/null 2>&1; then
@@ -520,6 +589,23 @@ gist_raw_url_reachable() {
   return 0
 }
 
+# Resolve the effective gist visibility: "1" (public) or "0" (secret/unlisted).
+# An explicit ASSET_GIST_PUBLIC always wins and short-circuits before any probe,
+# so callers that set it need no gh/network access. Empty → auto-derive from
+# repo visibility, declining `--public` for closed repos (see the ASSET_GIST_PUBLIC
+# note above). Unknown visibility (no gh, unauthed, probe failure) falls back to
+# public: that is the historical behaviour, and it keeps the embed rendering.
+gist_public_effective() {
+  case "${ASSET_GIST_PUBLIC:-}" in
+    1) printf '1'; return 0 ;;
+    0) printf '0'; return 0 ;;
+  esac
+  case "$(repo_visibility 2>/dev/null || printf '')" in
+    PRIVATE|INTERNAL) printf '0' ;;
+    *)                printf '1' ;;
+  esac
+}
+
 # Host a single PNG and echo its public https URL (or empty on failure).
 #   $1 = basename, $2 = on-disk source path
 # Uses HOST_TIER/HOST_OWNER_REPO/HOST_REF set by select_host_tier().
@@ -527,18 +613,37 @@ host_one_asset() {
   local base="$1" src="$2"
   case "$HOST_TIER" in
     user-attachments)
-      # OPT-IN, env-gated TOP tier. github.com/user-attachments/assets/<uuid>.
-      # q1 spike (see header): the upload-policy flow is NOT drivable with a gh
-      # token (needs a browser session cookie), so the LIVE uploader is not
-      # implemented — shipping a guessed POST would be a fake. This branch is
-      # therefore exercised only via the USER_ATTACH_URL_BASE mock; if that mock
-      # is unset (no proven live path), it returns failure so the caller degrades.
+      # TOP tier: github.com/user-attachments/assets/<uuid>. Live via the
+      # `gh image` extension, which supplies the browser SESSION token that the
+      # upload-policy flow requires and a PAT cannot provide (the q1 blocker).
+      # GitHub rewrites these to private-user-images.githubusercontent.com with a
+      # short-lived scoped JWT, so they render for repo members on PRIVATE and
+      # INTERNAL repos, accept binaries, and never touch the repository.
       if [ -n "$USER_ATTACH_URL_BASE" ]; then
         # Mirror GIST_RAW_URL_BASE: synthesise the asset URL offline. A real UUID
         # is server-assigned; the mock base stands in for it in tests.
         printf '%s/%s' "${USER_ATTACH_URL_BASE%/}" "$base"; return 0
       fi
-      return 1 ;;
+      if [ "$DRY_RUN" = "1" ]; then
+        # A dry run must not upload, but it also must not claim success for an
+        # uploader that isn't there — that is the failure mode that made an
+        # earlier dry run report working embeds while the real run emitted
+        # bullets. check-token is read-only, so probing it here is side-effect
+        # free. Inline (not via gh_image_available) to keep host_one_asset
+        # dependency-free for the declare -f subshells in the self-tests.
+        "$GH_BIN" image check-token >/dev/null 2>&1 || return 1
+        printf 'https://github.com/user-attachments/assets/dry-run-%s' "$base"; return 0
+      fi
+      # `gh image <file>` prints `![<base>](<url>)` on success. Extract the URL;
+      # a missing/!matching line means the upload failed, so degrade rather than
+      # emit a broken embed. stderr is dropped: it can echo token diagnostics.
+      local giout giurl
+      giout=$("$GH_BIN" image "$src" 2>/dev/null) || return 1
+      giurl=$(printf '%s' "$giout" \
+        | grep -oE 'https://github\.com/user-attachments/assets/[A-Za-z0-9._-]+' | head -1)
+      [ -z "$giurl" ] && return 1
+      printf '%s' "$giurl"
+      return 0 ;;
     raw)
       # Copy the PNG into the tracked assets path on the worktask branch so a
       # later (human-gated) commit ships it. We do NOT git-add/commit/push here.
@@ -559,8 +664,18 @@ host_one_asset() {
       printf '%s' "$raw_url"
       return 0 ;;
     gist)
-      # AC1 PRIMARY private-repo tier: a PUBLIC gist's raw URL is anonymously
-      # fetchable, so camo renders it inside a PRIVATE repo's issue/PR body.
+      # HARD LIMIT: `gh gist create` rejects binary content outright with
+      # "binary file not supported" — the gists API takes UTF-8 text only. A
+      # PNG/JPG can therefore NEVER be hosted on this tier, on any repo. Detect
+      # it here and fail fast so the caller degrades to a bullet with a real
+      # reason, instead of burning a network round-trip on a guaranteed failure.
+      # Placed ahead of the mock/dry-run short-circuits deliberately: a dry run
+      # that reported a working embed for a binary would be lying about the very
+      # thing being dry-run. `grep -I` treats binary as non-matching, so this
+      # succeeds only for text.
+      if ! LC_ALL=C grep -qI . "$src" 2>/dev/null; then
+        return 1
+      fi
       # Mock-friendly: if GIST_RAW_URL_BASE is set (self-tests), synthesise the
       # raw URL without touching the network. Otherwise upload via gh.
       if [ -n "$GIST_RAW_URL_BASE" ]; then
@@ -570,10 +685,10 @@ host_one_asset() {
         printf 'https://gist.githubusercontent.com/dry/run/raw/%s' "$base"; return 0
       fi
       local gout raw raw_url
-      # ASSET_GIST_PUBLIC (default 1) → `--public` gist (camo-renderable on
-      # private repos). =0 → secret/unlisted gist (policy opt-out; also
-      # anonymously fetchable, so it renders too — only discoverability differs).
-      if [ "${ASSET_GIST_PUBLIC:-1}" = "1" ]; then
+      # Visibility via gist_public_effective(): explicit ASSET_GIST_PUBLIC wins,
+      # else auto-derived from repo visibility (closed repo → secret). Both kinds
+      # are anonymously fetchable, so both render — only discoverability differs.
+      if [ "$(gist_public_effective)" = "1" ]; then
         gout=$("$GH_BIN" gist create --public "$src" 2>/dev/null) || return 1
       else
         gout=$("$GH_BIN" gist create "$src" 2>/dev/null) || return 1
@@ -1495,11 +1610,15 @@ MOCK
       printf '%s\n' "$f11a_embed" | head -20 >&2; fail=$((fail + 1))
     fi
 
-    # --- 11b: user-attachments unavailable (no mock base) → degrade (AC-3) ---
-    # Forced UA mode but USER_ATTACH_URL_BASE empty → host_one_asset returns 1 →
-    # tokens drop + degradation flagged. Non-blocking, no broken markup.
+    # --- 11b: user-attachments uploader unavailable → degrade (AC-3) ---
+    # Forced UA mode, no mock base, AND the `gh image` uploader failing (GH_BIN
+    # stubbed to `false`) → host_one_asset returns 1 → tokens drop + degradation
+    # flagged. Non-blocking, no broken markup. Stubbing GH_BIN is what makes this
+    # deterministic now that tier-0 has a live path: without it the test would
+    # really upload on any machine where `gh image` is installed and authed.
     ASSET_HOST_MODE="user-attachments"
     USER_ATTACH_URL_BASE=""
+    local f11b_gh_saved="$GH_BIN"; GH_BIN=false
     : > "$ASSET_DEGRADED_FILE"
     local f11b_embed
     f11b_embed=$(printf '%s' "$f11_design" | resolve_design_assets)
@@ -1509,6 +1628,7 @@ MOCK
     if printf '%s\n' "$f11b_embed" | grep -qF '{{asset:'; then f11b_ok=0; fi
     [ "$f11b_reason" = "image_hosting_unavailable" ] || f11b_ok=0
     printf '%s\n' "$f11b_embed" | grep -qF 'https://www.figma.com/design/FOO/FaceScan?node-id=255-2263' || f11b_ok=0
+    GH_BIN="$f11b_gh_saved"
     if [ "$f11b_ok" = "1" ]; then
       echo "publish-pl-issue: self-test 11b-user-attachments-degrade PASS"; pass=$((pass + 1))
     else
@@ -1562,10 +1682,11 @@ MOCK
     chmod +x "$t11d_bin/git"
     local f11d_tier
     f11d_tier=$( PATH="$t11d_bin:$PATH" GH_BIN=gh \
-      ASSET_HOST_MODE="" ASSET_REPO_VISIBILITY="" ASSET_UA_ENABLE=0 \
+      ASSET_HOST_MODE="" ASSET_REPO_VISIBILITY="" ASSET_UA_ENABLE=0 ASSET_GH_IMAGE=0 \
       bash -c '
         '"$(declare -f parse_owner_repo)"'
         '"$(declare -f repo_visibility)"'
+        '"$(declare -f gh_image_available)"'
         '"$(declare -f select_host_tier)"'
         select_host_tier
         printf "%s" "$HOST_TIER"
@@ -1582,6 +1703,7 @@ MOCK
     f11e_tier=$( ASSET_HOST_MODE="user-attachments" bash -c '
         '"$(declare -f parse_owner_repo)"'
         '"$(declare -f repo_visibility)"'
+        '"$(declare -f gh_image_available)"'
         '"$(declare -f select_host_tier)"'
         ASSET_UA_ENABLE=0 USER_ATTACH_URL_BASE=""
         select_host_tier
@@ -1633,6 +1755,8 @@ MOCK
   f12a_url_on=$( PATH="$t12_dir/bin:$PATH" GH_BIN=gh \
     bash -c '
       '"$(declare -f gist_raw_url_reachable)"'
+      '"$(declare -f repo_visibility)"'
+      '"$(declare -f gist_public_effective)"'
       '"$(declare -f host_one_asset)"'
       HOST_TIER=gist DRY_RUN=0 GIST_RAW_URL_BASE="" ASSET_GIST_PUBLIC=1 GIST_VERIFY_FORCE=pass
       host_one_asset "a.png" "'"$t12_dir"'/a.png"
@@ -1643,6 +1767,8 @@ MOCK
   f12a_url_off=$( PATH="$t12_dir/bin:$PATH" GH_BIN=gh \
     bash -c '
       '"$(declare -f gist_raw_url_reachable)"'
+      '"$(declare -f repo_visibility)"'
+      '"$(declare -f gist_public_effective)"'
       '"$(declare -f host_one_asset)"'
       HOST_TIER=gist DRY_RUN=0 GIST_RAW_URL_BASE="" ASSET_GIST_PUBLIC=0 GIST_VERIFY_FORCE=pass
       host_one_asset "a.png" "'"$t12_dir"'/a.png"
@@ -1657,6 +1783,108 @@ MOCK
     cat "$t12_dir/argv.log" >&2; fail=$((fail + 1))
   fi
 
+  # --- 12a0: tier-0 live path — `gh image` upload + URL extraction ---
+  # host_one_asset must invoke `gh image <src>` and pull the user-attachments URL
+  # out of its `![base](url)` line; a non-matching/absent line must degrade (rc!=0,
+  # no output) rather than emit a broken embed. Binary input is deliberate: this
+  # tier accepts binaries, which is exactly what the gist tier cannot do.
+  local f12a0_ok=1 f12a0_url f12a0_bad
+  cat > "$t12_dir/bin/gh-img" <<'MOCK'
+#!/usr/bin/env bash
+if [ "$1" = "image" ]; then
+  printf '![%s](https://github.com/user-attachments/assets/abc123-def456)\n' "$(basename "$2")"
+  exit 0
+fi
+exit 0
+MOCK
+  chmod +x "$t12_dir/bin/gh-img"
+  printf '\x89PNG\r\n\x1a\n\x00\x01' > "$t12_dir/ua.png"
+  f12a0_url=$( GH_BIN="$t12_dir/bin/gh-img" \
+    bash -c '
+      '"$(declare -f host_one_asset)"'
+      HOST_TIER=user-attachments DRY_RUN=0 USER_ATTACH_URL_BASE=""
+      host_one_asset "ua.png" "'"$t12_dir"'/ua.png"
+    ' )
+  [ "$f12a0_url" = "https://github.com/user-attachments/assets/abc123-def456" ] || f12a0_ok=0
+  # Uploader prints nothing usable → must degrade with no output.
+  f12a0_bad=$( GH_BIN=true \
+    bash -c '
+      '"$(declare -f host_one_asset)"'
+      HOST_TIER=user-attachments DRY_RUN=0 USER_ATTACH_URL_BASE=""
+      host_one_asset "ua.png" "'"$t12_dir"'/ua.png"
+    ' ) && f12a0_ok=0
+  [ -n "$f12a0_bad" ] && f12a0_ok=0
+  if [ "$f12a0_ok" = "1" ]; then
+    echo "publish-pl-issue: self-test 12a0-user-attachments-live PASS"; pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test 12a0-user-attachments-live FAIL (url='$f12a0_url' bad='$f12a0_bad')"; fail=$((fail + 1))
+  fi
+
+  # --- 12a2: unset ASSET_GIST_PUBLIC auto-derives visibility from the repo ---
+  # Closed repo (PRIVATE/INTERNAL) MUST NOT get `--public`: both gist kinds are
+  # anonymously fetchable so the embed renders either way, and `--public` only
+  # adds indexing + profile listing. PUBLIC (and unknown, e.g. no gh) keep the
+  # historical public default. ASSET_REPO_VISIBILITY mocks the probe offline.
+  local f12a2_ok=1 v
+  for v in PRIVATE INTERNAL; do
+    : > "$t12_dir/argv.log"
+    PATH="$t12_dir/bin:$PATH" GH_BIN=gh bash -c '
+      '"$(declare -f gist_raw_url_reachable)"'
+      '"$(declare -f repo_visibility)"'
+      '"$(declare -f gist_public_effective)"'
+      '"$(declare -f host_one_asset)"'
+      HOST_TIER=gist DRY_RUN=0 GIST_RAW_URL_BASE="" ASSET_GIST_PUBLIC="" GIST_VERIFY_FORCE=pass
+      ASSET_REPO_VISIBILITY="'"$v"'"
+      host_one_asset "a.png" "'"$t12_dir"'/a.png"
+    ' >/dev/null 2>&1
+    grep -qF 'gist create --public' "$t12_dir/argv.log" && f12a2_ok=0   # MUST be absent
+    grep -qE 'gist create [^-]' "$t12_dir/argv.log" || f12a2_ok=0       # secret form
+  done
+  for v in PUBLIC ""; do
+    : > "$t12_dir/argv.log"
+    PATH="$t12_dir/bin:$PATH" GH_BIN=gh bash -c '
+      '"$(declare -f gist_raw_url_reachable)"'
+      '"$(declare -f repo_visibility)"'
+      '"$(declare -f gist_public_effective)"'
+      '"$(declare -f host_one_asset)"'
+      HOST_TIER=gist DRY_RUN=0 GIST_RAW_URL_BASE="" ASSET_GIST_PUBLIC="" GIST_VERIFY_FORCE=pass
+      ASSET_REPO_VISIBILITY="'"$v"'"
+      host_one_asset "a.png" "'"$t12_dir"'/a.png"
+    ' >/dev/null 2>&1
+    grep -qF 'gist create --public' "$t12_dir/argv.log" || f12a2_ok=0   # MUST be present
+  done
+  if [ "$f12a2_ok" = "1" ]; then
+    echo "publish-pl-issue: self-test 12a2-gist-visibility-auto PASS"; pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test 12a2-gist-visibility-auto FAIL"
+    cat "$t12_dir/argv.log" >&2; fail=$((fail + 1))
+  fi
+
+  # --- 12a3: gist tier refuses binary assets (never calls gh) ---
+  # `gh gist create` rejects binary content, so a PNG/JPG can never be hosted on
+  # this tier. host_one_asset must fail fast and NOT invoke gh, so the caller
+  # degrades to a bullet instead of burning a guaranteed-failure round-trip.
+  local f12a3_ok=1 f12a3_url
+  printf '\x89PNG\r\n\x1a\n\x00\x01\x02\x03' > "$t12_dir/bin.png"
+  : > "$t12_dir/argv.log"
+  f12a3_url=$( PATH="$t12_dir/bin:$PATH" GH_BIN=gh \
+    bash -c '
+      '"$(declare -f gist_raw_url_reachable)"'
+      '"$(declare -f repo_visibility)"'
+      '"$(declare -f gist_public_effective)"'
+      '"$(declare -f host_one_asset)"'
+      HOST_TIER=gist DRY_RUN=0 GIST_RAW_URL_BASE="" ASSET_GIST_PUBLIC=1 GIST_VERIFY_FORCE=pass
+      host_one_asset "bin.png" "'"$t12_dir"'/bin.png"
+    ' ) && f12a3_ok=0        # MUST return non-zero
+  [ -n "$f12a3_url" ] && f12a3_ok=0                       # MUST emit no URL
+  [ -s "$t12_dir/argv.log" ] && f12a3_ok=0                # MUST NOT have called gh
+  if [ "$f12a3_ok" = "1" ]; then
+    echo "publish-pl-issue: self-test 12a3-gist-binary-refused PASS"; pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test 12a3-gist-binary-refused FAIL (url='$f12a3_url')"
+    cat "$t12_dir/argv.log" >&2; fail=$((fail + 1))
+  fi
+
   # --- 12b: render-verify gate — pass emits URL, fail degrades (no URL) ---
   local f12b_pass f12b_fail f12b_rc_pass f12b_rc_fail f12b_ok=1
   # gist_raw_url_reachable unit assertions (offline hook).
@@ -1666,6 +1894,8 @@ MOCK
   f12b_pass=$( PATH="$t12_dir/bin:$PATH" GH_BIN=gh \
     bash -c '
       '"$(declare -f gist_raw_url_reachable)"'
+      '"$(declare -f repo_visibility)"'
+      '"$(declare -f gist_public_effective)"'
       '"$(declare -f host_one_asset)"'
       HOST_TIER=gist DRY_RUN=0 GIST_RAW_URL_BASE="" ASSET_GIST_PUBLIC=1 GIST_VERIFY_FORCE=pass
       host_one_asset "a.png" "'"$t12_dir"'/a.png"
@@ -1675,6 +1905,8 @@ MOCK
   f12b_fail=$( PATH="$t12_dir/bin:$PATH" GH_BIN=gh \
     bash -c '
       '"$(declare -f gist_raw_url_reachable)"'
+      '"$(declare -f repo_visibility)"'
+      '"$(declare -f gist_public_effective)"'
       '"$(declare -f host_one_asset)"'
       HOST_TIER=gist DRY_RUN=0 GIST_RAW_URL_BASE="" ASSET_GIST_PUBLIC=1 GIST_VERIFY_FORCE=fail
       host_one_asset "a.png" "'"$t12_dir"'/a.png"
@@ -1709,10 +1941,11 @@ MOCK
   local f12c_tier
   f12c_tier=$( cp "$t12_dir/bin/gh-sel" "$t12_dir/bin/gh2"; cp "$t12_dir/bin/git-sel" "$t12_dir/bin/git"; \
     PATH="$t12_dir/bin:$PATH" GH_BIN=gh2 \
-    ASSET_HOST_MODE="" ASSET_REPO_VISIBILITY="" ASSET_UA_ENABLE=0 \
+    ASSET_HOST_MODE="" ASSET_REPO_VISIBILITY="" ASSET_UA_ENABLE=0 ASSET_GH_IMAGE=0 \
     bash -c '
       '"$(declare -f parse_owner_repo)"'
       '"$(declare -f repo_visibility)"'
+      '"$(declare -f gh_image_available)"'
       '"$(declare -f select_host_tier)"'
       select_host_tier
       printf "%s" "$HOST_TIER"
