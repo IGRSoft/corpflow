@@ -364,11 +364,11 @@ for full code patterns.
 | Status check | Self | haiku |
 | Code implementation | developer | opus |
 | Architecture question | software-architector | opus |
-| Apple/Swift architecture | apple-developer:apple-architector | opus |
+| Platform architecture (apple/systems/android/web/backend/ai) | the platform's architect agent — roster in `skills/shared/compatible-plugins.md § Functional-role agents` | opus |
 | Technical decision | technical-lead | opus |
 | Test design | qa-engineer | sonnet |
 
-> **Cross-plugin AR collaboration**: For Apple platform projects, `software-architector` consults `apple-developer:apple-architector` during AR stage for Swift app architecture (pattern selection, DI, navigation, concurrency). See `cross-plugin-handoff` skill for the full protocol.
+> **Cross-plugin AR collaboration**: For platform projects, `software-architector` consults the platform's architect agent during AR stage for platform-specific architecture (pattern selection, DI, navigation, concurrency for Apple; the equivalent concerns per platform). See `agents/software-architector.md § Platform Architecture Collaboration` for the per-platform table and `cross-plugin-handoff` skill for the full protocol.
 
 #### Nested delegation
 

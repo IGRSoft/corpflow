@@ -75,7 +75,7 @@ A change is worth flagging when:
 
 ## Options
 
-- `--platform <apple|android|web|all>` - Platform context (default: auto-detect)
+- `--platform <apple|android|web|systems|backend|ai|all>` - Platform context (default: auto-detect)
 - `--path <dir>` - Review a specific directory (diff scoped to that path)
 - `--pr <number>` - Review the changes in a PR
 ### Depth and focus options
