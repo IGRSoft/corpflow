@@ -57,13 +57,19 @@ handoff:
 
 #### error_file derivation
 
-The `error_file` for an apple-developer agent is `.context/errors/ios-developer.md` (last segment of qualified name) per `task-system.md § error_file derivation`. The same rule applies to system-developer agents (e.g., `.context/errors/c-developer.md`, `.context/errors/sys-code-fixer.md`), android-developer agents (e.g., `.context/errors/android-phone-developer.md`, `.context/errors/kotlin-architector.md`), frontend-developer agents (e.g., `.context/errors/react-developer.md`, `.context/errors/fe-code-fixer.md`), backend-developer agents (e.g., `.context/errors/node-developer.md`, `.context/errors/be-test-generator.md`), and ai-engineer agents (e.g., `.context/errors/llm-engineer.md`).
+The `error_file` for an apple-developer agent is `.context/errors/ios-developer.md` (last segment of qualified name) per `task-system.md § error_file derivation`. The same rule applies to every other dev plugin: `.context/errors/c-developer.md`, `.context/errors/kotlin-architector.md`, `.context/errors/react-developer.md`, `.context/errors/be-test-generator.md`, `.context/errors/llm-engineer.md`.
+
+##### Basename collisions
 
 Because the basename is the whole key, two plugins shipping the same bare agent name write to the same error file. `apple-developer` and `android-developer` both ship `security-auditor`, `test-generator`, and `code-fixer` — see `skills/shared/compatible-plugins.md § Naming` before routing both in one worktask.
 
 #### Build evidence defaults
 
-system-developer DV takeovers follow the identical frontmatter shape; note that systems work defaults `metadata.requires_screenshots: false` and supplies Build Evidence (terminal transcripts under `.context/logs/`) via the `cli_fallback_adapter` instead of UI screenshots. android-developer DV takeovers default `metadata.requires_screenshots: true` and supply Build Evidence via the `android_adapter` (`adb exec-out screencap -p`) plus Gradle build/test transcripts under `.context/logs/`; there is no Android build MCP, so builds run through scoped `Bash(gradle:*|./gradlew|adb:*)`. frontend-developer DV takeovers default `metadata.requires_screenshots: true` via the `web_adapter` (Playwright / Chrome MCP) plus Lighthouse and axe reports. backend-developer and ai-engineer DV takeovers default `false`: back-end evidence is API request/response transcripts, test output, k6 reports, and migration logs; AI evidence is eval reports, metric tables, and training transcripts — all under `.context/logs/`. Full table: `skills/shared/compatible-plugins.md § Handoff defaults`.
+system-developer DV takeovers follow the identical frontmatter shape; note that systems work defaults `metadata.requires_screenshots: false` and supplies Build Evidence (terminal transcripts under `.context/logs/`) via the `cli_fallback_adapter` instead of UI screenshots. android-developer DV takeovers default `metadata.requires_screenshots: true` and supply Build Evidence via the `android_adapter` (`adb exec-out screencap -p`) plus Gradle build/test transcripts under `.context/logs/`; there is no Android build MCP, so builds run through scoped `Bash(gradle:*|./gradlew|adb:*)`.
+
+##### Web, back-end and AI evidence
+
+frontend-developer DV takeovers default `metadata.requires_screenshots: true` via the `web_adapter` (Playwright / Chrome MCP) plus Lighthouse and axe reports. backend-developer and ai-engineer DV takeovers default `false`: back-end evidence is API request/response transcripts, test output, k6 reports, and migration logs; AI evidence is eval reports, metric tables, and training transcripts — all under `.context/logs/`. Full table: `skills/shared/compatible-plugins.md § Handoff defaults`.
 
 ## #relaxed-profile
 

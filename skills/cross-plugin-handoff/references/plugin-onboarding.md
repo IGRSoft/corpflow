@@ -56,16 +56,28 @@ The architect agent is consulted, not handed ownership: it writes
 Every file below must be updated in the same change. Ordered so that later edits can reference
 earlier ones.
 
+### Registry and routing
+
 | # | File | What changes |
 |---|------|--------------|
 | 1 | `skills/shared/compatible-plugins.md` | Registry row, functional-role row, handoff-defaults row |
 | 2 | `skills/shared/platform-detection.md` | Marker rows in § Detection Rules; a per-platform specialization section; precedence notes if markers overlap an existing platform |
 | 3 | `agents/developer.md` | `tools:` `Task(...)` grants; `--platform` enum (Priority Order, Detection Logging, Routing Audit); common-rows table; UI/non-UI defaults sentence; agent `description` |
+
+### Stage agents and handoff protocol
+
+| # | File | What changes |
+|---|------|--------------|
 | 4 | `agents/software-architector.md` | `tools:` architect grant; per-platform architect table |
 | 5 | `agents/security-reviewer.md` | `tools:` auditor grant; platform→auditor table and checklist |
 | 6 | `agents/qa-engineer.md` | `tools:` test-generator grant; platform→generator table |
 | 7 | `skills/cross-plugin-handoff/SKILL.md` | Binding-schema agent list; `error_file` examples; build-evidence defaults |
 | 8 | `skills/cross-plugin-handoff/references/plugin-protocols.md` | Per-plugin stage→agent handoff table |
+
+### Commands, scripts and release
+
+| # | File | What changes |
+|---|------|--------------|
 | 9 | `skills/worktask/scripts/publish-pl-issue.sh` | Plugin-prefix regex (both occurrences) **and** the leak-check greps — all must stay identical |
 | 10 | `commands/pm-milestone.md` | Implementation / Test / Review agent-assignment tables; `--platform` flag docs |
 | 11 | `commands/dev-code-review.md` | `--platform` enum |

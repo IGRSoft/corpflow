@@ -187,7 +187,7 @@ Rules`; plugin availability in `skills/shared/compatible-plugins.md`.
 | backend | `backend-developer:be-test-generator` | per-stack unit, integration, contract tests |
 | ai | `ai-engineer:ai-test-generator` | eval harnesses, regression suites |
 
-In every case:
+### Delegation rules
 
 1. QA retains test strategy ownership — the generator generates tests, QA validates quality and completeness
 2. Execute and measure with the platform's own tooling (Apple: XcodeBuildMCP `test_sim`, `get_coverage_report`; others: the plugin's `/build-test` and coverage tooling)

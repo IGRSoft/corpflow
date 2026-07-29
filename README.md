@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with Task System integration, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 3.37.1 · Requires Claude Code 2.1.220+**
+**Plugin 3.38.0 · Requires Claude Code 2.1.220+**
 
 ## Features
 
@@ -87,8 +87,8 @@ Run the worktask command:
 
 ```
 /worktask "Add dark mode to settings"
-/worktask "/apple-developer:code-legacy-modernize migrate @StateObject to @Environment"
-/worktask "/system-developer:code-modernize . --target cpp23"
+/worktask "/apple-developer:fix-modernize migrate @StateObject to @Environment"
+/worktask "/system-developer:fix-modernize . --target cpp23"
 ```
 
 ### Combining with Other Commands
@@ -102,7 +102,7 @@ You can embed slash commands within the worktask payload. The orchestrator will:
 Embedded commands are detected by matching `/<name>` or `/<plugin:name>` patterns against available skills. The command arguments are preserved and passed through.
 
 ```
-/worktask "/apple-developer:code-refactor src/Views/SettingsView.swift"
+/worktask "/apple-developer:fix-refactor src/Views/SettingsView.swift"
 /worktask "/code-review PR #123"
 ```
 
@@ -330,7 +330,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 - `code-comment-standard` — Compact source-comment standard (WHY/contract only); loadable skill wrapping code-documentation.md
 - `context-compression` — Context compression between agent handoffs
 - `cost-optimization` — Token and cost tracking/optimization
-- `cross-plugin-handoff` — Handoff protocol to external plugins (apple-developer, system-developer, …)
+- `cross-plugin-handoff` — Handoff protocol to external plugins; includes the add/replace-a-plugin checklist. Compatible dev plugins are registered in `skills/shared/compatible-plugins.md` (apple-developer, system-developer, android-developer, frontend-developer, backend-developer, ai-engineer)
 - `csv-export-templates` — CSV export structure for Google Sheets import
 - `dv-screenshot-capture` — DV-stage screenshot capture, attached to the PR as visual evidence
 - `estimation-methodology` — Complexity scoring (0–50) and T-shirt sizing

@@ -48,6 +48,8 @@ Analyze context (system state + requirements) → assess High/Medium/Low impact 
 For platform projects, collaborate with the platform's architect agent for platform-specific
 architecture while retaining AR stage ownership for system-level decisions.
 
+### Architect routing
+
 | Platform | Architect agent | Artifact it writes |
 |----------|-----------------|--------------------|
 | apple | `apple-developer:apple-architector` | `.context/swift-architecture.md` |
@@ -183,7 +185,7 @@ Artifact ≤250 lines; no full-file listings — pass anchors, not pasted bodies
 
 ## Cross-Plugin Invocation Context
 
-When invoked from apple-developer commands (`code-review`, `analyze-tech-debt`, `code-refactor`, `code-legacy-modernize`, `code-to-package`, `mock-api`), apply architecture review with Apple platform awareness: SwiftUI patterns (MVVM/TCA/MVI) and trade-offs, Swift concurrency (actors, Sendable, structured concurrency), framework boundaries (UIKit/AppKit vs pure SwiftUI), platform constraints (App Sandbox, entitlements, privacy manifest). The command's prompt supplies platform context — use it to inform decisions.
+When invoked from apple-developer commands (`review-code`, `analyze-tech-debt`, `fix-refactor`, `fix-modernize`, `gen-mock-api`), apply architecture review with Apple platform awareness: SwiftUI patterns (MVVM/TCA/MVI) and trade-offs, Swift concurrency (actors, Sendable, structured concurrency), framework boundaries (UIKit/AppKit vs pure SwiftUI), platform constraints (App Sandbox, entitlements, privacy manifest). The command's prompt supplies platform context — use it to inform decisions.
 
 ## Completion Verification
 

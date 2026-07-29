@@ -8,14 +8,27 @@ live in `skills/shared/platform-detection.md`; this file references that map and
 
 ## Registry
 
-| Plugin | Role | Platform key | Version floor | Entry agent | Command set | Workflow skill |
-|--------|------|--------------|---------------|-------------|-------------|----------------|
-| `apple-developer` | Apple platforms (Swift, SwiftUI, UIKit, AppKit) | `apple` | >=1.25.0 | `apple-developer:apple-developer` | core-parity + apple extras | `apple-developer:workflow-integration` |
-| `system-developer` | C, C++, Python, Bash systems code | `systems` | >=1.5.0 | `system-developer:system-developer` | core-parity + `sanitize-check` | `system-developer:workflow-integration` |
-| `android-developer` | Android (Kotlin, Compose, Gradle) | `android` | >=1.3.0 | `android-developer:android-developer` | core-parity | `android-developer:workflow-integration` |
-| `frontend-developer` | Web UI (React, Vue, Svelte, Angular, TS, CSS) | `web` | >=1.2.0 | `frontend-developer:frontend-developer` | core-parity + `gen-component` | `frontend-developer:workflow-integration` |
-| `backend-developer` | Services, APIs, persistence | `backend` | >=1.3.0 | `backend-developer:backend-developer` | core-parity + `gen-api`, `db-migrate`, `analyze-security` | `backend-developer:workflow-integration` |
-| `ai-engineer` | AI/ML, LLM applications, MLOps | `ai` | >=1.1.0 | `ai-engineer:ai-engineer` | **own set** (documented exception) | *(add when available)* |
+### Identity and routing
+
+| Plugin | Role | Platform key | Version floor | Entry agent |
+|--------|------|--------------|---------------|-------------|
+| `apple-developer` | Apple platforms (Swift, SwiftUI, UIKit, AppKit) | `apple` | >=1.25.0 | `apple-developer:apple-developer` |
+| `system-developer` | C, C++, Python, Bash systems code | `systems` | >=1.5.0 | `system-developer:system-developer` |
+| `android-developer` | Android (Kotlin, Compose, Gradle) | `android` | >=1.3.0 | `android-developer:android-developer` |
+| `frontend-developer` | Web UI (React, Vue, Svelte, Angular, TS, CSS) | `web` | >=1.2.0 | `frontend-developer:frontend-developer` |
+| `backend-developer` | Services, APIs, persistence | `backend` | >=1.3.0 | `backend-developer:backend-developer` |
+| `ai-engineer` | AI/ML, LLM applications, MLOps | `ai` | >=1.1.0 | `ai-engineer:ai-engineer` |
+
+### Command set and workflow skill
+
+| Plugin | Command set | Workflow skill |
+|--------|-------------|----------------|
+| `apple-developer` | core-parity + apple extras | `apple-developer:workflow-integration` |
+| `system-developer` | core-parity + `sanitize-check` | `system-developer:workflow-integration` |
+| `android-developer` | core-parity | `android-developer:workflow-integration` |
+| `frontend-developer` | core-parity + `gen-component` | `frontend-developer:workflow-integration` |
+| `backend-developer` | core-parity + `gen-api`, `db-migrate`, `analyze-security` | `backend-developer:workflow-integration` |
+| `ai-engineer` | **own set** (documented exception) | *(add when available)* |
 
 Apple extras: `analyze-issue`, `analyze-localization`, `gen-mock-api`, `fix-security-hardening`,
 `review-swiftui`, `review-uikit`, `review-appkit`.
@@ -25,14 +38,27 @@ Apple extras: `analyze-issue`, `analyze-localization`, `gen-mock-api`, `fix-secu
 Used by the stage agents that consult a dev plugin outside DV: AR (`software-architector`),
 SR (`security-reviewer`), QA (`qa-engineer`), DR remediation.
 
-| Plugin | Architect (AR) | Security auditor (SR) | Test generator (QA) | Code fixer (DR) |
-|--------|----------------|-----------------------|---------------------|-----------------|
-| `apple-developer` | `apple-architector` | `security-auditor` *(unprefixed)* | `test-generator` *(unprefixed)* | `code-fixer` *(unprefixed)* |
-| `system-developer` | `system-architector` | `sys-security-auditor` | `sys-test-generator` | `sys-code-fixer` |
-| `android-developer` | `kotlin-architector` | `security-auditor` *(unprefixed — collision, see § Naming)* | `test-generator` *(unprefixed — collision)* | `code-fixer` *(unprefixed — collision)* |
-| `frontend-developer` | `frontend-architector` | `fe-security-auditor` | `fe-test-generator` (+ `fe-accessibility-auditor`) | `fe-code-fixer` |
-| `backend-developer` | `backend-architector` | `be-security-auditor` | `be-test-generator` | `be-code-fixer` |
-| `ai-engineer` | `ai-architector` | `ai-security-auditor` | `ai-test-generator` | `ai-code-fixer` |
+### Architect and security auditor
+
+| Plugin | Architect (AR) | Security auditor (SR) |
+|--------|----------------|-----------------------|
+| `apple-developer` | `apple-architector` | `security-auditor` *(unprefixed)* |
+| `system-developer` | `system-architector` | `sys-security-auditor` |
+| `android-developer` | `kotlin-architector` | `security-auditor` *(unprefixed — collision, see § Naming)* |
+| `frontend-developer` | `frontend-architector` | `fe-security-auditor` |
+| `backend-developer` | `backend-architector` | `be-security-auditor` |
+| `ai-engineer` | `ai-architector` | `ai-security-auditor` |
+
+### Test generator and code fixer
+
+| Plugin | Test generator (QA) | Code fixer (DR) |
+|--------|---------------------|-----------------|
+| `apple-developer` | `test-generator` *(unprefixed)* | `code-fixer` *(unprefixed)* |
+| `system-developer` | `sys-test-generator` | `sys-code-fixer` |
+| `android-developer` | `test-generator` *(unprefixed — collision)* | `code-fixer` *(unprefixed — collision)* |
+| `frontend-developer` | `fe-test-generator` (+ `fe-accessibility-auditor`) | `fe-code-fixer` |
+| `backend-developer` | `be-test-generator` | `be-code-fixer` |
+| `ai-engineer` | `ai-test-generator` | `ai-code-fixer` |
 
 ## Core-parity command set
 

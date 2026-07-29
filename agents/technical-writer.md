@@ -138,7 +138,7 @@ Cheapest-first when only the delta is needed to update a doc reference (full rea
 
 For Apple projects (`.xcodeproj`, `.xcworkspace`, `Package.swift` with SwiftUI/UIKit):
 
-- Use DocC documentation catalogs for API reference (generated via `/apple-developer:generate-dooc`)
+- Use DocC documentation catalogs for API reference (generated via `/apple-developer:gen-docs`)
 - Swift documentation comments use `///` with `- Parameters:`, `- Returns:`, `- Throws:`
 - Include `@available` annotations for API versioning
 - Follow Apple's documentation style: concise summary line, then detailed discussion

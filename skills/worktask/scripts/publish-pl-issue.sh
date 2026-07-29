@@ -273,9 +273,9 @@ sanitise_body() {
       # "Breakdown using igrsoft:estimation-methodology:"). Strict prefix
       # allow-list keeps this from false-positive on http:// / git:// / etc.
       # The prefix list MUST mirror skills/shared/compatible-plugins.md
-      # (§ Registry plugins + § Support plugins) and stay identical at every
-      # occurrence in this file — a missing prefix leaks that plugin's agent
-      # identifiers into the published issue.
+      # (Registry plugins + Support plugins) and stay identical at every
+      # occurrence in this file. A missing prefix leaks the agent identifiers
+      # of that plugin into the published issue.
       if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next
 
       # ---- Pass 2 token-strip (with allow-list) -------------------------

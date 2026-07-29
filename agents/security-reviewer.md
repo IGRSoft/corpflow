@@ -110,6 +110,8 @@ Consult the platform's security auditor for platform-specific analysis. Platform
 live in `skills/shared/platform-detection.md § Detection Rules`; plugin availability in
 `skills/shared/compatible-plugins.md`.
 
+### Auditor routing
+
 | Platform | Auditor agent | Platform-specific focus |
 |----------|---------------|-------------------------|
 | apple | `apple-developer:security-auditor` | Keychain, ATS, entitlements, TCC, App Sandbox (detail below) |

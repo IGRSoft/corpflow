@@ -86,7 +86,7 @@ See `skills/shared/stage-codes.md` for stage details.
 ### Steps 1–3 — Parse flags and create context folders
 
 1. **Parse** task description and flags (`--secure`, `--auto-plan`, `--auto-finalization`, `--emergency`, etc.). See **Embedded Command Detection** below.
-2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:code-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
+2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:fix-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
 3. **Create context folders**: `mkdir -p .context/designs .context/images .context/errors .context/logs`
 
 ### Step 3a — Initialize state.json (handoff-protocol)
@@ -279,7 +279,7 @@ After the execution loop exits (ST completed), run the Post-Worktask Self-Improv
 
 ## Embedded Command Detection
 
-When the task description contains slash commands (e.g., `/skill-creator`, `/apple-developer:code-refactor`), these are **embedded commands** that must be executed during the appropriate worktask stage.
+When the task description contains slash commands (e.g., `/skill-creator`, `/apple-developer:fix-refactor`), these are **embedded commands** that must be executed during the appropriate worktask stage.
 
 ### Detection Rules
 
@@ -317,12 +317,12 @@ During the orchestrator execution loop, when executing a DV stage task:
 # - DV stage prompt includes: "Invoke Skill('skill-creator', args='deep analyze /path/to/source')"
 
 # User input:
-/worktask /apple-developer:code-refactor src/Views/SettingsView.swift
+/worktask /apple-developer:fix-refactor src/Views/SettingsView.swift
 
 # Parsed as:
-# - Worktask task: "code-refactor src/Views/SettingsView.swift"
-# - Embedded command: apple-developer:code-refactor with args "src/Views/SettingsView.swift"
-# - metadata.embedded_commands: "apple-developer:code-refactor"
+# - Worktask task: "fix-refactor src/Views/SettingsView.swift"
+# - Embedded command: apple-developer:fix-refactor with args "src/Views/SettingsView.swift"
+# - metadata.embedded_commands: "apple-developer:fix-refactor"
 ```
 
 ### Error Handling

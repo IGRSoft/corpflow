@@ -80,7 +80,9 @@ After the platform is decided, route to the specialist. The most-common targets:
 | backend | `backend-developer:backend-developer` (router, polyglot) | `backend-developer:node-developer` / `backend-developer:go-developer` |
 | ai | `ai-engineer:ai-engineer` (router) | `ai-engineer:llm-engineer` (LLM apps, RAG, evals) |
 
-Read `skills/shared/platform-detection.md` on platform ambiguity or when you need a specialist outside these common rows (the full Apple / Android / Systems / Web specialization tables live there).
+#### Beyond the common rows
+
+Read `skills/shared/platform-detection.md` on platform ambiguity or when you need a specialist outside these common rows (the full Apple / Android / Systems / Web / AI specialization tables live there).
 
 #### UI vs non-UI defaults
 

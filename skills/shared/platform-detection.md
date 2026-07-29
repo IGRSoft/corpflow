@@ -152,9 +152,11 @@ Canonical marker→platform routing tables, extracted from `agents/developer.md 
 
 Precedence on mixed repos: apple/android/web (UI) markers win over systems/backend markers when both are present and the task targets the app layer; systems markers win for native libraries, build tooling, or scripts; backend markers win when the task targets HTTP/RPC services, API contracts, or the persistence layer. Ambiguous → ask (Priority Order rule 4).
 
-Three precedence notes resolve the only non-trivial collisions:
+Three precedence notes resolve the only non-trivial collisions.
 
-- **Python language vs Python web vs Python ML.** Pure Python *language* depth (typing, asyncio internals, free-threading, packaging) → `system-developer:python-developer`. The Python *web* layer (FastAPI/Django/Flask + persistence) → `backend-developer:python-backend-developer`. The Python *ML* stack (training, inference, LLM orchestration, eval harnesses) → `ai-engineer:*`. The backend agent itself delegates language depth back to system-developer, so this is a routing entry point, not a fork. A FastAPI service that merely *calls* a model API is backend; a service whose substance is the model, retrieval, or eval pipeline is ai.
+#### Precedence — Python language vs web vs ML
+
+Pure Python *language* depth (typing, asyncio internals, free-threading, packaging) → `system-developer:python-developer`. The Python *web* layer (FastAPI/Django/Flask + persistence) → `backend-developer:python-backend-developer`. The Python *ML* stack (training, inference, LLM orchestration, eval harnesses) → `ai-engineer:*`. The backend agent itself delegates language depth back to system-developer, so this is a routing entry point, not a fork. A FastAPI service that merely *calls* a model API is backend; a service whose substance is the model, retrieval, or eval pipeline is ai.
 
 #### Precedence — front-end vs back-end `package.json`
 
