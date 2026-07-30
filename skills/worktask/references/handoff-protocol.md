@@ -801,7 +801,9 @@ disambiguation note below. Kept through FN; dropped at archival.
 never the literal token `HEAD`, which is not a branch. FN MUST treat an empty `facts.branch`
 as "no planned name to push under" and skip the `git push -u origin
 HEAD:refs/heads/<facts.branch>` refspec entirely, falling back to a plain
-`git push -u origin HEAD` (or the current branch's own name) instead.
+`git push -u origin HEAD` (or the current branch's own name) instead. **On a detached HEAD,
+this fallback fails loudly** with "The destination you provided is not a full refname" —
+an acceptable failure (no wrong target, no silent error).
 
 ##### Disambiguation — `facts.branch` vs `stages.DV.worktree.branch`
 

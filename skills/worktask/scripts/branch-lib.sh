@@ -192,9 +192,9 @@ audit_fn() {
   # `>>` append is the CALLING SHELL's redirection and its failure (e.g. an
   # unwritable log dir) is invisible to that guard. Capture it explicitly so a
   # rename that mutates git state never completes with silent, un-audited
-  # evidence loss (a security-relevant action leaving no trace). The warning
-  # names the action/result, not the sink path, so it cannot leak a filesystem
-  # layout detail beyond what the operator's own shell already has.
+  # evidence loss (a security-relevant action leaving no trace). Our own warning
+  # line names the action/result only; the shell's own error line preceding it
+  # will leak the sink path and absolute library path (operator's terminal only).
   if command -v jq > /dev/null 2>&1; then
     if ! jq -cn --arg ts "$ts" --arg a "$action" --arg subj "$subj" --arg r "$result" \
       --arg t "$tid" --arg dk "$dk" --arg actor "$actor" --arg origin "$stage" --argjson m "$meta" \

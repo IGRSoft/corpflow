@@ -107,6 +107,11 @@ done
 # be redirected onto an attacker-planted file next to the symlink.
 _resolve_script_dir() {
   local src="${BASH_SOURCE[0]:-$0}" dir
+  # Note: while loop has no iteration cap, but is unreachable in practice.
+  # Bash cannot open a cyclic symlink to execute or source a script
+  # ('Too many levels of symbolic links'), so BASH_SOURCE[0] can never be
+  # cyclic at the moment this function runs. Only a TOCTOU race by someone
+  # with write access to the script directory (who has easier options).
   while [ -h "$src" ]; do
     dir=$(CDPATH= cd -- "$(dirname -- "$src")" && pwd -P)
     src=$(readlink "$src")

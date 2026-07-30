@@ -76,8 +76,8 @@ On `OK`, run `gh pr create` using the data from `PR instructions.md`. On failure
 
 | Field | Source |
 |-------|--------|
-| Conventional-commit type | `state.json § facts.goal` via `branch-lib.sh derive_type`; falls back to `feature`. Not the plan — no template emits a `## Goal` anchor |
-| Plan document (other fields) | `FN0.metadata.plan_file` (basename; `handoff-protocol.md § plan_file shape boundary`), fallback newest `.context/planning-*.md` |
+| Conventional-commit type | `state.json § facts.goal` via `branch-lib.sh:derive_type` (`git-conventions.md § Branch Naming`); defaults to `feature`. Not the plan — no template emits `## Goal` |
+| Plan document (other fields) | `FN0.metadata.plan_file` (basename; `handoff-protocol.md § plan_file shape boundary`), else newest `.context/planning-*.md` |
 | Issue ref | `workspace.json § issue_number` (milestone mode) or `metadata.issue_ref` from PL0; else omit |
 | DR verdict | First "Approval Status" line in `.context/developer-review-N.md` (N from `run_index`) |
 | QA verdict | First "GO/NO-GO" line in `.context/testing-N.md` (N from `run_index`) |
