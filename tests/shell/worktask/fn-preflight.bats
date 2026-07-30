@@ -8,6 +8,7 @@
 #   - continuity: ancestor => pass; diverged => diagnostic + audit row, exit 0 (non-blocking)
 #   - unknown command/flag => exit 2
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
+bats_require_minimum_version 1.5.0
 
 SCRIPT="skills/worktask/scripts/fn-preflight.sh"
 
@@ -481,9 +482,12 @@ EOF
   # deliberately without branch-lib.sh alongside it.
   mkdir -p "$WD/lonely"
   cp "$PLUGIN_ROOT/$SCRIPT" "$WD/lonely/fn-preflight.sh"
-  run bash "$WD/lonely/fn-preflight.sh" attachments
+  run --separate-stderr bash "$WD/lonely/fn-preflight.sh" attachments
   assert_failure 3
-  assert_output --partial "branch-lib.sh"
+  # DR-3: prove the path lands on stderr, not merely somewhere in the merged
+  # stream — this test's own name claims "with the path on stderr".
+  [[ "$stderr" == *"branch-lib.sh"* ]]
+  assert_output ""
   run bash "$WD/lonely/fn-preflight.sh" resolve-issue
   assert_failure 3
 }

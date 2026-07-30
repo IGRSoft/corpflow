@@ -5,6 +5,7 @@
 # Canonical grammar/vocabulary/guard-ladder/exit-code contract:
 # skills/shared/git-conventions.md § Branch Naming.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
+bats_require_minimum_version 1.5.0
 
 SCRIPT="skills/worktask/scripts/branch-name.sh"
 
@@ -256,9 +257,12 @@ mk_branch_repo() {
   # plugin broken): copy branch-name.sh alone into a sibling-free temp dir.
   mkdir -p lonely
   cp "$PLUGIN_ROOT/$SCRIPT" lonely/branch-name.sh
-  run bash lonely/branch-name.sh
+  run --separate-stderr bash lonely/branch-name.sh
   assert_success
-  assert_output --partial "branch-lib.sh"
+  # DR-3: the warning is on stderr specifically, not merely "present somewhere"
+  # in the merged stream that --separate-stderr would otherwise hide.
+  assert [ -n "$stderr" ]
+  [[ "$stderr" == *"branch-lib.sh"* ]]
   assert_output --partial "library unreachable — skipped"
   assert_line --index "$(( ${#lines[@]} - 1 ))" "branch=wt-abc123"
   run git rev-parse --abbrev-ref HEAD
@@ -275,9 +279,9 @@ mk_branch_repo() {
   cd "$WD"
   mkdir -p lonely
   cp "$PLUGIN_ROOT/$SCRIPT" lonely/branch-name.sh
-  run bash lonely/branch-name.sh --check "feature/lyon"
+  run --separate-stderr bash lonely/branch-name.sh --check "feature/lyon"
   assert_failure 2
-  assert_output --partial "branch-lib.sh"
+  [[ "$stderr" == *"branch-lib.sh"* ]]
 }
 
 # ---------------------------------------------------------------------------
