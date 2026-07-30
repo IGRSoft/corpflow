@@ -537,6 +537,11 @@ The v1 additive fields have **orchestrator-loop / hook writers**, not schema-map
 Only `stages.<CODE>.worktree` maps from a stage artifact — the DV handoff frontmatter
 `worktree_path`/`worktree_branch`, applied by `state-patch.sh` (rows above).
 
+`facts.branch` is also an orchestrator-loop writer, not a schema-mapped stage return: the
+orchestrator parses the final `branch=<name>` stdout line of `branch-name.sh`
+(`commands/worktask.md § Step 3c`) and stamps it directly — `branch-name.sh` itself never
+writes state.json (single write chokepoint, `#atomic-write`). See field notes — branch above.
+
 ---
 
 ## #state-json-schema
@@ -649,6 +654,10 @@ fallback: readers report unresolved and degrade non-blocking. Implemented in
         type: string
         maxLength: 240
         description: "One-sentence worktask intent, populated by PL0 — see field notes"
+      branch:
+        type: string
+        maxLength: 120
+        description: "Working branch named once at PL start — see field notes"
       files_modified: { type: array, items: { type: string } }
       tests_added: { type: array, items: { type: string } }
       decisions:
@@ -765,7 +774,39 @@ OPTIONAL (additive, version:1). Written by the orchestrator Step-6.5 errored-ret
 
 #### Field notes — worktree
 
-OPTIONAL (additive, version:1; DV primarily). Records WHICH worktree the stage ran in — not just `worktree: true` semantics. Written by mapping the DV handoff frontmatter `worktree_path`/`worktree_branch` (`state-patch.sh`). Lets resume re-enter the exact worktree via `EnterWorktree(path)`, DR/QA run in the right dir, and fn-gate read the branch without shelling `git rev-parse`. Kept through FN for PR context; dropped at archival.
+OPTIONAL (additive, version:1; DV primarily). Records WHICH worktree the stage ran in — not just `worktree: true` semantics. Written by mapping the DV handoff frontmatter `worktree_path`/`worktree_branch` (`state-patch.sh`). Lets resume re-enter the exact worktree via `EnterWorktree(path)` and DR/QA run in the right dir, and FN carry PR context. The PR *head* comes from `facts.branch`, not from here — see the disambiguation note below. Kept through FN for PR context; dropped at archival.
+
+#### Field notes — branch
+
+OPTIONAL (additive, version:1). The worktask's **planned** working-branch name — the
+host-session branch as `branch-name.sh` left it at the start of PL, whether it renamed the
+branch or found it already conventional. Written exactly once per run, before any commit
+exists, and never rewritten by a later stage (the once-only rule —
+`skills/shared/git-conventions.md § Branch Naming`). **This is the field FN uses as the
+pull-request head.** Reading the ledger instead of shelling `git rev-parse` at FN time is
+what makes an external mid-run rename unable to silently retarget the PR: the PR opens
+against the name the worktask committed to, and divergence surfaces as a mismatch rather
+than as a differently-named PR. Not the same field as `stages.DV.worktree.branch` — see the
+disambiguation note below. Kept through FN; dropped at archival.
+
+##### Disambiguation — `facts.branch` vs `stages.DV.worktree.branch`
+
+Two fields, disjoint definitions, neither derived from the other:
+
+| | `facts.branch` | `stages.DV.worktree.branch` |
+|---|---|---|
+| Meaning | **planned** host-session branch name | **observed** branch of the worktree DV ran in |
+| Writer | orchestrator, from `branch-name.sh` stdout, at PL start | `state-patch.sh`, from DV handoff `worktree_branch` |
+| Written when | before any commit exists | after DV completes |
+| Rewritten | never (once-only rule) | per DV re-dispatch |
+| FN uses for | the PR **head** | worktree re-entry context only |
+
+They are equal in the common topology where the session's workspace **is** the worktree
+(`agents/developer.md § worktree_branch`), and differ when DV created a fresh
+`.claude/worktrees/` worktree whose branch the tool named itself. **A mismatch is
+information, not an error** — it tells FN the commits live somewhere other than the
+planned branch, exactly the condition `fn-preflight.sh continuity` handles. No writer may
+copy one into the other; that copy is what would make them a silent duplicate.
 
 #### Field notes — goal
 

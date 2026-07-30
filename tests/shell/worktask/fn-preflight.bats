@@ -296,6 +296,9 @@ EOF
   cd "$WD"
   mkdir -p "$WD/lonely"
   cp "$PLUGIN_ROOT/$SCRIPT" "$WD/lonely/fn-preflight.sh"
+  # branch-lib.sh must ship alongside fn-preflight.sh — this test isolates the
+  # OTHER sibling (publish-pl-issue.sh) being unreachable, not this one.
+  cp "$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh" "$WD/lonely/branch-lib.sh"
   no_screenshots
   mk_body
   run bash "$WD/lonely/fn-preflight.sh" pr-body --body body.md
@@ -342,6 +345,7 @@ EOF
   cd "$WD"
   mkdir -p "$WD/lonely"
   cp "$PLUGIN_ROOT/$SCRIPT" "$WD/lonely/fn-preflight.sh"
+  cp "$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh" "$WD/lonely/branch-lib.sh"
   printf 'Leak at /Users/korich/secret/run.log and no headings.\n' > body.md
   cp body.md body.orig.md
   run env MILESTONE_MODE=1 bash "$WD/lonely/fn-preflight.sh" pr-body --body body.md
@@ -420,102 +424,70 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# branch-name — readable branch rename (REQ-7)
+# branch-name removed from this validator (moved to the PL stage,
+# skills/worktask/scripts/branch-name.sh) — the removed argument must be
+# rejected, not silently accepted.
 # ---------------------------------------------------------------------------
 
-# An anonymous worktree branch with a goal on the ledger and issue 221 resolvable.
-mk_branch_repo() {
-  git init -q -b wt-abc123 "$WD"
-  git -C "$WD" -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "work"
-  jq '.facts.goal = "Fix PR composition and branch naming"' "$WD/.context/state.json" > "$WD/s" \
-    && mv "$WD/s" "$WD/.context/state.json"
-}
-
-@test "F18: branch-name renames an anonymous branch to <type>/<ticket>-<slug>" {
+@test "the removed branch-name argument is rejected with a usage exit" {
   cd "$WD"
-  mk_branch_repo
   run bash "$PLUGIN_ROOT/$SCRIPT" branch-name
-  assert_success
-  run git rev-parse --abbrev-ref HEAD
-  assert_output "fix/221-fix-pr-composition-and-branch-naming"
-  run jq -r 'select(.action=="branch_renamed") | .result' .context/logs/audit.jsonl
-  assert_output "ok"
+  assert_failure 2
+  assert_output --partial "unknown argument"
 }
 
-@test "F19: branch-name is a no-op on the second run (AC-9 idempotency)" {
+@test "--help never mentions the removed branch-name command" {
   cd "$WD"
-  mk_branch_repo
-  run bash "$PLUGIN_ROOT/$SCRIPT" branch-name
-  assert_success
-  local first
-  first=$(git rev-parse --abbrev-ref HEAD)
-  run bash "$PLUGIN_ROOT/$SCRIPT" branch-name
-  assert_success
-  assert_output --partial "no-op"
-  run git rev-parse --abbrev-ref HEAD
-  assert_output "$first"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --help
+  assert_failure 2
+  run bash -c "bash '$PLUGIN_ROOT/$SCRIPT' --help 2>&1 | grep -c 'branch-name'"
+  assert_output "0"
 }
 
-@test "F20: branch-name refuses to rename a branch with an upstream" {
+# ---------------------------------------------------------------------------
+# resolve-issue rank 4 — tightened to the leading <type>/<NNN>-<slug> shape
+# ---------------------------------------------------------------------------
+
+@test "resolve-issue: rank 4 resolves the leading <type>/<NNN>-<slug> branch shape" {
   cd "$WD"
-  mk_branch_repo
-  # Fabricate a tracked upstream offline. The remote must exist for its fetch
-  # refspec to map refs/heads/* onto the remote-tracking ref; no network is used.
-  git remote add origin https://example.invalid/r.git
-  git update-ref refs/remotes/origin/wt-abc123 HEAD
-  git branch --set-upstream-to=origin/wt-abc123 wt-abc123 > /dev/null
-  run bash "$PLUGIN_ROOT/$SCRIPT" branch-name
+  jq 'del(.metadata.github_issue_url)' .context/state.json > s && mv s .context/state.json
+  rm -f .context/gh-issue.json
+  git init -q -b "feature/42-add-login-flow" .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "work"
+  run bash "$PLUGIN_ROOT/$SCRIPT" resolve-issue
   assert_success
-  assert_output --partial "upstream already tracked"
-  run git rev-parse --abbrev-ref HEAD
-  assert_output "wt-abc123"
-  run jq -r 'select(.action=="branch_renamed") | .metadata.reason' .context/logs/audit.jsonl
-  assert_output "upstream_tracked"
+  assert_output "42"
 }
 
-@test "F21: branch-name self-disables under batch routing" {
+@test "AC-11: rank 4 does NOT resolve a bogus issue from a digit-terminated ticket-less slug" {
   cd "$WD"
-  mk_branch_repo
-  run env MILESTONE_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT" branch-name
+  jq 'del(.metadata.github_issue_url)' .context/state.json > s && mv s .context/state.json
+  rm -f .context/gh-issue.json
+  git init -q -b "feature/migrate-to-swift-6" .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "work"
+  run bash "$PLUGIN_ROOT/$SCRIPT" resolve-issue
   assert_success
-  assert_output --partial "skipped (milestone_mode_env)"
-  run git rev-parse --abbrev-ref HEAD
-  assert_output "wt-abc123"
+  refute_output "6"
 }
 
-@test "F21b: branch-name refuses to rename the integration branch itself" {
-  cd "$WD"
-  git init -q -b master "$WD"
-  git -C "$WD" -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "work"
-  jq '.facts.goal = "Fix things" | .metadata.base_ref = "master"' .context/state.json > s \
-    && mv s .context/state.json
-  run bash "$PLUGIN_ROOT/$SCRIPT" branch-name
-  assert_success
-  assert_output --partial "integration branch"
-  run git rev-parse --abbrev-ref HEAD
-  assert_output "master"
-}
+# ---------------------------------------------------------------------------
+# T4 — branch-lib.sh moved aside: fn-preflight.sh exits 3, no dispatch runs.
+# ---------------------------------------------------------------------------
 
-@test "F21c: BRANCH_NAME_PRINT=1 prints the target and renames nothing" {
+@test "T4: fn-preflight.sh exits 3 with the path on stderr when branch-lib.sh is unreachable" {
   cd "$WD"
-  mk_branch_repo
-  run env BRANCH_NAME_PRINT=1 bash "$PLUGIN_ROOT/$SCRIPT" branch-name
-  assert_success
-  assert_output "fix/221-fix-pr-composition-and-branch-naming"
-  run git rev-parse --abbrev-ref HEAD
-  assert_output "wt-abc123"
-}
-
-@test "branch-name is NOT part of the all sequence" {
-  cd "$WD"
-  mk_branch_repo
-  mk_attachments
-  no_screenshots
-  mk_body
-  run bash "$PLUGIN_ROOT/$SCRIPT" all --body body.md
-  assert_success
-  run git rev-parse --abbrev-ref HEAD
-  assert_output "wt-abc123"
+  local lib="$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh"
+  local moved="${lib}.movedaside"
+  mv "$lib" "$moved"
+  run bash "$PLUGIN_ROOT/$SCRIPT" attachments
+  local status_attachments="$status"
+  local output_attachments="$output"
+  run bash "$PLUGIN_ROOT/$SCRIPT" resolve-issue
+  local status_resolve="$status"
+  mv "$moved" "$lib"
+  [ "$status_attachments" -eq 3 ]
+  [[ "$output_attachments" == *"branch-lib.sh"* ]]
+  [ "$status_resolve" -eq 3 ]
 }
 
 @test "pr-body: missing --body => usage exit 2" {

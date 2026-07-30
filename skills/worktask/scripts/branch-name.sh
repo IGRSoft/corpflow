@@ -96,8 +96,13 @@ done
 # resolution). BASH_SOURCE, not $0: correct when sourced by bats.
 LIB_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd)/branch-lib.sh"
 
-# shellcheck disable=SC1090
-if ! . "$LIB_PATH" 2> /dev/null; then
+# `[ -r ]` first, not a bare `.`: sourcing a missing file with the `.` builtin is a
+# special-builtin error that exits a `set -e` shell immediately, bypassing an
+# `if ! . …; then` guard entirely (verified on bash 3.2 and 5.x).
+if [ -n "$LIB_PATH" ] && [ -r "$LIB_PATH" ]; then
+  # shellcheck disable=SC1090
+  . "$LIB_PATH"
+else
   # The library's only failure mode is absence (architecture-0.md § R-4): a
   # same-directory, same-commit sibling missing means the plugin install itself is
   # broken. A query mode has nothing to answer without the predicate/list it needs;

@@ -55,26 +55,33 @@ the work.
 Conductor additionally injects a session rule: *"Do not rename the current branch
 unless the user explicitly tells you to do so."* **Invoking `/worktask` satisfies that
 condition.** A conventionally-named branch and a ticket-referencing PR are part of what
-the pipeline was asked to deliver, so FN's `fn-preflight.sh branch-name` step is
-authorized work rather than an unprompted change. Neither the orchestrator nor FN
-should suspend the pipeline to re-ask.
+the pipeline was asked to deliver, so the PL-stage naming step
+(`skills/worktask/scripts/branch-name.sh`, run once at the very start of planning — see
+`skills/shared/git-conventions.md § Branch Naming`) is authorized work rather than an
+unprompted change. Neither the orchestrator nor PL should suspend the pipeline to
+re-ask. This runs at PL start now, not immediately before FN's push — see
+`agents/project-manager.md § Branch naming is a PL-stage concern` for how FN reads the
+resulting name (`facts.branch`) instead of re-deriving or re-renaming it.
 
 #### Scope of the authorization
 
-It covers exactly the rename `branch-name` performs, and nothing further. It does NOT
+It covers exactly the rename `branch-name.sh` performs, and nothing further. It does NOT
 authorize renaming a branch the user named themselves, deleting branches, force-pushing,
-or rewriting history. Run `branch-name` **before** the push; the `all` battery runs
-post-push and deliberately excludes it.
+or rewriting history.
 
 The step's own guard ladder stays the safety boundary — every arm exits 0:
 
 | Guard | Behaviour |
 |---|---|
 | Name already conventional | no-op — a deliberate name is never churned |
-| Upstream already tracked | no-op — renaming post-push orphans the remote ref |
+| Upstream already tracked | no-op — renaming a pushed branch orphans the remote ref |
 | On the integration branch | refuses |
 | Target name already exists | no-op |
 | Detached HEAD / not a repo | skipped |
+
+Running at PL start, before any commit exists, retires the very hazard the ladder's
+upstream-tracked and pushed-branch guards exist to catch — there is no push yet to
+orphan.
 
 #### Host mapping caveat
 
@@ -82,7 +89,9 @@ Surface this once; do not act on it. The host may map the workspace to its origi
 branch name, so a rename can leave that mapping stale. If the host's mapping matters
 more than the branch name, the equivalent without a local rename is to push under the
 target name (`git push origin <current>:<target>`) — the PR gets the conventional head
-and the local branch is untouched.
+and the local branch is untouched. FN's own push already targets `facts.branch`
+regardless (`agents/project-manager.md § Final FN steps`), so this caveat only matters
+for a host that reads the *local* branch name directly.
 
 ## Task ID Namespacing
 
@@ -111,7 +120,7 @@ When the merge target is not the worktask default (e.g. shipping into `origin/re
 
 ##### Base-ref resolution order
 
-PL0 also mirrors the detected branch to `state.json .metadata.base_ref` unconditionally, because shell helpers cannot read Task-System metadata. Every reader — DV, `fn-preflight.sh continuity`, `fn-preflight.sh branch-name` — resolves through one order, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`, `state.json .git.base_branch`, `workspace.json .git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. There is no hardcoded literal at the end of that chain; an unresolved base is reported and the caller degrades non-blocking. Canonical statement: `handoff-protocol.md § metadata.base_ref`.
+PL0 also mirrors the detected branch to `state.json .metadata.base_ref` unconditionally, because shell helpers cannot read Task-System metadata. Every reader — DV, `fn-preflight.sh continuity`, `branch-name.sh` (via `branch-lib.sh resolve_base_ref`) — resolves through one order, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`, `state.json .git.base_branch`, `workspace.json .git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. There is no hardcoded literal at the end of that chain; an unresolved base is reported and the caller degrades non-blocking. Canonical statement: `handoff-protocol.md § metadata.base_ref`.
 
 ##### Background & shared-checkout rules
 

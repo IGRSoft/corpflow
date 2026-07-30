@@ -60,7 +60,7 @@ The orchestrator pre-seeds both files at FN-gate time; the FN agent MUST **overw
   1. `state.json` → `.metadata.github_issue_url` — extract trailing integer from `/issues/<N>`. (Written by `publish-pl-issue.sh` on the run that CREATED the issue. NOT `facts.github_issue_url`.)
   2. `.context/gh-issue.json` → `.url` (trailing integer) or `.number` — the run-independent context ↔ issue anchor. **Authoritative on a follow-up run**, where `state.json` was re-seeded and no longer carries the URL (see `skills/gh-issue-dedup`).
   3. PL0 task `metadata.github_issue_number` (megatask per-issue mode — megatask issue ID).
-  4. Branch parse: `feature/<slug>-<NNN>` last 3-digit token, OR first `#NNN` token in `git log --oneline -n 5`.
+  4. Branch parse: leading `<type>/<NNN>-<slug>` shape (externally-named-branch fallback — the shape both branch generators produce), OR first `#NNN` token in `git log --oneline -n 5`.
 
 ##### Validate & run
 
@@ -103,13 +103,18 @@ The orchestrator pre-seeds both files at FN-gate time; the FN agent MUST **overw
 
 #### Final FN steps
 
-- **Branch name**: run `fn-preflight.sh branch-name` **before** the push — it renames the current branch to `<type>/<ticket>-<slug>` whenever that branch is not already conventional, has no upstream, and is not the integration branch. Not limited to anonymous worktree branches: a host-assigned workspace branch (e.g. Conductor's `<city>-v<n>`) is exactly the case it exists to fix. Renaming after the push orphans the remote ref, which is why this is not part of `all` (that battery runs post-push, immediately before `gh pr create`). Never blocks: every outcome exits 0.
+- **Push under the ledger branch name**: `git push -u origin HEAD:refs/heads/<facts.branch>` — the PR head is the **planned** name PL0 stamped on the ledger (`facts.branch`), never a live `git rev-parse` of FN's own cwd. This makes the head deterministic regardless of which topology DV ran in (the host branch, or a separate DV worktree) — see `skills/worktask/references/handoff-protocol.md § branch`. Branch naming itself happens once, at the start of planning (`skills/shared/git-conventions.md § Branch Naming`) — FN never renames anything.
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
 
-##### Branch rename under a host session rule
+##### Branch naming is a PL-stage concern
 
-Conductor hosts inject *"Do not rename the current branch unless the user explicitly tells you to do so."* Invoking `/worktask` **is** that explicit instruction — the pipeline's contract is a conventionally-named branch and a PR that references its ticket, so the rename is authorized work, not an unprompted change. Run the step; do not stop to re-ask. The guard ladder already refuses every genuinely unsafe case (upstream tracked, integration branch, target exists). Scope and caveats: `skills/worktask/references/workspace-modes.md § Branch naming under a host workspace`.
+The branch is named exactly once, at the start of planning, per the once-only rule in
+`skills/shared/git-conventions.md § Branch Naming` (authorization rationale for renaming a
+host-provisioned workspace branch, the guard ladder, and scope/caveats under a host
+workspace: `skills/worktask/references/workspace-modes.md § Branch naming under a host
+workspace`). FN never re-derives or re-renames the branch; it reads `facts.branch` from the
+ledger for the PR head (above).
 
 ### complete-summary-N.md Stage Timings Template
 
