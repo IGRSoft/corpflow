@@ -118,6 +118,51 @@ gh pr merge <number> --merge
 - Individual commit boundaries (one per stage/logical change) must survive on the target branch.
 - Keep the auto-generated merge commit subject (`Merge pull request #N from <branch>`); the PR title/body carries the summary.
 
+## Branch Naming
+
+Canonical single source of truth for worktask branch grammar. Every other file
+(`agents/product-manager.md`, `agents/project-manager.md`, `skills/worktask/references/*`)
+references this section instead of restating the rules.
+
+### Grammar
+
+```
+<type>/<slug>
+```
+
+No ticket number: the branch carries no issue reference (a worktask branch is named
+before any issue-linked commit exists, and the pull request body carries the closing
+keyword instead — see `skills/worktask/references/handoff-protocol.md § branch`).
+
+### Type vocabulary (12 tokens, accepted by the already-conventional check)
+
+`feat`, `feature`, `fix`, `refactor`, `perf`, `docs`, `chore`, `test`, `ci`, `build`,
+`style`, `revert`. Generated branches use the long form `feature` (never `feat`); `feat`
+stays accepted so a pre-existing short-form branch is never churned. The single
+machine-readable copy is `BRANCH_TYPES` in `skills/worktask/scripts/branch-lib.sh` — both
+the generator (`derive_type`) and the already-conventional predicate
+(`branch_is_conventional`) derive from it, so the two cannot drift.
+
+This list is branch-only. Do **not** add `feature` to the commit-type table above —
+that would legitimize `feature:` commits, which is out of scope here.
+
+### Guard ladder (every arm is a no-op or a refusal, never a failure)
+
+| Guard | Behaviour |
+|---|---|
+| Name already conventional | no-op — a deliberate name is never churned |
+| Upstream already tracked | no-op — renaming a pushed branch orphans the remote ref |
+| On the integration branch | refuses |
+| Target name already exists | no-op |
+| Detached HEAD / not a repo | skipped |
+
+### Once-only rule
+
+The branch is named exactly once, at the start of the planning stage
+(`skills/worktask/scripts/branch-name.sh`), before any commit exists, and never renamed
+again. `facts.branch` on the run ledger records the planned name; finalization reads it
+from there rather than re-deriving it from a live `git` query.
+
 ## GitHub Issue Types
 
 | Type | Keywords                                  |
