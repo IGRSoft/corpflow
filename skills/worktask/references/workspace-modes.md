@@ -52,6 +52,8 @@ ticket and no type (Conductor uses `<city>-v<n>` — `amman-v1`, `perth-v2`). Su
 branch reaching `gh pr create` unchanged produces a PR whose head says nothing about
 the work.
 
+#### Host session authorization
+
 Conductor additionally injects a session rule: *"Do not rename the current branch
 unless the user explicitly tells you to do so."* **Invoking `/worktask` satisfies that
 condition.** A conventionally-named branch and a ticket-referencing PR are part of what

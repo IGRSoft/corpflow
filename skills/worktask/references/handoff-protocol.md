@@ -660,6 +660,12 @@ fallback: readers report unresolved and degrade non-blocking. Implemented in
         description: "Working branch named once at PL start — see field notes"
       files_modified: { type: array, items: { type: string } }
       tests_added: { type: array, items: { type: string } }
+```
+
+#### facts — decisions
+
+```yaml
+# …continued: WorktaskStateLedger.properties.facts.properties
       decisions:
         type: array
         maxItems: 8
@@ -800,6 +806,8 @@ Two fields, disjoint definitions, neither derived from the other:
 | Written when | before any commit exists | after DV completes |
 | Rewritten | never (once-only rule) | per DV re-dispatch |
 | FN uses for | the PR **head** | worktree re-entry context only |
+
+##### Disambiguation — topology note
 
 They are equal in the common topology where the session's workspace **is** the worktree
 (`agents/developer.md § worktree_branch`), and differ when DV created a fresh

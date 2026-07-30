@@ -240,7 +240,7 @@ Every stage writes `<basename>-N.md` where N = the `planning-N.md` index for thi
 - **Define test strategy** (what needs to be tested, existing tests to update)
 - Define scope, priorities, and dependencies
 - **Detect the integration branch once** and stamp it (see below) — DV must never silently fork from the wrong branch
-- **Name the branch once** (see below), after the ledger seed and before creating stage tasks — the once-only rule (`skills/shared/git-conventions.md § Branch Naming`) means no later stage renames it again
+- **Name the branch once** (see below) — the once-only rule (`git-conventions.md § Branch Naming`)
 - **Create subsequent stage tasks** based on complexity assessment (see below) — set `metadata.plan_file` on each
 
 #### Branch naming (once, at PL0 start)
