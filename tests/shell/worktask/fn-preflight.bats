@@ -476,18 +476,16 @@ EOF
 
 @test "T4: fn-preflight.sh exits 3 with the path on stderr when branch-lib.sh is unreachable" {
   cd "$WD"
-  local lib="$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh"
-  local moved="${lib}.movedaside"
-  mv "$lib" "$moved"
-  run bash "$PLUGIN_ROOT/$SCRIPT" attachments
-  local status_attachments="$status"
-  local output_attachments="$output"
-  run bash "$PLUGIN_ROOT/$SCRIPT" resolve-issue
-  local status_resolve="$status"
-  mv "$moved" "$lib"
-  [ "$status_attachments" -eq 3 ]
-  [[ "$output_attachments" == *"branch-lib.sh"* ]]
-  [ "$status_resolve" -eq 3 ]
+  # Safe pattern (never mv the tracked file — an interrupt would leave the
+  # plugin broken): copy fn-preflight.sh alone into a sibling-free temp dir,
+  # deliberately without branch-lib.sh alongside it.
+  mkdir -p "$WD/lonely"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/lonely/fn-preflight.sh"
+  run bash "$WD/lonely/fn-preflight.sh" attachments
+  assert_failure 3
+  assert_output --partial "branch-lib.sh"
+  run bash "$WD/lonely/fn-preflight.sh" resolve-issue
+  assert_failure 3
 }
 
 @test "pr-body: missing --body => usage exit 2" {

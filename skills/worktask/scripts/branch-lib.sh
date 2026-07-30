@@ -2,10 +2,10 @@
 # @description branch-lib.sh — sourceable library shared by branch-name.sh (PL-stage
 #   rename entry point) and fn-preflight.sh (surviving FN validator commands).
 #
-#   Dependency-free by construction (architecture-0.md § library-construction-contract):
-#   sources nothing, sets no shell options, does no jq/git probing at load time, and has
-#   no side effects at load beyond idempotent variable init. Its only failure mode is
-#   absence, which callers detect and report loudly — see each caller's own guard.
+#   Dependency-free by construction: sources nothing, sets no shell options, does no
+#   jq/git probing at load time, and has no side effects at load beyond idempotent
+#   variable init. Its only failure mode is absence, which callers detect and report
+#   loudly — see each caller's own guard.
 #
 #   Symbols: BRANCH_TYPES, branch_type_regex, branch_is_conventional, resolve_goal,
 #   derive_type, derive_slug, target_branch_name, meta_json, audit_fn, fn_batch_scope,
@@ -199,10 +199,10 @@ audit_fn() {
 }
 
 # ---------- batch / incident scope guard ------------------------------------
-# Re-derived, not mirrored (architecture-0.md § R-4 resolution): this file's only
-# failure mode is absence (no jq probe, no fallible prologue at load time), so the
-# "unreachable library cannot fail the guard that exempts batch runs" property holds
-# without a partial local copy. Signals (any hit => self-disable):
+# Re-derived, not mirrored: this file's only failure mode is absence (no jq probe,
+# no fallible prologue at load time), so the "unreachable library cannot fail the
+# guard that exempts batch runs" property holds without a partial local copy.
+# Signals (any hit => self-disable):
 #   1. MILESTONE_MODE=1        env override (tests, /megatask)
 #   2. INCIDENT_MODE=1         env override (tests, incident runners)
 #   3. state.json .metadata.milestone non-empty

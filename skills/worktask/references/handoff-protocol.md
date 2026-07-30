@@ -795,6 +795,14 @@ against the name the worktask committed to, and divergence surfaces as a mismatc
 than as a differently-named PR. Not the same field as `stages.DV.worktree.branch` — see the
 disambiguation note below. Kept through FN; dropped at archival.
 
+##### Field notes — branch, empty value
+
+`branch-name.sh` prints `branch=` (empty) for a detached HEAD or a not-a-git-repo outcome —
+never the literal token `HEAD`, which is not a branch. FN MUST treat an empty `facts.branch`
+as "no planned name to push under" and skip the `git push -u origin
+HEAD:refs/heads/<facts.branch>` refspec entirely, falling back to a plain
+`git push -u origin HEAD` (or the current branch's own name) instead.
+
 ##### Disambiguation — `facts.branch` vs `stages.DV.worktree.branch`
 
 Two fields, disjoint definitions, neither derived from the other:

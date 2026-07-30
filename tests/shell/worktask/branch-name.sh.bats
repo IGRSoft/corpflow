@@ -1,8 +1,9 @@
 #!/usr/bin/env bats
 # Contract tests for skills/worktask/scripts/branch-name.sh — the PL-stage entry
 # point. Migrated from fn-preflight.bats's F18-F21c (rewritten for the ticket-less
-# target and the new --goal/--check/--print-types argument surface), plus new cases
-# per planning-0.md § test-plan and architecture-0.md § branch-name-contract.
+# target and the new --goal/--check/--print-types argument surface), plus new cases.
+# Canonical grammar/vocabulary/guard-ladder/exit-code contract:
+# skills/shared/git-conventions.md § Branch Naming.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 SCRIPT="skills/worktask/scripts/branch-name.sh"
@@ -101,6 +102,16 @@ mk_branch_repo() {
   assert_output "fix/fix-pr-composition-and-branch-naming"
   run git rev-parse --abbrev-ref HEAD
   assert_output "wt-abc123"
+}
+
+@test "detached HEAD prints branch= empty, never the literal token HEAD" {
+  cd "$WD"
+  mk_branch_repo
+  git checkout -q --detach HEAD
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "detached HEAD"
+  assert_line --index 1 "branch="
 }
 
 # ---------------------------------------------------------------------------
@@ -235,11 +246,56 @@ mk_branch_repo() {
 }
 
 # ---------------------------------------------------------------------------
+# T4 (branch-name.sh half) — branch-lib.sh unreachable.
+# ---------------------------------------------------------------------------
+
+@test "T4: unreachable branch-lib.sh — rename mode exits 0 with a warning and a noop row" {
+  cd "$WD"
+  mk_branch_repo
+  # Safe pattern (never mv the tracked library — an interrupt would leave the
+  # plugin broken): copy branch-name.sh alone into a sibling-free temp dir.
+  mkdir -p lonely
+  cp "$PLUGIN_ROOT/$SCRIPT" lonely/branch-name.sh
+  run bash lonely/branch-name.sh
+  assert_success
+  assert_output --partial "branch-lib.sh"
+  assert_output --partial "library unreachable — skipped"
+  assert_line --index "$(( ${#lines[@]} - 1 ))" "branch=wt-abc123"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "wt-abc123"
+  run jq -r 'select(.action=="branch_renamed") | .result' .context/logs/audit.jsonl
+  assert_output "noop"
+  run jq -r 'select(.action=="branch_renamed") | .metadata.reason' .context/logs/audit.jsonl
+  assert_output "branch_lib_unreachable"
+  run jq -r 'select(.action=="branch_renamed") | .metadata.origin_stage' .context/logs/audit.jsonl
+  assert_output "PL"
+}
+
+@test "T4: unreachable branch-lib.sh — --check exits 2 with a diagnostic" {
+  cd "$WD"
+  mkdir -p lonely
+  cp "$PLUGIN_ROOT/$SCRIPT" lonely/branch-name.sh
+  run bash lonely/branch-name.sh --check "feature/lyon"
+  assert_failure 2
+  assert_output --partial "branch-lib.sh"
+}
+
+# ---------------------------------------------------------------------------
 # Usage / argument surface
 # ---------------------------------------------------------------------------
 
 @test "--goal without a value is a usage error (exit 2)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --goal
+  assert_failure 2
+}
+
+@test "--state without a value is a usage error (exit 2)" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state
+  assert_failure 2
+}
+
+@test "--context without a value is a usage error (exit 2)" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --context
   assert_failure 2
 }
 

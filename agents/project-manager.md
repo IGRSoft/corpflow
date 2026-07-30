@@ -103,7 +103,7 @@ The orchestrator pre-seeds both files at FN-gate time; the FN agent MUST **overw
 
 #### Final FN steps
 
-- **Push under the ledger branch name**: `git push -u origin HEAD:refs/heads/<facts.branch>` — the PR head is the **planned** name PL0 stamped on the ledger (`facts.branch`), never a live `git rev-parse` of FN's own cwd. This makes the head deterministic regardless of which topology DV ran in (the host branch, or a separate DV worktree) — see `skills/worktask/references/handoff-protocol.md § branch`. Branch naming itself happens once, at the start of planning (`skills/shared/git-conventions.md § Branch Naming`) — FN never renames anything.
+- **Push under the ledger branch name**: `git push -u origin HEAD:refs/heads/<facts.branch>` — the PR head is the **planned** name PL0 stamped on the ledger (`facts.branch`), never a live `git rev-parse` of FN's own cwd. This makes the head deterministic regardless of which topology DV ran in (the host branch, or a separate DV worktree) — see `skills/worktask/references/handoff-protocol.md § branch`. **If `facts.branch` is empty** (detached HEAD / not-a-git-repo at PL start), skip this refspec and push plainly instead: `git push -u origin HEAD`. Branch naming itself happens once, at the start of planning (`skills/shared/git-conventions.md § Branch Naming`) — FN never renames anything.
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
 

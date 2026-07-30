@@ -1,7 +1,8 @@
 #!/usr/bin/env bats
 # Contract tests for skills/worktask/scripts/branch-lib.sh.
-# Structural tests (T1-T3) pin the R-4 residual risk (architecture-0.md):
-# an unreachable library is the only failure mode this file may have.
+# Structural tests (T1-T3) pin the residual risk: an unreachable library is
+# the only failure mode this file may have (skills/shared/git-conventions.md
+# § Branch Naming).
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 LIB="skills/worktask/scripts/branch-lib.sh"
@@ -87,14 +88,39 @@ mk_no_jq_path() {
   assert_output "revert"
 }
 
-@test "derive_type: never emits feat or style — output subset of BRANCH_TYPES emit set" {
+@test "derive_type: every output is a member of BRANCH_TYPES (AR ruling-4 self-test)" {
   run bash -c "
     . '$PLUGIN_ROOT/$LIB'
+    is_member() {
+      local needle=\"\$1\" t
+      local IFS=\$'\n'
+      for t in \$BRANCH_TYPES; do
+        [ \"\$t\" = \"\$needle\" ] && return 0
+      done
+      return 1
+    }
     for g in 'random goal' 'fix bug' 'refactor module' 'perf tuning' 'add docs' \
              'chore bump deps' 'ci pipeline' 'build packaging' 'test coverage' 'revert x'; do
       t=\$(derive_type \"\$g\")
-      case \"\$t\" in feat|style) printf 'BAD: %s -> %s\n' \"\$g\" \"\$t\"; exit 1 ;; esac
+      is_member \"\$t\" || { printf 'BAD (not in BRANCH_TYPES): %s -> %s\n' \"\$g\" \"\$t\"; exit 1; }
     done
+    exit 0
+  "
+  assert_success
+}
+
+@test "derive_type: a typo'd arm output (e.g. 'perff') would be caught by the ∈ BRANCH_TYPES self-test" {
+  run bash -c "
+    . '$PLUGIN_ROOT/$LIB'
+    is_member() {
+      local needle=\"\$1\" t
+      local IFS=\$'\n'
+      for t in \$BRANCH_TYPES; do
+        [ \"\$t\" = \"\$needle\" ] && return 0
+      done
+      return 1
+    }
+    is_member 'perff' && exit 1
     exit 0
   "
   assert_success

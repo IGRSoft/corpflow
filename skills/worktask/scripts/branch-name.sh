@@ -62,12 +62,20 @@ while [ $# -gt 0 ]; do
       ;;
     --state)
       shift
-      STATE_PATH="${1:-}"
+      [ $# -gt 0 ] || {
+        printf >&2 'branch-name: --state requires a value\n'
+        exit 2
+      }
+      STATE_PATH="$1"
       shift
       ;;
     --context)
       shift
-      CONTEXT_DIR="${1:-}"
+      [ $# -gt 0 ] || {
+        printf >&2 'branch-name: --context requires a value\n'
+        exit 2
+      }
+      CONTEXT_DIR="$1"
       shift
       ;;
     --check)
@@ -99,15 +107,16 @@ LIB_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd)/branch-
 # `[ -r ]` first, not a bare `.`: sourcing a missing file with the `.` builtin is a
 # special-builtin error that exits a `set -e` shell immediately, bypassing an
 # `if ! . …; then` guard entirely (verified on bash 3.2 and 5.x).
-if [ -n "$LIB_PATH" ] && [ -r "$LIB_PATH" ]; then
+if [ -r "$LIB_PATH" ]; then
   # shellcheck disable=SC1090
   . "$LIB_PATH"
 else
-  # The library's only failure mode is absence (architecture-0.md § R-4): a
-  # same-directory, same-commit sibling missing means the plugin install itself is
-  # broken. A query mode has nothing to answer without the predicate/list it needs;
-  # rename mode degrades loud-but-non-blocking, matching R2's "never blocks" contract.
+  # The library's only failure mode is absence: a same-directory, same-commit
+  # sibling missing means the plugin install itself is broken. A query mode has
+  # nothing to answer without the predicate/list it needs; rename mode degrades
+  # loud-but-non-blocking, matching the "never blocks" contract.
   if [ "$MODE" != "rename" ]; then
+    printf >&2 'branch-name: branch-lib.sh unreachable at %s — cannot answer\n' "$LIB_PATH"
     exit 2
   fi
   printf >&2 'branch-name: branch-lib.sh unreachable at %s — skipping rename\n' "$LIB_PATH"
@@ -151,8 +160,8 @@ cmd_rename() {
   local apply=1
   [ "${BRANCH_NAME_PRINT:-0}" = "1" ] && apply=0
 
-  # Identity for audit_fn's call-time read (architecture-0.md § audit_fn
-  # parameterization) — this is the PL-stage row, distinct from FN's defaults.
+  # Identity for audit_fn's call-time read — this is the PL-stage row, distinct
+  # from the FN-stage defaults audit_fn falls back to when unset.
   AUDIT_ACTOR="product-manager"
   local ri
   ri=$(jq -r '.run_index // 0' "$STATE_PATH" 2> /dev/null || printf '0')
@@ -175,8 +184,11 @@ cmd_rename() {
   local cur
   cur=$(git rev-parse --abbrev-ref HEAD 2> /dev/null || printf '')
   if [ -z "$cur" ] || [ "$cur" = "HEAD" ]; then
+    # Never stamp the literal token "HEAD" as a branch name — FN interpolates
+    # this value into a `refs/heads/<name>` push refspec, and "HEAD" is not a
+    # branch. Empty is the honest, always-safe value for "no branch to name".
     printf 'branch-name: detached HEAD — skipped\n'
-    printf 'branch=%s\n' "$cur"
+    printf 'branch=%s\n' ""
     return 0
   fi
 
@@ -228,11 +240,10 @@ cmd_rename() {
     return 0
   fi
 
-  if [ "$cur" = "$target" ]; then
-    printf 'branch-name: already %s — no-op\n' "$target"
-    printf 'branch=%s\n' "$cur"
-    return 0
-  fi
+  # No `cur == target` arm here: `target` is conventional by construction
+  # (type ∈ BRANCH_TYPES, slug matches the same charset the predicate accepts),
+  # so equality would imply `cur` was already conventional — already handled
+  # above. Keeping a dead arm invites a reason (`already_target`) no path emits.
 
   if [ "$apply" -eq 0 ]; then
     printf '%s\n' "$target"

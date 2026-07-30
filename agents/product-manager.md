@@ -240,23 +240,17 @@ Every stage writes `<basename>-N.md` where N = the `planning-N.md` index for thi
 - **Define test strategy** (what needs to be tested, existing tests to update)
 - Define scope, priorities, and dependencies
 - **Detect the integration branch once** and stamp it (see below) — DV must never silently fork from the wrong branch
-- **Name the branch once** (see below) — the once-only rule (`git-conventions.md § Branch Naming`)
 - **Create subsequent stage tasks** based on complexity assessment (see below) — set `metadata.plan_file` on each
 
-#### Branch naming (once, at PL0 start)
+#### Branch naming (already done by the orchestrator — do not re-run)
 
-Run once, immediately after the orchestrator's state.json seed and before `TaskCreate` for the
-first downstream stage task (`commands/worktask.md § Step 3c`):
-
-```bash
-bash skills/worktask/scripts/branch-name.sh --goal "<task description>"
-```
-
-The step never blocks: every outcome exits 0, and the ladder self-disables under `/megatask` or
-`--emergency` routing. It prints `branch=<name>` on its final line — the orchestrator captures that
-and stamps `facts.branch` on the ledger (never PM itself; `branch-name.sh` never writes
-state.json). Contract, guard ladder, and the once-only rule: `skills/shared/git-conventions.md §
-Branch Naming`; full argv/env/exit-code contract: the script's own `--help`.
+The branch was already named once, by the **orchestrator**, at `commands/worktask.md § Step 3c` —
+before this PL0 turn began, immediately after the state.json seed and before `TaskCreate` for
+PL0 itself. PM MUST NOT invoke `branch-name.sh` at any point; the once-only rule
+(`skills/shared/git-conventions.md § Branch Naming`) means exactly one run per worktask, and
+that run already happened. PM only *reads* the result: `state.json facts.branch` carries the
+name the orchestrator stamped from the script's `branch=<name>` stdout line (`branch-name.sh`
+itself never writes state.json). Full argv/env/exit-code contract: the script's own `--help`.
 
 #### Integration-branch detection
 

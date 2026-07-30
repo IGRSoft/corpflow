@@ -103,7 +103,7 @@ resolve_issue() {
     [[ -z "$n" ]] && n=$(jq -r '.metadata.github_issue_number // empty' "$STATE_PATH" 2> /dev/null || true)
   fi
   [[ -z "$n" ]] && n=$(git rev-parse --abbrev-ref HEAD 2> /dev/null \
-    | sed -nE 's#^[a-zA-Z]+/([0-9]+)-.*#\1#p')
+    | sed -nE 's#^[a-zA-Z]+/([0-9]+)-.*#\1#p' || true)
   [[ -z "$n" ]] && n=$(git log --oneline -n 5 2> /dev/null | grep -oE '#[0-9]+' | head -1 | tr -d '#' || true)
   printf '%s' "$n"
 }
