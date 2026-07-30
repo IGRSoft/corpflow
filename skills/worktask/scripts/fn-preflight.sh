@@ -108,10 +108,8 @@ resolve_issue() {
   printf '%s' "$n"
 }
 
-# fn_batch_scope, meta_json, and audit_fn are sourced from branch-lib.sh above.
-# `SCOPE_REASON` is initialized there (the `: "${SCOPE_REASON:=}"` carve-out).
-# Parity with the shared signals is pinned by tests/shell/worktask/fn-preflight.bats
-# "F14" and tests/shell/worktask/branch-lib.bats.
+# Parity with fn_batch_scope's shared signals is pinned by fn-preflight.bats "F14"
+# and branch-lib.bats.
 
 # ---------- sanitiser bridge ------------------------------------------------
 # Reads a body on stdin, writes the sanitised body to stdout.
@@ -166,8 +164,6 @@ ve_row_result() {
   fi
   printf '%s' "$r"
 }
-
-# resolve_base_ref is sourced from branch-lib.sh above.
 
 # A base ref may be stored bare (`master`) or remote-qualified (`origin/release/v2`
 # — the form workspace-modes.md documents). Map either onto something git resolves,

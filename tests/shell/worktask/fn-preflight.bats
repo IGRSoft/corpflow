@@ -467,7 +467,7 @@ EOF
   git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "work"
   run bash "$PLUGIN_ROOT/$SCRIPT" resolve-issue
   assert_success
-  refute_output "6"
+  assert_output ""
 }
 
 # ---------------------------------------------------------------------------
