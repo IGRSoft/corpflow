@@ -124,6 +124,17 @@ See `skills/shared/stage-codes.md` for stage details.
 #### Step 3b regression guard
 
    **Regression guard**: If neither the plugin-registered hook NOR the project-local copy exist, emit a warning: `"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge (Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."` Do NOT block the worktask.
+### Step 3c — Name the branch once (PL start)
+
+3c. **Name the branch**: after the state.json seed and before `TaskCreate` for PL0, run
+   `bash skills/worktask/scripts/branch-name.sh --goal "<task description>"`. This is the ONLY
+   place a worktask branch is ever renamed — the once-only rule per
+   `skills/shared/git-conventions.md § Branch Naming`. Every outcome exits 0 (a naming problem
+   must never stop planning) and the step self-disables under `/megatask` or `--emergency`
+   routing. Capture the script's final `branch=<name>` stdout line and stamp it into
+   `state.json facts.branch` (the script itself never writes state.json — see
+   `skills/worktask/references/handoff-protocol.md § branch`).
+
 ### Step 4 — TaskCreate PL0
 
 4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", plan_gate: "checkpoint", fn_gate: "checkpoint", isolation: "worktree" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.).

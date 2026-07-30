@@ -240,7 +240,23 @@ Every stage writes `<basename>-N.md` where N = the `planning-N.md` index for thi
 - **Define test strategy** (what needs to be tested, existing tests to update)
 - Define scope, priorities, and dependencies
 - **Detect the integration branch once** and stamp it (see below) — DV must never silently fork from the wrong branch
+- **Name the branch once** (see below), after the ledger seed and before creating stage tasks — the once-only rule (`skills/shared/git-conventions.md § Branch Naming`) means no later stage renames it again
 - **Create subsequent stage tasks** based on complexity assessment (see below) — set `metadata.plan_file` on each
+
+#### Branch naming (once, at PL0 start)
+
+Run once, immediately after the orchestrator's state.json seed and before `TaskCreate` for the
+first downstream stage task (`commands/worktask.md § Step 3c`):
+
+```bash
+bash skills/worktask/scripts/branch-name.sh --goal "<task description>"
+```
+
+The step never blocks: every outcome exits 0, and the ladder self-disables under `/megatask` or
+`--emergency` routing. It prints `branch=<name>` on its final line — the orchestrator captures that
+and stamps `facts.branch` on the ledger (never PM itself; `branch-name.sh` never writes
+state.json). Contract, guard ladder, and the once-only rule: `skills/shared/git-conventions.md §
+Branch Naming`; full argv/env/exit-code contract: the script's own `--help`.
 
 #### Integration-branch detection
 
