@@ -36,6 +36,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-07-30: v3.41.0 — branch naming PL-stage entry point + shared library; FN `branch-name` subcommand removed entirely; vocabulary extended to `feature`/`feat` (backward compatible); rank-4 issue resolver tightened; shell-injection hardening (input gate + validation at 3 consumption hops); symlink ACE + CDPATH + audit-row-loss fixes. 340 bats green. ~20 files.
 - 2026-07-29: v3.40.0 — suite fully green (281/0); new cross-plugin-refs contract test caught 2 dangling delegations; web/android capture scripts; android `and-*` agent rename propagated; `deps --upgrade` silent-audit fixed. ~12 files.
 - 2026-07-29: v3.39.0 — platform-agnostic orchestration: 36 XcodeBuildMCP grants removed (DV/DR/QA delegate to `/<plugin>:build-test`), Apple pre-warm deleted, Swift-Testing-for-all-platforms mandate and 4-platform schema gap fixed, Python comment-density and Android UI-detection bugs fixed. ~44 files.
 - 2026-07-29: v3.38.0 — compatible dev-plugin registry + onboarding checklist; ai-engineer wired in; publish-pl-issue prefix-regex leak (5 plugins) and pm-milestone/AR/SR/QA routing gaps fixed. ~15 files.
