@@ -59,15 +59,34 @@ STATE_PATH=".context/state.json"
 CONTEXT_DIR=".context"
 BODY_FILE=""
 
+# Physical directory of this script. CDPATH= disables a benign-but-common
+# CDPATH setting that otherwise makes `cd` echo an extra line into this very
+# capture, corrupting the path silently; `pwd -P` plus the readlink loop follow
+# a symlinked script to its real directory so sibling-library resolution cannot
+# be redirected onto an attacker-planted file next to the symlink.
+_resolve_script_dir() {
+  local src="${BASH_SOURCE[0]:-$0}" dir
+  while [ -h "$src" ]; do
+    dir=$(CDPATH= cd -- "$(dirname -- "$src")" && pwd -P)
+    src=$(readlink "$src")
+    case "$src" in
+      /*) ;;
+      *) src="$dir/$src" ;;
+    esac
+  done
+  CDPATH= cd -- "$(dirname -- "$src")" && pwd -P
+}
+SCRIPT_DIR="$(_resolve_script_dir 2> /dev/null)" || SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]:-$0}")"
+
 # Sanitiser library, resolved from this script's own location (mirrors
-# attach-visual-evidence.sh:69). BASH_SOURCE, not $0: correct when sourced by bats.
-LIB_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd)/publish-pl-issue.sh"
+# attach-visual-evidence.sh:69).
+LIB_PATH="${SCRIPT_DIR}/publish-pl-issue.sh"
 
 # Shared helpers (meta_json, audit_fn, fn_batch_scope, resolve_base_ref). This
 # file's only failure mode is absence — a same-directory, same-commit sibling
 # missing means the plugin install is broken, in which case this script is
 # equally suspect. Loud and immediate: no dispatch runs on a broken install.
-BRANCH_LIB_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd)/branch-lib.sh"
+BRANCH_LIB_PATH="${SCRIPT_DIR}/branch-lib.sh"
 # `[ -f ]` first, not a bare `.`: sourcing a missing file with the `.` builtin is a
 # special-builtin error that exits a `set -e` shell immediately, bypassing an
 # `if ! . …; then` guard entirely (verified on bash 3.2 and 5.x).

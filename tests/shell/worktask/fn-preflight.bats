@@ -500,3 +500,26 @@ EOF
   assert_failure 2
   assert_output --partial "unknown argument"
 }
+
+# ---------------------------------------------------------------------------
+# SR0 rework — SR-4 (MEDIUM, CWE-427): CDPATH=. must not corrupt LIB_PATH
+# resolution or spuriously trip the exit-3 unreachable-library guard.
+# ---------------------------------------------------------------------------
+
+@test "SR-4: CDPATH=. does not corrupt library resolution (attachments still dispatches)" {
+  cd "$WD"
+  mk_attachments
+  run env CDPATH=. bash "$PLUGIN_ROOT/$SCRIPT" attachments
+  assert_success
+  refute_output --partial "unreachable"
+}
+
+@test "SR-2/SR-4: a symlinked fn-preflight.sh still resolves its real sibling branch-lib.sh" {
+  cd "$WD"
+  mk_attachments
+  mkdir -p linked
+  ln -s "$PLUGIN_ROOT/$SCRIPT" linked/fn-preflight.sh
+  run bash linked/fn-preflight.sh attachments
+  assert_success
+  refute_output --partial "unreachable"
+}

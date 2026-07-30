@@ -163,6 +163,14 @@ The branch is named exactly once, at the start of the planning stage
 again. `facts.branch` on the run ledger records the planned name; finalization reads it
 from there rather than re-deriving it from a live `git` query.
 
+### Goal text becomes a public, durable branch name
+
+The task description feeds `derive_slug` and survives (truncated, kebab-cased) into the
+branch name, an `audit.jsonl` row, and — once pushed — a remote ref and the pull-request
+URL. On a public repository that is world-readable and effectively permanent. **Never
+put a live credential, secret, or other sensitive value in the task description** — treat
+it the same as you would a commit message or a PR title.
+
 ## GitHub Issue Types
 
 | Type | Keywords                                  |

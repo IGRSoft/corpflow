@@ -67,9 +67,28 @@ resulting name (`facts.branch`) instead of re-deriving or re-renaming it.
 
 #### Scope of the authorization
 
-It covers exactly the rename `branch-name.sh` performs, and nothing further. It does NOT
-authorize renaming a branch the user named themselves, deleting branches, force-pushing,
-or rewriting history.
+It covers exactly the rename `branch-name.sh` performs, and nothing further — never
+deleting branches, force-pushing, or rewriting history. **Caveat, stated plainly rather
+than promised as enforced:** the only discriminator the step has is
+`branch_is_conventional` (does the name already match `<type>/<slug>`?). A human-chosen
+name that happens not to match — e.g. `spike-oauth-poc` — is indistinguishable from a
+host-provisioned one and **will** be renamed; there is no mechanism that detects "the
+user named this deliberately" versus "the host assigned this by default". If that
+matters in your workflow, rename to a conventional form yourself before invoking
+`/worktask`, or accept the rename as part of what the pipeline does.
+
+#### Timing
+
+The rename runs at the very start of planning — before PL0 exists, and therefore before
+the plan-approval gate, the pipeline's only human checkpoint. If the operator later
+declines the plan, the branch has already been renamed and nothing renames it back
+automatically. `--auto-plan`, `--emergency`, and `/megatask` remove the approval gate
+entirely, so this rename is the only pre-approval action any of them take.
+
+#### Rollback
+
+The mutation is local, reversible, and network-free: `git branch -m <original-name>`
+restores it manually if a declined plan needs the old name back.
 
 The step's own guard ladder stays the safety boundary — every arm exits 0:
 

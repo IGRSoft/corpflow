@@ -103,9 +103,22 @@ The orchestrator pre-seeds both files at FN-gate time; the FN agent MUST **overw
 
 #### Final FN steps
 
-- **Push under the ledger branch name**: `git push -u origin HEAD:refs/heads/<facts.branch>` — the PR head is the **planned** name PL0 stamped on the ledger (`facts.branch`), never a live `git rev-parse` of FN's own cwd. This makes the head deterministic regardless of which topology DV ran in (the host branch, or a separate DV worktree) — see `skills/worktask/references/handoff-protocol.md § branch`. **If `facts.branch` is empty** (detached HEAD / not-a-git-repo at PL start), skip this refspec and push plainly instead: `git push -u origin HEAD`. Branch naming itself happens once, at the start of planning (`skills/shared/git-conventions.md § Branch Naming`) — FN never renames anything.
+- **Push under the ledger branch name** (see § Validating `facts.branch` before the push, below): `git push -u origin HEAD:refs/heads/<facts.branch>` — the PR head is the **planned** name PL0 stamped on the ledger (`facts.branch`), never a live `git rev-parse` of FN's own cwd. Branch naming itself happens once, at the start of planning (`skills/shared/git-conventions.md § Branch Naming`) — FN never renames anything.
 - **Workspace mode**: Create PR from workspace branch
 - **F3**: Mark technical complete
+
+##### Validating `facts.branch` before the push
+
+`facts.branch` is ledger data — defence in depth, not FN's only check: `branch-name.sh`
+validates at emission, but nothing re-validates at the point FN turns the value into
+shell command text. Before building the push command, confirm `facts.branch` matches
+`^[A-Za-z0-9._/-]+$` (git ref names permit `;`/`|`/`&`/backtick/`$(`/quotes/whitespace;
+bash does not). A value that fails MUST be treated as empty, never interpolated as-is —
+mitigating an externally-named branch (e.g. from `gh pr checkout` on a fork PR) reaching
+shell command text unsanitised. **Empty or failed-check `facts.branch`** (detached HEAD /
+not-a-git-repo at PL start / unvalidated value): skip the refspec, push plainly instead:
+`git push -u origin HEAD`. Deterministic regardless of DV's topology — see
+`skills/worktask/references/handoff-protocol.md § branch`.
 
 ##### Branch naming is a PL-stage concern
 

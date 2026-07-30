@@ -100,9 +100,25 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# Resolved from this script's own location (mirrors fn-preflight.sh's sanitiser-lib
-# resolution). BASH_SOURCE, not $0: correct when sourced by bats.
-LIB_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd)/branch-lib.sh"
+# Physical directory of this script. CDPATH= disables a benign-but-common
+# CDPATH setting that otherwise makes `cd` echo an extra line into this very
+# capture, corrupting the path silently; `pwd -P` plus the readlink loop follow
+# a symlinked script to its real directory so sibling-library resolution cannot
+# be redirected onto an attacker-planted file next to the symlink.
+_resolve_script_dir() {
+  local src="${BASH_SOURCE[0]:-$0}" dir
+  while [ -h "$src" ]; do
+    dir=$(CDPATH= cd -- "$(dirname -- "$src")" && pwd -P)
+    src=$(readlink "$src")
+    case "$src" in
+      /*) ;;
+      *) src="$dir/$src" ;;
+    esac
+  done
+  CDPATH= cd -- "$(dirname -- "$src")" && pwd -P
+}
+SCRIPT_DIR="$(_resolve_script_dir 2> /dev/null)" || SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]:-$0}")"
+LIB_PATH="${SCRIPT_DIR}/branch-lib.sh"
 
 # `[ -r ]` first, not a bare `.`: sourcing a missing file with the `.` builtin is a
 # special-builtin error that exits a `set -e` shell immediately, bypassing an
@@ -121,6 +137,13 @@ else
   fi
   printf >&2 'branch-name: branch-lib.sh unreachable at %s — skipping rename\n' "$LIB_PATH"
   cur=$(git rev-parse --abbrev-ref HEAD 2> /dev/null || printf '')
+  # branch_is_conventional is unavailable here (that is the library that failed
+  # to source) — fall back to a minimal safe-charset check so an untrusted
+  # current branch name is never passed through to a later shell-interpolation
+  # site. Never the literal "HEAD" (detached) either.
+  if [ "$cur" = "HEAD" ] || ! printf '%s' "$cur" | grep -Eq '^[A-Za-z0-9._/-]+$'; then
+    cur=""
+  fi
   mkdir -p "${CONTEXT_DIR}/logs" 2> /dev/null || true
   if command -v jq > /dev/null 2>&1; then
     # Self-contained audit row: the library that would supply audit_fn is exactly
@@ -154,6 +177,23 @@ cmd_print_types() {
   exit 0
 }
 
+# Emits `branch=<name>` only when <name> passes branch_is_conventional; any
+# other value (including the current, un-derived branch name on a no-op arm)
+# prints `branch=` empty instead. This is the fix for the git-legal-but-shell-
+# hostile branch name reaching FN's `git push -u origin HEAD:refs/heads/<name>`
+# command text (e.g. `fix/a$(id>/tmp/x)`) — git accepts characters bash does
+# not, and no downstream consumer re-validates before interpolating. `target`
+# (the rename-success arm) is conventional by construction and always passes;
+# `cur` (every no-op/failure arm) is untrusted external input and often will not.
+emit_branch() {
+  local name="${1:-}"
+  if [ -n "$name" ] && branch_is_conventional "$name"; then
+    printf 'branch=%s\n' "$name"
+  else
+    printf 'branch=%s\n' ""
+  fi
+}
+
 # Guard ladder — first hit wins, and every arm exits 0. This step is a courtesy
 # rename, never a gate: no naming problem is worth failing a planning stage over.
 cmd_rename() {
@@ -171,7 +211,7 @@ cmd_rename() {
   if fn_batch_scope; then
     printf 'branch-name: skipped (%s)\n' "$SCOPE_REASON"
     audit_fn branch_renamed skipped "$(meta_json reason "$SCOPE_REASON")"
-    printf 'branch=%s\n' "$(git rev-parse --abbrev-ref HEAD 2> /dev/null || printf '')"
+    emit_branch "$(git rev-parse --abbrev-ref HEAD 2> /dev/null || printf '')"
     return 0
   fi
 
@@ -197,7 +237,7 @@ cmd_rename() {
   if branch_is_conventional "$cur"; then
     printf 'branch-name: already conventional (%s) — no-op\n' "$cur"
     audit_fn branch_renamed noop "$(meta_json reason already_conventional branch "$cur")"
-    printf 'branch=%s\n' "$cur"
+    emit_branch "$cur"
     return 0
   fi
 
@@ -205,7 +245,7 @@ cmd_rename() {
   if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' > /dev/null 2>&1; then
     printf 'branch-name: upstream already tracked — no-op\n'
     audit_fn branch_renamed noop "$(meta_json reason upstream_tracked branch "$cur")"
-    printf 'branch=%s\n' "$cur"
+    emit_branch "$cur"
     return 0
   fi
 
@@ -214,7 +254,7 @@ cmd_rename() {
   if [ -n "$base" ] && [ "$cur" = "${base#origin/}" ]; then
     printf 'branch-name: on the integration branch (%s) — refusing to rename\n' "$cur"
     audit_fn branch_renamed noop "$(meta_json reason on_integration_branch branch "$cur")"
-    printf 'branch=%s\n' "$cur"
+    emit_branch "$cur"
     return 0
   fi
 
@@ -223,7 +263,7 @@ cmd_rename() {
   if ! command -v jq > /dev/null 2>&1; then
     printf 'branch-name: target unresolvable — no-op\n'
     audit_fn branch_renamed noop "$(meta_json reason jq_unavailable)"
-    printf 'branch=%s\n' "$cur"
+    emit_branch "$cur"
     return 0
   fi
 
@@ -236,7 +276,7 @@ cmd_rename() {
   if [ -z "$target" ]; then
     printf 'branch-name: target unresolvable — no-op\n'
     audit_fn branch_renamed noop "$(meta_json reason target_unresolvable)"
-    printf 'branch=%s\n' "$cur"
+    emit_branch "$cur"
     return 0
   fi
 
@@ -253,18 +293,18 @@ cmd_rename() {
   if git show-ref --verify --quiet "refs/heads/$target"; then
     printf 'branch-name: %s already exists — no-op\n' "$target"
     audit_fn branch_renamed noop "$(meta_json reason target_exists target "$target")"
-    printf 'branch=%s\n' "$cur"
+    emit_branch "$cur"
     return 0
   fi
 
   if git branch -m "$target" 2> /dev/null; then
     printf 'branch-name: %s -> %s\n' "$cur" "$target"
     audit_fn branch_renamed ok "$(meta_json from "$cur" to "$target")"
-    printf 'branch=%s\n' "$target"
+    emit_branch "$target"
   else
     printf >&2 'branch-name: rename failed (%s -> %s) — continuing\n' "$cur" "$target"
     audit_fn branch_renamed failed "$(meta_json from "$cur" to "$target")"
-    printf 'branch=%s\n' "$cur"
+    emit_branch "$cur"
   fi
   return 0
 }

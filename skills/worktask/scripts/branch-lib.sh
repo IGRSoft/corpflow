@@ -188,12 +188,22 @@ audit_fn() {
     "${STATE_PATH:-.context/state.json}" 2> /dev/null || printf '%s0' "$stage")
   dk="$wid:$ri:$action"
   mkdir -p "${CONTEXT_DIR:-.context}/logs" 2> /dev/null || true
+  # `2>/dev/null` on the pipeline above only silences jq's own stderr; the
+  # `>>` append is the CALLING SHELL's redirection and its failure (e.g. an
+  # unwritable log dir) is invisible to that guard. Capture it explicitly so a
+  # rename that mutates git state never completes with silent, un-audited
+  # evidence loss (a security-relevant action leaving no trace). The warning
+  # names the action/result, not the sink path, so it cannot leak a filesystem
+  # layout detail beyond what the operator's own shell already has.
   if command -v jq > /dev/null 2>&1; then
-    jq -cn --arg ts "$ts" --arg a "$action" --arg subj "$subj" --arg r "$result" \
+    if ! jq -cn --arg ts "$ts" --arg a "$action" --arg subj "$subj" --arg r "$result" \
       --arg t "$tid" --arg dk "$dk" --arg actor "$actor" --arg origin "$stage" --argjson m "$meta" \
       '{ts:$ts, actor:$actor, action:$a, subject:$subj, result:$r, task_id:$t,
         metadata:($m + {origin_stage:$origin, dedupe_key:$dk})}' \
-      >> "${CONTEXT_DIR:-.context}/logs/audit.jsonl" 2> /dev/null || true
+      >> "${CONTEXT_DIR:-.context}/logs/audit.jsonl" 2> /dev/null; then
+      printf >&2 'branch-lib: audit row NOT recorded (sink unwritable) — action=%s result=%s\n' \
+        "$action" "$result"
+    fi
   fi
   return 0
 }

@@ -131,8 +131,15 @@ See `skills/shared/stage-codes.md` for stage details.
    place a worktask branch is ever renamed — the once-only rule per
    `skills/shared/git-conventions.md § Branch Naming`. Every outcome exits 0 (a naming problem
    must never stop planning) and the step self-disables under `/megatask` or `--emergency`
-   routing. Capture the script's final `branch=<name>` stdout line and stamp it into
-   `state.json facts.branch` (the script itself never writes state.json — see
+   routing.
+
+#### Step 3c — validate before stamping
+
+   Capture the script's final `branch=<name>` stdout line; **before stamping it, verify it
+   matches `^[A-Za-z0-9._/-]+$`** (defence in depth alongside the script's own emission
+   validation and FN's re-validation before use — see `agents/project-manager.md § Final FN
+   steps`) — a value that fails this check MUST be stamped as empty, never as-is. Stamp the
+   result into `state.json facts.branch` (the script itself never writes state.json — see
    `skills/worktask/references/handoff-protocol.md § branch`).
 
 ### Step 4 — TaskCreate PL0

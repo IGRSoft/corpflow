@@ -314,3 +314,153 @@ mk_branch_repo() {
   assert_failure 2
   assert_output --partial "branch-name.sh"
 }
+
+# ---------------------------------------------------------------------------
+# SR0 rework — SR-1 (HIGH, CWE-78/88), SR-4 (MEDIUM, CWE-427), SR-3
+# (MEDIUM, CWE-778), SR-5 (LOW).
+# ---------------------------------------------------------------------------
+
+# git-legal, shell-hostile: `;`, `|`, `&`, backtick and `$(` are all permitted
+# in a ref name by `git check-ref-format --branch`, but not by bash. No space
+# (git rejects a space in a ref name outright) — mirrors security-review-0.md's
+# executed PoC shape exactly (`fix/a$(id>/tmp/...)`).
+HOSTILE_BRANCH='fix/a$(id>/tmp/branch-name-sr1-marker)'
+
+mk_hostile_repo() {
+  local marker="$1"
+  rm -f "$marker"
+  git init -q -b main "$WD"
+  git -C "$WD" -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m work
+  git -C "$WD" branch -m "$HOSTILE_BRANCH"
+}
+
+@test "SR-1 (HIGH, PoC): upstream_tracked arm never emits the raw hostile branch" {
+  cd "$WD"
+  local marker="/tmp/branch-name-sr1-marker-a"
+  mk_hostile_repo "$marker"
+  git remote add origin https://example.invalid/r.git
+  git update-ref "refs/remotes/origin/${HOSTILE_BRANCH}" HEAD
+  git branch --set-upstream-to="origin/${HOSTILE_BRANCH}" "$HOSTILE_BRANCH" > /dev/null
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "upstream already tracked"
+  assert_line --index "$(( ${#lines[@]} - 1 ))" "branch="
+  refute_output --partial 'fix/a$('
+  [ ! -e "$marker" ]
+}
+
+@test "SR-1: on_integration_branch arm never emits the hostile branch in the branch= line" {
+  cd "$WD"
+  local marker="/tmp/branch-name-sr1-marker-b"
+  mk_hostile_repo "$marker"
+  jq --arg b "$HOSTILE_BRANCH" '.metadata.base_ref = $b' .context/state.json > s && mv s .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "integration branch"
+  # The human-readable diagnostic MAY echo the raw name (operator-facing log
+  # text, never re-interpolated) — only the `branch=` line is the contract
+  # surface FN consumes, and that line specifically must never carry it.
+  assert_line --index "$(( ${#lines[@]} - 1 ))" "branch="
+  [ ! -e "$marker" ]
+}
+
+@test "SR-1: jq_unavailable arm never emits the raw hostile branch" {
+  cd "$WD"
+  local marker="/tmp/branch-name-sr1-marker-c"
+  mk_hostile_repo "$marker"
+  local nobin
+  nobin="$WD/nobin"
+  mkdir -p "$nobin"
+  local tool
+  for tool in git grep sed tr cut date mkdir bash sh env printf true false cat awk readlink dirname; do
+    local p
+    p=$(command -v "$tool" 2> /dev/null) || continue
+    ln -sf "$p" "$nobin/$tool"
+  done
+  run env PATH="$nobin" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index "$(( ${#lines[@]} - 1 ))" "branch="
+  refute_output --partial 'fix/a$('
+  [ ! -e "$marker" ]
+}
+
+@test "SR-1: fn_batch_scope (MILESTONE_MODE) arm never emits the raw hostile branch" {
+  cd "$WD"
+  local marker="/tmp/branch-name-sr1-marker-d"
+  mk_hostile_repo "$marker"
+  run env MILESTONE_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index "$(( ${#lines[@]} - 1 ))" "branch="
+  refute_output --partial 'fix/a$('
+  [ ! -e "$marker" ]
+}
+
+@test "SR-1: target_exists arm never emits the raw hostile branch" {
+  cd "$WD"
+  local marker="/tmp/branch-name-sr1-marker-e"
+  mk_hostile_repo "$marker"
+  jq '.facts.goal = "Add login flow"' .context/state.json > s && mv s .context/state.json
+  git branch feature/add-login-flow
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "already exists"
+  assert_line --index "$(( ${#lines[@]} - 1 ))" "branch="
+  refute_output --partial 'fix/a$('
+  [ ! -e "$marker" ]
+}
+
+@test "SR-5: no arm emits the literal token HEAD — detached + batch/incident + library-unreachable" {
+  cd "$WD"
+  mk_branch_repo
+  git checkout -q --detach HEAD
+  run env MILESTONE_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  refute_line "branch=HEAD"
+  assert_line --index "$(( ${#lines[@]} - 1 ))" "branch="
+
+  run env INCIDENT_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  refute_line "branch=HEAD"
+
+  mkdir -p lonely
+  cp "$PLUGIN_ROOT/$SCRIPT" lonely/branch-name.sh
+  run bash lonely/branch-name.sh
+  assert_success
+  refute_line "branch=HEAD"
+}
+
+@test "SR-3: a completed rename never exits 0 silently when the audit sink is unwritable" {
+  cd "$WD"
+  mk_branch_repo
+  mkdir -p ro/logs
+  chmod 500 ro/logs
+  run bash "$PLUGIN_ROOT/$SCRIPT" --context ro
+  chmod 700 ro/logs
+  assert_success
+  assert_output --partial "->"
+  assert_output --partial "audit row NOT recorded"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "fix/fix-pr-composition-and-branch-naming"
+}
+
+@test "SR-4: CDPATH=. does not corrupt LIB_PATH or skip the guard ladder" {
+  cd "$WD"
+  mk_branch_repo
+  run env CDPATH=. bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  refute_output --partial "unreachable"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "fix/fix-pr-composition-and-branch-naming"
+}
+
+@test "SR-2/SR-4: a symlinked script still resolves the real sibling branch-lib.sh" {
+  cd "$WD"
+  mk_branch_repo
+  mkdir -p linked
+  ln -s "$PLUGIN_ROOT/skills/worktask/scripts/branch-name.sh" linked/branch-name.sh
+  run bash linked/branch-name.sh
+  assert_success
+  refute_output --partial "unreachable"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "fix/fix-pr-composition-and-branch-naming"
+}
