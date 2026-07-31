@@ -2,7 +2,7 @@
 name: testing-strategy
 description: Cross-platform testing reference — testing pyramid, AAA pattern, per-platform framework and naming map, DV/QA boundary, and the Test Selection Gate. Reference when planning or implementing tests on any platform (apple, android, web, systems, backend, ai).
 effort: low
-version: 0.1.0
+version: 0.2.0
 ---
 
 # Testing Strategy
@@ -227,6 +227,19 @@ the test; restore afterwards. A mutation that silently no-ops — a `sed` patter
 `echo "…"` against a source that uses `printf '…'`, a line number that shifted — yields a passing
 test indistinguishable from a weak guard, so the reviewer concludes the opposite of what the
 evidence shows.
+
+## Portable verification greps
+
+A canon-sweep or acceptance-criteria count is evidence only if the command means the same thing on
+every host: `grep` may resolve to GNU grep, BSD grep or `ugrep`, which differ in ways that change a
+count silently instead of erroring.
+
+- Put `--include=`/`--exclude-dir=` **before** the pattern, and use `-e` for any pattern containing
+  `--` — past a `--` terminator ugrep stops parsing options and reads the filter as a filename.
+- Never anchor an exclusion regex on a `./` prefix; ugrep omits it, so `^\./…` filters match
+  nothing and the exclusion silently does not apply.
+- Report the per-file decomposition, not only the total — a filter that stopped applying looks
+  identical to one that found nothing to exclude.
 
 ## DV vs QA Boundary
 
