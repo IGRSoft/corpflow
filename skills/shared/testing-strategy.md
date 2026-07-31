@@ -227,6 +227,120 @@ DV produces the **build artifact + selected-test list**. QA executes the **selec
 | Test data builders/fixtures | Test quality review |
 | **Build verification + parse markers + emit Selected Tests** | **Run only the Selected Tests list** (plus full suite if `test_mode=full`) |
 
+## Test-Execution Authority
+
+Canonical, single-sourced statement of **who** may execute tests — orthogonal to `test_mode`
+(§ Test Selection Gate), which governs **how much** runs. Every agent file and skill points here;
+none restates the matrix or the runner list below.
+
+Authority is a property of the **stage**, never of the agent file: a support agent (`designer`,
+`ethics-reviewer`, `prompt-engineer`, `workflow-engineer`) inherits the authority of whichever
+stage it is dispatched into — `workflow-engineer` acting as DV0 for plugin-infrastructure scope
+holds DV's authority, not a fixed authority of its own.
+
+### Definitions
+
+**Test execution** — invoking a runner that evaluates test cases: `bats`, `swift test`, `pytest`,
+`python3 -m unittest`, `ctest`, `go test`, `cargo test`, `jest`, `vitest`, `playwright`, `rspec`,
+`dotnet test`, `gradle test` / `./gradlew test`, `npm`/`pnpm`/`yarn test`, `xcodebuild test`,
+`mcp__*__test_*`; plus `./run-tests.sh`, `make test`, `make coverage`, `make test-ios` in this
+repo; plus `/<plugin>:build-test` invoked *without* `--no-test`; plus delegating any of the above
+to another agent.
+
+**Build-only verification** — compile, link, type-check, lint, static analysis, and test
+*collection without execution* (`bats --count`, `pytest --collect-only`, `--dry-run`). **Allowed
+at every one of the 13 stages, always** — `/<plugin>:build-test --no-test` is the sanctioned
+delegated form. The allowance is only *reachable* where the stage holds a build path (see
+"Reachable how" below); nominal for stages with no test-capable Bash grant.
+
+### Authority matrix — DV, QA, AR, DR
+
+| Stage | Build-only | Reachable how | Scoped exec | Full exec | Note |
+|---|---|---|---|---|---|
+| DV | allowed | own Bash | **required** | **forbidden** | full-suite deny is mechanical for the bare-runner form only (`hooks/test-execution-gate.sh`) — a trailing flag or argument (`swift test --parallel`, `pytest -v`) classifies scoped and is allowed; only a bare runner with nothing after it (`swift test`) is caught |
+| QA | allowed | own Bash | allowed | **allowed — sole holder** | |
+| AR | allowed | delegation only (no Bash grant) | forbidden | forbidden | |
+| DR | allowed | `/<plugin>:build-test --no-test` | forbidden | forbidden | compile-check carve-out preserved verbatim (`agents/technical-lead.md`) |
+
+### Authority matrix — SR, RE, IR
+
+| Stage | Build-only | Reachable how | Scoped exec | Full exec | Note |
+|---|---|---|---|---|---|
+| SR | allowed | narrowed Bash, read-only introspection (git/jq/cat/head/tail) | forbidden | forbidden | no `Skill` tool → `build-test --no-test` is nominal, not reachable; scan capability is delegation-dependent (§ Mechanical enforcement) |
+| RE | allowed | narrowed Bash, read-only introspection (git/jq/cat/head/tail) | forbidden | forbidden | same `Skill`-tool gap as SR — build-only is nominal, not reachable |
+| IR | allowed | broad Bash (documented carve-out) | forbidden | forbidden | incident reproduction is not test execution (§ Escalation path) |
+
+### Authority matrix — everyone else
+
+| Stage | Build-only | Reachable how | Scoped exec | Full exec | Note |
+|---|---|---|---|---|---|
+| PL, TL, DC, FN, ST | allowed | delegation only (no test-capable Bash) | forbidden | forbidden | nominal allowance |
+| Support (`designer`, `ethics-reviewer`, `prompt-engineer`, `workflow-engineer`) | allowed | per agent | inherits dispatched stage | inherits dispatched stage | authority follows the stage being acted for, not the agent name |
+
+### Auto-promotion note
+
+**DV's no-handler auto-promotion never widens to `full`.** See `test-selection-syntax.md §
+Auto-promotion when no handler` — the cap is `module-scope`, an execution-only value recorded in
+`development-N.md § Decisions`, never a `test_mode` value (that vocabulary stays exactly
+`build-only | scoped | full`, unchanged and PL0-owned).
+
+### Escalation path
+
+A banned stage that believes runtime evidence is needed never self-serves. Ordered:
+
+1. **Non-blocking need** — record `requests_test_evidence: <what and why>` in the stage's own
+   artifact (`§ Findings` / `§ Notes`). QA ingests these the same way it ingests its own additions
+   (`agents/qa-engineer.md § Q1 QA Additions`) and executes them.
+2. **Blocking need** — the stage returns `verdict: blocked` with `error_escalated_to: "DV"`. The
+   orchestrator re-opens DV through the existing error-handling loop
+   (`skills/agent-coordination/SKILL.md § Error Handling`). No new machinery.
+3. **Incident reproduction is not test execution** — running the app, a repro script, or hitting a
+   failing endpoint is allowed for IR; its fix verification still routes through the emergency
+   pipeline's own DV and QA stages.
+4. **Compile-only checks are unaffected** — `/<plugin>:build-test --no-test` stays available to
+   every stage regardless of authority.
+
+### Mechanical enforcement
+
+Three layers, cheapest first — see `skills/worktask/SKILL.md` step 4.8b and
+`hooks/test-execution-gate.sh` for implementation:
+
+- **Tool-grant narrowing** — `security-reviewer` and `release-engineer` drop bare `Bash` for
+  scoped allow-lists, matching the `technical-lead`/`project-manager` idiom. `incident-responder`,
+  `prompt-engineer`, and `workflow-engineer` keep broad Bash — documented carve-outs.
+- **Orchestrator step 4.8b** — a NO-TEST-EXECUTION banner + `stage_test_ban_enforced` audit row
+  injected into the composed prompt for every dispatched stage not in `{DV, QA}`.
+
+### The `PreToolUse` hook layer
+
+**`hooks/test-execution-gate.sh`** — a `PreToolUse` hook, fail-open on every ambiguity, that
+resolves the acting stage from `.context/state.json` (never agent/payload identity) and denies
+test-runner invocations outside `{DV, QA}` (and DV full-suite runs). Exit code is always 0; the
+decision travels in the JSON `hookSpecificOutput.permissionDecision`. This is the only layer that
+covers delegated calls and the orchestrator's own shell.
+
+### SR/RE control layering
+
+**For SR and RE specifically, the hook is not a backstop behind the grant narrowing — it is the
+only control.** Both stages' platform-auditor delegates (e.g.
+`Task(system-developer:sys-security-auditor)`) hold test-capable Bash grants of their own
+(`ctest`, `make`, …) that are unaffected by narrowing SR's/RE's own grant. The hook denies the
+delegate's leaf call via the same state.json stage resolution, which is why the design is correct
+— but it means a regression in stage resolution is a complete loss of enforcement for SR/RE, not a
+degradation of a defense-in-depth layer.
+
+### Escape-hatch honesty
+
+`IGRSOFT_TEST_GATE=off` and `CLAUDE_PROJECT_DIR` (pointed at a directory
+with no `.context/state.json`) are both **agent-writable across sessions**, not agent-proof:
+`.claude/settings.json` `env` can be written by any stage holding `Write`/`Edit`, and takes effect
+on the next session or resume. Within a single live session neither is reachable from inside a
+command string — the hook reads process env, not payload text — which is what makes the hatch
+usable as a human relief valve without being agent-serviceable mid-retry. Across sessions it is a
+human-intent-scoped control, not a hard boundary; layers 1 (grants) and 2 (the 4.8b banner) do not
+share this property. The hook logs a `test_gate_disabled` audit row the first time either vector is
+observed disabled per `.context/`, so the disable is reviewable rather than silent.
+
 ## Test Selection Gate
 
 Tests are slow (especially UI/simulator bundles). The gate decides — per worktask run — **how much of the test pyramid runs and where**. Defaults are tightened so backend, refactor, and doc-only tasks do not pay simulator-startup cost.
@@ -252,7 +366,7 @@ When `<plan_file>` omits `metadata.test_mode`, agents resolve to `scoped` (not `
 
 DV/QA enforce these even if PL set a tighter mode:
 - Selected Tests list is empty AND `test_mode = build-only` → DV warns and runs the smoke set; QA promotes to `scoped` with a logged note in `testing-N.md § Notes`.
-- Platform has no wired marker-parser handler (every platform except Apple today — see `test-selection-syntax.md § Identifier grammar by platform`) AND `test_mode ∈ {build-only, scoped}` → DV auto-promotes to `full` for that platform with a logged warning. The mode stays as the PL-declared value in metadata; the promotion is recorded in `development-N.md § Decisions` with `auto_promoted_mode: full`.
+- Platform has no wired marker-parser handler (every platform except Apple today — see `test-selection-syntax.md § Identifier grammar by platform`) AND `test_mode ∈ {build-only, scoped}` → DV auto-promotes to **module-scope** (never `full` — see `§ Test-Execution Authority`) for that platform with a logged warning. The mode stays as the PL-declared value in metadata; the promotion is recorded in `development-N.md § Decisions` with `auto_promoted_mode: module-scope`. If module scope cannot be computed, DV runs the smoke set instead and records `deferred_to_qa: full_regression` — it does not widen further.
 
 ### Contract
 
@@ -271,7 +385,9 @@ DV/QA enforce these even if PL set a tighter mode:
 
 #### DR test-execution exclusion
 
-- **DR** (`agents/technical-lead.md`) does not run tests; the gate does not apply. DR's tool list and constraints explicitly forbid test execution — see `agents/technical-lead.md § Constraints` and § Bash Scope (DR) for the canonical forbidden-commands list (`xcodebuild test`, `swift test`, `xcrun simctl … test`, `npm/pnpm/yarn test`, `jest`, `vitest`, `pytest`, `go test`, `cargo test`, `rspec`, `mcp__XcodeBuildMCP__test_*`, `mcp__XcodeBuildMCP__swift_package_test`, `mcp__XcodeBuildMCP__build_run_*`). If DR thinks runtime verification is needed, it records a finding for QA — it never executes.
+- **DR** (`agents/technical-lead.md`) does not run tests; the gate does not apply. Authority is
+  canonical in `§ Test-Execution Authority` above — not restated here. If DR thinks runtime
+  verification is needed, it records `requests_test_evidence:` for QA — it never executes.
 
 ### DV Executed vs Selected (scope split)
 
@@ -427,7 +543,7 @@ regression gate. Prefer `/<plugin>:build-test`, which applies the correct form f
 
 ### Recording the resolved selection
 
-DV records `test_mode`, `selected_tests_count`, and `ui_visual_check` in `.context/development-N.md § Decisions`. QA records the resolved mode and any `Selected Tests (QA additions)` in `testing-N.md § Notes`. This applies on every platform, including runs auto-promoted to `full`.
+DV records `test_mode`, `selected_tests_count`, and `ui_visual_check` in `.context/development-N.md § Decisions`. QA records the resolved mode and any `Selected Tests (QA additions)` in `testing-N.md § Notes`. This applies on every platform, including runs auto-promoted to `module-scope` (§ Test-Execution Authority).
 
 ### Marker grammar reference
 

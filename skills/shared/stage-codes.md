@@ -24,6 +24,13 @@ Single source of truth for worktask stage codes.
 | ST | Stakeholder | stakeholder | sonnet |
 | IR | Incident Response | incident-responder | opus |
 
+### Test-execution authority note
+
+> Who may **execute** tests (vs. build-only) is a separate axis from `test_mode` breadth and is
+> canonical in `skills/shared/testing-strategy.md § Test-Execution Authority`: DV runs scoped
+> tests only, QA is the sole full-suite authority, every other stage code in this table is
+> build-only. Not restated here — this table stays the stage/agent/model reference only.
+
 ### DV routing note
 
 > DV defaults to `developer` (platform app code). For plugin worktask-infrastructure scope (`skills/worktask/scripts/*.sh`, the stage state-machine, `hooks/**`), PL0 routes DV to `workflow-engineer` instead — see `agents/product-manager.md` § Dynamic Worktask Sizing → DV0 routing override. This table keeps the single unconditional default; the conditional rule lives there.

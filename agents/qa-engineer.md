@@ -83,6 +83,12 @@ Cheapest-first when only verdict/decisions/refs or the delta is needed (full rea
 - **Q0**: Analyze requirements, review DV's unit tests, identify coverage gaps
 - **Q1**: Add missing edge-case tests, then dispatch test execution per the **Test Selection Gate** (see `skills/shared/testing-strategy.md § Test Selection Gate`). Q1 details in the sub-sections below.
 
+**QA is the sole holder of full-suite execution authority in this pipeline**
+(`skills/shared/testing-strategy.md § Test-Execution Authority`). QA escalates to a full run when
+any of: `test_mode: full`; DV recorded `deferred_to_qa`; the Selected Tests list is empty; or a
+banned stage filed a `requests_test_evidence` finding. `test_mode: full` means, non-inferably: DV
+executes only its `Executed Tests (DV)` subset, QA runs the full suite.
+
 #### Q1 Three-Mode Dispatcher
 
 Read `metadata.test_mode` from `<plan_file>` (effective default: `scoped`; one-cycle legacy alias is documented in `skills/shared/testing-strategy.md § Backward compatibility`). Read `.context/development-N.md § Selected Tests` (DV's authored list).
@@ -91,7 +97,7 @@ Read `metadata.test_mode` from `<plan_file>` (effective default: `scoped`; one-c
 |---|---|
 | `build-only` | Run **only Selected Tests** (one positive selection flag per test ID). If list is empty, auto-promote to `scoped` and log to `testing-N.md § Notes`: `Selected Tests empty under build-only; promoted to scoped for safety.` |
 | `scoped` | Run Selected Tests + any new edge-case tests added by QA + tests in any module touched by the diff. Pass each through the platform's selection flag. |
-| `full` | Run the full project test suite (no selection flags). UI test bundles run unless the platform omits them. |
+| `full` | Run the full project test suite (no selection flags **and no positional test-target argument** — a bare runner name with nothing after it). UI test bundles run unless the platform omits them. |
 
 ##### Q1 selection syntax
 
@@ -99,7 +105,7 @@ Selection syntax differs per platform — see `test-selection-syntax.md § Platf
 
 #### Q1 Test-run counters
 
-Per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape: `action: "scoped_test_run"` when it carries ≥1 test-selection flag, `action: "full_test_run"` when it carries none (the `full` row above). `metadata: {stage: "QA", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. Audit-only per `agent-coordination § Writers` — a missing or unexpected counter row never blocks QA and belongs in no completion checklist.
+Per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape: `action: "scoped_test_run"` when it carries ≥1 test-selection flag or a trailing positional test-target argument, `action: "full_test_run"` when it carries neither (the `full` row above). `metadata: {stage: "QA", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. Audit-only per `agent-coordination § Writers` — a missing or unexpected counter row never blocks QA and belongs in no completion checklist.
 
 #### Q1 QA Additions and Warnings
 

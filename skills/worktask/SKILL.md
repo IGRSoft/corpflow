@@ -736,6 +736,53 @@ was bypassed. DR surfaces that as an **advisory** finding — never a hard fail,
 produced by the orchestrator, so a stale version-keyed plugin cache serving the pre-4.8a loop
 would otherwise block a blameless DV.
 
+#### Step 4.8b
+
+```typescript
+    // 4.8b. Stage test-execution ban — mirrors 4.8a's mechanism for every stage
+    //       that is NOT {DV, QA}. Authority is canonical in
+    //       skills/shared/testing-strategy.md § Test-Execution Authority; DV/QA
+    //       are exempt here because they hold execution authority (scoped/full).
+    //       The `hooks/test-execution-gate.sh` PreToolUse hook is the mechanical
+    //       backstop (covers delegation + the orchestrator's own shell); this
+    //       banner is the F5-proven prose-at-the-dispatch-surface layer that
+    //       also *teaches* — a blocked agent sees the rule instead of retrying.
+    if (full.metadata.stage !== "DV" && full.metadata.stage !== "QA") {
+```
+
+##### Step 4.8b — ban banner
+
+```typescript
+      const ban =
+        `NO TEST EXECUTION at this stage (${full.metadata.stage}): authority is stage-scoped, ` +
+        `see \`skills/shared/testing-strategy.md § Test-Execution Authority\`. Build-only ` +
+        `verification (\`/<plugin>:build-test --no-test\`) stays permitted. Need runtime ` +
+        `evidence → record \`requests_test_evidence: <what and why>\` in this stage's artifact ` +
+        `(non-blocking) or return \`verdict: blocked\` + \`error_escalated_to: "DV"\` (blocking, ` +
+        `existing error-handling loop — no new machinery).`;
+      full.description = full.description + "\n\n" + ban;
+```
+
+##### Step 4.8b — ban audit
+
+```typescript
+      // …continued: step 4.8b body
+      appendAudit({
+        actor: "orchestrator",
+        action: "stage_test_ban_enforced",
+        subject: full.metadata.stage,
+        result: "ok",
+        metadata: { stage: full.metadata.stage }
+      });
+    }
+
+```
+
+Same observability property as 4.8a: a missing `stage_test_ban_enforced` row for a non-DV/QA
+dispatch proves the loop was bypassed. This banner covers the dispatched agent's own prose context;
+`hooks/test-execution-gate.sh` is the only layer that also covers a nested delegate's leaf `Bash`
+call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
+
 #### Step 4.9
 
 ```typescript
