@@ -161,7 +161,7 @@ then triage the findings — don't equate a clean audit with a safe dependency.
 
 ### Claude Code sandbox settings
 
-Settings that harden the agent's own execution surface. Review them when a worktask runs unattended (`/megatask`, `--auto-finalization`) or on a shared runner.
+Settings that harden the agent's own execution surface. Review them when a worktask runs unattended (`/megatask`, `--auto=[finalization]`) or on a shared runner.
 
 | Setting | Effect |
 |---------|--------|

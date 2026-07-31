@@ -82,7 +82,7 @@ matters in your workflow, rename to a conventional form yourself before invoking
 The rename runs at the very start of planning — before PL0 exists, and therefore before
 the plan-approval gate, the pipeline's only human checkpoint. If the operator later
 declines the plan, the branch has already been renamed and nothing renames it back
-automatically. `--auto-plan`, `--emergency`, and `/megatask` remove the approval gate
+automatically. `--auto=[plan]`, `--emergency`, and `/megatask` remove the approval gate
 entirely, so this rename is the only pre-approval action any of them take.
 
 #### Rollback

@@ -22,7 +22,7 @@ External orchestrators (CI runners, batch schedulers, the user's own shell) that
 
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
-| `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` (`manual` = accepted alias for `default`) | **Yes — audited** (see § Permission-Mode Pinning below) | SR/FN→`default`; DV under `--auto-plan`→`bypassPermissions` |
+| `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` (`manual` = accepted alias for `default`) | **Yes — audited** (see § Permission-Mode Pinning below) | SR/FN→`default`; DV under `--auto=[plan]`→`bypassPermissions` |
 | `workspace_path` | `--cwd <path>` | string | N/A (in-process inherits parent cwd) | megatask tracks → per-issue worktree |
 | `add_dirs` (array) | repeated `--add-dir <path>` | string[] | N/A | cross-repo work, monorepo siblings |
 | `mcp_config_path` | `--mcp-config <path>` | string | N/A | scoped MCP set per dispatch |

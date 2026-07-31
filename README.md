@@ -2,11 +2,11 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with Task System integration, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 3.42.0 · Requires Claude Code 2.1.220+**
+**Plugin 3.43.0 · Requires Claude Code 2.1.220+**
 
 ## Features
 
-- **Worktree-isolated + two approval gates (plan + finalization)**: every worktask runs in a dedicated git worktree and STOPs twice — once after planning to approve the plan (`plan_gate: "checkpoint"`; skipped by `--auto-plan` / `--emergency`) and once before finalization to approve commit/push/PR (`fn_gate: "checkpoint"`; skipped by `--auto-finalization` / `--emergency`). By default FN STOPs before any commit/push/PR; `--auto-finalization` finalizes unattended. `--auto-plan` is orthogonal — it skips only the plan gate, never the FN gate. Changes are reviewable as PRs. (Batch runs via **`/megatask`** stamp both gates `"bypass"` directly per issue — see the Megatask feature below.)
+- **Worktree-isolated + two approval gates (plan + finalization)**: every worktask runs in a dedicated git worktree and STOPs twice — once after planning to approve the plan (`plan_gate: "checkpoint"`; skipped by `--auto=[plan]` / `--emergency`) and once before finalization to approve commit/push/PR (`fn_gate: "checkpoint"`; skipped by `--auto=[finalization]` / `--emergency`). By default FN STOPs before any commit/push/PR; `--auto=[finalization]` finalizes unattended. The values are orthogonal — `plan` skips only the plan gate, never the FN gate; the third value, `--auto=[decision]`, skips no gate but delegates PL open questions to a Fable-model decision pass instead of the user. Changes are reviewable as PRs. (Batch runs via **`/megatask`** stamp both gates `"bypass"` directly per issue — see the Megatask feature below.)
 - **`/megatask` — dependency-DAG batch orchestration**: run many worktasks across a GitHub milestone (`/megatask N`) or an explicit issue array (`/megatask --issues 12,15,18`). Parses `Depends on:` / `Blocks:` + P0–P3 labels into a DAG, executes in topological + priority order (never starting an issue whose blockers are unmerged), isolates each issue in its own worktree, and drives completion via the `megatask-monitor` hook (unblock-dependents + progress). One human checkpoint: the R1 batch confirmation.
 - **9-Stage Worktask**: Planning → Architecture → Team Lead → Development → Developer Review → QA → Documentation → Finalization → Stakeholder
 - **Task System Integration**: Native `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` tools
@@ -79,7 +79,7 @@ Run the worktask command:
 /worktask "[task description]"   # The worktask pipeline — PL0 dynamic sizing picks stages
 ```
 
-`/worktask` is the single-issue entry point. PL0 sizes the pipeline by complexity (dropping AR/TL/DC for small tasks). Use `--auto-plan` to skip the plan-approval stop; `--auto-finalization` to skip the finalization-approval stop (auto commit/push/PR); `--emergency` for the incident pipeline (skips both gates). You can also launch via `Skill({skill:"igrsoft:worktask"})`. For **multi-issue batches**, use **`/megatask N`** (a milestone) or **`/megatask --issues 12,15,18`** (an array) — it orders by a dependency/blocker DAG and runs each issue unattended.
+`/worktask` is the single-issue entry point. PL0 sizes the pipeline by complexity (dropping AR/TL/DC for small tasks). Use `--auto=[plan]` to skip the plan-approval stop; `--auto=[finalization]` to skip the finalization-approval stop (auto commit/push/PR); `--auto=[decision]` to let a Fable-model delegate answer PL0's open questions; combine as `--auto=[plan, decision, finalization]` for a fully unattended run (escalation-class questions still stop). Use `--emergency` for the incident pipeline (skips both gates). You can also launch via `Skill({skill:"igrsoft:worktask"})`. For **multi-issue batches**, use **`/megatask N`** (a milestone) or **`/megatask --issues 12,15,18`** (an array) — it orders by a dependency/blocker DAG and runs each issue unattended.
 
 `/worktask` sets up the worktask context, Task System integration, and stage management.
 
@@ -110,12 +110,16 @@ Embedded commands are detected by matching `/<name>` or `/<plugin:name>` pattern
 
 ### `/worktask`
 
-Gate bypass flags — these are the only two that skip a human checkpoint, and they are independent of each other:
+Gate automation — `--auto=[<values>]` takes an array of any subset of `plan`, `decision`,
+`finalization` (brackets optional, e.g. `--auto=plan,decision`). Each value is independent:
 
-| Flag | Effect |
-|------|--------|
-| `--auto-plan` | Stamp `plan_gate: "bypass"` — skip the post-PL plan-approval STOP and proceed straight into the stage loop. FN gate still checkpoints. |
-| `--auto-finalization` | Stamp `fn_gate: "bypass"` — skip the pre-FN STOP; auto commit/push/PR. Plan gate still checkpoints. |
+| Value | Effect |
+|-------|--------|
+| `plan` | Stamp `plan_gate: "bypass"` — skip the post-PL plan-approval STOP and proceed straight into the stage loop. FN gate still checkpoints. |
+| `decision` | Stamp `decision_gate: "auto"` — PL0's open questions are answered by a Fable-model decision delegate instead of blocking on the user; the amendments land in the plan's existing anchors and the decisions themselves in `state.json facts.decisions[]` marked `(auto-decided)`. Escalation-class questions (irreversible, scope-expanding, security-posture, spend) still stop for a human. Bypasses no gate. |
+| `finalization` | Stamp `fn_gate: "bypass"` — skip the pre-FN STOP; auto commit/push/PR. Plan gate still checkpoints. |
+
+Legacy aliases `--auto-plan` (= `--auto=[plan]`) and `--auto-finalization` (= `--auto=[finalization]`) remain accepted but are deprecated.
 
 Scope and pipeline flags:
 

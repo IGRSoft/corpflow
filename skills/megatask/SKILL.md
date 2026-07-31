@@ -197,6 +197,18 @@ human gates** on every per-issue `PL0`: `plan_gate = "bypass"` and `fn_gate = "b
 human checkpoint is megatask's own **R1 batch confirmation** (before any worktree is created).
 Per-issue changes are reviewable as per-issue PRs.
 
+### Unattended open questions
+
+For the same reason megatask also stamps `decision_gate: "auto"` (default `"user"`) on every
+per-issue `PL0`: that issue's `open_questions[]` route through the Fable-model decision pass
+(`commands/worktask.md § Step A.4`) instead of parking the batch on a human. Escalate-class
+questions are never auto-decided here either — they **PARK that single issue** while the batch
+continues with the remaining unblocked issues. Parking rides the existing failure path: the
+per-issue worktask settles `execution.status: "failed"` + `execution.reason: "parked_escalation"`
+with an `escalation_parked` audit row (`commands/worktask.md § Step A.4 Escalation guard`), so the
+monitor frees the track and keeps dependents `blocked`; the batch summary lists each parked issue
+with its unanswered questions.
+
 > For headless `-p` runs, set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait;
 > with `--mcp-config`, server connections are bounded at 5s rather than blocking on the slowest.
 
@@ -279,7 +291,8 @@ TaskCreate({
     workspace_path: `.worktrees/${group}/${issueNumber}`,
     isolation: "worktree",
     megatask_group: group, milestone: milestoneOrNull,
-    fn_gate: "bypass", plan_gate: "bypass"  // megatask bypasses both default-checkpoint gates
+    fn_gate: "bypass", plan_gate: "bypass",  // megatask bypasses both default-checkpoint gates
+    decision_gate: "auto"  // unattended: open questions → Fable decision pass; escalate → park issue
   }
 });
 ```
@@ -374,7 +387,7 @@ not the track cap, bounds it.
 - `completed` — PR created
 - `skipped` — manually skipped
 - `skipped_has_pr` — already has a linked PR (auto-detected)
-- `failed` — max retries exceeded
+- `failed` — max retries exceeded, or parked on unanswered escalate-class questions (`workspace.json.execution.reason: "parked_escalation"`)
 
 ## GitHub CLI
 

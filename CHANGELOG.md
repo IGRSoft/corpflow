@@ -2,6 +2,93 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.43.0] - 2026-07-31
+
+Unattended worktasks had a third interruption the two gate-bypass flags never covered: PL0's
+open questions. `--auto-plan` skipped the plan-approval STOP, but a plan that surfaced
+`open_questions[]` still parked the run on a human — or, worse, silently adopted defaults with
+no recorded decision. The gap gets a first-class carrier: `PL0.metadata.decision_gate`
+(`"user"` default, `"auto"` opt-in). On `"auto"`, a new orchestrator pre-pass (Step A.4, before
+the plan gate) re-dispatches the product-manager as a **decision delegate on the Fable model**,
+which answers each question default-biased and applies the amendments to the plan's existing
+mandatory anchors in one batch pass; the orchestrator then merges the calls into
+`state.json facts.decisions[]` marked `(auto-decided)` and drops the resolved
+`facts.open_questions[]` entries, which is what makes them visible to AR/TL/DV — auditable
+(`auto_decision_dispatched` → `auto_decision_resolved` carrying each rationale,
+`subject:"PL<N>"`), resumable (new resume-table row), and bounded by a BINDING escalation
+guard: irreversible/destructive, scope-expanding, security-posture-weakening, or
+spend-authorizing questions are never auto-decided and stop for the user even under a bypassed
+plan gate. The Fable dispatch reuses loop step 5f's capability fallback
+(`facts.capabilities.fable_dispatch == "credit_blocked"` → `opus`, audited), so credit-gated
+accounts degrade instead of hard-failing.
+
+With three orthogonal automation carriers, two boolean flags stopped scaling. The flag surface
+becomes one **array flag**: `--auto=[plan, decision, finalization]` — any non-empty subset,
+brackets optional, whitespace tolerated, unknown values a parse error rather than a silent
+drop. `--auto-plan` and `--auto-finalization` remain accepted as deprecated aliases
+(`--auto=[plan]` / `--auto=[finalization]`) and compose with the array by union.
+
+### Added
+
+- **`PL0.metadata.decision_gate` carrier** (`"user"` default / `"auto"`), stamped by
+  `--auto=[decision]` (or directly per-issue by `/megatask`). Bypasses neither `plan_gate` nor `fn_gate` — it changes WHO answers
+  PL0's open questions, nothing else. `--emergency` leaves it `"user"` (no PL stage → inert).
+- **Step A.4 Auto-Decision Pre-Pass** (`commands/worktask.md`): no-op unless
+  `decision_gate == "auto"` AND `open_questions[]` is non-empty; otherwise dispatches the PM
+  decision delegate on `model: "fable"`, with the step-5f `opus` fallback and
+  `model_resolution_constrained` audit on credit-blocked accounts.
+- **Escalation guard (BINDING)**: `escalate`-class items force a `checkpoint`-style stop for
+  exactly those items even under `plan_gate: "bypass"` — auto-decision never widens what runs
+  unattended.
+- **Audit vocabulary**: `auto_decision_dispatched` / `auto_decision_resolved`
+  (`subject:"PL<N>"`, `metadata: {questions|decided|escalated, model_resolved, decisions:
+  [{question, answer, rationale}]}`) — the resolved row is where the per-question rationale lives.
+- **Ledger merge duty (orchestrator, not the delegate)**: decided items are appended to
+  `state.json facts.decisions[]` marked `(auto-decided)` and the resolved entries removed from
+  `facts.open_questions[]` via `atomicMergeStateJson`. The delegate adds NO anchor to
+  `planning-N.md` (the PL anchor set is exact — `## decisions` belongs to AR's
+  `architecture-N.md`) and never re-runs `state-patch.sh`, since PL0 is already `completed`.
+- **Precondition Signal 2b** (`skills/worktask/SKILL.md`): loop entry verifies the
+  `auto_decision_resolved` row (and escalate resolutions) exist when the carrier is `"auto"`
+  and questions were surfaced.
+- **Resume-table row** (`references/resume.md`): `auto_decision_dispatched` without a matching
+  `auto_decision_resolved` → re-run Step A.4; already-applied decisions (the `(auto-decided)`
+  entries in `facts.decisions[]`) are not re-decided.
+- **PM auto-decision path** (`agents/product-manager.md § Plan-Gate Open-Question Batching`):
+  under `decision_gate: "auto"` the PM still builds the numbered defaults list but returns it
+  via `open_questions[]` instead of holding a gate round-trip; the delegate turn's
+  decide/apply/record duties and the never-auto-decide classes are spelled out.
+
+### Changed
+
+- **`--auto=[plan, decision, finalization]` replaces the boolean gate flags** as the canonical
+  surface (`commands/worktask.md § Gate automation flag`); parse rule: strip brackets, split on
+  commas, trim, union with legacy aliases, reject unknown values. All plugin docs
+  (`README.md`, `skills/shared/worktask-invocation.md`, `skills/worktask/SKILL.md`,
+  `references/{resume,fn-gate,workspace-modes}.md`, `skills/agent-coordination/SKILL.md`,
+  `skills/security-review-process/SKILL.md`, headless-dispatch/hook-monitoring references) now
+  name the array form.
+- Plan-gate `checkpoint` summaries list every auto-decided question marked
+  `(auto-decided by Fable — see facts.decisions[] / audit)` so approval covers the decisions
+  together with the plan.
+- **`/megatask` stamps `decision_gate: "auto"`** on every per-issue `PL0` alongside the two gate
+  bypasses (`commands/megatask.md`, `skills/megatask/SKILL.md`) — a batch is unattended, so open
+  questions route through the Fable decision pass. Escalate-class questions are still never
+  auto-decided there: they PARK that single issue and the batch continues with the unblocked
+  issues instead of stalling on a human. Parking rides the monitor's existing failure path — the
+  per-issue worktask settles `execution.status: "failed"` +
+  `execution.reason: "parked_escalation"` with an `escalation_parked` audit row, so
+  `hooks/megatask-monitor.sh` frees the track, keeps dependents `blocked`, and the batch summary
+  lists the parked issue with its unanswered questions.
+- `.claude-plugin/marketplace.json` version parity — `metadata.version` and `plugins[0].version`
+  bumped to 3.43.0 alongside `plugin.json` and the README badge.
+
+### Deprecated
+
+- `--auto-plan` and `--auto-finalization` — accepted, documented as legacy aliases of
+  `--auto=[plan]` / `--auto=[finalization]`; new invocations and documentation must use the
+  array form.
+
 ## [3.42.0] - 2026-07-31
 
 AR and TL stop being score-driven mandates and become PL0 decisions. The tier tables encoded

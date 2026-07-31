@@ -768,7 +768,7 @@ Claude Code ships a native `/workflows` command and Workflow tool for **dynamic 
 ### When to reach for each
 
 - Reach for native dynamic workflows when you need quick parallelism without governance overhead (e.g., batch linting, parallel research, one-off data transforms).
-- Reach for the igrsoft worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks have two human checkpoints — the PL gate (plan approval after PL0) and the FN gate (finalization approval, which STOPs before commit/push/PR by default); both are bypassed by `--emergency`, the PL gate also by `--auto-plan` and the FN gate also by `--auto-finalization`. A batch orchestrator (`/megatask`) stamps `plan_gate`/`fn_gate: "bypass"` directly on each per-issue PL0.
+- Reach for the igrsoft worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks have two human checkpoints — the PL gate (plan approval after PL0) and the FN gate (finalization approval, which STOPs before commit/push/PR by default); both are bypassed by `--emergency`, the PL gate also by `--auto=[plan]` and the FN gate also by `--auto=[finalization]` (legacy aliases `--auto-plan`/`--auto-finalization`); `--auto=[decision]` additionally delegates PL open questions to a Fable-model decision pass without bypassing any gate. A batch orchestrator (`/megatask`) stamps `plan_gate`/`fn_gate: "bypass"` directly on each per-issue PL0.
 
 ### Composition & workflow sizing
 
