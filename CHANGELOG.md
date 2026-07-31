@@ -23,6 +23,37 @@ This release also renames the AR stage artifact `analyzing-N.md` -> `architectur
 fallback by explicit decision — so the commit carries the `refactor(workflow)!:` type and a
 `BREAKING CHANGE:` footer naming the old -> new mapping, following `cada9e4`'s shape.
 
+**Visual evidence stopped reaching pull requests, and nothing noticed.** A UI worktask captured
+six verified screenshots, published a PR carrying none of them plus a dead `.context/` path, and
+was audited `ok`. Four independent defects, each reproduced before being fixed.
+
+The leak was **not** specific to visual evidence. `sanitise_body`'s pass-1 rules anchor on
+`(^|[[:space:]])`, and a backtick is neither — so wrapping a path in a code span defeated every
+one of them, while pass 2 then copied code spans through verbatim by design. Four rule families
+were affected (`.context/`, `/Users/…`, `~/`, `../`), on **issue bodies as well as PR bodies**;
+absolute host paths escaping into published GitHub issues was the more serious half. Pass 1 now
+matches on a backtick-neutralised copy of the line. Substituting a space rather than deleting the
+backtick preserves each anchor's intent: `` `.context/ `` matches, `foo.context/` still does not.
+The visual-evidence block emitted its manifest reference **as a code span**, so it tripped this on
+every run; that reference is now path-free. Changing it was forced rather than optional — once
+pass 1 sees through backticks, a path there is simply stripped and `see manifest` names nothing.
+
+Tier-0 image hosting was never unavailable, only **unbounded**. `gh image check-token` succeeds
+but decrypts the browser cookie store on a cold cache (measured >120s cold, ~3s warm) and can
+block indefinitely on a macOS Keychain prompt when non-interactive. It was called with no timeout,
+so finalization stalled and the stall was then reported as "inline hosting unavailable". The
+obvious fix does not work: stock macOS ships neither `timeout` nor `gtimeout`, so the existing
+`command -v gtimeout || command -v timeout` guard resolved to empty and left the call unbounded on
+exactly the platform that needed it — including, already, `gh issue create`. Both now route
+through a coreutils-free `run_with_timeout`, and `GH_SESSION_TOKEN` skips browser extraction.
+
+Finally, the failure was silent. `visual_evidence_pr_emitted` reports `ok` whether or not a single
+image embedded, so it could not distinguish a healthy run from an invisible one. A distinct
+`visual_evidence_degraded` row now carries `captured`/`embedded`/`reason` whenever captures exist
+that the reader cannot see, alongside a stderr `NOTICE` and an FN-gate reporting duty. The trigger
+is `embedded < hostable`, not `== 0`, so partial loss counts too — the failing run had six
+captures against a five-embed cap and would have lost one even with hosting working.
+
 ### Added
 
 - **Stage Inclusion Criteria (PL0 authority) — one canonical block.** `skills/estimation-methodology/SKILL.md`
@@ -72,6 +103,21 @@ fallback by explicit decision — so the commit carries the `refactor(workflow)!
 - **Three conditional handoff edges — `AR->DV`, `PL->DV`, `PL->TL`** — with an edge registry in
   `handoff-protocol.md` giving every edge its when-clause, plus `AR->DV 350` / `PL->DV 400` /
   `PL->TL 400` context budget rows. Three new state-patch bats cases pin the edges.
+- `skills/worktask/scripts/pr-body-lint.sh` — validates a composed PR body: local-path leaks
+  (backtick-aware), a `Visual evidence` section with no images, non-`https://` image refs, missing
+  `Motivation`/`Changes`/`Test plan`/`Closes #<N>`, and AI-attribution footers. **Warn-only** by
+  default so it lands mid-flight; `--strict` / `IGRSOFT_PR_BODY_STRICT=1` exits 1, and that
+  becomes the default in a later minor — the same rollout the AR-ref gate uses above. Wired into
+  `fn-preflight.sh pr-body` after sanitisation, so it reads back the byte-identical body that
+  reaches `gh pr create`. Self-disables under `/megatask` and `--emergency`.
+- **`visual_evidence_degraded` audit row + stderr `NOTICE`**, emitted whenever captures exist that
+  did not reach the reader (`embedded < hostable`, so partial loss counts). Carries `captured`,
+  `embedded` and a `reason`; `agents/project-manager.md` must surface it at the FN gate.
+- `GH_IMAGE_FAIL_REASON` (`absent` / `token_invalid` / `probe_timeout` / `no_host_tier` / `ok`),
+  replacing one undifferentiated "hosting unavailable" sentence with the action that fixes it.
+- `run_with_timeout` — bounded execution with no coreutils dependency — and
+  `GH_IMAGE_PROBE_TIMEOUT` (default 90, deliberately longer than `GH_TIMEOUT` because a cold probe
+  legitimately needs it).
 
 ### Changed
 
@@ -123,6 +169,14 @@ fallback by explicit decision — so the commit carries the `refactor(workflow)!
   value.
 - **AR's `next_stage_focus` is addressed to TL when TL is in the plan, else to DV**, with the same
   conditional on `open_questions` addressees.
+- **Published issue and PR bodies now strip strictly more.** A line mentioning a local path inside
+  backticks is removed rather than preserved. This includes benign-looking cases: a line containing
+  `` `./run-tests.sh` `` is dropped, exactly as the bare `./run-tests.sh` form always was —
+  backticks were an accidental escape hatch, not a documented exemption. Pass 2 is unchanged, so
+  fenced code blocks and code spans carrying no leak token still render verbatim.
+- `skills/shared/git-conventions.md § Pull Request Format` now documents `Test plan`,
+  `Visual evidence` and the `Closes #<N>` trailer, which three enforcement points already required
+  but the spec omitted.
 
 ### Fixed
 
@@ -137,6 +191,13 @@ fallback by explicit decision — so the commit carries the `refactor(workflow)!
 - **The phantom `TL->DV` edge.** `agents/developer.md` unconditionally wrote
   `state-patch.sh --prev TL`, stamping a handoff edge from a stage that never ran on every tier
   below Moderate. Writing an edge for an absent stage is now documented as a ledger defect.
+- **`sanitise_body` no longer lets a backtick-wrapped local path through pass 1** — the defect
+  that published a `.context/` path into a PR. Applies to issue bodies equally.
+- **The visual-evidence manifest reference no longer emits a `.context/` path**, and three call
+  sites stopped overriding it with one.
+- **`gh image check-token` and `gh issue create` are bounded on hosts without `timeout`/
+  `gtimeout`** — i.e. stock macOS, where the previous `TIMEOUT_BIN` probe resolved to empty and
+  silently left both calls unbounded.
 
 ## [3.41.2] - 2026-07-31
 

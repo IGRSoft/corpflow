@@ -183,7 +183,14 @@ Run `gh pr create --base <BASE_BRANCH>` with:
 #### Template part 5
 
 ~~~markdown
-  **Visual evidence section** (between `## Test plan` and `## Notes`): on a UI-change run, run `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and insert its stdout verbatim. The helper self-gates — it prints the `## Visual evidence` block (hosted image refs + manifest reference) when `metadata.requires_screenshots == true` AND captures exist, and prints **nothing** otherwise (flag false / no captures). Insert the block only when stdout is non-empty; never hand-author the section. Image hosting reuses the publish-helper host tiers (private/internal repos degrade to a non-broken note — no relative `.context/` refs ever reach the body). Invoke it unconditionally; the empty-stdout case omits the section. `fn-preflight.sh pr-body` verifies the helper's `visual_evidence_pr_emitted` row for **this** run and blocks a body that dropped the block — a hand-authored body will not pass.
+  **Visual evidence section** (between `## Test plan` and `## Notes`): on a UI-change run, run `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and insert its stdout verbatim. The helper self-gates — it prints the `## Visual evidence` block (hosted image refs + manifest reference) when `metadata.requires_screenshots == true` AND captures exist, and prints **nothing** otherwise (flag false / no captures). Insert the block only when stdout is non-empty; never hand-author the section. Image hosting reuses the publish-helper host tiers; the manifest reference is path-free, so no `.context/` path reaches the body. Invoke it unconditionally; the empty-stdout case omits the section. `fn-preflight.sh pr-body` verifies the helper's `visual_evidence_pr_emitted` row for **this** run and blocks a body that dropped the block — a hand-authored body will not pass, and it then runs `pr-body-lint.sh` (warn-only) over the sanitised body.
+
+~~~
+
+#### Template part 5b — degraded visual evidence
+
+~~~markdown
+  **If captures exist but none embedded**, the helper prints a `NOTICE` on stderr and writes a `visual_evidence_degraded` audit row carrying `captured`, `embedded` and a `reason`. Surface that row at the FN gate — it means reviewers will see no images. `reason=probe_timeout` or `token_invalid` is fixed by exporting **`GH_SESSION_TOKEN`**, which lets the `gh image` uploader skip browser-cookie extraction (slow, and blocking on a Keychain prompt when non-interactive).
 
 ~~~
 

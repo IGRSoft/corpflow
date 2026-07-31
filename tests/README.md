@@ -95,10 +95,20 @@ bodies are exercised structurally, not unit-covered — see
 
 kcov **cannot run on macOS bash 3.2** (mis-parses `BASH_VERSINFO` guards; >2 min/file). Per the locked q3 resolution, coverage is validated via the **q3 assertion-density proxy**: every shell script has a dedicated test file with ≥3 real scenarios (happy / edge / failure-exit), asserting its documented contracts.
 
-- **35/35** total deterministic targets covered (9 hooks + 24 skill shell + 2 Python)
-- **33 bats files** covering 33 shell scripts/hooks
-- **429 `@test`** assertions across the suite (394 baseline + 35: 7 AR->DV gate cases, 4 conditional-edge cases, 4 filename-grammar cases, and pre-existing tracker drift)
-- **Min 3 / avg ~6 / max 14** scenarios per file
+- **36/36** total deterministic targets covered (9 hooks + 25 skill shell + 2 Python)
+- **46 bats files** (counted, not tracked by hand — `find tests/shell -name '*.bats' | wc -l`)
+- **466 `@test`** assertions across the suite (+28 in 3.42.0: 19 `pr-body-lint.sh` cases and 9 visual-evidence cases covering the degraded-hosting notice and the path-free manifest reference)
+- **Min 2 / avg ~10 / max 58** scenarios per file. The ≥3 rule has exactly one standing
+  exception, `tests/shell/hooks/comment-hooks-self-test.bats` (2), which delegates to the hooks'
+  own self-tests rather than re-asserting them.
+
+The file and scenario counts above were previously tracked by hand and had drifted (33 files /
+429 tests against an actual 46 / 466). Re-derive them rather than incrementing:
+
+```bash
+find tests/shell -name '*.bats' | wc -l
+tests/vendor/bats-core/bin/bats --count $(find tests/shell -name '*.bats' | sort)
+```
 
 High-logic-density targets (14+ scenarios):
 - `scan-secrets` (14) — exit code, pattern format, real vs synthetic secrets

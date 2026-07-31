@@ -102,9 +102,26 @@ Title: `<type>[scope][!]: <summary>`
 - [Change 1]
 - [Change 2]
 
+## Test plan
+- [How this was verified]
+
+## Visual evidence
+[UI runs only — inserted verbatim from `attach-visual-evidence.sh --emit pr`]
+
 ## Notes
 [Additional context, testing instructions, etc.]
+
+Closes #<N>
 ```
+
+`Test plan` and the `Closes #<N>` trailer are **required**, not optional: `fn-preflight.sh`
+blocks a body without a `Test plan` heading, and `pr-body-lint.sh` reports a missing closing
+keyword. `Visual evidence` appears only on runs that captured screenshots. Listing them here
+so the three enforcement points and this spec agree on one shape.
+
+**Never paste a local path into a PR body** — `.context/`, `/Users/…`, `~/…` and `../…` are
+per-workspace and gitignored, so they are meaningless to a reviewer and leak host layout. This
+holds inside backticks too: a code span is not an escape hatch. `pr-body-lint.sh` checks it.
 
 ## Merge Strategy
 

@@ -5,7 +5,7 @@ model: sonnet
 color: cyan
 effort: medium
 maxTurns: 40
-version: 0.4.0
+version: 0.5.0
 tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 hooks:
   Stop:
@@ -81,6 +81,14 @@ The orchestrator pre-seeds both files at FN-gate time; the FN agent MUST **overw
   - **Sanitises the body in place**, reusing `publish-pl-issue.sh`'s own `sanitise_body` rule set, so a working-folder path cannot reach a published PR. The pre-sanitise text is snapshotted to `.context/logs/pr-body-<run_index>.presanitise.md`. Because the file is rewritten, this runs BEFORE `validate-pr` — the body whose `Closes #<n>` line is validated is the byte-identical body that reaches `gh pr create`.
   - **Requires a `Test plan` heading** (ATX, any level, case-insensitive).
   - **On a `requires_screenshots` run, requires the `visual_evidence_pr_emitted` audit row for the CURRENT run index**, and — when that row reports `result: "ok"` — a `## Visual evidence` section in the body. A row reporting `skipped` legitimately produced nothing, so no section is required.
+
+##### Body-composition gate — read-back
+
+  - **Reads the result back** via `pr-body-lint.sh` (warn-only): local-path leaks including inside code spans, a `Visual evidence` section with no images, non-https image refs, missing sections, AI-attribution footers. Warnings never change this gate's verdict — report them, do not act on them.
+
+##### Degraded visual evidence — REPORT IT
+
+  That `visual_evidence_pr_emitted` row reports `ok` whether or not a single image embedded, so it cannot tell you the reader got nothing. The signal for that is a separate `visual_evidence_degraded` row with `captured`, `embedded` and `reason`. **Whenever it is present, state it in the FN summary** — e.g. `⚠ 6 captures taken, 0 reached the PR (reason=probe_timeout)`. Never let a run report success while its evidence is invisible; a `reason` of `probe_timeout`/`token_invalid` is resolved by exporting `GH_SESSION_TOKEN`.
 
 ##### Body-composition gate — failure & scope
 
