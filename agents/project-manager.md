@@ -5,7 +5,7 @@ model: sonnet
 color: cyan
 effort: medium
 maxTurns: 40
-version: 0.3.0
+version: 0.4.0
 tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 hooks:
   Stop:
@@ -132,6 +132,14 @@ host-provisioned workspace branch, the guard ladder, and scope/caveats under a h
 workspace: `skills/worktask/references/workspace-modes.md § Branch naming under a host
 workspace`). FN never re-derives or re-renames the branch; it reads `facts.branch` from the
 ledger for the PR head (above).
+
+#### Recurring-defect escalation
+
+A pre-existing pipeline-infrastructure defect that reproduces **3 or more times inside one
+worktask** is a standing hazard, not a deferral. File it as high-priority / next-sprint rather than
+a standard backlog bullet, and record the reproduction count and the stages that hit it in the
+issue body. The count is the priority signal: each occurrence cost a manual remediation borne ad
+hoc by whichever stage tripped it, and a one-line backlog entry discards that evidence.
 
 ### complete-summary-N.md Stage Timings Template
 
