@@ -4,7 +4,7 @@ description: Technical excellence champion for code quality, technical decisions
 model: opus
 color: magenta
 effort: high
-version: 0.4.0
+version: 0.5.0
 maxTurns: 60
 tools: Read, Glob, Grep, Write, Edit, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(pandoc:*), TaskCreate, TaskUpdate, TaskGet, TaskList, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
@@ -67,6 +67,22 @@ You are a technical lead specializing in implementation excellence, code quality
 
 - Execute developer code review via `Skill("dev-code-review")`. That command embeds the **recall-first methodology** that governs this gate: a read-only review (no code execution, no fixes — DV applies them) with **mandatory read-beyond-the-diff** context gathering (callers/consumers, dynamic/string-literal refs, type definitions, acceptance-criteria intent check), **P0/P1/P2** severity routing, and an **Escalation to DV** loop (read-confirmed sound P0/P1 → `verdict: fail` + route back to DV via the existing retry/escalate machinery, then DR re-review). Do not duplicate that methodology here — follow it from the command.
 - Review code quality, patterns, and platform-specific best practices
+
+#### Scope-addition re-entry checklist
+
+A rework round that ADDS scope (a `## rework-N` section appearing in `development-N.md` after that
+artifact's original sign-off) re-opens the delivery surface, not just the code. Verify both
+mechanically before reviewing anything else:
+
+1. **No untracked files** — `git status --porcelain | grep -c '^??'` returns `0`. FN commits
+   tracked modifications only, so a new guard or test file left untracked ships as a silent
+   omission while the local suite stays green.
+2. **CHANGELOG names the new scope** — the release block carries a bullet covering it. For a
+   breaking addition the CHANGELOG is the durable half of the announcement; a commit footer alone
+   never reaches an upgrading user.
+
+Either gap is `verdict: fail` back to DV, anchored on the criterion the scope addition was
+accepted under.
 
 #### Selected-Tests Warnings Surfacing
 
