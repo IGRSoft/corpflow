@@ -41,7 +41,7 @@ read_stdin() {
 
 # Synthetic payload for the self-test: one session, a chosen agent transcript.
 selftest_payload() {
-  printf '%s' "{\"session_id\":\"sess_selftest_$$\",\"transcript_path\":\"/tmp/tasks/$1.jsonl\",\"tool_input\":{\"file_path\":\"/tmp/Foo.swift\"}}"
+  printf '%s' "{\"session_id\":\"sess_selftest_$$\",\"transcript_path\":\"/tmp/tasks/$1.jsonl\",\"tool_input\":{\"file_path\":\"${2:-/tmp/Foo.swift}\"}}"
 }
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -68,7 +68,7 @@ run_hook() {
   _base="${_fp##*/}"
   _ext="${_base##*.}"
   case "$_ext" in
-    swift | h | m | mm | c | cc | cpp | ts | tsx | js | jsx | py | kt | java | go | rs) ;;
+    swift | h | m | mm | c | cc | cpp | ts | tsx | js | jsx | py | kt | java | go | rs | sh | bash) ;;
     *) return 0 ;;
   esac
 
@@ -96,7 +96,8 @@ run_hook() {
 if [ "$SELF_TEST" -eq 1 ]; then
   _agent_a="agentA_selftest_$$"
   _agent_b="agentB_selftest_$$"
-  trap 'rm -f "${TMPDIR:-/tmp}/igrsoft-comment-standard-${_agent_a}" "${TMPDIR:-/tmp}/igrsoft-comment-standard-${_agent_b}"' EXIT
+  _agent_c="agentC_selftest_$$"
+  trap 'rm -f "${TMPDIR:-/tmp}/igrsoft-comment-standard-${_agent_a}" "${TMPDIR:-/tmp}/igrsoft-comment-standard-${_agent_b}" "${TMPDIR:-/tmp}/igrsoft-comment-standard-${_agent_c}"' EXIT
 
   _emits_context() {
     printf '%s' "$1" | jq -e '
@@ -124,6 +125,13 @@ if [ "$SELF_TEST" -eq 1 ]; then
     echo "comment-standard-context: self-test FAIL (agent A injected twice)"
     exit 1
   fi
+
+  # 4. A shell path must inject: shell sat outside the extension gate. Fresh
+  #    agent key — injection fires once per agent.
+  _emits_context "$(run_hook "$(selftest_payload "$_agent_c" /tmp/deploy.sh)")" || {
+    echo "comment-standard-context: self-test FAIL (shell path got no injection)"
+    exit 1
+  }
 
   echo "comment-standard-context: self-test OK"
   exit 0

@@ -92,6 +92,22 @@ def retry_after(response: Response) -> float:
     """Seconds to wait before retrying; clamps a hostile Retry-After to 60s."""
 ```
 
+Shell has no doc-comment syntax, so the budget lands on two blocks: a script header of
+one purpose line plus the invocation contract (prerequisites, exit behaviour, re-run
+safety), and a one-line WHY above a non-obvious literal. The header counts toward density
+like any other comment — keep it to the contract, not a changelog:
+
+```bash
+#!/usr/bin/env bash
+# prune-artifacts — drop build artifacts past the retention window.
+#
+# Requires: find, date. Exits non-zero when the artifact root is absent.
+# Safe to re-run; deletion is idempotent.
+
+# Two retries: the artifact store 502s on a cold cache.
+fetch_manifest() { curl --retry 2 -fsSL "$1"; }
+```
+
 ## Where rationale belongs instead
 
 | Content | Home |
@@ -184,6 +200,26 @@ AFTER — one line for the one thing the signature cannot say; the PR keeps the 
 
 ```ts
 /** Total in minor units; excludes shipping, which is quoted per-address at checkout. */
+```
+
+### Shell example
+
+BEFORE — an inline comment written to answer a review finding, carrying the finding's IDs:
+
+```bash
+# DR-3 / AC-6: reviewer asked why this is 3 and not 5. Measured against staging
+# over the course of PR #812 — retries past 3 never recovered, they only widened
+# the window in which a partial upload was visible to readers. Holding at 3 per
+# REQ-4; QA should re-measure if the bucket ever moves regions.
+readonly MAX_RETRIES=3
+```
+
+AFTER — one WHY line; the measurement, the reviewer exchange, and the IDs move to the run's
+`development-N.md` and the PR:
+
+```bash
+# Past 3 the retries never recovered — they only widened the partial-upload window.
+readonly MAX_RETRIES=3
 ```
 
 ## Reconciliation

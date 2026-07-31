@@ -2,6 +2,58 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.41.2] - 2026-07-31
+
+Shell was the one gap in the comment-enforcement hooks: both the blocking density gate and the
+per-edit reminder hook gated on a file-extension allow-list that omitted `sh`/`bash`, so the
+repo's dominant language — every piece of worktask infrastructure under `hooks/` and `tests/` is
+bash — was structurally invisible to both. `hooks/test-execution-gate.sh` is 327 of 773
+non-blank-and-non-comment-skipped lines of comment, measured the way the gate itself measures
+(blank lines excluded, per `hooks/dv-comment-density-gate.sh` lines 111/123): **42 percent**,
+above the 40 percent ceiling, and it would never have been measured before this change. Suite
+green: both `--self-test` suites exit 0 (9 density-gate cases), the vendored `hooks/` bats module
+is 106/106, and `shellcheck` holds at the single pre-existing SC2016 baseline.
+
+### Added
+
+- **Shell coverage for both comment-enforcement hooks.** `hooks/dv-comment-density-gate.sh` and
+  `hooks/comment-standard-context.sh` now accept `sh`/`bash` in their source-extension allow-lists,
+  and the density gate's `comment_style_for` routes shell files through the existing `hash`
+  comment-style arm instead of falling through to the C-family default that scored them at
+  effectively zero. The density gate's self-test gains a bloated- and a lean-shell fixture pair
+  (mirroring the existing hash-language pair, the lean fixture carrying a realistic shebang and
+  header so it does not understate real shell density) plus a vendor-exclusion case with a control
+  arm; the reminder hook's self-test gains a shell first-touch injection case. A new
+  `tests/shell/hooks/comment-hooks-self-test.bats` wraps both hooks' `--self-test` runs, putting
+  them in the suite for the first time — ten sibling hooks already had bats coverage; these two
+  did not. `skills/shared/code-documentation.md` gains a shell BEFORE→AFTER gallery entry and a
+  shell doc-block shape in a new `### Other grammars` fence.
+- **Vendored-path exclusion in the density gate — a separate behavior change, not a rider on shell
+  coverage.** `hooks/dv-comment-density-gate.sh`'s `run_gate` filter loop now skips any path
+  matching `vendor/*`, `*/vendor/*`, `*/node_modules/*`, `*/Pods/*`, or `*/third_party/*`, and this
+  `case` runs **before** the extension `case`, so it exempts vendored files of every gated
+  language, not only shell. This is a genuine loosening of previously-active gating (e.g. a
+  vendored `.ts` under `node_modules/` was, in principle, measured before and is not now).
+  Confirmed zero first-party paths in this repo match any of the five globs, so present cost is
+  nil; the change is otherwise safe-direction for a blocking gate (false negatives only, never
+  false positives).
+
+### Follow-ups (deliberately deferred, not fixed this round)
+
+- `hooks/dv-comment-density-gate.sh` lines 90-91 document a leading-contiguous-comment-block skip
+  that is not implemented in either awk arm. Harmless for Python; structural for shell, where the
+  shebang and header always count as comment. This is the real mitigation for the shell comment
+  tax — it is why a narrow shebang exemption was rejected as ineffective (moves the density figure
+  at most ~2.5 percentage points; the multi-line header, not the shebang, is the actual driver).
+- `.bats` files (43 first-party, the largest DV-authored shell class in the repo) remain outside
+  the comment-density allow-list.
+- `.context/planning-0.md § risks D1` for this worktask carries a mis-measured 39 percent figure
+  for `hooks/test-execution-gate.sh`; the correct figure, measured the way the gate measures, is
+  42 percent (see above).
+- Plugin bug found during planning: `agents/product-manager.md` instructs
+  `state-patch.sh --stage PL --prev USER`, but the script rejects `USER` as not a stage code —
+  every PL run hits this.
+
 ## [3.41.1] - 2026-07-30
 
 Test-execution authority enforcement: a behavioral policy change governing which stages may execute tests, with real blast radius. DV's silent full-suite auto-promotion on non-Apple platforms is now capped at module scope, SR/RE lose unrestricted Bash, and a new always-on `PreToolUse` hook enforces the policy at the delegation boundary. Min CC unchanged at **2.1.220**. Suite **fully green** (394 bats assertions including 27 new gate scenarios, 0 failures).
