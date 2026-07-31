@@ -20,7 +20,11 @@ Emergency: IR → DV → DR → QA → RE → FN
 ```
 
 The 11-stage (full/secure) set adds **SR** after DR and **RE** before FN. PL0 dynamically
-sizes which stages run by complexity score (AR/TL/DC may be dropped for low-complexity work).
+sizes which stages run by complexity score. **AR** is optional — a tier default at score ≥11
+that PL0 may override in either direction per the Stage Inclusion Criteria. **TL** has no tier
+default at all: it runs only when PL0 splits the work across ≥2 developers. DC remains
+tier-driven. Criteria canon: `skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria
+(PL0 authority)`.
 
 ## Stage Roles
 

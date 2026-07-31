@@ -59,7 +59,7 @@ When changing existing logic, identify affected tests:
 
 ## AR Stage: Test Architecture
 
-### What to Include in analyzing.md
+### What to Include in architecture.md
 
 Concatenate the two template parts below into the `## Test Architecture` block.
 
@@ -112,7 +112,7 @@ The developer MUST implement unit tests alongside production code during the DV 
 ### Developer Responsibilities
 
 1. **Read test specs** from `.context/<plan_file> § Test Strategy` (resolve `<plan_file>` via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`)
-2. **Read test architecture** from `.context/analyzing-N.md § Test Architecture` (if available; N from `task.metadata.run_index`)
+2. **Read test architecture** from `.context/architecture-N.md § Test Architecture` (when AR ran — AR is optional per PL0's Stage Inclusion Criteria; N from `task.metadata.run_index`)
 3. **Create test files** using the specified testing framework
 4. **Follow test patterns** defined in the architecture (DI, mocking strategy, etc.)
 5. **Run tests scoped to changed code** (the new/updated tests plus any tests covering modified production files) and verify they pass before completing DV stage. Full project-suite regression is deferred to QA.

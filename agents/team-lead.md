@@ -78,7 +78,7 @@ TL is the **canonical and sole owner** of the intra-issue async decision: TL dec
 
 #### Procedure
 
-1. **Primary inputs**: Read `state.json` facts first, then read the `handoff:` frontmatter of `analyzing-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `analyzing-*.md`) and anchor-read `analyzing-N.md#decisions` to identify work streams from AR's architecture decisions. **Conditional**: only when AR's `next_stage_focus` does NOT already enumerate the work streams, anchor-read `planning-N.md#requirements` + `planning-N.md#acceptance-criteria` (plan path: `.context/${task.metadata.plan_file}`, fallback: newest `.context/planning-*.md`). Full-read either file only if an anchor is absent or `retry_count > 0`.
+1. **Primary inputs**: Read `state.json` facts first. **When AR ran** (a `stages.AR` entry exists), read the `handoff:` frontmatter of `architecture-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `architecture-*.md`) and anchor-read `architecture-N.md#decisions` to identify work streams from AR's architecture decisions; when AR was excluded, derive the streams from the plan alone and skip every architecture read. **Conditional**: only when AR's `next_stage_focus` does NOT already enumerate the work streams, anchor-read `planning-N.md#requirements` + `planning-N.md#acceptance-criteria` (plan path: `.context/${task.metadata.plan_file}`, fallback: newest `.context/planning-*.md`). Full-read either file only if an anchor is absent or `retry_count > 0`.
 2. For each stream, define: exclusive file ownership list, interface contracts, acceptance criteria
 
 ##### Steps 3-4: Locate and Narrow DV0
@@ -99,7 +99,7 @@ TL is the **canonical and sole owner** of the intra-issue async decision: TL dec
      metadata: {
        stage: "DV", agent: "igrsoft:developer", model: "opus",
        error_file: ".context/errors/developer.md",
-       context_files: `${resolvedPlanFile},analyzing-${runIndex}.md,coordination-${runIndex}.md,.context/errors/developer.md`,
+       context_files: `${resolvedPlanFile},architecture-${runIndex}.md,coordination-${runIndex}.md,.context/errors/developer.md`,
        plan_file: resolvedPlanFile,  // basename shape; state.json holds the path shape
        run_index: runIndex,
        worktask_id: "{id}", priority: "medium"
@@ -118,6 +118,12 @@ TL is the **canonical and sole owner** of the intra-issue async decision: TL dec
    TaskUpdate({ taskId: dr0_id, addBlockedBy: [dv1_id, dv2_id] })
    ```
 8. Document the split in `.context/coordination-N.md` under a "Parallel Streams" section
+
+#### Stream Slugs (required for DV fan-out)
+
+Every stream you define MUST be assigned a **kebab-case `stream` slug**, unique within the run and recorded alongside the stream in `coordination-N.md § fan-out`. The slug names the stream's artifact: `development-N-<stream>.md`.
+
+You specify the slugs; you do not execute the fan-out. The DV entry agent spawns one sub-agent per stream, each sub-agent writes only its own `development-N-<stream>.md`, and the DV entry agent alone merges the canonical `development-N.md` at fan-in — that merged file stays the DR/QA input (`agents/developer.md § TL fan-out`). A stream without a slug leaves its sub-agent no artifact name and blocks the merge.
 
 #### File Ownership Rules
 
@@ -260,11 +266,11 @@ Before marking TL stage complete, verify:
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-tl`. Prev→this label: `AR→TL`.
+Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-tl`. Prev→this label: `AR→TL` (or `PL→TL` when AR was excluded — pick from the `stages` keys present in `.context/state.json`).
 
-**Skip-exploration short-circuit**: If `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` as authoritative and rely on the AR-stage `analyzing-N.md` anchors for fan-out planning. Do NOT re-Glob/Grep files PL/AR already explored. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
+**Skip-exploration short-circuit**: If `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` as authoritative and rely on the AR-stage `architecture-N.md` anchors for fan-out planning (when AR ran; otherwise `planning-N.md#requirements` is the sole anchor source). Do NOT re-Glob/Grep files PL/AR already explored. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
 
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage TL --prev AR` (`skills/worktask/scripts/`) to atomically patch `stages.TL` + the `AR→TL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+Run `state-patch.sh --stage TL --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `AR` when AR ran and `PL` when AR was excluded, to atomically patch `stages.TL` + the corresponding `AR→TL` / `PL→TL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.

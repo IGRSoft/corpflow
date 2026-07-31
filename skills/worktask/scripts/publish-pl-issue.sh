@@ -297,7 +297,10 @@ sanitise_body() {
       if (line ~ /(^|[[:space:]])~\//) next                         # L4
       if (line ~ /conductor\/workspaces\/[A-Za-z0-9_-]+/) next      # L5
       if (line ~ /(^|[[:space:]])(workspace_path|plan_file|run_index|artifact_path)[[:space:]]*[:=]/) next  # L6
-      if (line ~ /(planning|analyzing|coordinating|coordination|developing|development|reviewing|review|qa|testing|documenting|documentation|releasing|release|finalizing|finalization|stakeholding|retrospective|incident|ethics-review)-[0-9]+\.md/) next  # L7,L8
+      # PERMANENT-SUPERSET: "analyzing" is retained alongside its 3.42.0 replacement
+      # "architecture" on purpose. This is a redaction filter, not a compat shim --
+      # dropping a name it used to recognize can only leak more. Do not tidy.
+      if (line ~ /(planning|architecture|analyzing|coordinating|coordination|developing|development|reviewing|review|qa|testing|documenting|documentation|releasing|release|finalizing|finalization|stakeholding|retrospective|incident|ethics-review)-[0-9]+\.md/) next  # L7,L8
       if (line ~ /(^|[[:space:]])(\.\/|\.\.\/)[A-Za-z0-9_.\/-]+/) next   # L9
       # L10: drop whole line when a plugin-qualified identifier is the leading
       # non-bullet token (e.g. "* Routed to igrsoft:developer ...",

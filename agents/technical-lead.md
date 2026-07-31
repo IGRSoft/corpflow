@@ -90,6 +90,26 @@ Verify that modified production files contain a `// MARK: - Test Info` footer (`
 
 Read the DV handoff frontmatter `worktree:` field (`.context/development-N.md`). Isolation is **always required**. A `worktree: false` handoff means DV wrote to the shared checkout instead of an isolated worktree: set `verdict: fail` and record `worktree_isolation_violation` in `§ Findings`, UNLESS the orchestrator explicitly waived isolation for this run via a `worktree_isolation_waived` audit row or `task.metadata.worktree_waived === true` (keep the waiver as the only escape valve). Rationale and DV-side enforcement: `agents/developer.md § D0.0`. Friction precedent: `tokamak-reconciler-unification` (#14, dv6) ran DV in the main workspace, risking cross-contamination.
 
+#### Architecture-Application Check
+
+Runs only when `.context/state.json` has a `stages.AR` entry — AR is optional, and with no AR entry this check is skipped entirely (do not synthesise an architecture expectation from the plan).
+
+When AR ran:
+
+1. Read `architecture.applied` from the DV handoff frontmatter (`.context/development-N.md`). When AR ran, `#tpl-dv` requires BOTH `refs.decisions` and the `architecture` object; an absent `architecture` object is therefore a `missing_input` back to DV, not a pass. Resolve the reference by the shared precedence — `refs.decisions`, then `architecture.ref`.
+2. Read AR's `key_decisions` from `architecture-N.md` frontmatter and spot-check the diff against each one — verify the decisions were *applied*, not merely referenced, and classify every departure you find.
+
+##### Classifying a departure
+
+- **Declared** — the departure appears in `development-N.md ## decisions` with a rationale. This is acceptable; record it in `§ Findings` and pass.
+- **Undeclared** — the diff departs from an AR decision with no `## decisions` entry. Set `verdict: fail` and route back to DV, citing the AR decision id.
+
+The orchestrator's `ar_ref_check` audit row (warn-only in 3.42.0) is surfaced in your dispatch prompt when the DV artifact's architecture reference was missing or dangling — treat that warning as a signal to check the linkage yourself, not as a pass.
+
+#### Anchored Rejections (applies to every DR rejection)
+
+Every rejection you issue — including an undeclared-deviation fail — MUST cite a **resolvable ref**: either an AR decision id (`architecture-N.md#decisions`) or a plan acceptance-criterion id (`planning-N.md#acceptance-criteria`). A rejection with no anchor is invalid on its face: DV may bounce it back as `missing_input` on DR rather than acting on it. If you cannot anchor a concern to a recorded decision or criterion, it is a `§ Findings` suggestion, not a blocker.
+
 #### Test-Scope Check (advisory)
 
 Confirm `development-N.md § Decisions` records the resolved `test_mode` and that DV's logged test invocations carry `-only-testing:` flags (`agents/developer.md § Test execution`). A missing `dv_test_scope_enforced` audit row for this DV dispatch means the injection loop was bypassed. Record either gap in `§ Findings`; **never** `verdict: fail` — the row is produced by the orchestrator, so a stale version-keyed plugin cache serving the pre-4.8a loop would otherwise block a blameless DV. See `worktask/SKILL.md` Step 4.8a.

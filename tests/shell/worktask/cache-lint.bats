@@ -119,3 +119,70 @@ EOF
   assert_success
   assert_output --partial "ALL PASS"
 }
+
+# ---------------------------------------------------------------------------
+# --filename-lint against artifacts with REAL bodies (3.42.0). The pre-existing
+# fixtures have bodies simple enough that yq parses the whole file by accident,
+# which hid extract_stage()'s whole-file parse from the suite entirely.
+# ---------------------------------------------------------------------------
+
+# A body with a markdown table — the construct that makes a whole-file yq parse abort.
+real_artifact() {
+  local path="$1" stage="$2"
+  cat > "$path" <<EOF
+---
+handoff:
+  stage: $stage
+  verdict: ok
+  summary: "artifact with a body yq cannot parse as YAML"
+  files_touched: [a.md]
+  next_stage_focus: "next"
+  refs: { dev: development.md#files-changed }
+---
+
+# Body
+
+| Column | Meaning |
+|--------|---------|
+| \`key\` | value: with a colon that breaks a whole-file YAML parse |
+
+## files-changed
+
+- a.md
+EOF
+}
+
+@test "filename-lint: an artifact with a table body is still detected (not silently skipped)" {
+  mkdir -p "$WD/ctx"
+  real_artifact "$WD/ctx/development-0.md" DV
+  run bash "$PLUGIN_ROOT/$SCRIPT" --filename-lint "$WD/ctx"
+  assert_success
+  assert_output --partial "1 artifacts checked"
+  refute_output --partial "no artifacts with handoff frontmatter found"
+}
+
+@test "filename-lint: per-stream development-N-<stream>.md is accepted (AC-8)" {
+  mkdir -p "$WD/ctx"
+  real_artifact "$WD/ctx/development-0.md" DV
+  real_artifact "$WD/ctx/development-0-swift-app.md" DV
+  real_artifact "$WD/ctx/development-0-backend.md" DV
+  run bash "$PLUGIN_ROOT/$SCRIPT" --filename-lint "$WD/ctx"
+  assert_success
+  assert_output --partial "3 artifacts checked, all canonical"
+}
+
+@test "filename-lint: a non-canonical stream suffix is still rejected (AC-8)" {
+  mkdir -p "$WD/ctx"
+  real_artifact "$WD/ctx/development-0-Swift_App.md" DV
+  run bash "$PLUGIN_ROOT/$SCRIPT" --filename-lint "$WD/ctx"
+  assert_failure 1
+  assert_output --partial "development-N.md or development-N-<stream>.md"
+}
+
+@test "filename-lint: a non-DV stage gets no stream-suffix latitude" {
+  mkdir -p "$WD/ctx"
+  real_artifact "$WD/ctx/planning-0-extra.md" PL
+  run bash "$PLUGIN_ROOT/$SCRIPT" --filename-lint "$WD/ctx"
+  assert_failure 1
+  assert_output --partial "expected 'planning-N.md'"
+}

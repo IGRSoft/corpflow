@@ -1,6 +1,6 @@
 ## requirements
 .context/planning-0.md
-.context/analyzing-0.md
+.context/architecture-0.md
 /Users/korich/secret/a.md
 /home/user/b.json
 ~/c.py

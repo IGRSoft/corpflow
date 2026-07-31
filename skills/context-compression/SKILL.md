@@ -59,7 +59,7 @@ handoff:
     - Source/Theme/ThemeManager.swift
     - Source/Settings/ThemeToggleViewModel.swift
   next_stage_focus: "DR reviews ThemeManager dependency injection"
-  refs: { decisions: analyzing.md#decisions, tests: development.md#tests-added }
+  refs: { decisions: architecture.md#decisions, tests: development.md#tests-added }
 ---
 ```
 
@@ -100,7 +100,7 @@ After (120 tokens):
 **Selected**: JWT tokens
 **Rejected**: Sessions (stateful), API keys (no rotation), OAuth (overkill)
 **Rationale**: Stateless, rotatable, fits microservice architecture
-**ADR**: .context/analyzing-N.md#adr-001
+**ADR**: .context/architecture-N.md#adr-001
 ```
 
 ### 3. Use Structured Formats
@@ -204,7 +204,7 @@ Risks: 2 identified (compatibility, migration) - see <plan_file>#risks
 | Content Type | Before | After | Reduction |
 |--------------|--------|-------|-----------|
 | ADR | Full document | "ADR-001: [title] - Status: [accepted]" | 80% |
-| Diagram | ASCII/Mermaid inline | "See analyzing.md#system-diagram" | 90% |
+| Diagram | ASCII/Mermaid inline | "See architecture.md#system-diagram" | 90% |
 | Patterns | Full explanation | "Pattern: Repository + Factory" | 85% |
 | Dependencies | Full analysis | "New deps: [lib1], [lib2]" | 75% |
 
@@ -216,7 +216,7 @@ Key components: ThemeManager (new), ColorPalette (modified)
 Dependencies: None added
 ADRs: ADR-001 (theme abstraction) - ACCEPTED
 
-Details: .context/analyzing-N.md
+Details: .context/architecture-N.md
 ```
 
 ## Context Budget by Handoff
@@ -227,7 +227,10 @@ Maximum tokens to pass between stages:
 |---------|------------|-------------|
 | **PL→AR** | 500 | Requirements, constraints, user needs |
 | **AR→TL** | 300 | Architecture decisions, patterns, risks |
+| **PL→TL** | 400 | Requirements, workstream split, acceptance criteria (AR excluded) |
 | **TL→DV** | 400 | Implementation approach, file assignments, deadlines |
+| **AR→DV** | 350 | Architecture decisions, integration points, schemas (TL excluded) |
+| **PL→DV** | 400 | Requirements, acceptance criteria, constraints (AR and TL excluded) |
 | **DV→DR** | 300 | What changed, code areas, implementation decisions |
 | **DR→QA** | 300 | Review findings, test focus areas, flagged issues |
 | **QA→DC** | 200 | Test results summary, documentation needs |
@@ -242,7 +245,10 @@ When running on **Opus 5** (the default Opus — 1M context, no plan qualifier, 
 |---------|----------------|---------------------|
 | **PL→AR** | 500 | 2,000 |
 | **AR→TL** | 300 | 1,200 |
+| **PL→TL** | 400 | 1,600 |
 | **TL→DV** | 400 | 1,600 |
+| **AR→DV** | 350 | 1,400 |
+| **PL→DV** | 400 | 1,600 |
 | **DV→DR** | 300 | 1,200 |
 | **DR→QA** | 300 | 1,200 |
 | **QA→DC** | 200 | 800 |
@@ -278,7 +284,7 @@ When running on **Opus 5** (the default Opus — 1M context, no plan qualifier, 
 | Full file contents | 500-2000 tokens/file | Include only interfaces/enums (< 30 lines) |
 | Implementation details | Low reuse across stages | Use file:line references |
 | Build commands | Already in CLAUDE.md | Don't duplicate |
-| Architecture decisions | Belongs in analyzing.md | Only include patterns/facts |
+| Architecture decisions | Belongs in architecture.md | Only include patterns/facts |
 
 ### Budget Enforcement
 

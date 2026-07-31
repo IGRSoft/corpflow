@@ -69,7 +69,7 @@ One method may sweep every substate or you may write one per substate; either wa
 
 QA stage receives from DV:
 1. **Test scope** from `<plan_file>` (resolved via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`) - WHAT was planned to test
-2. **Test architecture** from analyzing-N.md - HOW tests are structured
+2. **Test architecture** from architecture-N.md - HOW tests are structured (only when AR ran; AR is optional, so with no AR the plan's Test Strategy is the whole authority and DV owns the test shape)
 3. **Implemented unit tests** from development-N.md - WHAT tests DV already wrote
 4. **Existing tests to update** list - WHERE changes were made
 

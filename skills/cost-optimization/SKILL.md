@@ -81,7 +81,7 @@ After (80 tokens):
 - Stateless verification
 - Microservice compatible
 - Good library support
-See: .context/analyzing-N.md#auth-decision
+See: .context/architecture-N.md#auth-decision
 ```
 
 ### 3. Context Window Efficiency

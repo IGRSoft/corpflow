@@ -60,7 +60,7 @@ Check context window utilization, analyze token distribution, and trigger compre
 | Stage | Artifact | Tokens |
 |-------|----------|--------|
 | PL | planning-0.md (or planning-N.md if multiple plans) | 3,500 |
-| AR | analyzing.md | 6,000 |
+| AR | architecture.md | 6,000 |
 | TL | - | 0 |
 | DV | development.md (partial) | 5,500 |
 
@@ -157,7 +157,7 @@ Estimated new utilization: 38% (down from 65%)
 | Component | Tokens | Compressible |
 |-----------|--------|--------------|
 | planning-N.md (each plan) | 3,500 | Yes (to 500) |
-| analyzing.md | 6,000 | Yes (to 800) |
+| architecture.md | 6,000 | Yes (to 800) |
 | errors/*.md (per-agent) | 0 | N/A |
 
 ### Conversation

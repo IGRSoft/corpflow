@@ -96,7 +96,13 @@ The lock implementation is `skills/worktask/scripts/state-patch.sh` (`_lock_acqu
 
 ## #frontmatter-schema
 
-Every stage artifact (planning-N.md, analyzing-N.md, coordination-N.md, development-N.md, …) MUST start with a YAML block between `^---$` markers. Token budget ≤200. Line budget ≤30.
+Every stage artifact (planning-N.md, architecture-N.md, coordination-N.md, development-N.md, …) MUST start with a YAML block between `^---$` markers. Token budget ≤200. Line budget ≤30.
+
+Not every stage runs on every worktask: **AR** and **TL** are optional (AR is a tier default PL0
+may override in either direction; TL runs only when PL0 splits the work across ≥2 developers —
+`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`), so `architecture-N.md` and
+`coordination-N.md` may legitimately be absent. Frontmatter fields that reference an absent
+stage's artifact MUST be omitted rather than written with a dangling path.
 
 JSON-Schema-style spec:
 
@@ -317,10 +323,32 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
     "files_modified": { "type": "array", "items": { "type": "string" } },
     "tests_added": { "type": "array", "items": { "type": "string" } },
     "build_status": { "type": "string", "enum": ["pass", "fail", "skipped"] },
-    "decisions": { "type": "array", "items": { "type": "string" } }
+    "decisions": { "type": "array", "items": { "type": "string" } },
+    "architecture": {
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "pattern": "^architecture-[0-9]+\\.md(#[a-z-]+)?$" },
+        "applied": { "type": "boolean" }
+      },
+      "required": ["ref", "applied"]
+    }
   }
 }
 ```
+
+#### DVHandoff — architecture field notes
+
+`architecture` is optional at the schema level but **required whenever `state.json` has a
+`stages.AR` entry**, together with `refs.decisions` — both are written when AR ran and both are
+omitted when it did not (`stage-contracts.md#tpl-dv § Architecture reference contract`). The gate
+resolves the reference in one precedence shared by the harness, this schema and the DR rule:
+`refs.decisions`, then `architecture.ref`. `handoff-harness.sh --validate-frontmatter <artifact>
+--state <state.json>` enforces it (warn-only in 3.42.0, blocking under `--strict`). When AR was
+excluded the object MUST be omitted;
+the harness's inverse guard warns if an `architecture-*` reference appears without a `stages.AR`
+entry. `applied` is DV's truthful statement that AR's recorded decisions were followed;
+deviations are declared in `development-N.md ## decisions` with rationale, and DR fails an
+undeclared one.
 
 ### DRHandoff
 
@@ -487,8 +515,8 @@ populated from the artifact's `handoff:` frontmatter instead (F2/F3) — the map
 | `PL.verdict` | `stages.PL.verdict` | planning-N.md (frontmatter) |
 | `PL.complexity` | `stages.PL.complexity` | planning-N.md `## complexity` |
 | `PL.key_decisions` | `facts.decisions[]` | planning-N.md `## stages` |
-| `AR.verdict` | `stages.AR.verdict` | analyzing-N.md `## decisions` |
-| `AR.key_decisions` | `facts.decisions[]` | analyzing-N.md `## decisions` |
+| `AR.verdict` | `stages.AR.verdict` | architecture-N.md `## decisions` |
+| `AR.key_decisions` | `facts.decisions[]` | architecture-N.md `## decisions` |
 | `TL.verdict` | `stages.TL.verdict` | coordination-N.md `## fan-out` |
 | `TL.fanout` | (DV sub-task prompts; not a ledger field) | coordination-N.md `## fan-out` |
 
@@ -766,6 +794,49 @@ fallback: readers report unresolved and degrade non-blocking. Implemented in
       pattern: '.*ref:.*'
 ```
 
+#### Field notes — handoffs (edge registry)
+
+Keys are `FROM→TO` stage-code pairs. Because PL0 sizes the stage set, several stages have more
+than one possible predecessor — the edge that gets written is the one whose when-clause holds, so
+a stage that never ran never appears in an edge label. Writing an edge for an absent stage
+(a "phantom edge") is a ledger defect.
+
+The table below is **exhaustive across all three pipelines** — standard, secure/full, and
+emergency. The emergency pipeline (`IR→DV→DR→QA→RE→FN`) has **no PL, AR or TL stage at all**, so
+DV's predecessor there is `IR`, and RE's is `QA` rather than `DC`. Any predecessor not listed here
+is not a legal edge; add a row before writing one.
+
+##### Edge table — standard and secure pipelines
+
+| Edge | When | Written by |
+|------|------|-----------|
+| `USER→PL` | always (standard/secure) | PL |
+| `PL→AR` | AR is in the plan | AR |
+| `AR→TL` | TL is in the plan AND AR ran | TL |
+| `PL→TL` | TL is in the plan AND AR was excluded | TL |
+| `TL→DV` | TL ran | DV |
+| `AR→DV` | AR ran AND TL did not | DV |
+| `PL→DV` | neither AR nor TL ran | DV |
+| `DV→DR` | always (DR is a floor stage) | DR |
+| `DR→SR` | SR is in the plan | SR |
+| `SR→QA` / `DR→QA` | SR ran / SR was excluded | QA |
+| `QA→DC` | DC is in the plan | DC |
+| `DC→RE` | RE is in the plan AND DC ran | RE |
+| `RE→FN` / `DC→FN` | RE ran / RE was excluded | FN |
+| `FN→ST` | ST is in the plan | ST |
+
+##### Edge table — emergency pipeline and the ethics gate
+
+| Edge | When | Written by |
+|------|------|-----------|
+| `USER→IR` | always (emergency pipeline) | IR |
+| `IR→DV` | emergency pipeline — no PL/AR/TL stage exists | DV |
+| `QA→RE` | emergency pipeline (RE's predecessor is QA, not DC) | RE |
+| `<invoker>→ET` | the ethics gate fired; `<invoker>` is whichever stage triggered it | ET |
+
+The writer passes its predecessor to `state-patch.sh --stage <CODE> --prev <PREV>`; the script
+composes the key mechanically and does not itself know the when-clauses.
+
 #### Field notes — progress
 
 OPTIONAL. Budget-aware checkpoint for multi-batch stages (currently DV). Written after each sub-batch commit so a budget-exhausted agent leaves a resumable record instead of a progress narration. The orchestrator reads `next_batch` to resume the stage from where it stopped (see `agents/developer.md § Budget-Aware Checkpointing` and `skills/worktask/SKILL.md § Orchestrator Execution Loop` step 4.7). Stores batch ids only — never diffs, file contents, or test output.
@@ -939,7 +1010,7 @@ Four documented degradation paths. Worktask MUST complete in all four (AC-16, AC
 
 ### F4 regeneration walk
 
-1. Glob `.context/{planning-*,analyzing-*,coordination-*,development-*,developer-review-*,security-review-*,testing-*,documentation-*,release-*,complete-summary-*,retrospective-*,incident-*,ethics-review-*}.md`.
+1. Glob `.context/{planning-*,architecture-*,coordination-*,development-*,developer-review-*,security-review-*,testing-*,documentation-*,release-*,complete-summary-*,retrospective-*,incident-*,ethics-review-*}.md`.
 2. For each file, extract `handoff:` frontmatter (yq or fallback parser).
 3. Sort by stage order: PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET.
 4. Build state.json from PL0's frontmatter as seed.
@@ -957,9 +1028,9 @@ All stage artifacts are numbered; N is allocated by PL0 (same value as `planning
 | Stage code | Artifact filename | Plural? |
 |------------|-------------------|---------|
 | PL | `planning-N.md` (N starts at 0) | yes |
-| AR | `analyzing-N.md` | yes |
+| AR | `architecture-N.md` | yes |
 | TL | `coordination-N.md` | yes |
-| DV | `development-N.md` | yes |
+| DV | `development-N.md` (per-stream: `development-N-<stream>.md`) | yes |
 | DR | `developer-review-N.md` | yes |
 | SR | `security-review-N.md` | yes |
 | QA | `testing-N.md` | yes |
@@ -969,6 +1040,15 @@ All stage artifacts are numbered; N is allocated by PL0 (same value as `planning
 | ST | `retrospective-N.md` | yes |
 | IR | `incident-N.md` | yes |
 | ET | `ethics-review-N.md` | yes |
+
+### Per-stream DV artifacts
+
+Under TL fan-out the DV entry agent spawns one sub-agent per
+workstream; each writes only `development-N-<stream>.md`, where `<stream>` is the kebab slug the
+coordination plan assigned. The entry agent alone merges them into the canonical
+`development-N.md` at fan-in. `development-N.md` remains the documented DR/QA input and the file
+the DV0 handoff and state patch describe — the per-stream files are inputs to the merge, not
+handoff carriers.
 
 ### Run-index resolution
 
@@ -1042,7 +1122,7 @@ All stage artifacts MUST contain exactly the H2 headings (kebab-case, no undersc
 | Stage | Artifact | Mandatory H2 anchors |
 |-------|----------|-----------------------|
 | PL | planning-N.md | `## requirements`, `## acceptance-criteria`, `## scope`, `## out-of-scope`, `## risks`, `## complexity`, `## stages` |
-| AR | analyzing-N.md | `## decisions`, `## trade-offs`, `## patterns`, `## integration-points`, `## schemas`, `## open-questions`, `## risks` |
+| AR | architecture-N.md | `## decisions`, `## trade-offs`, `## patterns`, `## integration-points`, `## schemas`, `## open-questions`, `## risks` |
 | TL | coordination-N.md | `## fan-out`, `## shared-snippets`, `## sequence`, `## risks` |
 | DV | development-N.md | `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups` |
 | DR | developer-review-N.md | `## findings`, `## verdict`, `## blockers`, `## follow-ups` |
@@ -1065,7 +1145,7 @@ All stage artifacts MUST contain exactly the H2 headings (kebab-case, no undersc
 1. H2 only. H1 is reserved for the artifact's title (exempt from anchor lint).
 2. Kebab-case. No spaces, no underscores, no camelCase.
 3. Anchor IDs are derived by GitHub-style slugify (lowercase, spaces→hyphens, strip punctuation). The H2 title MUST be the kebab-case form already; we don't rely on slugify.
-4. `key_decisions[].anchor` and `refs.*` MUST resolve to a real `## <slug>` heading in the target file. The handoff harness validates this.
+4. `key_decisions[].anchor` and `refs.*` MUST resolve to a real `## <slug>` heading in the target file. Enforcement is narrower than the rule: the handoff harness validates cross-file resolution **only for the AR→DV edge** (`--validate-frontmatter <development-N.md> --state <state.json>` checks the architecture reference's pattern and that the file exists next to the artifact). Every other `refs.*` entry is checked for key presence only — a dangling target elsewhere is a contract violation the harness will not catch, so authors remain responsible for it.
 
 ### Anchor Pre-Flight (PostToolUse hook)
 
@@ -1085,7 +1165,7 @@ Anchor-lint also runs at the DR gate, but that is post-hoc — a missing anchor 
 
 #### Preflight behavior and cost
 
-`anchor-preflight.sh` matches only the canonical artifact regex (`\.context/(planning|analyzing|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+\.md$`); any other Write/Edit is a no-op. When the lint fails (non-zero exit), the agent that produced the artifact sees the diagnostic and amends the file before continuing — no downstream stages incur the cost. `continueOnBlock` follows the same managed-hook discipline as the other entries (the diagnostic is surfaced; an unrelated write is never blocked). The DR-gate lint plus the CI lint (PRs touching `skills/` or `agents/`) remain as the safety net for non-hook environments.
+`anchor-preflight.sh` matches only the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit is a no-op. When the lint fails (non-zero exit), the agent that produced the artifact sees the diagnostic and amends the file before continuing — no downstream stages incur the cost. `continueOnBlock` follows the same managed-hook discipline as the other entries (the diagnostic is surfaced; an unrelated write is never blocked). The DR-gate lint plus the CI lint (PRs touching `skills/` or `agents/`) remain as the safety net for non-hook environments.
 
 **Cost**: lint runs in O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit; net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
 

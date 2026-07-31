@@ -35,7 +35,7 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 
 | Field | Purpose |
 |-------|---------|
-| `stage` | Stage code unnumbered (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET) |
+| `stage` | Stage code unnumbered (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET). The enum is the full vocabulary, not the per-run set — AR and TL tasks exist only when PL0 included them |
 | `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (e.g., `igrsoft:software-architector`, `apple-developer:ios-developer`). Bare names are accepted via a back-compat shim that prepends `igrsoft:` and emits a deprecation warning — emit qualified form at the call site |
 | `model` | Model alias for this stage (fable, opus, sonnet, haiku). Always pass explicitly to `Task()` — do not rely on frontmatter inheritance. Under a managed `availableModels`/`enforceAvailableModels` allowlist a valid alias may silently resolve to a different model — see `skills/worktask/SKILL.md § Pre-Stage Validation` step 6 |
 
@@ -44,7 +44,7 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 | Field | Purpose |
 |-------|---------|
 | `run_index` | Integer ≥ 0; PL0 stamps this on every downstream task (same N as `planning-N.md`). Default 0. Orchestrator uses it to resolve `<stage>-N.md` paths. See `agents/product-manager.md § Stage Artifact Naming`. |
-| `context_refs` | JSON-encoded array of anchor refs (e.g. `["analyzing-N.md#decisions","planning-N.md#requirements"]`) the stage agent should grep instead of reading whole files. Preferred over `context_files` (handoff-protocol mode). When present, agent reads `state.json` + only these anchors |
+| `context_refs` | JSON-encoded array of anchor refs (e.g. `["architecture-N.md#decisions","planning-N.md#requirements"]`) the stage agent should grep instead of reading whole files. Preferred over `context_files` (handoff-protocol mode). When present, agent reads `state.json` + only these anchors |
 | `state_file` | Path to the worktask state ledger. Default `.context/state.json`. Read by the stage agent before delegation (per `skills/worktask/references/handoff-protocol.md#state-json-schema`). Absent state.json triggers fallback path F1 (legacy `context_files` mode) |
 
 ### Error & retry fields
@@ -122,7 +122,7 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
     },
     "context_refs": {
       "type": "string",
-      "description": "JSON-encoded array of anchor refs, e.g. '[\"analyzing-N.md#decisions\",\"planning-N.md#requirements\"]'. Preferred (handoff-protocol mode)."
+      "description": "JSON-encoded array of anchor refs, e.g. '[\"architecture-N.md#decisions\",\"planning-N.md#requirements\"]'. Preferred (handoff-protocol mode)."
     },
     "state_file": {
       "type": "string",

@@ -50,7 +50,7 @@ handoff:
     - Tests/ThemeManagerTests.swift
   next_stage_focus: "DR reviews ThemeManager DI; QA runs UI snapshot regression"
   refs:
-    decisions: analyzing.md#decisions
+    decisions: architecture.md#decisions
     tests: development.md#tests-added
 ---
 ```
@@ -91,7 +91,7 @@ The protocol below is written against `apple-developer:apple-architector` as the
 2. Completes system-level architecture first (API, backend, infra, data)
 3. Delegates Swift app architecture to `apple-developer:apple-architector`
 4. Receives compressed summary + reads `.context/swift-architecture.md`
-5. Merges into unified `analyzing.md`
+5. Merges into unified `architecture.md`
 
 ### Delegation Prompt Template
 
@@ -122,11 +122,11 @@ Provide Swift app architecture for the igrsoft worktask AR stage:
 
 ### Return Protocol
 
-`apple-architector` writes `.context/swift-architecture.md` with full detail and returns a compressed summary (max 500 tokens). `software-architector` reads the full file when merging into `analyzing.md`.
+`apple-architector` writes `.context/swift-architecture.md` with full detail and returns a compressed summary (max 500 tokens). `software-architector` reads the full file when merging into `architecture.md`.
 
-### analyzing.md Merge Template
+### architecture.md Merge Template
 
-When Apple platform is detected, `analyzing.md` gains these sections:
+When Apple platform is detected, `architecture.md` gains these sections:
 
 ```markdown
 ## Swift App Architecture
@@ -161,7 +161,7 @@ Before delegating, prepare context from worktask artifacts:
 - Acceptance criteria: {key_criteria}
 - Constraints: {platform, performance, etc.}
 
-## Compressed Architecture Context (from .context/analyzing-N.md)
+## Compressed Architecture Context (from .context/architecture-N.md)
 - Approach: {technical_approach}
 - Patterns: {architecture_patterns}
 - Key decisions: {decisions}
@@ -243,7 +243,7 @@ TaskCreate({
     agent: "apple-developer:ios-developer",  // fully-qualified → dispatched directly
     model: "opus",
     error_file: ".context/errors/ios-developer.md",
-    context_files: `${planFile},analyzing-${runIndex}.md,.context/errors/ios-developer.md`,
+    context_files: `${planFile},architecture-${runIndex}.md,.context/errors/ios-developer.md`,
     plan_file: planFile,  // bare basename, e.g. "planning-0.md" — state.json holds the path shape (handoff-protocol.md § state.json schema)
     worktask_id: worktaskId
   }

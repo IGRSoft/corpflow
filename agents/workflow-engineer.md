@@ -125,7 +125,7 @@ All changes committed to the issue branch, branch pushed to origin, PR created w
    ```bash
    # nullglob: unmatched globs expand to nothing, not error (zsh) or stay literal (bash)
    setopt null_glob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
-   for artifact in .context/{planning,analyzing,coordination,development,developer-review,security-review,testing,documentation,release,complete-summary,retrospective,incident,ethics-review}-*.md; do
+   for artifact in .context/{planning,architecture,coordination,development,developer-review,security-review,testing,documentation,release,complete-summary,retrospective,incident,ethics-review}-*.md; do
      [[ -f "$artifact" ]] || continue
      stage=$(awk '/^[[:space:]]*stage:/ { sub(/.*stage:[[:space:]]*/, ""); gsub(/[[:space:]"]+/, ""); print; exit }' "$artifact")
      [[ -n "$stage" ]] && CLAUDE_ARTIFACT_PATH="$artifact" CLAUDE_TASK_METADATA_STAGE="$stage" bash .claude/hooks/state-merge.sh
@@ -139,7 +139,7 @@ All changes committed to the issue branch, branch pushed to origin, PR created w
    mv .context/state.json ".context/state.json.bad.$(date +%s)"
    # Re-run PL0 initialization to re-seed, then run step 3 above
    ```
-5. **Validate artifact filenames**: `bash "<plugin-root>/skills/worktask/scripts/cache-lint.sh" --filename-lint .context/` — non-canonical names (e.g. `architecture-0.md` not `analyzing-0.md`) block hook artifact resolution
+5. **Validate artifact filenames**: `bash "<plugin-root>/skills/worktask/scripts/cache-lint.sh" --filename-lint .context/` — non-canonical names (e.g. `arch-0.md` not `architecture-0.md`) block hook artifact resolution
 
 **Prevention**: Ensure `commands/worktask.md` Phase 1 step 3b runs at worktask start. The plugin.json hook registration (v3.11.0+) gives automatic Layer 2 coverage without project-local install.
 

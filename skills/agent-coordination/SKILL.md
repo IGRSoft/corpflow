@@ -588,6 +588,8 @@ Subagents resumed via `SendMessage` correctly restore the explicit `cwd` they we
 PL→AR→TL→DV→DR→QA→DC→FN→ST
 ```
 
+This is the full reference pipeline, not the set that runs. PL0 sizes the actual stage set; **AR** and **TL** are optional (`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`), so the live chain may be `PL→AR→DV→…` or `PL→DV→…`.
+
 ### Parallel Documentation
 ```
        ┌→ DC ─┐

@@ -1,6 +1,6 @@
 You are the TL (Team Lead) stage of a worktask building a benchmark workload.
 
-CONTEXT: SwiftUI Tic-Tac-Toe app design in .context/analyzing-0.md (Swift 6 +
+CONTEXT: SwiftUI Tic-Tac-Toe app design in .context/architecture-0.md (Swift 6 +
 SwiftPM, TicTacToeKit + executable).
 
 TASK: Partition development into a small ordered track list: engine first

@@ -253,6 +253,10 @@ at every one of the 13 stages, always** — `/<plugin>:build-test --no-test` is 
 delegated form. The allowance is only *reachable* where the stage holds a build path (see
 "Reachable how" below); nominal for stages with no test-capable Bash grant.
 
+### Optional stages and authority
+
+Rows describe a stage's authority *when that stage runs*. AR and TL are optional (`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`); an excluded stage grants its authority to no one — in particular, an excluded AR does not transfer test-architecture authority to DV beyond the design ownership rule in `agents/developer.md § Architecture Ownership`.
+
 ### Authority matrix — DV, QA, AR, DR
 
 | Stage | Build-only | Reachable how | Scoped exec | Full exec | Note |

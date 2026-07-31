@@ -10,7 +10,7 @@ Every classified diff hunk must be mapped to exactly one owning file (the "targe
 |---|--------------------------|--------|-------|
 | 1 | `agents/<name>.md`, `skills/**/SKILL.md`, `commands/<name>.md` | The file itself | User edited the prompt directly — self-signal. Map to that file. |
 | 2 | `.context/planning-*.md` (numbered, e.g. `planning-0.md`, `planning-1.md`) | `agents/product-manager.md` | Producer lookup via stage-contracts. Match the glob — every numbered plan is owned by PM. |
-| 3 | `.context/analyzing-*.md` | `agents/software-architector.md` | Match the glob — every numbered artifact owned by AR. |
+| 3 | `.context/architecture-*.md` | `agents/software-architector.md` | Match the glob — every numbered artifact owned by AR. |
 | 4 | `.context/coordination-*.md` | `agents/team-lead.md` | |
 
 ### Mid-stage artifacts (rules 6–11)

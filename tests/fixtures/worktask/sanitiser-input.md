@@ -1,7 +1,8 @@
 ## requirements
 
 The system must validate input at /Users/korich/secret/path.md before run.
-See .context/planning-0.md for the full plan and analyzing-0.md notes.
+See .context/planning-0.md for the full plan and architecture-0.md notes.
+Legacy pre-3.42.0 name analyzing-3.md must still be stripped (PERMANENT-SUPERSET).
 Workspace at conductor/workspaces/company-workflow/tehran-v1 holds the state.
 plan_file: .context/planning-0.md
 run_index: 0

@@ -2,6 +2,142 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.42.0] - 2026-07-31
+
+AR and TL stop being score-driven mandates and become PL0 decisions. The tier tables encoded
+architecture at score >=11 and team-lead at >=21 with no planning discretion, in four duplicated
+copies plus the readme — so a single-workstream task at score 34 got a coordination stage it had
+nothing to coordinate. TL0 is now removed from every tier default row and included only on the
+split-work test; AR0 stays a default but an overridable one, against published criteria that live
+in exactly one place. The matching correctness gap closes with it: the typed `DVHandoff` schema
+had **no architecture field at all**, so DV found the AR artifact by filename convention while its
+frontmatter hard-coded `refs.decisions: analyzing-N.md#decisions` even on tiers where AR never ran
+— a dangling reference by construction. That reference is now conditional, typed, and gate-checked.
+The gate ships **warn-only**: exit stays 0, `--strict` (or `IGRSOFT_AR_REF_STRICT=1`) opts into
+blocking, and a future minor flips the default. Legacy invocation without `--state` is pinned
+byte-identical. Suite green; `shellcheck` holds at the pre-existing two-SC2064 baseline on
+`handoff-harness.sh`.
+
+This release also renames the AR stage artifact `analyzing-N.md` -> `architecture-N.md` (see
+`### Changed`). That is the release's **one breaking change**, and it ships with no back-compat
+fallback by explicit decision — so the commit carries the `refactor(workflow)!:` type and a
+`BREAKING CHANGE:` footer naming the old -> new mapping, following `cada9e4`'s shape.
+
+### Added
+
+- **Stage Inclusion Criteria (PL0 authority) — one canonical block.** `skills/estimation-methodology/SKILL.md`
+  gains the criteria as canon: the four conditions under which PL0 MAY exclude AR0, the five under
+  which it MUST include it at any tier including Low, and the single split-work test that governs
+  TL0. The other three tier-table copies and the readme carry a one-line pointer footnote rather
+  than a duplicated restatement, so there is one place to change when the rules move.
+- **`metadata.added_stages`.** A symmetric counterpart to `skipped_stages` with the identical
+  `{stage, reason}` shape, recording every stage PL0 includes beyond the tier default (AR0 forced
+  at a low tier, TL0 at any tier). Both lists stay measured against the full nine-stage reference
+  pipeline, so a declined stage always appears with a reason. Pre-stage validation gains check 3b:
+  every entry's reason must be decision-shaped, not a score restatement.
+- **AR->DV architecture-reference gate in `handoff-harness.sh`.** `--validate-frontmatter` accepts
+  `--state <state.json>` and `--strict`. When the artifact is a DV handoff and the ledger has a
+  `stages.AR` entry, the architecture reference must match `^architecture-[0-9]+\.md(#[a-z-]+)?$` and
+  resolve to a file beside the artifact. Violations are `warn:` + exit 0 by default and `fail:` +
+  exit 1 under `--strict`; the env opt-in `IGRSOFT_AR_REF_STRICT=1` is read by the script itself,
+  not only by the orchestrator, so the opt-in works even when an older caller omits the flag. The
+  inverse guard — an architecture reference with no `stages.AR` entry — warns in both modes and can
+  never fail. An unreadable `--state` (absent file, malformed JSON, or no `jq`) is reported rather than
+  treated as "AR did not run" — silence there would be a false negative on every `jq`-less host
+  once `--strict` becomes the default. `--self-test` covers all sixteen branches; fifteen new
+  bats cases cover the six specified scenarios, the AC-6 legacy pin, the four conditional edges
+  and the per-stream filename grammar.
+- **DR verification of architecture *application*, not just reference.** `agents/technical-lead.md`
+  gains an Architecture-Application Check that runs only when `stages.AR` exists: read
+  `architecture.applied`, spot-check the diff against AR's `key_decisions`, and fail an
+  **undeclared** deviation back to DV. A deviation declared with rationale in
+  `development-N.md ## decisions` passes.
+- **Anchored-rejection rule for DR.** Every DR rejection must cite a resolvable ref — an AR
+  decision id or a plan acceptance-criterion id. An unanchored rejection is invalid and DV may
+  bounce it back as `missing_input` on DR; a concern that cannot be anchored is a finding, not a
+  blocker.
+- **DV architecture ownership.** When AR was excluded, or when AR ran but is silent on a question
+  the implementation forces, DV decides and records the call in `development-N.md ## decisions`
+  with alternatives and rationale. No AR re-open loop, no separate artifact, no stalling on a
+  `missing_input` for a decision DV is competent to make.
+- **Per-workstream DV artifacts under TL fan-out.** TL assigns each workstream a kebab `stream`
+  slug; each DV sub-agent writes only `development-N-<stream>.md`, and the DV entry agent alone
+  merges the canonical `development-N.md` at fan-in — removing contention on a shared artifact.
+  `development-N.md` stays the DR/QA input and the file the handoff describes. Filename-lint
+  (`cache-lint.sh --filename-lint`) and `hooks/anchor-preflight.sh` accept the suffix; the
+  preflight self-test gains two positive and three negative cases pinning the kebab shape.
+- **`metadata.architecture_ref` on DV0, DR0 and QA0 dispatches.** When AR completed, all three
+  carry `{path, anchors, key_decisions}` (the digest drawn from AR's frontmatter, <=200 chars) and
+  name `architecture-N.md` in `context_files`; when AR was excluded, none of them may carry either.
+- **Three conditional handoff edges — `AR->DV`, `PL->DV`, `PL->TL`** — with an edge registry in
+  `handoff-protocol.md` giving every edge its when-clause, plus `AR->DV 350` / `PL->DV 400` /
+  `PL->TL 400` context budget rows. Three new state-patch bats cases pin the edges.
+
+### Changed
+
+- **BREAKING — the AR stage artifact is renamed `analyzing-N.md` -> `architecture-N.md`.**
+  Old -> new, in every position: `analyzing-N.md` -> `architecture-N.md`,
+  `analyzing-0.md` -> `architecture-0.md`, `analyzing.md` -> `architecture.md`,
+  `analyzing-*.md` -> `architecture-*.md`, and the reference pattern
+  `^analyzing-[0-9]+\.md(#[a-z-]+)?$` -> `^architecture-[0-9]+\.md(#[a-z-]+)?$`.
+  This finishes the normalization `cada9e4` (v3.8.0) began when it renamed four sibling stage
+  artifacts to noun-of-output names and left AR's behind.
+
+  **There is no back-compat fallback — writers and readers flip together.** Unlike `cada9e4`,
+  which kept legacy names readable for one cycle, an in-flight worktask that started under
+  <=3.41.2 and continues under 3.42.0 will not resolve its existing `analyzing-N.md`. The
+  affected population is bounded: `.context/` is gitignored and per-workspace, so this cannot
+  affect anything already merged. **To migrate, rename the file and its references:**
+  `mv .context/analyzing-N.md .context/architecture-N.md`, then update any `refs.decisions:` /
+  `architecture.ref` value in a stage artifact's frontmatter. Use `git mv` only in the unusual
+  case that you track `.context/` — against the default gitignored layout it fails with
+  `fatal: not under version control`. A worktask that has already cleared DR and DC needs no
+  action; one that passed DV but has not yet cleared them still needs the rename, because DR's
+  Architecture-Application Check (`agents/technical-lead.md`) and the DV/DC input rows in
+  `skills/shared/stage-contracts.md` all resolve `architecture-N.md` unconditionally.
+
+  One deliberate exception: the `.context/`-path redaction filter in
+  `skills/worktask/scripts/publish-pl-issue.sh` recognizes **both** names permanently
+  (`PERMANENT-SUPERSET`). It is a leak filter, not a compat shim — a filter that forgets a name it
+  used to recognize can only leak more.
+
+  New guard: `tests/shell/worktask/artifact-map-parity.bats` asserts all six copies of the
+  stage -> artifact-basename map agree for every stage code. The drift this rename repairs went
+  unnoticed for 34 minor releases because nothing compared those copies.
+- **TL0 removed from every tier default row** (Moderate, High, Critical) across
+  `skills/estimation-methodology/SKILL.md`, `skills/worktask/SKILL.md`, `README.md` and the command
+  surface; each table gains the `+ TL0 — only when PL0 splits the work across >=2 developers`
+  footnote, and each AR0 row is annotated as a PL0-overridable default. A single workstream served
+  by a single DV agent now gets no TL0 at any score.
+- **PL0 step 3 is three sub-steps** (`agents/product-manager.md`): resolve the tier default, apply
+  the AR0 override criteria, then decide TL0 on the split-work test alone — stamping both metadata
+  lists and recording both decisions in `planning-N.md ## stages`. The plan-approval gate summary
+  must now show the AR decision (flagging any deviation from the tier default) and the TL
+  split-work decision, each with its one-line reason.
+- **DV `refs.decisions` is conditional on AR having run**, in the stage-contract template, the
+  developer agent's own frontmatter block, and the `DVHandoff` schema — which gains the optional
+  `architecture: {ref, applied}` object, gate-required when `stages.AR` exists. `refs.coordination`
+  is likewise conditional on TL.
+- **Conditional `--prev` in the developer and team-lead contracts.** Both now select the
+  predecessor from the `stages` keys actually present in the ledger rather than passing a fixed
+  value.
+- **AR's `next_stage_focus` is addressed to TL when TL is in the plan, else to DV**, with the same
+  conditional on `open_questions` addressees.
+
+### Fixed
+
+- **The refs-validation false claim.** `handoff-protocol.md` asserted that the handoff harness
+  validates cross-file `refs.*` resolution. It does not, and did not: it checked key presence only.
+  The statement is narrowed to the truth — cross-file resolution is enforced for the AR->DV edge
+  alone, every other ref is presence-only, and authors remain responsible for those.
+- **A pre-existing over-cap section in `skills/shared/code-documentation.md`.** The
+  `section-lint` 1000-char enforcement test was already red at HEAD: `### Other grammars`, added
+  in 3.41.2, measured 1076 chars. Split with a `#### Shell` sub-heading — no content change. Out
+  of this release's nominal scope, but the suite could not go green without it.
+- **The phantom `TL->DV` edge.** `agents/developer.md` unconditionally wrote
+  `state-patch.sh --prev TL`, stamping a handoff edge from a stage that never ran on every tier
+  below Moderate. Writing an edge for an absent stage is now documented as a ledger defect.
+
 ## [3.41.2] - 2026-07-31
 
 Shell was the one gap in the comment-enforcement hooks: both the blocking density gate and the

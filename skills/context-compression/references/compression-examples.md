@@ -92,7 +92,7 @@ Files to create: 3 | Files to modify: 2
 Entry point: ThemeManager.swift
 Test focus: Theme switching, persistence
 
-ADR: .context/analyzing-N.md#adr-theme-system
+ADR: .context/architecture-N.md#adr-theme-system
 ```
 
 ## Anti-Patterns
@@ -125,7 +125,7 @@ Code:     path/file.swift:functionName()
 Decision: "[What] because [why in <10 words]"
 Artifact: .context/[stage].md#section
 ADR:      ADR-NNN: [title] - [status]
-Pattern:  "[Pattern Name]" - see analyzing.md
+Pattern:  "[Pattern Name]" - see architecture.md
 ```
 
 ### Token Estimation

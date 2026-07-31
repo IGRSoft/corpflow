@@ -111,6 +111,10 @@ paths:
 Emergency: IR → DV → DR → QA → RE → FN
 ```
 
+AR and TL are the optional members of these sets: AR is a tier default PL0 may override in
+either direction, TL runs only when PL0 splits the work across ≥2 developers. See
+`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria (PL0 authority)`.
+
 ## Subject Numbering
 
 Task subjects use `[CODE][N]:` format with 0-based index per stage code:
@@ -134,7 +138,7 @@ QA0: QA Testing        ← agents can split: QA0, QA1
 |------|----------|
 | EX | exploration.md |
 | PL | planning-N.md (numbered per `agents/product-manager.md § Plan File & Run Index Naming`) |
-| AR | analyzing-N.md |
+| AR | architecture-N.md |
 | TL | coordination-N.md |
 | DV | development-N.md |
 | DR | developer-review-N.md |

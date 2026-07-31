@@ -161,7 +161,7 @@ on the earlier levers.
 **PL, AR, TL, DV token usage is entirely unmeasured for this run.** These
 four stages executed successfully (state.json shows all four `completed`
 with `pass`/`ok` verdicts, substantive artifacts: `planning-1.md`,
-`analyzing-1.md`, `coordination-1.md`, `development-1.md`, and DV's handoff
+`architecture-1.md`, `coordination-1.md`, `development-1.md`, and DV's handoff
 lists concrete deliverables — 4 commits, 226 Swift tests, 37 Python files
 retired). **Their token cost is real and was incurred, but the harness
 crashed before the record was written, and the Layer-2 audit fallback

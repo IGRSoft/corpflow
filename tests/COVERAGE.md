@@ -96,8 +96,8 @@ scenario `@test`s (happy / edge / failure-exit) asserting its documented contrac
 
 - **33/33** shell scripts + hooks have a dedicated `.bats` file (path-keyed for the two
   `audit-dedup.sh`); **35/35** total deterministic targets covered (incl. 2 Python).
-- **~198** `@test` assertions across the shell suite; **min 3 / avg ~6 / max 14** per file.
-- Highest-density (high-logic) targets: `scan-secrets` 14, `post-compact-recovery`/`milestone-helpers`/`map-and-filter`/`agent-coordination__audit-dedup` 9, `state-patch`/`build-orchestrator`/`changelog-from-git` 8.
+- **429** `@test` assertions across the shell suite; **min 3 / avg ~10 / max 25** per file.
+- Highest-density (high-logic) targets: `state-patch` 25 (4 conditional-edge cases added in 3.42.0), `handoff-harness` 14 (7 AR->DV gate cases added in 3.42.0), `scan-secrets` 14, `cache-lint` 12 (4 filename-grammar cases added in 3.42.0), `post-compact-recovery`/`milestone-helpers`/`map-and-filter`/`agent-coordination__audit-dedup` 9, `build-orchestrator`/`changelog-from-git` 8.
 
 To measure real bash line coverage, run `make coverage` on a **GNU/Linux** host (bash ≥4 +
 kcov) where the `make coverage` target now works (the `$#`-expansion bug in the kcov stem

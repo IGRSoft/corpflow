@@ -46,6 +46,11 @@ Initialize a new worktask task with proper folder structure and Task System inte
 | Secure | PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST | `/worktask --secure` |
 | Emergency | IR→DV→DR→QA→RE→FN | `/worktask --emergency` |
 
+AR and TL are optional within the standard and secure pipelines: AR is a tier default PL0 may
+override in either direction, and TL is included only when PL0 splits the work across ≥2
+developers. Criteria: `skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria (PL0
+authority)`.
+
 See `skills/shared/stage-codes.md` for stage details.
 
 ## Options
@@ -159,7 +164,7 @@ Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOP
 6. **Delegate to PL agent**: `Task({ subagent_type: "igrsoft:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative.
 #### Step 6 — record dropped stages
 
-   - **Record dropped stages**: when PL0's dynamic sizing omits any of the full 9-stage pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PM stamps the PL0 task's `metadata.skipped_stages` (`{stage, reason}` list) so `state.json` self-documents the drops. See `agents/product-manager.md § Dynamic Worktask Sizing (PL0 Stage)`.
+   - **Record dropped and added stages**: when PL0's dynamic sizing omits any of the full 9-stage pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PM stamps the PL0 task's `metadata.skipped_stages` (`{stage, reason}` list) so `state.json` self-documents the drops; when PL0 includes a stage beyond the tier default (AR0 forced at a low tier, TL0 at any tier), it stamps the symmetric `metadata.added_stages` with the identical `{stage, reason}` shape. See `agents/product-manager.md § Dynamic Worktask Sizing (PL0 Stage)`.
 ### Steps 7–8 — Complete PL0 and present the plan
 
 7. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
@@ -179,7 +184,7 @@ index `N` from `state.json.run_index` (default `0`).
 **If `plan_gate == "checkpoint"`** (default — plain `worktask` with no bypass flag):
 1. Read `state.json.plan_file` to locate the plan; accept either shape (`handoff-protocol.md § plan_file shape boundary`).
 2. Present the plan summary to the user: complexity score, stages created (with agents),
-   dependency chain, and key decisions.
+   dependency chain, key decisions, and both inclusion decisions (see below).
 3. Call `AskUserQuestion`:
    *"Here is the generated plan for your worktask. Approve to begin implementation, or describe
    any changes you want first."*
@@ -188,6 +193,16 @@ index `N` from `state.json.run_index` (default `0`).
    worktasks; an idle auto-answer would count as an approval the operator never gave. A
    background-task completion notification is never this approval either — it explicitly
    states no human input occurred, so do not treat it as the operator's answer.)
+
+##### Stage-inclusion decisions in the gate summary
+
+The step-2 summary MUST show both decisions explicitly, each with its one-line reason drawn from
+`skipped_stages`/`added_stages`:
+
+- **AR** — included or excluded, and whether that deviates from the tier default (flag the
+  deviation; a tier-default AR still states its reason for being kept).
+- **TL** — included or excluded on the split-work test, naming the workstreams when included.
+
 #### Plan gate approval / rejection audit rows
 
 4. **On approval**, append one line to `.context/logs/audit.jsonl`, then proceed to Step A:
@@ -277,6 +292,30 @@ The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line
 ##### Layer-3 stamp and F3 fallback
 
    `STATE_MERGE_VIA=step6_5` stamps `stages.<CODE>.completed_via=step6_5` so this synchronous Layer-3 path is distinguishable from the SubagentStop-hook Layer-2 default (`hook`). Then re-read; if STILL not `completed`, apply the F3 fallback (derive minimal patch from agent return text — the F3 patch stamps `completed_via: "f3"`). This covers environments where the SubagentStop hook never fired. Full three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5.
+
+### Step B — AR-reference check at DV completion
+
+Runs only when `.context/state.json` has a `stages.AR` entry (AR is optional — see `skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`). After DV0 completes and before dispatching DR0:
+
+```bash
+STRICT_FLAG=""
+[ "${IGRSOFT_AR_REF_STRICT:-0}" = "1" ] && STRICT_FLAG="--strict"
+# shellcheck disable=SC2086
+skills/worktask/scripts/handoff-harness.sh --validate-frontmatter ".context/development-${N}.md" \
+  --state .context/state.json $STRICT_FLAG
+```
+
+#### Step B rollout and opt-in
+
+**Rollout — warn-only in 3.42.0.** With no opt-in the harness emits `warn:` lines and exits 0. Record each warning as an audit row and carry it into the DR dispatch prompt so DR checks the linkage:
+
+```json
+{"ts":"<ISO>","actor":"orchestrator","action":"ar_ref_check","subject":"DV<N>","result":"warn"}
+```
+
+A warning is **not** a `missing_input` block and never stops the transition.
+
+**Early opt-in — `IGRSOFT_AR_REF_STRICT=1`.** Set the env var and the orchestrator passes `--strict`; violations become `fail:` lines with exit 1 and block the DR dispatch until DV fixes the reference. Use it to shake out dangling references before the next minor, which flips `--strict` to the default. The inverse guard (an architecture reference with no `stages.AR` entry) warns in both modes and never fails.
 
 ## Phase 3: Post-Worktask Self-Improvement
 

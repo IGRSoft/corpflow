@@ -14,4 +14,4 @@ SwiftUI only) vs the thin `tictactoe` executable. Define the Swift Testing
 surface per module and the DI seams (RNG, store URL, sound player).
 No third-party dependencies; no network; no file writes outside the workdir.
 
-Write the architecture to .context/analyzing-0.md and STOP.
+Write the architecture to .context/architecture-0.md and STOP.

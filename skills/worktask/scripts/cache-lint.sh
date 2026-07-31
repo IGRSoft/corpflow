@@ -43,8 +43,8 @@
 #      Scans all stage artifacts in the given .context/ directory and asserts
 #      each filename matches the canonical #stage-artifact-map from
 #      handoff-protocol.md. Stage is inferred from handoff: frontmatter.
-#      Flags non-canonical names (e.g. architecture-0.md instead of
-#      analyzing-0.md). Exits 1 on any violation.
+#      Flags non-canonical names (e.g. arch-0.md instead of
+#      architecture-0.md). Exits 1 on any violation.
 #
 #   5. Self-test:
 #        cache-lint.sh --self-test
@@ -461,7 +461,7 @@ frontmatter_template_lint() {
 canonical_basename_for_stage() {
   case "$1" in
     PL) echo "planning" ;;
-    AR) echo "analyzing" ;;
+    AR) echo "architecture" ;;
     TL) echo "coordination" ;;
     DV) echo "development" ;;
     DR) echo "developer-review" ;;
@@ -477,6 +477,28 @@ canonical_basename_for_stage() {
   esac
 }
 
+# extract_stage() yq-parses the whole file, which aborts on any real artifact
+# body ("mapping values are not allowed in this context") and made filename-lint
+# skip every artifact it was meant to check. Scoped to the filename path on
+# purpose: this compares basenames only, so tightening it cannot surface new
+# assertions the way repairing extract_stage() for --anchor-lint would.
+extract_stage_from_frontmatter() {
+  local f="$1" fm
+  fm=$(awk '/^---$/{c++; if (c==1) next; if (c==2) exit} c==1' "$f")
+  [[ -n "$fm" ]] || return 0
+  if command -v yq >/dev/null 2>&1; then
+    printf '%s\n' "$fm" | yq eval '.handoff.stage // ""' - 2>/dev/null || true
+  else
+    printf '%s\n' "$fm" | awk '
+      /^[[:space:]]*stage:[[:space:]]*/ {
+        sub(/^[[:space:]]*stage:[[:space:]]*/, "")
+        gsub(/[[:space:]"]+/, "")
+        print
+        exit
+      }'
+  fi
+}
+
 filename_lint() {
   local ctx_dir="$1"
   [[ -d "$ctx_dir" ]] || { echo "filename-lint: directory not found: $ctx_dir" >&2; exit 2; }
@@ -486,18 +508,27 @@ filename_lint() {
     [[ -f "$artifact" ]] || continue
 
     local stage
-    stage=$(extract_stage "$artifact")
-    [[ -z "$stage" ]] && continue
+    stage=$(extract_stage_from_frontmatter "$artifact")
+    [[ -z "$stage" || "$stage" == "null" ]] && continue
 
     count=$((count + 1))
     local expected_base
     expected_base=$(canonical_basename_for_stage "$stage")
     [[ -z "$expected_base" ]] && continue
 
-    local actual_name
+    local actual_name name_re expected_desc
     actual_name=$(basename "$artifact")
-    if ! printf '%s' "$actual_name" | grep -qE "^${expected_base}-[0-9]+\\.md\$"; then
-      echo "filename-lint: $artifact (stage=$stage) FAIL: expected '${expected_base}-N.md', got '$actual_name'" >&2
+    name_re="^${expected_base}-[0-9]+\\.md\$"
+    expected_desc="${expected_base}-N.md"
+    # DV fans out one sub-agent per TL-assigned workstream, each writing
+    # development-N-<stream>.md; the entry agent merges them into the canonical
+    # development-N.md. Both names are legal on disk simultaneously.
+    if [[ "$expected_base" == "development" ]]; then
+      name_re="^development-[0-9]+(-[a-z0-9]+(-[a-z0-9]+)*)?\\.md\$"
+      expected_desc="development-N.md or development-N-<stream>.md"
+    fi
+    if ! printf '%s' "$actual_name" | grep -qE "$name_re"; then
+      echo "filename-lint: $artifact (stage=$stage) FAIL: expected '${expected_desc}', got '$actual_name'" >&2
       rc=1
     fi
   done
@@ -697,7 +728,7 @@ handoff:
     - path/to/file1.md
   next_stage_focus: "<imperative>"
   refs:
-    decisions: analyzing-N.md#decisions
+    decisions: architecture-N.md#decisions
 ---
 ```
 
@@ -846,7 +877,7 @@ EOF
   fi
 
   # Filename lint: negative — non-canonical name
-  cat > "$td/ctx/architecture-0.md" <<'EOF'
+  cat > "$td/ctx/arch-0.md" <<'EOF'
 ---
 handoff:
   stage: AR
@@ -857,7 +888,7 @@ handoff:
 ## decisions
 EOF
   if "$0" --filename-lint "$td/ctx" >/dev/null 2>&1; then
-    echo "self-test: filename-lint reject non-canonical: FAIL (should have flagged architecture-0.md)" >&2; exit 1
+    echo "self-test: filename-lint reject non-canonical: FAIL (should have flagged arch-0.md)" >&2; exit 1
   else
     echo "self-test: filename-lint reject non-canonical: ok"
   fi
