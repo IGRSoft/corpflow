@@ -2,7 +2,7 @@
 name: worktask
 description: Complete staged worktask system with dynamic sizing, task initialization, and stage management. Use when executing multi-stage worktasks, initializing tasks, or managing worktask state.
 effort: high
-version: 0.2.1
+version: 0.3.0
 ---
 
 > **INVOCATION GATE**: If you are reading this skill because the orchestrator delegated directly
@@ -427,7 +427,7 @@ The orchestrator NEVER writes implementation code directly. ALL stage work is de
 ### PRECONDITION CHECK
 Before entering this loop, verify:
 
-#### Signals 1–3
+#### Signals 1–3 (incl. 2b)
 
 - **Signal 1 (TaskList audit)**: Call `TaskList()`, find the PL0 task, verify its status is `completed`. If PL0 does not exist or is not completed, STOP — worktask not initialized or planning incomplete.
 
@@ -435,11 +435,21 @@ Before entering this loop, verify:
 - `"checkpoint"` (default): require BOTH PL0 `completed` AND an `approval_received` audit line with
   `subject:"PL<run_index>"` in `.context/logs/audit.jsonl` before loop entry. If the line is
   absent, STOP — return to `commands/worktask.md § Step A.5` to fulfil the gate.
-- `"bypass"` (`--auto-plan` / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator): PL0 `completed` alone is sufficient; no approval line.
+- `"bypass"` (`--auto=[plan]` — legacy `--auto-plan` — / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator): PL0 `completed` alone is sufficient; no approval line — except when Signal 2b escalated items exist, whose `approval_received` row is still required.
+
+##### Signal 2b (decision gate)
+
+`PL0.metadata.decision_gate` (default `"user"`) selects WHO answers PL0's `open_questions[]` at
+the plan gate. `"auto"` (stamped by `--auto=[decision]`) routes them through the Fable-model
+auto-decision pre-pass — `commands/worktask.md § Step A.4` is canon. Verify before loop entry:
+when `decision_gate == "auto"` and PL0's handoff carried a non-empty `open_questions[]`, an
+`auto_decision_resolved` audit row with `subject:"PL<run_index>"` MUST exist (and any `escalate`
+items MUST have an `approval_received` resolution) — if absent, STOP and return to Step A.4. The
+carrier bypasses neither `plan_gate` nor `fn_gate`.
 
 ##### Signal 3 (FN gate)
 
-FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`). The orchestrator STOPs immediately before the FN `Task()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto-finalization` / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator). See loop step 4.9 and § FN Gate.
+FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`). The orchestrator STOPs immediately before the FN `Task()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto=[finalization]` — legacy `--auto-finalization` — / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator). See loop step 4.9 and § FN Gate.
 
 #### After PL0 — steps 1–3
 
@@ -838,7 +848,7 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
 ##### Step 4.9 — bypass path
 
 ```typescript
-      } else {  // "bypass" — stamped by --auto-finalization / --emergency, or directly per-issue by /megatask
+      } else {  // "bypass" — stamped by --auto=[finalization] (legacy --auto-finalization) / --emergency, or directly per-issue by /megatask
         // (e) Emit `fn_gate_bypass subject:"FN<N>"` (reason: "unattended") and
         //     fall through to delegate FN — commit/push/PR unattended.
         appendAudit({ actor: "orchestrator", action: "fn_gate_bypass",
@@ -1273,6 +1283,38 @@ verification from the last checkpointed batch boundary instead of re-deriving th
 entire diff from scratch. Pairs with the orchestrator-side loop step 4.7 DV
 checkpoint resume, which carries a recorded checkpoint forward on re-dispatch.
 
+## Auto-Decision Delegation (decision_gate)
+
+Carried by `PL0.metadata.decision_gate` — `"user"` (default) or `"auto"` (stamped only by
+`--auto=[decision]`). On `"auto"`, PL0's `open_questions[]` are not held for the user: the
+orchestrator re-dispatches the PM as a decision delegate on `model: "fable"` (Fable 5; loop step
+5f capability fallback to `"opus"` applies). The carrier bypasses no gate. Canonical procedure:
+`commands/worktask.md § Step A.4`; precondition check: § PRECONDITION CHECK Signal 2b.
+
+### Delegate duties
+
+The delegate decides each question default-biased, applies the amendments to the plan's EXISTING
+mandatory anchors (`## requirements` / `## acceptance-criteria` / `## scope`) in one batch pass,
+and returns each call as a typed-return `key_decisions[]` entry prefixed `(auto-decided)`. It never
+adds a `## decisions` anchor to `planning-N.md` — the PL anchor set is exact
+(`references/handoff-protocol.md#anchor-allow-list`) — and never re-runs `state-patch.sh`, since
+PL0 is already `completed`; the plan amendments are its only writes.
+
+### Orchestrator ledger merge
+
+On the delegate's return the ORCHESTRATOR atomic-merges the ledger: decided items appended to
+`state.json facts.decisions[]` marked `(auto-decided)`, resolved entries dropped from
+`facts.open_questions[]`. That merge is what makes the decisions visible to AR/TL/DV, which read
+those two fields on stage entry (`skills/shared/stage-contracts.md`). Audit rows:
+`auto_decision_dispatched` → `auto_decision_resolved` (`subject:"PL<N>"`), the latter carrying each
+question's rationale in `metadata.decisions[]` (`{question, answer, rationale}` one-liners).
+
+### Escalation class
+
+Escalation-class questions (irreversible/destructive, scope-expanding, security-posture-weakening,
+spend-authorizing) are NEVER auto-decided — they return as `escalate` items and force a user stop
+even under `plan_gate: "bypass"`, resolved by an `approval_received subject:"PL<N>"` row.
+
 ## FN Gate
 
 The FN gate is the **pre-finalization human checkpoint**. Carried by `PL0.metadata.fn_gate`, default `"checkpoint"`. It sits **before the FN `Task()` delegation**, so nothing remote (commit/push/PR) happens before approval. `N = state.json.run_index` (default `0`).
@@ -1280,7 +1322,7 @@ The FN gate is the **pre-finalization human checkpoint**. Carried by `PL0.metada
 ### FN gate paths
 
 - **`checkpoint`** (default): loop step 4.9 runs the Pre-gate Conductor-attachments writer (local-only), emits `fn_gate_waiting subject:"FN<N>"`, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. On approval → append `approval_received subject:"FN<N>"` then delegate FN (commit/push/PR). On reject → append `approval_rejected subject:"FN<N>"` and STOP (do NOT delegate FN).
-- **`bypass`** (stamped only by `--auto-finalization` or `--emergency`, or directly per-issue by the `/megatask` batch orchestrator): loop step 4.9 runs the writer, emits `fn_gate_bypass subject:"FN<N>"` (`reason: "unattended"`), then delegates FN unattended. In dynamic mode the same bypass path applies on workflow return.
+- **`bypass`** (stamped only by `--auto=[finalization]` — legacy `--auto-finalization` — or `--emergency`, or directly per-issue by the `/megatask` batch orchestrator): loop step 4.9 runs the writer, emits `fn_gate_bypass subject:"FN<N>"` (`reason: "unattended"`), then delegates FN unattended. In dynamic mode the same bypass path applies on workflow return.
 
 ### At the FN stage
 
@@ -1368,7 +1410,11 @@ The orchestrator loop is restartable. **WHEN reattaching** (PostCompact, session
 
 ## FN Finalization Gate
 
-The FN gate defaults to `"checkpoint"` (see § FN Gate): PL0 stamps `metadata.fn_gate = "checkpoint"`, so the orchestrator STOPs before the FN delegation, presents the pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. The two human checkpoints are the PL gate (`commands/worktask.md § Step A.5` and § PRECONDITION CHECK Signal 2) and this FN gate (Signal 3). `--auto-finalization` and `--emergency` (and the `/megatask` batch orchestrator, per-issue) stamp `fn_gate: "bypass"` to finalize unattended (`--auto-plan` never bypasses FN — it is orthogonal to the plan gate). All file-writing work is worktree-isolated, so finalization is reviewable as a PR. On the checkpoint path the orchestrator writes `fn_gate_waiting` then `approval_received`/`approval_rejected`; on bypass it writes a single `fn_gate_bypass` audit line (`reason: "unattended"`) — all with `subject:"FN<run_index>"` (see § FN Gate).
+The FN gate defaults to `"checkpoint"` (see § FN Gate): PL0 stamps `metadata.fn_gate = "checkpoint"`, so the orchestrator STOPs before the FN delegation, presents the pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. The two human checkpoints are the PL gate (`commands/worktask.md § Step A.5` and § PRECONDITION CHECK Signal 2) and this FN gate (Signal 3). All file-writing work is worktree-isolated, so finalization is reviewable as a PR.
+
+### FN Finalization Gate — bypass and audit rows
+
+`--auto=[finalization]` (legacy `--auto-finalization`) and `--emergency` (and the `/megatask` batch orchestrator, per-issue) stamp `fn_gate: "bypass"` to finalize unattended (`--auto=[plan]` never bypasses FN — it is orthogonal to the plan gate; `--auto=[decision]` bypasses no gate — see § Auto-Decision Delegation). On the checkpoint path the orchestrator writes `fn_gate_waiting` then `approval_received`/`approval_rejected`; on bypass it writes a single `fn_gate_bypass` audit line (`reason: "unattended"`) — all with `subject:"FN<run_index>"` (see § FN Gate).
 
 ## Scripts
 

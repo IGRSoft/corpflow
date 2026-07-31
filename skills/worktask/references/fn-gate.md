@@ -2,11 +2,11 @@
 
 Read at gate time from `skills/worktask/SKILL.md § FN Gate` (stub). This file is the imperative procedure for the FN stage.
 
-**The FN gate is the pre-finalization human checkpoint.** It defaults to `"checkpoint"`: the orchestrator STOPs immediately before the FN `Task()` delegation, presents a pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. PL0 stamps `metadata.fn_gate = "bypass"` only for `--auto-finalization` / `--emergency` (a batch orchestrator such as `/megatask` stamps it directly on each per-issue PL0). The **Pre-gate Conductor-attachments writer** below runs on the checkpoint path (so Conductor's *Create PR* / *Request Review* actions inherit worktask context); on bypass, FN-agent Writer 2 (`agents/project-manager.md § FN Stage`) covers this. All file-writing work is worktree-isolated and the FN finalization is reviewable as a PR. `N` = `state.json.run_index` (default `0`).
+**The FN gate is the pre-finalization human checkpoint.** It defaults to `"checkpoint"`: the orchestrator STOPs immediately before the FN `Task()` delegation, presents a pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. PL0 stamps `metadata.fn_gate = "bypass"` only for `--auto=[finalization]` / `--emergency` (a batch orchestrator such as `/megatask` stamps it directly on each per-issue PL0). The **Pre-gate Conductor-attachments writer** below runs on the checkpoint path (so Conductor's *Create PR* / *Request Review* actions inherit worktask context); on bypass, FN-agent Writer 2 (`agents/project-manager.md § FN Stage`) covers this. All file-writing work is worktree-isolated and the FN finalization is reviewable as a PR. `N` = `state.json.run_index` (default `0`).
 
 ## Gate semantics
 
-- **Carrier**: `PL0.metadata.fn_gate`, default `"checkpoint"`. PL0 stamps `"bypass"` ONLY when `--auto-finalization` or `--emergency` is present (see `commands/worktask.md` Phase 1, step 4); a batch orchestrator such as `/megatask` stamps it directly on each per-issue PL0. `--auto-plan` NEVER bypasses the FN gate — it is orthogonal and bypasses only the plan gate.
+- **Carrier**: `PL0.metadata.fn_gate`, default `"checkpoint"`. PL0 stamps `"bypass"` ONLY when `--auto=[finalization]` or `--emergency` is present (see `commands/worktask.md` Phase 1, step 4); a batch orchestrator such as `/megatask` stamps it directly on each per-issue PL0. `--auto=[plan]` NEVER bypasses the FN gate — it is orthogonal and bypasses only the plan gate.
 
 ### Effect (checkpoint — the gated path)
 
@@ -77,7 +77,7 @@ All four FN-gate audit lines use `subject:"FN<run_index>"` (`N` = `state.json.ru
 {"actor":"orchestrator","action":"approval_rejected","subject":"FN<N>","result":"rejected"}
 ```
 
-**Bypass path** (`--auto-finalization` / `--emergency`, or a gate stamped `"bypass"` by `/megatask`) — a single line before the FN stage runs:
+**Bypass path** (`--auto=[finalization]` / `--emergency`, or a gate stamped `"bypass"` by `/megatask`) — a single line before the FN stage runs:
 
 ```json
 {"actor":"orchestrator","action":"fn_gate_bypass","subject":"FN<N>","result":"ok","reason":"unattended"}

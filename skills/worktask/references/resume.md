@@ -17,14 +17,20 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 
 | TaskList Shape | Audit Tail | Action |
 |----------------|------------|--------|
-| PL0 `completed`, stage tasks `pending`, no stage `in_progress` | No `approval_received` audit line for PL<run_index> | Branch on `PL<run_index>.metadata.plan_gate`. If `"bypass"` (`--auto-plan` / `--emergency`, or stamped by `/megatask`): stages not yet dispatched — re-enter the stage loop and delegate the first unblocked stage; do NOT stop. If `"checkpoint"` (default): parked at the post-plan human checkpoint — STOP and prompt for approval; proceed only once an `approval_received` line with `subject:"PL<run_index>"` is logged. |
+| PL0 `completed`, stage tasks `pending`, no stage `in_progress` | No `approval_received` audit line for PL<run_index> | Branch on `PL<run_index>.metadata.plan_gate`. If `"bypass"` (`--auto=[plan]` / `--emergency`, or stamped by `/megatask`): stages not yet dispatched — re-enter the stage loop and delegate the first unblocked stage; do NOT stop. If `"checkpoint"` (default): parked at the post-plan human checkpoint — STOP and prompt for approval; proceed only once an `approval_received` line with `subject:"PL<run_index>"` is logged. |
+
+### Auto-decision row
+
+| TaskList Shape | Audit Tail | Action |
+|----------------|------------|--------|
+| PL0 `completed`, stage tasks `pending`, `PL0.metadata.decision_gate == "auto"`, PL0 handoff carries non-empty `open_questions[]` | `auto_decision_dispatched` for `PL<run_index>` present but no matching `auto_decision_resolved` | Auto-decision pass interrupted mid-delegate. Re-run `commands/worktask.md § Step A.4` — already-applied decisions are visible as `(auto-decided)` entries in `facts.decisions[]`; do not re-decide those — then continue to the plan-gate row above. Unanswered `escalate` items always STOP for the user, even on a `bypass` plan gate. |
 
 ### Mid-stage & FN-gate rows
 
 | TaskList Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | PL0 `completed`, `approval_received` present, some stages `in_progress` | most recent `subagent_stopped` `result: error` | Mid-stage failure. Read `.context/errors/<agent>.md`, honor `retry_count` |
-| PL0 `completed`, all stages `completed` except FN, FN `pending`, audit tail has `fn_gate_waiting` for FN | No `approval_received` audit line for `FN<run_index>` | At the FN gate, parked. Branch on `PL<run_index>.metadata.fn_gate` (default `"checkpoint"`). If `"checkpoint"`: re-present the pre-FN summary (`references/fn-gate.md`), STOP, and delegate FN only once an `approval_received` line with `subject:"FN<run_index>"` is logged. If `"bypass"` (`--auto-finalization` / `--emergency`, or stamped by `/megatask`): proceed — delegate FN. |
+| PL0 `completed`, all stages `completed` except FN, FN `pending`, audit tail has `fn_gate_waiting` for FN | No `approval_received` audit line for `FN<run_index>` | At the FN gate, parked. Branch on `PL<run_index>.metadata.fn_gate` (default `"checkpoint"`). If `"checkpoint"`: re-present the pre-FN summary (`references/fn-gate.md`), STOP, and delegate FN only once an `approval_received` line with `subject:"FN<run_index>"` is logged. If `"bypass"` (`--auto=[finalization]` / `--emergency`, or stamped by `/megatask`): proceed — delegate FN. |
 
 ### Near-done & stale rows
 

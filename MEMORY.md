@@ -4,7 +4,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **3.42.0** (AR/TL stage inclusion becomes a PL0 decision, not a tier mandate; gated AR→DV architecture reference in the DV handoff, warn-only; BREAKING: AR artifact renamed `analyzing-N.md`→`architecture-N.md`, no back-compat. Suite **fully green** 438 bats/0 fail + 48 Swift + 37/175 Python. See release-history row below for the full changelog.)
+- Plugin version: **3.43.0** (gate flags become the array `--auto=[plan, decision, finalization]` with `--auto-plan`/`--auto-finalization` as deprecated aliases; new `decision_gate` carrier + Step A.4 Fable-model auto-decision pre-pass for PL0 open questions, escalation-guarded and audited, with the decisions merged into `facts.decisions[]` rather than any new plan anchor. Docs + manifest version parity only — no script or test changes. See release-history row below for the full changelog.)
 - Claude Code min required: **2.1.220** (README.md is authoritative; nested delegation is off by default on 2.1.217–2.1.218 and the plugin's DV routing depends on it, so 2.1.219 is the functional floor — pinned to the band top per the v3.35.0 precedent)
 - Claude Code latest integrated band: **2.1.216→2.1.220**
 
@@ -36,6 +36,19 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-07-31: v3.43.0 — `--auto` becomes an array flag (`--auto=[plan, decision, finalization]`;
+  legacy `--auto-plan`/`--auto-finalization` kept as deprecated aliases, union-composed). New
+  `PL0.metadata.decision_gate` (`"user"`/`"auto"`) + orchestrator Step A.4: on `"auto"`, PL0's
+  `open_questions[]` are decided by a PM decision delegate on `model: "fable"` (step-5f `opus`
+  fallback), applied to the plan's existing anchors in one batch pass, then merged by the
+  orchestrator into `state.json facts.decisions[]` as `(auto-decided)` entries (no new plan
+  anchor — `## decisions` stays AR's), audited `auto_decision_dispatched`→`auto_decision_resolved`
+  (rationale per question in that row). BINDING escalation guard: irreversible/scope/security/spend
+  questions always stop for the user, even under `plan_gate: "bypass"`. `/megatask` stamps
+  `decision_gate: "auto"` per issue and PARKS an escalate-class issue instead of stalling the
+  batch. New Signal 2b precondition + resume-table row. Docs + `marketplace.json` version parity
+  only; files include `commands/{worktask,megatask}.md`, `skills/megatask/SKILL.md`,
+  `.claude-plugin/marketplace.json`.
 - 2026-07-31: v3.42.0 — TL0 removed from every tier default (four table copies + README),
   included only when PL0 splits work across ≥2 developers; AR0 stays a tier default PL0 may
   override either direction, against one canonical Stage Inclusion Criteria block
@@ -78,7 +91,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-07-28: v3.37.1 — model-name sweep: no superseded Opus/Sonnet generation named outside CHANGELOG; dated rows de-named; benchmark STAGE_TABLE repinned to Opus 5/Sonnet 5. ~14 files.
 - 2026-07-28: v3.37.0 — Claude Code 2.1.216→2.1.220: nesting depth 5→3, 20-concurrent cap, Opus 5 default, budget-halt resume branch; min CC → 2.1.220. ~23 files.
 - 2026-07-27: v3.36.2 — worktask PR-composition, issue-publish, branch-naming, base-ref fixes. `fn-preflight.sh` gains `pr-body` (sanitises the composed body in place by sourcing `publish-pl-issue.sh`'s own `sanitise_body` under `PUBLISH_LIB_ONLY=1`, fail-closed; requires a `Test plan` heading; requires the `visual_evidence_pr_emitted` audit row for the current run index, and the `## Visual evidence` section when that row says `ok`) and `branch-name` (`<type>/<ticket>-<slug>`, idempotent, never renames an upstream-tracked or integration branch, deliberately not in `all` because `all` runs post-push). Both self-disable under `/megatask` and `--emergency` via a local five-signal `fn_batch_scope` mirror that depends on nothing but jq + the filesystem. `resolve_base_ref` replaces the hardcoded `main` continuity fallback with one five-rank order (`FN_BASE_REF` → `state.metadata.base_ref` → `state.git.base_branch` → `workspace.json` → `origin/HEAD` → unresolved, no literal). `publish-pl-issue.sh` resolves a bare-basename `plan_file` against the state directory and prints a stderr diagnostic naming every candidate on the fatal path. `plan_file` path-vs-basename boundary stated at seven writer/reader sites. +26 bats cases. ~13 files.
-- 2026-07-27: v3.36.1 — test-selection grammar and coordination: Apple test identifiers are suite-terminal (function parentheses + param suffixes in Swift Testing prevent per-function `-only-testing:` matching, causing full-suite fallback), DV dispatch test-scope enforcement + advisory TL reader, `environmental_contention` classification with re-baseline-only handler, `igrsoft:context-compression` wired into DR/QA, audit-only counters (`full_test_run`/`scoped_test_run` keyed on invocation shape, never a gate), cross-repo divergence note on upstream apple-developer plugin. ~8 files.
 ## Token Baselines
 
 Authoritative per-surface baselines: `skills/cost-optimization/references/token-baselines.md`. This file no longer mirrors them.

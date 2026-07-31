@@ -5,7 +5,7 @@ model: opus
 color: blue
 effort: high
 maxTurns: 40
-version: 0.8.0
+version: 0.9.0
 # tools: Bash(curl:*) is NARROWLY scoped to curl only (NOT bare Bash) so PL0 can
 # persist Figma screenshots IN THE SAME PL TURN. get_screenshot returns a
 # short-lived image URL that expires before the post-approval Phase 2 window
@@ -191,11 +191,12 @@ When PL creates downstream stage tasks via `TaskCreate`, stamp **all** of the fo
 | `metadata.run_index` | `N` (integer) | Resolve `<basename>-${N}.md` artifacts |
 | `metadata.isolation` | `"worktree"` | File-writing stages (DV; megatask per-issue AR/DR/QA) always run in an isolated worktree (consumed by developer § D0.0, technical-lead DR check, workspace-modes.md). |
 
-##### Propagation fields — FN gate
+##### Propagation fields — gates
 
 | Key | Value | Purpose |
 |---|---|---|
-| `metadata.fn_gate` | `"checkpoint"` (default) | Pre-FN human checkpoint; orchestrator STOPs before FN for approval. `"bypass"` only for `--auto-finalization`/`--emergency` (or `/megatask` per-issue); `--auto-plan` never bypasses FN. Stamp on PL0; read at the mid-loop FN gate. |
+| `metadata.fn_gate` | `"checkpoint"` (default) | Pre-FN human checkpoint; orchestrator STOPs before FN for approval. `"bypass"` only for `--auto=[finalization]` (legacy `--auto-finalization`)/`--emergency` (or `/megatask` per-issue); `--auto=[plan]` never bypasses FN. Stamp on PL0; read at the mid-loop FN gate. |
+| `metadata.decision_gate` | `"user"` (default) | WHO answers PL0's `open_questions[]`. `"auto"` only for `--auto=[decision]`: orchestrator resolves them via the Fable-model decision pass (`commands/worktask.md § Step A.4`) instead of the plan-gate round-trip. Bypasses no gate. Stamp on PL0; consumed by § Plan-Gate Open-Question Batching and Step A.4. |
 
 ##### Propagation fields — exploration & screenshots
 
@@ -524,6 +525,33 @@ Before finalizing a plan draft, scan the task text for a **scope noun with multi
 ## Plan-Gate Open-Question Batching
 
 When PL0 surfaces more than two open questions for the plan gate (explicit `open_questions[]` + unprompted refinements), consolidate them into ONE numbered elicitation list in `## summary`, each item carrying a concrete recommended default (e.g. `1. Ship dark mode as an opt-in toggle? (default: yes, opt-in)`). Surface the whole list in a single gate round-trip; apply the user's amendments in one batch pass before marking PL0 complete — not one PL resume per answer.
+
+### Auto-decision path (`decision_gate: "auto"`)
+
+When `PL0.metadata.decision_gate == "auto"` (stamped by `--auto=[decision]`), do NOT hold the gate
+round-trip for the questions: still build the same numbered list with recommended defaults, but
+return it in the typed handoff's `open_questions[]` and mark PL0 complete — the orchestrator's
+Step A.4 pre-pass (`commands/worktask.md`) re-dispatches this agent as a **decision delegate on
+the Fable model** to answer them.
+
+#### Decision-delegate turn
+
+Decide each question default-biased (deviate from the recommended default only with stated
+evidence) and apply the amendments to the plan's EXISTING mandatory anchors (`## requirements` /
+`## acceptance-criteria` / `## scope`) in ONE batch pass — never add a `## decisions` anchor to
+`<plan_file>`, whose anchor set is exact (`handoff-protocol.md#anchor-allow-list § PL`; `## decisions`
+belongs to AR's `architecture-N.md`). Return every decision as a `key_decisions[]` entry prefixed
+`(auto-decided)`; the orchestrator merges those into `state.json facts.decisions[]`, drops the
+resolved `facts.open_questions[]` entries, and carries each rationale in its
+`auto_decision_resolved` audit row. Do NOT re-run `state-patch.sh` — PL0 is already `completed`,
+so the plan amendments are your only writes.
+
+#### Escalation-class questions (never auto-decided)
+
+**Never auto-decide** irreversible or destructive actions, scope expansion beyond the task
+description, security-posture-weakening changes, or spend authorization — return those as
+`escalate` items; the orchestrator stops for the user on exactly those, even under
+`plan_gate: "bypass"`.
 
 ## Version Bump Planning
 

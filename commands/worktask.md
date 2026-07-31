@@ -1,21 +1,25 @@
 ---
 name: worktask
 description: Initialize a new worktask task with proper folder structure and Task System integration
-argument-hint: '<task description> [--secure] [--emergency] [--auto-plan] [--auto-finalization]'
-version: 0.2.0
+argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]]'
+version: 0.3.0
 model: opus
 allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager)
 ---
 
-> **EXECUTION MODEL (BINDING)** — two gates, two human checkpoints.
+> **EXECUTION MODEL (BINDING)** — two gates, two human checkpoints, plus an optional decision delegate.
 > The **PL gate** is the post-plan human checkpoint: after PL0 completes, the orchestrator
 > presents the generated plan and waits for explicit user approval (`AskUserQuestion`) before
 > dispatching any implementation stage (AR/DV/...). It is carried by `PL0.metadata.plan_gate`, which
-> defaults to `"checkpoint"`; `--auto-plan` and `--emergency` stamp `"bypass"` to auto-proceed (a batch orchestrator such as `/megatask` instead stamps it directly on each per-issue PL0).
+> defaults to `"checkpoint"`; `--auto=[plan]` (legacy alias `--auto-plan`) and `--emergency` stamp `"bypass"` to auto-proceed (a batch orchestrator such as `/megatask` instead stamps it directly on each per-issue PL0).
+> The **decision gate** is carried by `PL0.metadata.decision_gate`, default `"user"`: PL open
+> questions surface to the user at the plan gate. `--auto=[decision]` stamps `"auto"` — open
+> questions are resolved by a Fable-model decision delegate instead of blocking on the user
+> (see § Step A.4 Auto-Decision Pre-Pass). Escalation-class questions always fall back to the user.
 > The **FN gate** is the pre-finalization human checkpoint: `PL0.metadata.fn_gate` defaults to
 > `"checkpoint"`, so the orchestrator STOPs immediately before the FN `Task()` delegation, presents a
 > pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. It is stamped
-> `"bypass"` only by `--auto-finalization` or `--emergency` (unattended fast-path); `/megatask` stamps it directly on each per-issue PL0.
+> `"bypass"` only by `--auto=[finalization]` (legacy alias `--auto-finalization`) or `--emergency` (unattended fast-path); `/megatask` stamps it directly on each per-issue PL0.
 > Every worktask is worktree-isolated, so the PR is the review surface for the implementation.
 
 # Worktask Command
@@ -55,12 +59,31 @@ See `skills/shared/stage-codes.md` for stage details.
 
 ## Options
 
-### Gate bypass flags
+### Gate automation flag (`--auto`)
 
-| Option | Effect |
-|--------|--------|
-| `--auto-plan` | Stamp `plan_gate: "bypass"` — skip the post-PL plan-approval STOP and auto-proceed into the stage loop (trusted fast-path). FN gate is independent — still checkpoints unless `--auto-finalization`. |
-| `--auto-finalization` | Stamp `fn_gate: "bypass"` — skip the pre-FN finalization-approval STOP; auto commit/push/PR (trusted fast-path). Plan gate still applies unless `--auto-plan`. |
+`--auto=[<values>]` takes an **array** of automation values — any non-empty subset of
+`plan`, `decision`, `finalization`, comma-separated. Brackets are optional and whitespace inside
+them is tolerated: `--auto=[plan, decision]`, `--auto=plan,finalization`, and `--auto=[decision]`
+are all valid. An unknown value is a parse error — reject the invocation and report; do NOT drop
+the value silently. Each value is independent (orthogonal carriers on PL0).
+
+#### Gate automation flag — values
+
+| Value | Effect |
+|-------|--------|
+| `plan` | Stamp `plan_gate: "bypass"` — skip the post-PL plan-approval STOP and auto-proceed into the stage loop (trusted fast-path). FN gate is independent — still checkpoints unless `finalization` is also set. |
+| `decision` | Stamp `decision_gate: "auto"` — when PL0 surfaces `open_questions[]`, delegate their resolution to a **Fable-model decision pass** (§ Step A.4) instead of blocking on the user. Bypasses NO gate by itself: under a `checkpoint` plan gate the auto-decisions are presented (marked) for approval. Escalation-class questions (irreversible, scope-expanding, security-posture) always fall back to the user. |
+| `finalization` | Stamp `fn_gate: "bypass"` — skip the pre-FN finalization-approval STOP; auto commit/push/PR (trusted fast-path). Plan gate still applies unless `plan` is also set. |
+
+#### Legacy aliases (deprecated)
+
+| Legacy flag | Canonical equivalent |
+|-------------|----------------------|
+| `--auto-plan` | `--auto=[plan]` |
+| `--auto-finalization` | `--auto=[finalization]` |
+
+Both legacy flags remain accepted and compose with `--auto=[...]` (union of values). New
+invocations and documentation MUST use the array form.
 
 ### Scope and pipeline flags
 
@@ -90,7 +113,7 @@ See `skills/shared/stage-codes.md` for stage details.
 
 ### Steps 1–3 — Parse flags and create context folders
 
-1. **Parse** task description and flags (`--secure`, `--auto-plan`, `--auto-finalization`, `--emergency`, etc.). See **Embedded Command Detection** below.
+1. **Parse** task description and flags (`--secure`, `--auto=[plan, decision, finalization]` — plus the legacy aliases `--auto-plan`/`--auto-finalization` — `--emergency`, etc.). Resolve the `--auto` array per § Gate automation flag: strip optional brackets, split on commas, trim whitespace, union with any legacy aliases, reject unknown values. See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:fix-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
 3. **Create context folders**: `mkdir -p .context/designs .context/images .context/errors .context/logs`
 
@@ -149,15 +172,20 @@ See `skills/shared/stage-codes.md` for stage details.
 
 ### Step 4 — TaskCreate PL0
 
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", plan_gate: "checkpoint", fn_gate: "checkpoint", isolation: "worktree" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.).
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "igrsoft:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", plan_gate: "checkpoint", decision_gate: "user", fn_gate: "checkpoint", isolation: "worktree" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`igrsoft:`, `apple-developer:`, etc.).
 
 #### Step 4 — fn_gate stamping
 
-Stamp `fn_gate`: default `fn_gate: "checkpoint"` (the orchestrator STOPs immediately before the FN `Task()` delegation and asks for finalization approval before any commit/push/PR — handled at SKILL.md loop step 4.9). Stamp `fn_gate: "bypass"` ONLY when `--auto-finalization` is present OR when `--emergency` is set (incident pipeline finalizes unattended). `--auto-plan` MUST NEVER stamp `fn_gate: "bypass"` — it is orthogonal and bypasses only the plan gate. (A batch orchestrator such as `/megatask` stamps `fn_gate: "bypass"` directly on each per-issue PL0 — `/worktask` itself has no batch flag.)
+Stamp `fn_gate`: default `fn_gate: "checkpoint"` (the orchestrator STOPs immediately before the FN `Task()` delegation and asks for finalization approval before any commit/push/PR — handled at SKILL.md loop step 4.9). Stamp `fn_gate: "bypass"` ONLY when the resolved `--auto` array contains `finalization` (canonical `--auto=[finalization]`; legacy alias `--auto-finalization`) OR when `--emergency` is set (incident pipeline finalizes unattended). `--auto=[plan]` MUST NEVER stamp `fn_gate: "bypass"` — it is orthogonal and bypasses only the plan gate. (A batch orchestrator such as `/megatask` stamps `fn_gate: "bypass"` directly on each per-issue PL0 — `/worktask` itself has no batch flag.)
 
 #### Step 4 — plan_gate stamping
 
-Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOPs after PL0 and asks for plan approval before dispatching stages). Stamp `plan_gate: "bypass"` ONLY when `--auto-plan` is present OR when `--emergency` is set (emergency pipeline runs unattended from IR — no plan approval gate). (A batch orchestrator such as `/megatask` stamps `plan_gate: "bypass"` directly on each per-issue PL0.) `plan_gate` and `fn_gate` are the two carriers that let resume logic distinguish the post-plan and pre-FN checkpoints on interruption — see `skills/worktask/references/resume.md § State → Action Table`.
+Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOPs after PL0 and asks for plan approval before dispatching stages). Stamp `plan_gate: "bypass"` ONLY when the resolved `--auto` array contains `plan` (canonical `--auto=[plan]`; legacy alias `--auto-plan`) OR when `--emergency` is set (emergency pipeline runs unattended from IR — no plan approval gate). (A batch orchestrator such as `/megatask` stamps `plan_gate: "bypass"` directly on each per-issue PL0.) `plan_gate`, `decision_gate`, and `fn_gate` are the carriers resume logic branches on after interruption — see `skills/worktask/references/resume.md § State → Action Table`.
+
+#### Step 4 — decision_gate stamping
+
+Also stamp `decision_gate`: default `decision_gate: "user"` (PL open questions surface to the user at the plan gate — existing behavior). Stamp `decision_gate: "auto"` ONLY when the resolved `--auto` array contains `decision`. The carrier is consumed by two readers: the PM agent (holds no gate round-trip for questions — returns them in `open_questions[]`; see `agents/product-manager.md § Plan-Gate Open-Question Batching`) and the orchestrator's Step A.4 auto-decision pre-pass below. `decision_gate` bypasses neither `plan_gate` nor `fn_gate` — it only changes WHO answers PL0's open questions. `--emergency` leaves it at `"user"` (the incident pipeline has no PL stage, so the carrier is inert there).
+
 ### Steps 5–6 — Dispatch the PL agent
 
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
@@ -172,9 +200,67 @@ Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOP
 
 ## Phase 2: Execute Stages (proceeds automatically)
 
-Phase 2 begins with the Plan Gate Check (Step A.5): on a `checkpoint` plan gate the orchestrator presents the plan and waits for user approval before the stage loop; on `bypass` (`--auto-plan` / `--emergency`, or a gate stamped directly by `/megatask`) it proceeds directly.
+Phase 2 begins with the Auto-Decision Pre-Pass (Step A.4, no-op unless `decision_gate == "auto"` AND PL0 left open questions), then the Plan Gate Check (Step A.5): on a `checkpoint` plan gate the orchestrator presents the plan and waits for user approval before the stage loop; on `bypass` (`--auto=[plan]` / `--emergency`, or a gate stamped directly by `/megatask`) it proceeds directly.
 
-### Step A.5 — Plan Gate Check (runs FIRST in Phase 2, before Step A publish)
+### Step A.4 — Auto-Decision Pre-Pass (runs before Step A.5)
+
+Read `PL0.metadata.decision_gate` via `TaskGet` (default `"user"` when absent) and PL0's
+`open_questions[]` (typed handoff / plan-frontmatter — the numbered elicitation list from
+`agents/product-manager.md § Plan-Gate Open-Question Batching`). This step is a **no-op** when
+`decision_gate == "user"` or `open_questions[]` is empty/absent — fall through to Step A.5.
+
+#### Auto-decision dispatch (Fable delegate)
+
+When `decision_gate == "auto"` and `open_questions[]` is non-empty:
+
+1. Append an `auto_decision_dispatched` audit row (`subject:"PL<N>"`, `metadata.questions: <count>`).
+2. Re-dispatch the PM as a decision delegate on the **Fable model**:
+   `Task({ subagent_type: "igrsoft:product-manager", model: "fable", prompt: <decision prompt> })`.
+   The prompt carries the open-question list verbatim (each with its recommended default) and the
+   plan file path; its duties are § Auto-decision recording contract below. **Model fallback**:
+   apply loop step 5f exactly — if `facts.capabilities.fable_dispatch == "credit_blocked"`,
+   dispatch on `"opus"` and audit `model_resolution_constrained`.
+
+#### Auto-decision recording contract
+
+The decision prompt instructs the delegate to decide every non-escalation question (default-biased
+— deviate from the PM's recommended default only with stated evidence), apply the resulting
+amendments to the plan's EXISTING mandatory anchors (`## requirements` / `## acceptance-criteria` /
+`## scope`) in ONE batch pass, and return each decision as a typed-return `key_decisions[]` entry
+prefixed `(auto-decided)`, plus any `escalate` items. It adds NO new anchor to `planning-N.md` —
+the PL anchor set is exact (`skills/worktask/references/handoff-protocol.md § #anchor-allow-list`).
+It does NOT re-run `state-patch.sh`: PL0 is already `completed`, so the plan amendments are its
+only writes.
+
+#### Auto-decision ledger merge (orchestrator)
+
+3. On return the ORCHESTRATOR — not the delegate — merges the ledger via `atomicMergeStateJson`:
+   append each decided item to `state.json facts.decisions[]` marked `(auto-decided)` and remove
+   the resolved entries from `facts.open_questions[]`. This is what makes the decisions visible to
+   AR/TL/DV, which read `facts.decisions`/`facts.open_questions` on stage entry
+   (`skills/shared/stage-contracts.md`).
+4. Append one `auto_decision_resolved` audit row (`subject:"PL<N>"`, `metadata: { decided: <count>,
+   escalated: <count>, model_resolved: <alias>, decisions: [{question, answer, rationale}] }`) —
+   the per-question rationale is carried there, one line each.
+
+#### Escalation guard (BINDING)
+
+The delegate MUST NOT auto-decide **escalation-class** questions: anything irreversible or
+destructive (data deletion, force-push, external publication), scope-expanding beyond the task
+description, security-posture-weakening, or spend-authorizing. It returns those as `escalate`
+items. If any `escalate` items exist, Step A.5 runs as a **`checkpoint`** gate for those items
+even when `plan_gate == "bypass"` — the user answers only the escalated questions, the batch
+amendment pass applies their answers, then the bypass path resumes. Auto-decision never widens
+what runs unattended; it only answers what a human would otherwise be interrupted for.
+
+#### Presentation in the gate summary
+
+On a `checkpoint` plan gate, the Step A.5 summary MUST list every auto-decided question with its
+chosen answer marked `(auto-decided by Fable — see facts.decisions[] / audit)`, so the user
+approves the decisions together with the plan. On `bypass`, the audit rows plus the merged
+`facts.decisions[]` entries are the durable record.
+
+### Step A.5 — Plan Gate Check (runs after Step A.4, before Step A publish)
 
 Read `PL0.metadata.plan_gate` via `TaskGet` (default `"checkpoint"` when absent). Resolve the run
 index `N` from `state.json.run_index` (default `0`).
@@ -217,8 +303,11 @@ The step-2 summary MUST show both decisions explicitly, each with its one-line r
 
 #### Plan gate bypass path
 
-**If `plan_gate == "bypass"`** (stamped by `--auto-plan` or `--emergency`, or directly by `/megatask` on a per-issue PL0): proceed directly to
-Step A. No prompt, no approval line.
+**If `plan_gate == "bypass"`** (stamped by `--auto=[plan]` — legacy `--auto-plan` — or `--emergency`, or directly by `/megatask` on a per-issue PL0): proceed directly to
+Step A. No prompt, no approval line. Exception: unresolved `escalate` items from Step A.4 force a
+`checkpoint`-style stop for those items first (§ Step A.4 Escalation guard) — once the user has
+answered them, append the standard `approval_received subject:"PL<N>"` row (that row is what
+§ PRECONDITION CHECK Signal 2b requires as the escalate resolution) and then resume the bypass path.
 
 ### Step A — Publish plan to GitHub (run BEFORE the stage loop)
 
