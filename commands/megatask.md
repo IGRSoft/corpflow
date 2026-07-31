@@ -22,8 +22,9 @@ related:
 > `plan_gate: "bypass"`, `decision_gate: "auto"` and `fn_gate: "bypass"` on every per-issue `PL0`
 > because a batch cannot stop for per-issue plan/finalization approval, nor for that issue's open
 > questions — those route through the Fable decision pass. Escalate-class questions are never
-> auto-decided here either: they **PARK that single issue** (recorded, surfaced in the batch
-> summary) while the batch continues with the unblocked issues, rather than stalling the whole
+> auto-decided here either: they **PARK that single issue** — settled `failed` with
+> `execution.reason: "parked_escalation"` and surfaced in the batch summary (§ Step 3) — while the
+> batch continues with the unblocked issues, rather than stalling the whole
 > batch on a human. Review surface is the **per-issue PR**. megatask keeps
 > exactly **one** human checkpoint of its own: the **R1 batch confirmation** (Phase 1) — it presents
 > the resolved issue set, the DAG, and the PR count, and waits for `AskUserQuestion` approval before
@@ -204,8 +205,15 @@ and chain depth (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, 3 — megatask spends o
 `decision_gate:"auto"` is stamped because a batch run is unattended: that issue's PL0 open
 questions route through the Fable decision pass (`commands/worktask.md § Step A.4`) instead of
 parking on a human. Escalate-class questions are still never auto-decided — they PARK that one
-issue (recorded, reported in the batch summary) and the batch proceeds with the other unblocked
-issues.
+issue and the batch proceeds with the other unblocked issues.
+
+Parking rides the monitor's existing failure path, so it needs no new state: the per-issue
+worktask writes `workspace.json.execution.status: "failed"` with
+`execution.reason: "parked_escalation"` and an `escalation_parked` audit row
+(`commands/worktask.md § Step A.4 Escalation guard`), and `hooks/megatask-monitor.sh` settles it
+like any failed issue — track freed, dependents stay `blocked`. The batch summary lists each
+parked issue with its unanswered escalate questions (distinguished from genuine failures by
+`execution.reason`) so the user can re-run it interactively with `/worktask`, re-scope, or drop it.
 
 ### Phase 2 loop · Step 4 — Monitor
 

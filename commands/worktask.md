@@ -72,7 +72,7 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 | Value | Effect |
 |-------|--------|
 | `plan` | Stamp `plan_gate: "bypass"` — skip the post-PL plan-approval STOP and auto-proceed into the stage loop (trusted fast-path). FN gate is independent — still checkpoints unless `finalization` is also set. |
-| `decision` | Stamp `decision_gate: "auto"` — when PL0 surfaces `open_questions[]`, delegate their resolution to a **Fable-model decision pass** (§ Step A.4) instead of blocking on the user. Bypasses NO gate by itself: under a `checkpoint` plan gate the auto-decisions are presented (marked) for approval. Escalation-class questions (irreversible, scope-expanding, security-posture) always fall back to the user. |
+| `decision` | Stamp `decision_gate: "auto"` — when PL0 surfaces `open_questions[]`, delegate their resolution to a **Fable-model decision pass** (§ Step A.4) instead of blocking on the user. Bypasses NO gate by itself: under a `checkpoint` plan gate the auto-decisions are presented (marked) for approval. Escalation-class questions (irreversible, scope-expanding, security-posture, spend) always fall back to the user. |
 | `finalization` | Stamp `fn_gate: "bypass"` — skip the pre-FN finalization-approval STOP; auto commit/push/PR (trusted fast-path). Plan gate still applies unless `plan` is also set. |
 
 #### Legacy aliases (deprecated)
@@ -184,7 +184,7 @@ Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOP
 
 #### Step 4 — decision_gate stamping
 
-Also stamp `decision_gate`: default `decision_gate: "user"` (PL open questions surface to the user at the plan gate — existing behavior). Stamp `decision_gate: "auto"` ONLY when the resolved `--auto` array contains `decision`. The carrier is consumed by two readers: the PM agent (holds no gate round-trip for questions — returns them in `open_questions[]`; see `agents/product-manager.md § Plan-Gate Open-Question Batching`) and the orchestrator's Step A.4 auto-decision pre-pass below. `decision_gate` bypasses neither `plan_gate` nor `fn_gate` — it only changes WHO answers PL0's open questions. `--emergency` leaves it at `"user"` (the incident pipeline has no PL stage, so the carrier is inert there).
+Also stamp `decision_gate`: default `decision_gate: "user"` (PL open questions surface to the user at the plan gate — existing behavior). Stamp `decision_gate: "auto"` ONLY when the resolved `--auto` array contains `decision`. The carrier is consumed by two readers: the PM agent (holds no gate round-trip for questions — returns them in `open_questions[]`; see `agents/product-manager.md § Plan-Gate Open-Question Batching`) and the orchestrator's Step A.4 auto-decision pre-pass below. `decision_gate` bypasses neither `plan_gate` nor `fn_gate` — it only changes WHO answers PL0's open questions. `--emergency` leaves it at `"user"` (the incident pipeline has no PL stage, so the carrier is inert there). (A batch orchestrator such as `/megatask` stamps `decision_gate: "auto"` directly on each per-issue PL0.)
 
 ### Steps 5–6 — Dispatch the PL agent
 
@@ -252,6 +252,17 @@ items. If any `escalate` items exist, Step A.5 runs as a **`checkpoint`** gate f
 even when `plan_gate == "bypass"` — the user answers only the escalated questions, the batch
 amendment pass applies their answers, then the bypass path resumes. Auto-decision never widens
 what runs unattended; it only answers what a human would otherwise be interrupted for.
+
+##### Escalation guard — unattended `/megatask` per-issue runs (PARK)
+
+Under a `/megatask` per-issue run (detected by `PL0.metadata.megatask_group`) there is no user to
+stop for. Instead of holding the checkpoint, **PARK the issue**: write
+`workspace.json.execution.status: "failed"` with `execution.reason: "parked_escalation"`, append an
+`escalation_parked` audit row (`subject:"PL<N>"`, `metadata.escalated: [<questions>]`), and STOP
+this worktask without dispatching any stage. Parking rides the monitor's existing failure path
+(`hooks/megatask-monitor.sh` settles only `completed`/`failed`): the track is freed, dependents
+stay `blocked`, and the batch summary lists the issue with its unanswered escalate questions for a
+follow-up interactive `/worktask`.
 
 #### Presentation in the gate summary
 

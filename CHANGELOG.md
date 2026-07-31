@@ -30,8 +30,8 @@ drop. `--auto-plan` and `--auto-finalization` remain accepted as deprecated alia
 
 ### Added
 
-- **`PL0.metadata.decision_gate` carrier** (`"user"` default / `"auto"`), stamped only by
-  `--auto=[decision]`. Bypasses neither `plan_gate` nor `fn_gate` — it changes WHO answers
+- **`PL0.metadata.decision_gate` carrier** (`"user"` default / `"auto"`), stamped by
+  `--auto=[decision]` (or directly per-issue by `/megatask`). Bypasses neither `plan_gate` nor `fn_gate` — it changes WHO answers
   PL0's open questions, nothing else. `--emergency` leaves it `"user"` (no PL stage → inert).
 - **Step A.4 Auto-Decision Pre-Pass** (`commands/worktask.md`): no-op unless
   `decision_gate == "auto"` AND `open_questions[]` is non-empty; otherwise dispatches the PM
@@ -74,8 +74,12 @@ drop. `--auto-plan` and `--auto-finalization` remain accepted as deprecated alia
 - **`/megatask` stamps `decision_gate: "auto"`** on every per-issue `PL0` alongside the two gate
   bypasses (`commands/megatask.md`, `skills/megatask/SKILL.md`) — a batch is unattended, so open
   questions route through the Fable decision pass. Escalate-class questions are still never
-  auto-decided there: they PARK that single issue (recorded, surfaced in the batch summary) and
-  the batch continues with the unblocked issues instead of stalling on a human.
+  auto-decided there: they PARK that single issue and the batch continues with the unblocked
+  issues instead of stalling on a human. Parking rides the monitor's existing failure path — the
+  per-issue worktask settles `execution.status: "failed"` +
+  `execution.reason: "parked_escalation"` with an `escalation_parked` audit row, so
+  `hooks/megatask-monitor.sh` frees the track, keeps dependents `blocked`, and the batch summary
+  lists the parked issue with its unanswered questions.
 - `.claude-plugin/marketplace.json` version parity — `metadata.version` and `plugins[0].version`
   bumped to 3.43.0 alongside `plugin.json` and the README badge.
 

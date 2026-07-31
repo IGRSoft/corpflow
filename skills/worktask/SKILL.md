@@ -1285,8 +1285,9 @@ checkpoint resume, which carries a recorded checkpoint forward on re-dispatch.
 
 ## Auto-Decision Delegation (decision_gate)
 
-Carried by `PL0.metadata.decision_gate` — `"user"` (default) or `"auto"` (stamped only by
-`--auto=[decision]`). On `"auto"`, PL0's `open_questions[]` are not held for the user: the
+Carried by `PL0.metadata.decision_gate` — `"user"` (default) or `"auto"` (stamped by
+`--auto=[decision]`, or directly per-issue by the `/megatask` batch orchestrator). On `"auto"`,
+PL0's `open_questions[]` are not held for the user: the
 orchestrator re-dispatches the PM as a decision delegate on `model: "fable"` (Fable 5; loop step
 5f capability fallback to `"opus"` applies). The carrier bypasses no gate. Canonical procedure:
 `commands/worktask.md § Step A.4`; precondition check: § PRECONDITION CHECK Signal 2b.
@@ -1313,7 +1314,10 @@ question's rationale in `metadata.decisions[]` (`{question, answer, rationale}` 
 
 Escalation-class questions (irreversible/destructive, scope-expanding, security-posture-weakening,
 spend-authorizing) are NEVER auto-decided — they return as `escalate` items and force a user stop
-even under `plan_gate: "bypass"`, resolved by an `approval_received subject:"PL<N>"` row.
+even under `plan_gate: "bypass"`, resolved by an `approval_received subject:"PL<N>"` row. Under an
+unattended `/megatask` per-issue run there is no user: the issue PARKS instead — settled
+`execution.status: "failed"` + `execution.reason: "parked_escalation"` with an `escalation_parked`
+audit row (`commands/worktask.md § Step A.4 Escalation guard`).
 
 ## FN Gate
 

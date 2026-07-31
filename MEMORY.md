@@ -46,7 +46,8 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
   (rationale per question in that row). BINDING escalation guard: irreversible/scope/security/spend
   questions always stop for the user, even under `plan_gate: "bypass"`. `/megatask` stamps
   `decision_gate: "auto"` per issue and PARKS an escalate-class issue instead of stalling the
-  batch. New Signal 2b precondition + resume-table row. Docs + `marketplace.json` version parity
+  batch (settled `failed` + `execution.reason: "parked_escalation"`, riding the monitor's normal
+  failure path — track freed, dependents stay blocked). New Signal 2b precondition + resume-table row. Docs + `marketplace.json` version parity
   only; files include `commands/{worktask,megatask}.md`, `skills/megatask/SKILL.md`,
   `.claude-plugin/marketplace.json`.
 - 2026-07-31: v3.42.0 — TL0 removed from every tier default (four table copies + README),

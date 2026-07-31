@@ -196,7 +196,7 @@ When PL creates downstream stage tasks via `TaskCreate`, stamp **all** of the fo
 | Key | Value | Purpose |
 |---|---|---|
 | `metadata.fn_gate` | `"checkpoint"` (default) | Pre-FN human checkpoint; orchestrator STOPs before FN for approval. `"bypass"` only for `--auto=[finalization]` (legacy `--auto-finalization`)/`--emergency` (or `/megatask` per-issue); `--auto=[plan]` never bypasses FN. Stamp on PL0; read at the mid-loop FN gate. |
-| `metadata.decision_gate` | `"user"` (default) | WHO answers PL0's `open_questions[]`. `"auto"` only for `--auto=[decision]`: orchestrator resolves them via the Fable-model decision pass (`commands/worktask.md § Step A.4`) instead of the plan-gate round-trip. Bypasses no gate. Stamp on PL0; consumed by § Plan-Gate Open-Question Batching and Step A.4. |
+| `metadata.decision_gate` | `"user"` (default) | WHO answers PL0's `open_questions[]`. `"auto"` only for `--auto=[decision]` (or `/megatask` per-issue): orchestrator resolves them via the Fable-model decision pass (`commands/worktask.md § Step A.4`) instead of the plan-gate round-trip. Bypasses no gate. Stamp on PL0; consumed by § Plan-Gate Open-Question Batching and Step A.4. |
 
 ##### Propagation fields — exploration & screenshots
 
@@ -551,7 +551,8 @@ so the plan amendments are your only writes.
 **Never auto-decide** irreversible or destructive actions, scope expansion beyond the task
 description, security-posture-weakening changes, or spend authorization — return those as
 `escalate` items; the orchestrator stops for the user on exactly those, even under
-`plan_gate: "bypass"`.
+`plan_gate: "bypass"` (under an unattended `/megatask` per-issue run it instead parks the issue —
+`commands/worktask.md § Step A.4 Escalation guard`).
 
 ## Version Bump Planning
 

@@ -23,7 +23,7 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 
 | TaskList Shape | Audit Tail | Action |
 |----------------|------------|--------|
-| PL0 `completed`, stage tasks `pending`, `PL0.metadata.decision_gate == "auto"`, PL0 handoff carries non-empty `open_questions[]` | `auto_decision_dispatched` for `PL<run_index>` present but no matching `auto_decision_resolved` | Auto-decision pass interrupted mid-delegate. Re-run `commands/worktask.md § Step A.4` — already-applied decisions are visible as `(auto-decided)` entries in `facts.decisions[]`; do not re-decide those — then continue to the plan-gate row above. Unanswered `escalate` items always STOP for the user, even on a `bypass` plan gate. |
+| PL0 `completed`, stage tasks `pending`, `PL0.metadata.decision_gate == "auto"`, PL0 handoff carries non-empty `open_questions[]` | `auto_decision_dispatched` for `PL<run_index>` present but no matching `auto_decision_resolved` | Auto-decision pass interrupted mid-delegate. Re-run `commands/worktask.md § Step A.4` — already-applied decisions are visible as `(auto-decided)` entries in `facts.decisions[]`; do not re-decide those — then continue to the plan-gate row above. Unanswered `escalate` items always STOP for the user, even on a `bypass` plan gate (a `/megatask` per-issue run never reaches this row — it parks instead: settled `failed` + `parked_escalation`, `commands/worktask.md § Step A.4 Escalation guard`). |
 
 ### Mid-stage & FN-gate rows
 
