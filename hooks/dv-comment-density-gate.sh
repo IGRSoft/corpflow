@@ -72,7 +72,7 @@ fi
 # ---------------------------------------------------------------------------
 comment_style_for() {
   case "${1##*.}" in
-    py) printf 'hash' ;;
+    py | sh | bash) printf 'hash' ;;
     *) printf 'cfamily' ;;
   esac
 }
@@ -162,8 +162,14 @@ run_gate() {
   _checked=0
   while IFS= read -r _f; do
     [ -n "$_f" ] || continue
+    # Vendored trees are exempt: on a dependency refresh the added lines ARE the
+    # third-party code, so added-line scoping stops shielding the writer from
+    # bloat it cannot slim.
+    case "$_f" in
+      vendor/* | */vendor/* | */node_modules/* | */Pods/* | */third_party/*) continue ;;
+    esac
     case "${_f##*.}" in
-      swift | h | m | mm | c | cc | cpp | ts | tsx | js | jsx | py | kt | java | go | rs) ;;
+      swift | h | m | mm | c | cc | cpp | ts | tsx | js | jsx | py | kt | java | go | rs | sh | bash) ;;
       *) continue ;;
     esac
     [ -f "$_root/$_f" ] || continue
@@ -307,6 +313,70 @@ if [ "$SELF_TEST" -eq 1 ]; then
   } >"$_tmp/lean.py"
   _out=$(run_gate "$(read_stdin)" "$_tmp/.context" "$_tmp")
   [ -z "$_out" ] || { echo "dv-comment-density-gate: self-test FAIL (lean .py blocked)"; _fail=1; }
+
+  # 7. Shell: a bloated .sh must block. Shell fell to the C-family regex, so it
+  #    scored 0% no matter how much of it was comment.
+  {
+    echo '#!/usr/bin/env bash'
+    printf '# Essay line %s narrating history the standard bans.\n' 1 2 3 4 5 6 7 8 9 10
+    printf '# Contract prose %s restating the signature.\n' 1 2 3 4 5 6 7 8 9 10
+    printf '# Provenance %s: ticket id, review answer, issue tag.\n' 1 2 3 4 5 6 7 8 9 10
+    echo 'set -euo pipefail'
+    printf 'field%s=0\n' 1 2 3 4 5 6 7 8
+    printf 'calc%s() { echo %s; }\n' 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8
+  } >"$_tmp/bloated.sh"
+  _out=$(run_gate "$(read_stdin)" "$_tmp/.context" "$_tmp")
+  printf '%s' "$_out" | jq -e '
+    .decision == "block" and (.reason | test("bloated\\.sh"))
+  ' >/dev/null 2>&1 || { echo "dv-comment-density-gate: self-test FAIL (bloated .sh did not block)"; _fail=1; }
+
+  # 8. Lean .sh -> must pass. It carries a real shebang and a conventional header
+  #    because shell's mandatory preamble is counted as comment: a fixture
+  #    without one would overstate how much headroom a real script has.
+  rm -f "$_tmp/bloated.sh"
+  run_gate "$(read_stdin)" "$_tmp/.context" "$_tmp" >/dev/null
+  _checked_before=$(tail -n 1 "$_tmp/.context/logs/audit.jsonl" | jq -r '.metadata.files_checked')
+  {
+    echo '#!/usr/bin/env bash'
+    echo '# prune-artifacts — drop build artifacts past the retention window.'
+    echo '#'
+    echo '# Requires: find, date. Exits non-zero when the artifact root is absent.'
+    echo '# Safe to re-run; deletion is idempotent.'
+    echo 'set -euo pipefail'
+    printf 'field%s=0\n' 1 2 3 4 5 6 7 8 9 10
+    printf 'calc%s() { echo %s; }\n' 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10 10
+    echo '# Two retries: the artifact store 502s on a cold cache.'
+    printf 'derived%s() { echo "derived %s"; }\n' 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10 10
+    printf 'extra%s() { :; }\n' 1 2 3 4 5 6 7 8
+  } >"$_tmp/lean.sh"
+  _out=$(run_gate "$(read_stdin)" "$_tmp/.context" "$_tmp")
+  [ -z "$_out" ] || { echo "dv-comment-density-gate: self-test FAIL (lean .sh blocked)"; _fail=1; }
+  # Silence alone cannot separate a measured pass from a file the extension
+  # filter never looked at, so pin the count the audit row reports.
+  _checked_after=$(tail -n 1 "$_tmp/.context/logs/audit.jsonl" | jq -r '.metadata.files_checked')
+  [ "$_checked_after" -eq $((_checked_before + 1)) ] ||
+    { echo "dv-comment-density-gate: self-test FAIL (lean .sh was never measured)"; _fail=1; }
+
+  # 9. Vendored third-party shell must never block: on a dependency refresh the
+  #    added lines are code the agent did not write.
+  rm -f "$_tmp/lean.sh"
+  _vendor_body=$(
+    printf '# vendor essay %s\n' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20
+    printf 'v%s=0\n' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25
+  )
+  # Control arm: the identical body outside vendor/ must block, so the pass below
+  # is attributable to the path filter and not to the size floor.
+  printf '%s\n' "$_vendor_body" >"$_tmp/dep.sh"
+  _out=$(run_gate "$(read_stdin)" "$_tmp/.context" "$_tmp")
+  printf '%s' "$_out" | jq -e '
+    .decision == "block" and (.reason | test("dep\\.sh"))
+  ' >/dev/null 2>&1 || { echo "dv-comment-density-gate: self-test FAIL (vendor control fixture did not block)"; _fail=1; }
+
+  rm -f "$_tmp/dep.sh"
+  mkdir -p "$_tmp/vendor"
+  printf '%s\n' "$_vendor_body" >"$_tmp/vendor/dep.sh"
+  _out=$(run_gate "$(read_stdin)" "$_tmp/.context" "$_tmp")
+  [ -z "$_out" ] || { echo "dv-comment-density-gate: self-test FAIL (vendored .sh blocked)"; _fail=1; }
 
   [ "$_fail" -eq 0 ] || exit 1
   echo "dv-comment-density-gate: self-test OK"
