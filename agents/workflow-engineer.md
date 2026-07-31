@@ -4,7 +4,7 @@ description: Worktask system expert for task management, stage transitions, Task
 model: sonnet
 color: green
 effort: medium
-version: 0.1.2
+version: 0.2.0
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -244,4 +244,16 @@ Finish the atomic unit: complete the **current edit theme** (every file in the g
 4. Resume from the checkpoint next turn; clear it once the theme completes.
 
 Mirrors the DV "finish the atomic unit" principle in `skills/worktask/SKILL.md`.
+
+### Markdown section-splitting (DV execution)
+
+Splitting an over-cap section (`section-lint.sh`) means inserting a heading at a matched anchor. A
+literal-string match does not establish a legal block boundary: before inserting, confirm the
+matched occurrence is not inside a fenced code block, a YAML comment, a table body, or a list-item
+continuation. A heading injected into any of those corrupts the block while the lint still passes —
+it counts characters and ignores heading-lookalikes inside fences, so a green lint is not evidence
+the split was structurally sound.
+
+Audit every heading the diff adds (`git diff -U0 -- '*.md' | grep '^+#\{2,6\} '`), not only the
+sites the splitting tool reported touching.
 
