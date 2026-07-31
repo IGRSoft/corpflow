@@ -158,6 +158,9 @@ WORKSPACE_ROOT="${WORKSPACE_ROOT:-}"
 GH_BIN="${GH_BIN:-gh}"
 DRY_RUN="${DRY_RUN:-0}"
 GH_TIMEOUT="${GH_TIMEOUT:-30}"
+# Longer than GH_TIMEOUT on purpose: a COLD `gh image check-token` legitimately
+# needs tens of seconds to decrypt the browser cookie store (warm is ~3s).
+GH_IMAGE_PROBE_TIMEOUT="${GH_IMAGE_PROBE_TIMEOUT:-90}"
 STRICT="${STRICT:-0}"
 LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
 AUDIT_FILE="$LOG_DIR/audit.jsonl"
@@ -235,6 +238,33 @@ for _arg in "$@"; do
 done
 
 # ---------- helpers ---------------------------------------------------------
+# Bounded execution WITHOUT coreutils. Stock macOS ships neither `timeout` nor
+# `gtimeout` and Homebrew coreutils is not a dependency of this plugin, so the
+# `command -v gtimeout || command -v timeout` idiom used below silently resolves
+# to empty and leaves the call UNBOUNDED on exactly the platform that needs it.
+# Prefers a real timeout binary when one exists; otherwise polls at 1s
+# granularity. Returns the command's status, or 124 on timeout (GNU convention).
+TIMEOUT_BIN="${TIMEOUT_BIN:-$(command -v gtimeout || command -v timeout || true)}"
+run_with_timeout() {
+  local secs="$1"; shift
+  if [ -n "$TIMEOUT_BIN" ]; then
+    "$TIMEOUT_BIN" "$secs" "$@"
+    return $?
+  fi
+  "$@" &
+  local p=$! n=0
+  while kill -0 "$p" 2> /dev/null && [ "$n" -lt "$secs" ]; do
+    sleep 1; n=$((n + 1))
+  done
+  if kill -0 "$p" 2> /dev/null; then
+    kill -9 "$p" 2> /dev/null || true
+    wait "$p" 2> /dev/null || true
+    return 124
+  fi
+  wait "$p" 2> /dev/null
+  return $?
+}
+
 audit_row() {
   # $1=result, $2=metadata-json (compact). Always appends one row.
   local result="$1" meta_json="$2"
@@ -291,17 +321,25 @@ sanitise_body() {
     BEGIN { in_fence = 0 }
     {
       line = $0
+      # Pass-1 predicates match on a backtick-neutralised COPY. The rules below
+      # anchor on (^|[[:space:]]), and a backtick is neither -- so wrapping a
+      # path in a code span used to defeat every one of them while pass 2 (A1/A2)
+      # then copied code spans through verbatim. That combination published
+      # `.context/` and `/Users/...` paths into PR and issue bodies. Substituting
+      # a SPACE (not deleting) preserves each anchor s intent: `.context/ now
+      # matches, foo.context/ still does not. Emit "line", never "probe".
+      probe = line; gsub(/`/, " ", probe)
       # ---- Pass 1 line-strip --------------------------------------------
-      if (line ~ /(^|[[:space:]])\.context\//) next                 # L1
-      if (line ~ /(^|[[:space:]])\/(Users|home|tmp|var|opt|etc|root)\//) next  # L2,L3
-      if (line ~ /(^|[[:space:]])~\//) next                         # L4
+      if (probe ~ /(^|[[:space:]])\.context\//) next                 # L1
+      if (probe ~ /(^|[[:space:]])\/(Users|home|tmp|var|opt|etc|root)\//) next  # L2,L3
+      if (probe ~ /(^|[[:space:]])~\//) next                         # L4
       if (line ~ /conductor\/workspaces\/[A-Za-z0-9_-]+/) next      # L5
       if (line ~ /(^|[[:space:]])(workspace_path|plan_file|run_index|artifact_path)[[:space:]]*[:=]/) next  # L6
       # PERMANENT-SUPERSET: "analyzing" is retained alongside its 3.42.0 replacement
       # "architecture" on purpose. This is a redaction filter, not a compat shim --
       # dropping a name it used to recognize can only leak more. Do not tidy.
       if (line ~ /(planning|architecture|analyzing|coordinating|coordination|developing|development|reviewing|review|qa|testing|documenting|documentation|releasing|release|finalizing|finalization|stakeholding|retrospective|incident|ethics-review)-[0-9]+\.md/) next  # L7,L8
-      if (line ~ /(^|[[:space:]])(\.\/|\.\.\/)[A-Za-z0-9_.\/-]+/) next   # L9
+      if (probe ~ /(^|[[:space:]])(\.\/|\.\.\/)[A-Za-z0-9_.\/-]+/) next   # L9
       # L10: drop whole line when a plugin-qualified identifier is the leading
       # non-bullet token (e.g. "* Routed to igrsoft:developer ...",
       # "Breakdown using igrsoft:estimation-methodology:"). Strict prefix
@@ -441,19 +479,31 @@ repo_visibility() {
 # 0 = force unavailable, empty = probe live. The probe is cached because
 # check-token does network I/O and select_host_tier can be called per asset.
 GH_IMAGE_OK_CACHE=""
+# Why the probe result is no longer a bare boolean: "extension absent", "token
+# stale" and "probe timed out" are three different operator actions, and
+# collapsing them into one "inline hosting unavailable" sentence is what let a
+# run ship six captured screenshots as a dead path. Set to
+# absent|token_invalid|probe_timeout|ok and surfaced in the body + audit row.
+GH_IMAGE_FAIL_REASON=""
 gh_image_available() {
   case "${ASSET_GH_IMAGE:-}" in
-    1) return 0 ;;
-    0) return 1 ;;
+    1) GH_IMAGE_FAIL_REASON="ok"; return 0 ;;
+    0) GH_IMAGE_FAIL_REASON="absent"; return 1 ;;
   esac
   [ -n "$GH_IMAGE_OK_CACHE" ] && { [ "$GH_IMAGE_OK_CACHE" = "1" ] && return 0 || return 1; }
   GH_IMAGE_OK_CACHE=0
-  command -v "$GH_BIN" >/dev/null 2>&1 || return 1
-  # check-token exits non-zero when the extension is absent or the token is stale.
-  if "$GH_BIN" image check-token >/dev/null 2>&1; then
-    GH_IMAGE_OK_CACHE=1; return 0
-  fi
-  return 1
+  command -v "$GH_BIN" >/dev/null 2>&1 || { GH_IMAGE_FAIL_REASON="absent"; return 1; }
+  # check-token is SLOW on a cold cache: it decrypts the browser cookie store and
+  # on macOS can block indefinitely on a Keychain prompt when non-interactive
+  # (measured >120s cold, 3s warm). Unbounded, it stalls FN and the stall is then
+  # misreported as "hosting unavailable". GH_SESSION_TOKEN bypasses the browser
+  # entirely and is the supported way to make this fast and non-interactive.
+  run_with_timeout "$GH_IMAGE_PROBE_TIMEOUT" "$GH_BIN" image check-token >/dev/null 2>&1
+  case "$?" in
+    0)   GH_IMAGE_OK_CACHE=1; GH_IMAGE_FAIL_REASON="ok"; return 0 ;;
+    124) GH_IMAGE_FAIL_REASON="probe_timeout"; return 1 ;;
+    *)   GH_IMAGE_FAIL_REASON="token_invalid"; return 1 ;;
+  esac
 }
 
 HOST_TIER=""
@@ -471,7 +521,9 @@ select_host_tier() {
       HOST_REF="${ASSET_REF:-main}"
       return 0 ;;
     gist) HOST_TIER="gist"; return 0 ;;
-    none) HOST_TIER="none"; return 0 ;;
+    none) HOST_TIER="none"
+          [ -n "$GH_IMAGE_FAIL_REASON" ] || GH_IMAGE_FAIL_REASON="no_host_tier"
+          return 0 ;;
     *) ;;  # fall through to live probes
   esac
 
@@ -525,8 +577,11 @@ select_host_tier() {
      "$GH_BIN" auth status >/dev/null 2>&1; then
     HOST_TIER="gist"; return 0
   fi
-  # Tier-3: URL-only note.
+  # Tier-3: URL-only note. Only stamp a reason when the gh-image probe did not
+  # already set a more specific one (absent/token_invalid/probe_timeout) — that
+  # distinction is the whole point of GH_IMAGE_FAIL_REASON.
   HOST_TIER="none"
+  [ -n "$GH_IMAGE_FAIL_REASON" ] || GH_IMAGE_FAIL_REASON="no_host_tier"
   return 0
 }
 
@@ -2285,12 +2340,9 @@ if [ "$DRY_RUN" = "1" ]; then
   URL="https://github.com/dry/run/issues/0"
   echo "DRY_RUN: $GH_BIN issue create --title \"$TITLE\" --body-file $BODY_TMP --label $SURVIVING_LABELS" >&2
 else
-  TIMEOUT_BIN="$(command -v gtimeout || command -v timeout || true)"
-  if [ -n "$TIMEOUT_BIN" ]; then
-    GH_OUT=$("$TIMEOUT_BIN" "$GH_TIMEOUT" "$GH_BIN" issue create --title "$TITLE" --body-file "$BODY_TMP" --label "$SURVIVING_LABELS" 2>&1) || true
-  else
-    GH_OUT=$("$GH_BIN" issue create --title "$TITLE" --body-file "$BODY_TMP" --label "$SURVIVING_LABELS" 2>&1) || true
-  fi
+  # run_with_timeout, not a bare TIMEOUT_BIN probe: on stock macOS both binaries
+  # are absent, so the old `else` arm ran this call completely unbounded.
+  GH_OUT=$(run_with_timeout "$GH_TIMEOUT" "$GH_BIN" issue create --title "$TITLE" --body-file "$BODY_TMP" --label "$SURVIVING_LABELS" 2>&1) || true
   URL=$(printf '%s' "$GH_OUT" | grep -oE 'https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[0-9]+' | head -1)
   if [ -z "$URL" ]; then
     # AC-3: classify failure mode from gh stderr. If labels were dropped and
