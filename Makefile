@@ -1,4 +1,4 @@
-# Makefile — igrsoft plugin test suite + dual-path TTT benchmark (Python harness)
+# Makefile — company-workflow plugin test suite + dual-path TTT benchmark (Python harness)
 #
 # Targets:
 #   make bootstrap       vendored-bats present-check; swift toolchain check;
@@ -41,7 +41,7 @@ SHELL_TESTS  := $(shell find $(PLUGIN_ROOT)/tests/shell -type f -name '*.bats' 2
 .DEFAULT_GOAL := help
 
 help:
-	@echo "igrsoft test suite — targets:"
+	@echo "company-workflow test suite — targets:"
 	@echo "  make bootstrap       resolve bats/swift/kcov (idempotent)"
 	@echo "  make test            full deterministic suite (offline)"
 	@echo "  make coverage        suite under kcov + swift coverage, gate >=$(COV_MIN)%"

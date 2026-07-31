@@ -341,14 +341,14 @@ sanitise_body() {
       if (line ~ /(planning|architecture|analyzing|coordinating|coordination|developing|development|reviewing|review|qa|testing|documenting|documentation|releasing|release|finalizing|finalization|stakeholding|retrospective|incident|ethics-review)-[0-9]+\.md/) next  # L7,L8
       if (probe ~ /(^|[[:space:]])(\.\/|\.\.\/)[A-Za-z0-9_.\/-]+/) next   # L9
       # L10: drop whole line when a plugin-qualified identifier is the leading
-      # non-bullet token (e.g. "* Routed to igrsoft:developer ...",
-      # "Breakdown using igrsoft:estimation-methodology:"). Strict prefix
+      # non-bullet token (e.g. "* Routed to company-workflow:developer ...",
+      # "Breakdown using company-workflow:estimation-methodology:"). Strict prefix
       # allow-list keeps this from false-positive on http:// / git:// / etc.
       # The prefix list MUST mirror skills/shared/compatible-plugins.md
       # (Registry plugins + Support plugins) and stay identical at every
       # occurrence in this file. A missing prefix leaks the agent identifiers
       # of that plugin into the published issue.
-      if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next
+      if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next
 
       # ---- Pass 2 token-strip (with allow-list) -------------------------
       # Track fenced code block state (A1).
@@ -390,11 +390,11 @@ sanitise_body() {
           i = i + RLENGTH
           continue
         }
-        # A6: plugin-qualified identifier token (igrsoft:foo, apple-developer:bar,
+        # A6: plugin-qualified identifier token (company-workflow:foo, apple-developer:bar,
         # etc.). Narrow known-prefix allow-list to avoid false positives on
         # http:, git:, file:, etc. Backtick spans already passed through above.
         # Prefix list MUST mirror skills/shared/compatible-plugins.md and L275.
-        if (match(rest, /^(igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/)) {
+        if (match(rest, /^(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/)) {
           i = i + RLENGTH
           continue
         }
@@ -983,7 +983,7 @@ label_color() {
 
 label_description() {
   case "$1" in
-    worktask)             printf 'igrsoft worktask run' ;;
+    worktask)             printf 'company-workflow worktask run' ;;
     planning-approved)    printf 'PL stage plan approved by human' ;;
     complexity:*)         printf 'PL complexity tier' ;;
     ticket:*)             printf 'External tracker reference' ;;
@@ -1468,7 +1468,7 @@ MOCK
     # Fixture 02b: plugin-qualified identifier tokens must not appear in
     # sanitised body (Pass-2 A6 rule), outside code spans.
     local leak_in leak_out
-    leak_in=$'Breakdown using igrsoft:estimation-methodology:\n* Routed to igrsoft:developer (apple-developer:ios-developer).\nNarrative referencing igrsoft:product-manager directly.\nKeep `igrsoft:code-fixer` inside backticks intact.\n'
+    leak_in=$'Breakdown using company-workflow:estimation-methodology:\n* Routed to company-workflow:developer (apple-developer:ios-developer).\nNarrative referencing company-workflow:product-manager directly.\nKeep `company-workflow:code-fixer` inside backticks intact.\n'
     leak_out=$(printf '%s' "$leak_in" | sanitise_body)
     local f02b_ok=1
     # The leading-token lines (1 + 2) should be entirely dropped by L10.
@@ -1476,14 +1476,14 @@ MOCK
     if printf '%s' "$leak_out" | grep -qF 'Routed to'; then f02b_ok=0; fi
     # The mid-sentence reference should have the identifier stripped by A6
     # (narrative remains, token gone).
-    if printf '%s' "$leak_out" | grep -qE '(igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]' | grep -v '`'; then
+    if printf '%s' "$leak_out" | grep -qE '(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]' | grep -v '`'; then
       # Allow backticked occurrences only (one is intentionally kept).
-      if printf '%s' "$leak_out" | grep -vE '^[^`]*`[^`]*`[^`]*$' | grep -qE '(igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]'; then
+      if printf '%s' "$leak_out" | grep -vE '^[^`]*`[^`]*`[^`]*$' | grep -qE '(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]'; then
         f02b_ok=0
       fi
     fi
     # Backtick passthrough preserves the token.
-    if ! printf '%s' "$leak_out" | grep -qF '`igrsoft:code-fixer`'; then f02b_ok=0; fi
+    if ! printf '%s' "$leak_out" | grep -qF '`company-workflow:code-fixer`'; then f02b_ok=0; fi
     if [ "$f02b_ok" = "1" ]; then
       echo "publish-pl-issue: self-test 02b-identifier-leak-strip PASS"
       pass=$((pass + 1))

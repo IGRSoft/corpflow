@@ -1,6 +1,6 @@
 # Adding or Replacing a Dev Plugin
 
-How to register a new development plugin with the igrsoft orchestrator, or swap one out for a
+How to register a new development plugin with the company-workflow orchestrator, or swap one out for a
 different implementation of the same platform. Registry of currently compatible plugins:
 `skills/shared/compatible-plugins.md`.
 
@@ -49,7 +49,7 @@ adapter; non-UI platforms default `false` with `cli_fallback_adapter` transcript
 
 The architect agent is consulted, not handed ownership: it writes
 `.context/<platform>-architecture.md` and returns a summary of ≤500 tokens.
-`igrsoft:software-architector` retains the stage and merges the result.
+`company-workflow:software-architector` retains the stage and merges the result.
 
 ## B. Touchpoint checklist
 
@@ -103,7 +103,7 @@ directory skills with their own `SKILL.md` are listed in `skills[]`.
 3. Confirm the replacement's command set covers every command the old one was invoked with —
    check embedded commands in `commands/worktask.md` and stage templates.
 4. Bump MINOR. A replacement is a behavior change for every worktask targeting that platform, so
-   it belongs in the CHANGELOG even though no igrsoft command changed.
+   it belongs in the CHANGELOG even though no company-workflow command changed.
 
 Always exclude `.claude/worktrees/` from edit sweeps — it holds stale working copies of `agents/`
 and `skills/` that are not the source of truth.

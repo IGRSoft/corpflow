@@ -11,7 +11,7 @@ import unittest
 _HARNESS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PROMPTS = os.path.join(os.path.dirname(_HARNESS), "live", "prompts")
 _STAGE_FILES = ["pl", "ar", "tl", "dv", "dr", "sr", "qa", "dc", "fn", "st"]
-_PLUGIN_VOCAB = ["igrsoft", "worktask", ".context", "stage", "<<<"]
+_PLUGIN_VOCAB = ["company-workflow", "worktask", ".context", "stage", "<<<"]
 _SPEC_SCOPE_WORDS = ["SwiftUI", "Tic-Tac-Toe", "minimax", "Swift Testing"]
 
 

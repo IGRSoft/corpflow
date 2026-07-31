@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # DV screenshot-gate hook — blocks the developer agent's SubagentStop when the
-# DV implementation manifest is missing (igrsoft worktask plugin, v3.11.3+).
+# DV implementation manifest is missing (company-workflow worktask plugin, v3.11.3+).
 #
 # Closes the OV-56 failure class: a headless DV reasoning its way out of capture
 # with a checkbox + prose, and DR reclassifying the absent manifest as a
@@ -8,10 +8,10 @@
 #
 # Fires on SubagentStop (wired alongside audit-subagent.sh / state-merge.sh in
 # .claude-plugin/plugin.json — no matcher; the hook self-filters by agent name,
-# the same convention audit-subagent.sh self-tests under: "igrsoft:developer").
+# the same convention audit-subagent.sh self-tests under: "company-workflow:developer").
 #
 # Behavior:
-#   - No-op (exit 0) for any agent that is not igrsoft:developer.
+#   - No-op (exit 0) for any agent that is not company-workflow:developer.
 #   - Resolves .context/ via CLAUDE_PROJECT_DIR (fallback pwd, like siblings).
 #   - Reads state.json.worktask_id and metadata.requires_screenshots; the flag
 #     may live in state.json metadata and/or the stdin payload. Default TRUE
@@ -40,7 +40,7 @@ SELF_TEST=0
 read_stdin() {
   if [ "$SELF_TEST" -eq 1 ]; then
     # Block-fixture payload: developer agent, no requires_screenshots flag.
-    printf '%s' '{"agent_type":"igrsoft:developer","agent_id":"agt_test","session_id":"sess_test","parent_agent_id":"agt_parent"}'
+    printf '%s' '{"agent_type":"company-workflow:developer","agent_id":"agt_test","session_id":"sess_test","parent_agent_id":"agt_parent"}'
   else
     cat
   fi
@@ -64,7 +64,7 @@ run_gate() {
 
   _agent=$(printf '%s' "$_payload" | jq -r '.agent_type // "unknown"' 2>/dev/null || echo unknown)
   # No-op for any non-developer agent (same match as audit-subagent.sh:14).
-  if [ "$_agent" != "igrsoft:developer" ]; then
+  if [ "$_agent" != "company-workflow:developer" ]; then
     return 0
   fi
 
@@ -165,7 +165,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   _bctx="$_tmp/block/.context"
   mkdir -p "$_bctx/images/ov56-edit-mode-fix"
   printf '%s' '{"version":1,"worktask_id":"ov56-edit-mode-fix","metadata":{}}' > "$_bctx/state.json"
-  _bpayload='{"agent_type":"igrsoft:developer","agent_id":"agt_b","session_id":"sess_b","parent_agent_id":"agt_pb"}'
+  _bpayload='{"agent_type":"company-workflow:developer","agent_id":"agt_b","session_id":"sess_b","parent_agent_id":"agt_pb"}'
   _bout=$(run_gate "$_bpayload" "$_bctx")
   printf '%s' "$_bout" | jq -e '.decision == "block" and (.reason | test("missing screenshots.md"))' >/dev/null 2>&1 \
     || { echo "dv-screenshot-gate: self-test FAIL (block: no block decision)"; _fail=1; }
@@ -179,7 +179,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   tail -n 1 "$_bctx/logs/audit.jsonl" | jq -e '
     .action == "screenshot_gate_block"
     and .result == "block"
-    and .subject == "igrsoft:developer"
+    and .subject == "company-workflow:developer"
     and .metadata.worktask_id == "ov56-edit-mode-fix"
     and (.metadata.dedupe_key == "sess_b:agt_b:screenshot-gate")
     and (.metadata.dedupe_key_extended == "agt_pb:sess_b:agt_b:screenshot-gate")
@@ -191,7 +191,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   mkdir -p "$_pctx/images/wid-pass"
   printf '%s' '{"version":1,"worktask_id":"wid-pass","metadata":{}}' > "$_pctx/state.json"
   printf '# screenshots\n' > "$_pctx/images/wid-pass/screenshots.md"
-  _ppayload='{"agent_type":"igrsoft:developer","agent_id":"agt_p","session_id":"sess_p","parent_agent_id":"agt_pp"}'
+  _ppayload='{"agent_type":"company-workflow:developer","agent_id":"agt_p","session_id":"sess_p","parent_agent_id":"agt_pp"}'
   _pout=$(run_gate "$_ppayload" "$_pctx")
   [ -z "$_pout" ] || { echo "dv-screenshot-gate: self-test FAIL (pass-A: unexpected stdout)"; _fail=1; }
   tail -n 1 "$_pctx/logs/audit.jsonl" | jq -e '
@@ -206,7 +206,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   _fctx="$_tmp/flagfalse/.context"
   mkdir -p "$_fctx/images/wid-noui"
   printf '%s' '{"version":1,"worktask_id":"wid-noui","metadata":{"requires_screenshots":false}}' > "$_fctx/state.json"
-  _fpayload='{"agent_type":"igrsoft:developer","agent_id":"agt_f","session_id":"sess_f","parent_agent_id":"agt_pf"}'
+  _fpayload='{"agent_type":"company-workflow:developer","agent_id":"agt_f","session_id":"sess_f","parent_agent_id":"agt_pf"}'
   _fout=$(run_gate "$_fpayload" "$_fctx")
   [ -z "$_fout" ] || { echo "dv-screenshot-gate: self-test FAIL (pass-B: unexpected block)"; _fail=1; }
   tail -n 1 "$_fctx/logs/audit.jsonl" | jq -e '
@@ -219,7 +219,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   _nctx="$_tmp/nonagent/.context"
   mkdir -p "$_nctx/images/wid-x"
   printf '%s' '{"version":1,"worktask_id":"wid-x","metadata":{}}' > "$_nctx/state.json"
-  _nout=$(run_gate '{"agent_type":"igrsoft:qa-engineer","agent_id":"agt_n","session_id":"sess_n"}' "$_nctx")
+  _nout=$(run_gate '{"agent_type":"company-workflow:qa-engineer","agent_id":"agt_n","session_id":"sess_n"}' "$_nctx")
   [ -z "$_nout" ] || { echo "dv-screenshot-gate: self-test FAIL (no-op: unexpected output)"; _fail=1; }
   [ ! -f "$_nctx/logs/audit.jsonl" ] || { echo "dv-screenshot-gate: self-test FAIL (no-op: wrote a row)"; _fail=1; }
 

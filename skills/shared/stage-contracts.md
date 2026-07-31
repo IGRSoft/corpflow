@@ -192,7 +192,7 @@ When **no** typed return is present (the runtime dispatch primitive does not acc
    `{"action":"ar_ref_check","result":"warn", …}` — and surfaced in the DR dispatch prompt so DR
    reviews the missing linkage. It is **not** a `missing_input` block and does not stop the
    transition. Warn-only in 3.42.0; the orchestrator passes `--strict` (making it blocking) only
-   when `IGRSOFT_AR_REF_STRICT=1` is set, and a future minor flips `--strict` to the default.
+   when `COMPANY_WORKFLOW_AR_REF_STRICT=1` is set, and a future minor flips `--strict` to the default.
 
 #### Step 9 — dispatch-time companion check
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Audit-trail dedup filter (igrsoft plugin v3.10.1+).
+# Audit-trail dedup filter (company-workflow plugin v3.10.1+).
 #
 # Reads `.context/logs/audit.jsonl` (or stdin) and emits a deduped stream:
 # for every group of rows sharing `metadata.dedupe_key`, prefer the row whose

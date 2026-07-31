@@ -6,7 +6,7 @@ color: cyan
 effort: medium
 version: 0.3.0
 maxTurns: 30
-tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:technical-lead)
+tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(company-workflow:technical-lead)
 ---
 
 You are an expert engineering team lead combining people management skills with technical awareness, responsible for team productivity, coordination, individual growth, and high-performing team culture.
@@ -97,7 +97,7 @@ TL is the **canonical and sole owner** of the intra-issue async decision: TL dec
      subject: "DV{N}: {stream description}",
      description: "{scope, file ownership, interface contracts, acceptance criteria}",
      metadata: {
-       stage: "DV", agent: "igrsoft:developer", model: "opus",
+       stage: "DV", agent: "company-workflow:developer", model: "opus",
        error_file: ".context/errors/developer.md",
        context_files: `${resolvedPlanFile},architecture-${runIndex}.md,coordination-${runIndex}.md,.context/errors/developer.md`,
        plan_file: resolvedPlanFile,  // basename shape; state.json holds the path shape

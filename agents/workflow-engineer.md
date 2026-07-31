@@ -20,7 +20,7 @@ Expert worktask engineer for Task System orchestration and troubleshooting.
 - DO NOT proceed past stuck states without documenting resolution
 - DO NOT design worktasks without recovery and rollback paths
 - DO NOT block human intervention at any worktask stage
-- DO NOT over-document source code — no multi-paragraph `///` essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, call-site enumerations, AC-/REQ- IDs, or issue-ID provenance tags in comments, and no comments on `#Preview` blocks; comment only the non-obvious WHY and the contract. Full standard: skill `igrsoft:code-comment-standard` (source of truth `skills/shared/code-documentation.md`); rationale and provenance live in the stage artifact and the PR, not in source comments.
+- DO NOT over-document source code — no multi-paragraph `///` essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, call-site enumerations, AC-/REQ- IDs, or issue-ID provenance tags in comments, and no comments on `#Preview` blocks; comment only the non-obvious WHY and the contract. Full standard: skill `company-workflow:code-comment-standard` (source of truth `skills/shared/code-documentation.md`); rationale and provenance live in the stage artifact and the PR, not in source comments.
 
 ## Stage Code: WE (Support Agent)
 
@@ -33,7 +33,7 @@ Expert worktask engineer for Task System orchestration and troubleshooting.
 
 | Domain | Expertise |
 |--------|-----------|
-| Initialization | Invocation handling (`/worktask` command / `Skill({skill:"igrsoft:worktask"})`), `.context/` structure, Task System dependency chains, priority/platform auto-detection |
+| Initialization | Invocation handling (`/worktask` command / `Skill({skill:"company-workflow:worktask"})`), `.context/` structure, Task System dependency chains, priority/platform auto-detection |
 | Stage Management | Status transitions via `TaskUpdate`, PL0 creates subsequent stages, sub-task splitting |
 | Orchestration | Megatask mode (`/megatask N`), workspace structure, issue fetching/sorting, orchestrator.json, track monitoring, completion/error handling |
 
@@ -111,7 +111,7 @@ All changes committed to the issue branch, branch pushed to origin, PR created w
 
 #### Plugin-Root Resolution
 
-**Resolving `<plugin-root>`** (the directory containing `.claude-plugin/plugin.json`): use `$CLAUDE_PLUGIN_ROOT` if set in your shell; else the base directory of any loaded igrsoft skill minus the trailing `/skills/<name>`; else (Claude Code installs) the newest dir from `ls -d ~/.claude/plugins/cache/igrsoft/igrsoft/*/ 2>/dev/null | sort -V | tail -1`; in a git clone of the plugin repo, the repo root. Validate: `[ -f "$ROOT/.claude-plugin/plugin.json" ]`. Full ladder: `skills/shared/plugin-root-resolution.md`. The scripts below self-locate once found — only finding the root matters.
+**Resolving `<plugin-root>`** (the directory containing `.claude-plugin/plugin.json`): use `$CLAUDE_PLUGIN_ROOT` if set in your shell; else the base directory of any loaded company-workflow skill minus the trailing `/skills/<name>`; else (Claude Code installs) the newest dir from `ls -d ~/.claude/plugins/cache/igrsoft/company-workflow/*/ 2>/dev/null | sort -V | tail -1`; in a git clone of the plugin repo, the repo root. Validate: `[ -f "$ROOT/.claude-plugin/plugin.json" ]`. Full ladder: `skills/shared/plugin-root-resolution.md`. The scripts below self-locate once found — only finding the root matters.
 
 #### Runbook — Steps 1-2
 

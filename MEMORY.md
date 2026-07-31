@@ -1,10 +1,10 @@
-# igrsoft Plugin Memory
+# company-workflow Plugin Memory
 
 Repository-tracked memory note (lean rolling format). The authoritative cross-conversation memory lives at `~/.claude/projects/<slug>/memory/MEMORY.md`; full per-release narratives live in git history (`git log --grep="<version>"`) and in the CC band files indexed below. Release tooling reads the `Plugin version:` line — keep its exact format. Hard cap ~5KB: when Release History exceeds 12 rows, delete the oldest.
 
 ## Version Tracking
 
-- Plugin version: **3.43.0** (gate flags become the array `--auto=[plan, decision, finalization]` with `--auto-plan`/`--auto-finalization` as deprecated aliases; new `decision_gate` carrier + Step A.4 Fable-model auto-decision pre-pass for PL0 open questions, escalation-guarded and audited, with the decisions merged into `facts.decisions[]` rather than any new plan anchor. Docs + manifest version parity only — no script or test changes. See release-history row below for the full changelog.)
+- Plugin version: **4.0.0** (plugin renamed `igrsoft` → `company-workflow`: every invocation id, the marketplace plugin entry, the `Stop` hook matcher, and the install cache path move to the new prefix; the six `IGRSOFT_*` environment variables become `COMPANY_WORKFLOW_*` with no fallback read. Vendor identity — author `IGRSoft`, `support@igrsoft.com`, the `github.com/IGRSoft` URLs, `com.igrsoft.*` bundle IDs, and the marketplace name — is deliberately unchanged. BREAKING: `igrsoft:*` ids no longer resolve and there is no back-compat alias. Previous release: gate flags became the array `--auto=[plan, decision, finalization]` with `--auto-plan`/`--auto-finalization` as deprecated aliases; new `decision_gate` carrier + Step A.4 Fable-model auto-decision pre-pass for PL0 open questions, escalation-guarded and audited, with the decisions merged into `facts.decisions[]` rather than any new plan anchor. Docs + manifest version parity only — no script or test changes. See release-history row below for the full changelog.)
 - Claude Code min required: **2.1.220** (README.md is authoritative; nested delegation is off by default on 2.1.217–2.1.218 and the plugin's DV routing depends on it, so 2.1.219 is the functional floor — pinned to the band top per the v3.35.0 precedent)
 - Claude Code latest integrated band: **2.1.216→2.1.220**
 
@@ -36,6 +36,16 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-07-31: v4.0.0 — plugin renamed `igrsoft` → `company-workflow`. Every `igrsoft:<agent|skill>`
+  invocation id, the `marketplace.json` plugin entry, the `plugin.json` `Stop` matcher, the
+  bare-name resolution shim, and the install cache path (`cache/igrsoft/company-workflow/`, only
+  the plugin segment) move to the new prefix. The six `IGRSOFT_*` env vars become
+  `COMPANY_WORKFLOW_*` — hard cut, no fallback read. Three runtime string matches were the real
+  risk and moved with it: `dv-screenshot-gate.sh`'s exact `!= "company-workflow:developer"` guard,
+  `build-context-set.sh`'s awk `$1 == "company-workflow"`, and the 4 copies of the leak-regex
+  alternation in `publish-pl-issue.sh` (kept in lockstep with `compatible-plugins.md`). Vendor
+  identity deliberately untouched: author `IGRSoft`, `support@igrsoft.com`, `github.com/IGRSoft`
+  URLs, `com.igrsoft.*` bundle IDs, and the marketplace name itself. BREAKING — no alias.
 - 2026-07-31: v3.43.0 — `--auto` becomes an array flag (`--auto=[plan, decision, finalization]`;
   legacy `--auto-plan`/`--auto-finalization` kept as deprecated aliases, union-composed). New
   `PL0.metadata.decision_gate` (`"user"`/`"auto"`) + orchestrator Step A.4: on `"auto"`, PL0's
@@ -58,7 +68,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
   optional `architecture: {ref, applied}`, gate-required when AR ran; `refs.decisions` conditional
   on AR; precedence `refs.decisions` then `architecture.ref` cited identically in 5 places.
   `handoff-harness.sh` gains `--state`/`--strict` plus the AR-ref check, ships **warn-only** (exit
-  0 by default; `--strict` or `IGRSOFT_AR_REF_STRICT=1` opts into blocking; legacy invocation
+  0 by default; `--strict` or `COMPANY_WORKFLOW_AR_REF_STRICT=1` opts into blocking; legacy invocation
   byte-identical). Edge registry created (did not exist at HEAD) covering all 20 handoff edges
   incl. `AR→DV`/`PL→DV`/`PL→TL`/`USER→IR`/`IR→DV`/`QA→RE`/`<invoker>→ET`. Per-workstream
   `development-N-<stream>.md` under TL fan-out. **BREAKING, folded in from a second DV round:**
@@ -69,7 +79,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
   `tests/shell/worktask/artifact-map-parity.bats` (8 tests) asserts all seven stage→basename
   sources of truth agree — nothing compared them before, which is how the v3.8.0 drift went
   unnoticed for 34 minors. 13 provenance comments citing a past run's real `analyzing-0.md`
-  deliberately left byte-identical (own follow-up to delete under `igrsoft:code-comment-standard`,
+  deliberately left byte-identical (own follow-up to delete under `company-workflow:code-comment-standard`,
   not a rename miss); `publish-pl-issue.sh`'s leak filter keeps both tokens permanently
   (`PERMANENT-SUPERSET`). Suite: 438 bats (0 fail, up from 394) + 48 Swift + 37/175 Python; all 4
   self-tests exit 0; shellcheck at pre-existing baseline on all edited scripts. 59 files. Known

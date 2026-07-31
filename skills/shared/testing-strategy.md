@@ -361,7 +361,7 @@ degradation of a defense-in-depth layer.
 
 ### Escape-hatch honesty
 
-`IGRSOFT_TEST_GATE=off` and `CLAUDE_PROJECT_DIR` (pointed at a directory
+`COMPANY_WORKFLOW_TEST_GATE=off` and `CLAUDE_PROJECT_DIR` (pointed at a directory
 with no `.context/state.json`) are both **agent-writable across sessions**, not agent-proof:
 `.claude/settings.json` `env` can be written by any stage holding `Write`/`Edit`, and takes effect
 on the next session or resume. Within a single live session neither is reachable from inside a

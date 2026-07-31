@@ -236,8 +236,8 @@ Recorded in `orchestrator.json → configuration.parallel_tracks`. Never a flag/
 | Level | Standalone `/worktask` | Under `/megatask` |
 |-------|------------------------|-------------------|
 | 0 | session | session |
-| 1 | stage agent (`igrsoft:developer`) | per-issue `/worktask` orchestrator |
-| 2 | platform router (`apple-developer:apple-developer`) | stage agent (`igrsoft:developer`) |
+| 1 | stage agent (`company-workflow:developer`) | per-issue `/worktask` orchestrator |
+| 2 | platform router (`apple-developer:apple-developer`) | stage agent (`company-workflow:developer`) |
 | 3 | Tier-2 specialist (`apple-developer:test-generator`) | platform router |
 | 4 | — | Tier-2 specialist ⚠️ **past the default ceiling** |
 
@@ -286,7 +286,7 @@ TaskCreate({
   taskId: `t${track}-1`,
   subject: `PL${stageIndex}: Planning - Issue #${issueNumber}`,
   metadata: {
-    stage: "PL", agent: "igrsoft:product-manager",
+    stage: "PL", agent: "company-workflow:product-manager",
     issue_number: issueNumber, track: track,
     workspace_path: `.worktrees/${group}/${issueNumber}`,
     isolation: "worktree",

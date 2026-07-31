@@ -221,7 +221,7 @@ Artifact ≤300 lines; findings table ≤2 lines/row; no diff hunks >5 lines —
 | Lines per review | 200-400 max | Reviewer fatigue leads to missed errors beyond 400 |
 | Review session | 60-90 min max | Attention span degrades beyond this |
 | PR size | Small, focused | Easier to review, faster feedback loops |
-| Comment density | ≤40% of a file's **added** lines | `skill: igrsoft:code-comment-standard` — comment-to-code well below 1:1 |
+| Comment density | ≤40% of a file's **added** lines | `skill: company-workflow:code-comment-standard` — comment-to-code well below 1:1 |
 
 **Comment density is a finding, not taste.** Measure the comment share of each
 file's *added* lines — the author owns what they added. Over 40%, flag the kind:

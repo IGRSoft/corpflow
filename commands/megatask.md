@@ -4,7 +4,7 @@ description: Orchestrate many worktasks across a GitHub milestone or an explicit
 argument-hint: '<milestone-N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
 version: 0.1.0
 model: opus
-allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(igrsoft:product-manager), Task(igrsoft:workflow-engineer), Task(igrsoft:project-manager)
+allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(company-workflow:product-manager), Task(company-workflow:workflow-engineer), Task(company-workflow:project-manager)
 related:
   - skills/megatask/SKILL.md
   - skills/megatask/references/dependency-graph.md
@@ -191,7 +191,7 @@ and chain depth (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, 3 — megatask spends o
 
 3. **Launch the per-issue worktask** — delegate to `/worktask` for that issue, **with both gates
    pre-bypassed**. Megatask stamps the per-issue `PL0.metadata` directly:
-   `{ stage:"PL", agent:"igrsoft:product-manager", model:"opus", issue_number, track,
+   `{ stage:"PL", agent:"company-workflow:product-manager", model:"opus", issue_number, track,
    workspace_path:".worktrees/<group>/{issue#}", isolation:"worktree",
    plan_gate:"bypass", decision_gate:"auto", fn_gate:"bypass", megatask_group:"<group>",
    milestone:<N|null> }`.

@@ -20,7 +20,7 @@ done
 
 read_stdin() {
   if [ "$SELF_TEST" -eq 1 ]; then
-    printf '%s' '{"agent_type":"igrsoft:product-manager","agent_id":"agt_pl","session_id":"sess_test","parent_agent_id":"agt_parent","background_tasks":[{"id":"bg1"},{"id":"bg2"}],"session_crons":[{"id":"cr1"}]}'
+    printf '%s' '{"agent_type":"company-workflow:product-manager","agent_id":"agt_pl","session_id":"sess_test","parent_agent_id":"agt_parent","background_tasks":[{"id":"bg1"},{"id":"bg2"}],"session_crons":[{"id":"cr1"}]}'
   else
     cat
   fi

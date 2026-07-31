@@ -6,7 +6,7 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 | Hook Event | Fires When | Matcher | Payload Fields |
 |------------|------------|---------|----------------|
-| `SubagentStart` | Stage agent spawned | Agent type name (e.g., `igrsoft:developer`) | `agent_id`, `agent_type` |
+| `SubagentStart` | Stage agent spawned | Agent type name (e.g., `company-workflow:developer`) | `agent_id`, `agent_type` |
 | `SubagentStop` | Stage agent completes | Agent type name | `agent_id`, `agent_type` |
 | `PermissionDenied` | Auto-mode classifier denies a tool call | — | Tool name, denial reason |
 | `StopFailure` | API error causes turn end | — | Error details |
@@ -18,7 +18,7 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 #### Workspace trust is a precondition for agent-frontmatter hooks
 
-> Hooks declared in an **agent file's own frontmatter** run only when that agent file's folder has accepted workspace trust. In an untrusted plugin folder they are **silently skipped** — no error, no audit row, the stage simply completes without its gate. Three igrsoft agents declare frontmatter hooks and are affected: `agents/product-manager.md`, `agents/project-manager.md`, `agents/stakeholder.md`.
+> Hooks declared in an **agent file's own frontmatter** run only when that agent file's folder has accepted workspace trust. In an untrusted plugin folder they are **silently skipped** — no error, no audit row, the stage simply completes without its gate. Three company-workflow agents declare frontmatter hooks and are affected: `agents/product-manager.md`, `agents/project-manager.md`, `agents/stakeholder.md`.
 >
 > Consequence for gate reasoning: absence of a hook-emitted audit row is **not** evidence the hook passed — it is equally consistent with the hook never having run. When a stage's completion depends on a frontmatter hook, confirm trust was granted for the plugin folder rather than inferring success from a clean run. Hooks installed via `plugin.json` (the `hooks` block) and the repo's own `hooks/` scripts are unaffected.
 
@@ -135,7 +135,7 @@ Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved. With ne
 
 ### Managed (plugin) vs ad-hoc (user) hooks
 
-**Plugin-managed hooks** ship in `.claude-plugin/plugin.json` and survive `allowManagedHooksOnly: true` enforcement. As of v3.10.0 the igrsoft plugin ships four managed hooks: `audit-tooluse` (PostToolUse), `audit-subagent` (SubagentStop), `precompact-checkpoint` (PreCompact), and a `mcp_tool` PushNotification at PL/FN Stop. The audit trail is a **plugin invariant** — these need to fire deterministically across every install.
+**Plugin-managed hooks** ship in `.claude-plugin/plugin.json` and survive `allowManagedHooksOnly: true` enforcement. As of v3.10.0 the company-workflow plugin ships four managed hooks: `audit-tooluse` (PostToolUse), `audit-subagent` (SubagentStop), `precompact-checkpoint` (PreCompact), and a `mcp_tool` PushNotification at PL/FN Stop. The audit trail is a **plugin invariant** — these need to fire deterministically across every install.
 
 **Ad-hoc user hooks** go in project `settings.json` (or `~/.claude/settings.json`) and are for opt-in worktasks like dashboard webhooks or external SIEM forwarding. Examples below remain valid templates for that case.
 
@@ -148,7 +148,7 @@ Add to project `settings.json` for worktask-wide monitoring:
   "hooks": {
     "SubagentStart": [
       {
-        "matcher": "igrsoft:.*",
+        "matcher": "company-workflow:.*",
         "hooks": [
           { "type": "command", "command": "./tools/log-stage-start.sh" }
         ]
@@ -190,7 +190,7 @@ Hooks support an `if` field using permission rule syntax to avoid unnecessary pr
   "hooks": {
     "SubagentStop": [
       {
-        "if": "agent_type matches 'igrsoft:.*'",
+        "if": "agent_type matches 'company-workflow:.*'",
         "hooks": [
           { "type": "command", "command": "./tools/log-stage-complete.sh" }
         ]
@@ -270,11 +270,11 @@ Hooks can invoke MCP tools directly via `type: "mcp_tool"` (alongside `command` 
 
 #### Matcher semantics
 
-**Matcher semantics:** hook matchers with hyphenated identifiers **exact-match** rather than substring-matching — as of plugin v3.30.0 the Stop matcher is written with explicit wildcards (`.*igrsoft:product-manager.*|.*igrsoft:project-manager.*`, per the `mcp__server__.*` guidance) so it keeps firing regardless of how the runtime qualifies the agent name. Comma-separated matchers (`"Bash,PowerShell"`) do not fire — always use regex alternation (`Bash|PowerShell`), never commas.
+**Matcher semantics:** hook matchers with hyphenated identifiers **exact-match** rather than substring-matching — as of plugin v3.30.0 the Stop matcher is written with explicit wildcards (`.*company-workflow:product-manager.*|.*company-workflow:project-manager.*`, per the `mcp__server__.*` guidance) so it keeps firing regardless of how the runtime qualifies the agent name. Comma-separated matchers (`"Bash,PowerShell"`) do not fire — always use regex alternation (`Bash|PowerShell`), never commas.
 
 #### Plugin v3.10.0 historical note
 
-**Plugin v3.10.0 historical note:** `plugin.json` shipped an `mcp_tool` hook on `Stop` matching `igrsoft:product-manager|igrsoft:project-manager` that fired `conductor.PushNotification` at the PL and FN stages. The hook still fires at stage completion for observability (PushNotification). The PL stage is followed by a human plan-approval gate (Step A.5); the FN stage is now gated by a finalization checkpoint (`fn_gate`, default `"checkpoint"`) that STOPs before commit/push/PR unless bypassed by `--auto=[finalization]` / `--emergency` (a `/megatask` batch stamps `fn_gate: "bypass"` directly on each per-issue PL0). Gracefully no-ops if the conductor MCP server is unavailable.
+**Plugin v3.10.0 historical note:** `plugin.json` shipped an `mcp_tool` hook on `Stop` matching `company-workflow:product-manager|company-workflow:project-manager` that fired `conductor.PushNotification` at the PL and FN stages. The hook still fires at stage completion for observability (PushNotification). The PL stage is followed by a human plan-approval gate (Step A.5); the FN stage is now gated by a finalization checkpoint (`fn_gate`, default `"checkpoint"`) that STOPs before commit/push/PR unless bypassed by `--auto=[finalization]` / `--emergency` (a `/megatask` batch stamps `fn_gate: "bypass"` directly on each per-issue PL0). Gracefully no-ops if the conductor MCP server is unavailable.
 
 ### PostToolUse duration_ms
 
@@ -363,7 +363,7 @@ Use cases: stop teammate when its issue is complete, when megatask budget is exh
 
 ## Agent Teams vs Subagents
 
-### Comparison for igrsoft Worktasks
+### Comparison for company-workflow Worktasks
 
 | Aspect | Subagents (Task tool) | Agent Teams (`Agent(name: …)`) |
 |--------|----------------------|------------------------|

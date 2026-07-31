@@ -231,13 +231,13 @@ QA reads this file and quotes any `WARN:` lines into `testing-N.md § Notes`.
 ## Platform handlers
 
 The marker grammar is platform-agnostic (line comments are universally parseable). What varies is
-the **identifier grammar** each runner accepts and whether igrsoft has wired a handler that emits
+the **identifier grammar** each runner accepts and whether company-workflow has wired a handler that emits
 it. Status is per-platform and load-bearing: a platform whose handler is not wired auto-promotes
 to `full` (see § Auto-promotion when no handler) regardless of how well-specified its syntax is.
 
 ### Identifier grammar by platform
 
-Apple's row is the only one an igrsoft parser emits today; the rest document the syntax a
+Apple's row is the only one an company-workflow parser emits today; the rest document the syntax a
 platform handler will need.
 
 #### Grammar — app platforms
@@ -264,7 +264,7 @@ All rows below are documented, not wired.
 #### Handler status semantics
 
 "Documented, not wired" means the syntax above is correct and safe to write into a plan or
-report, but no igrsoft parser emits it yet — those runs auto-promote to module-scope at DV (see
+report, but no company-workflow parser emits it yet — those runs auto-promote to module-scope at DV (see
 § Auto-promotion when no handler; never `full` — `testing-strategy.md § Test-Execution
 Authority`).
 
@@ -295,7 +295,7 @@ the exception, not the model to copy.
 
 [^divergence]: `apple-developer:swift-testing-entry` still documents the per-function form and
 lives in a separate repository. Until that follow-up lands, **this table is authoritative** for
-igrsoft stages.
+company-workflow stages.
 
 ### Auto-promotion when no handler
 

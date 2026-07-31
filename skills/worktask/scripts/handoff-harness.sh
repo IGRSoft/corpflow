@@ -29,7 +29,7 @@
 #       not run at all and behaviour is unchanged.
 #
 #       --strict turns gate violations from `warn:` + exit 0 into `fail:` +
-#       exit 1. Equivalent env opt-in: IGRSOFT_AR_REF_STRICT=1, which the
+#       exit 1. Equivalent env opt-in: COMPANY_WORKFLOW_AR_REF_STRICT=1, which the
 #       orchestrator honours when deciding whether to pass --strict. The gate
 #       ships warn-only in 3.42.0; --strict becomes the orchestrator default in
 #       a future minor, so treat warnings as work to do now.
@@ -65,7 +65,7 @@ STATE_ARG=""
 # Env opt-in is read here so the gate is strict even when an older orchestrator
 # forgets the --strict flag; --strict alone can only turn it on.
 STRICT=0
-if [[ "${IGRSOFT_AR_REF_STRICT:-0}" == "1" ]]; then STRICT=1; fi
+if [[ "${COMPANY_WORKFLOW_AR_REF_STRICT:-0}" == "1" ]]; then STRICT=1; fi
 
 usage() {
   sed -n 's/^# \{0,1\}//p' "$0" | sed -n '1,/^$/p'
