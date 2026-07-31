@@ -96,7 +96,7 @@ When a user attaches images during a worktask task, copy them to `.context/image
 ```
 .context/
 ├── planning-0.md
-├── analyzing-0.md
+├── architecture-0.md
 ├── coordination-0.md
 ├── development-0.md
 ├── developer-review-0.md
@@ -131,7 +131,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 ```
 .context/
 ├── planning-0.md                               # References mockups in Design Requirements
-├── analyzing-0.md                              # Reviews mockup feasibility
+├── architecture-0.md                              # Reviews mockup feasibility
 ├── coordination-0.md
 ├── development-0.md                            # Uses mockups as implementation guide
 ├── testing-0.md                                # Validates against mockups
@@ -152,7 +152,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 .context/
 ├── planning-0.md                               # References Figma screenshots in Design Requirements
 ├── exploration.md                              # Contains Figma design context summary
-├── analyzing-0.md
+├── architecture-0.md
 ├── development-0.md                            # Uses Figma screenshots as implementation guide
 ├── testing-0.md                                # Design comparison results
 ├── designs/
@@ -167,7 +167,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 ```
 .context/
 ├── planning-0.md
-├── analyzing-0.md
+├── architecture-0.md
 ├── coordination-0.md
 ├── development-0.md
 ├── developer-review-0.md
@@ -199,7 +199,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 ```
 .context/
 ├── planning-0.md
-├── analyzing-0.md
+├── architecture-0.md
 ├── development-0.md
 ├── errors/
 │   ├── developer.md      # DV retries (one section per retry)
@@ -214,7 +214,7 @@ Runtime capture from `run_in_background` Bash and Monitor-tool streaming lands i
 .context/
 ├── milestone.json        # GitHub milestone context
 ├── planning-0.md
-├── analyzing-0.md
+├── architecture-0.md
 ├── development-0.md
 ├── testing-0.md
 └── images/
@@ -228,7 +228,7 @@ Under `/megatask`, `.context/` lives inside each worktree (always):
 .worktrees/milestone-1/42/              # Git worktree root (full source copy)
 ├── .context/                            # Worktask artifacts
 │   ├── planning-0.md
-│   ├── analyzing-0.md
+│   ├── architecture-0.md
 │   ├── development-0.md
 │   ├── testing-0.md
 │   └── designs/
@@ -248,12 +248,12 @@ When PL reruns (scope change, re-plan), artifacts from all runs coexist. `state.
 ```
 .context/
 ├── planning-0.md           # Original plan (run 0)
-├── analyzing-0.md
+├── architecture-0.md
 ├── development-0.md
 ├── testing-0.md
 ├── complete-summary-0.md
 ├── planning-1.md           # Re-plan (run 1, scope change)
-├── analyzing-1.md
+├── architecture-1.md
 ├── development-1.md
 ├── testing-1.md
 ├── complete-summary-1.md

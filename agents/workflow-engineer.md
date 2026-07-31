@@ -4,7 +4,7 @@ description: Worktask system expert for task management, stage transitions, Task
 model: sonnet
 color: green
 effort: medium
-version: 0.1.2
+version: 0.2.0
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
@@ -125,7 +125,7 @@ All changes committed to the issue branch, branch pushed to origin, PR created w
    ```bash
    # nullglob: unmatched globs expand to nothing, not error (zsh) or stay literal (bash)
    setopt null_glob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
-   for artifact in .context/{planning,analyzing,coordination,development,developer-review,security-review,testing,documentation,release,complete-summary,retrospective,incident,ethics-review}-*.md; do
+   for artifact in .context/{planning,architecture,coordination,development,developer-review,security-review,testing,documentation,release,complete-summary,retrospective,incident,ethics-review}-*.md; do
      [[ -f "$artifact" ]] || continue
      stage=$(awk '/^[[:space:]]*stage:/ { sub(/.*stage:[[:space:]]*/, ""); gsub(/[[:space:]"]+/, ""); print; exit }' "$artifact")
      [[ -n "$stage" ]] && CLAUDE_ARTIFACT_PATH="$artifact" CLAUDE_TASK_METADATA_STAGE="$stage" bash .claude/hooks/state-merge.sh
@@ -139,7 +139,7 @@ All changes committed to the issue branch, branch pushed to origin, PR created w
    mv .context/state.json ".context/state.json.bad.$(date +%s)"
    # Re-run PL0 initialization to re-seed, then run step 3 above
    ```
-5. **Validate artifact filenames**: `bash "<plugin-root>/skills/worktask/scripts/cache-lint.sh" --filename-lint .context/` — non-canonical names (e.g. `architecture-0.md` not `analyzing-0.md`) block hook artifact resolution
+5. **Validate artifact filenames**: `bash "<plugin-root>/skills/worktask/scripts/cache-lint.sh" --filename-lint .context/` — non-canonical names (e.g. `arch-0.md` not `architecture-0.md`) block hook artifact resolution
 
 **Prevention**: Ensure `commands/worktask.md` Phase 1 step 3b runs at worktask start. The plugin.json hook registration (v3.11.0+) gives automatic Layer 2 coverage without project-local install.
 
@@ -244,4 +244,16 @@ Finish the atomic unit: complete the **current edit theme** (every file in the g
 4. Resume from the checkpoint next turn; clear it once the theme completes.
 
 Mirrors the DV "finish the atomic unit" principle in `skills/worktask/SKILL.md`.
+
+### Markdown section-splitting (DV execution)
+
+Splitting an over-cap section (`section-lint.sh`) means inserting a heading at a matched anchor. A
+literal-string match does not establish a legal block boundary: before inserting, confirm the
+matched occurrence is not inside a fenced code block, a YAML comment, a table body, or a list-item
+continuation. A heading injected into any of those corrupts the block while the lint still passes —
+it counts characters and ignores heading-lookalikes inside fences, so a green lint is not evidence
+the split was structurally sound.
+
+Audit every heading the diff adds (`git diff -U0 -- '*.md' | grep '^+#\{2,6\} '`), not only the
+sites the splitting tool reported touching.
 

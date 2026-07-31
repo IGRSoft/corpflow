@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with Task System integration, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 3.41.2 · Requires Claude Code 2.1.220+**
+**Plugin 3.42.0 · Requires Claude Code 2.1.220+**
 
 ## Features
 
@@ -148,10 +148,12 @@ Single entry point (`/worktask`). PL always runs; PL0 dynamic sizing scores comp
 | Score | Tier | Stages created (PL always runs) |
 |-------|------|---------------------------------|
 | 0–10 | Low | DV → DR → QA |
-| 11–20 | Medium | AR → DV → DR → QA |
-| 21–30 | Moderate | AR → TL → DV → DR → QA |
-| 31–40 | High | AR → TL → DV → DR → QA → DC → FN → ST (full 9 stages) |
-| 41–50 | Critical | AR → TL → DV → DR → SR → QA → DC → RE → FN → ST (11 stages, adds SR + RE) |
+| 11–20 | Medium | AR (default — PL0 may override per Stage Inclusion Criteria) → DV → DR → QA |
+| 21–30 | Moderate | AR (default — PL0 may override per Stage Inclusion Criteria) → DV → DR → QA |
+| 31–40 | High | AR (default — PL0 may override per Stage Inclusion Criteria) → DV → DR → QA → DC → FN → ST |
+| 41–50 | Critical | AR (default — PL0 may override per Stage Inclusion Criteria) → DV → DR → SR → QA → DC → RE → FN → ST (adds SR + RE) |
+
+\+ TL — only when PL0 splits the work across ≥2 developers (see Stage Inclusion Criteria in `skills/estimation-methodology/SKILL.md`)
 
 `--secure` / `--full` forces the 11-stage path (SR after DR, RE before FN). Security-sensitive features auto-include SR regardless of score.
 
@@ -195,7 +197,7 @@ TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
 ```
 .context/
 ├── planning-0.md            # PL stage (run 0; subsequent PL runs add planning-1.md, planning-2.md, …)
-├── analyzing-0.md           # AR stage (run 0)
+├── architecture-0.md           # AR stage (run 0)
 ├── coordination-0.md        # TL stage (run 0)
 ├── development-0.md         # DV stage (run 0)
 ├── developer-review-0.md    # DR stage (run 0)

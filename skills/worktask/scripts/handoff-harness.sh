@@ -16,9 +16,32 @@
 #       Runs the above against built-in fixtures, then validates frontmatter
 #       and state.json schemas using yq + jq. Exits 0 on pass.
 #
-#   handoff-harness.sh --validate-frontmatter <artifact.md>
+#   handoff-harness.sh --validate-frontmatter <artifact.md> [--state <state.json>] [--strict]
 #       Validates the artifact's `handoff:` frontmatter against the per-stage
 #       required-field matrix. Exits 0 on pass, 1 on fail.
+#
+#       --state adds the AR->DV architecture-reference gate: when the artifact
+#       is a DV handoff and the state ledger has a stages.AR entry, the
+#       architecture reference (refs.decisions, then architecture.ref -- the
+#       same precedence stage-contracts.md#tpl-dv and the DR rule declare)
+#       must match ^architecture-[0-9]+\.md(#[a-z-]+)?$ and
+#       resolve to a file beside the artifact. Without --state the check does
+#       not run at all and behaviour is unchanged.
+#
+#       --strict turns gate violations from `warn:` + exit 0 into `fail:` +
+#       exit 1. Equivalent env opt-in: IGRSOFT_AR_REF_STRICT=1, which the
+#       orchestrator honours when deciding whether to pass --strict. The gate
+#       ships warn-only in 3.42.0; --strict becomes the orchestrator default in
+#       a future minor, so treat warnings as work to do now.
+#
+#       The inverse guard (an architecture reference with no stages.AR entry)
+#       always warns and never fails, in either mode.
+#
+#       Exception: an unreadable --state (file missing, jq unavailable, or
+#       invalid JSON) is itself a gate violation, not a silent skip -- it
+#       warns by default and, unlike every other case above where --strict
+#       is opt-in future behaviour, this ALREADY fails under --strict today
+#       (exit 1). A state file we cannot read is not evidence AR didn't run.
 #
 #   handoff-harness.sh --validate-state <state.json>
 #       Validates the ledger against the schema (required keys, ≤500 token
@@ -38,6 +61,11 @@ set -euo pipefail
 OUT_DIR=""
 MODE="run"
 ARG=""
+STATE_ARG=""
+# Env opt-in is read here so the gate is strict even when an older orchestrator
+# forgets the --strict flag; --strict alone can only turn it on.
+STRICT=0
+if [[ "${IGRSOFT_AR_REF_STRICT:-0}" == "1" ]]; then STRICT=1; fi
 
 usage() {
   sed -n 's/^# \{0,1\}//p' "$0" | sed -n '1,/^$/p'
@@ -51,6 +79,8 @@ while [[ $# -gt 0 ]]; do
     --self-test) MODE="self-test"; shift ;;
     --validate-frontmatter) MODE="validate-fm"; shift; ARG="${1:-}"; shift ;;
     --validate-state) MODE="validate-state"; shift; ARG="${1:-}"; shift ;;
+    --state) shift; STATE_ARG="${1:-}"; shift ;;
+    --strict) STRICT=1; shift ;;
     *) echo "unknown arg: $1" >&2; usage ;;
   esac
 done
@@ -96,6 +126,76 @@ required_for() {
   esac
 }
 
+ARCH_REF_RE='^architecture-[0-9]+\.md(#[a-z-]+)?$'
+
+# Warn-only by default so an advisory check can never break an unrelated run.
+ar_ref_violation() {
+  if [[ "$STRICT" -eq 1 ]]; then
+    echo "fail: $1" >&2
+    return 1
+  fi
+  echo "warn: $1" >&2
+  return 0
+}
+
+# Runtime truth for "did AR run" is the stages.AR entry, never the presence of
+# an architecture file — AR is optional and PL0 decides it per run.
+check_ar_ref() {
+  local artifact="$1" fmfile="$2"
+
+  # A state file we cannot read is NOT evidence that AR did not run. Saying so
+  # out loud keeps the two cases distinguishable once --strict becomes the
+  # default, where a silent skip would be a false negative on every jq-less host.
+  local unreadable=""
+  if [[ ! -f "$STATE_ARG" ]]; then
+    unreadable="state file not found: $STATE_ARG"
+  elif ! command -v jq >/dev/null 2>&1; then
+    unreadable="jq unavailable; cannot read $STATE_ARG"
+  elif ! jq empty "$STATE_ARG" >/dev/null 2>&1; then
+    unreadable="state file is not valid JSON: $STATE_ARG"
+  fi
+
+  if [[ -n "$unreadable" ]]; then
+    ar_ref_violation "AR-ref check skipped — $unreadable" || return 1
+    return 0
+  fi
+
+  local ar_present=0
+  if jq -e '.stages.AR' "$STATE_ARG" >/dev/null 2>&1; then
+    ar_present=1
+  fi
+
+  local ref
+  ref=$(yq eval '.handoff.refs.decisions // .handoff.architecture.ref // ""' "$fmfile")
+  [[ "$ref" == "null" ]] && ref=""
+
+  if [[ "$ar_present" -eq 0 ]]; then
+    if [[ -n "$ref" ]] && printf '%s' "$ref" | grep -qE '^architecture-'; then
+      echo "warn: DV references $ref but state has no stages.AR entry" >&2
+    fi
+    return 0
+  fi
+
+  if [[ -z "$ref" ]]; then
+    ar_ref_violation "AR completed but DV refs.decisions missing" || return 1
+    return 0
+  fi
+
+  if ! printf '%s' "$ref" | grep -qE "$ARCH_REF_RE"; then
+    ar_ref_violation "DV architecture ref dangling: $ref" || return 1
+    return 0
+  fi
+
+  local reffile
+  reffile="${ref%%#*}"
+  if [[ ! -f "$(dirname "$artifact")/$reffile" ]]; then
+    ar_ref_violation "DV architecture ref dangling: $reffile" || return 1
+    return 0
+  fi
+
+  return 0
+}
+
 validate_frontmatter() {
   local f="$1"
   [[ -f "$f" ]] || { echo "frontmatter: file not found: $f" >&2; return 1; }
@@ -137,6 +237,13 @@ validate_frontmatter() {
       return 1
     fi
   done
+
+  if [[ "$stage" == "DV" && -n "$STATE_ARG" ]]; then
+    if ! check_ar_ref "$f" "$fmfile"; then
+      rm -f "$fmfile"
+      return 1
+    fi
+  fi
 
   # Token budget check (≤200 cl100k_base proxy)
   local tcount
@@ -205,14 +312,14 @@ make_fixtures() {
     "tests_added": [],
     "decisions": [
       {"id":"pd1","summary":"9-stage worktask","ref":"planning-0.md#stages"},
-      {"id":"ad1","summary":"Atomic write agent-primary + hook idempotent","ref":"analyzing.md#decisions"}
+      {"id":"ad1","summary":"Atomic write agent-primary + hook idempotent","ref":"architecture.md#decisions"}
     ],
     "open_questions": [],
     "verdicts": {"PL":"ok","AR":"ok","TL":"ok"}
   },
   "handoffs": {
     "PL→AR": "9-stage, complexity 38. ref: planning-0.md#requirements",
-    "AR→TL": "Schemas designed, atomic write strategy. ref: analyzing.md#decisions",
+    "AR→TL": "Schemas designed, atomic write strategy. ref: architecture.md#decisions",
     "TL→DV": "24-file fan-out, 8 batches. ref: coordination.md#fan-out"
   }
 }
@@ -266,14 +373,14 @@ Score 38.
 PL AR TL DV DR QA DC FN ST.
 EOF
 
-  cat > "$d/.context/analyzing.md" <<'EOF'
+  cat > "$d/.context/architecture.md" <<'EOF'
 ---
 handoff:
   stage: AR
   verdict: ok
   summary: "Schemas designed."
   key_decisions:
-    - { id: ad1, summary: "Atomic write", anchor: "analyzing.md#decisions" }
+    - { id: ad1, summary: "Atomic write", anchor: "architecture.md#decisions" }
   next_stage_focus: "TL fans out edits"
   open_questions: ["q3: hook lang"]
   refs: { plan: planning-0.md#requirements }
@@ -284,8 +391,8 @@ handoff:
 ## decisions
 
 EOF
-  for i in $(seq 1 200); do echo "- AD-$i decision body with justification, alternatives, and trade-offs spanning multiple lines" >> "$d/.context/analyzing.md"; done
-  cat >> "$d/.context/analyzing.md" <<'EOF'
+  for i in $(seq 1 200); do echo "- AD-$i decision body with justification, alternatives, and trade-offs spanning multiple lines" >> "$d/.context/architecture.md"; done
+  cat >> "$d/.context/architecture.md" <<'EOF'
 
 ## trade-offs
 
@@ -362,11 +469,11 @@ run_token_count() {
   # POSIX-compatible: case-statement lookup instead of associative arrays.
   legacy_files_for() {
     case "$1" in
-      DV) echo ".context/planning-0.md .context/analyzing.md" ;;
-      DR) echo ".context/planning-0.md .context/analyzing.md .context/development.md" ;;
+      DV) echo ".context/planning-0.md .context/architecture.md" ;;
+      DR) echo ".context/planning-0.md .context/architecture.md .context/development.md" ;;
       QA) echo ".context/planning-0.md .context/development.md" ;;
       DC) echo ".context/planning-0.md .context/development.md" ;;
-      FN) echo ".context/planning-0.md .context/analyzing.md .context/development.md" ;;
+      FN) echo ".context/planning-0.md .context/architecture.md .context/development.md" ;;
       *) echo "" ;;
     esac
   }
@@ -421,7 +528,7 @@ self_test() {
 
   make_fixtures "$td"
   validate_frontmatter "$td/.context/planning-0.md" >/dev/null
-  validate_frontmatter "$td/.context/analyzing.md" >/dev/null
+  validate_frontmatter "$td/.context/architecture.md" >/dev/null
   validate_frontmatter "$td/.context/development.md" >/dev/null
   validate_state "$td/.context/state.json" >/dev/null
 
@@ -430,7 +537,87 @@ self_test() {
   else
     echo "self-test: token-count: FAIL" >&2; exit 1
   fi
+
+  self_test_ar_gate "$td"
+
   echo "self-test: ALL PASS"
+}
+
+# Exercises every branch of the AR->DV gate. Each case restores STATE_ARG/STRICT
+# itself, so ordering between cases carries no state.
+self_test_ar_gate() {
+  local ctx="$1/.context"
+
+  if ! command -v yq >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+    echo "self-test: ar-ref gate: SKIP (yq/jq unavailable)"
+    return 0
+  fi
+
+  jq 'del(.stages.AR)' "$ctx/state.json" > "$ctx/state-no-ar.json"
+
+  # The shared preamble every gate fixture needs; only refs differ per case.
+  _dv_artifact() {
+    local path="$1" refs_block="$2"
+    {
+      echo '---'
+      echo 'handoff:'
+      echo '  stage: DV'
+      echo '  verdict: ok'
+      echo '  summary: "Implemented."'
+      echo '  files_touched: [a.md]'
+      echo '  next_stage_focus: "DR reviews"'
+      echo '  refs:'
+      printf '%s\n' "$refs_block"
+      echo '---'
+      echo
+      echo '# Development'
+    } > "$path"
+  }
+
+  _dv_artifact "$ctx/dv-no-ref.md"    '    dev: development.md#files-changed'
+  _dv_artifact "$ctx/dv-dangling.md"  '    decisions: architecture-9.md#decisions'
+  _dv_artifact "$ctx/dv-valid.md"     '    decisions: architecture-0.md#decisions'
+  cp "$ctx/architecture.md" "$ctx/architecture-0.md"
+
+  # <label> <state-file|-> <strict> <want-rc> <want-pattern|-> <artifact>
+  _ar_case() {
+    local label="$1" state="$2" strict="$3" want_rc="$4" want_pat="$5" artifact="$6"
+    STATE_ARG=""; [[ "$state" != "-" ]] && STATE_ARG="$state"
+    STRICT="$strict"
+    local out rc=0
+    out=$(validate_frontmatter "$artifact" 2>&1) || rc=$?
+    STATE_ARG=""; STRICT=0
+    if [[ "$rc" -ne "$want_rc" ]]; then
+      echo "self-test: ar-ref $label: FAIL (rc=$rc want=$want_rc)" >&2; exit 1
+    fi
+    if [[ "$want_pat" == "-" ]]; then
+      if printf '%s' "$out" | grep -qE '^(warn|fail): (AR completed|DV architecture|DV references)'; then
+        echo "self-test: ar-ref $label: FAIL (unexpected gate line)" >&2; exit 1
+      fi
+    elif ! printf '%s' "$out" | grep -q "$want_pat"; then
+      echo "self-test: ar-ref $label: FAIL (pattern not found: $want_pat)" >&2; exit 1
+    fi
+    echo "self-test: ar-ref $label: ok"
+  }
+
+  _ar_case "AR+missing/default"  "$ctx/state.json"       0 0 "warn: AR completed but DV refs.decisions missing" "$ctx/dv-no-ref.md"
+  _ar_case "AR+missing/strict"   "$ctx/state.json"       1 1 "fail: AR completed but DV refs.decisions missing" "$ctx/dv-no-ref.md"
+  _ar_case "AR+dangling/default" "$ctx/state.json"       0 0 "warn: DV architecture ref dangling"               "$ctx/dv-dangling.md"
+  _ar_case "AR+dangling/strict"  "$ctx/state.json"       1 1 "fail: DV architecture ref dangling"               "$ctx/dv-dangling.md"
+  _ar_case "AR+valid/default"    "$ctx/state.json"       0 0 -                                                  "$ctx/dv-valid.md"
+  _ar_case "AR+valid/strict"     "$ctx/state.json"       1 0 -                                                  "$ctx/dv-valid.md"
+  _ar_case "noAR+noref/default"  "$ctx/state-no-ar.json" 0 0 -                                                  "$ctx/dv-no-ref.md"
+  _ar_case "noAR+ref/default"    "$ctx/state-no-ar.json" 0 0 "warn: DV references architecture-0.md"               "$ctx/dv-valid.md"
+  _ar_case "noAR+ref/strict"     "$ctx/state-no-ar.json" 1 0 "warn: DV references architecture-0.md"               "$ctx/dv-valid.md"
+  _ar_case "legacy/no-state"     -                       0 0 -                                                  "$ctx/dv-no-ref.md"
+  _ar_case "legacy/no-state+strict" -                    1 0 -                                                  "$ctx/dv-dangling.md"
+
+  # F5: an unreadable --state must be loud, not silently indistinguishable from "no AR".
+  printf 'not json {{' > "$ctx/state-corrupt.json"
+  _ar_case "badstate/missing/default" "$ctx/nope.json"     0 0 "warn: AR-ref check skipped" "$ctx/dv-no-ref.md"
+  _ar_case "badstate/missing/strict"  "$ctx/nope.json"     1 1 "fail: AR-ref check skipped" "$ctx/dv-no-ref.md"
+  _ar_case "badstate/corrupt/default" "$ctx/state-corrupt.json" 0 0 "warn: AR-ref check skipped" "$ctx/dv-no-ref.md"
+  _ar_case "badstate/corrupt/strict"  "$ctx/state-corrupt.json" 1 1 "fail: AR-ref check skipped" "$ctx/dv-no-ref.md"
 }
 
 # ---------- main ----------

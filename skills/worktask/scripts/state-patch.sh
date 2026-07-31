@@ -85,7 +85,7 @@ log_msg() {
 basename_for_stage() {
   case "$1" in
     PL) printf 'planning' ;;
-    AR) printf 'analyzing' ;;
+    AR) printf 'architecture' ;;
     TL) printf 'coordination' ;;
     DV) printf 'development' ;;
     DR) printf 'developer-review' ;;
@@ -402,7 +402,7 @@ EOART
   cat > .context/state.json << 'EOSTATE'
 {"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","stages":{"PL":{"status":"completed","verdict":"ok"}},"facts":{"verdicts":{"PL":"ok"}},"handoffs":{}}
 EOSTATE
-  cat > .context/analyzing-1.md << 'EOART'
+  cat > .context/architecture-1.md << 'EOART'
 ---
 handoff:
   stage: AR
@@ -411,7 +411,7 @@ handoff:
   refs: { plan: planning-0.md#requirements }
 ---
 EOART
-  cat > .context/analyzing-0.md << 'EOART'
+  cat > .context/architecture-0.md << 'EOART'
 ---
 handoff:
   stage: AR
@@ -425,7 +425,7 @@ EOART
       printf 'T4: state-patch returned non-zero\n' >&2
       exit 1
     }
-  if jq -e '.stages.AR.verdict == "blocked" and (.stages.AR.artifact | endswith("analyzing-1.md"))' \
+  if jq -e '.stages.AR.verdict == "blocked" and (.stages.AR.artifact | endswith("architecture-1.md"))' \
     .context/state.json > /dev/null; then
     printf 'T4: highest-N wins when run_index absent: ok\n'
   else
@@ -505,7 +505,7 @@ EOART
 
   # ---- T8: --prev writes handoffs["PREV→CODE"] from the parsed summary + ref ----
   make_state
-  cat > .context/analyzing-0.md << 'EOART'
+  cat > .context/architecture-0.md << 'EOART'
 ---
 handoff:
   stage: AR
@@ -514,12 +514,12 @@ handoff:
   refs: { plan: planning-0.md#requirements }
 ---
 EOART
-  bash "$SELF" --stage AR --prev PL --artifact .context/analyzing-0.md \
+  bash "$SELF" --stage AR --prev PL --artifact .context/architecture-0.md \
     || {
       printf 'T8: state-patch returned non-zero\n' >&2
       exit 1
     }
-  if jq -e '(.handoffs["PL→AR"] // "") | test("approach validated") and test("ref:analyzing-0.md")' \
+  if jq -e '(.handoffs["PL→AR"] // "") | test("approach validated") and test("ref:architecture-0.md")' \
     .context/state.json > /dev/null; then
     printf 'T8: --prev writes handoffs edge from summary+ref: ok\n'
   else
@@ -529,7 +529,7 @@ EOART
   fi
   # Absent --prev must NOT synthesize a handoffs edge (byte-stable default path).
   make_state
-  bash "$SELF" --stage AR --artifact .context/analyzing-0.md
+  bash "$SELF" --stage AR --artifact .context/architecture-0.md
   if jq -e '(.handoffs | length) == 0' .context/state.json > /dev/null; then
     printf 'T8: absent --prev leaves handoffs untouched: ok\n'
   else

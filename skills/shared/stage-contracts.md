@@ -21,7 +21,7 @@ Every stage agent reads inputs in this order, anchor-first:
 
 1. Read `.context/state.json` (the worktask ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, `run_index`, and `stages` relevant to your stage.
 2. Resolve `N = task.metadata.run_index ?? state.run_index ?? 0`. All stage artifacts for this run use `<basename>-${N}.md`.
-3. Read only the listed anchors in upstream artifacts (e.g. `analyzing-N.md#decisions`, `planning-N.md#requirements`). Do **not** read whole files unless an anchor is absent.
+3. Read only the listed anchors in upstream artifacts (e.g. `architecture-N.md#decisions`, `planning-N.md#requirements`). Do **not** read whole files unless an anchor is absent.
 4. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
 
 ### Run index and F1 fallback
@@ -95,14 +95,21 @@ All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolve
 
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
-| **AR** | software-architector | opus | `.context/<plan_file>` (resolved via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`) | `.context/analyzing-N.md` with sections: Architecture Decisions, Trade-offs, Patterns, Integration Points | `analyzing-N.md` exists + at least one decision with rationale | `.context/errors/software-architector.md` |
-| **TL** | team-lead | sonnet | `.context/<plan_file>` (resolved per AR rule), `.context/analyzing-N.md` | `.context/coordination-N.md` with sections: Task Breakdown, Parallel Streams, Assignments, Risks | `coordination-N.md` exists + task breakdown maps to DV sub-tasks | `.context/errors/team-lead.md` |
+| **AR** | software-architector | opus | `.context/<plan_file>` (resolved via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`) | `.context/architecture-N.md` with sections: Architecture Decisions, Trade-offs, Patterns, Integration Points | `architecture-N.md` exists + at least one decision with rationale | `.context/errors/software-architector.md` |
+| **TL** | team-lead | sonnet | `.context/<plan_file>` (resolved per AR rule), `.context/architecture-N.md` (when AR ran) | `.context/coordination-N.md` with sections: Task Breakdown, Parallel Streams, Assignments, Risks | `coordination-N.md` exists + task breakdown maps to DV sub-tasks | `.context/errors/team-lead.md` |
 
 ### DV–DR
 
+#### DV row
+
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
-| **DV** | developer | opus | `.context/<plan_file>` (resolved per AR rule), `.context/analyzing-N.md`, `.context/coordination-N.md` (if present) | `.context/development-N.md` with sections: Files Changed, Approach, Tests Added, Verification Command + actual code changes | `development-N.md` exists + git diff is non-empty + every `handoff.files_touched` path passes `test -e` (write landed, not chat text) + `.context/logs/build-*.log` shows success | `.context/errors/developer.md` |
+| **DV** | developer | opus | `.context/<plan_file>` (resolved per AR rule), `.context/architecture-N.md` (when AR ran — then MANDATORY and gate-enforced via `--validate-frontmatter --state`), `.context/coordination-N.md` (when TL ran) | `.context/development-N.md` with sections: Files Changed, Approach, Tests Added, Verification Command + actual code changes | `development-N.md` exists + git diff is non-empty + every `handoff.files_touched` path passes `test -e` (write landed, not chat text) + `.context/logs/build-*.log` shows success | `.context/errors/developer.md` |
+
+#### DR row
+
+| Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
+|-------|-------|-------|-----------------|------------------|------------|------------|
 | **DR** | technical-lead | opus | `.context/development-N.md` + source diff | `.context/developer-review-N.md` with sections: Code Quality, Test Coverage, Issues Found, Approval Status | `developer-review-N.md` exists + Approval Status ∈ {approved, needs-changes, rejected} | `.context/errors/technical-lead.md` |
 
 ### SR
@@ -121,7 +128,7 @@ All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolve
 
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
-| **DC** | technical-writer | haiku | `.context/development-N.md`, `.context/analyzing-N.md` **frontmatter-first** (`Read <artifact> limit:30`); deep-read a body ONLY on anchor-miss, a section-flagging `verdict`/`next_stage_focus`, or `retry_count > 0` | `.context/documentation-N.md` with sections: Doc Changes, README Updates, API Docs | `documentation-N.md` exists + docs diff present | `.context/errors/technical-writer.md` |
+| **DC** | technical-writer | haiku | `.context/development-N.md`, `.context/architecture-N.md` (when AR ran) **frontmatter-first** (`Read <artifact> limit:30`); deep-read a body ONLY on anchor-miss, a section-flagging `verdict`/`next_stage_focus`, or `retry_count > 0` | `.context/documentation-N.md` with sections: Doc Changes, README Updates, API Docs | `documentation-N.md` exists + docs diff present | `.context/errors/technical-writer.md` |
 | **RE** | release-engineer | haiku | `.context/development-N.md`, `.context/testing-N.md`, `.context/documentation-N.md` | `.context/release-N.md` with sections: Version Bump, Changelog, Deployment Checklist | `release-N.md` exists + version bump proposed + changelog entry drafted | `.context/errors/release-engineer.md` |
 
 ### FN
@@ -171,6 +178,27 @@ When **no** typed return is present (the runtime dispatch primitive does not acc
 ### Step 8 and failure rule
 
 8. **state.json patch check**: After Task() returns, orchestrator re-reads `.context/state.json`. If `stages.<CODE>.status` is still `in_progress`, parse the artifact's `handoff:` frontmatter and atomic-merge into state.json (third belt-and-suspenders layer; see `handoff-protocol.md#fallback-paths` F2/F3).
+
+### Step 9 — AR-reference check (DV completion, warn-only in 3.42.0)
+
+9. **AR-reference check**: At DV completion, if `.context/state.json` has a `stages.AR` entry, run:
+
+   ```bash
+   skills/worktask/scripts/handoff-harness.sh --validate-frontmatter .context/development-N.md \
+     --state .context/state.json
+   ```
+
+   A `warn:` line is recorded as an audit row appended to `.context/logs/audit.jsonl` —
+   `{"action":"ar_ref_check","result":"warn", …}` — and surfaced in the DR dispatch prompt so DR
+   reviews the missing linkage. It is **not** a `missing_input` block and does not stop the
+   transition. Warn-only in 3.42.0; the orchestrator passes `--strict` (making it blocking) only
+   when `IGRSOFT_AR_REF_STRICT=1` is set, and a future minor flips `--strict` to the default.
+
+#### Step 9 — dispatch-time companion check
+
+**Dispatch-time companion check**: when AR completed, the DV0, DR0 **and** QA0 tasks MUST each
+   carry `metadata.architecture_ref` (`{path, anchors, key_decisions}`) and name `architecture-N.md`
+   in `context_files`. When AR was excluded, none of them may carry either.
 
 Failure at any step → do NOT transition. Append a `missing_input` entry to the *next* stage's error file and block until resolved.
 
@@ -240,15 +268,17 @@ handoff:
   verdict: ok                  # ok / blocked / escalate
   summary: "<one-line summary ≤200 chars>"
   key_decisions:
-    - { id: ad1, summary: "<decision>", anchor: "analyzing-N.md#decisions" }
-  next_stage_focus: "<imperative: what TL must fan-out>"
+    - { id: ad1, summary: "<decision>", anchor: "architecture-N.md#decisions" }
+  next_stage_focus: "<imperative — addressed to TL when TL is in the plan, else to DV>"
   open_questions:
-    - "q3: <question text> (TL to decide)"
+    - "q3: <question text> (TL to decide; DV when TL is not in the plan)"
   refs:
     plan: .context/planning-N.md#requirements
-    decisions: analyzing-N.md#decisions
+    decisions: architecture-N.md#decisions
 ---
 ```
+
+`key_decisions` is also the source the orchestrator digests into the `metadata.architecture_ref.key_decisions` string (≤200 chars) stamped on the DV0/DR0/QA0 dispatches — keep each summary self-contained.
 
 Prev→this label: `PL→AR`. Skip-exploration short-circuit applies — see `agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
 
@@ -263,12 +293,12 @@ handoff:
   next_stage_focus: "<imperative: DV batch order + parallelization>"
   refs:
     plan: .context/planning-N.md#requirements
-    arch: .context/analyzing-N.md#decisions
+    arch: .context/architecture-N.md#decisions   # ONLY when AR ran; omit otherwise
     fan_out: coordination-N.md#fan-out
 ---
 ```
 
-Prev→this label: `AR→TL`. Skip-exploration short-circuit applies.
+Prev→this label: `AR→TL` (or `PL→TL` when AR was excluded). Skip-exploration short-circuit applies.
 
 ### #tpl-dv — Development (developer)
 
@@ -283,13 +313,36 @@ handoff:
     - path/to/file2.md
   next_stage_focus: "<imperative: what DR/QA must focus on>"
   refs:
-    decisions: analyzing-N.md#decisions
-    coordination: coordination-N.md#fan-out
+    decisions: architecture-N.md#decisions      # ONLY when AR ran; omit otherwise
+    coordination: coordination-N.md#fan-out  # ONLY when TL ran; omit otherwise
     tests: development-N.md#tests-added
+  architecture:                # ONLY when AR ran; omit the whole object otherwise
+    ref: architecture-N.md#decisions
+    applied: true              # truthful; see the architecture reference contract below
 ---
 ```
 
-Prev→this label: `TL→DV`.
+Prev→this label: `TL→DV` (or `AR→DV` when TL was excluded, `PL→DV` when neither AR nor TL ran, `IR→DV` on the emergency pipeline).
+
+#### Architecture reference contract (tpl-dv)
+
+When AR ran, BOTH `refs.decisions` and the `architecture` object are required, and both must be
+omitted when AR was excluded. They are not alternatives: `refs.decisions` is the anchor-read
+pointer downstream stages follow, `architecture.ref` is the typed carrier the `DVHandoff` schema
+validates, and `architecture.applied` is the assertion DR checks. Writing one without the other
+is a contract violation — the harness accepts either (see the precedence below) but DR rejects an
+absent `architecture` object as `missing_input`.
+
+Gate precedence, in the single order shared by the harness, the schema and the DR rule:
+`refs.decisions`, then `architecture.ref`. The chosen value must match
+`^architecture-[0-9]+\.md(#[a-z-]+)?$` and resolve to a file next to the artifact — warn-only in
+3.42.0, blocking under `--strict`. An architecture reference with no `stages.AR` entry trips the
+inverse guard (warn, never a failure).
+
+##### Unreadable-state exception
+
+An unreadable `--state` fails (exit 1) under `--strict` in 3.42.0 itself, ahead of the rest of
+this warn-only rollout.
 
 ### #tpl-dr — Developer Review (technical-lead)
 
@@ -468,7 +521,7 @@ Single source of truth for what every stage agent verifies before `status: compl
 
 1. **Artifact frontmatter**: Your artifact (`.context/<artifact>-N.md`) MUST start with `---\nhandoff:` YAML frontmatter conforming to the per-stage template at `stage-contracts.md#tpl-<CODE>`.
 2. **Required fields**: Frontmatter MUST include all required fields for your stage `<CODE>` per `skills/worktask/references/handoff-protocol.md#frontmatter-schema` § Per-stage required-field matrix.
-3. **Artifact filename**: Artifact MUST use the canonical name from `handoff-protocol.md#stage-artifact-map`. Non-canonical names (e.g. `architecture-0.md` instead of `analyzing-0.md`) break the SubagentStop safety net.
+3. **Artifact filename**: Artifact MUST use the canonical name from `handoff-protocol.md#stage-artifact-map`. Non-canonical names (e.g. `arch-0.md` instead of `architecture-0.md`) break the SubagentStop safety net.
 
 ### Steps 4–5
 

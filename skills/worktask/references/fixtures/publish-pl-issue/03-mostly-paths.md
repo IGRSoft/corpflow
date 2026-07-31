@@ -3,7 +3,7 @@
 .context/planning-0.md
 .context/planning-1.md
 .context/planning-2.md
-.context/analyzing-0.md
+.context/architecture-0.md
 .context/coordination-0.md
 .context/development-0.md
 .context/development-1.md
@@ -33,7 +33,7 @@ run_index: 99
 artifact_path: development-9.md
 workspace_path: /Users/foo/bar
 planning-7.md
-analyzing-7.md
+architecture-7.md
 coordination-7.md
 development-7.md
 

@@ -55,7 +55,7 @@ All markdown files are stored directly in `.context/` (no subfolders except for 
 ```
 .context/
 ├── planning-0.md            # First plan (PL run 0); subsequent runs add planning-1.md, planning-2.md, ...
-├── analyzing-0.md           # Technical design, architecture (AR stage)
+├── architecture-0.md           # Technical design, architecture (AR stage)
 ├── coordination-0.md        # Team coordination (TL stage)
 ├── development-0.md         # Implementation notes (DV stage)
 ├── developer-review-0.md    # Code review findings (DR stage)
@@ -94,11 +94,11 @@ When PL0 reruns (e.g. scope change, re-plan), it increments the run index and wr
 ```
 .context/
 ├── planning-0.md       # Run 0
-├── analyzing-0.md
+├── architecture-0.md
 ├── development-0.md
 ├── complete-summary-0.md
 ├── planning-1.md       # Run 1 (re-plan)
-├── analyzing-1.md
+├── architecture-1.md
 ├── development-1.md
 ├── complete-summary-1.md
 ├── state.json          # Shared (reset + patched each run)
@@ -136,9 +136,9 @@ Product Manager's planning document containing:
 
 #### 8-Stage Worktask (standard)
 
-- **analyzing-N.md**: Architecture decisions (AR stage)
+- **architecture-N.md**: Architecture decisions (AR stage)
 - **coordination-N.md**: Team coordination (TL stage)
-- **development-N.md**: Implementation notes (DV stage)
+- **development-N.md**: Implementation notes (DV stage). Under TL fan-out, each DV sub-agent also writes a per-stream **development-N-`<stream>`.md** (kebab slug assigned by `coordination-N.md § fan-out`); the DV entry agent merges them into the canonical `development-N.md`, which stays the DR/QA input
 - **developer-review-N.md**: Code review findings (DR stage)
 - **testing-N.md**: Test plan and results (QA stage)
 - **documentation-N.md**: Documentation plan (DC stage)
@@ -204,9 +204,9 @@ Files are named by **worktask stage** and stored in `.context/`:
 | File | Stage | Owner |
 |------|-------|-------|
 | planning-N.md (e.g. planning-0.md) | PL (Planning) | product-manager |
-| analyzing-N.md | AR (Architecture) | software-architector |
+| architecture-N.md | AR (Architecture) | software-architector |
 | coordination-N.md | TL (Team Lead) | team-lead |
-| development-N.md | DV (Development) | developer |
+| development-N.md (per-stream: development-N-`<stream>`.md) | DV (Development) | developer |
 | developer-review-N.md | DR (Developer Review) | technical-lead |
 | security-review-N.md | SR (Security Review) | security-reviewer |
 | testing-N.md | QA (QA Testing) | qa-engineer |

@@ -261,9 +261,9 @@ IR → DV → DR → QA → [RE] → FN
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-re`. Prev→this label: `DC→RE`.
+Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-re`. Prev→this label: `DC→RE` (or `QA→RE` on the emergency pipeline, `IR→DV→DR→QA→RE→FN`, where DC does not run).
 
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage RE --prev DC` (`skills/worktask/scripts/`) to atomically patch `stages.RE` + the `DC→RE` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+Run `state-patch.sh --stage RE --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `DC` normally and `QA` on the emergency pipeline — pick it from the `stages` keys actually present in `.context/state.json` — to atomically patch `stages.RE` + the corresponding `DC→RE` / `QA→RE` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.

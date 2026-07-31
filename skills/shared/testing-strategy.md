@@ -2,6 +2,7 @@
 name: testing-strategy
 description: Cross-platform testing reference — testing pyramid, AAA pattern, per-platform framework and naming map, DV/QA boundary, and the Test Selection Gate. Reference when planning or implementing tests on any platform (apple, android, web, systems, backend, ai).
 effort: low
+version: 0.2.0
 ---
 
 # Testing Strategy
@@ -215,6 +216,31 @@ prefer a descriptive sentence naming behavior and expected outcome, not the meth
 | Rust | snake_case `#[test] fn` inside `mod tests` | `fn login_valid_credentials()` |
 | bats | `@test "<sentence>"` | `@test "login with valid credentials"` |
 
+## Mutation Testing
+
+A mutation test proves a guard is non-vacuous by breaking what it guards and requiring the guard
+to fail. Its result carries no information unless the mutation actually landed.
+
+**Assert the mutation was applied before trusting the pass/fail it produced.** Back the target up,
+mutate, byte-compare against the backup (`diff -q` must report the files differ), and only then run
+the test; restore afterwards. A mutation that silently no-ops — a `sed` pattern written for
+`echo "…"` against a source that uses `printf '…'`, a line number that shifted — yields a passing
+test indistinguishable from a weak guard, so the reviewer concludes the opposite of what the
+evidence shows.
+
+## Portable verification greps
+
+A canon-sweep or acceptance-criteria count is evidence only if the command means the same thing on
+every host: `grep` may resolve to GNU grep, BSD grep or `ugrep`, which differ in ways that change a
+count silently instead of erroring.
+
+- Put `--include=`/`--exclude-dir=` **before** the pattern, and use `-e` for any pattern containing
+  `--` — past a `--` terminator ugrep stops parsing options and reads the filter as a filename.
+- Never anchor an exclusion regex on a `./` prefix; ugrep omits it, so `^\./…` filters match
+  nothing and the exclusion silently does not apply.
+- Report the per-file decomposition, not only the total — a filter that stopped applying looks
+  identical to one that found nothing to exclude.
+
 ## DV vs QA Boundary
 
 DV produces the **build artifact + selected-test list**. QA executes the **selected tests** plus visual checks if gated on. This division keeps the DV iteration loop fast (build-only by default) while preserving regression coverage at QA.
@@ -252,6 +278,10 @@ to another agent.
 at every one of the 13 stages, always** — `/<plugin>:build-test --no-test` is the sanctioned
 delegated form. The allowance is only *reachable* where the stage holds a build path (see
 "Reachable how" below); nominal for stages with no test-capable Bash grant.
+
+### Optional stages and authority
+
+Rows describe a stage's authority *when that stage runs*. AR and TL are optional (`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`); an excluded stage grants its authority to no one — in particular, an excluded AR does not transfer test-architecture authority to DV beyond the design ownership rule in `agents/developer.md § Architecture Ownership`.
 
 ### Authority matrix — DV, QA, AR, DR
 

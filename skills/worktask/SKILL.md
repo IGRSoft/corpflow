@@ -24,6 +24,10 @@ Single source of truth for task worktask management using the Task System.
                         Developer Review  Security Review (optional)
 ```
 
+AR and TL are optional: AR is a tier default PL0 may override in either direction, and TL runs
+only when PL0 splits the work across ≥2 developers. See `skills/estimation-methodology/SKILL.md
+§ Stage Inclusion Criteria (PL0 authority)`.
+
 ### State Machine
 
 ```mermaid
@@ -86,15 +90,22 @@ PL0 assesses complexity and creates only the stages needed. No pre-creation or d
 | Score | Complexity | PL0 Creates |
 |-------|------------|-------------|
 | 0-10 | Low | DV0, DR0, QA0 |
-| 11-20 | Medium | AR0, DV0, DR0, QA0 |
-| 21-30 | Moderate | AR0, TL0, DV0, DR0, QA0 |
-| 31-40 | High | AR0, TL0, DV0, DR0, QA0, DC0, FN0, ST0 |
-| 41-50 | Critical | AR0, TL0, DV0, DR0, SR0, QA0, DC0, RE0, FN0, ST0 |
+| 11-20 | Medium | AR0 (default — PL0 may override per Stage Inclusion Criteria), DV0, DR0, QA0 |
+| 21-30 | Moderate | AR0 (default — PL0 may override per Stage Inclusion Criteria), DV0, DR0, QA0 |
+| 31-40 | High | AR0 (default — PL0 may override per Stage Inclusion Criteria), DV0, DR0, QA0, DC0, FN0, ST0 |
+| 41-50 | Critical | AR0 (default — PL0 may override per Stage Inclusion Criteria), DV0, DR0, SR0, QA0, DC0, RE0, FN0, ST0 |
 
-**Record dropped stages**: whenever the chosen tier omits any stage from the full 9-stage pipeline
-(`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PL0 MUST stamp its own `metadata.skipped_stages` — a list of
-`{ "stage": "<CODE>", "reason": "<short reason>" }` — so `state.json` is self-documenting about
-which standard stages were dropped and why.
++ TL0 — only when PL0 splits the work across ≥2 developers (see Stage Inclusion Criteria)
+
+Criteria canon: `skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria (PL0 authority)`.
+
+#### Recording skipped and added stages
+
+**Record both directions**: whenever the resolved stage set omits any stage of the full 9-stage
+pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PL0 MUST stamp its own `metadata.skipped_stages` — a
+list of `{ "stage": "<CODE>", "reason": "<short reason>" }` — and MUST stamp the symmetric
+`metadata.added_stages` (identical `{stage, reason}` shape) for every stage included beyond the
+tier default, so `state.json` is self-documenting in both directions.
 
 **Security-sensitive features** auto-include SR0:
 - Authentication/authorization, payment processing, PII handling
@@ -132,6 +143,8 @@ Use the `Monitor` tool to stream events from background processes during worktas
 
 ### Never Parallelize
 
+Rows apply only to stages present in the plan; a stage PL0 excluded imposes no ordering constraint.
+
 - AR before PL (needs requirements)
 - DV before TL (needs coordination)
 - DR before DV (can't review unwritten code)
@@ -151,14 +164,17 @@ Each stage: max 3 retries. Track via `metadata.retry_count` (per-task) and appen
 Emergency: FN → RE → QA → DR → DV → IR → USER
 ```
 
+Stages absent from the plan drop out of the chain — escalation from DV goes to TL if TL ran, else
+AR if AR ran, else PL.
+
 Document errors in `.context/errors/<agent>.md` (per-agent, append-only; one `## Retry N — <ts>` section per failure) with problem, classification, root cause, attempted solutions. Raw captures belong in `.context/logs/` per `logging-conventions`.
 
 ## Rule Checks
 
 | Rule | Required Before |
 |------|-----------------|
-| Test Strategy | PL → AR |
-| Test Architecture | AR → TL |
+| Test Strategy | PL → AR (when AR runs; else PL owns it) |
+| Test Architecture | AR → TL when both run; AR → DV when TL is excluded (the default shape at every tier — see Stage Inclusion Criteria); PL → DV when AR is excluded too |
 | Code Format | DV complete |
 | Build Pass | DV → DR |
 | Unit Tests Written + Pass | DV → DR |
@@ -235,6 +251,7 @@ Before executing any worktask stage, the orchestrator MUST validate:
 1. **TaskList check**: Call `TaskList()` and verify at least one task exists with `metadata.worktask_id` matching the current worktask
 2. **PL0 exists**: Verify a task with subject starting with `PL0:` exists
 3. **Stage tasks exist**: After PL0 completes, verify PL0 created subsequent stage tasks (at minimum DV0, DR0, and QA0 for any complexity level)
+3b. **Inclusion decisions are reasoned**: every entry in PL0's `metadata.skipped_stages` and `metadata.added_stages` carries a non-empty, decision-shaped `reason`; a bare score restatement or an entry with no reason fails the check
 4. **Stage contract check**: Verify upstream outputs match the next stage's Required Inputs per `shared/stage-contracts.md` (file exists + required sections present)
 5. **Metadata schema check**: Validate next task's metadata against `shared/task-system.md` § JSON Schema (non-PL tasks require `stage`, `agent`, `model`, `error_file`)
 ### Validation checks 6–7
@@ -306,7 +323,7 @@ Resolves the numbered artifact path with fallback:
 
 ```typescript
 const ARTIFACT_BASE: Record<string, string> = {
-  PL: "planning", AR: "analyzing", TL: "coordination",
+  PL: "planning", AR: "architecture", TL: "coordination",
   DV: "development", DR: "developer-review", SR: "security-review",
   QA: "testing", DC: "documentation", RE: "release",
   FN: "complete-summary", ST: "retrospective", IR: "incident",
@@ -1179,7 +1196,7 @@ The helper extracts a `^[A-Z][A-Z0-9]+-[0-9]+` prefix from `facts.goal` (falls b
 
 #### Sanitiser pass 1 — line drops (L1–L9)
 
-Pass 1 drops entire lines matching any of nine rules (L1–L9): `.context/` paths, absolute filesystem paths (`/Users/`, `/home/`, `/tmp/`, `/var/`, `/opt/`, `/etc/`, `/root/`), `~/`-prefixed paths, `conductor/workspaces/<id>` directories, the literal tokens `workspace_path`/`plan_file`/`run_index`/`artifact_path`, every numbered artifact filename (`planning-N.md`, `analyzing-N.md`, `coordination-N.md`, `development-N.md`, `developer-review-N.md`, `testing-N.md`, `documentation-N.md`, `release-N.md`, `complete-summary-N.md`, `retrospective-N.md`, `incident-N.md`, `ethics-review-N.md`), and `./` / `../` relative paths.
+Pass 1 drops entire lines matching any of nine rules (L1–L9): `.context/` paths, absolute filesystem paths (`/Users/`, `/home/`, `/tmp/`, `/var/`, `/opt/`, `/etc/`, `/root/`), `~/`-prefixed paths, `conductor/workspaces/<id>` directories, the literal tokens `workspace_path`/`plan_file`/`run_index`/`artifact_path`, every numbered artifact filename (`planning-N.md`, `architecture-N.md`, `coordination-N.md`, `development-N.md`, `developer-review-N.md`, `testing-N.md`, `documentation-N.md`, `release-N.md`, `complete-summary-N.md`, `retrospective-N.md`, `incident-N.md`, `ethics-review-N.md`), and `./` / `../` relative paths.
 
 #### Sanitiser pass 2 — filename tokens (A1–A5)
 

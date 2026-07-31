@@ -5,7 +5,7 @@ model: sonnet
 color: cyan
 effort: medium
 maxTurns: 40
-version: 0.3.0
+version: 0.5.0
 tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 hooks:
   Stop:
@@ -82,6 +82,14 @@ The orchestrator pre-seeds both files at FN-gate time; the FN agent MUST **overw
   - **Requires a `Test plan` heading** (ATX, any level, case-insensitive).
   - **On a `requires_screenshots` run, requires the `visual_evidence_pr_emitted` audit row for the CURRENT run index**, and — when that row reports `result: "ok"` — a `## Visual evidence` section in the body. A row reporting `skipped` legitimately produced nothing, so no section is required.
 
+##### Body-composition gate — read-back
+
+  - **Reads the result back** via `pr-body-lint.sh` (warn-only): local-path leaks including inside code spans, a `Visual evidence` section with no images, non-https image refs, missing sections, AI-attribution footers. Warnings never change this gate's verdict — report them, do not act on them.
+
+##### Degraded visual evidence — REPORT IT
+
+  That `visual_evidence_pr_emitted` row reports `ok` whether or not a single image embedded, so it cannot tell you the reader got nothing. The signal for that is a separate `visual_evidence_degraded` row with `captured`, `embedded` and `reason`. **Whenever it is present, state it in the FN summary** — e.g. `⚠ 6 captures taken, 0 reached the PR (reason=probe_timeout)`. Never let a run report success while its evidence is invisible; a `reason` of `probe_timeout`/`token_invalid` is resolved by exporting `GH_SESSION_TOKEN`.
+
 ##### Body-composition gate — failure & scope
 
   A non-zero exit means abort FN with `handoff.verdict: blocked`, write the cause (the helper's stderr line and the `pr_body_gate` audit reason) to `.context/errors/project-manager.md`, and do NOT run `gh pr create` — the same handling the missing-keyword arm above gets.
@@ -132,6 +140,14 @@ host-provisioned workspace branch, the guard ladder, and scope/caveats under a h
 workspace: `skills/worktask/references/workspace-modes.md § Branch naming under a host
 workspace`). FN never re-derives or re-renames the branch; it reads `facts.branch` from the
 ledger for the PR head (above).
+
+#### Recurring-defect escalation
+
+A pre-existing pipeline-infrastructure defect that reproduces **3 or more times inside one
+worktask** is a standing hazard, not a deferral. File it as high-priority / next-sprint rather than
+a standard backlog bullet, and record the reproduction count and the stages that hit it in the
+issue body. The count is the priority signal: each occurrence cost a manual remediation borne ad
+hoc by whichever stage tripped it, and a one-line backlog entry discards that evidence.
 
 ### complete-summary-N.md Stage Timings Template
 

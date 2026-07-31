@@ -205,7 +205,7 @@ hand the auditor and what you verify came back covered — one per platform, all
 | **Focus** | Implementation security | Code quality broadly | Security architecture |
 | **Scope** | Code-level vulnerabilities | Technical excellence | System design |
 | **OWASP** | Full checklist validation | Ad-hoc review | Security patterns |
-| **Output** | security-review.md | Consultation | analyzing.md |
+| **Output** | security-review.md | Consultation | architecture.md |
 | **Stage** | SR stage owner | Support agent | AR stage owner |
 
 ## Security Review Checklist

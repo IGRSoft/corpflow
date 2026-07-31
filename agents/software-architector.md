@@ -91,7 +91,7 @@ and no `.xcodeproj` is server-side Swift — handle it directly, without delegat
 | App architecture (pattern choice, DI, navigation, concurrency) | the platform's architect |
 | System test architecture | software-architector |
 | App test architecture | the platform's architect |
-| Final artifact (analyzing.md) | software-architector (merges both) |
+| Final artifact (architecture.md) | software-architector (merges both) |
 | Conflict resolution | software-architector (system constraints win) |
 
 ### Delegation Flow
@@ -99,7 +99,7 @@ and no `.xcodeproj` is server-side Swift — handle it directly, without delegat
 1. Complete system-level architecture decisions first
 2. Delegate to the platform's architect (§ Architect routing) with planning context and system constraints
 3. The architect writes the artifact named in its § Architect routing row (e.g. `.context/swift-architecture.md` for apple) and returns a compressed summary
-4. Read that artifact, merge into `analyzing-N.md` under `## <Platform> App Architecture` (`## Swift App Architecture` for apple)
+4. Read that artifact, merge into `architecture-N.md` under `## <Platform> App Architecture` (`## Swift App Architecture` for apple)
 5. If conflicts exist between system and app architecture, resolve in favor of system constraints and document trade-off in ADR
 
 See `skills/cross-plugin-handoff/SKILL.md` for delegation prompt template and merge protocol.
@@ -123,7 +123,7 @@ When designing technical solutions, include testability considerations:
 
 ### Test Architecture Template
 
-Include in analyzing.md:
+Include in architecture.md:
 
 ```markdown
 ## Test Architecture
@@ -168,7 +168,7 @@ Before completing AR stage:
 - **AR0**: Read `state.json` facts first, then anchor-read `planning-N.md#requirements` + `planning-N.md#acceptance-criteria` (N = `task.metadata.run_index`; plan path: `.context/${task.metadata.plan_file}`, fallback: newest `.context/planning-*.md`). Analyze requirements + test strategy from those anchors. Full-read the plan file only if an anchor is absent or `retry_count > 0`.
 - **AR1**: Design technical solution, create ADRs, **design test architecture**
 - **AR2**: Handle design conflicts (iterate or escalate)
-- **AR3**: Complete analyzing-N.md with architecture decisions and **test architecture**
+- **AR3**: Complete architecture-N.md with architecture decisions and **test architecture**
 
 **Task System**: Stage AR, Owner: software-architector. See `skills/shared/task-system.md`.
 
@@ -191,7 +191,7 @@ Model selection is **complexity-driven** — see `skills/shared/model-selection.
 
 #### Low-Complexity Gate (AR)
 
-When the validated complexity score is in the **Low** band (0–10 per `skills/estimation-methodology/SKILL.md § PL0 Stage-Set` — the tier where PL0 normally drops AR, so you land here only via direct invocation, a forced stage set, or a down-revision), do NOT delegate to the platform's architect — on any platform: pick the app pattern straight from that platform's playbook and write a compact `analyzing-N.md` (≤150 lines — pattern choice + DI/navigation + test boundaries, no full ADR set). Delegate to the platform architect only at **Medium**+ (score ≥ 11), where deeper platform-architecture review earns its cost.
+When the validated complexity score is in the **Low** band (0–10 per `skills/estimation-methodology/SKILL.md § PL0 Stage-Set` — the tier where PL0 normally drops AR, so you land here only via direct invocation, a forced stage set, or a down-revision), do NOT delegate to the platform's architect — on any platform: pick the app pattern straight from that platform's playbook and write a compact `architecture-N.md` (≤150 lines — pattern choice + DI/navigation + test boundaries, no full ADR set). Delegate to the platform architect only at **Medium**+ (score ≥ 11), where deeper platform-architecture review earns its cost.
 
 ### Output Budget (AR)
 
@@ -206,12 +206,12 @@ Apple as the worked example: SwiftUI patterns (MVVM/TCA/MVI) and trade-offs, Swi
 ## Completion Verification
 
 Before marking AR stage complete, verify:
-- [ ] analyzing-N.md written with architecture decisions (N = task.metadata.run_index)
+- [ ] architecture-N.md written with architecture decisions (N = task.metadata.run_index)
 - [ ] Test architecture section included
 - [ ] Component dependencies mapped
 - [ ] PL complexity score validated or adjusted
 - [ ] No unresolved technical risks blocking DV stage
-- [ ] Platform detected? → that platform's architect consulted, its App Architecture section merged into analyzing-N.md
+- [ ] Platform detected? → that platform's architect consulted, its App Architecture section merged into architecture-N.md
 - [ ] Conflicts between system and app architecture resolved and documented
 
 
@@ -221,8 +221,18 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 
 **Skip-exploration short-circuit**: If `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` (list of `<file>#<anchor>` refs) as the authoritative pre-explored set. Do NOT re-Glob/Grep the source tree for files already covered. Read only the listed anchors and start architecture work from those facts. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
 
-`next_stage_focus` should enumerate the work streams and the requirement(s) each
-covers, so TL can skip a redundant planning read.
+### next_stage_focus and key_decisions
+
+`next_stage_focus` is addressed to **TL when TL is in the plan, else to DV** — TL is optional
+(`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`). Addressed to TL it should
+enumerate the work streams and the requirement(s) each covers, so TL can skip a redundant
+planning read; addressed to DV it should name the implementation order and the decisions DV must
+apply. The same conditional governs `open_questions` addressees.
+
+`key_decisions` is additionally the source the orchestrator digests into
+`metadata.architecture_ref.key_decisions` (a ≤200-char string) stamped on the DV0, DR0 and QA0
+dispatches, and the list DR spot-checks the diff against. Each summary must therefore stand on
+its own without the surrounding body text.
 
 ### State Patch — REQUIRED before return
 

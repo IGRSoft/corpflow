@@ -92,6 +92,8 @@ def retry_after(response: Response) -> float:
     """Seconds to wait before retrying; clamps a hostile Retry-After to 60s."""
 ```
 
+#### Shell
+
 Shell has no doc-comment syntax, so the budget lands on two blocks: a script header of
 one purpose line plus the invocation contract (prerequisites, exit behaviour, re-run
 safety), and a one-line WHY above a non-obvious literal. The header counts toward density

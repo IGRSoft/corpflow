@@ -25,7 +25,7 @@ Every constraint below names the artifact that proves compliance; absent evidenc
   site), then walk the rule by hand against at least one real corpus example that SHOULD fire
   and one that should NOT, before handing it to DR. `development-N.md § Decisions` MUST record
   which corpus file(s) each new gate was validated against and the pass/fail outcome.
-- DO NOT implement without understanding requirements — `development-N.md § Decisions` MUST cite the `<plan_file>`/`analyzing-N.md` row driving each material decision (`<plan_file>` resolves from `task.metadata.plan_file`; N = `task.metadata.run_index`; fallback: newest glob then legacy)
+- DO NOT implement without understanding requirements — `development-N.md § Decisions` MUST cite the `<plan_file>` (or `architecture-N.md`, when AR ran) row driving each material decision (`<plan_file>` resolves from `task.metadata.plan_file`; N = `task.metadata.run_index`; fallback: newest glob then legacy). When AR did not run, the plan is the only upstream authority and you own the rest — see § Architecture Ownership
 
 ### Code changes & scope
 
@@ -344,7 +344,7 @@ When `<plan_file>` includes a Test Strategy section, developers MUST implement u
 
 #### Process
 1. **Read test specs** from `.context/<plan_file> § Test Strategy`
-2. **Read test architecture** from `.context/analyzing-N.md § Test Architecture` (if AR stage ran; N from `task.metadata.run_index`)
+2. **Read test architecture** from `.context/architecture-N.md § Test Architecture` (when AR ran; N from `task.metadata.run_index`). When AR did not run, the plan's Test Strategy is the whole authority and you choose the test shape yourself — record the choice per § Architecture Ownership
 3. **Create test files** using the framework specified in `<plan_file>` (Swift Testing, XCTest, etc.)
 4. **Follow test patterns** defined in the architecture document
 5. **Run tests scoped to changed code** (the new tests plus any tests covering modified production files) and verify they pass before marking DV complete. Full-suite regression is QA's responsibility.
@@ -371,7 +371,7 @@ One row per material choice (architecture pivot, dependency add, scope deviation
 
 | id | choice | alternatives | rationale | source |
 | -- | ------ | ------------ | --------- | ------ |
-| d1 | <what> | <considered> | <why>     | `<plan_file>` L<N> \| analyzing.md L<N> \| user msg |
+| d1 | <what> | <considered> | <why>     | `<plan_file>` L<N> \| architecture.md L<N> \| user msg |
 
 ### Tool Invocations
 One row per material build/test/MCP call, in chronological order.
@@ -450,7 +450,7 @@ Specialization tables in `skills/shared/platform-detection.md` (the full Apple /
 
 ### Context Passing
 
-When delegating, include: task description, detected platform markers, DV stage context (task ID, compressed summaries from `.context/<plan_file>` and `.context/analyzing-N.md`, test strategy/architecture), acceptance criteria, platform constraints, and architectural decisions. Also pass the code-documentation rule (`skill: igrsoft:code-comment-standard`) so specialists apply it: non-obvious WHY/contract only, `///` 1–3 lines, no essays/provenance/AC-IDs/`#Preview` comments, density ≤40% of added lines (gated by `dv-comment-density-gate.sh`). State that rationale, threshold derivations and QA runbooks go in `.context/development-N.md` — never in source, including when answering a DR finding. Request implementation code, a summary for `.context/development-N.md`, and any blockers using the `## Blockers` schema (see § Artifact Schema — `id`, `kind ∈ {missing_input | design_flaw | hard_constraint | ambiguous_requirements}`, `description`, `escalate_to`).
+When delegating, include: task description, detected platform markers, DV stage context (task ID, compressed summaries from `.context/<plan_file>` and, when AR ran, `.context/architecture-N.md`, test strategy), acceptance criteria, platform constraints, and architectural decisions. Also pass the code-documentation rule (`skill: igrsoft:code-comment-standard`) so specialists apply it: non-obvious WHY/contract only, `///` 1–3 lines, no essays/provenance/AC-IDs/`#Preview` comments, density ≤40% of added lines (gated by `dv-comment-density-gate.sh`). State that rationale, threshold derivations and QA runbooks go in `.context/development-N.md` — never in source, including when answering a DR finding. Request implementation code, a summary for `.context/development-N.md`, and any blockers using the `## Blockers` schema (see § Artifact Schema — `id`, `kind ∈ {missing_input | design_flaw | hard_constraint | ambiguous_requirements}`, `description`, `escalate_to`).
 
 ### Routing Audit
 
@@ -516,13 +516,36 @@ When budget is near exhaustion (you sense the remaining context cannot finish th
 
 **Never emit a progress narration as your terminal output.** A budget-exhausted DV that has written a checkpoint artifact + `## Blockers` is a valid (partial) handoff; a chat-style "here's where I got to" message is not, and is rejected by the same handoff contract that the Artifact-Complete Gate enforces.
 
+## Architecture Ownership
+
+AR is optional (`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`), so DV runs both with and without an architecture report. Three rules govern the difference.
+
+### AR excluded, or silent on a question you hit — you decide
+
+When AR was not in the plan, **or** when AR ran but its report does not cover a design question your implementation forces, you make the call and record it in `development-N.md ## decisions` with the alternatives considered and the rationale. Do not open a re-open loop back to AR and do not stall on a `missing_input` blocker for a decision you are competent to make — DR reviews the recorded decision after the fact. A `## decisions` entry is the deliverable; a separate artifact is not.
+
+### AR ran — `architecture.applied` must be truthful
+
+Set `architecture.applied` in your handoff frontmatter to what actually happened, not to what was planned. Any departure from an AR `key_decisions` entry MUST be declared in `development-N.md ## decisions` with its rationale. DR spot-checks the diff against AR's decisions: a **declared** deviation with rationale passes; an **undeclared** one is a `verdict: fail` routed back to you. Claiming `applied: true` over a silent departure is the failure mode this rule exists to prevent.
+
+### TL fan-out — per-stream artifacts, one merged canonical file
+
+There is exactly one DV0 task even under fan-out; the split is an agent-level spawn concern, not a Task-System one.
+
+1. Read the workstream list and each workstream's kebab `stream` slug from `coordination-N.md § fan-out` (TL assigns the slugs; you do not invent them).
+2. Spawn one sub-agent per workstream through the normal platform-routing chain — mind the spawn-depth ceiling (`skills/agent-coordination/SKILL.md § Three independent ceilings`).
+3. Each sub-agent writes **only** `development-N-<stream>.md`. No sub-agent writes the canonical file, so there is no contention on a shared artifact.
+4. At fan-in **you alone** write the canonical `development-N.md`: a summary, a ref to each per-stream artifact, and the union of every stream's `files_touched`. That merged file is what DR and QA consume and what the DV0 handoff frontmatter and state patch describe.
+
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dv`. Prev→this label: `TL→DV`.
+Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dv`. Prev→this label: `TL→DV` (or `AR→DV` when TL was skipped, `PL→DV` when both AR and TL were skipped, `IR→DV` on the emergency pipeline).
 
 ### Frontmatter for this stage (DV)
 
 Paste at the top of `.context/development-N.md` (N resolved per `stage-contracts.md#run-index-resolution`):
+
+#### DV frontmatter block
 
 ```yaml
 ---
@@ -530,7 +553,7 @@ handoff:
   stage: DV
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
-  worktree: true               # MUST be true — see #### Field notes — worktree fields
+  worktree: true               # MUST be true — see the worktree field notes below
   worktree_path: <abs path>    # OPTIONAL (additive) — see field notes
   worktree_branch: <branch>    # OPTIONAL (additive) — see field notes
   files_touched:
@@ -538,11 +561,19 @@ handoff:
     - path/to/file2.md
   next_stage_focus: "<imperative: what DR/QA must focus on>"
   refs:
-    decisions: analyzing-N.md#decisions
-    coordination: coordination-N.md#fan-out
+    decisions: architecture-N.md#decisions      # ONLY when AR ran; omit otherwise
+    coordination: coordination-N.md#fan-out  # ONLY when TL ran; omit otherwise
     tests: development-N.md#tests-added
+  architecture:                # ONLY when AR ran; omit the whole object otherwise
+    ref: architecture-N.md#decisions
+    applied: true              # truthful; see the architecture field notes below
 ---
 ```
+
+#### Field notes — architecture fields
+
+- `refs.decisions` / `architecture.ref`: present **iff** AR ran. When `state.json` has a `stages.AR` entry, `handoff-harness.sh --validate-frontmatter <artifact> --state .context/state.json` requires the reference to match `^architecture-[0-9]+\.md(#[a-z-]+)?$` and to resolve to a file next to the artifact — warn-only in 3.42.0, blocking under `--strict`. When AR was excluded, writing an architecture reference anyway trips the inverse guard (warn, never a failure).
+- `architecture.applied`: your truthful statement that AR's recorded `key_decisions` were followed. Set it `false`, or declare the specific departure, whenever you diverged. Every deviation MUST appear in `development-N.md ## decisions` with its rationale — DR spot-checks the diff against AR's decisions and fails an **undeclared** deviation back to you. A declared deviation with rationale passes.
 
 #### Field notes — worktree fields
 
@@ -552,7 +583,7 @@ handoff:
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage DV --prev TL` (`skills/worktask/scripts/`) to atomically patch `stages.DV` + the `TL→DV` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+Run `state-patch.sh --stage DV --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `TL` when TL ran, `AR` when AR ran without TL, `PL` when neither did, and `IR` on the emergency pipeline (`IR→DV→DR→QA→RE→FN`, which has no PL/AR/TL stage at all) — pick it from the `stages` keys actually present in `.context/state.json`, never from this list unconditionally. This atomically patches `stages.DV` + the corresponding `TL→DV` / `AR→DV` / `PL→DV` / `IR→DV` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
 
 ### Files Read Registry (token optimization)
 

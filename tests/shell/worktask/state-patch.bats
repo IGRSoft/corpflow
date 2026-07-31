@@ -298,3 +298,66 @@ EOART
   run jq -r '.stages.QA.status' .context/state.json
   assert_output "completed"
 }
+
+# ---------------------------------------------------------------------------
+# Conditional handoff edges for the optional AR/TL stages (3.42.0). PL0 sizes
+# the stage set, so DV's predecessor is TL, AR or PL and TL's is AR or PL.
+# ---------------------------------------------------------------------------
+
+@test "prev: --stage DV --prev AR records the AR→DV edge (TL excluded)" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev AR --artifact .context/development-0.md
+  assert_success
+  run jq -r '.handoffs["AR→DV"]' .context/state.json
+  assert_output --partial "ref:development-0.md"
+  run jq -r '.handoffs | has("TL→DV")' .context/state.json
+  assert_output "false"
+}
+
+@test "prev: --stage DV --prev PL records the PL→DV edge (AR and TL excluded)" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev PL --artifact .context/development-0.md
+  assert_success
+  run jq -r '.handoffs["PL→DV"]' .context/state.json
+  assert_output --partial "ref:development-0.md"
+  run jq -r '.handoffs | keys | length' .context/state.json
+  assert_output "1"
+}
+
+@test "prev: --stage TL --prev PL records the PL→TL edge (AR excluded)" {
+  cd "$WD"
+  cat > .context/coordination-0.md <<'EOF'
+---
+handoff:
+  stage: TL
+  verdict: ok
+  summary: "Single workstream, no fan-out"
+  next_stage_focus: "DV implements in one batch"
+  refs: { plan: planning-0.md#requirements }
+---
+
+# Coordination
+
+## fan-out
+
+Single stream.
+EOF
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage TL --prev PL --artifact .context/coordination-0.md
+  assert_success
+  run jq -r '.handoffs["PL→TL"]' .context/state.json
+  assert_output --partial "ref:coordination-0.md"
+  run jq -r '.stages.TL.status' .context/state.json
+  assert_output "completed"
+}
+
+@test "prev: --stage DV --prev IR records the IR→DV edge (emergency pipeline, no PL)" {
+  cd "$WD"
+  # The emergency pipeline is IR→DV→DR→QA→RE→FN — there is no PL/AR/TL stage at all,
+  # so PL→DV here would be exactly the phantom edge R8 exists to eliminate.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev IR --artifact .context/development-0.md
+  assert_success
+  run jq -r '.handoffs["IR→DV"]' .context/state.json
+  assert_output --partial "ref:development-0.md"
+  run jq -r '.handoffs | has("PL→DV")' .context/state.json
+  assert_output "false"
+}

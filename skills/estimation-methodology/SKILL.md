@@ -168,15 +168,44 @@ Notes:
 
 PL0 (`agents/product-manager.md § Dynamic Worktask Sizing` and `§ Test Selection Gate`) uses the 0–50 complexity score to pick the stage set and the default `test_mode`.
 
-**Stage set by score** — each created stage task carries `metadata.agent`; stamp `metadata.skipped_stages` (`{stage, reason}`) for every stage of the full `PL→AR→TL→DV→DR→QA→DC→FN→ST` pipeline the tier does NOT create:
+**Stage set by score** — each created stage task carries `metadata.agent`; stamp `metadata.skipped_stages` (`{stage, reason}`) for every stage of the full `PL→AR→TL→DV→DR→QA→DC→FN→ST` pipeline the tier does NOT create, and the symmetric `metadata.added_stages` (same `{stage, reason}` shape) for every stage PL0 includes beyond the tier default. Both lists are measured against the full nine-stage reference pipeline, so a stage PL0 declines always appears in `skipped_stages` with a reason.
+
+### Stage set table
 
 | Score | Tier | Stages created |
 |-------|------|----------------|
 | 0–10 | Low | DV0, DR0, QA0 |
-| 11–20 | Medium | AR0, DV0, DR0, QA0 |
-| 21–30 | Moderate | AR0, TL0, DV0, DR0, QA0 |
-| 31–40 | High | AR0, TL0, DV0, DR0, QA0, DC0, FN0, ST0 |
-| 41–50 | Critical | AR0, TL0, DV0, DR0, SR0, QA0, DC0, RE0, FN0, ST0 |
+| 11–20 | Medium | AR0 (default — PL0 may override per Stage Inclusion Criteria), DV0, DR0, QA0 |
+| 21–30 | Moderate | AR0 (default — PL0 may override per Stage Inclusion Criteria), DV0, DR0, QA0 |
+| 31–40 | High | AR0 (default — PL0 may override per Stage Inclusion Criteria), DV0, DR0, QA0, DC0, FN0, ST0 |
+| 41–50 | Critical | AR0 (default — PL0 may override per Stage Inclusion Criteria), DV0, DR0, SR0, QA0, DC0, RE0, FN0, ST0 |
+
++ TL0 — only when PL0 splits the work across ≥2 developers (see Stage Inclusion Criteria)
+
+### Stage Inclusion Criteria (PL0 authority)
+
+Both decisions are made by PL0 DURING PLANNING, before the plan-approval gate,
+and surfaced in the gate summary. DV0, DR0, QA0 are the floor and are never
+removable. Every decision MUST be recorded as metadata.skipped_stages /
+metadata.added_stages entries ({stage, reason}) on the PL0 task.
+
+AR0 — tier default with PL0 override. The tier table includes AR0 by default at
+score ≥11. PL0 MAY exclude it when ALL hold: change follows existing patterns;
+no new interfaces or schemas; confined to one module; no open design questions.
+PL0 MUST include it (any tier, incl. Low) when ANY holds: new module/service/
+public API/schema surface; ≥2 viable design approaches needing a recorded
+decision; cross-cutting integration (≥3 files across ≥2 subsystems); patterns
+novel to this codebase; security- or data-model-relevant structure.
+
+#### TL0 criterion
+
+TL0 — decision-only, never a tier default. Include TL0 ONLY when the work must
+be split across ≥2 developers/engineers: parallelizable workstreams, multiple
+DV specialists (mixed-platform DV), or external-plugin fan-out requiring
+coordination/merge. Single workstream + single DV agent → no TL0, at any score.
+
+Constraint: TL0 without AR0 is allowed (prev edge PL→TL); AR0 at Low tier is
+allowed (added_stages). Reasons are one sentence, decision-shaped, not scores.
 
 ### Default test_mode by score
 

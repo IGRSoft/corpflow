@@ -19,7 +19,7 @@ See .context/planning-3.md for the canonical spec.
 
 - AC-1: Run xcodebuild test -workspace App.xcworkspace.
 - AC-2: artifact_path: development-1.md must list every modified file.
-- AC-3: See analyzing-0.md for architectural decisions.
+- AC-3: See architecture-0.md for architectural decisions.
 - AC-4: workspace_path = /Users/korich/conductor/workspaces/foo.
 
 ## Scope

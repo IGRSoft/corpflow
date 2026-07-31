@@ -4,7 +4,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **3.41.2** (comment-density/reminder-hook shell coverage + vendor-path exclusion; suite **fully green** 394/0 plus the new `comment-hooks-self-test.bats` module (2 cases) and 9 density-gate self-test cases. See release-history row below for the full changelog.)
+- Plugin version: **3.42.0** (AR/TL stage inclusion becomes a PL0 decision, not a tier mandate; gated AR→DV architecture reference in the DV handoff, warn-only; BREAKING: AR artifact renamed `analyzing-N.md`→`architecture-N.md`, no back-compat. Suite **fully green** 438 bats/0 fail + 48 Swift + 37/175 Python. See release-history row below for the full changelog.)
 - Claude Code min required: **2.1.220** (README.md is authoritative; nested delegation is off by default on 2.1.217–2.1.218 and the plugin's DV routing depends on it, so 2.1.219 is the functional floor — pinned to the band top per the v3.35.0 precedent)
 - Claude Code latest integrated band: **2.1.216→2.1.220**
 
@@ -36,6 +36,31 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-07-31: v3.42.0 — TL0 removed from every tier default (four table copies + README),
+  included only when PL0 splits work across ≥2 developers; AR0 stays a tier default PL0 may
+  override either direction, against one canonical Stage Inclusion Criteria block
+  (`skills/estimation-methodology/SKILL.md`) with pointer footnotes elsewhere. New
+  `metadata.added_stages` (symmetric with `skipped_stages`, `{stage, reason}`). `DVHandoff` gains
+  optional `architecture: {ref, applied}`, gate-required when AR ran; `refs.decisions` conditional
+  on AR; precedence `refs.decisions` then `architecture.ref` cited identically in 5 places.
+  `handoff-harness.sh` gains `--state`/`--strict` plus the AR-ref check, ships **warn-only** (exit
+  0 by default; `--strict` or `IGRSOFT_AR_REF_STRICT=1` opts into blocking; legacy invocation
+  byte-identical). Edge registry created (did not exist at HEAD) covering all 20 handoff edges
+  incl. `AR→DV`/`PL→DV`/`PL→TL`/`USER→IR`/`IR→DV`/`QA→RE`/`<invoker>→ET`. Per-workstream
+  `development-N-<stream>.md` under TL fan-out. **BREAKING, folded in from a second DV round:**
+  AR's own artifact renamed `analyzing-N.md`→`architecture-N.md` across every reference pattern,
+  map and grammar (finishes the `cada9e4`/v3.8.0 normalization that left AR behind); no back-compat
+  — `.context/` is gitignored so the affected population is bounded to an in-flight worktask
+  spanning the bump, migrated via `mv` (not `git mv`, which fails — gitignored path). New
+  `tests/shell/worktask/artifact-map-parity.bats` (8 tests) asserts all seven stage→basename
+  sources of truth agree — nothing compared them before, which is how the v3.8.0 drift went
+  unnoticed for 34 minors. 13 provenance comments citing a past run's real `analyzing-0.md`
+  deliberately left byte-identical (own follow-up to delete under `igrsoft:code-comment-standard`,
+  not a rename miss); `publish-pl-issue.sh`'s leak filter keeps both tokens permanently
+  (`PERMANENT-SUPERSET`). Suite: 438 bats (0 fail, up from 394) + 48 Swift + 37/175 Python; all 4
+  self-tests exit 0; shellcheck at pre-existing baseline on all edited scripts. 59 files. Known
+  follow-up: pre-existing `state-patch.sh` idempotence bug (stale handoff edge survives a stage
+  re-run after rejection) deferred out of scope, FN to file as its own GitHub issue.
 - 2026-07-31: v3.41.2 — comment-density and comment-standard-reminder hooks extended to cover
   `sh`/`bash` (allow-list + `comment_style_for` hash-arm routing); density gate gains a
   vendored-path exclusion (`vendor/`, `node_modules/`, `Pods/`, `third_party/`) applying to every
@@ -54,7 +79,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-07-28: v3.37.0 — Claude Code 2.1.216→2.1.220: nesting depth 5→3, 20-concurrent cap, Opus 5 default, budget-halt resume branch; min CC → 2.1.220. ~23 files.
 - 2026-07-27: v3.36.2 — worktask PR-composition, issue-publish, branch-naming, base-ref fixes. `fn-preflight.sh` gains `pr-body` (sanitises the composed body in place by sourcing `publish-pl-issue.sh`'s own `sanitise_body` under `PUBLISH_LIB_ONLY=1`, fail-closed; requires a `Test plan` heading; requires the `visual_evidence_pr_emitted` audit row for the current run index, and the `## Visual evidence` section when that row says `ok`) and `branch-name` (`<type>/<ticket>-<slug>`, idempotent, never renames an upstream-tracked or integration branch, deliberately not in `all` because `all` runs post-push). Both self-disable under `/megatask` and `--emergency` via a local five-signal `fn_batch_scope` mirror that depends on nothing but jq + the filesystem. `resolve_base_ref` replaces the hardcoded `main` continuity fallback with one five-rank order (`FN_BASE_REF` → `state.metadata.base_ref` → `state.git.base_branch` → `workspace.json` → `origin/HEAD` → unresolved, no literal). `publish-pl-issue.sh` resolves a bare-basename `plan_file` against the state directory and prints a stderr diagnostic naming every candidate on the fatal path. `plan_file` path-vs-basename boundary stated at seven writer/reader sites. +26 bats cases. ~13 files.
 - 2026-07-27: v3.36.1 — test-selection grammar and coordination: Apple test identifiers are suite-terminal (function parentheses + param suffixes in Swift Testing prevent per-function `-only-testing:` matching, causing full-suite fallback), DV dispatch test-scope enforcement + advisory TL reader, `environmental_contention` classification with re-baseline-only handler, `igrsoft:context-compression` wired into DR/QA, audit-only counters (`full_test_run`/`scoped_test_run` keyed on invocation shape, never a gate), cross-repo divergence note on upstream apple-developer plugin. ~8 files.
-- 2026-07-22: v3.36.0 — plugin token-utilization & cross-agent comms (issue #221, PR #224): paired ±agent benchmark runner (U3/U4 symmetric with/without arms, shared prompts), per-call token accounting (U5), generated-project output sections (U2), bypassPermissions + deny-list enforcement (A1, both arms), progressive-disclosure ref files (visual-qa.md, platform-detection.md, workspace-modes.md), phase-4 worktask prose diet, state-patch.sh --prev + fn-preflight.sh, STAGE_TABLE reconciliation (AR/DV/DR high, QA medium, FN/ST sonnet/low), 156 harness tests (up from 131), agents/ 283,888→245,987 B, section-lint 15→0. ~80 files.
 ## Token Baselines
 
 Authoritative per-surface baselines: `skills/cost-optimization/references/token-baselines.md`. This file no longer mirrors them.

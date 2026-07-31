@@ -376,14 +376,26 @@ Use the **Unified Complexity Assessment** from `skills/worktask/SKILL.md § Dyna
 
 #### Stage set by score (step 3)
 
-3. **Create stage tasks** by score (each with `metadata.agent`) per the tier table in `skills/estimation-methodology/SKILL.md § PL0 Stage-Set & Test-Mode by Complexity Score`. Stamp `metadata.skipped_stages` (`{stage, reason}`) for every stage of the full `PL→AR→TL→DV→DR→QA→DC→FN→ST` pipeline the chosen tier did NOT create, so `state.json` self-documents which standard stages were dropped and why.
+3. **Create stage tasks** by score (each with `metadata.agent`), in three sub-steps:
+
+   **3a — Resolve the tier default** from the tier table in `skills/estimation-methodology/SKILL.md § PL0 Stage-Set & Test-Mode by Complexity Score`.
+
+   **3b — Decide AR0.** AR0 is a tier default at score ≥11, not a mandate. Apply the AR0 override rules in `§ Stage Inclusion Criteria (PL0 authority)` — exclude it only when ALL of the exclusion conditions hold, and force-include it at ANY tier (including Low) when ANY of the inclusion conditions holds.
+
+   **3c — Decide TL0.** TL0 has no tier default; it is included on one test only — must this work be split across ≥2 developers/engineers (parallelizable workstreams, multiple DV specialists, or external-plugin fan-out needing coordination and merge)? Yes → include TL0 and record it in `added_stages`. No → omit it, at any score. A single workstream served by a single DV agent never gets TL0.
+
+#### Recording the decisions (step 3, continued)
+
+Stamp `metadata.skipped_stages` (`{stage, reason}`) for every stage of the full `PL→AR→TL→DV→DR→QA→DC→FN→ST` pipeline that is NOT created, and `metadata.added_stages` (same `{stage, reason}` shape) for every stage included beyond the tier default — so `state.json` self-documents both directions of the decision. Reasons are one sentence and decision-shaped, never a restatement of the score. Record the AR0 and TL0 decisions with their reasons in `planning-${N}.md ## stages`; the plan-approval gate summary surfaces both.
+
+**context_files seeding**: when AR0 is included, the DV0 task's `metadata.context_files` MUST name `architecture-${N}.md`, and the DV0/DR0/QA0 dispatches carry `metadata.architecture_ref` once AR completes. When AR0 is excluded, `architecture-${N}.md` MUST NOT appear in any `context_files` list and no `architecture_ref` is stamped.
 
 #### Dependency chain & run-index stamping (steps 4–5)
 
 4. **Set dependency chain** between created tasks using `TaskUpdate({ addBlockedBy })`
 5. **Mark PL0 completed** after creating all stage tasks
 
-Every `TaskCreate` for a downstream stage MUST include `metadata.run_index = N` and `metadata.plan_file = "planning-${N}.md"`. Stage artifact paths embedded in the task description use `<basename>-${N}.md` (e.g., `analyzing-${N}.md`, `development-${N}.md`).
+Every `TaskCreate` for a downstream stage MUST include `metadata.run_index = N` and `metadata.plan_file = "planning-${N}.md"`. Stage artifact paths embedded in the task description use `<basename>-${N}.md` (e.g., `architecture-${N}.md`, `development-${N}.md`).
 
 #### Agent mapping for `metadata.agent`
 

@@ -112,9 +112,9 @@ map_path() {
       ;;
   esac
 
-  # Rule 3 — analyzing artifact
+  # Rule 3 — architecture artifact
   case "$p" in
-    .context/analyzing-*.md)
+    .context/architecture-*.md)
       printf '3\tagents/software-architector.md\n'
       return 0
       ;;

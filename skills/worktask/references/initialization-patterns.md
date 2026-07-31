@@ -264,6 +264,13 @@ const requiresScreenshots = planMetadata.requires_screenshots; // boolean
 
 ### AR0 task
 
+AR0 is a tier default at score ≥11, not a mandate — PL0 resolves its inclusion against
+`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria (PL0 authority)` and records
+the outcome in `skipped_stages`/`added_stages`. The block below is the AR-included branch; when
+AR is excluded, skip this `TaskCreate` entirely and chain DV0 directly off PL0.
+
+#### AR0 TaskCreate
+
 ```typescript
 // …continued: AR0 creation
 // Capture task IDs returned by TaskCreate.
@@ -285,6 +292,12 @@ const ar0 = TaskCreate({
 
 ### DV0 task
 
+**context_files seeding rule**: `architecture-${N}.md` appears in DV0's `context_files` if and only
+if AR0 was included. When AR is excluded it MUST NOT appear in any downstream `context_files`,
+and no `metadata.architecture_ref` is stamped on DV0/DR0/QA0.
+
+#### DV0 TaskCreate
+
 ```typescript
 // …continued: DV0 creation
 const dv0 = TaskCreate({
@@ -294,7 +307,7 @@ const dv0 = TaskCreate({
   metadata: {
     stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
-    context_files: `exploration.md,${planFile},analyzing.md,coordination.md,.context/errors/developer.md`,
+    context_files: `exploration.md,${planFile},architecture.md,coordination.md,.context/errors/developer.md`,
     plan_file: planFile,
     // requires_screenshots is the value PL0 stamped on the plan frontmatter
     // (set by detect-ui-change.sh — see agents/product-manager.md). Propagated
@@ -316,7 +329,7 @@ const dr0 = TaskCreate({
   metadata: {
     stage: "DR", agent: "igrsoft:technical-lead", model: "sonnet",
     error_file: ".context/errors/technical-lead.md",
-    context_files: `exploration.md,${planFile},analyzing.md,coordination.md,development.md,.context/errors/technical-lead.md`,
+    context_files: `exploration.md,${planFile},architecture.md,coordination.md,development.md,.context/errors/technical-lead.md`,
     plan_file: planFile,
     worktask_id: worktaskId, priority: "medium"
   }
@@ -350,7 +363,9 @@ const qa0 = TaskCreate({
 // …continued: wire dependencies, close PL0
 // Chain dependencies using captured IDs (PL0 is taskId "1" from initial creation)
 TaskUpdate({ taskId: ar0, addBlockedBy: ["1"] });  // AR0 ← PL0
-TaskUpdate({ taskId: dv0, addBlockedBy: [ar0] });  // DV0 ← AR0
+// DV0's predecessor is whichever of TL0/AR0/PL0 is the last stage actually created:
+// TL0 when TL ran, AR0 when AR ran without TL, PL0 when neither did.
+TaskUpdate({ taskId: dv0, addBlockedBy: [ar0] });  // DV0 ← AR0 (AR-included branch)
 TaskUpdate({ taskId: dr0, addBlockedBy: [dv0] });  // DR0 ← DV0
 TaskUpdate({ taskId: qa0, addBlockedBy: [dr0] });  // QA0 ← DR0
 
@@ -425,7 +440,7 @@ const dv1 = TaskCreate({
   metadata: {
     stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
-    context_files: `${planFile},analyzing.md,coordination.md,.context/errors/developer.md`,
+    context_files: `${planFile},architecture.md,coordination.md,.context/errors/developer.md`,
     plan_file: planFile,
     worktask_id: worktaskId, priority: "medium"
   }
@@ -442,7 +457,7 @@ const dv2 = TaskCreate({
   metadata: {
     stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
-    context_files: `${planFile},analyzing.md,coordination.md,.context/errors/developer.md`,
+    context_files: `${planFile},architecture.md,coordination.md,.context/errors/developer.md`,
     plan_file: planFile,
     worktask_id: worktaskId, priority: "medium"
   }
@@ -476,7 +491,7 @@ const dv1 = TaskCreate({
   metadata: {
     stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
-    context_files: `${planFile},analyzing.md,.context/errors/developer.md`,
+    context_files: `${planFile},architecture.md,.context/errors/developer.md`,
     plan_file: planFile,
     worktask_id: worktaskId, priority: "medium"
   }
@@ -493,7 +508,7 @@ const dv2 = TaskCreate({
   metadata: {
     stage: "DV", agent: "igrsoft:developer", model: "opus",
     error_file: ".context/errors/developer.md",
-    context_files: `${planFile},analyzing.md,.context/errors/developer.md`,
+    context_files: `${planFile},architecture.md,.context/errors/developer.md`,
     plan_file: planFile,
     worktask_id: worktaskId, priority: "medium"
   }

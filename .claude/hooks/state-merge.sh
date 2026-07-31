@@ -49,7 +49,7 @@ log() {
 _basename_for_stage() {
   case "$1" in
     PL) printf 'planning' ;;
-    AR) printf 'analyzing' ;;
+    AR) printf 'architecture' ;;
     TL) printf 'coordination' ;;
     DV) printf 'development' ;;
     DR) printf 'developer-review' ;;

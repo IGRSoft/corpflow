@@ -42,7 +42,7 @@ STAGE_CONTRACT = {
            "Anchors: ## requirements, ## acceptance-criteria, ## scope, "
            "## out-of-scope, ## risks, ## complexity, ## stages. "
            "Verdict in frontmatter handoff.verdict."),
-    "AR": ("STAGE AR (Architecture). Artifact: .context/analyzing-0.md. "
+    "AR": ("STAGE AR (Architecture). Artifact: .context/architecture-0.md. "
            "Anchors: ## decisions, ## trade-offs, ## patterns, "
            "## integration-points, ## schemas, ## open-questions, ## risks."),
     "TL": ("STAGE TL (Team Lead). Artifact: .context/coordination-0.md. "

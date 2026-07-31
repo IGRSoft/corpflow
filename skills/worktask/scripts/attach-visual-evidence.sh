@@ -143,7 +143,8 @@ parse_manifest() {
 # ---------- block builder ---------------------------------------------------
 # Build the "## Visual evidence" block from a parsed manifest.
 #   stdout: the block (may be empty)
-#   Globs read: BLOCK_HEADING, BLOCK_MANIFEST_REF (set by caller)
+#   Globs read: BLOCK_HEADING, BLOCK_MANIFEST_REF (test-only override; callers
+#   deliberately leave it unset so the single path-free default below applies)
 # Hosting decisions go through the sourced select_host_tier/host_one_asset.
 # Returns the chosen host tier via the HOST_TIER global (set by select_host_tier).
 build_block() {
@@ -161,6 +162,10 @@ build_block() {
 
   local img_dir; img_dir=$(dirname "$mf")
   local out="" embed_count=0 num path cap kind src url bullets=""
+  # Counts EMBEDDABLE rows only (kind=png). placeholder/oversize rows are never
+  # embedded by design, so counting them would fire the degradation notice on
+  # every healthy run and train the operator to ignore it.
+  local hostable=0
   # Per-bullet text stays short; the WHY is emitted once below (host_fail_note) so
   # a 5-capture run does not repeat a paragraph five times.
   local HOST_FAIL_HINT="not embeddable; see note below." host_fail=0
@@ -176,6 +181,7 @@ build_block() {
     [ -z "$path" ] && continue
     case "$kind" in
       png)
+        hostable=$((hostable+1))
         if [ "$embed_count" -ge "$MAX_EMBED" ]; then
           bullets="${bullets}- ${path} — omitted (embed cap ${MAX_EMBED}); see manifest."$'\n'
           continue
@@ -223,9 +229,38 @@ EOF
     # Explain the degradation once, in terms an operator can act on.
     printf '\n%s\n' "$host_fail_note"
   fi
-  # Manifest reference as a code-span path (relative links never resolve in
-  # PR/issue bodies — ad7); emitted, not linked.
-  printf '\nManifest: `%s`\n' "${BLOCK_MANIFEST_REF:-.context/images/$WORKTASK_ID/screenshots.md}"
+  # Manifest reference, deliberately PATH-FREE. Two independent reasons: relative
+  # links never resolve in PR/issue bodies (ad7), and the working-folder path is
+  # local + gitignored, so it is meaningless to a reviewer. It used to be emitted
+  # as a code span, which also happened to be the one shape that defeated the
+  # sanitiser's pass-1 anchors -- that is now closed in publish-pl-issue.sh, and a
+  # path here would simply be stripped, leaving "see manifest" naming nothing.
+  # Assigned in two steps rather than via ${VAR:-word}: bash treats an apostrophe
+  # inside the word part as an opening quote even within double quotes.
+  local manifest_ref="${BLOCK_MANIFEST_REF:-}"
+  [ -n "$manifest_ref" ] || manifest_ref="screenshots.md, in this run's local images folder (not committed)."
+  printf '\nManifest: %s\n' "$manifest_ref"
+
+  # D4 -- notify when captures exist but did not reach the reader. Emitted from
+  # inside build_block on purpose: callers wrap this in $(), which captures stdout
+  # only, so stderr and the audit append both still escape. Uses "<" not "== 0" so
+  # partial loss (e.g. the MAX_EMBED cap silently dropping the 6th capture) is
+  # caught too, not just total failure.
+  if [ "$hostable" -gt 0 ] && [ "$embed_count" -lt "$hostable" ]; then
+    local reason="${GH_IMAGE_FAIL_REASON:-unknown}" seen
+    if [ "$embed_count" -eq 0 ]; then
+      seen="no images"
+    else
+      seen="only $embed_count of $hostable images"
+    fi
+    printf >&2 'attach-visual-evidence: NOTICE — %d capture(s) on disk, %d embedded (reason=%s).\n' \
+      "$hostable" "$embed_count" "$reason"
+    printf >&2 '  Reviewers will see %s. Set GH_SESSION_TOKEN to make tier-0 non-interactive.\n' "$seen"
+    audit_av visual_evidence_degraded degraded \
+      "$(jq -cn --argjson c "$hostable" --argjson e "$embed_count" \
+              --arg r "$reason" --arg t "${HOST_TIER:-unknown}" \
+          '{captured:$c, embedded:$e, reason:$r, host_tier:$t}' 2>/dev/null || printf '{}')"
+  fi
   return 0
 }
 
@@ -269,7 +304,7 @@ emit_pr() {
   local mf; mf=$(manifest_path)
   local block _tier_tmp _tier; _tier="none"
   _tier_tmp=$(mktemp 2>/dev/null || printf '%s' "${TMPDIR:-/tmp}/ave-tier-pr.$$")
-  if block=$(HOST_TIER_FILE="$_tier_tmp" BLOCK_MANIFEST_REF=".context/images/$WORKTASK_ID/screenshots.md" \
+  if block=$(HOST_TIER_FILE="$_tier_tmp" \
              build_block "$mf" "## Visual evidence"); then
     _tier=$(cat "$_tier_tmp" 2>/dev/null || printf 'none'); rm -f "$_tier_tmp"
     printf '%s' "$block"
@@ -323,7 +358,7 @@ post_issue() {
   local mf; mf=$(manifest_path)
   local block _tier_tmp _tier; _tier="none"
   _tier_tmp=$(mktemp 2>/dev/null || printf '%s' "${TMPDIR:-/tmp}/ave-tier-issue.$$")
-  if ! block=$(HOST_TIER_FILE="$_tier_tmp" BLOCK_MANIFEST_REF=".context/images/$WORKTASK_ID/screenshots.md" \
+  if ! block=$(HOST_TIER_FILE="$_tier_tmp" \
                build_block "$mf" "## Visual evidence (DV captures, run $RUN_INDEX)"); then
     rm -f "$_tier_tmp"
     audit_av "visual_evidence_issue_commented" "skipped" \
@@ -475,7 +510,6 @@ build_completion_body() {
     mf=$(manifest_path)
     _tier_tmp=$(mktemp 2>/dev/null || printf '%s' "${TMPDIR:-/tmp}/ave-tier-comp.$$")
     if block=$(HOST_TIER_FILE="$_tier_tmp" \
-               BLOCK_MANIFEST_REF=".context/images/$WORKTASK_ID/screenshots.md" \
                build_block "$mf" "## Visual evidence (DV captures, run $RUN_INDEX)"); then
       printf '\n%s' "$block"
     fi
