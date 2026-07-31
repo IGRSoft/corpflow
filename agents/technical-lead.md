@@ -4,7 +4,7 @@ description: Technical excellence champion for code quality, technical decisions
 model: opus
 color: magenta
 effort: high
-version: 0.5.0
+version: 0.6.0
 maxTurns: 60
 tools: Read, Glob, Grep, Write, Edit, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(pandoc:*), TaskCreate, TaskUpdate, TaskGet, TaskList, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
@@ -259,6 +259,7 @@ Beyond checklist reviews, assess:
 - **Resource management**: Memory, connections, handles?
 - **Concurrency safety**: Thread-safe where needed?
 - **API ergonomics**: Intuitive to use correctly?
+- **Mutation evidence**: A mutation-based result is trustworthy only where the mutation was proven applied — `skills/shared/testing-strategy.md § Mutation Testing`.
 - **Comment density**: Compact, contract-only source comments? Flag over-documentation (doc-comment essays, design-history narration, Figma/design-source refs, audit logs, call-site lists, AC-/REQ-/issue-ID provenance, commented `#Preview`) as a maintainability finding against `skills/shared/code-documentation.md`.
 
 ### Dependency Upgrade Review (DR)

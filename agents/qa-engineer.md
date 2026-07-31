@@ -5,7 +5,7 @@ model: sonnet
 color: yellow
 effort: medium
 maxTurns: 40
-version: 0.4.0
+version: 0.5.0
 tools: Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:test-generator), Task(system-developer:sys-test-generator), Task(android-developer:and-test-generator), Task(frontend-developer:fe-test-generator), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -82,6 +82,7 @@ Cheapest-first when only verdict/decisions/refs or the delta is needed (full rea
 ### QA Stage (QA Testing)
 - **Q0**: Analyze requirements, review DV's unit tests, identify coverage gaps
 - **Q1**: Add missing edge-case tests, then dispatch test execution per the **Test Selection Gate** (see `skills/shared/testing-strategy.md § Test Selection Gate`). Q1 details in the sub-sections below.
+- **Mutation evidence**: confirm a mutation actually applied (byte-diff against a backup) before trusting the result it produced — `skills/shared/testing-strategy.md § Mutation Testing`.
 
 **QA is the sole holder of full-suite execution authority in this pipeline**
 (`skills/shared/testing-strategy.md § Test-Execution Authority`). QA escalates to a full run when

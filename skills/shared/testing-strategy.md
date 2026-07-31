@@ -2,6 +2,7 @@
 name: testing-strategy
 description: Cross-platform testing reference — testing pyramid, AAA pattern, per-platform framework and naming map, DV/QA boundary, and the Test Selection Gate. Reference when planning or implementing tests on any platform (apple, android, web, systems, backend, ai).
 effort: low
+version: 0.1.0
 ---
 
 # Testing Strategy
@@ -214,6 +215,18 @@ prefer a descriptive sentence naming behavior and expected outcome, not the meth
 | Go | Exported `Test<Thing>` **required** | `TestLoginValidCredentials` |
 | Rust | snake_case `#[test] fn` inside `mod tests` | `fn login_valid_credentials()` |
 | bats | `@test "<sentence>"` | `@test "login with valid credentials"` |
+
+## Mutation Testing
+
+A mutation test proves a guard is non-vacuous by breaking what it guards and requiring the guard
+to fail. Its result carries no information unless the mutation actually landed.
+
+**Assert the mutation was applied before trusting the pass/fail it produced.** Back the target up,
+mutate, byte-compare against the backup (`diff -q` must report the files differ), and only then run
+the test; restore afterwards. A mutation that silently no-ops — a `sed` pattern written for
+`echo "…"` against a source that uses `printf '…'`, a line number that shifted — yields a passing
+test indistinguishable from a weak guard, so the reviewer concludes the opposite of what the
+evidence shows.
 
 ## DV vs QA Boundary
 
