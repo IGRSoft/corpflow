@@ -76,16 +76,28 @@ mk_no_jq_path() {
   assert_output "feature"
 }
 
-@test "derive_type: fix keywords map to fix" {
+@test "derive_type: fix keywords map to bugfix (not fix)" {
   run bash -c ". '$PLUGIN_ROOT/$LIB'; derive_type 'Fix crash on startup'"
   assert_success
-  assert_output "fix"
+  assert_output "bugfix"
 }
 
 @test "derive_type: revert keyword maps to revert" {
   run bash -c ". '$PLUGIN_ROOT/$LIB'; derive_type 'Revert the last release'"
   assert_success
   assert_output "revert"
+}
+
+@test "derive_type: hotfix keyword maps to hotfix (not bugfix)" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; derive_type 'Ship a hotfix for prod'"
+  assert_success
+  assert_output "hotfix"
+}
+
+@test "derive_type: hotfix wins even when the goal also contains crash/bug (case ordering)" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; derive_type 'hotfix for a bug causing a crash'"
+  assert_success
+  assert_output "hotfix"
 }
 
 @test "derive_type: every output is a member of BRANCH_TYPES (AR ruling-4 self-test)" {
@@ -99,8 +111,9 @@ mk_no_jq_path() {
       done
       return 1
     }
-    for g in 'random goal' 'fix bug' 'refactor module' 'perf tuning' 'add docs' \
-             'chore bump deps' 'ci pipeline' 'build packaging' 'test coverage' 'revert x'; do
+    for g in 'random goal' 'fix bug' 'ship a hotfix' 'refactor module' 'perf tuning' \
+             'add docs' 'chore bump deps' 'ci pipeline' 'build packaging' \
+             'test coverage' 'revert x'; do
       t=\$(derive_type \"\$g\")
       is_member \"\$t\" || { printf 'BAD (not in BRANCH_TYPES): %s -> %s\n' \"\$g\" \"\$t\"; exit 1; }
     done
@@ -173,6 +186,18 @@ mk_no_jq_path() {
 
 @test "branch_is_conventional: already-conventional short form (feat) is accepted" {
   run bash -c ". '$PLUGIN_ROOT/$LIB'; branch_is_conventional 'feat/221-thing'"
+  assert_success
+}
+
+@test "branch_is_conventional: fix/ is removed cleanly — a fix/ branch is rejected" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; branch_is_conventional 'fix/legacy-crash-on-startup'"
+  assert_failure 1
+}
+
+@test "branch_is_conventional: bugfix/ and hotfix/ are accepted" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; branch_is_conventional 'bugfix/crash-on-startup'"
+  assert_success
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; branch_is_conventional 'hotfix/crash-on-startup'"
   assert_success
 }
 

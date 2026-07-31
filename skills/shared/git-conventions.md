@@ -134,11 +134,14 @@ No ticket number: the branch carries no issue reference (a worktask branch is na
 before any issue-linked commit exists, and the pull request body carries the closing
 keyword instead — see `skills/worktask/references/handoff-protocol.md § branch`).
 
-### Type vocabulary (12 tokens, accepted by the already-conventional check)
+### Type vocabulary (13 tokens, accepted by the already-conventional check)
 
-`feat`, `feature`, `fix`, `refactor`, `perf`, `docs`, `chore`, `test`, `ci`, `build`,
-`style`, `revert`. Generated branches use the long form `feature` (never `feat`); `feat`
-stays accepted so a pre-existing short-form branch is never churned. The single
+`feat`, `feature`, `bugfix`, `hotfix`, `refactor`, `perf`, `docs`, `chore`, `test`, `ci`,
+`build`, `style`, `revert`. **No `fix`** — removed cleanly, not kept as a compatibility
+token; a pre-existing `fix/<slug>` branch is treated as non-conventional and renamed
+onto the derived `bugfix/`/`hotfix/` target. Generated branches use the long form
+`feature` (never `feat`); `feat` and `style` stay accepted so a pre-existing short-form
+or style branch is never churned, but neither is ever generated. The single
 machine-readable copy is `BRANCH_TYPES` in `skills/worktask/scripts/branch-lib.sh` — both
 the generator (`derive_type`) and the already-conventional predicate
 (`branch_is_conventional`) derive from it, so the two cannot drift.

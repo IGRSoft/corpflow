@@ -36,9 +36,9 @@ mk_branch_repo() {
   run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_line --index 0 --partial "->"
-  assert_line --index 1 "branch=fix/fix-pr-composition-and-branch-naming"
+  assert_line --index 1 "branch=bugfix/fix-pr-composition-and-branch-naming"
   run git rev-parse --abbrev-ref HEAD
-  assert_output "fix/fix-pr-composition-and-branch-naming"
+  assert_output "bugfix/fix-pr-composition-and-branch-naming"
   run jq -r 'select(.action=="branch_renamed") | .result' .context/logs/audit.jsonl
   assert_output "ok"
 }
@@ -100,7 +100,7 @@ mk_branch_repo() {
   mk_branch_repo
   run env BRANCH_NAME_PRINT=1 bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
-  assert_output "fix/fix-pr-composition-and-branch-naming"
+  assert_output "bugfix/fix-pr-composition-and-branch-naming"
   run git rev-parse --abbrev-ref HEAD
   assert_output "wt-abc123"
 }
@@ -156,6 +156,25 @@ mk_branch_repo() {
   assert_line --index 0 --partial "already conventional"
   run git rev-parse --abbrev-ref HEAD
   assert_output "feat/221-already-named"
+}
+
+@test "N4b: an existing fix/<slug> branch is non-conventional and gets renamed to bugfix/" {
+  cd "$WD"
+  mk_branch_repo "fix/legacy-crash-on-startup" "Fix crash on startup"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "->"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "bugfix/fix-crash-on-startup"
+}
+
+@test "N4c: a goal containing hotfix yields hotfix/<slug>, not bugfix/<slug>" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "Ship a hotfix for the login crash"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "hotfix/ship-a-hotfix-for-the-login-crash"
 }
 
 @test "N5: upstream present is a no-op (exit 0)" {
@@ -238,12 +257,15 @@ mk_branch_repo() {
   assert_output ""
 }
 
-@test "--print-types: emits the 12-token vocabulary, one per line" {
+@test "--print-types: emits the 13-token vocabulary, one per line, no fix" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --print-types
   assert_success
-  assert_equal "${#lines[@]}" 12
+  assert_equal "${#lines[@]}" 13
   assert_line "feature"
   assert_line "feat"
+  assert_line "bugfix"
+  assert_line "hotfix"
+  refute_line "fix"
 }
 
 # ---------------------------------------------------------------------------
@@ -444,7 +466,7 @@ mk_hostile_repo() {
   assert_output --partial "->"
   assert_output --partial "audit row NOT recorded"
   run git rev-parse --abbrev-ref HEAD
-  assert_output "fix/fix-pr-composition-and-branch-naming"
+  assert_output "bugfix/fix-pr-composition-and-branch-naming"
 }
 
 @test "SR-4: CDPATH=. does not corrupt LIB_PATH or skip the guard ladder" {
@@ -454,7 +476,7 @@ mk_hostile_repo() {
   assert_success
   refute_output --partial "unreachable"
   run git rev-parse --abbrev-ref HEAD
-  assert_output "fix/fix-pr-composition-and-branch-naming"
+  assert_output "bugfix/fix-pr-composition-and-branch-naming"
 }
 
 @test "SR-2/SR-4: a symlinked script still resolves the real sibling branch-lib.sh" {
@@ -466,5 +488,5 @@ mk_hostile_repo() {
   assert_success
   refute_output --partial "unreachable"
   run git rev-parse --abbrev-ref HEAD
-  assert_output "fix/fix-pr-composition-and-branch-naming"
+  assert_output "bugfix/fix-pr-composition-and-branch-naming"
 }

@@ -28,12 +28,16 @@ fi
 # Newline-delimited, NOT an array and NOT `readonly`: a second `readonly` assignment
 # is rc 1 and kills a `set -e` caller (this file's own bats source it twice), and a
 # space-delimited list yields one token under a caller's `IFS=$'\n\t'`. Accept list
-# (12) is deliberately wider than what derive_type ever emits (10): `feat` and `style`
-# are accepted so an existing short-form/style branch is never churned, but neither
-# is ever generated. Canonical prose: skills/shared/git-conventions.md § Branch Naming.
+# (13) is deliberately wider than what derive_type ever emits (11): `feat` and `style`
+# are accepted so an existing short-form/style branch is never churned, but neither is
+# ever generated. `fix` is intentionally absent — removed cleanly, not kept as a
+# compatibility token — so a pre-existing `fix/<slug>` branch reads as non-conventional
+# and gets renamed onto the derived `bugfix/`/`hotfix/` target. Canonical prose:
+# skills/shared/git-conventions.md § Branch Naming.
 BRANCH_TYPES='feat
 feature
-fix
+bugfix
+hotfix
 refactor
 perf
 docs
@@ -107,7 +111,10 @@ derive_type() {
   g=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')
   case "$g" in
     *revert*) t="revert" ;;
-    *"fix "* | *bug* | *defect* | *hotfix* | *crash*) t="fix" ;;
+    # hotfix MUST be checked before the general bugfix arm: "hotfix" itself
+    # contains "fix" and would otherwise be swallowed by *"fix "*/*bug*/*crash*.
+    *hotfix*) t="hotfix" ;;
+    *"fix "* | *bug* | *defect* | *crash*) t="bugfix" ;;
     *refactor*) t="refactor" ;;
     *perf* | *optimi*) t="perf" ;;
     *docs* | *document*) t="docs" ;;
