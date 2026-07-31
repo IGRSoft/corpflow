@@ -2,6 +2,43 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.41.1] - 2026-07-30
+
+Test-execution authority enforcement: a behavioral policy change governing which stages may execute tests, with real blast radius. DV's silent full-suite auto-promotion on non-Apple platforms is now capped at module scope, SR/RE lose unrestricted Bash, and a new always-on `PreToolUse` hook enforces the policy at the delegation boundary. Min CC unchanged at **2.1.220**. Suite **fully green** (394 bats assertions including 27 new gate scenarios, 0 failures).
+
+### Changed (Breaking)
+
+- **Test-execution authority is now stage-scoped and mechanically enforced.** `skills/shared/testing-strategy.md` introduces a new canonical `## Test-Execution Authority` matrix: only DV (scoped execution required, full forbidden) and QA (sole holder of full-suite authority) may execute tests; every other stage is denied. Authority is orthogonal to `test_mode` (breadth) and is enforced at three layers: documented constraints on every stage agent, orchestrator step 4.8b dispatch-time ban banner, and a new `PreToolUse` hook `hooks/test-execution-gate.sh` that resolves the acting stage from `.context/state.json` and denies test-runner invocations outside `{DV, QA}`.
+- **`security-reviewer` and `release-engineer` drop bare `Bash` for scoped allow-lists**, matching `technical-lead`/`project-manager` precedent. Both carry git read-only introspection (git diff/show/log/status/ls-files) and jq; RE additionally carries git-tag/describe. This reduces blast radius without breaking legitimate review operations.
+- **DV's no-handler auto-promotion is capped at `module-scope`**, not `full`.** When no platform-specific test-selection handler is wired, DV no longer auto-escalates to `full`; instead it computes the touched-module test set and invokes the runner with ≥1 selection argument (classifying as `scoped_test_run`). Full-suite regression remains QA's sole gate. Deferred-to-QA flows are explicitly recorded.
+- **`hooks/test-execution-gate.sh` — new `PreToolUse` hook, registered in `plugin.json`.** Fail-open on every ambiguity, stage-resolved from `.context/state.json` only, denies test-runner CLI invocations and `Task`/`Skill` delegations to test-capable agents outside `{DV, QA}`. Exit code always 0; decision travels in JSON. Escape hatch: `IGRSOFT_TEST_GATE=off`. Covers the delegation-path hole that tool-grant narrowing alone cannot close.
+
+### Added
+
+- **`hooks/test-execution-gate.sh`** — PreToolUse hook implementing the stage-authority policy at the tool-invocation boundary. Command classification: runner heads + multi-purpose subcommand checking + depth-capped `bash -c` recursion. Build-only verification is allowed everywhere; test-collection flags (`--count`, `--co`, etc.) are recognized and allowed. Fail-open on every ambiguity (no `.context/`, unparseable JSON, two stages in-progress, jq absent). `command_head` in audit rows is always a known runner token or `redacted`, never a secret. `--self-test` built-in, 18 scenario coverage.
+- **`tests/shell/hooks/test-execution-gate.bats`** — 18 test scenarios covering all spec'd behaviors, edge cases, and fail-open branches. Scenario classes: DV/QA allow (scoped/full), banned stages deny, multi-purpose runner subcommand gating, build-only flags, `-c` / `--count` / `-N` / `--co` allowed, recursion depth capping, command_head redaction, escape hatch, no side effects on missing `.context/`, jq absence. Includes four regression cases for fix-validation (SR-H1 unanchored match, P1-4 `-c` false-positive, N1 xcodebuild prefilter, N2 predicate divergence).
+- **`tests/shell/skills/test-authority-matrix.bats`** — 6 scenarios verifying single-sourcing: the canonical `## Test-Execution Authority` header exists, every non-DV/QA agent carries the ban pointer, no stray forbidden-runner list restatement, `RUNNERS`/`MULTI_PURPOSE_RUNNERS` in the hook match the canonical prose, and the predicate (≥1 selection argument or positional test target) is consistent across DV/QA/hook.
+- **Extended `tests/shell/worktask/manifest-parity.bats`** — added check that `hooks/test-execution-gate.sh` exists, is executable, and is registered in `plugin.json`.
+
+### Fixed
+
+- **DV's auto-promotion was a live defect:** on systems/backend/web (no wired selective-test handler), DV always escalated from the plan's `test_mode: scoped` to `full`, silently widening the scope and deferring the choice to QA. Test selection semantics are now predictable: DV runs scoped (module-touched tests for systems; narrower for others), QA holds full-suite gate, and `deferred_to_qa: full_regression` is explicit in the artifact.
+- **Tool-grant narrowing:** 8 occurrences of `auto_promoted_mode: full` in agent/skill prose were replaced with `module-scope`; the residual grep `grep -rn 'auto_promoted_mode: *full'` is now clean.
+- **Section size limit compliance:** 8 sections that grew during this theme (canonical Test-Execution Authority + 7 other agent/skill sections) exceeded the 1000-char cap and were restructured into subsections. No substance lost — all 394 tests green post-split.
+
+### Tests
+
+- New `tests/shell/hooks/test-execution-gate.bats` — 18/18 scenarios pass, covering all entry/exit paths.
+- New `tests/shell/skills/test-authority-matrix.bats` — 6/6 scenarios pass, verifying single-sourcing and predicate consistency.
+- Extended `tests/shell/worktask/manifest-parity.bats` — 1 new case for gate hook registration.
+- **Full regression — 394/394 pass** (`./run-tests.sh` exit 0). Baseline ~340; new tests added 54 cases (27 hook scenarios + 6 matrix parity + 3 manifest + 18 existing worktask cases re-exercised). Post-split `section-lint.bats` also passes (0 sections over 1000-char cap).
+
+### Acknowledged Limitations
+
+- **No-space `bash -c'…'` form, `env -i`, `/usr/bin/env … pytest`, backtick command substitution, `find -exec`/`xargs`** — not unwrapped by the gate and remain as accepted, documented bypasses. This hook is a backstop, not a sandbox — tool-grant narrowing (R5a) and orchestrator step 4.8b (R5b) are the primary controls.
+- **Recursion depth is capped at 2 levels.** `bash -c 'bash -c "pytest"'` is chased and denied (if applicable); deeper nesting beyond the cap classifies as `not_test` (allow) rather than continuing to recurse unbounded (CWE-674 risk).
+- **`npm test --dry-run` bypasses build-only override.** The `--dry-run` flag is classified as build-only and allows execution, but npm's run-script path ignores the flag for custom test scripts (unlike `npm install`-family commands), so the script still executes. This is an accepted bypass of the same class as the ones above; requires agent intent (`--dry-run` specifically) rather than tripping over a benign command.
+
 ## [3.41.0] - 2026-07-30
 
 Branch naming moved from FN stage to PL start. New `branch-name.sh` entry point named once before any commit exists, never renamed afterward. Shared `branch-lib.sh` library unifies helpers. FN's `branch-name` subcommand removed entirely. Branch type vocabulary extended to `feature` (both forms backward compatible). Rank-4 issue resolver tightened to prevent false-positive issue matches from digit-terminated slugs. Input sanitization hardened to prevent shell injection of branch names into git push refspec. Min CC unchanged at **2.1.220**. Suite **fully green** (340 bats assertions, 0 failures).
