@@ -12,7 +12,8 @@
 #                    hand-authored: sanitises it in place with publish-pl-issue.sh's
 #                    own `sanitise_body`, then requires a `Test plan` heading and,
 #                    on a screenshot-requiring run, the visual-evidence helper's
-#                    audit row for THIS run index.
+#                    audit row for THIS run index. Then runs pr-body-lint.sh over
+#                    the sanitised body (warn-only; never changes this verdict).
 #     continuity     the worktree HEAD is an ancestor of the integration branch, else
 #                    log a diverged→cherry-pick diagnostic + audit row (never blocks).
 #     all            attachments → pr-body → validate-pr → continuity.
@@ -251,6 +252,16 @@ cmd_pr_body() {
     printf 'pr-body: sanitised (%s -> %s lines)\n' "$before" "$after"
     audit_fn pr_body_sanitised ok "$(meta_json lines_before "$before" lines_after "$after" \
       snapshot "${CONTEXT_DIR}/logs/pr-body-${ri}.presanitise.md")"
+  fi
+
+  # Read back what the sanitiser actually produced. Sanitising without inspecting
+  # the result is how a body that lost every image and kept a dead local path was
+  # audited "ok". Runs here, after the rewrite, so it lints the byte-identical
+  # body that reaches `gh pr create`. Warn-only by contract: it never changes this
+  # gate's verdict, so it can land mid-flight — promote it with --strict.
+  if [ -x "${SCRIPT_DIR}/pr-body-lint.sh" ]; then
+    bash "${SCRIPT_DIR}/pr-body-lint.sh" --body "$BODY_FILE" --state "$STATE_PATH" \
+      --context "$CONTEXT_DIR" || true
   fi
 
   # Checked AFTER sanitising, so a heading the sanitiser removed reports as missing
