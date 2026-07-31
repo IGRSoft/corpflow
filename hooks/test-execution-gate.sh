@@ -134,7 +134,7 @@ EOF
 # real latency on a single tool call, not a crash, but not "depth 1" either.
 MAX_RECURSE_DEPTH=2
 classify_segment() {
-  local _seg _depth _head_full _head _rest _launcher _inner _mod _padded _subcmd _rest_for_selection _rest_effective _second _task
+  local _seg _depth _head_full _head _rest _launcher _inner _mod _padded _subcmd _rest_for_selection _rest_effective _second _task _tok _found
 
   _seg="$1"
   _depth="${2:-0}"
@@ -275,6 +275,29 @@ classify_segment() {
             *) printf 'not_test'; return ;;
           esac
           _rest_effective="$(printf '%s' "$_rest" | sed -E 's/^[[:space:]]*[^ ]*//')"
+          ;;
+        xcodebuild)
+          # xcodebuild conventionally puts its ACTION after the options
+          # (`xcodebuild -scheme A -destination B test`), so the first-token
+          # subcommand read used for every other multi-purpose runner sees
+          # `-scheme` and lets a real test run through. Scan every remaining
+          # token instead, word-exact: a substring match would fire on
+          # `-scheme MyTests` (a build), and `build-for-testing` compiles a
+          # test bundle without running it, so only the two executing actions
+          # count. Residual, accepted: an option VALUE that is literally the
+          # word `test` (e.g. `-resultBundlePath test`) reads as the action —
+          # a false deny at a banned stage, the safe direction for a backstop.
+          _rest_effective=""
+          _found=0
+          for _tok in $_rest; do
+            if [ "$_found" -eq 0 ]; then
+              case "$_tok" in
+                test|test-without-building) _found=1; continue ;;
+              esac
+            fi
+            _rest_effective="$_rest_effective $_tok"
+          done
+          [ "$_found" -eq 1 ] || { printf 'not_test'; return; }
           ;;
         *)
           _subcmd="$(printf '%s' "$_rest" | sed -E 's/^[[:space:]]+//')"
@@ -490,7 +513,14 @@ run_gate() {
       # before any classification work, so `git status`/`ls`/`cat` calls
       # never enter classify_cmd.
       case "$_cmd" in
-        *bats*|*pytest*|*unittest*|*"swift test"*|*ctest*|*"cargo test"*|*"go test"*|*jest*|*vitest*|*playwright*|*rspec*|*"dotnet test"*|*gradle*|*xcodebuild*|*"pnpm test"*|*"npm test"*|*"yarn test"*|*"pnpm run test"*|*"npm run test"*|*"yarn run test"*|*run-tests*|*build-test*|*coverage*) ;;
+        # `make test` also covers `make test-ios` by substring — both are
+        # named full runners in classify_segment, yet without a prefilter
+        # pattern neither ever reached it. The same substring admits
+        # `make test*` targets that are NOT tests (`make testdata`), which
+        # then classify scoped and deny at a banned stage — the safe
+        # direction for a backstop, and the trade `make coverage*` already
+        # makes via the *coverage* pattern below.
+        *bats*|*pytest*|*unittest*|*"swift test"*|*ctest*|*"cargo test"*|*"go test"*|*jest*|*vitest*|*playwright*|*rspec*|*"dotnet test"*|*gradle*|*xcodebuild*|*"make test"*|*"pnpm test"*|*"npm test"*|*"yarn test"*|*"pnpm run test"*|*"npm run test"*|*"yarn run test"*|*run-tests*|*build-test*|*coverage*) ;;
         *) return 0 ;;
       esac
       _class=$(classify_cmd "$_cmd")
@@ -511,7 +541,17 @@ run_gate() {
       _cmd_head="$(redact_unless_known_head "$_cmd_head")"
       ;;
     Skill)
-      _skill_cmd=$(printf '%s' "$_payload" | jq -r '.tool_input.command // .tool_input.skill // empty' 2>/dev/null)
+      # The Skill payload carries its flags in a SEPARATE `args` field
+      # ({skill, args}), not appended to the skill name — reading the name
+      # alone loses `--no-test` and denies DR its sanctioned compile-check.
+      # Recombined into one string so the build-only carve-out below matches
+      # the same way it does for the command-string form. An all-empty
+      # result emits nothing (`select`), preserving "empty -> allow".
+      _skill_cmd=$(printf '%s' "$_payload" | jq -r '
+        [(.tool_input.command // .tool_input.skill // empty), (.tool_input.args // empty)]
+        | map(if type == "array" then (map(tostring) | join(" ")) else tostring end)
+        | map(select(length > 0)) | join(" ") | select(length > 0)
+      ' 2>/dev/null)
       case "$_skill_cmd" in
         *build-test*--no-test*|*build-test*--count*|*build-test*--dry-run*) return 0 ;;
         *build-test*) _class="full_test_run" ;;
@@ -710,6 +750,36 @@ if [ "$SELF_TEST" -eq 1 ]; then
   printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx8/state.json"
   _o8=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"/system-developer:build-test --no-test"}}' "$_ctx8")
   [ -z "$_o8" ] || { echo "test-execution-gate: self-test FAIL (build-test --no-test)"; _fail=1; }
+
+  # DR + Skill payload in its real {skill, args} shape -> --no-test allows,
+  # bare denies (the flag lives in `args`, not in the skill name).
+  _ctx8b="$_tmp/skill-args/.context"; mkdir -p "$_ctx8b"
+  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx8b/state.json"
+  _p8b='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test","args":"--no-test"}}'
+  _o8b=$(run_gate "$_p8b" "$_ctx8b")
+  [ -z "$_o8b" ] || { echo "test-execution-gate: self-test FAIL (Skill args --no-test)"; _fail=1; }
+  _p8c='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test","args":"--scheme App"}}'
+  _o8c=$(run_gate "$_p8c" "$_ctx8b")
+  printf '%s' "$_o8c" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+    || { echo "test-execution-gate: self-test FAIL (Skill args full run)"; _fail=1; }
+
+  # `make test` reaches the classifier at all (the zero-fork prefilter used
+  # to drop it before classification, allowing it at every banned stage).
+  _ctx8d="$_tmp/make-test/.context"; mkdir -p "$_ctx8d"
+  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx8d/state.json"
+  _o8d=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"make test"}}' "$_ctx8d")
+  printf '%s' "$_o8d" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+    || { echo "test-execution-gate: self-test FAIL (make test must deny at DR)"; _fail=1; }
+
+  # xcodebuild's action follows its options — the trailing-action shape must
+  # classify identically to the action-first shape.
+  _ctx8e="$_tmp/xcodebuild/.context"; mkdir -p "$_ctx8e"
+  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx8e/state.json"
+  _o8e=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"xcodebuild -scheme MyApp -destination generic/platform=iOS test"}}' "$_ctx8e")
+  printf '%s' "$_o8e" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+    || { echo "test-execution-gate: self-test FAIL (xcodebuild trailing test action)"; _fail=1; }
+  _o8f=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"xcodebuild -scheme MyTests build-for-testing"}}' "$_ctx8e")
+  [ -z "$_o8f" ] || { echo "test-execution-gate: self-test FAIL (xcodebuild build-for-testing must allow)"; _fail=1; }
 
   # Regression: pure build/non-test commands on multi-purpose runners must
   # ALLOW at a banned stage — build-only stays permitted everywhere.

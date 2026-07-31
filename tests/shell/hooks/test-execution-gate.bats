@@ -416,6 +416,115 @@ bash_payload() {
   assert_failure
 }
 
+# --- DR Round 3 regression scenarios (developer-review-1.md § Round 3) ---
+
+@test "R3-1: Skill payload in its real {skill,args} shape — '--no-test' in args ALLOWS at DR (build-only carve-out)" {
+  state_with DR
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test","args":"--no-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R3-1: same {skill,args} shape WITHOUT --no-test -> deny at DR" {
+  state_with DR
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test","args":"--scheme App"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "R3-1: {skill,args} with no args field at all -> deny (bare build-test is a full run)" {
+  state_with DR
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "R3-1: args-carried secret never reaches command_head (redaction survives the recombination)" {
+  state_with DR
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test","args":"--token sk-live-9x8y"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  run jq -e '.metadata.command_head == "redacted"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+  run bash -c "grep -i 'sk-live-9x8y' '$WD/.context/logs/audit.jsonl'"
+  assert_failure
+}
+
+@test "R3-2: 'make test' and 'make test-ios' deny at DR (both were dropped by the zero-fork prefilter)" {
+  state_with DR
+  for cmd in 'make test' 'make test-ios'; do
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
+    assert_success
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' \
+      || fail "expected deny for: $cmd"
+  done
+}
+
+@test "R3-2: 'make test' at DV hits the full-suite deny (a named full runner, never scoped)" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'make test')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  run jq -e '.metadata.class == "full_test_run" and .metadata.command_head == "make"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "R3-2 sibling: 'make build' still allows at DR (the widened prefilter did not swallow every make target)" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'make build')"
+  assert_success
+  [ -z "$output" ]
+  [ ! -f "$WD/.context/logs/audit.jsonl" ]
+}
+
+@test "R3-3: xcodebuild's action AFTER its options is a test run -> deny at DR (was read as _subcmd='-scheme')" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'xcodebuild -scheme MyApp -destination generic/platform=iOS test')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "R3-3: trailing-action and action-first xcodebuild shapes classify IDENTICALLY" {
+  state_with DR
+  for cmd in 'xcodebuild test -scheme MyApp' 'xcodebuild -scheme MyApp test'; do
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
+    assert_success
+  done
+  run jq -s -e 'map(.metadata.class) | unique | length == 1 and .[0] == "scoped_test_run"' \
+    "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "R3-3: 'xcodebuild test-without-building' (executes a prebuilt bundle) -> deny at DR" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'xcodebuild -scheme MyApp test-without-building')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "R3-3: '-only-testing:' selection still classifies scoped, not full" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'xcodebuild -scheme MyApp -only-testing:MyAppTests/LoginTests test')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  run jq -e '.metadata.class == "scoped_test_run"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "R3-3 siblings: non-executing xcodebuild actions still ALLOW at DR (word-exact action match)" {
+  state_with DR
+  # `build-for-testing` compiles a test bundle without running it; `-scheme
+  # MyTests` must not read as the `test` action on a substring match.
+  for cmd in 'xcodebuild -scheme MyApp build' 'xcodebuild archive -scheme X' 'xcodebuild -scheme MyApp build-for-testing' 'xcodebuild -scheme MyTests build'; do
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
+    assert_success
+    [ -z "$output" ] || fail "expected allow for: $cmd (got: $output)"
+  done
+}
+
 @test "SR2-L2: IGRSOFT_TEST_GATE=off with NO .context/ at all creates nothing (no test_gate_disabled pollution)" {
   rm -rf "$WD/.context"
   run env CLAUDE_PROJECT_DIR="$WD" IGRSOFT_TEST_GATE=off bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'bats foo.bats')"

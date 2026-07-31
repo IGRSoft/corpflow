@@ -30,7 +30,8 @@
 #                         despite the prefix — see handoff-protocol.md § metadata.base_ref).
 #
 # @exitcode 0   Every rename-mode outcome (ok, noop, failed, skipped, unreachable
-#               library). `--check`: not conventional.
+#               library).
+# @exitcode 1   `--check`: name is not conventional.
 # @exitcode 2   Usage error, or `--check` on an internal regex fault.
 #
 # Minimum shell: bash 3.2+ (macOS default).
