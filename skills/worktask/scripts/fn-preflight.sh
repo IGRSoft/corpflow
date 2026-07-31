@@ -13,21 +13,21 @@
 #                    own `sanitise_body`, then requires a `Test plan` heading and,
 #                    on a screenshot-requiring run, the visual-evidence helper's
 #                    audit row for THIS run index.
-#     branch-name    move an anonymous worktree branch onto `<type>/<ticket>-<slug>`.
-#                    Idempotent; never blocks; deliberately NOT part of `all`.
 #     continuity     the worktree HEAD is an ancestor of the integration branch, else
 #                    log a diverged→cherry-pick diagnostic + audit row (never blocks).
 #     all            attachments → pr-body → validate-pr → continuity.
 #
 #   `pr-body` runs BEFORE `validate-pr` because it rewrites the body in place: the
 #   body whose `Closes #<n>` line is validated must be the byte-identical body that
-#   reaches `gh pr create`. `branch-name` is NOT in `all` because `all` runs after
-#   the push step, and renaming a pushed branch orphans the remote ref — call it
-#   between pre-flight and push (skills/worktask/references/conductor-attachments.md).
+#   reaches `gh pr create`.
 #
-#   `pr-body` and `branch-name` self-disable under batch (`/megatask`) and incident
-#   (`--emergency`) routing, so those pipelines keep their current behaviour
-#   byte-for-byte. See `fn_batch_scope` for the five signals.
+#   `pr-body` self-disables under batch (`/megatask`) and incident (`--emergency`)
+#   routing, so those pipelines keep their current behaviour byte-for-byte. See
+#   `fn_batch_scope` (branch-lib.sh) for the five signals.
+#
+#   Branch naming moved to the start of the planning stage (see
+#   `skills/shared/git-conventions.md § Branch Naming`). This validator never
+#   renames anything.
 #
 #   Behavior is byte-for-byte the logic documented in
 #   agents/project-manager.md § FN Stage; this script is the single implementation the
@@ -39,16 +39,16 @@
 # @arg -h | --help        Show this header.
 #
 # @env FN_BASE_REF        Highest-priority integration-branch override (see resolve_base_ref).
-# @env BRANCH_NAME_PRINT  1 => `branch-name` prints the target and renames nothing.
-# @env MILESTONE_MODE     1 => batch routing; `pr-body`/`branch-name` self-disable.
+# @env MILESTONE_MODE     1 => batch routing; `pr-body` self-disables.
 # @env INCIDENT_MODE      1 => incident routing; same self-disable.
 #
 # @exitcode 0   Check passed (or a non-blocking degrade: no issue resolvable / diverged /
-#               scope-disabled / `branch-name` in every outcome).
+#               scope-disabled).
 # @exitcode 1   Blocking failure (missing attachment; body missing the closing keyword;
 #               `pr-body`: missing `Test plan` heading, missing or contradicted
 #               visual-evidence evidence, or an unreachable sanitiser library).
 # @exitcode 2   Usage error (unknown command/flag; `pr-body`/`validate-pr` without --body).
+# @exitcode 3   branch-lib.sh unreachable — no dispatch runs (plugin install broken).
 #
 # Minimum shell: bash 3.2+ (macOS default). Mirrors state-patch.sh conventions.
 
@@ -59,12 +59,48 @@ STATE_PATH=".context/state.json"
 CONTEXT_DIR=".context"
 BODY_FILE=""
 
+# Physical directory of this script. CDPATH= disables a benign-but-common
+# CDPATH setting that otherwise makes `cd` echo an extra line into this very
+# capture, corrupting the path silently; `pwd -P` plus the readlink loop follow
+# a symlinked script to its real directory so sibling-library resolution cannot
+# be redirected onto an attacker-planted file next to the symlink.
+_resolve_script_dir() {
+  local src="${BASH_SOURCE[0]:-$0}" dir
+  while [ -h "$src" ]; do
+    dir=$(CDPATH= cd -- "$(dirname -- "$src")" && pwd -P)
+    src=$(readlink "$src")
+    case "$src" in
+      /*) ;;
+      *) src="$dir/$src" ;;
+    esac
+  done
+  CDPATH= cd -- "$(dirname -- "$src")" && pwd -P
+}
+SCRIPT_DIR="$(_resolve_script_dir 2> /dev/null)" || SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]:-$0}")"
+
 # Sanitiser library, resolved from this script's own location (mirrors
-# attach-visual-evidence.sh:69). BASH_SOURCE, not $0: correct when sourced by bats.
-LIB_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd)/publish-pl-issue.sh"
+# attach-visual-evidence.sh:69).
+LIB_PATH="${SCRIPT_DIR}/publish-pl-issue.sh"
+
+# Shared helpers (meta_json, audit_fn, fn_batch_scope, resolve_base_ref). This
+# file's only failure mode is absence — a same-directory, same-commit sibling
+# missing means the plugin install is broken, in which case this script is
+# equally suspect. Loud and immediate: no dispatch runs on a broken install.
+BRANCH_LIB_PATH="${SCRIPT_DIR}/branch-lib.sh"
+# `[ -f ]` first, not a bare `.`: sourcing a missing file with the `.` builtin is a
+# special-builtin error that exits a `set -e` shell immediately, bypassing an
+# `if ! . …; then` guard entirely (verified on bash 3.2 and 5.x).
+if [ -n "$BRANCH_LIB_PATH" ] && [ -r "$BRANCH_LIB_PATH" ]; then
+  # shellcheck disable=SC1090
+  . "$BRANCH_LIB_PATH"
+else
+  printf >&2 'fn-preflight.sh: branch-lib.sh unreachable at %s — plugin install broken\n' \
+    "$BRANCH_LIB_PATH"
+  exit 3
+fi
 
 usage() {
-  sed -n 's/^# \{0,1\}//p' "$0" | head -62
+  awk 'NR>1{ if (!/^#/) exit; sub(/^# ?/,""); print }' "$0"
   exit 2
 }
 
@@ -72,7 +108,10 @@ usage() {
 # 1. state.json .metadata.github_issue_url  — trailing integer of /issues/<N>.
 # 2. .context/gh-issue.json .url (trailing int) or .number — follow-up-run anchor.
 # 3. state.json .metadata.github_issue_number — megatask per-issue mode.
-# 4. branch parse: feature/<slug>-<NNN> trailing int, else first #NNN in last 5 commits.
+# 4. branch parse: leading <type>/<NNN>-<slug> shape (externally-named-branch
+#    fallback — the shape both branch generators actually produce), else first
+#    #NNN in the last 5 commits. NOT a trailing integer: a ticket-less
+#    `feature/<slug-ending-in-digit>` branch must not resolve a bogus issue number.
 resolve_issue() {
   local n=""
   if command -v jq > /dev/null 2>&1; then
@@ -82,103 +121,14 @@ resolve_issue() {
       "${CONTEXT_DIR}/gh-issue.json" 2> /dev/null | grep -oE '[0-9]+$' || true)
     [[ -z "$n" ]] && n=$(jq -r '.metadata.github_issue_number // empty' "$STATE_PATH" 2> /dev/null || true)
   fi
-  [[ -z "$n" ]] && n=$(git rev-parse --abbrev-ref HEAD 2> /dev/null | grep -oE '[0-9]+$' || true)
+  [[ -z "$n" ]] && n=$(git rev-parse --abbrev-ref HEAD 2> /dev/null \
+    | sed -nE 's#^[a-zA-Z]+/([0-9]+)-.*#\1#p' || true)
   [[ -z "$n" ]] && n=$(git log --oneline -n 5 2> /dev/null | grep -oE '#[0-9]+' | head -1 | tr -d '#' || true)
   printf '%s' "$n"
 }
 
-# ---------- batch / incident scope guard ------------------------------------
-# Deliberate local mirror of publish-pl-issue.sh `is_milestone_mode` (~line 658),
-# extended with the incident signals. NOT sourced: this guard has to answer before
-# the sanitiser library is touched, otherwise an unreachable library (which
-# `sanitise_stream` treats as a blocking failure) would fail the very guard that
-# exists to exempt batch and incident runs from that failure.
-# Parity with the library's three shared signals is pinned by
-# tests/shell/worktask/fn-preflight.bats "F14".
-# Signals (any hit => the new gates self-disable):
-#   1. MILESTONE_MODE=1        env override (tests, /megatask)
-#   2. INCIDENT_MODE=1         env override (tests, incident runners)
-#   3. state.json .metadata.milestone non-empty
-#   4. state.json .stages.IR present — the emergency pipeline's marker stage
-#   5. workspace.json present at $WORKSPACE_ROOT or $PWD
-# Deliberately NOT metadata.fn_gate == "bypass": that carrier is also stamped by
-# --auto-finalization, an ordinary interactive run that merely skips the human
-# checkpoint and is exactly the run that most needs these gates.
-SCOPE_REASON=""
-fn_batch_scope() {
-  if [[ "${MILESTONE_MODE:-0}" == "1" ]]; then
-    SCOPE_REASON="milestone_mode_env"
-    return 0
-  fi
-  if [[ "${INCIDENT_MODE:-0}" == "1" ]]; then
-    SCOPE_REASON="incident_mode_env"
-    return 0
-  fi
-  if command -v jq > /dev/null 2>&1 && [[ -f "$STATE_PATH" ]]; then
-    local m
-    m=$(jq -r '.metadata.milestone // ""' "$STATE_PATH" 2> /dev/null || printf '')
-    if [[ -n "$m" && "$m" != "null" ]]; then
-      SCOPE_REASON="milestone_metadata"
-      return 0
-    fi
-    if jq -e '.stages | has("IR")' "$STATE_PATH" > /dev/null 2>&1; then
-      SCOPE_REASON="incident_pipeline"
-      return 0
-    fi
-  fi
-  if [[ -n "${WORKSPACE_ROOT:-}" && -f "${WORKSPACE_ROOT}/workspace.json" ]]; then
-    SCOPE_REASON="workspace_record"
-    return 0
-  fi
-  if [[ -f "${PWD}/workspace.json" ]]; then
-    SCOPE_REASON="workspace_record"
-    return 0
-  fi
-  return 1
-}
-
-# ---------- audit helpers ---------------------------------------------------
-# meta_json k v k v … -> compact JSON object. Values are always strings.
-# The <2-argument guard is not cosmetic: bash 3.2 (the stated floor) errors on an
-# empty array expansion under `set -u`, so the array must never reach jq empty.
-meta_json() {
-  command -v jq > /dev/null 2>&1 || {
-    printf '{}'
-    return 0
-  }
-  if [[ $# -lt 2 ]]; then
-    printf '{}'
-    return 0
-  fi
-  local args=() prog="{}" i=1
-  while [[ $# -gt 1 ]]; do
-    args+=(--arg "k$i" "$1" --arg "v$i" "$2")
-    prog="$prog + {(\$k$i): \$v$i}"
-    shift 2
-    i=$((i + 1))
-  done
-  jq -cn "${args[@]}" "$prog"
-}
-
-# One audit row per gate outcome. Mirrors the hand-built rows already in this file.
-# Never fails the caller: an audit row is evidence, not a gate.
-audit_fn() {
-  local action="$1" result="$2" meta="${3:-}" ts wid ri tid dk
-  [[ -n "$meta" ]] || meta='{}'
-  ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  wid=$(jq -r '.worktask_id // "unknown"' "$STATE_PATH" 2> /dev/null || printf 'unknown')
-  ri=$(jq -r '.run_index // 0' "$STATE_PATH" 2> /dev/null || printf '0')
-  tid=$(jq -r '.stages.FN.task_id // "FN0"' "$STATE_PATH" 2> /dev/null || printf 'FN0')
-  dk="$wid:$ri:$action"
-  mkdir -p "${CONTEXT_DIR}/logs" 2> /dev/null || true
-  if command -v jq > /dev/null 2>&1; then
-    jq -cn --arg ts "$ts" --arg a "$action" --arg s "FN0" --arg r "$result" \
-      --arg t "$tid" --arg dk "$dk" --argjson m "$meta" \
-      '{ts:$ts, actor:"project-manager", action:$a, subject:$s, result:$r, task_id:$t,
-        metadata:($m + {dedupe_key:$dk})}' >> "${CONTEXT_DIR}/logs/audit.jsonl" 2> /dev/null || true
-  fi
-  return 0
-}
+# Parity with fn_batch_scope's shared signals is pinned by fn-preflight.bats "F14"
+# and branch-lib.bats.
 
 # ---------- sanitiser bridge ------------------------------------------------
 # Reads a body on stdin, writes the sanitised body to stdout.
@@ -234,38 +184,6 @@ ve_row_result() {
   printf '%s' "$r"
 }
 
-# ---------- integration-branch resolution -----------------------------------
-# Single source of truth for "what is the integration branch", ranked:
-#   1. $FN_BASE_REF                          explicit operator/test override
-#   2. state.json .metadata.base_ref         stamped by PL0, mirrors task metadata
-#   3. state.json .git.base_branch           legacy ledger field, orchestrator seed
-#   4. workspace.json .git.base_branch       /megatask per-issue record
-#   5. git symbolic-ref refs/remotes/origin/HEAD
-#   -  unresolved                            reported, never guessed
-# There is deliberately NO hardcoded literal. A wrong guess (`main` in a `master`
-# repo) compares against a branch that does not exist, which is how the continuity
-# check silently degraded to a no-op before 3.36.2. Callers degrade non-blocking.
-resolve_base_ref() {
-  local v="${FN_BASE_REF:-}"
-  if [[ -z "$v" ]] && command -v jq > /dev/null 2>&1; then
-    v=$(jq -r '.metadata.base_ref // empty' "$STATE_PATH" 2> /dev/null || printf '')
-    if [[ -z "$v" ]]; then
-      v=$(jq -r '.git.base_branch // empty' "$STATE_PATH" 2> /dev/null || printf '')
-    fi
-    if [[ -z "$v" ]]; then
-      local ws="${WORKSPACE_ROOT:-$PWD}/workspace.json"
-      if [[ -f "$ws" ]]; then
-        v=$(jq -r '.git.base_branch // empty' "$ws" 2> /dev/null || printf '')
-      fi
-    fi
-  fi
-  if [[ -z "$v" ]]; then
-    v=$(git symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null || printf '')
-  fi
-  [[ "$v" == "null" ]] && v=""
-  printf '%s' "$v"
-}
-
 # A base ref may be stored bare (`master`) or remote-qualified (`origin/release/v2`
 # — the form workspace-modes.md documents). Map either onto something git resolves,
 # which is what lets both stored shapes work without normalising the stored value.
@@ -278,59 +196,6 @@ resolve_git_ref() {
     fi
   done
   return 1
-}
-
-# ---------- branch-name derivation ------------------------------------------
-# Conventional-commit type. The goal string on the state ledger is the real source:
-# no plan template in this repo emits the `## Goal` anchor the attachments reference
-# used to nominate. Unmatched goals fall back to `feat`.
-derive_type() {
-  local g="" t="feat"
-  if command -v jq > /dev/null 2>&1; then
-    g=$(jq -r '.facts.goal // ""' "$STATE_PATH" 2> /dev/null || printf '')
-  fi
-  g=$(printf '%s' "$g" | tr '[:upper:]' '[:lower:]')
-  case "$g" in
-    *revert*) t="revert" ;;
-    *"fix "* | *bug* | *defect* | *hotfix* | *crash*) t="fix" ;;
-    *refactor*) t="refactor" ;;
-    *perf* | *optimi*) t="perf" ;;
-    *docs* | *document*) t="docs" ;;
-    *test* | *coverage*) t="test" ;;
-    *ci\ * | *pipeline*) t="ci" ;;
-    *build* | *packaging*) t="build" ;;
-    *chore* | *bump* | *dependency*) t="chore" ;;
-    *) t="feat" ;;
-  esac
-  printf '%s' "$t"
-}
-
-# Kebab slug from the goal (fallback: worktask_id). <=48 chars, no leading/trailing '-'.
-derive_slug() {
-  local g=""
-  if command -v jq > /dev/null 2>&1; then
-    g=$(jq -r '.facts.goal // .worktask_id // ""' "$STATE_PATH" 2> /dev/null || printf '')
-  fi
-  printf '%s' "$g" |
-    tr '[:upper:]' '[:lower:]' |
-    sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-*//' -e 's/-*$//' |
-    cut -c1-48 | sed -e 's/-*$//'
-}
-
-# `<type>/<ticket>-<slug>`, or `<type>/<slug>` when no ticket resolves.
-# Returns 1 (no output) when no slug can be derived — callers treat that as a no-op.
-target_branch_name() {
-  local t n s
-  t=$(derive_type)
-  s=$(derive_slug)
-  n=$(resolve_issue)
-  if [[ -z "$n" && -n "${EXTERNAL_TICKET:-}" ]]; then n="$EXTERNAL_TICKET"; fi
-  if [[ -z "$s" ]]; then return 1; fi
-  if [[ -n "$n" ]]; then
-    printf '%s/%s-%s' "$t" "$n" "$s"
-  else
-    printf '%s/%s' "$t" "$s"
-  fi
 }
 
 # ---------- Commands ----------
@@ -458,75 +323,6 @@ cmd_validate_pr() {
   return 0
 }
 
-# Guard ladder — first hit wins, and every arm exits 0. This step is a courtesy
-# rename, never a gate: no naming problem is worth failing a finalization over.
-cmd_branch_name() {
-  local apply=1
-  [[ "${BRANCH_NAME_PRINT:-0}" == "1" ]] && apply=0
-  if fn_batch_scope; then
-    printf 'branch-name: skipped (%s)\n' "$SCOPE_REASON"
-    audit_fn branch_renamed skipped "$(meta_json reason "$SCOPE_REASON")"
-    return 0
-  fi
-  git rev-parse --git-dir > /dev/null 2>&1 || {
-    printf 'branch-name: not a git repo — skipped\n'
-    return 0
-  }
-  local cur
-  cur=$(git rev-parse --abbrev-ref HEAD 2> /dev/null || printf '')
-  if [[ -z "$cur" || "$cur" == "HEAD" ]]; then
-    printf 'branch-name: detached HEAD — skipped\n'
-    return 0
-  fi
-  # A conventional name is a deliberate name — never churn one.
-  if printf '%s' "$cur" | grep -E -q '^(feat|fix|refactor|perf|docs|chore|test|ci|build|style|revert)/[a-z0-9._-]+$'; then
-    printf 'branch-name: already conventional (%s) — no-op\n' "$cur"
-    return 0
-  fi
-  # Renaming a branch that already has an upstream orphans the remote ref.
-  if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' > /dev/null 2>&1; then
-    printf 'branch-name: upstream already tracked — no-op\n'
-    audit_fn branch_renamed noop "$(meta_json reason upstream_tracked branch "$cur")"
-    return 0
-  fi
-  local base
-  base=$(resolve_base_ref)
-  if [[ -n "$base" && "$cur" == "${base#origin/}" ]]; then
-    printf 'branch-name: on the integration branch (%s) — refusing to rename\n' "$cur"
-    audit_fn branch_renamed noop "$(meta_json reason on_integration_branch branch "$cur")"
-    return 0
-  fi
-  local target
-  EXTERNAL_TICKET=$(jq -r '.metadata.external_ticket // ""' "$STATE_PATH" 2> /dev/null || printf '')
-  target=$(target_branch_name 2> /dev/null || printf '')
-  if [[ -z "$target" ]]; then
-    printf 'branch-name: target unresolvable — no-op\n'
-    audit_fn branch_renamed noop "$(meta_json reason target_unresolvable)"
-    return 0
-  fi
-  if [[ "$cur" == "$target" ]]; then
-    printf 'branch-name: already %s — no-op\n' "$target"
-    return 0
-  fi
-  if [[ "$apply" -eq 0 ]]; then
-    printf '%s\n' "$target"
-    return 0
-  fi
-  if git show-ref --verify --quiet "refs/heads/$target"; then
-    printf 'branch-name: %s already exists — no-op\n' "$target"
-    audit_fn branch_renamed noop "$(meta_json reason target_exists target "$target")"
-    return 0
-  fi
-  if git branch -m "$target" 2> /dev/null; then
-    printf 'branch-name: %s -> %s\n' "$cur" "$target"
-    audit_fn branch_renamed ok "$(meta_json from "$cur" to "$target")"
-  else
-    printf >&2 'branch-name: rename failed (%s -> %s) — continuing\n' "$cur" "$target"
-    audit_fn branch_renamed failed "$(meta_json from "$cur" to "$target")"
-  fi
-  return 0
-}
-
 cmd_continuity() {
   local wt_head int_branch ref
   wt_head=$(git rev-parse HEAD 2> /dev/null || printf '')
@@ -580,7 +376,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h | --help) usage ;;
-    attachments | resolve-issue | validate-pr | pr-body | branch-name | continuity | all)
+    attachments | resolve-issue | validate-pr | pr-body | continuity | all)
       COMMAND="$1"
       shift
       ;;
@@ -601,7 +397,6 @@ case "$COMMAND" in
   resolve-issue) resolve_issue && printf '\n' ;;
   validate-pr) cmd_validate_pr ;;
   pr-body) cmd_pr_body ;;
-  branch-name) cmd_branch_name ;;
   continuity) cmd_continuity ;;
   all)
     cmd_attachments && cmd_pr_body && cmd_validate_pr && cmd_continuity

@@ -28,6 +28,11 @@ You are an expert product manager specializing in product strategy, user-centric
 - DO NOT let HiPPO override data and research
 - DO NOT build solutions before validating problems
 - DO NOT treat the roadmap as a fixed commitment
+- DO NOT execute tests. Authority is stage-scoped and canonical in
+  `skills/shared/testing-strategy.md § Test-Execution Authority`; build-only verification
+  (`/<plugin>:build-test --no-test`) stays permitted. Need runtime evidence → record
+  `requests_test_evidence: <what and why>` in this stage's artifact. `test_mode` governs breadth
+  only; authority is static and does not depend on any plan field.
 - DO NOT fall into analysis paralysis; set research timeboxes
 - DO NOT call `TaskUpdate(status: "in_progress")` on any task other than your own PL0. Downstream stage tasks (AR/TL/DV/DR/SR/QA/DC/RE/FN/ST) MUST be created with `status: pending` and left untouched — only the orchestrator may promote them.
 
@@ -98,7 +103,7 @@ The complexity-score → default `test_mode` table lives in `skills/estimation-m
 
 #### `always_required_tests` — explicit override
 
-Test IDs that must always run (every mode, every run). The ID grammar is per-platform and canonical in `skills/shared/test-selection-syntax.md § Platform handlers`: Apple uses `<TargetName>/<SuiteName>` (suite-terminal — per-function IDs are rejected by the runner), Android the JUnit `<package>.<ClassName>#<methodName>` form, web a file-path + test-name pattern. Platforms whose selective-test handler is still a stub auto-promote the run to `full`, so entries are recorded but not used for selection. Use sparingly for cross-cutting smoke tests not annotated with `@test-required` in source.
+Test IDs that must always run (every mode, every run). The ID grammar is per-platform and canonical in `skills/shared/test-selection-syntax.md § Platform handlers`: Apple uses `<TargetName>/<SuiteName>` (suite-terminal — per-function IDs are rejected by the runner), Android the JUnit `<package>.<ClassName>#<methodName>` form, web a file-path + test-name pattern. Platforms whose selective-test handler is still a stub auto-promote the run to module-scope at DV (never `full` — QA remains the sole full-suite authority per the Constraints pointer above), so entries are recorded but not used for DV's selection. Use sparingly for cross-cutting smoke tests not annotated with `@test-required` in source.
 
 #### `ui_visual_check` — Visual QA gate
 
@@ -241,6 +246,16 @@ Every stage writes `<basename>-N.md` where N = the `planning-N.md` index for thi
 - Define scope, priorities, and dependencies
 - **Detect the integration branch once** and stamp it (see below) — DV must never silently fork from the wrong branch
 - **Create subsequent stage tasks** based on complexity assessment (see below) — set `metadata.plan_file` on each
+
+#### Branch naming (already done by the orchestrator — do not re-run)
+
+The branch was already named once, by the **orchestrator**, at `commands/worktask.md § Step 3c` —
+before this PL0 turn began, immediately after the state.json seed and before `TaskCreate` for
+PL0 itself. PM MUST NOT invoke `branch-name.sh` at any point; the once-only rule
+(`skills/shared/git-conventions.md § Branch Naming`) means exactly one run per worktask, and
+that run already happened. PM only *reads* the result: `state.json facts.branch` carries the
+name the orchestrator stamped from the script's `branch=<name>` stdout line (`branch-name.sh`
+itself never writes state.json). Full argv/env/exit-code contract: the script's own `--help`.
 
 #### Integration-branch detection
 

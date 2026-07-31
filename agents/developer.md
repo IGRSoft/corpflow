@@ -180,11 +180,13 @@ Write one `audit.jsonl` line `action: "plugin_unavailable"` with
 
   `Executed Tests (DV)` = (`Selected Tests` ∩ test files Added/Modified/renamed-to in `git diff --diff-filter=AMR <base>...HEAD`) ∪ `metadata.always_required_tests`. Tests matched only by `@depends-on:` / covers-changed-files / module-level that this run did NOT touch stay in the `Selected Tests` artifact for QA. `<base>` = the worktask base branch. `task.metadata.base_ref` (stamped by PL0) is **authoritative** when present; only when it is absent does the session-level `worktree.baseRef` govern. Full resolution order: `handoff-protocol.md § state.json schema`. See § Worktree Mode.
 
-###### Execution per mode & auto-promotion
+###### Execution per mode
 
   DV runs ONLY `Executed Tests (DV)`; QA runs the broader Selected list. `build-only`: build only, no tests at DV. `scoped`/`full`: build + run `Executed Tests (DV)` (sanity check on what DV touched); QA runs the module/full scope.
 
-  **Auto-promotion**: Executed empty AND Selected non-empty AND `test_mode ≠ build-only` → run the smoke set, record `auto_executed: smoke_set` in `§ Decisions`. No marker handler for the platform AND `test_mode ∈ {build-only, scoped}` → auto-promote to `full`, record `auto_promoted_mode: full` (plan `test_mode` not rewritten).
+###### Auto-promotion
+
+  Executed empty AND Selected non-empty AND `test_mode ≠ build-only` → run the smoke set, record `auto_executed: smoke_set` in `§ Decisions`. No marker handler for the platform AND `test_mode ∈ {build-only, scoped}` → auto-promote to **module-scope** (never `full` — DV holds no full-suite authority, `skills/shared/testing-strategy.md § Test-Execution Authority`): run every test file in the module(s) the diff touches through the platform's positional/filter syntax (always ≥1 selection argument), record `auto_promoted_mode: module-scope` (plan `test_mode` not rewritten). If module scope cannot be computed, run the smoke set instead and record `deferred_to_qa: full_regression` — never widen further.
 
 ###### Selection syntax is per platform
 
@@ -196,7 +198,7 @@ Write one `audit.jsonl` line `action: "plugin_unavailable"` with
 
 ###### Test-run counters
 
-  **Counter**: per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape — `action: "scoped_test_run"` when it carries ≥1 test-selection flag, `action: "full_test_run"` when it carries none. `metadata: {stage: "DV", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. `build-only` invokes no tests, so it emits no row. Audit-only: a missing or unexpected counter row never blocks a stage and appears in no completion checklist.
+  **Counter**: per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape — `action: "scoped_test_run"` when it carries ≥1 test-selection flag **or a trailing positional test-target argument** (e.g. `bats tests/foo.bats`, `cargo test foo` — a bare runner name with no argument at all is `full_test_run` instead), `action: "full_test_run"` otherwise. `metadata: {stage: "DV", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. `build-only` invokes no tests, so it emits no row. Audit-only: a missing or unexpected counter row never blocks a stage and appears in no completion checklist.
 
 ##### D2 failure handling
 

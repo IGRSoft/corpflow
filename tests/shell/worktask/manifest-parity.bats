@@ -25,3 +25,10 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
   run grep -F -- "$plugin_ver" "$PLUGIN_ROOT/README.md"
   assert_success
 }
+
+@test "AC-9: test-execution-gate.sh is registered under PreToolUse and is executable on disk" {
+  [ -x "$PLUGIN_ROOT/hooks/test-execution-gate.sh" ]
+  run jq -r '.hooks.PreToolUse[].hooks[].command' "$PLUGIN_ROOT/.claude-plugin/plugin.json"
+  assert_success
+  assert_output --partial 'hooks/test-execution-gate.sh'
+}

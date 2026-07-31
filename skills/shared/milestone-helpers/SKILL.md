@@ -38,7 +38,7 @@ All subcommands accept pre-fetched JSON via `--file` so they are network-free an
 
 `implementations.md` previously stated 30 chars; `megatask/SKILL.md §Branch Naming` states 50. The dispatcher implements **50** as the single source of truth. Both files now agree.
 
-> **Constants are canonical in `megatask`.** Branch-name format (`feature/{issue#}-{slug}`), priority labels (P0–P3 + none), and the base-branch resolution chain (issue body → develop → master) are defined there. This skill applies them via `scripts/milestone-helpers.sh`; do not redefine — reference the `megatask` skill to avoid drift.
+> **Constants are canonical in `megatask`** — with one exception: the branch **type** vocabulary (the accepted `<type>` tokens) is canonical in `skills/shared/git-conventions.md § Branch Naming`; `megatask` fixes the type to `feature` and owns only the number-interpolation format (`feature/{issue#}-{slug}`) and the slug cap. Priority labels (P0–P3 + none) and the base-branch resolution chain (issue body → develop → master) stay canonical here in `megatask`. This skill applies them via `scripts/milestone-helpers.sh`; do not redefine — reference the `megatask` skill (or `git-conventions.md` for the type vocabulary) to avoid drift.
 
 ## Function Index (pseudocode spec — implemented in scripts/milestone-helpers.sh)
 

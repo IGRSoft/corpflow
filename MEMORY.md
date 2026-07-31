@@ -4,7 +4,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **3.40.0** (follow-through on 3.39.0; suite **fully green** 281/0 for the first time in the series. NEW `tests/shell/skills/cross-plugin-refs.bats` — asserts every `/<plugin>:<command>` and `Task(plugin:agent)` resolves in the sibling repo; caught two live defects nothing else could see (3.39.0 promised `/ai-engineer:build-test` which did not exist; android rename left 3 dangling Task grants). Skips when siblings absent. NEW `web-capture.sh`/`android-capture.sh` — all 3 platforms now have shipped capture scripts (Apple was the only one). Fixed the 3 long-red tests: composed-token drift in code-comment-standard, `attach-visual-evidence` missing usage + argv validated after state load, `cache-lint` test asserting on untracked live `.context/`. android-developer renamed its 4 colliding bare-name agents to `and-*` (apple-developer now the sole bare-name plugin); refs here follow. `deps --upgrade` silently ran a read-only audit in 4 plugins — now an explicit error. ai-engineer gained `build-test` + the required `workflow-integration` skill. MINOR; min CC unchanged 2.1.220.)
+- Plugin version: **3.41.1** (test-execution authority enforcement; suite **fully green** 394/0. See release-history row below for the full changelog.)
 - Claude Code min required: **2.1.220** (README.md is authoritative; nested delegation is off by default on 2.1.217–2.1.218 and the plugin's DV routing depends on it, so 2.1.219 is the functional floor — pinned to the band top per the v3.35.0 precedent)
 - Claude Code latest integrated band: **2.1.216→2.1.220**
 
@@ -36,6 +36,8 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-07-30: v3.41.1 — test-execution authority enforcement via stage-scoped policy matrix; DV auto-promotion capped at module-scope; SR/RE tool-grant narrowing (bare Bash → scoped allow-lists); new `PreToolUse` hook `hooks/test-execution-gate.sh` with fail-open guards; 27 new hook test scenarios + 6 parity tests; 8 sections restructured for size compliance. 394 bats green. ~25 files.
+- 2026-07-30: v3.41.0 — branch naming PL-stage entry point + shared library; FN `branch-name` subcommand removed entirely; vocabulary extended to `feature`/`feat` (backward compatible); rank-4 issue resolver tightened; shell-injection hardening (input gate + validation at 3 consumption hops); symlink ACE + CDPATH + audit-row-loss fixes. 340 bats green. ~20 files.
 - 2026-07-29: v3.40.0 — suite fully green (281/0); new cross-plugin-refs contract test caught 2 dangling delegations; web/android capture scripts; android `and-*` agent rename propagated; `deps --upgrade` silent-audit fixed. ~12 files.
 - 2026-07-29: v3.39.0 — platform-agnostic orchestration: 36 XcodeBuildMCP grants removed (DV/DR/QA delegate to `/<plugin>:build-test`), Apple pre-warm deleted, Swift-Testing-for-all-platforms mandate and 4-platform schema gap fixed, Python comment-density and Android UI-detection bugs fixed. ~44 files.
 - 2026-07-29: v3.38.0 — compatible dev-plugin registry + onboarding checklist; ai-engineer wired in; publish-pl-issue prefix-regex leak (5 plugins) and pm-milestone/AR/SR/QA routing gaps fixed. ~15 files.

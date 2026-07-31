@@ -247,6 +247,9 @@ Before executing any worktask stage, the orchestrator MUST validate:
 ### Validation check 9
 
 9. **Hook installation check** (first stage only): Verify `state-merge.sh` SubagentStop hook is operational. Check: (a) `.claude/hooks/state-merge.sh` exists and is executable, OR (b) the plugin's `plugin.json` registers the SubagentStop hook entry. If neither is true, emit a warning: `"⚠ state-merge.sh hook not installed — run hook-install.sh"`. Do NOT block — the orchestrator's Step 6.5 provides Layer 3 coverage. See `references/initialization-patterns.md#hook-installation`.
+### Validation check 10
+
+10. **Branch naming** (first stage only, after the state.json seed and before `TaskCreate` PL0): run `bash skills/worktask/scripts/branch-name.sh --goal "<task description>"` — the ONLY point in the pipeline a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). Every outcome exits 0 and the step self-disables under `/megatask`/`--emergency` routing; capture its final `branch=<name>` stdout line, **verify it matches `^[A-Za-z0-9._/-]+$` before stamping** (a failing value is stamped empty, not as-is), and stamp `facts.branch` on the ledger (the script itself never writes state.json — see `references/handoff-protocol.md § branch`).
 
 ### On validation failure
 
@@ -732,6 +735,53 @@ The audit row is what makes injection observable: its absence for a DV dispatch 
 was bypassed. DR surfaces that as an **advisory** finding — never a hard fail, because the row is
 produced by the orchestrator, so a stale version-keyed plugin cache serving the pre-4.8a loop
 would otherwise block a blameless DV.
+
+#### Step 4.8b
+
+```typescript
+    // 4.8b. Stage test-execution ban — mirrors 4.8a's mechanism for every stage
+    //       that is NOT {DV, QA}. Authority is canonical in
+    //       skills/shared/testing-strategy.md § Test-Execution Authority; DV/QA
+    //       are exempt here because they hold execution authority (scoped/full).
+    //       The `hooks/test-execution-gate.sh` PreToolUse hook is the mechanical
+    //       backstop (covers delegation + the orchestrator's own shell); this
+    //       banner is the F5-proven prose-at-the-dispatch-surface layer that
+    //       also *teaches* — a blocked agent sees the rule instead of retrying.
+    if (full.metadata.stage !== "DV" && full.metadata.stage !== "QA") {
+```
+
+##### Step 4.8b — ban banner
+
+```typescript
+      const ban =
+        `NO TEST EXECUTION at this stage (${full.metadata.stage}): authority is stage-scoped, ` +
+        `see \`skills/shared/testing-strategy.md § Test-Execution Authority\`. Build-only ` +
+        `verification (\`/<plugin>:build-test --no-test\`) stays permitted. Need runtime ` +
+        `evidence → record \`requests_test_evidence: <what and why>\` in this stage's artifact ` +
+        `(non-blocking) or return \`verdict: blocked\` + \`error_escalated_to: "DV"\` (blocking, ` +
+        `existing error-handling loop — no new machinery).`;
+      full.description = full.description + "\n\n" + ban;
+```
+
+##### Step 4.8b — ban audit
+
+```typescript
+      // …continued: step 4.8b body
+      appendAudit({
+        actor: "orchestrator",
+        action: "stage_test_ban_enforced",
+        subject: full.metadata.stage,
+        result: "ok",
+        metadata: { stage: full.metadata.stage }
+      });
+    }
+
+```
+
+Same observability property as 4.8a: a missing `stage_test_ban_enforced` row for a non-DV/QA
+dispatch proves the loop was bypassed. This banner covers the dispatched agent's own prose context;
+`hooks/test-execution-gate.sh` is the only layer that also covers a nested delegate's leaf `Bash`
+call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
 
 #### Step 4.9
 

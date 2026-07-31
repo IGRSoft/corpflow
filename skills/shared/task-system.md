@@ -67,7 +67,7 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 | `workspace_path` | Workspace directory (megatask mode) or worktree path |
 | `track` | Parallel track number 1–5 |
 | `isolation` | Always `"worktree"` on file-writing tasks (DV and megatask per-issue AR/DR/QA). PL0 stamps this unconditionally; developer.md § D0.0, technical-lead.md DR check, SKILL.md 4.8, and workspace-modes.md all treat it as always `"worktree"`. |
-| `worktree_branch` | Branch name in worktree (convenience field) |
+| `worktree_branch` | Branch name in worktree (convenience field). ≠ `facts.branch` (the planned host-session branch, named once at PL start) — see `skills/worktask/references/handoff-protocol.md § branch` for the disambiguation |
 
 ### Dispatch metadata (optional)
 

@@ -264,7 +264,9 @@ All rows below are documented, not wired.
 #### Handler status semantics
 
 "Documented, not wired" means the syntax above is correct and safe to write into a plan or
-report, but no igrsoft parser emits it yet — those runs auto-promote to `full`.
+report, but no igrsoft parser emits it yet — those runs auto-promote to module-scope at DV (see
+§ Auto-promotion when no handler; never `full` — `testing-strategy.md § Test-Execution
+Authority`).
 
 ### Apple identifier grammar — suite-terminal
 
@@ -297,11 +299,15 @@ igrsoft stages.
 
 ### Auto-promotion when no handler
 
-A platform whose handler is not wired (every row except Apple in § Identifier grammar by platform) with `test_mode ∈ {build-only, scoped}` triggers DV to auto-promote that run to `full` and log to `.context/logs/test-selection-warnings.md`:
+A platform whose handler is not wired (every row except Apple in § Identifier grammar by platform) with `test_mode ∈ {build-only, scoped}` triggers DV to auto-promote that run to **module-scope**
+(never `full` — DV holds no full-suite authority, `testing-strategy.md § Test-Execution
+Authority`) and log to `.context/logs/test-selection-warnings.md`:
 
-> No selective-test handler wired for platform `<platform>`. Auto-promoted to `full` for this run; selective execution will activate when a handler ships. Markers are still parsed and recorded for forward-compatibility.
+> No selective-test handler wired for platform `<platform>`. Auto-promoted to module-scope for this run (every test file in the touched module(s), via the platform's positional/filter syntax); selective execution will activate when a handler ships. Markers are still parsed and recorded for forward-compatibility.
 
-`development-N.md § Decisions` records `auto_promoted_mode: full` so QA and DR see the deviation. The plan-level `test_mode` is **not** rewritten — it's a per-run override.
+#### Recording the auto-promotion
+
+`development-N.md § Decisions` records `auto_promoted_mode: module-scope` so QA and DR see the deviation — this is a DV-artifact execution value, never a `test_mode` value. The plan-level `test_mode` is **not** rewritten — it's a per-run override. If module scope cannot be computed, DV runs the smoke set and records `deferred_to_qa: full_regression` instead.
 
 ## Reader matrix
 

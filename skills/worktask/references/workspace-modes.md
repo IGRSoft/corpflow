@@ -52,29 +52,57 @@ ticket and no type (Conductor uses `<city>-v<n>` — `amman-v1`, `perth-v2`). Su
 branch reaching `gh pr create` unchanged produces a PR whose head says nothing about
 the work.
 
+#### Host session authorization
+
 Conductor additionally injects a session rule: *"Do not rename the current branch
 unless the user explicitly tells you to do so."* **Invoking `/worktask` satisfies that
 condition.** A conventionally-named branch and a ticket-referencing PR are part of what
-the pipeline was asked to deliver, so FN's `fn-preflight.sh branch-name` step is
-authorized work rather than an unprompted change. Neither the orchestrator nor FN
-should suspend the pipeline to re-ask.
+the pipeline was asked to deliver, so the PL-stage naming step
+(`skills/worktask/scripts/branch-name.sh`, run once at the very start of planning — see
+`skills/shared/git-conventions.md § Branch Naming`) is authorized work rather than an
+unprompted change. Neither the orchestrator nor PL should suspend the pipeline to
+re-ask. This runs at PL start now, not immediately before FN's push — see
+`agents/project-manager.md § Branch naming is a PL-stage concern` for how FN reads the
+resulting name (`facts.branch`) instead of re-deriving or re-renaming it.
 
 #### Scope of the authorization
 
-It covers exactly the rename `branch-name` performs, and nothing further. It does NOT
-authorize renaming a branch the user named themselves, deleting branches, force-pushing,
-or rewriting history. Run `branch-name` **before** the push; the `all` battery runs
-post-push and deliberately excludes it.
+It covers exactly the rename `branch-name.sh` performs, and nothing further — never
+deleting branches, force-pushing, or rewriting history. **Caveat, stated plainly rather
+than promised as enforced:** the only discriminator the step has is
+`branch_is_conventional` (does the name already match `<type>/<slug>`?). A human-chosen
+name that happens not to match — e.g. `spike-oauth-poc` — is indistinguishable from a
+host-provisioned one and **will** be renamed; there is no mechanism that detects "the
+user named this deliberately" versus "the host assigned this by default". If that
+matters in your workflow, rename to a conventional form yourself before invoking
+`/worktask`, or accept the rename as part of what the pipeline does.
+
+#### Timing
+
+The rename runs at the very start of planning — before PL0 exists, and therefore before
+the plan-approval gate, the pipeline's only human checkpoint. If the operator later
+declines the plan, the branch has already been renamed and nothing renames it back
+automatically. `--auto-plan`, `--emergency`, and `/megatask` remove the approval gate
+entirely, so this rename is the only pre-approval action any of them take.
+
+#### Rollback
+
+The mutation is local, reversible, and network-free: `git branch -m <original-name>`
+restores it manually if a declined plan needs the old name back.
 
 The step's own guard ladder stays the safety boundary — every arm exits 0:
 
 | Guard | Behaviour |
 |---|---|
 | Name already conventional | no-op — a deliberate name is never churned |
-| Upstream already tracked | no-op — renaming post-push orphans the remote ref |
+| Upstream already tracked | no-op — renaming a pushed branch orphans the remote ref |
 | On the integration branch | refuses |
 | Target name already exists | no-op |
 | Detached HEAD / not a repo | skipped |
+
+Running at PL start, before any commit exists, retires the very hazard the ladder's
+upstream-tracked and pushed-branch guards exist to catch — there is no push yet to
+orphan.
 
 #### Host mapping caveat
 
@@ -82,7 +110,9 @@ Surface this once; do not act on it. The host may map the workspace to its origi
 branch name, so a rename can leave that mapping stale. If the host's mapping matters
 more than the branch name, the equivalent without a local rename is to push under the
 target name (`git push origin <current>:<target>`) — the PR gets the conventional head
-and the local branch is untouched.
+and the local branch is untouched. FN's own push already targets `facts.branch`
+regardless (`agents/project-manager.md § Final FN steps`), so this caveat only matters
+for a host that reads the *local* branch name directly.
 
 ## Task ID Namespacing
 
@@ -111,7 +141,7 @@ When the merge target is not the worktask default (e.g. shipping into `origin/re
 
 ##### Base-ref resolution order
 
-PL0 also mirrors the detected branch to `state.json .metadata.base_ref` unconditionally, because shell helpers cannot read Task-System metadata. Every reader — DV, `fn-preflight.sh continuity`, `fn-preflight.sh branch-name` — resolves through one order, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`, `state.json .git.base_branch`, `workspace.json .git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. There is no hardcoded literal at the end of that chain; an unresolved base is reported and the caller degrades non-blocking. Canonical statement: `handoff-protocol.md § metadata.base_ref`.
+PL0 also mirrors the detected branch to `state.json .metadata.base_ref` unconditionally, because shell helpers cannot read Task-System metadata. Every reader — DV, `fn-preflight.sh continuity`, `branch-name.sh` (via `branch-lib.sh resolve_base_ref`) — resolves through one order, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`, `state.json .git.base_branch`, `workspace.json .git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. There is no hardcoded literal at the end of that chain; an unresolved base is reported and the caller degrades non-blocking. Canonical statement: `handoff-protocol.md § metadata.base_ref`.
 
 ##### Background & shared-checkout rules
 
