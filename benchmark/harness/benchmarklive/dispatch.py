@@ -40,16 +40,16 @@ from . import capture, preamble
 
 # Per-stage dispatch table: stage -> (agent, model_id, effort).
 STAGE_TABLE = {
-    "PL": ("igrsoft:product-manager", "claude-opus-5", "high"),
-    "AR": ("igrsoft:software-architector", "claude-opus-5", "high"),
-    "TL": ("igrsoft:team-lead", "claude-sonnet-5", "medium"),
-    "DV": ("igrsoft:developer", "claude-opus-5", "high"),
-    "DR": ("igrsoft:technical-lead", "claude-opus-5", "high"),
-    "SR": ("igrsoft:security-reviewer", "claude-opus-5", "xhigh"),
-    "QA": ("igrsoft:qa-engineer", "claude-sonnet-5", "medium"),
-    "DC": ("igrsoft:technical-writer", "claude-haiku-4-5", "low"),
-    "FN": ("igrsoft:project-manager", "claude-sonnet-5", "medium"),
-    "ST": ("igrsoft:stakeholder", "claude-sonnet-5", "low"),
+    "PL": ("company-workflow:product-manager", "claude-opus-5", "high"),
+    "AR": ("company-workflow:software-architector", "claude-opus-5", "high"),
+    "TL": ("company-workflow:team-lead", "claude-sonnet-5", "medium"),
+    "DV": ("company-workflow:developer", "claude-opus-5", "high"),
+    "DR": ("company-workflow:technical-lead", "claude-opus-5", "high"),
+    "SR": ("company-workflow:security-reviewer", "claude-opus-5", "xhigh"),
+    "QA": ("company-workflow:qa-engineer", "claude-sonnet-5", "medium"),
+    "DC": ("company-workflow:technical-writer", "claude-haiku-4-5", "low"),
+    "FN": ("company-workflow:project-manager", "claude-sonnet-5", "medium"),
+    "ST": ("company-workflow:stakeholder", "claude-sonnet-5", "low"),
 }
 
 CAPTURE_JSON = "json"

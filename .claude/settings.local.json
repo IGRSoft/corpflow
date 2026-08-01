@@ -1,6 +1,6 @@
 {
   "enabledPlugins": {
-    "igrsoft@igrsoft": true,
+    "company-workflow@igrsoft": true,
     "apple-developer@apple-developer": true,
     "context7@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,

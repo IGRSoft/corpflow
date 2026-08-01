@@ -185,7 +185,7 @@ Add to project `settings.json`:
   "hooks": {
     "SubagentStop": [
       {
-        "matcher": "igrsoft:.*",
+        "matcher": "company-workflow:.*",
         "command": ".claude/hooks/cost-log.sh",
         "if": "$CLAUDE_TASK_METADATA_STAGE != ''"
       }
@@ -227,7 +227,7 @@ jq -cn --arg ts "$(date -u +%FT%TZ)" '{
 ```jsonc
 {
   "ts": "ISO-8601 UTC",
-  "agent_type": "e.g., igrsoft:developer",
+  "agent_type": "e.g., company-workflow:developer",
   "task_id": "Task System ID",
   "stage": "PL|AR|TL|DV|DR|SR|QA|DC|RE|FN|ST|IR|ET",
   "model": "opus|sonnet|haiku",
@@ -274,7 +274,7 @@ The handoff protocol uses an OPTIONAL `.claude/hooks/state-merge.sh` SubagentSto
   "hooks": {
     "SubagentStop": [
       {
-        "matcher": "igrsoft:.*",
+        "matcher": "company-workflow:.*",
         "command": ".claude/hooks/state-merge.sh",
         "if": "$CLAUDE_TASK_METADATA_STAGE != ''"
       }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostToolUse hook: injects the igrsoft comment-standard reminder into the
+# PostToolUse hook: injects the company-workflow comment-standard reminder into the
 # transcript the first time a source file is touched in a session, so DV
 # agents see it without re-reading a skill file every edit.
 #
@@ -26,7 +26,7 @@
 # deletes its own sentinel so repeated runs stay deterministic.
 set -eu
 
-STANDARD_TEXT='igrsoft code-comment-standard: comment the non-obvious WHY and the contract only — never the WHAT, the history, or design provenance. Budgets: function doc 1–3 lines (one is the norm, only when the name isn'"'"'t clear); var/const doc ≤1 sentence, only when needed; inline // = one short line per non-obvious literal; #Preview blocks are never commented; comment-to-code density well below 1:1 and ≤40% of a change'"'"'s added lines (enforced by dv-comment-density-gate.sh on SubagentStop). Never write: multi-paragraph /// essays, before/after or "the previous X" narration, Figma/hex provenance, caller enumeration, AC-/REQ- IDs, issue tags as provenance, prose restating the signature, QA tuning runbooks, or a justification written to answer a DR finding. Rationale — including threshold derivations and review answers — belongs in the PR / .context/development-N.md, not in source. Full standard: skill `igrsoft:code-comment-standard`.'
+STANDARD_TEXT='company-workflow code-comment-standard: comment the non-obvious WHY and the contract only — never the WHAT, the history, or design provenance. Budgets: function doc 1–3 lines (one is the norm, only when the name isn'"'"'t clear); var/const doc ≤1 sentence, only when needed; inline // = one short line per non-obvious literal; #Preview blocks are never commented; comment-to-code density well below 1:1 and ≤40% of a change'"'"'s added lines (enforced by dv-comment-density-gate.sh on SubagentStop). Never write: multi-paragraph /// essays, before/after or "the previous X" narration, Figma/hex provenance, caller enumeration, AC-/REQ- IDs, issue tags as provenance, prose restating the signature, QA tuning runbooks, or a justification written to answer a DR finding. Rationale — including threshold derivations and review answers — belongs in the PR / .context/development-N.md, not in source. Full standard: skill `company-workflow:code-comment-standard`.'
 
 SELF_TEST=0
 [ "${1:-}" = "--self-test" ] && SELF_TEST=1
@@ -80,7 +80,7 @@ run_hook() {
   _key="${_key//[^A-Za-z0-9_-]/}"
   [ -n "$_key" ] || _key="${_sid//[^A-Za-z0-9_-]/}"
   [ -n "$_key" ] || _key="nosession"
-  _sentinel="${TMPDIR:-/tmp}/igrsoft-comment-standard-${_key}"
+  _sentinel="${TMPDIR:-/tmp}/company-workflow-comment-standard-${_key}"
 
   [ -e "$_sentinel" ] && return 0
   : >"$_sentinel" || return 0
@@ -97,7 +97,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   _agent_a="agentA_selftest_$$"
   _agent_b="agentB_selftest_$$"
   _agent_c="agentC_selftest_$$"
-  trap 'rm -f "${TMPDIR:-/tmp}/igrsoft-comment-standard-${_agent_a}" "${TMPDIR:-/tmp}/igrsoft-comment-standard-${_agent_b}" "${TMPDIR:-/tmp}/igrsoft-comment-standard-${_agent_c}"' EXIT
+  trap 'rm -f "${TMPDIR:-/tmp}/company-workflow-comment-standard-${_agent_a}" "${TMPDIR:-/tmp}/company-workflow-comment-standard-${_agent_b}" "${TMPDIR:-/tmp}/company-workflow-comment-standard-${_agent_c}"' EXIT
 
   _emits_context() {
     printf '%s' "$1" | jq -e '

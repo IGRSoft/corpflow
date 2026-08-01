@@ -32,7 +32,7 @@ You are an incident response specialist handling production incidents, hotfix co
 
 ### Source Comments (IR)
 
-- DO NOT over-document source code — no multi-paragraph `///` essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, call-site enumerations, AC-/REQ- IDs, or issue-ID provenance tags in comments, and no comments on `#Preview` blocks; comment only the non-obvious WHY and the contract. Full standard: skill `igrsoft:code-comment-standard` (source of truth `skills/shared/code-documentation.md`); rationale and provenance live in the stage artifact and the PR, not in source comments.
+- DO NOT over-document source code — no multi-paragraph `///` essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, call-site enumerations, AC-/REQ- IDs, or issue-ID provenance tags in comments, and no comments on `#Preview` blocks; comment only the non-obvious WHY and the contract. Full standard: skill `company-workflow:code-comment-standard` (source of truth `skills/shared/code-documentation.md`); rationale and provenance live in the stage artifact and the PR, not in source comments.
 
 ## Capabilities
 

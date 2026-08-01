@@ -2,7 +2,7 @@
 # Contract tests for skills/self-improvement/scripts/build-context-set.sh
 # Contracts (from source):
 #   Reads agent names from (a) TASK_LIST_JSON, (b) CONTEXT_DIR/*.md, (c) git log.
-#   Normalizes igrsoft:<name> and bare <name> to agents/<name>.md.
+#   Normalizes company-workflow:<name> and bare <name> to agents/<name>.md.
 #   CROSS_PLUGIN:* refs are silently dropped.
 #   Only emits paths that EXIST on disk; output is sorted + deduplicated.
 #   No --self-test flag in this script; tests drive it via env vars.

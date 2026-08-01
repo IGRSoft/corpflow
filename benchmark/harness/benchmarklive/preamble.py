@@ -19,7 +19,7 @@ MARK_TASK = "<<<task>>>"
 
 # [1] contract-reminder — byte-identical for EVERY stage of EVERY worktask.
 CONTRACT_REMINDER = (
-    "You are a stage agent inside an igrsoft staged worktask. Binding contract:\n"
+    "You are a stage agent inside a company-workflow staged worktask. Binding contract:\n"
     "1. Read your required inputs from .context/ (paths per the task metadata).\n"
     "2. Produce your stage artifact at the required .context/ path; the first\n"
     "   block MUST be YAML frontmatter (`---` / `handoff:`) per your stage\n"

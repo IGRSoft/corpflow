@@ -293,9 +293,9 @@ The **`## Worktask Efficiency Analysis (required pass)`** runs on **every** invo
 
 ## Worktask Routing (BINDING)
 
-When this command is embedded in a `/worktask` invocation (e.g., `/worktask /cc-update X.Y.Z`), the orchestrator MUST route the implementation stage to `igrsoft:prompt-engineer`. Do NOT default to `igrsoft:developer`. Rationale: cc-update is metadata/prompt engineering, not platform code.
+When this command is embedded in a `/worktask` invocation (e.g., `/worktask /cc-update X.Y.Z`), the orchestrator MUST route the implementation stage to `company-workflow:prompt-engineer`. Do NOT default to `company-workflow:developer`. Rationale: cc-update is metadata/prompt engineering, not platform code.
 
-PL0 must set `metadata.agent: "igrsoft:prompt-engineer"` on the implementation task even when the worktask framework labels the stage slot as DV. This binding overrides the default DV → developer mapping for any worktask whose `metadata.embedded_commands` includes `cc-update`.
+PL0 must set `metadata.agent: "company-workflow:prompt-engineer"` on the implementation task even when the worktask framework labels the stage slot as DV. This binding overrides the default DV → developer mapping for any worktask whose `metadata.embedded_commands` includes `cc-update`.
 
 ## Edge Cases
 

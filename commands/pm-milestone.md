@@ -78,20 +78,20 @@ Select based on `--platform` flag and ticket content:
 | `--platform systems` | `system-developer` | system-developer |
 | `--platform backend` | `backend-developer` | backend-developer |
 | `--platform ai` | `ai-engineer` | ai-engineer |
-| `all` / omitted | `developer` | igrsoft |
+| `all` / omitted | `developer` | company-workflow |
 
 ##### Content-Based Routing — platform-neutral roles
 
 | Content | Agent | Plugin |
 |---------|-------|--------|
 | Automated batch fix | the detected platform's code-fixer | resolves per platform |
-| Documentation-only ticket | `technical-writer` | igrsoft |
-| Agent/command/skill ticket | `prompt-engineer` | igrsoft |
-| Design system / UI design | `designer` | igrsoft |
+| Documentation-only ticket | `technical-writer` | company-workflow |
+| Agent/command/skill ticket | `prompt-engineer` | company-workflow |
+| Design system / UI design | `designer` | company-workflow |
 
 Batch fix resolves through `skills/shared/compatible-plugins.md § Test generator and code
 fixer` — never unconditionally Apple. When the platform is ambiguous, assign `developer`
-(igrsoft) and let it route at runtime.
+(company-workflow) and let it route at runtime.
 
 ##### Content-Based Routing — app-platform specialization
 
@@ -123,7 +123,7 @@ The `developer` agent auto-routes to platform specialists at runtime, so it's th
 
 | Ticket Type | Agent | Plugin |
 |-------------|-------|--------|
-| Default | `qa-engineer` | igrsoft |
+| Default | `qa-engineer` | company-workflow |
 | Apple platform tests | `test-generator` | apple-developer |
 | Android tests | `test-generator` | android-developer |
 | Web tests | `fe-test-generator` | frontend-developer |
@@ -139,11 +139,11 @@ named `test-generator`, so the bare name alone is ambiguous. Always dispatch the
 
 | Ticket Type | Agent | Plugin |
 |-------------|-------|--------|
-| Default | `technical-lead` | igrsoft |
-| `--secure` or security content | `security-reviewer` | igrsoft |
-| Architecture-level changes | `software-architector` | igrsoft |
-| `--ethics-review` or high-risk | `ethics-reviewer` | igrsoft |
-| Agent/prompt changes | `prompt-engineer` | igrsoft |
+| Default | `technical-lead` | company-workflow |
+| `--secure` or security content | `security-reviewer` | company-workflow |
+| Architecture-level changes | `software-architector` | company-workflow |
+| `--ethics-review` or high-risk | `ethics-reviewer` | company-workflow |
+| Agent/prompt changes | `prompt-engineer` | company-workflow |
 
 Security auto-detection: if ticket description contains keywords like "auth", "encryption", "credentials", "token", "API key", "certificate", "permission", "keychain", auto-add `security-reviewer` as review agent even without `--secure`.
 

@@ -2,6 +2,50 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.0] - 2026-07-31
+
+The plugin was declared as `"name": "igrsoft"` while the repository had already become
+`IGRSoft/company-workflow` — the plugin id was the last artifact carrying the vendor name as its
+identity. This release renames the **plugin**, and only the plugin.
+
+The word appeared in three distinct roles, and separating them is the whole substance of the
+change. **Plugin identity** moves: every `igrsoft:<agent|skill>` invocation id, the
+`marketplace.json` plugin entry, the `plugin.json` `Stop` hook matcher, the `Task(igrsoft:…)`
+frontmatter grants, the bare-name resolution shim, and the Claude Code install cache path.
+**Vendor identity** does not move: the author block (`IGRSoft`, `support@igrsoft.com`), the
+`github.com/IGRSoft/…` URLs, the `com.igrsoft.*` bundle IDs in `/appstore-iap`, and the
+marketplace name — which stays `igrsoft`, so the cache path becomes
+`~/.claude/plugins/cache/igrsoft/company-workflow/<version>/` with only the second segment
+changed, and the install key becomes `company-workflow@igrsoft`.
+
+Most of the ~330 references were prose or ids, but four sites matched the literal string at
+runtime and would have failed silently rather than loudly:
+
+- `hooks/dv-screenshot-gate.sh` guards on exact equality (`!= "company-workflow:developer"`).
+  Left stale, the DV screenshot gate would have no-opped on every run with no error.
+- `skills/self-improvement/scripts/build-context-set.sh` maps agent refs to file paths via an
+  awk field compare (`$1 == "company-workflow"`).
+- `.claude-plugin/plugin.json`'s `Stop` matcher must track the plugin name or the PL/FN
+  approval-gate push notification stops firing.
+- `skills/worktask/scripts/publish-pl-issue.sh` carries four identical copies of the
+  plugin-prefix leak regex that strips internal agent ids out of published GitHub issues; they
+  are kept byte-for-byte in lockstep with the list in `skills/shared/compatible-plugins.md`.
+
+### Breaking
+
+- **`igrsoft:*` agent and skill ids no longer resolve.** There is no back-compat alias. The six
+  sibling plugins (`apple-developer`, `system-developer`, `android-developer`,
+  `frontend-developer`, `backend-developer`, `ai-engineer`) are updated in the same pass; merge
+  this release first, since their docs reference `company-workflow:` ids.
+- **`IGRSOFT_*` environment variables renamed to `COMPANY_WORKFLOW_*` with no fallback read** —
+  `TEST_GATE`, `AR_REF_STRICT`, `PR_BODY_STRICT`, and `COMMENT_DENSITY_{MAX,WARN,MIN_LINES}`.
+  Update shell profiles and CI jobs.
+- **Stale installs must be reinstalled.** `~/.claude/plugins/cache/` and the
+  `known_marketplaces.json` / `installed_plugins.json` indexes still key on the old plugin name
+  until then.
+- **`audit.jsonl` is not comparable across the boundary** — the `subject` field changes prefix,
+  so pre- and post-rename audit trails cannot be diffed directly.
+
 ## [3.43.0] - 2026-07-31
 
 Unattended worktasks had a third interruption the two gate-bypass flags never covered: PL0's

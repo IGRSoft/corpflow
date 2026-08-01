@@ -6,7 +6,7 @@ version: 0.3.0
 ---
 
 > **INVOCATION GATE**: If you are reading this skill because the orchestrator delegated directly
-> (e.g., a Read/Task/Grep on this file) instead of launching via `Skill({skill:"igrsoft:worktask"})`
+> (e.g., a Read/Task/Grep on this file) instead of launching via `Skill({skill:"company-workflow:worktask"})`
 > or the `/worktask` command, the BLOCKING rule in `../shared/worktask-invocation.md § BLOCKING` was
 > violated. Do NOT silently continue — surface the error to the user, then restart through the
 > canonical entry point.
@@ -411,7 +411,7 @@ function markDispatchStatus(state, taskId, status, modelResolved) {
 // classifyError — map an errored Task() return to the EXISTING retry taxonomy
 // (agent-coordination § Retry / Escalate Matrix). No new vocabulary. A rate-limit /
 // API cut-off is `transient`; other classes come from the artifact/return text.
-// errorBasename — last ":"-segment of the subagent_type (e.g. igrsoft:developer → developer).
+// errorBasename — last ":"-segment of the subagent_type (e.g. company-workflow:developer → developer).
 ```
 
 ###### Banner relocation & cache-prefix hygiene
@@ -542,7 +542,7 @@ while (tasks.some(t => t.status !== "completed")) {
 ##### Agent-type resolution
 
 ```typescript
-    // Resolve plugin: bare → "igrsoft:<name>"; 2-part "plugin:name" → as-is;
+    // Resolve plugin: bare → "company-workflow:<name>"; 2-part "plugin:name" → as-is;
     //   3-part "a:b:c" → UNSUPPORTED, throw (message below). The .context/errors/<basename>.md
     //   basename is the last `:`-segment. Applies at every nesting depth (the runtime allows
     //   3-deep sub-agent spawning by default) — depth never legitimizes a 3-part name.
@@ -552,7 +552,7 @@ while (tasks.some(t => t.status !== "completed")) {
     if (colonCount > 1) {
       throw new Error(`Invalid agent reference '${agentType}': only bare or plugin-qualified names supported.`);
     }
-    const subagentType = colonCount === 1 ? agentType : `igrsoft:${agentType}`;
+    const subagentType = colonCount === 1 ? agentType : `company-workflow:${agentType}`;
 ```
 
 #### Step 4.5
@@ -892,7 +892,7 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
 
 ```typescript
     // 5c. Platform tooling is the dev plugin's concern, not the orchestrator's.
-    //     igrsoft holds no platform build/test tool grants: DV/DR/QA delegate to
+    //     company-workflow holds no platform build/test tool grants: DV/DR/QA delegate to
     //     `/<plugin>:build-test`, and each plugin owns its own toolchain lifecycle,
     //     including MCP cold-start and any raw-CLI fallback. Nothing to warm here.
     //     Plugin resolution: skills/shared/compatible-plugins.md § Registry.
@@ -1166,7 +1166,7 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
 - NEVER skip TaskUpdate calls (both in_progress and completed)
 - NEVER execute a stage without checking blockedBy dependencies are completed
 - ALWAYS pass `model` from task metadata to the Agent tool (e.g. `model: opus` → `model: "opus"`); omitting/mismatching is a violation. Do NOT rely on frontmatter inheritance
-- `metadata.agent`: bare names → `igrsoft:<name>`, plugin-qualified (`apple-developer:ios-developer`) used as-is. Detection: presence of `:`
+- `metadata.agent`: bare names → `company-workflow:<name>`, plugin-qualified (`apple-developer:ios-developer`) used as-is. Detection: presence of `:`
 - If a stage agent fails after 3 retries, escalate per the error handling chain
 
 ##### Key rules — completion & tooling

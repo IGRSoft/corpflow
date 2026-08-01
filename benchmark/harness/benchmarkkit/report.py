@@ -369,7 +369,7 @@ def render_html(history: dict, plugin_root: Optional[str] = None) -> str:
         "<!DOCTYPE html>\n"
         '<html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        "<title>igrsoft benchmark &mdash; Tic-Tac-Toe with/without plugin</title>"
+        "<title>company-workflow benchmark &mdash; Tic-Tac-Toe with/without plugin</title>"
         f"<style>{_CSS}</style></head><body>"
         "<h1>Tic-Tac-Toe benchmark &mdash; WITH vs WITHOUT plugin</h1>"
         '<p class="sub">All metrics per retained run (latest-3 per mode). As of '

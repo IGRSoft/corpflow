@@ -76,7 +76,7 @@ fi
 
 # Normalize qualified names → file paths.
 # Rules:
-#   igrsoft:<name>              → agents/<name>.md
+#   company-workflow:<name>              → agents/<name>.md
 #   apple-developer:<name>      → (cross-plugin) — kept as raw ref; mapper drops if non-local
 #   bare <name>                 → agents/<name>.md  (back-compat shim)
 #   <name>:<sub> as command     → commands/<name>.md  (best-effort)
@@ -85,11 +85,11 @@ fi
 normalize() {
   awk -F: '
     NF == 1 {
-      # bare → igrsoft agent
+      # bare → company-workflow agent
       print "agents/" $1 ".md"
       next
     }
-    $1 == "igrsoft" && NF == 2 {
+    $1 == "company-workflow" && NF == 2 {
       print "agents/" $2 ".md"
       # also try as command
       print "commands/" $2 ".md"

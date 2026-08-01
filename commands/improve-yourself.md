@@ -2,7 +2,7 @@
 name: improve-yourself
 description: Manual entry point for the self-improvement skill. Analyzes user edits since a baseline, classifies diffs, and writes .context/learnings.md with scoped approvable proposals. Complements automatic ST-stage invocation.
 argument-hint: '[--since <ref>] [--target agents|skills|commands|all] [--dry-run] [--no-scope-filter] [--apply]'
-allowed-tools: Read, Glob, Grep, Bash, Write, Edit, Task(igrsoft:prompt-engineer), TaskCreate, TaskUpdate, TaskGet, TaskList
+allowed-tools: Read, Glob, Grep, Bash, Write, Edit, Task(company-workflow:prompt-engineer), TaskCreate, TaskUpdate, TaskGet, TaskList
 model: sonnet
 estimated-cost:
   min-tokens: 3000
@@ -44,7 +44,7 @@ Invokes `skills/self-improvement/SKILL.md`. The skill handles the heavy lifting;
 | `--target <kind>` | `agents`, `skills`, `commands`, or `all` — filters proposals to the listed target type(s). Comma-separated for multiple. | `all` |
 | `--dry-run` | Write `.context/learnings.md` but do not enter apply phase, even if user checks boxes. Useful for review only. | off |
 | `--no-scope-filter` | Skip the used-in-context filter (Step 4 of the skill). All mapped proposals are surfaced regardless of whether the target participated in any worktask. **Advanced — use with caution** (higher noise). | off |
-| `--apply` | After presenting `learnings.md`, block until the user checks boxes and explicitly approves, then delegate checked items to `igrsoft:prompt-engineer`. | off |
+| `--apply` | After presenting `learnings.md`, block until the user checks boxes and explicitly approves, then delegate checked items to `company-workflow:prompt-engineer`. | off |
 
 ## Examples
 
@@ -74,7 +74,7 @@ The skill owns the pipeline; this command wires flags around it:
 
 ### Step 5 — Apply Phase
 
-Runs only with `--apply`, never under `--dry-run`: STOP for user box-checking (`- [ ]` → `- [x]`) + explicit approval message → re-read checked items → delegate to `igrsoft:prompt-engineer` per `agents/prompt-engineer.md § Self-Improvement Patch Application` (one commit + `version:` bump per proposal) → append audit line:
+Runs only with `--apply`, never under `--dry-run`: STOP for user box-checking (`- [ ]` → `- [x]`) + explicit approval message → re-read checked items → delegate to `company-workflow:prompt-engineer` per `agents/prompt-engineer.md § Self-Improvement Patch Application` (one commit + `version:` bump per proposal) → append audit line:
 
 ```json
 {"actor": "command:/improve-yourself", "action": "self_improvement_applied", "applied_count": N, "skipped_count": M, "result": "ok"}

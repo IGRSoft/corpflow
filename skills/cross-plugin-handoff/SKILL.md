@@ -1,6 +1,6 @@
 ---
 name: cross-plugin-handoff
-description: Protocol for handoffs between igrsoft worktask and external plugins (apple-developer, system-developer, android-developer, frontend-developer, backend-developer, ai-engineer, security-scanning, etc.). Use when delegating work to external plugins.
+description: Protocol for handoffs between company-workflow worktask and external plugins (apple-developer, system-developer, android-developer, frontend-developer, backend-developer, ai-engineer, security-scanning, etc.). Use when delegating work to external plugins.
 effort: medium
 ---
 
@@ -16,7 +16,7 @@ When the orchestrator receives results from ANY external plugin command (apple-d
 
 # Cross-Plugin Handoff Protocol
 
-Defines the handoff protocol between igrsoft worktask stages and external plugin agents.
+Defines the handoff protocol between company-workflow worktask stages and external plugin agents.
 
 For plugin-specific protocol tables and error handling, see `${CLAUDE_SKILL_DIR}/references/plugin-protocols.md`
 
@@ -96,7 +96,7 @@ The protocol below is written against `apple-developer:apple-architector` as the
 ### Delegation Prompt Template
 
 ```
-Provide Swift app architecture for the igrsoft worktask AR stage:
+Provide Swift app architecture for the company-workflow worktask AR stage:
 
 ## Task
 {task_description}
@@ -194,7 +194,7 @@ External agents receiving worktree-isolated tasks should:
 ### 3. Delegation Prompt Template
 
 ```
-Implement the following for the igrsoft worktask DV stage:
+Implement the following for the company-workflow worktask DV stage:
 
 ## Task
 {task_description}
@@ -228,7 +228,7 @@ External agent should:
 
 ## Direct Orchestrator Dispatch
 
-The orchestrator loop dispatches `metadata.agent` directly. **Convention**: always emit fully-qualified `plugin:agent` form (e.g., `igrsoft:developer`, `apple-developer:ios-developer`). A back-compat shim still prepends `igrsoft:` to bare names but logs a deprecation warning. This convention enables PL0 to route stages to any plugin agent — `igrsoft:`, `apple-developer:`, or any other installed plugin — using identical syntax at every call site.
+The orchestrator loop dispatches `metadata.agent` directly. **Convention**: always emit fully-qualified `plugin:agent` form (e.g., `company-workflow:developer`, `apple-developer:ios-developer`). A back-compat shim still prepends `company-workflow:` to bare names but logs a deprecation warning. This convention enables PL0 to route stages to any plugin agent — `company-workflow:`, `apple-developer:`, or any other installed plugin — using identical syntax at every call site.
 
 ### Direct dispatch example
 
@@ -254,10 +254,10 @@ TaskCreate({
 
 Use direct dispatch when:
 - The task is entirely within one external plugin's domain (e.g., pure Swift/Apple work)
-- PL0 can determine at planning time that no igrsoft routing is needed
+- PL0 can determine at planning time that no company-workflow routing is needed
 - The external agent's handoff format (see below) is used for stage continuity
 
-Bare names like `"developer"` continue to resolve to `igrsoft:developer` — fully backward compatible.
+Bare names like `"developer"` continue to resolve to `company-workflow:developer` — fully backward compatible.
 
 ### Skill Name Resolution
 

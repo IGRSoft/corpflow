@@ -149,7 +149,7 @@ When invoked by the orchestrator after ST stage with approved proposals from `.c
    Target: <path>
    Confidence: <high|medium|low>
 
-   Agent: igrsoft:prompt-engineer
+   Agent: company-workflow:prompt-engineer
    Stage: ST-SI
    ```
    Type selection: `refactor` for wording/structure, `fix` for accuracy corrections, `feat` for completeness additions (new capability).

@@ -23,7 +23,7 @@
 #
 #   Warn-only by DEFAULT: findings print and the exit status stays 0, so this
 #   can land without breaking in-flight worktasks. --strict (or
-#   IGRSOFT_PR_BODY_STRICT=1) turns findings into exit 1. The strict path is
+#   COMPANY_WORKFLOW_PR_BODY_STRICT=1) turns findings into exit 1. The strict path is
 #   intended to become the default in a later minor, mirroring the
 #   handoff-harness.sh AR-ref rollout.
 #
@@ -38,7 +38,7 @@
 # @arg --self-test        Run the embedded fixture suite.
 # @arg -h | --help        Show this header.
 #
-# @env IGRSOFT_PR_BODY_STRICT  1 => same as --strict.
+# @env COMPANY_WORKFLOW_PR_BODY_STRICT  1 => same as --strict.
 # @env MILESTONE_MODE          1 => batch routing; the lint self-disables.
 # @env INCIDENT_MODE           1 => incident routing; same self-disable.
 #
@@ -55,7 +55,7 @@ IFS=$'\n\t'
 STATE_PATH=".context/state.json"
 CONTEXT_DIR=".context"
 BODY_FILE=""
-STRICT="${IGRSOFT_PR_BODY_STRICT:-0}"
+STRICT="${COMPANY_WORKFLOW_PR_BODY_STRICT:-0}"
 
 # See fn-preflight.sh:62-78 for why this is a readlink loop with CDPATH= and
 # `pwd -P` rather than a plain dirname.

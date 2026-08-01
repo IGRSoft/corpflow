@@ -2,7 +2,7 @@
 
 ## apple-developer Plugin
 
-| igrsoft Stage | apple-developer Agent | Handoff Data |
+| company-workflow Stage | apple-developer Agent | Handoff Data |
 |---------------|----------------------|--------------|
 | AR (Architecture) | apple-architector | planning context + system constraints |
 | DV (Development) | ios-developer, macos-developer, etc. | planning + architecture context |
@@ -16,7 +16,7 @@
 
 ### system-developer — core stage handoffs
 
-| igrsoft Stage | system-developer Agent | Handoff Data |
+| company-workflow Stage | system-developer Agent | Handoff Data |
 |---------------|------------------------|--------------|
 | AR (Architecture) | system-architector | planning context + system constraints (consultation model, like apple-architector) |
 | DV (Development) | system-developer (router), c-developer, cpp-developer, python-developer, bash-developer | planning + architecture context; `requires_screenshots: false` for CLI work (Build Evidence = terminal transcripts) |
@@ -24,7 +24,7 @@
 
 ### system-developer — review, support & incident handoffs
 
-| igrsoft Stage | system-developer Agent | Handoff Data |
+| company-workflow Stage | system-developer Agent | Handoff Data |
 |---------------|------------------------|--------------|
 | SR (Security) | sys-security-auditor | development context + systems security checklist (sanitizers, CWE Top 25, injection, hardening flags) |
 | QA (Quality) | sys-test-generator | development context + test requirements; QA gate includes ASan+UBSan clean on changed components |
@@ -36,14 +36,14 @@
 
 ### android-developer — architecture & development handoffs
 
-| igrsoft Stage | android-developer Agent | Handoff Data |
+| company-workflow Stage | android-developer Agent | Handoff Data |
 |---------------|-------------------------|--------------|
 | AR (Architecture) | kotlin-architector | planning context + Android architecture constraints (Clean Architecture, modularization, Hilt DI — consultation model, like apple-architector) |
 | DV (Development) | android-developer (router), android-phone-developer | planning + architecture context; `requires_screenshots: true` (Build Evidence = `adb exec-out screencap -p` via `android_adapter` + Gradle build/test transcripts); no Android build MCP — scoped `Bash(gradle:*\|./gradlew\|adb:*)` |
 
 ### android-developer — review, QA & dependency handoffs
 
-| igrsoft Stage | android-developer Agent | Handoff Data |
+| company-workflow Stage | android-developer Agent | Handoff Data |
 |---------------|-------------------------|--------------|
 | DR (Developer Review) | code-fixer | gate blockers (`metadata.gate_blockers[]`) + ktlint/detekt minimal-diff remediation |
 | SR (Security) | security-auditor | development context + Android security checklist (EncryptedSharedPreferences/Keystore, no-cleartext, exported-component validation, no hardcoded secrets) |
@@ -54,14 +54,14 @@
 
 ### frontend-developer — architecture & development handoffs
 
-| igrsoft Stage | frontend-developer Agent | Handoff Data |
+| company-workflow Stage | frontend-developer Agent | Handoff Data |
 |---------------|--------------------------|--------------|
 | AR (Architecture) | frontend-architector | planning context + rendering-strategy constraints (CSR/SSR/SSG/ISR, state management, design system — consultation model, like apple-architector) |
 | DV (Development) | frontend-developer (router), react-developer, vue-developer, svelte-developer, angular-developer, typescript-developer, css-developer | planning + architecture context; `requires_screenshots: true` (Build Evidence = `web_adapter` → Playwright / Chrome MCP + Lighthouse and axe reports) |
 
 ### frontend-developer — review, QA & support handoffs
 
-| igrsoft Stage | frontend-developer Agent | Handoff Data |
+| company-workflow Stage | frontend-developer Agent | Handoff Data |
 |---------------|--------------------------|--------------|
 | DR (Developer Review) | fe-code-fixer | gate blockers (`metadata.gate_blockers[]`) + ESLint/Biome minimal-diff remediation |
 | SR (Security) | fe-security-auditor | development context + web security checklist (XSS, CSP, auth-token storage, dependency supply chain) |
@@ -74,14 +74,14 @@
 
 ### backend-developer — architecture & development handoffs
 
-| igrsoft Stage | backend-developer Agent | Handoff Data |
+| company-workflow Stage | backend-developer Agent | Handoff Data |
 |---------------|-------------------------|--------------|
 | AR (Architecture) | backend-architector | planning context + service decomposition and data constraints (consultation model, like apple-architector) |
 | DV (Development) | backend-developer (router), node-developer, go-developer, jvm-backend-developer, python-backend-developer, api-designer, database-engineer | planning + architecture context; `requires_screenshots: false` (Build Evidence = API request/response transcripts, test output, k6 load reports, migration logs) |
 
 ### backend-developer — review, QA & support handoffs
 
-| igrsoft Stage | backend-developer Agent | Handoff Data |
+| company-workflow Stage | backend-developer Agent | Handoff Data |
 |---------------|-------------------------|--------------|
 | DR (Developer Review) | be-code-fixer | gate blockers (`metadata.gate_blockers[]`) + minimal-diff remediation |
 | SR (Security) | be-security-auditor | development context + OWASP API Top 10 checklist (authz boundaries, injection, secret handling, dependency CVEs) |
@@ -93,14 +93,14 @@
 
 ### ai-engineer — architecture & development handoffs
 
-| igrsoft Stage | ai-engineer Agent | Handoff Data |
+| company-workflow Stage | ai-engineer Agent | Handoff Data |
 |---------------|-------------------|--------------|
 | AR (Architecture) | ai-architector | planning context + model/pipeline constraints (consultation model, like apple-architector) |
 | DV (Development) | ai-engineer (router), llm-engineer, ml-engineer, mlops-engineer | planning + architecture context; `requires_screenshots: false` (Build Evidence = eval reports, metric tables, training transcripts under `.context/logs/`) |
 
 ### ai-engineer — review, QA & support handoffs
 
-| igrsoft Stage | ai-engineer Agent | Handoff Data |
+| company-workflow Stage | ai-engineer Agent | Handoff Data |
 |---------------|-------------------|--------------|
 | DR (Developer Review) | ai-code-fixer | gate blockers (`metadata.gate_blockers[]`) + minimal-diff remediation |
 | SR (Security) | ai-security-auditor | development context + AI security checklist (prompt injection, training/inference data leakage, model supply chain) |
@@ -111,14 +111,14 @@
 
 ## security-scanning Plugin
 
-| igrsoft Stage | security-scanning Agent | Handoff Data |
+| company-workflow Stage | security-scanning Agent | Handoff Data |
 |---------------|------------------------|--------------|
 | SR (Security) | security-auditor | code + OWASP checklist |
 | SR (Security) | threat-modeling-expert | architecture + threat analysis |
 
 ## debugging-toolkit Plugin
 
-| igrsoft Stage | debugging-toolkit Agent | Handoff Data |
+| company-workflow Stage | debugging-toolkit Agent | Handoff Data |
 |---------------|------------------------|--------------|
 | DV (Development) | debugger | error logs, stack traces |
 | DV (Development) | dx-optimizer | worktask friction points |

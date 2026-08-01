@@ -142,7 +142,7 @@ Only `apple` registers one today; `web` and `android` have no degraded adapter t
 
 #### apple, web, android adapters
 
-These three **delegate the capture to the platform's own agent**. igrsoft no longer holds direct platform tool grants (XcodeBuildMCP and friends); the platform plugin does. So this skill asks that agent to produce a file at the target path, then stats the path itself to fill the `{path, bytes, ok, error}` contract — the return shape is unchanged.
+These three **delegate the capture to the platform's own agent**. company-workflow no longer holds direct platform tool grants (XcodeBuildMCP and friends); the platform plugin does. So this skill asks that agent to produce a file at the target path, then stats the path itself to fill the `{path, bytes, ok, error}` contract — the return shape is unchanged.
 
 ##### Platform delegation table
 
@@ -156,7 +156,7 @@ Every no-file case below emits `screenshot_platform_fallback` and routes to `cli
 
 ##### Scripts are the executable procedure, not a second delegation path
 
-`web-capture.sh` and `android-capture.sh` are the executable form of the `web`/`android` rows above. They are plain CLI (`npx`, `adb`) and hold no MCP grant, so the delegated platform agent runs them exactly as a direct caller would — the delegation model is unchanged, and igrsoft still needs no platform tool grant.
+`web-capture.sh` and `android-capture.sh` are the executable form of the `web`/`android` rows above. They are plain CLI (`npx`, `adb`) and hold no MCP grant, so the delegated platform agent runs them exactly as a direct caller would — the delegation model is unchanged, and company-workflow still needs no platform tool grant.
 
 ##### Delegated-capture result handling
 

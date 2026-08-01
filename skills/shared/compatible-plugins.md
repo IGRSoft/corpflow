@@ -97,11 +97,13 @@ A wider core-parity pass is optional, not required.
 
 ## Support (non-dev) plugins
 
-`igrsoft`, `debugging-toolkit`, `security-scanning`, `skill-creator`, `conductor`, `claude-in-chrome`.
+`company-workflow`, `debugging-toolkit`, `security-scanning`, `skill-creator`, `conductor`, `claude-in-chrome`.
 
 The plugin-prefix regex in `skills/worktask/scripts/publish-pl-issue.sh` MUST equal this list
-united with the Plugin column of § Registry. Changing either without the other lets internal
-agent identifiers leak into published GitHub issues.
+united with the Plugin column of § Registry, plus the permanent legacy token `igrsoft`
+(PERMANENT-SUPERSET: it is a redaction filter, so renamed prefixes are kept forever —
+pre-4.0.0 `.context/` artifacts still carry the old ids). Changing either without the other
+lets internal agent identifiers leak into published GitHub issues.
 
 ## § Naming — plugin-unique agent prefixes
 

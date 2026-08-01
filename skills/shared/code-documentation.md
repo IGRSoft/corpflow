@@ -116,8 +116,8 @@ fetch_manifest() { curl --retry 2 -fsSL "$1"; }
 |---|---|
 | Change summary, migration scope, design provenance link | **PR description** |
 | Material/color/approach decision, rejected alternatives, DV verification evidence | **`.context/development-N.md` § Decisions** |
-| Durable architectural decision | **ADR** (`igrsoft:arch-decision`) |
-| Design source (Figma board, rgba/hex) | **design spec / `.context/designs`** (`igrsoft:design-specs`) |
+| Durable architectural decision | **ADR** (`company-workflow:arch-decision`) |
+| Design source (Figma board, rgba/hex) | **design spec / `.context/designs`** (`company-workflow:design-specs`) |
 | `AC-n` / `REQ-n` requirement traceability | **PR description / `.context/` stage artifacts** — never source comments |
 | Resolved token value | **the asset catalog** (the single source of truth) — trust the semantic token |
 | Answer to a DR/SR finding; threshold derivation; calibration data | **`.context/development-N.md`** — source keeps a one-line WHY at most |

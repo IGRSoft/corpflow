@@ -139,7 +139,7 @@ effort: low
 
 Use `model` parameter on Task() calls to override per delegation:
 ```
-Task({ subagent_type: "igrsoft:qa-engineer", model: "sonnet", prompt: "..." })
+Task({ subagent_type: "company-workflow:qa-engineer", model: "sonnet", prompt: "..." })
 ```
 
 Team agents inherit leader's model by default. Override only when complexity warrants it. Teammates spawned via tmux/pane backends inherit the leader's `--effort` too. The built-in `Explore` agent inherits the main session's model **capped at opus** instead of running on haiku — exploration fan-outs cost sonnet/opus-tier tokens; budget accordingly or pass an explicit `model` override.
