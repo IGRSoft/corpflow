@@ -348,7 +348,9 @@ sanitise_body() {
       # (Registry plugins + Support plugins) and stay identical at every
       # occurrence in this file. A missing prefix leaks the agent identifiers
       # of that plugin into the published issue.
-      if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next
+      # PERMANENT-SUPERSET: "igrsoft" is retained alongside its 4.0.0 replacement
+      # "company-workflow" — pre-rename .context/ artifacts still carry the old ids.
+      if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(company-workflow|igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next
 
       # ---- Pass 2 token-strip (with allow-list) -------------------------
       # Track fenced code block state (A1).
@@ -393,8 +395,9 @@ sanitise_body() {
         # A6: plugin-qualified identifier token (company-workflow:foo, apple-developer:bar,
         # etc.). Narrow known-prefix allow-list to avoid false positives on
         # http:, git:, file:, etc. Backtick spans already passed through above.
-        # Prefix list MUST mirror skills/shared/compatible-plugins.md and L275.
-        if (match(rest, /^(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/)) {
+        # Prefix list MUST mirror skills/shared/compatible-plugins.md and L275
+        # (plus the PERMANENT-SUPERSET legacy token "igrsoft").
+        if (match(rest, /^(company-workflow|igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/)) {
           i = i + RLENGTH
           continue
         }
@@ -1468,17 +1471,18 @@ MOCK
     # Fixture 02b: plugin-qualified identifier tokens must not appear in
     # sanitised body (Pass-2 A6 rule), outside code spans.
     local leak_in leak_out
-    leak_in=$'Breakdown using company-workflow:estimation-methodology:\n* Routed to company-workflow:developer (apple-developer:ios-developer).\nNarrative referencing company-workflow:product-manager directly.\nKeep `company-workflow:code-fixer` inside backticks intact.\n'
+    leak_in=$'Breakdown using company-workflow:estimation-methodology:\n* Routed to company-workflow:developer (apple-developer:ios-developer).\nDelegated to igrsoft:qa-engineer for regression coverage.\nNarrative referencing company-workflow:product-manager directly.\nLegacy narrative referencing igrsoft:developer inline.\nKeep `company-workflow:code-fixer` inside backticks intact.\n'
     leak_out=$(printf '%s' "$leak_in" | sanitise_body)
     local f02b_ok=1
-    # The leading-token lines (1 + 2) should be entirely dropped by L10.
+    # The leading-token lines (1 + 2 + legacy 3) should be entirely dropped by L10.
     if printf '%s' "$leak_out" | grep -qF 'Breakdown using'; then f02b_ok=0; fi
     if printf '%s' "$leak_out" | grep -qF 'Routed to'; then f02b_ok=0; fi
-    # The mid-sentence reference should have the identifier stripped by A6
-    # (narrative remains, token gone).
-    if printf '%s' "$leak_out" | grep -qE '(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]' | grep -v '`'; then
+    if printf '%s' "$leak_out" | grep -qF 'Delegated to'; then f02b_ok=0; fi
+    # The mid-sentence references (current + legacy prefix) should have the
+    # identifier stripped by A6 (narrative remains, token gone).
+    if printf '%s' "$leak_out" | grep -qE '(company-workflow|igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]' | grep -v '`'; then
       # Allow backticked occurrences only (one is intentionally kept).
-      if printf '%s' "$leak_out" | grep -vE '^[^`]*`[^`]*`[^`]*$' | grep -qE '(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]'; then
+      if printf '%s' "$leak_out" | grep -vE '^[^`]*`[^`]*`[^`]*$' | grep -qE '(company-workflow|igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]'; then
         f02b_ok=0
       fi
     fi

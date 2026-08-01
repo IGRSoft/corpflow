@@ -772,7 +772,7 @@ Claude Code ships a native `/workflows` command and Workflow tool for **dynamic 
 
 ### Composition & workflow sizing
 
-They can compose: a DV agent inside an company-workflow worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
+They can compose: a DV agent inside a company-workflow worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
 
 #### Workflow size guideline
 

@@ -237,7 +237,7 @@ to `full` (see § Auto-promotion when no handler) regardless of how well-specifi
 
 ### Identifier grammar by platform
 
-Apple's row is the only one an company-workflow parser emits today; the rest document the syntax a
+Apple's row is the only one a company-workflow parser emits today; the rest document the syntax a
 platform handler will need.
 
 #### Grammar — app platforms
