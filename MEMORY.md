@@ -4,7 +4,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.0** (plugin renamed `igrsoft` → `company-workflow`: every invocation id, the marketplace plugin entry, the `Stop` hook matcher, and the install cache path move to the new prefix; the six `IGRSOFT_*` environment variables become `COMPANY_WORKFLOW_*` with no fallback read. Vendor identity — author `IGRSoft`, `support@igrsoft.com`, the `github.com/IGRSoft` URLs, `com.igrsoft.*` bundle IDs, and the marketplace name — is deliberately unchanged. BREAKING: `igrsoft:*` ids no longer resolve and there is no back-compat alias. Previous release: gate flags became the array `--auto=[plan, decision, finalization]` with `--auto-plan`/`--auto-finalization` as deprecated aliases; new `decision_gate` carrier + Step A.4 Fable-model auto-decision pre-pass for PL0 open questions, escalation-guarded and audited, with the decisions merged into `facts.decisions[]` rather than any new plan anchor. Docs + manifest version parity only — no script or test changes. See release-history row below for the full changelog.)
+- Plugin version: **4.0.1** (two silent publication-surface fixes. Branch naming: Step 3c is now unconditional — `branch_is_conventional()` is the SOLE authority, never an eyeball judgement, with a non-blocking post-check audit row; grammar gains an optional `<ticket>-` segment budgeted inside the 48-char cap; `derive_slug` stops cutting mid-word; `derive_type` matches `fix` as a word and knows defect vocabulary. `publish-pl-issue.sh`: issue title and `## Summary` resolve through independent fallback chains instead of sharing the optional `facts.goal`, whose absence published a kebab-slug title with an empty body; the slug rank is audited, the ticket-prefix guard is case-insensitive, and the recovery search probes the legacy title. Step 3a seeds `facts.goal`. Scripts + tests + docs only — no stage, agent, or gate semantics change. Previous release: plugin renamed `igrsoft` → `company-workflow`: every invocation id, the marketplace plugin entry, the `Stop` hook matcher, and the install cache path move to the new prefix; the six `IGRSOFT_*` environment variables become `COMPANY_WORKFLOW_*` with no fallback read. Vendor identity — author `IGRSoft`, `support@igrsoft.com`, the `github.com/IGRSoft` URLs, `com.igrsoft.*` bundle IDs, and the marketplace name — is deliberately unchanged. BREAKING: `igrsoft:*` ids no longer resolve and there is no back-compat alias. See release-history row below for the full changelog.)
 - Claude Code min required: **2.1.220** (README.md is authoritative; nested delegation is off by default on 2.1.217–2.1.218 and the plugin's DV routing depends on it, so 2.1.219 is the functional floor — pinned to the band top per the v3.35.0 precedent)
 - Claude Code latest integrated band: **2.1.216→2.1.220**
 
@@ -36,6 +36,23 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-08-03: v4.0.1 — two silent publication-surface degradations. **Branch naming**:
+  `commands/worktask.md` Step 3c is now UNCONDITIONAL with a BINDING line that
+  `branch_is_conventional()` is the sole authority (an orchestrator judging "already named,
+  skip" by eye is how `fix/catalog-image-blinking` reached `facts.branch`), plus a non-blocking
+  `branch_convention_check` post-check naming actual + derived target. Grammar gains an OPTIONAL
+  ticket segment `<type>/[<ticket>-]<slug>` (`derive_ticket`, first `\b[A-Z]{2,}-\d+\b` from the
+  goal, budgeted inside the 48-char cap and stripped from the slug body); the predicate accepts
+  both shapes so no existing branch churns. `derive_slug` drops the trailing PARTIAL word instead
+  of cutting mid-word; `derive_type` matches `fix` as a WORD (the old `*"fix "*` missed "…and
+  fix.") and gained defect vocabulary (blink/flicker/glitch/broken/regression/incorrect/wrong/
+  fails/failing). **`publish-pl-issue.sh`**: title and Summary now resolve through INDEPENDENT
+  chains (title: `facts.goal` → frontmatter `title:` → first H1 → summary/problem first sentence
+  → slug; summary: `facts.goal` → `## summary` → `## problem`) — `facts.goal` is optional and
+  nothing on the PL patch path ever wrote it, so one unset field produced both a kebab-slug title
+  and an empty Summary. Slug rank is audited (`title_fallback_worktask_id`); the no-double-prefix
+  guard is now case-insensitive and `-`-aware; the recovery search probes the legacy title on a
+  miss. Step 3a now seeds `facts.goal`. +34 tests, all non-blocking contracts intact.
 - 2026-07-31: v4.0.0 — plugin renamed `igrsoft` → `company-workflow`. Every `igrsoft:<agent|skill>`
   invocation id, the `marketplace.json` plugin entry, the `plugin.json` `Stop` matcher, the
   bare-name resolution shim, and the install cache path (`cache/igrsoft/company-workflow/`, only
@@ -100,8 +117,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-07-29: v3.38.0 — compatible dev-plugin registry + onboarding checklist; ai-engineer wired in; publish-pl-issue prefix-regex leak (5 plugins) and pm-milestone/AR/SR/QA routing gaps fixed. ~15 files.
 - 2026-07-29: v3.37.2 — image hosting: tier-0 user-attachments LIVE via `drogers0/gh-image` (only tier that renders on private repos + takes binaries + commits nothing); gist tier proven unable to host any image (`gh gist create` refuses binaries) and fails fast; `manifest_unparseable` split from `no_captures`; `ASSET_GIST_PUBLIC` tri-state, auto-derived from repo visibility. Self-tests 37→38. 6 files.
 - 2026-07-28: v3.37.1 — model-name sweep: no superseded Opus/Sonnet generation named outside CHANGELOG; dated rows de-named; benchmark STAGE_TABLE repinned to Opus 5/Sonnet 5. ~14 files.
-- 2026-07-28: v3.37.0 — Claude Code 2.1.216→2.1.220: nesting depth 5→3, 20-concurrent cap, Opus 5 default, budget-halt resume branch; min CC → 2.1.220. ~23 files.
-- 2026-07-27: v3.36.2 — worktask PR-composition, issue-publish, branch-naming, base-ref fixes. `fn-preflight.sh` gains `pr-body` (sanitises the composed body in place by sourcing `publish-pl-issue.sh`'s own `sanitise_body` under `PUBLISH_LIB_ONLY=1`, fail-closed; requires a `Test plan` heading; requires the `visual_evidence_pr_emitted` audit row for the current run index, and the `## Visual evidence` section when that row says `ok`) and `branch-name` (`<type>/<ticket>-<slug>`, idempotent, never renames an upstream-tracked or integration branch, deliberately not in `all` because `all` runs post-push). Both self-disable under `/megatask` and `--emergency` via a local five-signal `fn_batch_scope` mirror that depends on nothing but jq + the filesystem. `resolve_base_ref` replaces the hardcoded `main` continuity fallback with one five-rank order (`FN_BASE_REF` → `state.metadata.base_ref` → `state.git.base_branch` → `workspace.json` → `origin/HEAD` → unresolved, no literal). `publish-pl-issue.sh` resolves a bare-basename `plan_file` against the state directory and prints a stderr diagnostic naming every candidate on the fatal path. `plan_file` path-vs-basename boundary stated at seven writer/reader sites. +26 bats cases. ~13 files.
 ## Token Baselines
 
 Authoritative per-surface baselines: `skills/cost-optimization/references/token-baselines.md`. This file no longer mirrors them.

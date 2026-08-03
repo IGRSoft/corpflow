@@ -2,6 +2,84 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.1] - 2026-08-03
+
+Two publication-surface bugs, both found the same way: a live worktask shipped output nobody
+would have written by hand — a `fix/`-prefixed branch after `fix` had been removed from the
+vocabulary, and a GitHub issue titled with a kebab slug. Neither was a failure; both paths
+degraded silently and stayed within their non-blocking contracts while doing it. Scripts,
+tests, and docs only — no stage, agent, or gate semantics change.
+
+### Fixed — worktask branch naming (four defects on one path)
+
+A live worktask shipped `fix/catalog-image-blinking` — a branch whose type prefix had been
+deliberately removed from `BRANCH_TYPES`. The root cause was not the vocabulary but the step
+that enforces it.
+
+- **Step 3c was skippable.** `commands/worktask.md` told the orchestrator to run
+  `branch-name.sh` but nothing verified that it did, so on a workspace already sitting on a
+  plausible-looking branch an orchestrator could reasonably conclude "already named, skip" and
+  stamp the pre-existing name into `facts.branch`. Step 3c is now **unconditional**, with the
+  reason stated (the "already conventional" arm is a no-op, so always running it costs one
+  process and is the only correct way to decide), a BINDING line that conventionality is
+  decided by `branch_is_conventional()` and never by eye, an explicit pre-existing-branch
+  clause, and a non-blocking post-check that emits one `branch_convention_check` warning row
+  naming both the actual and the derived target when the stamped value fails the predicate.
+- **The grammar gained an optional ticket segment** — `<type>/[<ticket>-]<slug>`. Repos using
+  this plugin already ship `bugfix/ov-156-…`, which the spec (documented as the single source
+  of truth) previously forced to drop its issue key. The new `derive_ticket` reads the first
+  `\b[A-Z]{2,}-\d+\b` token from the goal text only, lowercased; no key found means unchanged
+  behaviour. `branch_is_conventional` accepts both shapes, so no existing branch becomes
+  non-conventional and gets churned. Branch ticket and PR closing keyword are complementary,
+  not alternatives.
+- **`derive_slug` no longer truncates mid-word.** `cut -c1-48` produced
+  `…-blinking-before-r`; truncation now drops the trailing partial segment and always keeps at
+  least one whole word. The ticket prefix is budgeted inside the 48-char cap, so a long issue
+  key cannot starve the slug, and the key is stripped from the slug body so it appears once.
+- **`derive_type` no longer misclassifies bug reports as features.** The `*"fix "*` arm
+  required a trailing space, so "…investigate and fix" and "…and fix." fell through to
+  `feature`. `fix` is now matched as a word (without swallowing `prefix`/`fixture`), and the
+  bugfix arm gained the defect vocabulary `blink`, `flicker`, `glitch`, `broken`, `regression`,
+  `incorrect`, `wrong`, `fails`, `failing`. The hotfix-before-bugfix ordering is unchanged.
+
+Guard ladder unchanged — every arm is still a no-op or a refusal, never a failure. Commit-type
+table untouched: `feature` stays branch-only. +26 bats cases across `branch-lib.bats` and
+`branch-name.sh.bats`.
+
+### Fixed — `publish-pl-issue.sh` published a garbage title and an empty Summary
+
+Issue #375 was published as `OV-164 ov-164-catalog-image-blinking` with an empty `## Summary`.
+`facts.goal` was the ONLY source for both, and it is OPTIONAL in the handoff protocol — written
+only when the PM agent patches state.json, so orchestrator-inline seeding, a hand-authored
+`.context/`, or a regenerated state left it unset and degraded both outputs at once, silently.
+
+- **Title and Summary now resolve through independent chains**, first non-empty wins. Title:
+  `facts.goal` → plan frontmatter `title:` → plan first H1 → first sentence of
+  `## summary`/`## problem` → `worktask_id`. Summary: `facts.goal` → `## summary` →
+  `## problem`. The worktask slug is deliberately not a Summary rank — an empty section is
+  honest, a slug posing as prose is not.
+- **New readers**, POSIX sh + awk in house style: `extract_frontmatter_field` (leading `---`
+  fence only, so a thematic break mid-body is never mistaken for frontmatter),
+  `extract_first_h1`, `first_sentence` (skips bullets; a terminator must be followed by
+  whitespace, so `3.5s` is not a sentence end). The `head -1 | cut -c1-100 | sanitise_body`
+  pipeline still applies to every rank.
+- **Reaching the `worktask_id` rank is audited**, not silent: one advisory row with
+  `reason: "title_fallback_worktask_id"` and `metadata.title_source`, on the
+  `<dedupe_key>:title_source` suffix so it never masks the canonical outcome. Still non-blocking.
+- **External-ticket extraction gained ranks** (winning title source, then plan frontmatter
+  `issue:`) and its no-double-prefix guard is now case-insensitive and accepts `-` as a
+  separator — the exact-case check is why `ov-164-…` was treated as unprefixed and doubled.
+- **Recovery-search compatibility**: changing title generation orphans issues published under
+  the old title, so `resolve_context_issue_search()` probes the current title first and the
+  legacy one only on a miss. Documented as removable once that corpus is closed.
+
+Secondary (separate commit): `commands/worktask.md` Step 3a now seeds `facts.goal` from the
+task description, `skills/worktask/references/initialization-patterns.md` carries it in the
+seed snippet, and `agents/product-manager.md` states that a non-empty `facts.goal` is part of
+the PL state-patch contract. Nothing on the patch path actually wrote the field before. The
+script fix stands on its own regardless — a missing optional field is not a reason to publish
+a broken title. +5 `--self-test` blocks (13a–13e) with three new plan fixtures.
+
 ## [4.0.0] - 2026-07-31
 
 The plugin was declared as `"name": "igrsoft"` while the repository had already become
