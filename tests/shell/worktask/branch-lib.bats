@@ -39,13 +39,13 @@ mk_no_jq_path() {
 # ---------------------------------------------------------------------------
 # T2 — symbol inventory: all 10 required functions defined after one source.
 # ---------------------------------------------------------------------------
-@test "T2: all 10 required symbols are defined after sourcing" {
+@test "T2: all 11 required symbols are defined after sourcing" {
   cd "$WD"
   run bash -c "
     . '$PLUGIN_ROOT/$LIB'
     for f in branch_type_regex branch_is_conventional resolve_goal derive_type \
-             derive_slug target_branch_name meta_json audit_fn fn_batch_scope \
-             resolve_base_ref; do
+             derive_ticket derive_slug target_branch_name meta_json audit_fn \
+             fn_batch_scope resolve_base_ref; do
       type -t \"\$f\" > /dev/null 2>&1 || { printf 'MISSING: %s\n' \"\$f\"; exit 1; }
     done
     exit 0
@@ -139,6 +139,85 @@ mk_no_jq_path() {
   assert_success
 }
 
+# D4 — `fix` matched as a word, plus the defect vocabulary. Every string in the
+# "verified today" column of the defect report is pinned here.
+@test "derive_type: table-driven goal -> type mapping (D4)" {
+  run bash -c "
+    . '$PLUGIN_ROOT/$LIB'
+    rc=0
+    while IFS='|' read -r goal want; do
+      [ -n \"\$goal\" ] || continue
+      got=\$(derive_type \"\$goal\")
+      if [ \"\$got\" != \"\$want\" ]; then
+        printf 'MISMATCH: %s -> %s (want %s)\n' \"\$goal\" \"\$got\" \"\$want\"
+        rc=1
+      fi
+    done <<'TABLE'
+Images blink on catalog open, investigate and fix|bugfix
+Catalog images blink before rendering|bugfix
+Product images flicker on open|bugfix
+Investigate and fix|bugfix
+Something is off, please fix.|bugfix
+fix|bugfix
+Fix crash on startup|bugfix
+Rendering glitch in the grid|bugfix
+Thumbnail cache is broken|bugfix
+Scroll regression after the 2.1 release|bugfix
+Totals are incorrect on export|bugfix
+Wrong locale on first launch|bugfix
+Upload fails on retry|bugfix
+Sync failing intermittently|bugfix
+Prefix handling in the fixture parser|feature
+Add suffix support to filenames|feature
+Ship a hotfix for prod|hotfix
+hotfix for a bug causing a crash|hotfix
+Revert the last release|revert
+Add dark mode support|feature
+Refactor the module boundaries|refactor
+Optimise startup perf|perf
+Document the public API|docs
+Improve test coverage|test
+Bump the dependency|chore
+TABLE
+    exit \$rc
+  "
+  assert_success
+}
+
+# ---------------------------------------------------------------------------
+# derive_ticket — D2.
+# ---------------------------------------------------------------------------
+@test "derive_ticket: extracts the first issue key, lowercased" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; derive_ticket 'OV-164 Product images blink'"
+  assert_success
+  assert_output "ov-164"
+}
+
+@test "derive_ticket: first key wins when the goal names several" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; derive_ticket 'OV-161 blocks ABC-9 somehow'"
+  assert_success
+  assert_output "ov-161"
+}
+
+@test "derive_ticket: no key in the goal yields empty (ticket-less shape unchanged)" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; derive_ticket 'Add dark mode support'"
+  assert_success
+  assert_output ""
+}
+
+@test "derive_ticket: an already-lowercased token is not a key" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; derive_ticket 'work on ov-164 today'"
+  assert_success
+  assert_output ""
+}
+
+@test "derive_ticket: a no-match run does not kill a set -euo pipefail caller" {
+  run bash -c "set -euo pipefail; IFS=\$'\n\t'; . '$PLUGIN_ROOT/$LIB'
+    t=\$(derive_ticket 'no key at all'); printf 'survived=%s' \"\$t\""
+  assert_success
+  assert_output "survived="
+}
+
 @test "derive_slug: kebab-cases, trims, and caps at 48 chars" {
   run bash -c ". '$PLUGIN_ROOT/$LIB'; derive_slug 'Fix: crash on startup!!!'"
   assert_success
@@ -152,8 +231,99 @@ mk_no_jq_path() {
   assert_output "fix-pr-composition-and-branch-naming"
 }
 
+# D3 — the exact goal that produced `…-blinking-before-r` before the fix.
+@test "derive_slug: truncation drops the trailing partial word, never cuts mid-word" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'
+    derive_slug 'Product list images are blinking before rendering on the catalog screen'"
+  assert_success
+  assert_output "product-list-images-are-blinking-before"
+  refute_output --partial "-renderin"
+}
+
+@test "derive_slug: output is always a whole-word prefix of the untruncated kebab (D3)" {
+  run bash -c "
+    . '$PLUGIN_ROOT/$LIB'
+    rc=0
+    while IFS= read -r goal; do
+      [ -n \"\$goal\" ] || continue
+      full=\$(printf '%s' \"\$goal\" | tr '[:upper:]' '[:lower:]' \
+        | sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-*//' -e 's/-*\$//')
+      got=\$(derive_slug \"\$goal\")
+      case \"\$full\" in
+        \"\$got\") ;;
+        \"\$got\"-*) ;;
+        *) printf 'NOT A WHOLE-WORD PREFIX: %s -> %s\n' \"\$goal\" \"\$got\"; rc=1 ;;
+      esac
+      case \"\$got\" in
+        *-) printf 'TRAILING SEPARATOR: %s\n' \"\$got\"; rc=1 ;;
+      esac
+    done <<'TABLE'
+Product list images are blinking before rendering on the catalog screen
+aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll mmm nnn ooo
+aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk
+Fix the reconstruction scan flow so it stops dropping frames midway
+short goal
+TABLE
+    exit \$rc
+  "
+  assert_success
+}
+
+@test "derive_slug: a single word longer than the budget survives whole (never empty)" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'
+    derive_slug 'supercalifragilisticexpialidociousnessfactorial tail'"
+  assert_success
+  assert_output "supercalifragilisticexpialidociousnessfactorial"
+}
+
+@test "derive_slug: ticket prefix is budgeted inside the 48-char cap" {
+  run bash -c "
+    . '$PLUGIN_ROOT/$LIB'
+    k=ov-164
+    s=\$(derive_slug 'OV-164 Product list images are blinking before rendering on catalog' \"\$k\")
+    printf '%s-%s|%s' \"\$k\" \"\$s\" \"\${#k}\"
+    c=\"\$k-\$s\"
+    [ \"\${#c}\" -le 48 ] || { printf ' OVER-BUDGET(%s)' \"\${#c}\"; exit 1; }
+  "
+  assert_success
+  assert_output --partial "ov-164-product-list-images-are-blinking-before|"
+}
+
+@test "derive_slug: a long issue key cannot starve the slug to nothing" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'
+    derive_slug 'VERYLONGPROJECTKEY-123456789 reconstruction scan flow drops frames' \
+      'verylongprojectkey-123456789'"
+  assert_success
+  refute_output ""
+  refute_output --regexp -- '-$'
+}
+
+@test "derive_slug: the ticket is stripped from the slug body — no duplicate key" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; derive_slug 'OV-156 reconstruction scan flow' 'ov-156'"
+  assert_success
+  assert_output "reconstruction-scan-flow"
+}
+
+@test "derive_slug: adjacent repeats of the key are all stripped" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; derive_slug 'OV-1 OV-1 scan flow OV-1' 'ov-1'"
+  assert_success
+  assert_output "scan-flow"
+}
+
 @test "target_branch_name: composes <type>/<slug>" {
   run bash -c ". '$PLUGIN_ROOT/$LIB'; target_branch_name feature add-login-flow"
+  assert_success
+  assert_output "feature/add-login-flow"
+}
+
+@test "target_branch_name: composes <type>/<ticket>-<slug> when a ticket is supplied" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; target_branch_name bugfix reconstruction-scan-flow ov-156"
+  assert_success
+  assert_output "bugfix/ov-156-reconstruction-scan-flow"
+}
+
+@test "target_branch_name: an empty ticket argument yields the ticket-less shape" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; target_branch_name feature add-login-flow ''"
   assert_success
   assert_output "feature/add-login-flow"
 }
@@ -191,6 +361,27 @@ mk_no_jq_path() {
 
 @test "branch_is_conventional: fix/ is removed cleanly — a fix/ branch is rejected" {
   run bash -c ". '$PLUGIN_ROOT/$LIB'; branch_is_conventional 'fix/legacy-crash-on-startup'"
+  assert_failure 1
+}
+
+# D2 — both grammar shapes are conventional. An existing ticketed branch must never
+# become non-conventional and get churned.
+@test "branch_is_conventional: the ticketed shape is accepted" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; branch_is_conventional 'bugfix/ov-156-reconstruction-scan-flow'"
+  assert_success
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; branch_is_conventional 'feature/ov-161-add-dark-mode'"
+  assert_success
+}
+
+@test "branch_is_conventional: the ticket-less shape is still accepted" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; branch_is_conventional 'feature/add-dark-mode'"
+  assert_success
+}
+
+@test "branch_is_conventional: rejects fix/x and a bare no-type-prefix name" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; branch_is_conventional 'fix/x'"
+  assert_failure 1
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; branch_is_conventional 'no-type-prefix'"
   assert_failure 1
 }
 

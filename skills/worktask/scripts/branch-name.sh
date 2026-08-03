@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # @description branch-name.sh — the PL-stage branch-naming entry point. Renames the
-#   current branch onto `<type>/<slug>` (no ticket — see git-conventions.md § Branch
+#   current branch onto `<type>/[<ticket>-]<slug>` (see git-conventions.md § Branch
 #   Naming), once, at the very start of the planning stage, before any commit exists.
 #
 #   Sources branch-lib.sh from its own directory for the guard ladder, the type
-#   vocabulary, goal resolution, and the audit/scope helpers. This script never
-#   resolves an issue number and never writes state.json — it prints `branch=<name>`
-#   and the orchestrator stamps `facts.branch` through the normal state-patch path.
+#   vocabulary, goal resolution, and the audit/scope helpers. The ticket segment is
+#   derived from the goal text only — no issue lookup — and this script never writes
+#   state.json: it prints `branch=<name>` and the orchestrator stamps `facts.branch`
+#   through the normal state-patch path.
 #
 #   Every rename-mode outcome exits 0, including an unreachable library: a naming
 #   problem must never stop a worktask from planning. `--check`/`--print-types` are
@@ -273,11 +274,19 @@ cmd_rename() {
     return 0
   fi
 
-  local goal type slug target
+  local goal type ticket slug target
   goal=$(resolve_goal "$GOAL_ARG")
   type=$(derive_type "$goal")
-  slug=$(derive_slug "$goal")
-  target=$(target_branch_name "$type" "$slug" 2> /dev/null || printf '')
+  ticket=$(derive_ticket "$goal")
+  slug=$(derive_slug "$goal" "$ticket")
+  # A goal that is nothing but its issue key leaves no slug body. The key is then the
+  # only name available, so it becomes the slug — not a ticket segment with nothing
+  # after it, and not the target_unresolvable no-op.
+  if [ -z "$slug" ] && [ -n "$ticket" ]; then
+    slug="$ticket"
+    ticket=""
+  fi
+  target=$(target_branch_name "$type" "$slug" "$ticket" 2> /dev/null || printf '')
 
   if [ -z "$target" ]; then
     printf 'branch-name: target unresolvable — no-op\n'

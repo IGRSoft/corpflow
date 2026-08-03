@@ -144,12 +144,38 @@ references this section instead of restating the rules.
 ### Grammar
 
 ```
-<type>/<slug>
+<type>/[<ticket>-]<slug>
 ```
 
-No ticket number: the branch carries no issue reference (a worktask branch is named
-before any issue-linked commit exists, and the pull request body carries the closing
-keyword instead — see `skills/worktask/references/handoff-protocol.md § branch`).
+The ticket segment is **optional**, and both shapes are equally conventional —
+`bugfix/ov-156-reconstruction-scan-flow` and `feature/add-dark-mode` alike.
+`branch_is_conventional` accepts both, so adopting the ticket segment never turns an
+existing branch non-conventional and never churns it.
+
+#### Ticket derivation
+
+The ticket is read from the **goal text only** — the first `\b[A-Z]{2,}-\d+\b` token,
+lowercased (`derive_ticket` in `skills/worktask/scripts/branch-lib.sh`). No issue lookup
+happens: the branch is named before any issue-linked commit exists. A goal carrying no
+such key produces the ticket-less shape, which is the unchanged prior behaviour. The key
+is stripped from the slug body so it appears exactly once in the branch name, and its
+length is budgeted **inside** the 48-character cap (see § Slug budget).
+
+#### Ticket vs. the PR closing keyword — complementary, not alternatives
+
+A ticket in the branch name does **not** replace the closing keyword in the pull-request
+body, and the closing keyword does not make the ticket segment redundant. The branch
+segment is a human-readable locator carried by every ref, log line, and PR URL; the
+closing keyword is the machine-actionable link that actually closes the issue on merge
+(see `skills/worktask/references/handoff-protocol.md § branch`). Emit both when the goal
+supplies a key.
+
+#### Slug budget
+
+`<ticket>-<slug>` fits within 48 characters. Truncation drops the trailing **partial**
+segment rather than cutting mid-word — `bugfix/ov-164-…-blinking-before`, never
+`…-blinking-before-r`. At least one whole word always survives, even a word longer than
+the remaining budget, so a long issue key can never starve the slug to nothing.
 
 ### Type vocabulary (13 tokens, accepted by the already-conventional check)
 
@@ -165,6 +191,24 @@ the generator (`derive_type`) and the already-conventional predicate
 
 This list is branch-only. Do **not** add `feature` to the commit-type table above —
 that would legitimize `feature:` commits, which is out of scope here.
+
+#### Type derivation
+
+`derive_type` matches `fix` as a **word** (start, end, or surrounded by punctuation) —
+"…investigate and fix" and "…and fix." are bug reports, while `prefix`/`fixture` are not
+— and additionally recognises the defect vocabulary `blink`, `flicker`, `glitch`,
+`broken`, `regression`, `incorrect`, `wrong`, `fails`, `failing` for reports that never
+use the word "fix" at all. `hotfix` is tested before all of them, since it contains
+`fix` itself.
+
+### Conventionality is a predicate, never a judgement (BINDING)
+
+The **sole** authority on whether a branch name is conventional is
+`branch_is_conventional()` in `skills/worktask/scripts/branch-lib.sh` (queryable as
+`branch-name.sh --check <name>`). No agent, orchestrator, or reviewer may decide by eye
+that a name "looks conventional" and skip the naming step on that basis — that judgement
+is exactly how a `fix/<slug>` branch survived after `fix` was removed from the
+vocabulary. A plausible-looking name is not a checked name.
 
 ### Guard ladder (every arm is a no-op or a refusal, never a failure)
 

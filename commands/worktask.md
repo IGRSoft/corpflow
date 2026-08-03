@@ -154,12 +154,34 @@ invocations and documentation MUST use the array form.
    **Regression guard**: If neither the plugin-registered hook NOR the project-local copy exist, emit a warning: `"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge (Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."` Do NOT block the worktask.
 ### Step 3c — Name the branch once (PL start)
 
-3c. **Name the branch**: after the state.json seed and before `TaskCreate` for PL0, run
-   `bash skills/worktask/scripts/branch-name.sh --goal "<task description>"`. This is the ONLY
-   place a worktask branch is ever renamed — the once-only rule per
+3c. **Name the branch — UNCONDITIONAL**: after the state.json seed and before `TaskCreate`
+   for PL0, run `bash skills/worktask/scripts/branch-name.sh --goal "<task description>"`.
+   This is the ONLY place a worktask branch is ever renamed — the once-only rule per
    `skills/shared/git-conventions.md § Branch Naming`. Every outcome exits 0 (a naming problem
-   must never stop planning) and the step self-disables under `/megatask` or `--emergency`
-   routing.
+   must never stop planning) and the step self-disables **inside the script** under `/megatask`
+   or `--emergency` routing.
+
+#### Step 3c — why it always runs
+
+   **Run it on every worktask, with no precondition of any kind.** The script's own guard
+   ladder already contains an "already conventional" arm that is a pure no-op — it prints
+   `no-op`, writes one audit row, and changes nothing — so running it on an
+   already-named branch costs one process and is the *only* correct way to establish that
+   the name is in fact conventional. Skipping the step because the current branch looks
+   fine is not an optimisation; it is the check being replaced by a guess.
+
+#### Step 3c — pre-existing branches are covered
+
+   A Conductor workspace, a manual `git checkout -b`, or any branch created outside this
+   pipeline still has to pass the predicate. Being already on a branch is not evidence
+   that the branch is conventional.
+
+   > **BINDING** — never judge conventionality by eye. The sole authority is
+   > `branch_is_conventional()` from `skills/worktask/scripts/branch-lib.sh`, reachable as
+   > `bash skills/worktask/scripts/branch-name.sh --check "<name>"` (exit 0 = conventional,
+   > 1 = not, 2 = internal fault). An orchestrator that reasons "this branch already looks
+   > like a real branch name, skip" is how `fix/catalog-image-blinking` reached `facts.branch`
+   > after `fix` had been removed from `BRANCH_TYPES`.
 
 #### Step 3c — validate before stamping
 
@@ -169,6 +191,34 @@ invocations and documentation MUST use the array form.
    steps`) — a value that fails this check MUST be stamped as empty, never as-is. Stamp the
    result into `state.json facts.branch` (the script itself never writes state.json — see
    `skills/worktask/references/handoff-protocol.md § branch`).
+
+#### Step 3c — post-check (non-blocking)
+
+   After stamping, assert the stamped value against the predicate — not by eye:
+
+   ```bash
+   stamped=$(jq -r '.facts.branch // ""' .context/state.json)
+   if [ -n "$stamped" ] && ! bash skills/worktask/scripts/branch-name.sh --check "$stamped"; then
+     derived=$(BRANCH_NAME_PRINT=1 bash skills/worktask/scripts/branch-name.sh \
+       --goal "<task description>" 2>/dev/null | tail -n 1)
+     jq -cn --arg ts "$(date -u +%FT%TZ)" --arg a "$stamped" --arg d "$derived" \
+       '{ts:$ts, actor:"orchestrator", action:"branch_convention_check", subject:"PL0",
+         result:"warn", metadata:{actual:$a, derived_target:$d}}' \
+       >> .context/logs/audit.jsonl
+   fi
+   ```
+
+#### Step 3c — post-check invariants
+
+   The row MUST name **both** the actual stamped branch and the derived target, so the
+   divergence is legible without re-deriving it later. An empty `facts.branch` is a
+   documented outcome (detached HEAD, not a git repo) and is not a warning; an empty
+   `derived_target` means a guard arm short-circuited before derivation, and `actual` is
+   then the load-bearing half of the row.
+
+   **This post-check MUST NOT block planning.** It emits a warning row and nothing else —
+   no STOP, no retry, no rename. A rename at this point would violate the once-only rule,
+   and a naming problem is never worth failing a worktask over.
 
 ### Step 4 — TaskCreate PL0
 

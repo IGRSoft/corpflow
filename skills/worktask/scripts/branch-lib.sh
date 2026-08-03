@@ -8,8 +8,8 @@
 #   loudly — see each caller's own guard.
 #
 #   Symbols: BRANCH_TYPES, branch_type_regex, branch_is_conventional, resolve_goal,
-#   derive_type, derive_slug, target_branch_name, meta_json, audit_fn, fn_batch_scope,
-#   resolve_base_ref.
+#   derive_type, derive_ticket, derive_slug, target_branch_name, meta_json, audit_fn,
+#   fn_batch_scope, resolve_base_ref.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -66,9 +66,13 @@ branch_type_regex() {
   printf '%s' "$regex"
 }
 
-# Predicate: is <name> a conventional `<type>/<slug>` branch? The sole matching site
-# — nobody else greps this pattern. 0 = yes, 1 = no (documented exemption: a predicate
-# that cannot say "no" is useless), 2 = internal regex fault (empty vocabulary).
+# Predicate: is <name> a conventional `<type>/[<ticket>-]<slug>` branch? The sole
+# matching site — nobody else greps this pattern, and no caller may judge
+# conventionality by eye. The tail is charset-only on purpose: it accepts the
+# ticketed and ticket-less shapes with one pattern, so adding the optional ticket
+# segment cannot retroactively make an existing branch non-conventional and churn it.
+# 0 = yes, 1 = no (documented exemption: a predicate that cannot say "no" is
+# useless), 2 = internal regex fault (empty vocabulary).
 branch_is_conventional() {
   local name="${1:-}" regex rc=0
   regex=$(branch_type_regex)
@@ -112,9 +116,16 @@ derive_type() {
   case "$g" in
     *revert*) t="revert" ;;
     # hotfix MUST be checked before the general bugfix arm: "hotfix" itself
-    # contains "fix" and would otherwise be swallowed by *"fix "*/*bug*/*crash*.
+    # contains "fix" and would otherwise be swallowed by the fix-word arm.
     *hotfix*) t="hotfix" ;;
-    *"fix "* | *bug* | *defect* | *crash*) t="bugfix" ;;
+    # `fix` is matched as a WORD across its four positions (whole string, leading,
+    # trailing, interior). The old `*"fix "*` required a trailing space, so a goal
+    # ending "…and fix" or "…and fix." fell through to `feature`; a bare `*fix*`
+    # would instead swallow prefix/suffix/fixture. The defect vocabulary that
+    # follows catches bug reports whose text never contains "fix" at all.
+    fix | fix[!a-z]* | *[!a-z]fix | *[!a-z]fix[!a-z]* | \
+      *bug* | *defect* | *crash* | *blink* | *flicker* | *glitch* | *broken* | \
+      *regression* | *incorrect* | *wrong* | *fails* | *failing*) t="bugfix" ;;
     *refactor*) t="refactor" ;;
     *perf* | *optimi*) t="perf" ;;
     *docs* | *document*) t="docs" ;;
@@ -127,25 +138,82 @@ derive_type() {
   printf '%s' "$t"
 }
 
-# Kebab slug from a free-text goal, <=48 chars, no leading/trailing '-'. `tr '\n' ' '`
-# runs before the collapse: a multi-line task description (this function's caller may
-# now pass one, unlike the old goal-only source) would otherwise survive as embedded
-# newlines through `sed`/`cut`'s line-oriented view and yield a two-line slug, which
-# then fails `git branch -m` outright.
-derive_slug() {
-  printf '%s' "${1:-}" |
-    tr '\n' ' ' |
-    tr '[:upper:]' '[:lower:]' |
-    sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-*//' -e 's/-*$//' |
-    cut -c1-48 | sed -e 's/-*$//'
+# Issue key from a free-text goal — the first `\b[A-Z]{2,}-\d+\b` token, lowercased;
+# empty when the goal carries none, which leaves the ticket-less shape unchanged.
+# The all-caps match is what keeps it from firing on an already-kebabbed word pair.
+# `head -n1` is deliberately avoided: it would SIGPIPE grep, and under the caller's
+# `pipefail` that rc would discard a match this function had already found.
+derive_ticket() {
+  local k
+  k=$(printf '%s' "${1:-}" | tr '\n' ' ' | grep -Eo '\b[A-Z]{2,}-[0-9]+\b') || k=""
+  k=${k%%$'\n'*}
+  printf '%s' "$k" | tr '[:upper:]' '[:lower:]'
 }
 
-# `<type>/<slug>`. No ticket: the naming path never resolves an issue (R6). Returns 1
-# (no output) when the slug is empty — callers treat that as a no-op.
+# Kebab slug from a free-text goal, no leading/trailing '-'. `tr '\n' ' '` runs before
+# the collapse: a multi-line task description (this function's caller may now pass one,
+# unlike the old goal-only source) would otherwise survive as embedded newlines through
+# `sed`/`cut`'s line-oriented view and yield a two-line slug, which then fails
+# `git branch -m` outright.
+#
+# $2 is the optional ticket, which is budgeted INSIDE the 48-char cap (and stripped from
+# the slug body, or the key would appear twice in one branch name). Truncation drops the
+# trailing PARTIAL segment rather than cutting mid-word — `cut -c1-48` alone produced
+# `…-blinking-before-r`. One whole word always survives, even one longer than the budget:
+# an empty slug makes target_branch_name refuse, which is worse than a long name.
+derive_slug() {
+  local ticket="${2:-}" body budget=48 keep next
+  body=$(printf '%s' "${1:-}" |
+    tr '\n' ' ' |
+    tr '[:upper:]' '[:lower:]' |
+    sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-*//' -e 's/-*$//')
+
+  if [ -n "$ticket" ]; then
+    # Sentinel-wrapped so one pattern covers every position, and looped because a
+    # replacement consumes its own trailing separator — a single global pass leaves
+    # the second key of an adjacent "OV-1 OV-1" pair behind. Each pass strictly
+    # shortens `body`, so the loop terminates. Glob-safe: derive_ticket emits only
+    # [a-z0-9-] (rules/security.md — no dynamic program construction).
+    body="-${body}-"
+    while [ "$body" != "${body//-${ticket}-/-}" ]; do
+      body="${body//-${ticket}-/-}"
+    done
+    body="${body#-}"
+    body="${body%-}"
+    budget=$((budget - ${#ticket} - 1))
+    [ "$budget" -ge 1 ] || budget=1
+  fi
+
+  if [ "${#body}" -le "$budget" ]; then
+    printf '%s' "$body" | sed -e 's/-*$//'
+    return 0
+  fi
+
+  # A cut landing exactly on a separator already ends on a whole word; stripping back
+  # unconditionally would throw away a word that fit.
+  next=$(printf '%s' "$body" | cut -c$((budget + 1))-$((budget + 1)))
+  keep=$(printf '%s' "$body" | cut -c1-"$budget")
+  if [ "$next" != "-" ]; then
+    if [ "${keep%-*}" = "$keep" ]; then
+      keep=${body%%-*}
+    else
+      keep=${keep%-*}
+    fi
+  fi
+  printf '%s' "$keep" | sed -e 's/-*$//'
+}
+
+# `<type>/[<ticket>-]<slug>` — the ticket segment is emitted only when $3 is non-empty
+# (`git-conventions.md § Branch Naming`). Returns 1 (no output) when the slug is empty —
+# callers treat that as a no-op.
 target_branch_name() {
-  local t="${1:-}" s="${2:-}"
+  local t="${1:-}" s="${2:-}" k="${3:-}"
   [ -n "$s" ] || return 1
-  printf '%s/%s' "$t" "$s"
+  if [ -n "$k" ]; then
+    printf '%s/%s-%s' "$t" "$k" "$s"
+  else
+    printf '%s/%s' "$t" "$s"
+  fi
 }
 
 # ---------- Audit helpers ----------
