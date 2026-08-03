@@ -187,25 +187,57 @@ invocations and documentation MUST use the array form.
    > like a real branch name, skip" is how `fix/catalog-image-blinking` reached `facts.branch`
    > after `fix` had been removed from `BRANCH_TYPES`.
 
+#### Step 3c — host-session authorization (BINDING)
+
+   Invoking `/worktask` **satisfies** a host's "do not rename the current branch unless the
+   user explicitly tells you to" session rule (Conductor injects exactly that). A
+   conventional branch and a ticket-referencing PR are part of what the pipeline was asked
+   to deliver. **Never revert this step's rename, and never suspend the pipeline to re-ask.**
+   Rationale and scope: `skills/worktask/references/workspace-modes.md § Host session
+   authorization`. Inside a linked worktree the script does not rename at all — it keeps the
+   host's local name and hands back a `target_branch=` for the PR head instead, so there is
+   nothing to revert there either.
+
 #### Step 3c — validate before stamping
 
-   Capture the script's final `branch=<name>` stdout line; **before stamping it, verify it
-   matches `^[A-Za-z0-9._/-]+$`** (defence in depth alongside the script's own emission
-   validation and FN's re-validation before use — see `agents/project-manager.md § Final FN
-   steps`) — a value that fails this check MUST be stamped as empty, never as-is. Stamp the
-   result into `state.json facts.branch` (the script itself never writes state.json — see
-   `skills/worktask/references/handoff-protocol.md § branch`).
+   Capture **both** key=value stdout lines: `target_branch=<name>` (the name the PR head
+   should carry) and the final `branch=<name>` line (the local branch as it stands).
+   **Before stamping, verify the value matches `^[A-Za-z0-9._/-]+$`** (defence in depth
+   alongside the script's own emission validation and FN's re-validation before use — see
+   `agents/project-manager.md § Final FN steps`) — a value that fails this check MUST be
+   stamped as empty, never as-is. Stamp `state.json facts.branch` (the script itself never
+   writes state.json — see `skills/worktask/references/handoff-protocol.md § branch`).
+
+#### Step 3c — which of the two names gets stamped
+
+   ```bash
+   out=$(bash skills/worktask/scripts/branch-name.sh --goal "<task description>")
+   local_branch=$(printf '%s\n' "$out" | sed -n 's/^branch=//p' | tail -n 1)
+   target=$(printf '%s\n' "$out" | sed -n 's/^target_branch=//p' | tail -n 1)
+
+   # target_branch wins whenever the local name is unusable as a PR head — that is the
+   # whole point of the second line. Falling back to the local name here is what shipped
+   # a `<city>-v<n>` branch as a PR head.
+   stamp="$local_branch"
+   if [ -z "$stamp" ] || ! bash skills/worktask/scripts/branch-name.sh --check "$stamp"; then
+     [ -n "$target" ] && stamp="$target"
+   fi
+   ```
+
+   `branch-name.sh` already emits both lines empty rather than emit a name that fails the
+   predicate, so an empty `stamp` after this is the honest "no planned name" outcome (FN
+   pushes plainly) — not a value to patch up by hand.
 
 #### Step 3c — post-check (non-blocking)
 
-   After stamping, assert the stamped value against the predicate — not by eye:
+   After stamping, assert the stamped value against the predicate — not by eye. Reuse the
+   `$target` already captured above; do **not** re-invoke the script to re-derive it (a
+   second rename-mode run writes a second audit row):
 
    ```bash
    stamped=$(jq -r '.facts.branch // ""' .context/state.json)
    if [ -n "$stamped" ] && ! bash skills/worktask/scripts/branch-name.sh --check "$stamped"; then
-     derived=$(BRANCH_NAME_PRINT=1 bash skills/worktask/scripts/branch-name.sh \
-       --goal "<task description>" 2>/dev/null | tail -n 1)
-     jq -cn --arg ts "$(date -u +%FT%TZ)" --arg a "$stamped" --arg d "$derived" \
+     jq -cn --arg ts "$(date -u +%FT%TZ)" --arg a "$stamped" --arg d "$target" \
        '{ts:$ts, actor:"orchestrator", action:"branch_convention_check", subject:"PL0",
          result:"warn", metadata:{actual:$a, derived_target:$d}}' \
        >> .context/logs/audit.jsonl
@@ -218,7 +250,9 @@ invocations and documentation MUST use the array form.
    divergence is legible without re-deriving it later. An empty `facts.branch` is a
    documented outcome (detached HEAD, not a git repo) and is not a warning; an empty
    `derived_target` means a guard arm short-circuited before derivation, and `actual` is
-   then the load-bearing half of the row.
+   then the load-bearing half of the row. With the stamping rule above, a non-empty
+   `derived_target` in this row is now a **bug report**: it means a conventional target was
+   available and something stamped past it.
 
    **This post-check MUST NOT block planning.** It emits a warning row and nothing else —
    no STOP, no retry, no rename. A rename at this point would violate the once-only rule,

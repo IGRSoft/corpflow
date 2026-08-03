@@ -75,7 +75,10 @@ name that happens not to match — e.g. `spike-oauth-poc` — is indistinguishab
 host-provisioned one and **will** be renamed; there is no mechanism that detects "the
 user named this deliberately" versus "the host assigned this by default". If that
 matters in your workflow, rename to a conventional form yourself before invoking
-`/worktask`, or accept the rename as part of what the pipeline does.
+`/worktask`, or accept the rename as part of what the pipeline does. The host-workspace
+arm below narrows the blast radius (inside a linked worktree nothing is renamed at all)
+without solving this — a deliberate name in a plain checkout is still indistinguishable
+from a host-assigned one.
 
 #### Timing
 
@@ -90,29 +93,43 @@ entirely, so this rename is the only pre-approval action any of them take.
 The mutation is local, reversible, and network-free: `git branch -m <original-name>`
 restores it manually if a declined plan needs the old name back.
 
-The step's own guard ladder stays the safety boundary — every arm exits 0:
+#### Guard ladder — two names, one per decision
 
-| Guard | Behaviour |
-|---|---|
-| Name already conventional | no-op — a deliberate name is never churned |
-| Upstream already tracked | no-op — renaming a pushed branch orphans the remote ref |
-| On the integration branch | refuses |
-| Target name already exists | no-op |
-| Detached HEAD / not a repo | skipped |
+Every arm exits 0 and returns two names: `branch=<name>` is the LOCAL branch after the run
+(the final stdout line), `target_branch=` is what the **remote** branch — the PR head —
+should carry. Blocking the rename never blocks the target.
 
-Running at PL start, before any commit exists, retires the very hazard the ladder's
-upstream-tracked and pushed-branch guards exist to catch — there is no push yet to
-orphan.
+| Guard | Local branch | `target_branch=` |
+|---|---|---|
+| Already conventional | no-op — a deliberate name is never churned | empty — `branch=` is the answer |
+| Upstream tracked | no-op — a rename orphans the remote ref | derived |
+| On the integration branch | refuses | empty — never a PR head |
+| Target name exists | no-op | derived |
+| **Host workspace (linked worktree)** | **no rename — host's name kept** | **derived** |
+| jq unavailable | no-op — batch scope unknowable | derived if `--goal` passed |
+| Detached HEAD / no repo / batch routing | skipped | empty |
 
-#### Host mapping caveat
+Running at PL start retires the hazard the upstream guards catch — no push yet to orphan.
 
-Surface this once; do not act on it. The host may map the workspace to its original
-branch name, so a rename can leave that mapping stale. If the host's mapping matters
-more than the branch name, the equivalent without a local rename is to push under the
-target name (`git push origin <current>:<target>`) — the PR gets the conventional head
-and the local branch is untouched. FN's own push already targets `facts.branch`
-regardless (`agents/project-manager.md § Final FN steps`), so this caveat only matters
-for a host that reads the *local* branch name directly.
+#### Host mapping — handled, not just noted
+
+The host maps the workspace to its original branch name, so a local rename leaves that
+mapping stale. Under a linked worktree — the shape every worktree-based host provisions,
+detected as `git rev-parse --git-dir != --git-common-dir`, which is the only signal a host
+workspace reliably leaves (Conductor writes no `workspace.json` in `$PWD`, so none of
+`fn_batch_scope`'s five signals fire) — `branch-name.sh` therefore **keeps the local name
+and emits the derived `target_branch=` instead**, auditing `branch_renamed / skipped` with
+`reason: host_workspace_worktree`.
+
+#### Host mapping — where the target lands
+
+The orchestrator stamps that target into `facts.branch` (`commands/worktask.md § Step 3c —
+which of the two names gets stamped`) and FN's existing
+`git push -u origin HEAD:refs/heads/<facts.branch>` gives the PR a conventional head
+(`agents/project-manager.md § Final FN steps`). The host's mapping stays intact and the PR
+head is still right — the two are not in conflict, and neither is traded for the other.
+This is the mechanism that keeps `facts.branch` deliberately **different** from the local
+branch name in a host workspace. That divergence is the designed outcome here, not drift.
 
 ## Task ID Namespacing
 

@@ -255,8 +255,11 @@ before this PL0 turn began, immediately after the state.json seed and before `Ta
 PL0 itself. PM MUST NOT invoke `branch-name.sh` at any point; the once-only rule
 (`skills/shared/git-conventions.md § Branch Naming`) means exactly one run per worktask, and
 that run already happened. PM only *reads* the result: `state.json facts.branch` carries the
-name the orchestrator stamped from the script's `branch=<name>` stdout line (`branch-name.sh`
-itself never writes state.json). Full argv/env/exit-code contract: the script's own `--help`.
+name the orchestrator stamped from the script's `branch=<name>` / `target_branch=<name>`
+stdout lines (`branch-name.sh` itself never writes state.json). In a host workspace that name
+is the **planned remote** name and will not match the local branch — see
+`skills/worktask/references/workspace-modes.md § Host mapping — handled, not just noted`.
+Full argv/env/exit-code contract: the script's own `--help`.
 
 #### Integration-branch detection
 
