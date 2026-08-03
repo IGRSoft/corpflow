@@ -629,3 +629,7 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage PL --prev USER` (`skills/worktask/scripts/`) to atomically patch `stages.PL` + the `USER→PL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Put the one-line goal (verb + object, ≤120 chars) in that summary — downstream stages read it as the worktask goal alongside `planning-N.md#requirements`. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+
+#### State Patch — `facts.goal` is part of the contract
+
+`facts.goal` MUST be non-empty in `.context/state.json` when PL returns. The orchestrator seeds it from the task description at Step 3a, so the normal job here is to REFINE it to the one-line goal above — but verify it, and write it if the seed is missing (`jq '.facts.goal = "<goal>"'` through the same atomic temp+rename). It is not a bookkeeping field: `publish-pl-issue.sh` reads it as the first rank of both the issue title and the `## Summary` chain, and its absence is what produced a kebab-slug title with an empty Summary in issue #375. Also write a `title:` line into the plan's frontmatter — that is the chain's next rank and the plan's own record of what it is about.

@@ -123,7 +123,11 @@ invocations and documentation MUST use the array form.
 
 #### Step 3a snippets — init procedure
 
-   The re-run-aware next-free-planning-index resolver (N=0 on a fresh `.context/`, nullglob-safe) and the atomic `state.json` seed write are canonical in `skills/worktask/references/initialization-patterns.md`. Compute N, then atomic-write the seed (`{version:1, worktask_id, plan_file: .context/planning-${N}.md, platform, run_index:N, stages.PL.status:in_progress, empty facts incl. dispatched_agents:[], handoffs:{}}`) per `handoff-protocol.md#atomic-write`.
+   The re-run-aware next-free-planning-index resolver (N=0 on a fresh `.context/`, nullglob-safe) and the atomic `state.json` seed write are canonical in `skills/worktask/references/initialization-patterns.md`. Compute N, then atomic-write the seed (`{version:1, worktask_id, plan_file: .context/planning-${N}.md, platform, run_index:N, stages.PL.status:in_progress, facts.goal seeded from the task description plus the otherwise-empty facts incl. dispatched_agents:[], handoffs:{}}`) per `handoff-protocol.md#atomic-write`.
+
+#### Step 3a — seed `facts.goal`
+
+   Seed it from the task description, JSON-escaped, truncated to 240 chars. It is the issue title and `## Summary` source for `publish-pl-issue.sh`, and nothing on the PL state-patch path actually writes it, so leaving it to PL0 is what let a run publish a kebab-slug title with an empty Summary (issue #375). PM refines it later; this seed only guarantees it is never absent.
 
    The seeded `plan_file` is the **path** shape (`.context/planning-${N}.md`), not a bare basename — task metadata carries the basename shape instead. Both are legal; see the `plan_file` shape boundary in `handoff-protocol.md § state.json schema`.
 
