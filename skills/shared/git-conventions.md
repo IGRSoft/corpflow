@@ -212,13 +212,21 @@ vocabulary. A plausible-looking name is not a checked name.
 
 ### Guard ladder (every arm is a no-op or a refusal, never a failure)
 
-| Guard | Behaviour |
-|---|---|
-| Name already conventional | no-op — a deliberate name is never churned |
-| Upstream already tracked | no-op — renaming a pushed branch orphans the remote ref |
-| On the integration branch | refuses |
-| Target name already exists | no-op |
-| Detached HEAD / not a repo | skipped |
+Two names come back from every run: `branch=` is the LOCAL branch after it (the final
+stdout line), `target_branch=` is what the **remote** branch — the PR head — should carry.
+Blocking the local rename never blocks the target.
+
+| Guard | Local branch | `target_branch=` |
+|---|---|---|
+| Name already conventional | no-op — a deliberate name is never churned | empty — `branch=` is the answer |
+| Upstream already tracked | no-op — a rename orphans the remote ref | derived |
+| On the integration branch | refuses | empty — never a PR head |
+| Target name already exists | no-op | derived |
+| Host workspace (linked worktree) | no rename — the host's name is kept | derived |
+| Detached HEAD / not a repo | skipped | empty |
+
+The host-workspace arm keeps a host's branch↔workspace mapping intact while the PR still
+gets a conventional head — `workspace-modes.md § Host mapping — handled, not just noted`.
 
 ### Once-only rule
 

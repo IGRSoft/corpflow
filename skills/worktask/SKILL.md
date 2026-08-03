@@ -270,7 +270,11 @@ Before executing any worktask stage, the orchestrator MUST validate:
 
 ### Validation check 10 — stamping and post-check
 
-Capture the script's final `branch=<name>` stdout line, **verify it matches `^[A-Za-z0-9._/-]+$` before stamping** (a failing value is stamped empty, not as-is), and stamp `facts.branch` on the ledger (the script itself never writes state.json — see `references/handoff-protocol.md § branch`). Then run the non-blocking post-check (`commands/worktask.md § Step 3c — post-check`): a stamped name failing `--check` emits one `branch_convention_check` warning row naming the actual and derived target, and never blocks planning.
+Capture **both** stdout key=value lines — `target_branch=<name>` (the name the PR head should carry) and the final `branch=<name>` line (the local branch as it stands) — **verify the value matches `^[A-Za-z0-9._/-]+$` before stamping** (a failing value is stamped empty, not as-is), and stamp `facts.branch` on the ledger (the script itself never writes state.json — see `references/handoff-protocol.md § branch`).
+
+### Validation check 10 — which name, and the host rule
+
+**When `branch=` is empty or fails `--check` but `target_branch=` is non-empty, stamp the target** — the local name may be blocked from changing (upstream tracked, target exists, host workspace) while the PR head is still ours to name. Then run the non-blocking post-check (`commands/worktask.md § Step 3c — post-check`): a stamped name failing `--check` emits one `branch_convention_check` warning row naming the actual and derived target, and never blocks planning. Invoking `/worktask` authorizes the rename against a host's no-rename session rule — never revert it, never re-ask (`references/workspace-modes.md § Host session authorization`).
 
 ### On validation failure
 

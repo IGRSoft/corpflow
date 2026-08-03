@@ -141,6 +141,12 @@ workspace: `skills/worktask/references/workspace-modes.md § Branch naming under
 workspace`). FN never re-derives or re-renames the branch; it reads `facts.branch` from the
 ledger for the PR head (above).
 
+`facts.branch` **may legitimately differ from the local branch name** — inside a host
+workspace (linked worktree) the naming step keeps the host's local name and plans the
+conventional one for the remote instead. That is the designed outcome, not drift: the push
+refspec `HEAD:refs/heads/<facts.branch>` is exactly what makes both true at once. Do not
+"correct" the mismatch by falling back to `git rev-parse`.
+
 #### Recurring-defect escalation
 
 A pre-existing pipeline-infrastructure defect that reproduces **3 or more times inside one

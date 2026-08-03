@@ -565,10 +565,15 @@ The v1 additive fields have **orchestrator-loop / hook writers**, not schema-map
 Only `stages.<CODE>.worktree` maps from a stage artifact — the DV handoff frontmatter
 `worktree_path`/`worktree_branch`, applied by `state-patch.sh` (rows above).
 
+#### Additive-field writers — facts.branch
+
 `facts.branch` is also an orchestrator-loop writer, not a schema-mapped stage return: the
 orchestrator parses the final `branch=<name>` stdout line of `branch-name.sh`
 (`commands/worktask.md § Step 3c`) and stamps it directly — `branch-name.sh` itself never
-writes state.json (single write chokepoint, `#atomic-write`). See field notes — branch above.
+writes state.json (single write chokepoint, `#atomic-write`). When that line is empty or
+non-conventional and the script's `target_branch=<name>` line is not, the **target** is what
+gets stamped: the local rename can be blocked (upstream tracked, target exists, host
+workspace) while the PR head is still the pipeline's to name. See field notes — branch above.
 
 ---
 
@@ -865,6 +870,16 @@ what makes an external mid-run rename unable to silently retarget the PR: the PR
 against the name the worktask committed to, and divergence surfaces as a mismatch rather
 than as a differently-named PR. Not the same field as `stages.DV.worktree.branch` — see the
 disambiguation note below. Kept through FN; dropped at archival.
+
+##### Field notes — branch, divergence from the local branch name
+
+Under a host workspace (a linked git worktree — Conductor and friends), `facts.branch`
+deliberately does **not** match `git rev-parse --abbrev-ref HEAD`: `branch-name.sh` keeps
+the host's local name and returns the derived `target_branch=` for the PR head instead, so
+the host's branch↔workspace mapping survives (`workspace-modes.md § Host mapping — handled,
+not just noted`). The same divergence appears on the upstream-tracked and target-exists
+arms. No reader may "repair" it by re-deriving from the local branch — the ledger value is
+the planned name and the PR head is what it plans.
 
 ##### Field notes — branch, empty value
 
