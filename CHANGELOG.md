@@ -2,6 +2,74 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.2] - 2026-08-03
+
+A live worktask in a Conductor workspace shipped PR #382 from `ov166-skin-score-all-layers`
+— a branch name that fails this plugin's own `branch_is_conventional` predicate, on a repo
+that merges rather than squashes, so the name is permanent history. The design was already
+right (FN pushes `HEAD:refs/heads/<facts.branch>`, decoupling the PR head from the local
+branch); it was fed a bad value. Scripts, tests, and docs only — no stage, agent, or gate
+semantics change.
+
+### Fixed — the derived branch target is no longer discarded on the no-op arms
+
+`branch-name.sh` derived the conventional target inside the rename arm alone. Every other
+arm — upstream tracked, target exists, jq unavailable — passed the *current* branch to
+`emit_branch`, which prints `branch=` empty when the name fails the predicate. The right
+answer was computed and thrown away, `facts.branch` landed empty, and FN's documented
+fallback pushed the non-conventional local name as the PR head.
+
+- **A second stdout line, `target_branch=<name>`**, emitted by every arm that can derive
+  one, independent of whether the local rename happened. Derivation moved above the no-op
+  arms; `derive_target` split out as a pure function. `branch=` keeps its exact semantics
+  and stays the **final** stdout line — four docs and every consumer specify that parse, so
+  the new line goes before it, not after. Both lines pass the same `branch_is_conventional`
+  gate before emission, preserving the shell-injection hardening `emit_branch` exists for.
+- **Arms that must not propose a target still emit it empty**: already-conventional
+  (`branch=` is the answer), the integration branch (never a PR head under any name), and
+  batch/incident routing (which owns its own naming).
+- **Step 3c now stamps the target it already computed.** The post-check wrote `derived_target`
+  into an audit row and discarded it; the orchestrator now stamps `facts.branch` from
+  `target_branch=` whenever `branch=` is empty or fails `--check`, and the post-check reuses
+  the captured value instead of re-invoking the script (which wrote a duplicate audit row).
+  A non-empty `derived_target` in that warning row is now a bug report, not a shrug.
+
+### Added — host-workspace (linked-worktree) arm
+
+Nothing in the guard ladder could see a host workspace: Conductor leaves no `workspace.json`
+in `$PWD`, so all five `fn_batch_scope` signals miss it. New arm, detected as
+`git rev-parse --git-dir != --git-common-dir`: derive and emit the target, **skip** the local
+`git branch -m`, audit `branch_renamed / skipped` with `reason: host_workspace_worktree`. The
+host's branch↔workspace mapping stays intact *and* the PR gets a conventional head — what
+`workspace-modes.md § Host mapping caveat` previously described as a manual equivalent is now
+the automatic behaviour. `facts.branch` deliberately differs from the local branch name there;
+that divergence is documented in `handoff-protocol.md` and `agents/project-manager.md` as the
+designed outcome, so no reader "repairs" it back to a `git rev-parse`.
+
+### Fixed — the host-session authorization was invisible at the point of decision
+
+`workspace-modes.md § Host session authorization` ("invoking `/worktask` satisfies a host's
+no-rename session rule") was referenced from exactly one file: the **FN** agent, which runs
+long after the rename and never renames anything. The orchestrator at Step 3c — the only
+actor that decides — had no pointer, and Step 3c's own "MUST NOT block, no STOP, no retry,
+no rename" text reads as *tolerate the divergence*. An orchestrator holding Conductor's
+session rule and Step 3c had everything it needed to revert a correct rename. It did. Step 3c
+now carries the authorization inline as a BINDING note, in `commands/worktask.md` and
+`skills/worktask/SKILL.md`.
+
+### Tests
+
+Twelve new cases in `tests/shell/worktask/branch-name.sh.bats` (57 total, all green): the
+host-workspace arm over a real `git worktree` (local name kept, target derived, HEAD
+untouched, audit reason); the acceptance trio executed through the documented Step 3c
+stamping rule rather than paraphrased; both cwd cases for the detection itself — a
+subdirectory of a plain repo must still rename (git answers `--git-dir` absolutely and
+`--git-common-dir` relatively from there, so the comparison resolves both to physical
+paths), a subdirectory inside a worktree must still detect; `target_branch=` on the
+upstream-tracked, target-exists, and jq-unavailable arms; empty on the arms that must not
+propose one; batch routing still winning over the host arm; a shell-hostile current branch
+reaching neither emitted line; and the `BRANCH_NAME_PRINT` dry run unchanged.
+
 ## [4.0.1] - 2026-08-03
 
 Two publication-surface bugs, both found the same way: a live worktask shipped output nobody
