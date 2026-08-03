@@ -136,6 +136,61 @@ EOS
   assert_output "plan_unreadable"
 }
 
+# Issue #375 regression. `facts.goal` is optional in the handoff protocol; when it was
+# the only source, an unset value published the kebab worktask slug as the title and an
+# empty Summary. The chain and the case-insensitive prefix guard are asserted here at
+# suite level, not only inside --self-test, because this is the shape that shipped.
+@test "#375: unset facts.goal falls back to the plan title, not the worktask slug" {
+  cd "$WD"
+  cp "$PLUGIN_ROOT/skills/worktask/references/fixtures/publish-pl-issue/13-frontmatter-title.md" \
+    "$WD/.context/plan.md"
+  jq 'del(.facts.goal) | .worktask_id = "ov-164-catalog-image-blinking"' \
+    .context/state.json > s2 && mv s2 .context/state.json
+
+  run env PATH="$WD/bin:$PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 GH_ISSUE_SEARCH=0 \
+    bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output --partial '--title "OV-164 Product list images are blinking before rendering"'
+  refute_output --partial "ov-164-catalog-image-blinking"
+  refute_output --partial "OV-164 OV-164"
+
+  # The same run must render a non-empty Summary, from the plan's own anchor.
+  [ -f "$WD/.context/logs/issue-body-0.tmp" ]
+  run awk '/^## Summary$/ { s = 1; next } /^## / { s = 0 } s' "$WD/.context/logs/issue-body-0.tmp"
+  assert_output --partial "blinks on every scroll"
+}
+
+@test "#375: every title source empty degrades to the slug AND audits the degradation" {
+  cd "$WD"
+  cp "$PLUGIN_ROOT/skills/worktask/references/fixtures/publish-pl-issue/13c-no-title-source.md" \
+    "$WD/.context/plan.md"
+  jq 'del(.facts.goal) | .worktask_id = "wt-no-sources"' \
+    .context/state.json > s2 && mv s2 .context/state.json
+
+  run env PATH="$WD/bin:$PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 GH_ISSUE_SEARCH=0 \
+    bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output --partial '--title "wt-no-sources"'
+  run jq -r 'select(.metadata.reason=="title_fallback_worktask_id") | .metadata.title_source' \
+    "$WD/.context/logs/audit.jsonl"
+  assert_output "worktask_id"
+}
+
+@test "#375: facts.goal still wins every later rank (no happy-path regression)" {
+  cd "$WD"
+  cp "$PLUGIN_ROOT/skills/worktask/references/fixtures/publish-pl-issue/13-frontmatter-title.md" \
+    "$WD/.context/plan.md"
+  jq '.facts.goal = "OV-164 Ship the catalog image cache"' \
+    .context/state.json > s2 && mv s2 .context/state.json
+
+  run env PATH="$WD/bin:$PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 GH_ISSUE_SEARCH=0 \
+    bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output --partial '--title "OV-164 Ship the catalog image cache"'
+  run grep -c "Ship the catalog image cache" "$WD/.context/logs/issue-body-0.tmp"
+  refute_output "0"
+}
+
 @test "contract: --self-test passes (smoke, NON-counting)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success

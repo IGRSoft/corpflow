@@ -177,6 +177,52 @@ mk_branch_repo() {
   assert_output "hotfix/ship-a-hotfix-for-the-login-crash"
 }
 
+@test "N4d: a goal carrying an issue key yields <type>/<ticket>-<slug> (D2)" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "OV-164 Product images blink on catalog open"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "bugfix/ov-164-product-images-blink-on-catalog-open"
+}
+
+@test "N4e: a long ticketed goal never lands on a mid-word slug (D3)" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" \
+    "OV-164 Product list images are blinking before rendering on the catalog screen"
+  run env BRANCH_NAME_PRINT=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output "bugfix/ov-164-product-list-images-are-blinking-before"
+}
+
+@test "N4f: a goal ending in the word fix is a bugfix, not a feature (D4)" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "Images blink on catalog open, investigate and fix"
+  run env BRANCH_NAME_PRINT=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output "bugfix/images-blink-on-catalog-open-investigate-and-fix"
+}
+
+@test "N4g: the shipped fix/catalog-image-blinking branch is renamed, not accepted (D1)" {
+  cd "$WD"
+  mk_branch_repo "fix/catalog-image-blinking" "Catalog images blink before rendering"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "->"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "bugfix/catalog-images-blink-before-rendering"
+}
+
+@test "N4h: an existing ticketed branch is conventional and never churned (D2)" {
+  cd "$WD"
+  mk_branch_repo "bugfix/ov-156-reconstruction-scan-flow" "OV-156 reconstruction scan flow"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "already conventional"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "bugfix/ov-156-reconstruction-scan-flow"
+}
+
 @test "N5: upstream present is a no-op (exit 0)" {
   cd "$WD"
   mk_branch_repo
@@ -194,6 +240,23 @@ mk_branch_repo() {
   jq '.metadata.base_ref = "master"' .context/state.json > s && mv s .context/state.json
   run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
+}
+
+# Guard ladder, unchanged by the ticket/slug/type work — every arm still a no-op or a
+# refusal, never a failure. Arms: already conventional (N3/N4/N4h), upstream tracked
+# (M3/N5), integration branch (M5/N6), target exists (below + SR-1), detached HEAD /
+# not a repo (the detached-HEAD case above).
+@test "N6b: target exists is still a no-op when the target carries a ticket segment" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "OV-156 reconstruction scan flow"
+  git branch feature/ov-156-reconstruction-scan-flow
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "already exists"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "wt-abc123"
+  run jq -r 'select(.action=="branch_renamed") | .metadata.reason' .context/logs/audit.jsonl
+  assert_output "target_exists"
 }
 
 @test "N7: self-disables under incident (INCIDENT_MODE) routing" {

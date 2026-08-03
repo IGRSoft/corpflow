@@ -54,6 +54,7 @@ cat > "$tmp" <<EOF
   "run_index": ${N},
   "stages": { "PL": { "status": "in_progress" } },
   "facts": {
+    "goal": "${GOAL}",
     "files_modified": [],
     "tests_added": [],
     "decisions": [],
@@ -67,6 +68,15 @@ EOF
 sync "$tmp" 2>/dev/null || true
 mv -f "$tmp" .context/state.json
 ```
+
+### Seeded goal
+
+`GOAL` is the task description, JSON-escaped and truncated to 240 chars
+(`handoff-protocol.md § facts.goal`). Seed it here rather than leaving it for PL0's state
+patch: nothing in the patch path actually writes the field, so a run where PL completes by
+any other route left it unset — and `publish-pl-issue.sh` then published a kebab-slug issue
+title with an empty Summary (issue #375). PM still refines it; the seed only guarantees it
+is never absent. On a `/megatask` per-issue run the issue title is the goal.
 
 ### Post-seed notes
 

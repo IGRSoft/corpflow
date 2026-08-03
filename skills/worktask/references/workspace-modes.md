@@ -70,7 +70,7 @@ resulting name (`facts.branch`) instead of re-deriving or re-renaming it.
 It covers exactly the rename `branch-name.sh` performs, and nothing further — never
 deleting branches, force-pushing, or rewriting history. **Caveat, stated plainly rather
 than promised as enforced:** the only discriminator the step has is
-`branch_is_conventional` (does the name already match `<type>/<slug>`?). A human-chosen
+`branch_is_conventional` (does the name already match `<type>/[<ticket>-]<slug>`?). A human-chosen
 name that happens not to match — e.g. `spike-oauth-poc` — is indistinguishable from a
 host-provisioned one and **will** be renamed; there is no mechanism that detects "the
 user named this deliberately" versus "the host assigned this by default". If that
