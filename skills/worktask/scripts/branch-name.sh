@@ -397,8 +397,8 @@ cmd_rename() {
   # Host workspace (linked worktree): derive and hand over the target, leave the local
   # branch alone. The host's branch↔workspace mapping reads the local name, so renaming
   # it is the one action here with an owner other than this pipeline — while the PR head
-  # is ours to name. `workspace-modes.md § Host mapping caveat` specified this outcome as
-  # the manual equivalent; this arm makes it the automatic one. Placed above the
+  # is ours to name. `workspace-modes.md § Host mapping — handled, not just noted`
+  # documents this outcome as the designed one. Placed above the
   # target_exists check on purpose: an existing local `refs/heads/<target>` only blocks a
   # rename we are no longer attempting.
   if is_host_workspace; then
