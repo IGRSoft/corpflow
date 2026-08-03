@@ -423,6 +423,73 @@ extract_anchor() {
   ' "$plan"
 }
 
+# Scalar YAML frontmatter field from a plan file. Only the LEADING `---` … `---`
+# fence counts — a `---` thematic break further down the body is not frontmatter and
+# is never read. Splits on the FIRST colon so a value may contain further colons.
+# A folded/multi-line value contributes only its first line, which is all a title can
+# carry anyway (the caller's `head -1` would drop the rest regardless).
+extract_frontmatter_field() {
+  local plan="$1" key="$2" v
+  v=$(awk -v key="$key" '
+    NR == 1 && $0 != "---" { exit }
+    NR == 1 { in_fm = 1; next }
+    in_fm && $0 == "---" { exit }
+    # Top-level keys only. The PL template nests everything under `handoff:`, and an
+    # indented `title:`/`issue:` there belongs to that block, not to the document.
+    in_fm && /^[ \t]/ { next }
+    in_fm {
+      idx = index($0, ":")
+      if (idx == 0) next
+      k = substr($0, 1, idx - 1)
+      gsub(/[ \t]+$/, "", k)
+      if (tolower(k) != tolower(key)) next
+      val = substr($0, idx + 1)
+      gsub(/^[ \t]+|[ \t]+$/, "", val)
+      print val
+      exit
+    }
+  ' "$plan" 2>/dev/null) || v=""
+  # One layer of surrounding quotes is stripped HERE rather than in awk, which would
+  # need nested-quote escaping for no benefit.
+  case "$v" in
+    \"*\") v="${v#\"}"; v="${v%\"}" ;;
+    \'*\') v="${v#\'}"; v="${v%\'}" ;;
+  esac
+  printf '%s' "$v"
+}
+
+# First `# ` heading of a plan, frontmatter skipped (a `#`-prefixed frontmatter
+# comment must not win over the document's real H1).
+extract_first_h1() {
+  local plan="$1"
+  awk '
+    NR == 1 && $0 == "---" { in_fm = 1; next }
+    in_fm && $0 == "---" { in_fm = 0; next }
+    in_fm { next }
+    /^# / { sub(/^#[ \t]+/, ""); gsub(/[ \t]+$/, ""); print; exit }
+  ' "$plan" 2>/dev/null
+}
+
+# First sentence of a block read on stdin — the first prose line, truncated at its
+# first sentence terminator. Headings, quotes, table rows and list bullets are
+# skipped: a requirements bullet is a fragment, not a title. The terminator must be
+# followed by whitespace or end-of-line so a version like "3.5s" is not a sentence end.
+first_sentence() {
+  awk '
+    /^[[:space:]]*$/ { next }
+    /^[[:space:]]*[#>|]/ { next }
+    /^[[:space:]]*[-*+][[:space:]]/ { next }
+    {
+      line = $0
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+      if (line == "") next
+      if (match(line, /[.!?]([[:space:]]|$)/)) line = substr(line, 1, RSTART)
+      print line
+      exit
+    }
+  '
+}
+
 # ---------- asset host-and-rewrite (Figma image embed) ----------------------
 # Parse "owner/repo" from a git remote URL. Handles both forms:
 #   git@github.com:IGRSoft/company-workflow.git
@@ -944,13 +1011,28 @@ resolve_context_issue_local() {
 # (case-insensitive, trimmed). Accepts a single hit only — an ambiguous / multi-hit
 # result is ignored so an unrelated same-worded issue never captures a fresh context.
 # Needs $TITLE, so it runs AFTER the title is built. Sets RESOLVED_ISSUE_* on hit.
+#
+# Tried twice, by design. Title generation changed in #375 (the chain below the
+# fold), so an issue published earlier under the pre-#375 slug-fallback title no
+# longer matches the title this run would generate — the anchor-loss recovery path
+# would miss it and open a duplicate. $TITLE_LEGACY reproduces the old title and is
+# probed only when the current one misses, costing one extra `gh issue list` on a
+# path that is already the rare fallback. The probe is dropped once the corpus of
+# issues published before #375 is closed out.
 resolve_context_issue_search() {
+  resolve_context_issue_search_for "$TITLE" && return 0
+  [ -n "${TITLE_LEGACY:-}" ] && [ "$TITLE_LEGACY" != "$TITLE" ] || return 1
+  resolve_context_issue_search_for "$TITLE_LEGACY"
+}
+
+resolve_context_issue_search_for() {
+  local probe="$1"
   [ "$GH_ISSUE_SEARCH" = "1" ] || return 1
   [ "$DRY_RUN" != "1" ] || return 1
   command -v "$GH_BIN" >/dev/null 2>&1 || return 1
-  local want; want=$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  local want; want=$(printf '%s' "$probe" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
   [ -n "$want" ] || return 1
-  local hits; hits=$("$GH_BIN" issue list --state open --search "$TITLE in:title" --json number,title,url --limit 20 2>/dev/null || true)
+  local hits; hits=$("$GH_BIN" issue list --state open --search "$probe in:title" --json number,title,url --limit 20 2>/dev/null || true)
   [ -n "$hits" ] || return 1
   local matched n
   matched=$(printf '%s' "$hits" | jq -c --arg t "$want" '[ .[] | select((.title|ascii_downcase|gsub("^\\s+|\\s+$";"")) == $t) ]' 2>/dev/null || echo '[]')
@@ -1272,6 +1354,141 @@ MOCK
     echo "publish-pl-issue: self-test 07-no-double-prefix FAIL"
     fail=$((fail + 1))
   fi
+
+  # ---- Fixture 13: title/summary resolution chain (#375) ----
+  # Driven end-to-end through the real entrypoint under DRY_RUN=1, not through the
+  # helpers in isolation: the title is only observable on the `gh issue create` line
+  # and the Summary only in the rendered body file, so a unit-level assertion would
+  # miss exactly the wiring that broke. `t13_run <plan> <worktask_id> [goal]` builds a
+  # throwaway workspace, runs the script, and leaves stderr + body + audit behind.
+  local t13_dir t13_self
+  t13_dir=$(mktemp -d 2>/dev/null || echo "/tmp/publish-pl-self-test-13.$$")
+  # Absolute: t13_run cds into the throwaway workspace before re-invoking us, so a
+  # relative $0 (the normal invocation shape) would no longer resolve.
+  t13_self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+  t13_run() {
+    local plan="$1" wid="$2" goal="${3:-}" run="$t13_dir/run"
+    rm -rf "$run"; mkdir -p "$run/.context/logs"
+    cp "$plan" "$run/.context/planning-0.md"
+    jq -n --arg w "$wid" --arg g "$goal" \
+      '{version:1, worktask_id:$w, run_index:0, plan_file:".context/planning-0.md",
+        stages:{PL:{status:"completed"}},
+        facts:(if $g == "" then {} else {goal:$g} end),
+        handoffs:{}, metadata:{}}' > "$run/.context/state.json"
+    ( cd "$run" && WORKSPACE_ROOT="$run" STATE_FILE="$run/.context/state.json" \
+        DRY_RUN=1 GH_ISSUE_SEARCH=0 GH_BIN=true \
+        bash "$t13_self" > "$run/out.txt" 2> "$run/err.txt" )
+  }
+  # Title as published: the DRY_RUN line quotes it, so read between the quotes.
+  t13_title() {
+    sed -n 's/.*--title "\(.*\)" --body-file.*/\1/p' "$t13_dir/run/err.txt" | head -1
+  }
+  t13_summary() {
+    awk '/^## Summary$/ { s = 1; next } /^## / { s = 0 } s' "$t13_dir/run/issue-body-0.tmp" 2>/dev/null \
+      || true
+  }
+
+  local f13="$fixtures_dir/13-frontmatter-title.md"
+  local f13b="$fixtures_dir/13b-prefixed-title.md"
+  local f13c="$fixtures_dir/13c-no-title-source.md"
+  if [ -f "$f13" ] && [ -f "$f13b" ] && [ -f "$f13c" ]; then
+    # 13a: no facts.goal → frontmatter title wins, ticket prefixed exactly once,
+    # and the Summary falls back to the plan's own ## summary anchor.
+    local t13a_ok=1 t13a_title t13a_sum
+    t13_run "$f13" "ov-164-catalog-image-blinking" ""
+    # LOG_DIR is WORKSPACE_ROOT-relative, so the body lands beside the run's audit.
+    cp "$t13_dir/run/.context/logs/issue-body-0.tmp" "$t13_dir/run/issue-body-0.tmp" 2>/dev/null || true
+    t13a_title=$(t13_title)
+    t13a_sum=$(t13_summary | tr -d '[:space:]')
+    [ "$t13a_title" = "OV-164 Product list images are blinking before rendering" ] || t13a_ok=0
+    [ -n "$t13a_sum" ] || t13a_ok=0
+    if [ "$t13a_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 13a-frontmatter-title PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 13a-frontmatter-title FAIL (title='$t13a_title' summary_empty=$([ -z "$t13a_sum" ] && echo yes || echo no))"
+      fail=$((fail + 1))
+    fi
+
+    # 13b: a frontmatter title that ALREADY carries the ticket must not be doubled.
+    local t13b_ok=1 t13b_title
+    t13_run "$f13b" "ov-164-catalog-image-blinking" ""
+    t13b_title=$(t13_title)
+    [ "$t13b_title" = "OV-164 Product list images are blinking before rendering" ] || t13b_ok=0
+    case "$t13b_title" in *"OV-164 OV-164"*) t13b_ok=0 ;; esac
+    if [ "$t13b_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 13b-no-double-prefix PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 13b-no-double-prefix FAIL (title='$t13b_title')"
+      fail=$((fail + 1))
+    fi
+
+    # 13c: every prose rank empty → slug fallback, exit 0, degradation row present.
+    local t13c_ok=1 t13c_title t13c_rc=0
+    t13_run "$f13c" "wt-no-sources" "" || t13c_rc=$?
+    t13c_title=$(t13_title)
+    [ "$t13c_rc" = "0" ] || t13c_ok=0
+    [ "$t13c_title" = "wt-no-sources" ] || t13c_ok=0
+    grep -qF '"reason":"title_fallback_worktask_id"' "$t13_dir/run/.context/logs/audit.jsonl" 2>/dev/null || t13c_ok=0
+    if [ "$t13c_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 13c-slug-fallback-audited PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 13c-slug-fallback-audited FAIL (rc=$t13c_rc title='$t13c_title')"
+      fail=$((fail + 1))
+    fi
+
+    # 13d: no regression — facts.goal set still wins every later rank, for BOTH the
+    # title and the Summary, exactly as before the chain existed.
+    local t13d_ok=1 t13d_title t13d_sum
+    t13_run "$f13" "ov-164-catalog-image-blinking" "OV-164 Ship the catalog image cache"
+    cp "$t13_dir/run/.context/logs/issue-body-0.tmp" "$t13_dir/run/issue-body-0.tmp" 2>/dev/null || true
+    t13d_title=$(t13_title)
+    t13d_sum=$(t13_summary)
+    [ "$t13d_title" = "OV-164 Ship the catalog image cache" ] || t13d_ok=0
+    printf '%s' "$t13d_sum" | grep -qF 'Ship the catalog image cache' || t13d_ok=0
+    if [ "$t13d_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 13d-goal-still-wins PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 13d-goal-still-wins FAIL (title='$t13d_title')"
+      fail=$((fail + 1))
+    fi
+  else
+    echo "publish-pl-issue: self-test 13-title-chain SKIP (fixtures missing)"
+    fail=$((fail + 1))
+  fi
+
+  # 13e: reader units — frontmatter parsing must not read a `---` thematic break
+  # further down the body, and first_sentence must not stop inside "3.5s".
+  local t13e_ok=1 t13e_v
+  printf 'not frontmatter\n\n---\ntitle: Stolen From A Thematic Break\n---\n' > "$t13_dir/nofm.md"
+  t13e_v=$(extract_frontmatter_field "$t13_dir/nofm.md" "title")
+  [ -z "$t13e_v" ] || t13e_ok=0
+  printf -- '---\ntitle: "Quoted: with a colon"\n---\n# H1 here\n' > "$t13_dir/fm.md"
+  t13e_v=$(extract_frontmatter_field "$t13_dir/fm.md" "title")
+  [ "$t13e_v" = "Quoted: with a colon" ] || t13e_ok=0
+  t13e_v=$(extract_first_h1 "$t13_dir/fm.md")
+  [ "$t13e_v" = "H1 here" ] || t13e_ok=0
+  t13e_v=$(printf -- '- a bullet\n\nCut the 3.5s delay. Second sentence.\n' | first_sentence)
+  [ "$t13e_v" = "Cut the 3.5s delay." ] || t13e_ok=0
+  # A nested key belongs to its block: the PL template's `handoff:` carries indented
+  # fields, and one of them must never be mistaken for the document's own title.
+  printf -- '---\nhandoff:\n  title: Nested Not Mine\n---\n' > "$t13_dir/nested.md"
+  t13e_v=$(extract_frontmatter_field "$t13_dir/nested.md" "title")
+  [ -z "$t13e_v" ] || t13e_ok=0
+  printf -- "---\ntitle: 'Single quoted'\n---\n" > "$t13_dir/sq.md"
+  t13e_v=$(extract_frontmatter_field "$t13_dir/sq.md" "title")
+  [ "$t13e_v" = "Single quoted" ] || t13e_ok=0
+  if [ "$t13e_ok" = "1" ]; then
+    echo "publish-pl-issue: self-test 13e-chain-readers PASS"
+    pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test 13e-chain-readers FAIL (last='$t13e_v')"
+    fail=$((fail + 1))
+  fi
+  rm -rf "$t13_dir"
 
   # ---- Fixture classify_gh_failure: canned stderr blobs ----
   local cl
@@ -2135,12 +2352,49 @@ fi
 }
 
 # ---------- extract + sanitise + render -------------------------------------
-SUMMARY_RAW=$(jq -r '.facts.goal // ""' "$STATE_FILE")
+# Title and Summary resolve through INDEPENDENT chains. They shared one source
+# (`facts.goal`) until issue #375: `facts.goal` is OPTIONAL in the handoff protocol —
+# written only when the PM agent patches state.json, so orchestrator-inline seeding, a
+# hand-authored `.context/`, or a regenerated state leaves it unset — and one empty
+# value then corrupted BOTH the title (silently, to the kebab worktask slug) and the
+# `## Summary` section (to empty) in the same run.
+GOAL_RAW=$(jq -r '.facts.goal // ""' "$STATE_FILE")
+FM_TITLE=$(extract_frontmatter_field "$PLAN_FILE" "title")
+FM_ISSUE=$(extract_frontmatter_field "$PLAN_FILE" "issue")
+PLAN_H1=$(extract_first_h1 "$PLAN_FILE")
+SUMMARY_ANCHOR=$(extract_anchor "$PLAN_FILE" "summary")
+if [ -z "$(printf '%s' "$SUMMARY_ANCHOR" | tr -d '[:space:]')" ]; then
+  SUMMARY_ANCHOR=$(extract_anchor "$PLAN_FILE" "problem")
+fi
 
-# AC-2: external-ticket extraction. Match ^[A-Z][A-Z0-9]+-[0-9]+ in SUMMARY_RAW
-# first; fall back to upper-cased WORKTASK_ID extraction. Already-prefixed
-# titles are left as-is in the render block below (no double-prefix).
-EXTERNAL_TICKET=$(extract_external_ticket "$SUMMARY_RAW")
+# Summary body chain: facts.goal → `## summary` → `## problem`. The worktask slug is
+# deliberately NOT a rank here — an empty section is honest, a slug posing as prose
+# is not.
+SUMMARY_RAW="$GOAL_RAW"
+if [ -z "$SUMMARY_RAW" ]; then SUMMARY_RAW="$SUMMARY_ANCHOR"; fi
+
+# Title chain, first non-empty wins. TITLE_SOURCE names the winning rank and is
+# carried into the audit row so a degraded title is visible rather than silent.
+TITLE_SOURCE="facts_goal"
+TITLE_RAW="$GOAL_RAW"
+if [ -z "$TITLE_RAW" ]; then TITLE_SOURCE="plan_frontmatter_title"; TITLE_RAW="$FM_TITLE"; fi
+if [ -z "$TITLE_RAW" ]; then TITLE_SOURCE="plan_h1"; TITLE_RAW="$PLAN_H1"; fi
+if [ -z "$TITLE_RAW" ]; then
+  TITLE_SOURCE="plan_summary_anchor"
+  TITLE_RAW=$(printf '%s\n' "$SUMMARY_ANCHOR" | first_sentence)
+fi
+if [ -z "$TITLE_RAW" ]; then TITLE_SOURCE="worktask_id"; TITLE_RAW="$WORKTASK_ID"; fi
+
+# AC-2: external-ticket extraction. Match ^[A-Z][A-Z0-9]+-[0-9]+ in the goal first,
+# then whichever source won the title, then the plan's frontmatter `issue:`, then
+# upper-cased WORKTASK_ID. Every rank feeds the same no-double-prefix guard below.
+EXTERNAL_TICKET=$(extract_external_ticket "$GOAL_RAW")
+if [ -z "$EXTERNAL_TICKET" ]; then
+  EXTERNAL_TICKET=$(extract_external_ticket "$TITLE_RAW")
+fi
+if [ -z "$EXTERNAL_TICKET" ]; then
+  EXTERNAL_TICKET=$(extract_external_ticket "$(printf '%s' "$FM_ISSUE" | tr '[:lower:]' '[:upper:]')")
+fi
 if [ -z "$EXTERNAL_TICKET" ]; then
   EXTERNAL_TICKET=$(extract_external_ticket "$(printf '%s' "$WORKTASK_ID" | tr '[:lower:]' '[:upper:]')")
 fi
@@ -2243,21 +2497,49 @@ if [ -n "$ASSET_DEGRADED_REASON" ]; then
   audit_row "deferred" "$(jq -cn --arg v "publish-pl-issue.sh" --arg r "$ASSET_DEGRADED_REASON" --arg dk "${DEDUPE_KEY}:asset_hosting" '{via:$v, reason:$r, dedupe_key:$dk}')" || true
 fi
 
-# Title (sanitised — pulled from facts.goal or worktask_id).
-TITLE_RAW="${SUMMARY_RAW:-$WORKTASK_ID}"
+# Title (sanitised — TITLE_RAW resolved by the chain above). The head/cut/sanitise
+# pipeline applies to every rank of that chain: a multi-line frontmatter value or a
+# long H1 is flattened and capped here, never at the source.
 TITLE=$(printf '%s' "$TITLE_RAW" | head -1 | cut -c1-100 | sanitise_body | tr -d '\n')
 [ -z "$TITLE" ] && TITLE="Plan approved: $WORKTASK_ID"
 
+# The pre-#375 title, kept ONLY to let the recovery search below find issues that
+# were published under it. Never used as the title of a new issue.
+TITLE_LEGACY=$(printf '%s' "${GOAL_RAW:-$WORKTASK_ID}" | head -1 | cut -c1-100 | sanitise_body | tr -d '\n')
+
 # AC-2: ensure title starts with EXTERNAL_TICKET prefix. Skip if already prefixed
-# (avoid double-prefix like "OV-113 OV-113 …").
+# (avoid double-prefix like "OV-113 OV-113 …"). Compared case-INsensitively and with
+# `-` accepted as a separator: the slug-fallback rank yields "ov-164-catalog-…",
+# which an exact-case check treats as unprefixed and turns into the reported
+# "OV-164 ov-164-catalog-…".
 if [ -n "$EXTERNAL_TICKET" ]; then
-  case "$TITLE" in
-    "$EXTERNAL_TICKET"|"$EXTERNAL_TICKET "*|"$EXTERNAL_TICKET:"*)
+  _title_lc=$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]')
+  _tkt_lc=$(printf '%s' "$EXTERNAL_TICKET" | tr '[:upper:]' '[:lower:]')
+  case "$_title_lc" in
+    "$_tkt_lc"|"$_tkt_lc "*|"$_tkt_lc:"*|"$_tkt_lc-"*)
       ;;
     *)
       TITLE="$EXTERNAL_TICKET $TITLE"
       ;;
   esac
+  case "$TITLE_LEGACY" in
+    "") ;;
+    *) _leg_lc=$(printf '%s' "$TITLE_LEGACY" | tr '[:upper:]' '[:lower:]')
+       case "$_leg_lc" in
+         "$_tkt_lc"|"$_tkt_lc "*|"$_tkt_lc:"*) ;;
+         *) TITLE_LEGACY="$EXTERNAL_TICKET $TITLE_LEGACY" ;;
+       esac ;;
+  esac
+fi
+
+# Degradation is recorded, not silent: reaching the slug rank means every prose
+# source was empty and the published title is a kebab id. Distinct dedupe-key suffix
+# so this advisory never masks the canonical github_issue_created outcome. Never
+# blocks — a title is not worth failing a worktask over.
+if [ "$TITLE_SOURCE" = "worktask_id" ]; then
+  audit_row "deferred" "$(jq -cn --arg v "publish-pl-issue.sh" --arg r "title_fallback_worktask_id" \
+    --arg ts "$TITLE_SOURCE" --arg dk "${DEDUPE_KEY}:title_source" \
+    '{via:$v, reason:$r, title_source:$ts, dedupe_key:$dk}')" || true
 fi
 
 # Guard 2 (recovery half): no local anchor resolved → try a GitHub-side search to

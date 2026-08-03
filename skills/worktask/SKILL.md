@@ -1200,13 +1200,34 @@ The helper is **non-blocking by contract** (default): orchestrator wraps it in a
 | `helper_not_found` | not raised by the helper itself — the orchestrator emits this directly when the helper file is unreachable |
 | `label_create_failed`, `gh_api_error`, `gh_timeout`, `permission_denied`, `repo_not_found` | `gh`-side failures |
 
+##### Reason enum — advisory rows
+
+`title_fallback_worktask_id` is advisory, not an outcome (see § Title and Summary resolution): every prose title source was empty, so the published title is the kebab worktask id. It carries `metadata.title_source`, uses the `<dedupe_key>:title_source` suffix so it never masks the canonical outcome row, and never blocks.
+
 #### Strict mode
 
 **Strict mode opt-in.** Passing `--strict` to the helper, or stamping `metadata.gh_issue.strict: true` on the state.json, flips operational failures from non-blocking `result: "deferred"` to blocking `result: "failed"` with `exit 1`. Use when an unpublished issue is unacceptable (e.g., compliance-tracked runs). Default behaviour stays unchanged so the existing fixture corpus and casual runs are unaffected.
 
+#### Title and Summary resolution
+
+`facts.goal` is OPTIONAL in the handoff protocol — it exists only once the PM agent patches state.json, so an orchestrator-inline seed, a hand-authored `.context/`, or a regenerated state leaves it unset. It used to be the ONLY source for both the issue title and the `## Summary` body, so one missing field degraded both at once (issue #375: title `OV-164 ov-164-catalog-image-blinking`, empty Summary). The two now resolve independently, first non-empty wins:
+
+| | Chain |
+|---|---|
+| **Title** | `facts.goal` → plan frontmatter `title:` → plan first `# ` H1 → first sentence of `## summary`/`## problem` → `worktask_id` |
+| **Summary** | `facts.goal` → `## summary` → `## problem` |
+
+##### Title and Summary resolution — invariants
+
+`worktask_id` is deliberately absent from the Summary chain — an empty section is honest, a slug posing as prose is not. Reaching the `worktask_id` title rank emits the advisory `title_fallback_worktask_id` row, so the degradation is visible rather than silent; it never blocks. The `head -1 | cut -c1-100 | sanitise_body` pipeline applies to every rank, so a multi-line frontmatter value cannot break the title.
+
+##### Recovery-search compatibility
+
+`resolve_context_issue_search()` recovers a lost `.context` ↔ issue binding by exact-title search, so changing title generation orphans issues published under the pre-#375 slug title. Accepted, with a probe: the search tries the current title, then the legacy `facts.goal`-or-slug title, and only when the first misses. Drop the second probe once the pre-#375 issue corpus is closed.
+
 #### External-ticket extraction
 
-The helper extracts a `^[A-Z][A-Z0-9]+-[0-9]+` prefix from `facts.goal` (falls back to upper-cased `worktask_id`). On match it (a) ensures the issue title starts with the prefix without double-prefixing, (b) appends a `ticket:<PREFIX>` label (auto-provisioned via the same `ensure_labels()` path as the canonical set), (c) persists the prefix to `state.json:metadata.external_ticket`, (d) includes `external_ticket` in the success audit row. When `ensure_labels()` cannot create one of the canonical or ticket labels, the offending label is dropped from the `--label` argument and recorded in the audit row under `metadata.labels_dropped` (array).
+The helper extracts a `^[A-Z][A-Z0-9]+-[0-9]+` prefix from `facts.goal`, then the winning title source, then the plan frontmatter's `issue:`, then upper-cased `worktask_id`. On match it (a) ensures the issue title starts with the prefix without double-prefixing, (b) appends a `ticket:<PREFIX>` label (auto-provisioned via the same `ensure_labels()` path as the canonical set), (c) persists the prefix to `state.json:metadata.external_ticket`, (d) includes `external_ticket` in the success audit row. When `ensure_labels()` cannot create one of the canonical or ticket labels, the offending label is dropped from the `--label` argument and recorded in the audit row under `metadata.labels_dropped` (array).
 
 #### Sanitiser pass 1 — line drops (L1–L9)
 
