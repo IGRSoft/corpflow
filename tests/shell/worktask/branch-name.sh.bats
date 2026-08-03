@@ -36,7 +36,9 @@ mk_branch_repo() {
   run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_line --index 0 --partial "->"
-  assert_line --index 1 "branch=bugfix/fix-pr-composition-and-branch-naming"
+  assert_line --index 1 "target_branch=bugfix/fix-pr-composition-and-branch-naming"
+  # `branch=` stays the FINAL line — four docs and every consumer specify that parse.
+  assert_line --index "$((${#lines[@]} - 1))" "branch=bugfix/fix-pr-composition-and-branch-naming"
   run git rev-parse --abbrev-ref HEAD
   assert_output "bugfix/fix-pr-composition-and-branch-naming"
   run jq -r 'select(.action=="branch_renamed") | .result' .context/logs/audit.jsonl
@@ -112,7 +114,8 @@ mk_branch_repo() {
   run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_line --index 0 --partial "detached HEAD"
-  assert_line --index 1 "branch="
+  assert_line --index 1 "target_branch="
+  assert_line --index 2 "branch="
 }
 
 # ---------------------------------------------------------------------------
@@ -540,6 +543,207 @@ mk_hostile_repo() {
   refute_output --partial "unreachable"
   run git rev-parse --abbrev-ref HEAD
   assert_output "bugfix/fix-pr-composition-and-branch-naming"
+}
+
+# ---------------------------------------------------------------------------
+# target_branch= — the derived remote name survives every no-op arm (Defect A),
+# and the host-workspace arm (Defect C). The failure this closes: a run whose
+# local rename was blocked stamped an empty/non-conventional `facts.branch`, so
+# FN pushed the host-assigned name as the PR head.
+# ---------------------------------------------------------------------------
+
+# A linked worktree — the shape every worktree-based host provisions, and the only
+# signal a host workspace reliably leaves (no workspace.json in $PWD).
+mk_worktree_repo() {
+  local branch="${1:-moab-v1}" goal="${2:-OV-166 Show all layers instead of zero at full score}"
+  mkdir -p "$WD/main"
+  git init -q -b master "$WD/main"
+  git -C "$WD/main" -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m work
+  git -C "$WD/main" worktree add -b "$branch" "$WD/wt" > /dev/null 2>&1
+  mkdir -p "$WD/wt/.context/logs"
+  jq --arg g "$goal" '.facts.goal = $g' "$WD/.context/state.json" > "$WD/wt/.context/state.json"
+}
+
+# The documented Step 3c stamping rule, executed rather than paraphrased
+# (commands/worktask.md § Step 3c — validate before stamping).
+stamp_from_output() {
+  local out="$1" local_branch target stamp
+  local_branch=$(printf '%s\n' "$out" | sed -n 's/^branch=//p' | tail -n 1)
+  target=$(printf '%s\n' "$out" | sed -n 's/^target_branch=//p' | tail -n 1)
+  stamp="$local_branch"
+  if [ -z "$stamp" ] || ! bash "$PLUGIN_ROOT/$SCRIPT" --check "$stamp"; then
+    [ -n "$target" ] && stamp="$target"
+  fi
+  printf '%s' "$stamp"
+}
+
+@test "TB-1: host workspace — local name kept, conventional target emitted, HEAD untouched" {
+  mk_worktree_repo
+  cd "$WD/wt"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "host workspace"
+  assert_line "target_branch=feature/ov-166-show-all-layers-instead-of-zero-at-full"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "moab-v1"
+  run jq -r 'select(.action=="branch_renamed") | .result' .context/logs/audit.jsonl
+  assert_output "skipped"
+  run jq -r 'select(.action=="branch_renamed") | .metadata.reason' .context/logs/audit.jsonl
+  assert_output "host_workspace_worktree"
+}
+
+@test "TB-2: host workspace — the acceptance trio (local name, facts.branch, PR head)" {
+  mk_worktree_repo
+  cd "$WD/wt"
+  local out
+  out=$(bash "$PLUGIN_ROOT/$SCRIPT")
+  # 1. the host's branch↔workspace mapping is intact
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "moab-v1"
+  # 2. + 3. what the orchestrator stamps, and therefore what FN pushes as the head
+  run stamp_from_output "$out"
+  assert_output "feature/ov-166-show-all-layers-instead-of-zero-at-full"
+}
+
+@test "TB-3: batch routing still wins over the host-workspace arm" {
+  mk_worktree_repo
+  cd "$WD/wt"
+  run env MILESTONE_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "skipped (milestone_mode_env)"
+  # /megatask names its own branches — a target here would invite a stamp it never planned.
+  assert_line "target_branch="
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "moab-v1"
+}
+
+@test "TB-3b: a subdirectory of a PLAIN repo is not a host workspace (rename still happens)" {
+  cd "$WD"
+  mk_branch_repo
+  mkdir -p src/deep
+  cd src/deep
+  # git answers --git-dir absolutely and --git-common-dir relatively from here; a raw
+  # string compare would read every nested cwd as a linked worktree.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state "$WD/.context/state.json" --context "$WD/.context"
+  assert_success
+  assert_line --index 0 --partial "->"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "bugfix/fix-pr-composition-and-branch-naming"
+}
+
+@test "TB-3c: a subdirectory INSIDE a host workspace is still detected" {
+  mk_worktree_repo
+  mkdir -p "$WD/wt/src/deep"
+  cd "$WD/wt/src/deep"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state "$WD/wt/.context/state.json" --context "$WD/wt/.context"
+  assert_success
+  assert_line --index 0 --partial "host workspace"
+  assert_line "target_branch=feature/ov-166-show-all-layers-instead-of-zero-at-full"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "moab-v1"
+}
+
+@test "TB-4: upstream_tracked keeps the branch AND emits the derived target" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "OV-166 Show all layers instead of zero at full score"
+  git remote add origin https://example.invalid/r.git
+  git update-ref refs/remotes/origin/wt-abc123 HEAD
+  git branch --set-upstream-to=origin/wt-abc123 wt-abc123 > /dev/null
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "upstream already tracked"
+  assert_line "target_branch=feature/ov-166-show-all-layers-instead-of-zero-at-full"
+  # branch= unchanged from before this feature: the non-conventional local name is gated out.
+  assert_line --index "$((${#lines[@]} - 1))" "branch="
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "wt-abc123"
+}
+
+@test "TB-5: target_exists keeps the branch AND emits the derived target" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "OV-156 reconstruction scan flow"
+  git branch feature/ov-156-reconstruction-scan-flow
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "already exists"
+  assert_line "target_branch=feature/ov-156-reconstruction-scan-flow"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "wt-abc123"
+}
+
+@test "TB-6: jq_unavailable emits the target derived from an explicit --goal" {
+  cd "$WD"
+  mk_branch_repo
+  local nobin tool p
+  nobin="$WD/nobin"
+  mkdir -p "$nobin"
+  for tool in git grep sed tr cut date mkdir bash sh env printf true false cat awk readlink dirname; do
+    p=$(command -v "$tool" 2> /dev/null) || continue
+    ln -sf "$p" "$nobin/$tool"
+  done
+  run env PATH="$nobin" bash "$PLUGIN_ROOT/$SCRIPT" --goal "Add a new login flow"
+  assert_success
+  assert_line --index 0 --partial "target unresolvable"
+  # The arm refuses the RENAME (batch scope is unknowable without jq); naming the PR
+  # head needs no ledger read when the goal came in on argv.
+  assert_line "target_branch=feature/add-a-new-login-flow"
+}
+
+@test "TB-7: no target on the arms that must not propose one" {
+  cd "$WD"
+  # already conventional — branch= is already the answer
+  mk_branch_repo "feature/already-named-thing"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line "target_branch="
+  assert_line --index "$((${#lines[@]} - 1))" "branch=feature/already-named-thing"
+
+  # integration branch — never a PR head under any name
+  rm -rf "$WD/.git"
+  git init -q -b master "$WD"
+  git -C "$WD" -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m work
+  jq '.facts.goal = "Add a new login flow" | .metadata.base_ref = "master"' \
+    .context/state.json > s && mv s .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "integration branch"
+  assert_line "target_branch="
+}
+
+@test "TB-8: library unreachable emits both lines, target empty (nothing can derive it)" {
+  cd "$WD"
+  mk_branch_repo
+  mkdir -p lonely
+  cp "$PLUGIN_ROOT/$SCRIPT" lonely/branch-name.sh
+  run bash lonely/branch-name.sh
+  assert_success
+  assert_line "target_branch="
+  assert_line --index "$((${#lines[@]} - 1))" "branch=wt-abc123"
+}
+
+@test "TB-9 (SR-1): a shell-hostile current branch reaches neither emitted line" {
+  cd "$WD"
+  local marker="/tmp/branch-name-sr1-marker-f"
+  mk_hostile_repo "$marker"
+  jq '.facts.goal = "Add login flow"' .context/state.json > s && mv s .context/state.json
+  git branch feature/add-login-flow
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  # target_branch= carries the DERIVED name — conventional by construction, so the
+  # hostile current name cannot ride along on either contract line.
+  assert_line "target_branch=feature/add-login-flow"
+  assert_line --index "$((${#lines[@]} - 1))" "branch="
+  refute_output --partial 'fix/a$('
+  [ ! -e "$marker" ]
+}
+
+@test "TB-10: BRANCH_NAME_PRINT dry run still prints the bare target, no key=value lines" {
+  cd "$WD"
+  mk_branch_repo
+  run env BRANCH_NAME_PRINT=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output "bugfix/fix-pr-composition-and-branch-naming"
+  refute_output --partial "target_branch="
 }
 
 @test "SR-2/SR-4: a symlinked script still resolves the real sibling branch-lib.sh" {
