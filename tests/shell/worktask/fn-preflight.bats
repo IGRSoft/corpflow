@@ -158,7 +158,7 @@ no_screenshots() {
   cd "$WD"
   git init -q .
   git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
-  jq '.git={"base_branch":"'"$(git rev-parse --abbrev-ref HEAD)"'"}' \
+  jq '.metadata.base_ref="'"$(git rev-parse --abbrev-ref HEAD)"'"' \
     .context/state.json > s && mv s .context/state.json
   run bash "$PLUGIN_ROOT/$SCRIPT" continuity
   assert_success
@@ -417,8 +417,9 @@ EOF
   cd "$WD"
   git init -q -b master .
   git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
-  jq '.metadata.base_ref = "never-used" | .git = {"base_branch":"also-not"}' \
+  jq '.metadata.base_ref = "never-used"' \
     .context/state.json > s && mv s .context/state.json
+  printf '{"git":{"base_branch":"also-not"}}\n' > workspace.json
   run env FN_BASE_REF=master bash "$PLUGIN_ROOT/$SCRIPT" continuity
   assert_success
   assert_output --partial "ancestor of master"

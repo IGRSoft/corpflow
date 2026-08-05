@@ -141,7 +141,7 @@ All changes committed to the issue branch, branch pushed to origin, PR created w
    ```
 5. **Validate artifact filenames**: `bash "<plugin-root>/skills/worktask/scripts/cache-lint.sh" --filename-lint .context/` — non-canonical names (e.g. `arch-0.md` not `architecture-0.md`) block hook artifact resolution
 
-**Prevention**: Ensure `commands/worktask.md` Phase 1 step 3b runs at worktask start. The plugin.json hook registration (v3.11.0+) gives automatic Layer 2 coverage without project-local install.
+**Prevention**: Ensure `commands/worktask.md` Phase 1 step 3b runs at worktask start. The plugin.json hook registration gives automatic Layer 2 coverage without project-local install.
 
 ## Worktree Troubleshooting
 
@@ -256,4 +256,3 @@ the split was structurally sound.
 
 Audit every heading the diff adds (`git diff -U0 -- '*.md' | grep '^+#\{2,6\} '`), not only the
 sites the splitting tool reported touching.
-

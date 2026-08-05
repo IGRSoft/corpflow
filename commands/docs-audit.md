@@ -235,4 +235,3 @@ Owner: Technical Writer
 This command works with:
 - `/docs-readme` - Fix README issues
 - `/worktask` DC stage - Documentation phase
-

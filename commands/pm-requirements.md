@@ -100,4 +100,3 @@ This command feeds into:
 - `/arch-decision` - Technical decisions from requirements
 - `/test-plan` - Test cases from acceptance criteria
 - `/worktask` - Requirements for PL stage
-

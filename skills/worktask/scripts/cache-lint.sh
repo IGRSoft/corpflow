@@ -703,7 +703,7 @@ desc" '{worktask_id:"wf-ft-retry", stage:"PL", prompt:$prompt}' > "$ftlog_retry"
   fi
 
   # Frontmatter template lint: positive fixture (stage agent shaped like
-  # the post-v3.9.0 collapsed agents).
+  # the collapsed agents).
   cat > "$td/developer.md" <<'EOF'
 ---
 name: developer

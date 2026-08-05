@@ -366,4 +366,3 @@ After worktask:
 | Reading entire large files | Wastes context on irrelevant code | Use offset/limit after Grep (§4c) |
 | Sequential git log/show/diff | 4 commands for 1 answer | Single combined git command (§4a) |
 | Separate greps for related symbols | Multiplies round-trips | Use `\|` alternation (§4b) |
-

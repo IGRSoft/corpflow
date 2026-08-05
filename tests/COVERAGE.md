@@ -70,7 +70,7 @@ requirement on clean clones.
 |---------|-----------|-------------------|
 | `benchmark/harness` (benchmarkkit + benchmarklive) | 95 tests / 16 modules | opportunistic coverage.py |
 
-Harness tests exercise schema byte-compat (vendored history.json), rotation,
+Harness tests exercise the schema decoder (vendored history.json), rotation,
 generators (real `swift test` on generated apps), deterministic/live pipelines,
 budget/credential gates, prompt assembly, and stage attribution — all with
 injected fakes, zero real LLM calls.
@@ -94,9 +94,9 @@ without completing. Per the LOCKED plan's open-question q3, where no coverage to
 use the **assertion-density proxy**: every shell script has a dedicated test file with ≥3 real
 scenario `@test`s (happy / edge / failure-exit) asserting its documented contracts.
 
-- **33/33** shell scripts + hooks have a dedicated `.bats` file (path-keyed for the two
-  `audit-dedup.sh`); **35/35** total deterministic targets covered (incl. 2 Python).
-- **429** `@test` assertions across the shell suite; **min 3 / avg ~10 / max 25** per file.
+- **32/32** shell scripts + hooks have a dedicated `.bats` file (path-keyed where basenames
+  collide); **34/34** total deterministic targets covered (incl. 2 Python).
+- **499** `@test` assertions across the shell suite; **min 3 / avg ~10 / max 25** per file.
 - Highest-density (high-logic) targets: `state-patch` 25 (4 conditional-edge cases added in 3.42.0), `handoff-harness` 14 (7 AR->DV gate cases added in 3.42.0), `scan-secrets` 14, `cache-lint` 12 (4 filename-grammar cases added in 3.42.0), `post-compact-recovery`/`milestone-helpers`/`map-and-filter`/`agent-coordination__audit-dedup` 9, `build-orchestrator`/`changelog-from-git` 8.
 
 To measure real bash line coverage, run `make coverage` on a **GNU/Linux** host (bash ≥4 +
@@ -116,7 +116,6 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 |-------------|-----------|-------------|---------------|---|
 | `hooks/agent-stop.sh` | `tests/shell/hooks/agent-stop.bats` | — | — | — |
 | `hooks/anchor-preflight.sh` | `tests/shell/hooks/anchor-preflight.bats` | — | — | — |
-| `hooks/audit-dedup.sh` | `tests/shell/hooks/audit-dedup.bats` | — | — | — |
 | `hooks/audit-subagent.sh` | `tests/shell/hooks/audit-subagent.bats` | — | — | — |
 | `hooks/audit-tooluse.sh` | `tests/shell/hooks/audit-tooluse.bats` | — | — | — |
 | `hooks/dv-screenshot-gate.sh` | `tests/shell/hooks/dv-screenshot-gate.bats` | — | — | — |

@@ -115,7 +115,7 @@ make benchmark-live
 - `--stages CODE[,CODE…]` (or `make benchmark-live STAGES=…`) dispatches a
   validated subset in canonical order — unknown code exits 64
 - Default capture is `stream-json`, which additionally yields the per-stage
-  **coverage manifest**; `--capture json` (bench-live flag) keeps the legacy
+  **coverage manifest**; `--capture json` (bench-live flag) keeps the
   single-object capture
 
 **Credentials — machine `claude` login is the PREFERRED source;
@@ -283,7 +283,7 @@ non-empty. `paths.with` / `paths.without`:
 All 5 token keys are ALWAYS emitted (value or null); cache figures are additive
 siblings, never summed into `total`. `comparison.<metric>` =
 `{"with": …, "without": …, "delta": …}` (`delta` null when either side null).
-Legacy records (3 token keys, no `app_path`) still decode.
+A present `tokens` block MUST carry all 5 keys; a partial block is rejected. `app_path` stays optional.
 
 ## bench-analyze (evidence-backed markdown)
 

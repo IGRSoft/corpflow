@@ -53,7 +53,7 @@ Invokes `skills/self-improvement/SKILL.md`. The skill handles the heavy lifting;
 /improve-yourself
 
 # Review since the last release tag, don't apply
-/improve-yourself --since v3.6.0 --dry-run
+/improve-yourself --since v4.0.0 --dry-run
 
 # Focus on skills only, apply after review
 /improve-yourself --target skills --apply

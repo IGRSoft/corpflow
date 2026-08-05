@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostToolUse → audit.jsonl writer (company-workflow worktask plugin, v3.10.0+).
+# PostToolUse → audit.jsonl writer (company-workflow worktask plugin).
 # Reads CC hook stdin JSON (tool_name, tool_input, tool_use_id, duration_ms,
 # effort.level, session_id) and appends one canonical row to
 # .context/logs/audit.jsonl with actor "hook:audit-tooluse".

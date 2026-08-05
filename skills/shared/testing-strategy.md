@@ -404,7 +404,7 @@ DV/QA enforce these even if PL set a tighter mode:
 - **Effective default when absent**: `scoped` (see *Effective default* note above). `build-only` is opt-in.
 - **Companion flags**:
   - `metadata.always_required_tests: [<test ID>...]` — explicit override, included in every Selected Tests list regardless of mode.
-  - `metadata.ui_visual_check: <bool>` — default `false`. When `true` AND `.context/designs/` exists, QA performs Design Comparison (was previously bundled into `requires_ui_tests`). Independent of `test_mode`.
+  - `metadata.ui_visual_check: <bool>` — default `false`. When `true` AND `.context/designs/` exists, QA performs Design Comparison. Independent of `test_mode`.
 - **Writer**: PL stage (`agents/product-manager.md` § Test Strategy Definition).
 
 #### Readers
@@ -450,7 +450,7 @@ DV's `Selected Tests` is the **handoff artifact** consumed by QA; DV's `Executed
 - Stakeholder requested full regression
 - First run after a major dependency upgrade
 
-### `ui_visual_check` (was: `requires_ui_tests` for visual QA)
+### `ui_visual_check`
 
 Set to `true` when at least one applies:
 - New user-facing views or screens (SwiftUI/UIKit, Compose, React/Vue/Svelte/Angular components)
@@ -487,10 +487,6 @@ DV's D2 step parses test sources for the markers documented in `skills/shared/te
 
 QA reads this section verbatim. If QA adds new tests during QA-stage edge-case review, it appends them to a `## Selected Tests (QA additions)` section in `testing-N.md`.
 
-### Backward compatibility (deprecated `requires_ui_tests` flag)
-
-Legacy `requires_ui_tests` (one-release-cycle compat alias; removed next minor release). When a `<plan_file>` has `requires_ui_tests` and no `test_mode`, map: `true` → `test_mode: full` + `ui_visual_check: true`; `false`/absent → `test_mode: scoped` + `ui_visual_check: false` (NOT `build-only` — that would silently drop QA unit-test execution on legacy plans). PL/DV/QA emit one deprecation note in their artifact `§ Notes` when it fires.
-
 ### Design↔result image comparison (wired flow)
 
 When the Design Comparison gate is open (`ui_visual_check: true` AND `.context/designs/`
@@ -515,15 +511,12 @@ RMSE is a **one-way escalator** — it may raise
 severity, never lower it (RMSE is blind to copy/semantic errors). The full 6-row matrix is
 in `agents/qa-engineer.md § Verdict reconciliation`.
 
-#### Backward-compat guarantees
+#### Degradation invariants (by reference)
 
-The change is strictly additive:
-- Top-level gate unchanged (`ui_visual_check: true` AND `.context/designs/` artifacts).
-- `requires_screenshots: false` → no DV images → 100% live-capture fallback = today's output.
-- `magick` absent → `visual-diff.sh` self-degrades (`skipped`/`imagemagick_not_found`, exit 0)
-  → QA proceeds vision-only, non-blocking.
-- No registry → existing Glob Discovery fallback untouched, vision-only.
-- Old manifest lacking the `Design Ref` column parses fine (missing ≡ `—` → live-capture).
+The design↔result reuse is strictly additive; the full invariant list (gate unchanged, absent DV
+images → live-capture, `magick` absent → vision-only non-blocking, no registry → Glob Discovery,
+manifest without a `Design Ref` column) is canonical in
+`skills/worktask/references/visual-qa.md § Degradation invariants`.
 
 ### Skip mechanics — positive selection everywhere
 

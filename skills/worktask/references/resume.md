@@ -71,7 +71,7 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 
 ### Step 0 notes — dispatched_agents matching
 
-   **`dispatched_agents[]` is now populated (v3.31.0).** The orchestrator loop writes one entry per `task_id` (`{stage, task_id, subagent_type, agent_id?, name?, model_requested?, model_resolved?, status}`), so this pre-check has real rows to match against — previously the field was referenced but never written. **Degrade rules for imperfect rows:**
+   The orchestrator loop writes one `dispatched_agents[]` entry per `task_id` (`{stage, task_id, subagent_type, agent_id?, name?, model_requested?, model_resolved?, status}`), so this pre-check has real rows to match against. **Degrade rules for imperfect rows:**
    - **`agent_id` present** → match the `claude agents --json --all` row by id; branch per the table above.
 #### Degrade rules — absent or terminal rows
 

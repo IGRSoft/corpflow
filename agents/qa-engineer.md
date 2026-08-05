@@ -92,7 +92,7 @@ executes only its `Executed Tests (DV)` subset, QA runs the full suite.
 
 #### Q1 Three-Mode Dispatcher
 
-Read `metadata.test_mode` from `<plan_file>` (effective default: `scoped`; one-cycle legacy alias is documented in `skills/shared/testing-strategy.md § Backward compatibility`). Read `.context/development-N.md § Selected Tests` (DV's authored list).
+Read `metadata.test_mode` from `<plan_file>` (effective default: `scoped`). Read `.context/development-N.md § Selected Tests` (DV's authored list).
 
 | `test_mode` (DV's effective mode after auto-promotion, if any) | QA execution |
 |---|---|
@@ -134,8 +134,6 @@ Per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation
 ### Design Comparison (Visual QA)
 
 **Gate**: only run when `metadata.ui_visual_check: true` in `<plan_file>` **and** design references exist in `.context/designs/`. If the flag is `false` or absent, skip this entire section and record one line in `testing-N.md § Design Comparison`: `Skipped — ui_visual_check=false in plan`. See `skills/shared/testing-strategy.md § Test Selection Gate`.
-
-One-cycle legacy alias mapping is documented in `skills/shared/testing-strategy.md § Backward compatibility`; emit the deprecation note in `testing-N.md § Notes` when it fires.
 
 When the gate is open, perform visual comparison during Q1 (after functional testing).
 
@@ -227,7 +225,6 @@ Before marking QA stage complete, verify:
 ## Handoff Protocol
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-qa`. Prev→this label: `DR→QA` (or `SR→QA` when SR runs).
-
 
 ### State Patch — REQUIRED before return
 

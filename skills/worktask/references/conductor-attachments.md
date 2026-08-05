@@ -110,7 +110,7 @@ The company-workflow worktask has finished and is ready to ship.
 - Uncommitted changes: <N>
 - Upstream: <UPSTREAM_LINE>
 - Suggested commit type: **<TYPE>** (per `rules/git-conventions.md`, Conventional Commits 1.0.0)
-- Worktask summary: `.context/complete-summary-N.md` (N = `run_index`; fallback newest `.context/complete-summary-*.md`, then legacy `.context/complete-summary.md`)
+- Worktask summary: `.context/complete-summary-N.md` (N = `run_index`; fallback newest `.context/complete-summary-*.md`)
 <ISSUE_LINE>
 <!-- If issue ref present: "- Issue: #<ISSUE> — include `Closes #<ISSUE>` in the PR body to auto-close on merge." -->
 

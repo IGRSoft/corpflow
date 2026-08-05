@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Audit-trail dedup filter (company-workflow plugin v3.10.1+).
+# Audit-trail dedup filter (company-workflow plugin).
 #
 # Reads `.context/logs/audit.jsonl` (or stdin) and emits a deduped stream:
 # for every group of rows sharing `metadata.dedupe_key`, prefer the row whose
@@ -31,15 +31,15 @@ run_self_test() {
 {"ts":"2026-05-15T00:00:02Z","actor":"developer","action":"tool_invoked","subject":"Write","result":"ok","metadata":{"dedupe_key":"sessA:toolu1"}}
 {"ts":"2026-05-15T00:00:02Z","actor":"hook:audit-tooluse","action":"tool_invoked","subject":"Write","result":"ok","metadata":{"dedupe_key":"sessA:toolu1","duration_ms":42,"effort":"high"}}
 {"ts":"2026-05-15T00:00:03Z","actor":"developer","action":"tool_invoked","subject":"Edit","result":"ok","metadata":{"dedupe_key":"sessA:toolu2"}}
-{"ts":"2026-05-15T00:00:04Z","actor":"hook:audit-subagent","action":"subagent_stopped","subject":"developer","result":"ok","metadata":{"dedupe_key":"sessA:agX:taskY:stop"}}
+{"ts":"2026-05-15T00:00:04Z","actor":"hook:audit-subagent","action":"subagent_stopped","subject":"developer","result":"ok","metadata":{"dedupe_key":"sessA:agX:stop"}}
 {"ts":"2026-05-15T00:00:05Z","actor":"developer","action":"subagent_stopped","subject":"developer","result":"ok","metadata":{"dedupe_key":"sessA:agY:stop"}}
-{"ts":"2026-05-15T00:00:05Z","actor":"hook:audit-subagent","action":"subagent_stopped","subject":"developer","result":"ok","metadata":{"dedupe_key":"sessA:agY:taskZ:stop"}}
+{"ts":"2026-05-15T00:00:05Z","actor":"hook:audit-subagent","action":"subagent_stopped","subject":"developer","result":"ok","metadata":{"dedupe_key":"sessA:agY:stop"}}
 JSONL
   local out; out=$("$0" "$tmp")
   rm -f "$tmp"
   # Expected: 5 rows (orchestrator approval + hook row for toolu1 [agent row dropped]
   # + developer row for toolu2 [no hook row, kept] + hook subagent_stopped for agX
-  # + hook row for agY cross-shape pair [legacy agent row dropped via norm_dk]).
+  # + hook row for agY [agent row dropped]).
   local n; n=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
   if [ "$n" != "5" ]; then
     echo "audit-dedup self-test FAIL: expected 5 rows, got $n" >&2
@@ -51,11 +51,10 @@ JSONL
     echo "audit-dedup self-test FAIL: expected hook row for sessA:toolu1, got actor=$actor" >&2
     return 1
   fi
-  # Cross-shape: legacy key sessA:agY:stop + new key sessA:agY:taskZ:stop must collapse
-  # to one row; the hook row (new shape) must win.
-  local actor2; actor2=$(printf '%s\n' "$out" | jq -rs '.[] | select(.metadata.dedupe_key == "sessA:agY:taskZ:stop" or .metadata.dedupe_key == "sessA:agY:stop") | .actor')
+  # Same key from both a hook and an agent writer must collapse to the hook row.
+  local actor2; actor2=$(printf '%s\n' "$out" | jq -rs '.[] | select(.metadata.dedupe_key == "sessA:agY:stop") | .actor')
   if [ "$actor2" != "hook:audit-subagent" ]; then
-    echo "audit-dedup self-test FAIL: expected hook to win cross-shape dedupe for sessA:agY, got actor=$actor2" >&2
+    echo "audit-dedup self-test FAIL: expected hook row to win for sessA:agY, got actor=$actor2" >&2
     return 1
   fi
   echo "audit-dedup: self-test OK"
@@ -79,26 +78,19 @@ fi
 # Strategy:
 #   1. Parse every line as JSON; attach original index + normalized key for stable ordering.
 #   2. Partition by presence of metadata.dedupe_key.
-#   3. Normalize subagent_stopped keys: legacy 3-segment "<s>:<a>:stop" and new
-#      4-segment "<s>:<a>:<t>:stop" share the same norm key so they collapse into one group.
-#   4. For grouped rows, keep the hook:* row if any, else the first by index.
-#   5. Re-merge with ungrouped rows and sort by original index.
+#   3. For grouped rows, keep the hook:* row if any, else the first by index.
+#   4. Re-merge with ungrouped rows and sort by original index.
 printf '%s' "$INPUT" | jq -ncR '
-  def norm_dk:
-    if . == null then null
-    elif (endswith(":stop") and (split(":") | length) == 4) then
-      (split(":") | .[0:2] + ["stop"] | join(":"))
-    else . end;
   [inputs | select(length > 0) | fromjson?] as $rows
   | $rows
   | to_entries
-  | map(.value + {__idx: .key, __norm_key: (.value.metadata.dedupe_key | norm_dk)})
-  | (map(select(.metadata.dedupe_key)) | group_by(.__norm_key)
+  | map(.value + {__idx: .key})
+  | (map(select(.metadata.dedupe_key)) | group_by(.metadata.dedupe_key)
        | map(  (map(select(.actor | startswith("hook:"))) | first) // (sort_by(.__idx) | .[0])
             )) as $deduped
   | (map(select(.metadata.dedupe_key | not))) as $singletons
   | ($deduped + $singletons)
   | sort_by(.__idx)
-  | map(del(.__idx) | del(.__norm_key))
+  | map(del(.__idx))
   | .[]
 ' 2>/dev/null

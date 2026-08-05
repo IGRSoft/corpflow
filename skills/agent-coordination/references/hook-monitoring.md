@@ -54,7 +54,7 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 ### PreCompact & plugin monitors
 
-> The `PreCompact` hook fires **before** automatic compaction and can block it by returning exit code 2 — useful for guarding critical stage handoffs from premature summarization. See `context-compression` skill for the paired `PostCompact` recovery pattern. **As of plugin v3.10.0, the managed hook `hooks/precompact-checkpoint.sh` (registered in `plugin.json`) snapshots `.context/state.json` to `.context/state.checkpoint-<ts>.json` on every compaction — never blocks (exit 0 always).**
+> The `PreCompact` hook fires **before** automatic compaction and can block it by returning exit code 2 — useful for guarding critical stage handoffs from premature summarization. See `context-compression` skill for the paired `PostCompact` recovery pattern. **The managed hook `hooks/precompact-checkpoint.sh` (registered in `plugin.json`) snapshots `.context/state.json` to `.context/state.checkpoint-<ts>.json` on every compaction — never blocks (exit 0 always).**
 
 > Background monitor support for plugins via the `monitors` manifest key. Declare long-running monitors that stream events into the session without occupying a foreground tool call.
 
@@ -98,7 +98,7 @@ The two surfaces are symmetric: the hook embeds remediation in the block JSON; t
 
 #### Hook-stdin forward-compat
 
-**Hook-stdin forward-compat**: `parent_agent_id` is OTEL-side and not confirmed in Stop/SubagentStop hook stdin, but `audit-subagent.sh` and `agent-stop.sh` defensively capture it with `(.parent_agent_id // "none")` — no-op until CC surfaces it in hook payloads, automatically populated the moment it does. Paired with the `dedupe_key_extended` audit field (see `skills/agent-coordination/SKILL.md § Dedupe Key Migration`) the worktask gets parent-aware audit dedup without any future plugin release.
+`parent_agent_id` is OTEL-side and not confirmed in Stop/SubagentStop hook stdin, but `audit-subagent.sh` and `agent-stop.sh` defensively capture it with `(.parent_agent_id // "none")` — no-op until CC surfaces it in hook payloads, automatically populated the moment it does. It is recorded for observability only; dedupe keys do not use it.
 
 ### Background Tasks & Crons Visibility
 
@@ -113,7 +113,7 @@ Captured fields (additive metadata on existing audit rows; written by `hooks/aud
 - `session_crons_count: ((.session_crons // []) | length)`
 - `session_cron_ids: ((.session_crons // []) | map(.id // .cron_id // "unknown"))`
 
-Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved. With nested sub-agent spawning, real `parent_agent_id` values flow in hook stdin — `hooks/audit-dedup.sh --check-mode` auto-detects them and switches base→extended dedupe keys with no code change (designed for exactly this cut-over in v3.10.6).
+Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved. With nested sub-agent spawning, real `parent_agent_id` values flow in hook stdin and are recorded on the row.
 
 ### OTEL `tool_parameters`, resource-attribute labels & log-event correlation
 
@@ -131,11 +131,11 @@ Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved. With ne
 
 #### BG-Task ID Schema Watch
 
-**BG-Task ID Schema Watch**: the ID extraction uses a defensive coalesce `(.id // .task_id // "unknown")` / `(.id // .cron_id // "unknown")` because the canonical key name is not yet confirmed in CC docs. Any `"unknown"` value appearing in `background_task_ids` or `session_cron_ids` is a signal that CC has begun populating the arrays with payloads whose ID field name is neither `id` nor `task_id`/`cron_id`. When that happens, the next `/cc-update` should pin the canonical key (remove the coalesce) and update both hook scripts. Until then the coalesce keeps the capture working across whichever name CC chooses.
+The ID extraction uses a defensive coalesce `(.id // .task_id // "unknown")` / `(.id // .cron_id // "unknown")` because the canonical key name is not yet confirmed in CC docs. Any `"unknown"` value appearing in `background_task_ids` or `session_cron_ids` is a signal that CC has begun populating the arrays with payloads whose ID field name is neither `id` nor `task_id`/`cron_id`. When that happens, the next `/cc-update` should pin the canonical key (remove the coalesce) and update both hook scripts. Until then the coalesce keeps the capture working across whichever name CC chooses.
 
 ### Managed (plugin) vs ad-hoc (user) hooks
 
-**Plugin-managed hooks** ship in `.claude-plugin/plugin.json` and survive `allowManagedHooksOnly: true` enforcement. As of v3.10.0 the company-workflow plugin ships four managed hooks: `audit-tooluse` (PostToolUse), `audit-subagent` (SubagentStop), `precompact-checkpoint` (PreCompact), and a `mcp_tool` PushNotification at PL/FN Stop. The audit trail is a **plugin invariant** — these need to fire deterministically across every install.
+**Plugin-managed hooks** ship in `.claude-plugin/plugin.json` and survive `allowManagedHooksOnly: true` enforcement; see `plugin.json` for the current managed-hook set. The audit trail is a **plugin invariant** — these need to fire deterministically across every install.
 
 **Ad-hoc user hooks** go in project `settings.json` (or `~/.claude/settings.json`) and are for opt-in worktasks like dashboard webhooks or external SIEM forwarding. Examples below remain valid templates for that case.
 
@@ -270,15 +270,15 @@ Hooks can invoke MCP tools directly via `type: "mcp_tool"` (alongside `command` 
 
 #### Matcher semantics
 
-**Matcher semantics:** hook matchers with hyphenated identifiers **exact-match** rather than substring-matching — as of plugin v3.30.0 the Stop matcher is written with explicit wildcards (`.*company-workflow:product-manager.*|.*company-workflow:project-manager.*`, per the `mcp__server__.*` guidance) so it keeps firing regardless of how the runtime qualifies the agent name. Comma-separated matchers (`"Bash,PowerShell"`) do not fire — always use regex alternation (`Bash|PowerShell`), never commas.
+Hook matchers with hyphenated identifiers **exact-match** rather than substring-matching, so the Stop matcher is written with explicit wildcards (`.*company-workflow:product-manager.*|.*company-workflow:project-manager.*`, per the `mcp__server__.*` guidance) to keep firing regardless of how the runtime qualifies the agent name. Comma-separated matchers (`"Bash,PowerShell"`) do not fire — always use regex alternation (`Bash|PowerShell`), never commas.
 
-#### Plugin v3.10.0 historical note
+#### Stop → PushNotification hook
 
-**Plugin v3.10.0 historical note:** `plugin.json` shipped an `mcp_tool` hook on `Stop` matching `company-workflow:product-manager|company-workflow:project-manager` that fired `conductor.PushNotification` at the PL and FN stages. The hook still fires at stage completion for observability (PushNotification). The PL stage is followed by a human plan-approval gate (Step A.5); the FN stage is now gated by a finalization checkpoint (`fn_gate`, default `"checkpoint"`) that STOPs before commit/push/PR unless bypassed by `--auto=[finalization]` / `--emergency` (a `/megatask` batch stamps `fn_gate: "bypass"` directly on each per-issue PL0). Gracefully no-ops if the conductor MCP server is unavailable.
+`plugin.json` registers an `mcp_tool` hook on `Stop` (matcher per § Matcher semantics above) that fires `conductor.PushNotification` at PL and FN stage completion (observability only). The PL stage is followed by a human plan-approval gate (Step A.5); the FN stage is gated by a finalization checkpoint (`fn_gate`, default `"checkpoint"`) that STOPs before commit/push/PR unless bypassed by `--auto=[finalization]` / `--emergency` (a `/megatask` batch stamps `fn_gate: "bypass"` directly on each per-issue PL0). Gracefully no-ops if the conductor MCP server is unavailable.
 
 ### PostToolUse duration_ms
 
-`PostToolUse` and `PostToolUseFailure` hook inputs include `duration_ms` — tool execution time excluding permission prompts and `PreToolUse` hooks. Useful for cost/perf telemetry and slow-tool alerting in worktask audit trails. **Plugin v3.10.0:** the managed hook `hooks/audit-tooluse.sh` (registered in `plugin.json`) consumes `duration_ms` + `effort.level` and writes `metadata` of every `audit.jsonl` `tool_invoked` row.
+`PostToolUse` and `PostToolUseFailure` hook inputs include `duration_ms` — tool execution time excluding permission prompts and `PreToolUse` hooks. Useful for cost/perf telemetry and slow-tool alerting in worktask audit trails. The managed hook `hooks/audit-tooluse.sh` (registered in `plugin.json`) consumes `duration_ms` + `effort.level` and writes `metadata` of every `audit.jsonl` `tool_invoked` row.
 
 ### PostToolUse Output Replacement
 

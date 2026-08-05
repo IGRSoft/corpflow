@@ -30,7 +30,7 @@ Every stage agent reads inputs in this order, anchor-first:
 1. `task.metadata.run_index` → `<basename>-${N}.md`.
 2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
 
-**Backward-compatibility fallback (F1)**: If `.context/state.json` is absent, fall back to `metadata.context_files` (legacy mode), reading the listed files in full. Rationale and full F1 description: `skills/shared/legacy-fallback-f1.md`.
+**Fallback (F1)**: If `.context/state.json` is absent, fall back to `metadata.context_files` (`context_files` mode), reading the listed files in full. Rationale and full F1 description: `skills/worktask/references/handoff-protocol.md#f1-fallback`.
 
 ### F1 telemetry emission
 
@@ -47,7 +47,7 @@ printf '%s\t%s\t%s\t%s\n' \
   >> ".context/logs/fallback-${N}.log"
 ```
 
-Then proceed with the legacy read. The fallback log is consumed by `/cost-report` to flag worktasks that lost cache hits silently.
+Then proceed with the `context_files` read. The fallback log is consumed by `/cost-report` to flag worktasks that lost cache hits silently.
 
 ### No-restate rule
 
@@ -71,7 +71,7 @@ Canonical cheapest-first read order for review/finalization stages (DR/SR/QA/DC/
 
 #### Diff-only — full-read escape hatch
 
-Read the full file/artifact ONLY when the above is insufficient (document the reason in the stage artifact's `§ Findings`/`§ Notes`); for files >200 lines, use `Read` with `offset`/`limit` on the changed region. Absent `facts.files_read` (legacy worktask) → normal reads. Stage agents cite this anchor and keep a ~1-line steady-path reminder inline; they MUST NOT restate this full text.
+Read the full file/artifact ONLY when the above is insufficient (document the reason in the stage artifact's `§ Findings`/`§ Notes`); for files >200 lines, use `Read` with `offset`/`limit` on the changed region. Absent `facts.files_read` → normal reads. Stage agents cite this anchor and keep a ~1-line steady-path reminder inline; they MUST NOT restate this full text.
 
 ## Required Outputs (handoff-protocol)
 
@@ -154,7 +154,7 @@ All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolve
 
 The orchestrator runs validation between `TaskUpdate({status: "completed"})` and the next stage's `status: in_progress`:
 
-1. **File check**: Read `metadata.context_refs` (anchor-based, preferred) or `metadata.context_files` (legacy fallback) for next stage — verify every referenced file exists on disk. `metadata.error_file` is always present in `context_files` (orchestrator auto-appends on `TaskCreate`/`TaskUpdate`); treat its absence on disk as "no prior retries" (not a failure).
+1. **File check**: Read `metadata.context_refs` (anchor-based, preferred) or `metadata.context_files` (F1 fallback) for next stage — verify every referenced file exists on disk. `metadata.error_file` is always present in `context_files` (orchestrator auto-appends on `TaskCreate`/`TaskUpdate`); treat its absence on disk as "no prior retries" (not a failure).
 
 ### Step 2 — frontmatter / typed-return check
 

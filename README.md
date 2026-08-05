@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with Task System integration, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.0.2 · Requires Claude Code 2.1.220+**
+**Plugin 4.0.3 · Requires Claude Code 2.1.220+**
 
 ## Features
 
@@ -118,8 +118,6 @@ Gate automation — `--auto=[<values>]` takes an array of any subset of `plan`, 
 | `plan` | Stamp `plan_gate: "bypass"` — skip the post-PL plan-approval STOP and proceed straight into the stage loop. FN gate still checkpoints. |
 | `decision` | Stamp `decision_gate: "auto"` — PL0's open questions are answered by a Fable-model decision delegate instead of blocking on the user; the amendments land in the plan's existing anchors and the decisions themselves in `state.json facts.decisions[]` marked `(auto-decided)`. Escalation-class questions (irreversible, scope-expanding, security-posture, spend) still stop for a human. Bypasses no gate. |
 | `finalization` | Stamp `fn_gate: "bypass"` — skip the pre-FN STOP; auto commit/push/PR. Plan gate still checkpoints. |
-
-Legacy aliases `--auto-plan` (= `--auto=[plan]`) and `--auto-finalization` (= `--auto=[finalization]`) remain accepted but are deprecated.
 
 Scope and pipeline flags:
 
@@ -380,7 +378,6 @@ Registered in `.claude-plugin/plugin.json`. Several are **gates** — they can b
 | `megatask-monitor.sh` | SubagentStop | Drives the megatask completion loop (unblock dependents, progress) |
 | `precompact-checkpoint.sh` | PreCompact | Checkpoints `state.json` before auto-compaction |
 | `agent-stop.sh` | Stop (wired via agent frontmatter) | Stage-boundary audit row + PL/FN approval-gate notification |
-| `audit-dedup.sh` | — | Not registered; manual read-helper for audit consumers such as `/cost-report` |
 
 A `Stop` matcher on `product-manager`/`project-manager` also fires a `conductor` `PushNotification` when an approval gate is ready for review.
 

@@ -207,6 +207,8 @@ questions route through the Fable decision pass (`commands/worktask.md § Step A
 parking on a human. Escalate-class questions are still never auto-decided — they PARK that one
 issue and the batch proceeds with the other unblocked issues.
 
+##### Step 3 — parking mechanics
+
 Parking rides the monitor's existing failure path, so it needs no new state: the per-issue
 worktask writes `workspace.json.execution.status: "failed"` with
 `execution.reason: "parked_escalation"` and an `escalation_parked` audit row
@@ -262,4 +264,3 @@ schedule live in `skills/megatask/references/dependency-graph.md`.
   `/worktask "<task>"`.
 - `/megatask` owns everything multi-issue: issue-set resolution, the DAG, track derivation, the
   monitoring hook, and per-issue gate-bypass. `/worktask` stays a single-issue stage runner.
-

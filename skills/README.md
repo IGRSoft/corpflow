@@ -4,7 +4,6 @@ All available skills for the company-workflow worktask plugin.
 
 ## Skills
 
-
 ### Capture, coordination & context
 
 | Skill | Description | Effort |

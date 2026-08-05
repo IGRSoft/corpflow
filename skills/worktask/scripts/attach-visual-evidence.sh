@@ -601,8 +601,7 @@ MD
   _fail() { echo "attach-visual-evidence: $1 FAIL${2:+ — $2}"; fail=$((fail+1)); }
 
   # GH mock: records calls, simulates `issue view` (marker presence via file) and
-  # `issue comment`. Marker store = $GH_MARKER_FILE (single, legacy f4/f5) OR
-  # $GH_MARKER_DIR/<target> (per-issue, AC2 f9-f12). The mock also answers
+  # `issue comment`. Marker store = $GH_MARKER_DIR/<target> (per-issue). The mock also answers
   # `pr view` for the completion resolver/summary:
   #   $GH_PR_BODY    → PR body for keyword scan + title/body fallback
   #   $GH_PR_REFS    → space-separated issue numbers for closingIssuesReferences
@@ -613,11 +612,14 @@ MD
 #!/usr/bin/env bash
 # Per-target marker store path. target = the issue ref/number ($3).
 _store() {
-  if [ -n "${GH_MARKER_DIR:-}" ]; then
-    printf '%s/%s' "$GH_MARKER_DIR" "$(printf '%s' "${1:-_}" | tr '/:' '__')"
-  else
-    printf '%s' "${GH_MARKER_FILE:-/dev/null}"
+  # Per-issue marker file under $GH_MARKER_DIR. With the dir unset there is no
+  # per-target store, so sink to /dev/null rather than composing /dev/null/<target>,
+  # which is ENOTDIR and would make every read and write in the mock fail.
+  if [ -z "${GH_MARKER_DIR:-}" ]; then
+    printf '/dev/null'
+    return 0
   fi
+  printf '%s/%s' "$GH_MARKER_DIR" "$(printf '%s' "${1:-_}" | tr '/:' '__')"
 }
 case "$1 $2" in
   "pr view")
@@ -704,13 +706,13 @@ MD
   # ---- f4: --post issue first run → one comment + ok row
   local d4; d4=$(_mk_sandbox); _manifest_with_captures "$d4"
   mkdir -p "$d4/bin"; _mk_gh "$d4"
-  local mfile4="$d4/markers.txt"; : > "$mfile4"
+  local mdir4="$d4/markers"; mkdir -p "$mdir4"
   ( PATH="$d4/bin:$PATH" STATE_FILE="$d4/.context/state.json" WORKSPACE_ROOT="$d4" \
-    GH_BIN=gh GH_MARKER_FILE="$mfile4" ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
+    GH_BIN=gh GH_MARKER_DIR="$mdir4" ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
     bash "$self" --post issue >/dev/null 2>&1 )
   if grep -q '"action":"visual_evidence_issue_commented"' "$d4/.context/logs/audit.jsonl" 2>/dev/null && \
      grep -q '"result":"ok"' "$d4/.context/logs/audit.jsonl" 2>/dev/null && \
-     grep -qF "<!-- visual-evidence:wid-test:0 -->" "$mfile4"; then
+     grep -rqF "<!-- visual-evidence:wid-test:0 -->" "$mdir4"; then
     _ok "f4-post-issue-first"
   else
     _fail "f4-post-issue-first" "$(tail -1 "$d4/.context/logs/audit.jsonl" 2>/dev/null)"
@@ -718,9 +720,9 @@ MD
 
   # ---- f5: --post issue second run, marker present → skipped/already_published
   ( PATH="$d4/bin:$PATH" STATE_FILE="$d4/.context/state.json" WORKSPACE_ROOT="$d4" \
-    GH_BIN=gh GH_MARKER_FILE="$mfile4" ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
+    GH_BIN=gh GH_MARKER_DIR="$mdir4" ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
     bash "$self" --post issue >/dev/null 2>&1 )
-  local marker_count; marker_count=$(grep -cF "<!-- visual-evidence:wid-test:0 -->" "$mfile4")
+  local marker_count; marker_count=$(cat "$mdir4"/* 2>/dev/null | grep -cF "<!-- visual-evidence:wid-test:0 -->")
   if [ "$marker_count" -eq 1 ] && \
      grep -q '"reason":"already_published"' "$d4/.context/logs/audit.jsonl" 2>/dev/null; then
     _ok "f5-post-issue-idempotent"

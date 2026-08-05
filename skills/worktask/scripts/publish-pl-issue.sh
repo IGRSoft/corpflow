@@ -335,10 +335,7 @@ sanitise_body() {
       if (probe ~ /(^|[[:space:]])~\//) next                         # L4
       if (line ~ /conductor\/workspaces\/[A-Za-z0-9_-]+/) next      # L5
       if (line ~ /(^|[[:space:]])(workspace_path|plan_file|run_index|artifact_path)[[:space:]]*[:=]/) next  # L6
-      # PERMANENT-SUPERSET: "analyzing" is retained alongside its 3.42.0 replacement
-      # "architecture" on purpose. This is a redaction filter, not a compat shim --
-      # dropping a name it used to recognize can only leak more. Do not tidy.
-      if (line ~ /(planning|architecture|analyzing|coordinating|coordination|developing|development|reviewing|review|qa|testing|documenting|documentation|releasing|release|finalizing|finalization|stakeholding|retrospective|incident|ethics-review)-[0-9]+\.md/) next  # L7,L8
+      if (line ~ /(planning|architecture|coordinating|coordination|developing|development|reviewing|review|qa|testing|documenting|documentation|releasing|release|finalizing|finalization|stakeholding|retrospective|incident|ethics-review)-[0-9]+\.md/) next  # L7,L8
       if (probe ~ /(^|[[:space:]])(\.\/|\.\.\/)[A-Za-z0-9_.\/-]+/) next   # L9
       # L10: drop whole line when a plugin-qualified identifier is the leading
       # non-bullet token (e.g. "* Routed to company-workflow:developer ...",
@@ -348,9 +345,7 @@ sanitise_body() {
       # (Registry plugins + Support plugins) and stay identical at every
       # occurrence in this file. A missing prefix leaks the agent identifiers
       # of that plugin into the published issue.
-      # PERMANENT-SUPERSET: "igrsoft" is retained alongside its 4.0.0 replacement
-      # "company-workflow" — pre-rename .context/ artifacts still carry the old ids.
-      if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(company-workflow|igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next
+      if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next
 
       # ---- Pass 2 token-strip (with allow-list) -------------------------
       # Track fenced code block state (A1).
@@ -395,9 +390,8 @@ sanitise_body() {
         # A6: plugin-qualified identifier token (company-workflow:foo, apple-developer:bar,
         # etc.). Narrow known-prefix allow-list to avoid false positives on
         # http:, git:, file:, etc. Backtick spans already passed through above.
-        # Prefix list MUST mirror skills/shared/compatible-plugins.md and L275
-        # (plus the PERMANENT-SUPERSET legacy token "igrsoft").
-        if (match(rest, /^(company-workflow|igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/)) {
+        # Prefix list MUST mirror skills/shared/compatible-plugins.md and L275.
+        if (match(rest, /^(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/)) {
           i = i + RLENGTH
           continue
         }
@@ -1011,18 +1005,8 @@ resolve_context_issue_local() {
 # (case-insensitive, trimmed). Accepts a single hit only — an ambiguous / multi-hit
 # result is ignored so an unrelated same-worded issue never captures a fresh context.
 # Needs $TITLE, so it runs AFTER the title is built. Sets RESOLVED_ISSUE_* on hit.
-#
-# Tried twice, by design. Title generation changed in #375 (the chain below the
-# fold), so an issue published earlier under the pre-#375 slug-fallback title no
-# longer matches the title this run would generate — the anchor-loss recovery path
-# would miss it and open a duplicate. $TITLE_LEGACY reproduces the old title and is
-# probed only when the current one misses, costing one extra `gh issue list` on a
-# path that is already the rare fallback. The probe is dropped once the corpus of
-# issues published before #375 is closed out.
 resolve_context_issue_search() {
-  resolve_context_issue_search_for "$TITLE" && return 0
-  [ -n "${TITLE_LEGACY:-}" ] && [ "$TITLE_LEGACY" != "$TITLE" ] || return 1
-  resolve_context_issue_search_for "$TITLE_LEGACY"
+  resolve_context_issue_search_for "$TITLE"
 }
 
 resolve_context_issue_search_for() {
@@ -1688,18 +1672,18 @@ MOCK
     # Fixture 02b: plugin-qualified identifier tokens must not appear in
     # sanitised body (Pass-2 A6 rule), outside code spans.
     local leak_in leak_out
-    leak_in=$'Breakdown using company-workflow:estimation-methodology:\n* Routed to company-workflow:developer (apple-developer:ios-developer).\nDelegated to igrsoft:qa-engineer for regression coverage.\nNarrative referencing company-workflow:product-manager directly.\nLegacy narrative referencing igrsoft:developer inline.\nKeep `company-workflow:code-fixer` inside backticks intact.\n'
+    leak_in=$'Breakdown using company-workflow:estimation-methodology:\n* Routed to company-workflow:developer (apple-developer:ios-developer).\nDelegated to apple-developer:test-generator for regression coverage.\nNarrative referencing company-workflow:product-manager directly.\nKeep `company-workflow:code-fixer` inside backticks intact.\n'
     leak_out=$(printf '%s' "$leak_in" | sanitise_body)
     local f02b_ok=1
-    # The leading-token lines (1 + 2 + legacy 3) should be entirely dropped by L10.
+    # The three leading-token lines should be entirely dropped by L10.
     if printf '%s' "$leak_out" | grep -qF 'Breakdown using'; then f02b_ok=0; fi
     if printf '%s' "$leak_out" | grep -qF 'Routed to'; then f02b_ok=0; fi
     if printf '%s' "$leak_out" | grep -qF 'Delegated to'; then f02b_ok=0; fi
-    # The mid-sentence references (current + legacy prefix) should have the
-    # identifier stripped by A6 (narrative remains, token gone).
-    if printf '%s' "$leak_out" | grep -qE '(company-workflow|igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]' | grep -v '`'; then
+    # The mid-sentence reference should have the identifier stripped by A6
+    # (narrative remains, token gone).
+    if printf '%s' "$leak_out" | grep -qE '(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]' | grep -v '`'; then
       # Allow backticked occurrences only (one is intentionally kept).
-      if printf '%s' "$leak_out" | grep -vE '^[^`]*`[^`]*`[^`]*$' | grep -qE '(company-workflow|igrsoft|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]'; then
+      if printf '%s' "$leak_out" | grep -vE '^[^`]*`[^`]*`[^`]*$' | grep -qE '(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]'; then
         f02b_ok=0
       fi
     fi
@@ -2503,10 +2487,6 @@ fi
 TITLE=$(printf '%s' "$TITLE_RAW" | head -1 | cut -c1-100 | sanitise_body | tr -d '\n')
 [ -z "$TITLE" ] && TITLE="Plan approved: $WORKTASK_ID"
 
-# The pre-#375 title, kept ONLY to let the recovery search below find issues that
-# were published under it. Never used as the title of a new issue.
-TITLE_LEGACY=$(printf '%s' "${GOAL_RAW:-$WORKTASK_ID}" | head -1 | cut -c1-100 | sanitise_body | tr -d '\n')
-
 # AC-2: ensure title starts with EXTERNAL_TICKET prefix. Skip if already prefixed
 # (avoid double-prefix like "OV-113 OV-113 …"). Compared case-INsensitively and with
 # `-` accepted as a separator: the slug-fallback rank yields "ov-164-catalog-…",
@@ -2521,14 +2501,6 @@ if [ -n "$EXTERNAL_TICKET" ]; then
     *)
       TITLE="$EXTERNAL_TICKET $TITLE"
       ;;
-  esac
-  case "$TITLE_LEGACY" in
-    "") ;;
-    *) _leg_lc=$(printf '%s' "$TITLE_LEGACY" | tr '[:upper:]' '[:lower:]')
-       case "$_leg_lc" in
-         "$_tkt_lc"|"$_tkt_lc "*|"$_tkt_lc:"*) ;;
-         *) TITLE_LEGACY="$EXTERNAL_TICKET $TITLE_LEGACY" ;;
-       esac ;;
   esac
 fi
 

@@ -236,4 +236,3 @@ This command works with:
 - `/pm-prioritize` - Prioritize before adding to roadmap
 - `/pm-requirements` - Detail features on roadmap
 - `/pm-sprint` - Break roadmap into sprints
-

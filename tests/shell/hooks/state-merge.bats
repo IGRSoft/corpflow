@@ -2,7 +2,7 @@
 # tests/shell/hooks/state-merge.bats — DV0c
 # Target: .claude/hooks/state-merge.sh
 # Covers: F1 absent-state.json no-op, happy merge DV→completed, corrupt-state no-op (KNOWN BUG),
-#         absent-artifact no-op.
+#         absent-artifact no-op, state-patch.sh resolution from a project-local install.
 #
 # Note: state-merge.sh resolves .context/state.json relative to CWD.
 # Tests run via `bash -c "cd WD && ..."` to set the working directory correctly.
@@ -109,4 +109,38 @@ EOF
   local via
   via=$(jq -r '.stages.DV.completed_via' "$WD/.context/state.json")
   [ "$via" = "step6_5" ]
+}
+
+# --- state-patch.sh resolution (Layer-2 safety net) -------------------------
+# worktask.md Step 3b copies this hook into <project>/.claude/hooks/, where the
+# relative arm resolves to a skills/ tree that does not exist. These pin the
+# resolution so the net can never silently become a no-op again.
+
+_install_project_local() {
+  mkdir -p "$WD/.claude/hooks"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/.claude/hooks/state-merge.sh"
+  chmod +x "$WD/.claude/hooks/state-merge.sh"
+}
+
+@test "project-local copy: CLAUDE_PLUGIN_ROOT resolves state-patch.sh and the merge still lands" {
+  _seed_state
+  _seed_artifact
+  _install_project_local
+  run bash -c "cd '$WD' && CLAUDE_PLUGIN_ROOT='$PLUGIN_ROOT' CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV bash '$WD/.claude/hooks/state-merge.sh'"
+  assert_success
+  local dv_status
+  dv_status=$(jq -r '.stages.DV.status' "$WD/.context/state.json")
+  [ "$dv_status" = "completed" ]
+}
+
+@test "absent state-patch.sh: exit 0 (never blocks) and the stage is left untouched" {
+  _seed_state
+  _seed_artifact
+  _install_project_local
+  # Plugin root with no skills/ tree, and no skills/ beside the project-local copy.
+  run bash -c "cd '$WD' && CLAUDE_PLUGIN_ROOT='$WD/nowhere' CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV bash '$WD/.claude/hooks/state-merge.sh'"
+  assert_success
+  local dv_status
+  dv_status=$(jq -r '.stages.DV.status' "$WD/.context/state.json")
+  [ "$dv_status" = "in_progress" ]
 }

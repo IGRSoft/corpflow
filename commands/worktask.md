@@ -11,7 +11,7 @@ allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCre
 > The **PL gate** is the post-plan human checkpoint: after PL0 completes, the orchestrator
 > presents the generated plan and waits for explicit user approval (`AskUserQuestion`) before
 > dispatching any implementation stage (AR/DV/...). It is carried by `PL0.metadata.plan_gate`, which
-> defaults to `"checkpoint"`; `--auto=[plan]` (legacy alias `--auto-plan`) and `--emergency` stamp `"bypass"` to auto-proceed (a batch orchestrator such as `/megatask` instead stamps it directly on each per-issue PL0).
+> defaults to `"checkpoint"`; `--auto=[plan]` and `--emergency` stamp `"bypass"` to auto-proceed (a batch orchestrator such as `/megatask` instead stamps it directly on each per-issue PL0).
 > The **decision gate** is carried by `PL0.metadata.decision_gate`, default `"user"`: PL open
 > questions surface to the user at the plan gate. `--auto=[decision]` stamps `"auto"` — open
 > questions are resolved by a Fable-model decision delegate instead of blocking on the user
@@ -19,7 +19,7 @@ allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCre
 > The **FN gate** is the pre-finalization human checkpoint: `PL0.metadata.fn_gate` defaults to
 > `"checkpoint"`, so the orchestrator STOPs immediately before the FN `Task()` delegation, presents a
 > pre-FN summary, and waits for `AskUserQuestion` approval before any commit/push/PR. It is stamped
-> `"bypass"` only by `--auto=[finalization]` (legacy alias `--auto-finalization`) or `--emergency` (unattended fast-path); `/megatask` stamps it directly on each per-issue PL0.
+> `"bypass"` only by `--auto=[finalization]` or `--emergency` (unattended fast-path); `/megatask` stamps it directly on each per-issue PL0.
 > Every worktask is worktree-isolated, so the PR is the review surface for the implementation.
 
 # Worktask Command
@@ -75,16 +75,6 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 | `decision` | Stamp `decision_gate: "auto"` — when PL0 surfaces `open_questions[]`, delegate their resolution to a **Fable-model decision pass** (§ Step A.4) instead of blocking on the user. Bypasses NO gate by itself: under a `checkpoint` plan gate the auto-decisions are presented (marked) for approval. Escalation-class questions (irreversible, scope-expanding, security-posture, spend) always fall back to the user. |
 | `finalization` | Stamp `fn_gate: "bypass"` — skip the pre-FN finalization-approval STOP; auto commit/push/PR (trusted fast-path). Plan gate still applies unless `plan` is also set. |
 
-#### Legacy aliases (deprecated)
-
-| Legacy flag | Canonical equivalent |
-|-------------|----------------------|
-| `--auto-plan` | `--auto=[plan]` |
-| `--auto-finalization` | `--auto=[finalization]` |
-
-Both legacy flags remain accepted and compose with `--auto=[...]` (union of values). New
-invocations and documentation MUST use the array form.
-
 ### Scope and pipeline flags
 
 | Option | Effect |
@@ -113,13 +103,13 @@ invocations and documentation MUST use the array form.
 
 ### Steps 1–3 — Parse flags and create context folders
 
-1. **Parse** task description and flags (`--secure`, `--auto=[plan, decision, finalization]` — plus the legacy aliases `--auto-plan`/`--auto-finalization` — `--emergency`, etc.). Resolve the `--auto` array per § Gate automation flag: strip optional brackets, split on commas, trim whitespace, union with any legacy aliases, reject unknown values. See **Embedded Command Detection** below.
+1. **Parse** task description and flags (`--secure`, `--auto=[plan, decision, finalization]`, `--emergency`, etc.). Resolve the `--auto` array per § Gate automation flag: strip optional brackets, split on commas, trim whitespace, reject unknown values. See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:fix-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
 3. **Create context folders**: `mkdir -p .context/designs .context/images .context/errors .context/logs`
 
 ### Step 3a — Initialize state.json (handoff-protocol)
 
-3a. **Initialize state.json (handoff-protocol)**: Atomic-write `.context/state.json` seed using temp+fsync+rename per `skills/worktask/references/handoff-protocol.md#atomic-write`. PL0 stage marked `in_progress`. Schema per `handoff-protocol.md#state-json-schema`. **Re-run aware**: the seed MUST compute the next free planning index from any pre-existing `.context/planning-*.md` (NOT hard-code `0`) — on a re-run in a populated `.context/`, hard-coding `planning-0.md` would pin the old plan and cause PL0 to overwrite it. Backward-compat: if creation fails (e.g. read-only filesystem), log a warning and continue — F1 fallback (legacy `metadata.context_files` mode) keeps the worktask operational.
+3a. **Initialize state.json (handoff-protocol)**: Atomic-write `.context/state.json` seed using temp+fsync+rename per `skills/worktask/references/handoff-protocol.md#atomic-write`. PL0 stage marked `in_progress`. Schema per `handoff-protocol.md#state-json-schema`. **Re-run aware**: the seed MUST compute the next free planning index from any pre-existing `.context/planning-*.md` (NOT hard-code `0`) — on a re-run in a populated `.context/`, hard-coding `planning-0.md` would pin the old plan and cause PL0 to overwrite it. Backward-compat: if creation fails (e.g. read-only filesystem), log a warning and continue — F1 fallback (`metadata.context_files` mode) keeps the worktask operational.
 
 #### Step 3a snippets — init procedure
 
@@ -141,9 +131,7 @@ invocations and documentation MUST use the array form.
 #### Step 3b hook-install snippet
 
    ```bash
-   PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
-   # Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
-   # above the worktask skill's base directory (see skills/shared/plugin-root-resolution.md).
+   PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
    [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
    hook_src="$PLUGIN_ROOT/.claude/hooks/state-merge.sh"
    hook_dst=".claude/hooks/state-merge.sh"
@@ -264,11 +252,11 @@ invocations and documentation MUST use the array form.
 
 #### Step 4 — fn_gate stamping
 
-Stamp `fn_gate`: default `fn_gate: "checkpoint"` (the orchestrator STOPs immediately before the FN `Task()` delegation and asks for finalization approval before any commit/push/PR — handled at SKILL.md loop step 4.9). Stamp `fn_gate: "bypass"` ONLY when the resolved `--auto` array contains `finalization` (canonical `--auto=[finalization]`; legacy alias `--auto-finalization`) OR when `--emergency` is set (incident pipeline finalizes unattended). `--auto=[plan]` MUST NEVER stamp `fn_gate: "bypass"` — it is orthogonal and bypasses only the plan gate. (A batch orchestrator such as `/megatask` stamps `fn_gate: "bypass"` directly on each per-issue PL0 — `/worktask` itself has no batch flag.)
+Stamp `fn_gate`: default `fn_gate: "checkpoint"` (the orchestrator STOPs immediately before the FN `Task()` delegation and asks for finalization approval before any commit/push/PR — handled at SKILL.md loop step 4.9). Stamp `fn_gate: "bypass"` ONLY when the resolved `--auto` array contains `finalization` OR when `--emergency` is set (incident pipeline finalizes unattended). `--auto=[plan]` MUST NEVER stamp `fn_gate: "bypass"` — it is orthogonal and bypasses only the plan gate. (A batch orchestrator such as `/megatask` stamps `fn_gate: "bypass"` directly on each per-issue PL0 — `/worktask` itself has no batch flag.)
 
 #### Step 4 — plan_gate stamping
 
-Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOPs after PL0 and asks for plan approval before dispatching stages). Stamp `plan_gate: "bypass"` ONLY when the resolved `--auto` array contains `plan` (canonical `--auto=[plan]`; legacy alias `--auto-plan`) OR when `--emergency` is set (emergency pipeline runs unattended from IR — no plan approval gate). (A batch orchestrator such as `/megatask` stamps `plan_gate: "bypass"` directly on each per-issue PL0.) `plan_gate`, `decision_gate`, and `fn_gate` are the carriers resume logic branches on after interruption — see `skills/worktask/references/resume.md § State → Action Table`.
+Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOPs after PL0 and asks for plan approval before dispatching stages). Stamp `plan_gate: "bypass"` ONLY when the resolved `--auto` array contains `plan` OR when `--emergency` is set (emergency pipeline runs unattended from IR — no plan approval gate). (A batch orchestrator such as `/megatask` stamps `plan_gate: "bypass"` directly on each per-issue PL0.) `plan_gate`, `decision_gate`, and `fn_gate` are the carriers resume logic branches on after interruption — see `skills/worktask/references/resume.md § State → Action Table`.
 
 #### Step 4 — decision_gate stamping
 
@@ -402,7 +390,7 @@ The step-2 summary MUST show both decisions explicitly, each with its one-line r
 
 #### Plan gate bypass path
 
-**If `plan_gate == "bypass"`** (stamped by `--auto=[plan]` — legacy `--auto-plan` — or `--emergency`, or directly by `/megatask` on a per-issue PL0): proceed directly to
+**If `plan_gate == "bypass"`** (stamped by `--auto=[plan]` or `--emergency`, or directly by `/megatask` on a per-issue PL0): proceed directly to
 Step A. No prompt, no approval line. Exception: unresolved `escalate` items from Step A.4 force a
 `checkpoint`-style stop for those items first (§ Step A.4 Escalation guard) — once the user has
 answered them, append the standard `approval_received subject:"PL<N>"` row (that row is what
@@ -410,9 +398,7 @@ answered them, append the standard `approval_received subject:"PL<N>"` row (that
 
 ### Step A — Publish plan to GitHub (run BEFORE the stage loop)
 
-    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
-    # Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
-    # above the worktask skill's base directory (see skills/shared/plugin-root-resolution.md).
+    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
     [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
     HELPER="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue.sh"
 

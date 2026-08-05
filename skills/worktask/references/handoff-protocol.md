@@ -81,9 +81,8 @@ mkdir-spinlock serializes their read-merge-rename windows so neither patch is lo
 no global "exactly one agent `in_progress`" requirement. **Timeout ⇒ proceed unlocked + WARN**,
 which is never worse than the pre-lock lockless path (an exit-0 no-op would instead let a
 leaked lock silently swallow merges). The lock lives only in `state-patch.sh`'s `atomic_merge()`;
-the SubagentStop hook inherits it by delegation. The legacy `_inline_merge` fallback in
-`state-merge.sh` (used only when `state-patch.sh` is absent) stays unlocked — a documented
-transitional residual.
+the SubagentStop hook inherits it by delegation. `state-patch.sh` is the single merge
+implementation — when it is absent `state-merge.sh` logs a warning and exits 0 without merging.
 
 ### Lock implementation
 
@@ -614,7 +613,7 @@ points here rather than restating the rule.
 The integration branch, mirrored by PL0 from `task.metadata.base_ref` so shell
 helpers (which cannot read Task-System metadata) can reach it. Resolution order for
 any reader, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`,
-`state.json .git.base_branch`, `workspace.json .git.base_branch`,
+`workspace.json .git.base_branch`,
 `git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. There is no literal
 fallback: readers report unresolved and degrade non-blocking. Implemented in
 `skills/worktask/scripts/fn-preflight.sh` `resolve_base_ref`.
@@ -779,18 +778,10 @@ fallback: readers report unresolved and degrade non-blocking. Implemented in
         additionalProperties: true
 ```
 
-#### mcp_session, handoffs
+#### handoffs
 
 ```yaml
 # …continued: WorktaskStateLedger.properties
-  mcp_session:
-    type: object
-    description: "DEPRECATED — legacy Apple MCP session cache. No longer written; see field notes"
-    properties:
-      xcode_defaults: { type: object, description: "Result of session_show_defaults" }
-      schemes: { type: array, items: { type: string } }
-      simulators: { type: array, items: { type: object } }
-      warmed_at: { type: string, format: date-time }
   handoffs:
     type: object
     additionalProperties:
@@ -848,7 +839,7 @@ OPTIONAL. Budget-aware checkpoint for multi-batch stages (currently DV). Written
 
 #### Field notes — completed_via
 
-OPTIONAL (additive, version:1). Which enforcement layer stamped this stage `completed`. `hook` = SubagentStop delegation (Layer 2, `state-merge.sh` default); `step6_5` = orchestrator synchronous Step-6.5 (`STATE_MERGE_VIA=step6_5`); `f3` = orchestrator F3 minimal-patch fallback. **Absence encodes Layer-1 agent self-patch OR a pre-upgrade run** — the hook's idempotency check exits before writing when Layer 1 already landed, so no value is stamped. Observability only; no consumer behavior branches on it.
+OPTIONAL (additive, version:1). Which enforcement layer stamped this stage `completed`. `hook` = SubagentStop delegation (Layer 2, `state-merge.sh` default); `step6_5` = orchestrator synchronous Step-6.5 (`STATE_MERGE_VIA=step6_5`); `f3` = orchestrator F3 minimal-patch fallback. **Absence encodes a Layer-1 agent self-patch** — the hook's idempotency check exits before writing when Layer 1 already landed, so no value is stamped. Observability only; no consumer behavior branches on it.
 
 #### Field notes — last_error
 
@@ -914,7 +905,7 @@ copy one into the other; that copy is what would make them a silent duplicate.
 
 #### Field notes — goal
 
-One-sentence statement of the worktask's intent, populated by PL0 from the user-supplied task description (or the issue title under a `/megatask` per-issue run). Read by stage agents that need the original intent without re-reading the plan file (e.g. AR sanity-checking architecture against requirements, FN composing the PR title). Supersedes the `/goal` slash directive — the directive would have been a second, drift-prone surface for the same value (v3.10.1).
+One-sentence statement of the worktask's intent, populated by PL0 from the user-supplied task description (or the issue title under a `/megatask` per-issue run). Read by stage agents that need the original intent without re-reading the plan file (e.g. AR sanity-checking architecture against requirements, FN composing the PR title). It is the single surface for this value — do not introduce a parallel one.
 
 #### Field notes — files_read
 
@@ -927,14 +918,6 @@ OPTIONAL (additive, version:1). Writer: the orchestrator loop ONLY. One entry pe
 #### Field notes — capabilities
 
 OPTIONAL (additive, version:1). Probe cache for account-level hard-fails so every later stage does not re-hit the same error. Written by the orchestrator on first observed failure; model resolution consults it before any fable-tier dispatch. Example: `{ "fable_dispatch": "credit_blocked", "checked_at": "<ISO>" }` — Fable 5 is 1M-by-default but *dispatch* fails hard without 1M credits (observed live per model-selection.md).
-
-#### Field notes — mcp_session
-
-**Deprecated.** This cached the orchestrator's XcodeBuildMCP warm-up so Apple DV/DR/QA could skip
-redundant session queries. Platform tooling now belongs to the dev plugins (`worktask § Platform
-tooling ownership`), so nothing writes this field and no stage reads it. Retained in the schema only
-so state ledgers written by earlier versions still validate; treat it as absent. A future MAJOR may
-remove it.
 
 ### Eviction order on overflow
 
@@ -1011,7 +994,7 @@ Four documented degradation paths. Worktask MUST complete in all four (AC-16, AC
 
 | Path | Trigger | Behavior |
 |------|---------|----------|
-| F1 | state.json **absent** | Fall back to legacy `metadata.context_files` mode. Read listed files in full. No cache-friendly preamble. Log INFO `state.json not found, legacy mode`. |
+| F1 | state.json **absent** | Fall back to `metadata.context_files` mode. Read listed files in full. No cache-friendly preamble. Log INFO `state.json not found, context_files mode`. |
 | F2 | state.json **present**, agent ignores it | No penalty. Agent reads listed files and writes its artifact. Orchestrator's hook patches state.json from frontmatter (or return text on F3). |
 
 ### Paths F3–F4
@@ -1021,7 +1004,23 @@ Four documented degradation paths. Worktask MUST complete in all four (AC-16, AC
 | F3 | Agent writes artifact **without frontmatter** | Orchestrator logs WARN `frontmatter missing in <artifact>`. Derives minimal handoff: `{stage, verdict: ok, summary: <first 200 chars of return>, refs: {artifact: <path>}}`. Worktask proceeds. |
 | F4 | state.json **corrupt** (invalid JSON or schema mismatch) | Quarantine to `.context/state.json.bad.<unix-ts>`. Regenerate from PL0 + completed-stage frontmatter walk. Audit log to `.context/logs/state-recovery.log`. Continue. |
 
-> F1 rationale (legacy `context_files` mode, cache-degradation tradeoff): see `skills/shared/legacy-fallback-f1.md`. This matrix is the canonical operational spec.
+#### F1 — `context_files` mode {#f1-fallback}
+
+The preferred handoff mode is anchor-based: a stage reads `.context/state.json` plus the anchors
+named in `metadata.context_refs` (≥30% input-token reduction, cache-friendly preamble).
+
+When `state.json` is absent (or `context_refs` is missing), stages fall back to reading every
+`metadata.context_files` path in full — **`context_files` mode**. There is no cache-friendly
+preamble in this mode, so the prompt-cache benefit collapses; the degradation is silent to the
+worktask but surfaced via the `#f1-telemetry` log consumed by `/cost-report`.
+
+##### F1 is required behavior, not compatibility
+
+This path is **required** (AC-16/AC-17): a worktask MUST complete even
+when `state.json` is absent — e.g. on a read-only filesystem, where the seed write fails. Both
+metadata forms are dual-written by current code. `context_refs` wins when `state.json` is present;
+`context_files` is the safety net. The F1 telemetry snippet lives in
+`skills/shared/stage-contracts.md#f1-telemetry`.
 
 ### F4 regeneration walk
 

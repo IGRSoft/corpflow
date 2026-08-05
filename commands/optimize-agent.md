@@ -226,7 +226,7 @@ Run on every agent regardless of focus area; treat findings here as blocking on 
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `hooks:` | Required on PL/FN/ST agents (gate notifications). Optional but recommended on stage agents that emit terminal artifacts (DV, DR, QA, SR, RE) once v3.11.0 ships the rollout. Until then, flag PL/FN/ST omissions only. **Trust precondition**: frontmatter hooks run only when the agent file's own folder has accepted workspace trust — otherwise they are silently skipped, so never treat a missing hook artifact as proof the hook passed (`skills/agent-coordination/references/hook-monitoring.md`). | P1 (PL/FN/ST) / P2 (others) |
+| `hooks:` | Required on PL/FN/ST agents (gate notifications). Optional but recommended on stage agents that emit terminal artifacts (DV, DR, QA, SR, RE) — until that rollout lands, flag PL/FN/ST omissions only. **Trust precondition**: frontmatter hooks run only when the agent file's own folder has accepted workspace trust — otherwise they are silently skipped, so never treat a missing hook artifact as proof the hook passed (`skills/agent-coordination/references/hook-monitoring.md`). | P1 (PL/FN/ST) / P2 (others) |
 | `maxTurns` | Present and proportional to role: coordinators (DV, AR) ≥60; reviewers (DR, QA, SR) 30–60; one-shot (haiku-tier) ≤30. | P2 |
 | `disallowedTools` | Consider for review-only agents to harden the constraint contract (e.g., DR with `disallowedTools: Write, Edit, mcp__XcodeBuildMCP__test_*`). Suggest, do not block. | P2 |
 
@@ -278,4 +278,3 @@ This command is used by:
 - prompt-engineer agent for optimization tasks
 - During agent ecosystem maintenance
 - After worktask changes require agent updates
-

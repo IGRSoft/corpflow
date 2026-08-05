@@ -244,7 +244,9 @@
           "tokens": {
             "in": 574557,
             "out": 7329,
-            "total": 581886
+            "total": 581886,
+            "cache_read": null,
+            "cache_creation": null
           },
           "cost_usd": 1.241815,
           "wall_clock_s": 92.191,
@@ -260,7 +262,9 @@
           "tokens": {
             "in": 218476,
             "out": 5745,
-            "total": 224221
+            "total": 224221,
+            "cache_read": null,
+            "cache_creation": null
           },
           "cost_usd": 0.561047,
           "wall_clock_s": 57.253,

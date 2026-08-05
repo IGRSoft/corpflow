@@ -64,8 +64,6 @@ Use git trailer format (`token: value` or `token #value`). Hyphens replace space
 - Present tense, capitalize summary, no ending period
 - Always prefix with issue code (#PROJ-123)
 - Body must be separated from summary by a blank line
-- Never add "Generated with" or "Co-Authored-By" footers
-- Set `attribution.sessionUrl` to omit the claude.ai session link from commits/PRs — keeps the no-AI-footer rule above enforced at the tooling layer
 
 ## Git Safety (beyond CC defaults)
 

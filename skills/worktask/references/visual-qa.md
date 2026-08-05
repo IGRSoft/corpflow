@@ -8,7 +8,7 @@ If `.context/designs/figma-registry.md` exists, it is the authoritative source �
 
 ### Join Key (Design Ref)
 
-The join key is the optional **`Design Ref`** column on DV's `.context/images/<worktask_id>/screenshots.md` manifest (Option A): QA joins `screenshots.md.Design Ref → figma-registry.md.ID` by explicit ID equality. A missing column or missing value is treated as `—` (no candidate → fallback). Per-row algorithm (replaces the legacy 5-step capture loop) — three parts below form ONE loop:
+The join key is the optional **`Design Ref`** column on DV's `.context/images/<worktask_id>/screenshots.md` manifest (Option A): QA joins `screenshots.md.Design Ref → figma-registry.md.ID` by explicit ID equality. A missing column or missing value is treated as `—` (no candidate → fallback). Per-row algorithm (replaces the earlier 5-step capture loop) — three parts below form ONE loop:
 
 ### Per-Row Algorithm — Skip, Overview, Join
 
@@ -30,7 +30,7 @@ for each registry row R:
 
 ```
 # …continued: same loop, empty-candidates branch
-  if candidates == ∅:                       # (d) LEGACY FALLBACK — byte-equivalent to today
+  if candidates == ∅:                       # (d) GLOB FALLBACK — byte-equivalent to today
       impl = build_run_sim → navigate(R.Target File(s)) → screenshot   # § fallback-only below
       vision = multimodal_compare(R.Screenshot, impl)
       emit_row(R, reconcile(None, vision), source="live-capture"); continue
@@ -74,9 +74,9 @@ When the registry contains **per-frame rows** — a container produces one `Stat
 
 A leaf (single-screen) registry has no overview row and collapses to the normal one-row comparison — no regression.
 
-## Fallback: Glob Discovery (Legacy Tasks)
+## Fallback: Glob Discovery (no registry)
 
-If the registry is missing, glob `.context/designs/figma-*.png` and compare what's there — the legacy behavior. Flag the missing registry in `testing.md § Design Comparison` as a process gap:
+If the registry is missing, glob `.context/designs/figma-*.png` and compare what's there. Flag the missing registry in `testing.md § Design Comparison` as a process gap:
 
 > No `figma-registry.md` found; using glob fallback. Screen/state/target mapping inferred from filenames only.
 
@@ -177,7 +177,7 @@ After the table, include a one-line AC coverage summary:
 
 (`<plan_file>` resolves from `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`.)
 
-## Backward-compatibility guarantees
+## Degradation invariants
 
 The design↔result reuse + RMSE pre-pass is strictly additive — these invariants hold:
 
@@ -188,12 +188,12 @@ The design↔result reuse + RMSE pre-pass is strictly additive — these invaria
   registry row joins to ∅ and falls to the live-capture branch `(d)`. RMSE is never invoked;
   output is byte-equivalent to the pre-change behaviour (100% live-capture).
 
-### Degradation and Legacy-Input Invariants
+### Degradation and absent-input invariants
 
 - **`magick` absent → vision-only, non-blocking**: `visual-diff.sh` self-degrades
   (`verdict=skipped reason=imagemagick_not_found`, exit 0). QA proceeds with vision alone;
   the row reports `n/a (imagemagick_not_found)`. Never blocks.
-- **No registry → Glob Discovery fallback untouched**: the legacy glob path (above) is
+- **No registry → Glob Discovery fallback untouched**: the glob path (above) is
   unchanged and remains vision-only — no RMSE, no join.
-- **Old manifest without `Design Ref` column**: parses fine; a missing column/value is
+- **Manifest without a `Design Ref` column**: parses fine; a missing column/value is
   treated as `—` → no candidate → live-capture fallback.

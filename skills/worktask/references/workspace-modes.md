@@ -31,7 +31,7 @@ if (isolation === 'worktree') {
 
 When CC spawns a worktask session inside a Conductor-managed workspace clone
 (e.g. `/Users/<user>/conductor/workspaces/<plugin>/<workspace-id>/`), the
-canonical plugin source directory (e.g. `/Users/<user>/Projects/igrsoft/company-worktask/`)
+canonical plugin source directory (e.g. `/Users/<user>/Projects/company-workflow/`)
 is a SIBLING repo on a different branch and MUST NOT be edited.
 
 Rule: all `Edit`/`Write` calls MUST target paths under `git rev-parse --show-toplevel`
@@ -158,7 +158,7 @@ When the merge target is not the worktask default (e.g. shipping into `origin/re
 
 ##### Base-ref resolution order
 
-PL0 also mirrors the detected branch to `state.json .metadata.base_ref` unconditionally, because shell helpers cannot read Task-System metadata. Every reader — DV, `fn-preflight.sh continuity`, `branch-name.sh` (via `branch-lib.sh resolve_base_ref`) — resolves through one order, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`, `state.json .git.base_branch`, `workspace.json .git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. There is no hardcoded literal at the end of that chain; an unresolved base is reported and the caller degrades non-blocking. Canonical statement: `handoff-protocol.md § metadata.base_ref`.
+PL0 also mirrors the detected branch to `state.json .metadata.base_ref` unconditionally, because shell helpers cannot read Task-System metadata. Every reader — DV, `fn-preflight.sh continuity`, `branch-name.sh` (via `branch-lib.sh resolve_base_ref`) — resolves through one order, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`, `workspace.json .git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. There is no hardcoded literal at the end of that chain; an unresolved base is reported and the caller degrades non-blocking. Canonical statement: `handoff-protocol.md § metadata.base_ref`.
 
 ##### Background & shared-checkout rules
 

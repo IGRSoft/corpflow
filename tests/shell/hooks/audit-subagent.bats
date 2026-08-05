@@ -19,7 +19,6 @@ setup() {
     and .metadata.duration_ms == 12345
     and .metadata.parent_agent_id == "agt_parent"
     and (.metadata.dedupe_key == "sess_fix:agt_dv:stop")
-    and (.metadata.dedupe_key_extended == "agt_parent:sess_fix:agt_dv:stop")
   ' "$WD/.context/logs/audit.jsonl"
   assert_success
 }

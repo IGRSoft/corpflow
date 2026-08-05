@@ -78,17 +78,11 @@ fi
 # Rules:
 #   company-workflow:<name>              → agents/<name>.md
 #   apple-developer:<name>      → (cross-plugin) — kept as raw ref; mapper drops if non-local
-#   bare <name>                 → agents/<name>.md  (back-compat shim)
 #   <name>:<sub> as command     → commands/<name>.md  (best-effort)
 #
 # The normalizer only emits LOCAL paths that exist in this repo.
 normalize() {
   awk -F: '
-    NF == 1 {
-      # bare → company-workflow agent
-      print "agents/" $1 ".md"
-      next
-    }
     $1 == "company-workflow" && NF == 2 {
       print "agents/" $2 ".md"
       # also try as command
@@ -110,7 +104,10 @@ normalize < "$raw" \
   | while read -r path; do
       case "$path" in
         CROSS_PLUGIN:*) continue ;;
-        *) [ -f "$path" ] && echo "$path" ;;
+        # `|| true`: a non-existent candidate is normal (each qualified ref probes
+        # agent/command/skill paths), and under `set -e` its non-zero status would
+        # otherwise become the loop's — and the script's — exit code.
+        *) [ -f "$path" ] && echo "$path" || true ;;
       esac
     done \
   | sort -u

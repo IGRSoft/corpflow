@@ -60,7 +60,7 @@ The minimum recommended flag set per stage when dispatching from a headless runn
 
 ### Model & effort defaults
 
-The model/effort defaults track `skills/shared/model-selection.md`. Override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **opus/xhigh** (matches `skills/shared/stage-codes.md` and the stage table in `benchmark/harness/Sources/BenchmarkLive/Dispatch.swift`, the machine-checked SSOT — the Python `dispatch.py` predecessor was retired in v3.29.0); the agent's `model: opus` frontmatter default applies to both the DR stage dispatch and direct TC consults.
+The model/effort defaults track `skills/shared/model-selection.md`. Override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **opus/xhigh** (matches `skills/shared/stage-codes.md` and the stage table in `benchmark/harness/Sources/BenchmarkLive/Dispatch.swift`, the machine-checked SSOT); the agent's `model: opus` frontmatter default applies to both the DR stage dispatch and direct TC consults.
 
 ### Alias note
 
@@ -144,19 +144,19 @@ Rows additionally render a `done/total` progress count in the human-readable (no
 
 #### Drift observed on CC 2.1.175
 
-> ⚠ **Drift observed on CC 2.1.175** (2026-06-12, v3.17.0 cc-update; unannounced in the changelog): with only interactive sessions live, rows came back as `{pid, cwd, kind: "interactive", startedAt, sessionId}` — **camelCase** (`session_id` → `sessionId`), `startedAt` as **epoch-millis number** (was ISO-8601 string), a new `kind` discriminator, and no `agent_id`/`state`/`waitingFor` on that row type. **Unconfirmed** whether dispatched-agent rows (`kind` ≠ `interactive`) kept the snake_case baseline shape — no live agents existed at observation time.
+> ⚠ **Drift observed on CC 2.1.175** (2026-06-12; unannounced in the changelog): with only interactive sessions live, rows came back as `{pid, cwd, kind: "interactive", startedAt, sessionId}` — **camelCase** (`session_id` → `sessionId`), `startedAt` as **epoch-millis number** (was ISO-8601 string), a new `kind` discriminator, and no `agent_id`/`state`/`waitingFor` on that row type. **Unconfirmed** whether dispatched-agent rows (`kind` ≠ `interactive`) kept the snake_case baseline shape — no live agents existed at observation time.
 
 ##### Mitigations until the agent-row variant is pinned
 
 > Until a watch run pins the agent-row variant: (a) coalesce both spellings in every read (pattern below); (b) filter by `kind` before matching resume rows; (c) expect the resume pre-check to degrade safely to "absent → re-delegate" when fields read null.
 
-#### Watch run 2026-07-07 (v3.30.0 cc-update)
+#### Watch run 2026-07-07
 
-> **Watch run 2026-07-07 (v3.30.0 cc-update)**: interactive-row variant returned `{cwd, kind, name, pid, sessionId, startedAt}` — same camelCase shape as the 2.1.175 observation plus a new optional **`name`** key (readable default session names; also the `SendMessage`/`/rename` address — `/rename` on background sessions persists across restarts). Agent-row variant still unconfirmed (no dispatched agents live at observation time). Baseline-shift rule not triggered — additive optional key on the interactive variant only.
+> **Watch run 2026-07-07**: interactive-row variant returned `{cwd, kind, name, pid, sessionId, startedAt}` — same camelCase shape as the 2.1.175 observation plus a new optional **`name`** key (readable default session names; also the `SendMessage`/`/rename` address — `/rename` on background sessions persists across restarts). Agent-row variant still unconfirmed (no dispatched agents live at observation time). Baseline-shift rule not triggered — additive optional key on the interactive variant only.
 
 #### Defensive jq pattern
 
-**Defensive jq pattern** (canonical for any plugin code reading this output):
+Canonical for any plugin code reading this output:
 
 ```jq
 .[] | {
@@ -171,7 +171,7 @@ Rows additionally render a `done/total` progress count in the human-readable (no
 
 #### If the baseline shifts
 
-**If the baseline shifts** (new required field, renamed field, type change), the next cc-update MUST bump min CC version and add a migration note to the relevant `cc-features-<from>-<to>.md` band file.
+On a baseline shift (new required field, renamed field, type change), the next cc-update MUST bump min CC version and add a migration note to the relevant `cc-features-<from>-<to>.md` band file.
 
 #### `--tools` Grep/Glob
 

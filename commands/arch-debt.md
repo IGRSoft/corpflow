@@ -177,4 +177,3 @@ This command supports:
 - Sprint planning - Allocate debt reduction time
 - Architecture reviews - Identify new debt
 - Prioritization - Balance features vs debt
-

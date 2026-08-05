@@ -218,4 +218,3 @@ This command is typically used:
 - At end of QA stage - Document test results
 - Before FN stage - Quality gate check
 - For stakeholder review - ST stage input
-

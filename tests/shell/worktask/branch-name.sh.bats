@@ -163,7 +163,7 @@ mk_branch_repo() {
 
 @test "N4b: an existing fix/<slug> branch is non-conventional and gets renamed to bugfix/" {
   cd "$WD"
-  mk_branch_repo "fix/legacy-crash-on-startup" "Fix crash on startup"
+  mk_branch_repo "fix/crash-on-startup" "Fix crash on startup"
   run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_line --index 0 --partial "->"

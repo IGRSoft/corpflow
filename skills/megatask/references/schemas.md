@@ -134,12 +134,19 @@
 
 #### Completion contract
 
-**Completion contract (read by `hooks/megatask-monitor.sh`).** The per-issue worktask MUST write its
+Read by `hooks/megatask-monitor.sh`. The per-issue worktask MUST write its
 terminal outcome into `workspace.json.execution`:
+
+##### `execution.status`
+
+| Written by | Values | Read by |
+|-----------|--------|---------|
+| the per-issue FN/ST stage (`agents/project-manager.md § FN Stage`), or the per-issue orchestrator when parking on escalate-class questions (`commands/worktask.md § Step A.4 Escalation guard`) | `in_progress` (default) → `completed` (PR created) \| `failed` (max retries, or parked escalation) | `hooks/megatask-monitor.sh` — the reconciliation sweep marks the orchestrator issue and unblocks dependents |
+
+##### `execution.reason` and `execution.pr`
 
 | Field | Written by | Values | Read by |
 |-------|-----------|--------|---------|
-| `execution.status` | the per-issue FN/ST stage (`agents/project-manager.md § FN Stage`), or the per-issue orchestrator when parking on escalate-class questions (`commands/worktask.md § Step A.4 Escalation guard`) | `in_progress` (default) → `completed` (PR created) \| `failed` (max retries, or parked escalation) | `hooks/megatask-monitor.sh` — the reconciliation sweep marks the orchestrator issue and unblocks dependents |
 | `execution.reason` | the per-issue orchestrator on parking only | `"parked_escalation"` (absent otherwise) | the batch summary — distinguishes a parked issue from a genuine failure |
 | `execution.pr` | the per-issue FN stage on PR creation | PR URL (`null` until then) | recorded onto `orchestrator.json issues[].pr` |
 

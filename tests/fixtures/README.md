@@ -16,28 +16,17 @@ No two tracks write the same fixture file. `tests/fixtures/` itself is read by a
 tracks (a `.bats` file may reference another track's fixture by absolute path via
 `$FIXTURES/<subdir>/<file>` — reads are unrestricted; writes are namespaced).
 
-## audit-dedup.sh basename collision (BINDING on all tracks + QA AC-2)
+## Basename collisions (BINDING on all tracks + QA AC-2)
 
-Two source files share the basename `audit-dedup.sh`:
+When two source files share a basename, their test files MUST be distinguishable by
+**path-derived stem**, not raw basename: the AC-2 residual-completeness gate strips the
+extension and greps `tests/ -R` for the stem, so a naive basename match would claim a
+single test file covers both sources.
 
-| # | Path | Track | Test file |
-|---|------|-------|-----------|
-| 1 | `hooks/audit-dedup.sh`                                 | DV0c | `tests/shell/hooks/audit-dedup.bats` |
-| 2 | `skills/agent-coordination/scripts/audit-dedup.sh`  | DV0b | `tests/shell/skills/agent-coordination__audit-dedup.bats` |
-
-The AC-2 residual-completeness gate strips the extension and greps `tests/ -R` for
-the stem. A naive grep for `audit-dedup` would match BOTH files with a SINGLE test
-file, falsely claiming both are covered.
-
-**Locked mitigation:**
-- DV0c's test file lives at `tests/shell/hooks/audit-dedup.bats` — safe because the
-  `hooks/` directory prefix distinguishes it from the skill variant.
-- DV0b's test file is `tests/shell/skills/agent-coordination__audit-dedup.bats` — the
-  double-underscore path-derived prefix makes the skill variant uniquely identifiable.
-- QA's AC-2 gate MUST match on **path-derived stems** (not raw basenames). The
-  correctness check is: both `tests/shell/hooks/audit-dedup.bats` AND
-  `tests/shell/skills/agent-coordination__audit-dedup.bats` must exist for the suite
-  to be considered complete.
+**Locked mitigation:** name the test file after the path, using a double-underscore
+prefix for non-`hooks/` variants (e.g. `agent-coordination__audit-dedup.bats` for
+`skills/agent-coordination/scripts/audit-dedup.sh`). QA's AC-2 gate MUST match on
+path-derived stems.
 
 ## Fixture hygiene rules (all tracks)
 

@@ -17,8 +17,8 @@ You are an expert technical writer specializing in software documentation, API r
 - DO NOT omit examples; always include working code examples
 - DO NOT write walls of text; use headers, lists, and code blocks
 - DO NOT duplicate documentation; maintain a single source of truth
-- DO NOT execute tests. Authority is stage-scoped and canonical in
-  `skills/shared/testing-strategy.md § Test-Execution Authority`; build-only verification
+- DO NOT execute tests (stage-scoped authority, canonical in
+  `skills/shared/testing-strategy.md § Test-Execution Authority`); build-only verification
   (`/<plugin>:build-test --no-test`) stays permitted. Need runtime evidence → record
   `requests_test_evidence: <what and why>` in this stage's artifact.
 
@@ -193,11 +193,9 @@ Before marking DC stage complete, verify:
 - [ ] Code comments follow `skills/shared/code-documentation.md` — compact (non-obvious WHY/contract only), no doc-comment essays, design-history, design-source, verification logs, call-site enumerations, AC-/REQ- IDs, issue-ID provenance, or `#Preview` comments
 - [ ] All new public APIs documented
 
-
 ## Handoff Protocol
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dc`. Prev→this label: `QA→DC`.
-
 
 ### State Patch — REQUIRED before return
 

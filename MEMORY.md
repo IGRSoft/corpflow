@@ -4,7 +4,26 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.1** (two silent publication-surface fixes. Branch naming: Step 3c is now unconditional — `branch_is_conventional()` is the SOLE authority, never an eyeball judgement, with a non-blocking post-check audit row; grammar gains an optional `<ticket>-` segment budgeted inside the 48-char cap; `derive_slug` stops cutting mid-word; `derive_type` matches `fix` as a word and knows defect vocabulary. `publish-pl-issue.sh`: issue title and `## Summary` resolve through independent fallback chains instead of sharing the optional `facts.goal`, whose absence published a kebab-slug title with an empty body; the slug rank is audited, the ticket-prefix guard is case-insensitive, and the recovery search probes the legacy title. Step 3a seeds `facts.goal`. Scripts + tests + docs only — no stage, agent, or gate semantics change. Previous release: plugin renamed `igrsoft` → `company-workflow`: every invocation id, the marketplace plugin entry, the `Stop` hook matcher, and the install cache path move to the new prefix; the six `IGRSOFT_*` environment variables become `COMPANY_WORKFLOW_*` with no fallback read. Vendor identity — author `IGRSoft`, `support@igrsoft.com`, the `github.com/IGRSoft` URLs, `com.igrsoft.*` bundle IDs, and the marketplace name — is deliberately unchanged. BREAKING: `igrsoft:*` ids no longer resolve and there is no back-compat alias. See release-history row below for the full changelog.)
+- Plugin version: **4.0.3** (Round 1 — deprecation cleanup + compaction across `agents/`,
+  `commands/`, `skills/`: every elapsed-sunset rules deprecation removed — legacy `--auto-plan`/
+  `--auto-finalization` aliases, the sunset `requires_ui_tests` compat-mapping table, `igrsoft`
+  rename residuals outside the vendor-identity allow-list, 21 of 42 stale pre-4.0 version gates —
+  plus a token-compaction pass, 34,119 → 34,035 tracked markdown lines. Round 2 — user-approved
+  aggressive legacy-*logic* removal (13 themes) across hooks, scripts, tests, and the benchmark
+  harness: the dual dedupe-key mechanism (`metadata.dedupe_key_extended` + `hooks/audit-dedup.sh`)
+  deleted; pre-4.0 `.context/` read-compat dropped (bare-basename artifact resolver rung, pre-#375
+  issue-title probe, single-file visual-evidence marker shape, `state.json .git.base_branch`
+  fallback); redaction supersets removed (leak risk accepted for pre-4.0 identifiers);
+  benchmark `tokens` block decoding now strict (all 5 keys required, no silent `None`s,
+  `history.json` migrated in place); `state.mcp_session`, `--severity` legacy aliases, and the
+  bare-name agent shim dropped. Zero stage/agent/gate semantics change on current-contract paths.
+  BREAKING (round 1): the two legacy `--auto-*` flags are no longer recognised or documented
+  (undefined effect, no parse error); a resumed pre-4.0 plan with `requires_ui_tests` and no
+  `test_mode` now silently degrades to `scoped` test mode with no Design Comparison, no
+  deprecation note. BREAKING (round 2): pre-4.0 `.context/` artifacts, issue titles, and visual-
+  evidence markers no longer resolve via any compat path; redacted identifiers may leak into
+  GitHub issue bodies on a pre-4.0 resume; a partial benchmark `tokens` block now raises instead
+  of decoding. Previous release 4.0.1 — two silent publication-surface fixes. Branch naming: Step 3c is now unconditional — `branch_is_conventional()` is the SOLE authority, never an eyeball judgement, with a non-blocking post-check audit row; grammar gains an optional `<ticket>-` segment budgeted inside the 48-char cap; `derive_slug` stops cutting mid-word; `derive_type` matches `fix` as a word and knows defect vocabulary. `publish-pl-issue.sh`: issue title and `## Summary` resolve through independent fallback chains instead of sharing the optional `facts.goal`, whose absence published a kebab-slug title with an empty body; the slug rank is audited, the ticket-prefix guard is case-insensitive, and the recovery search probes the legacy title. Step 3a seeds `facts.goal`. Scripts + tests + docs only — no stage, agent, or gate semantics change. Previous release: plugin renamed `igrsoft` → `company-workflow`: every invocation id, the marketplace plugin entry, the `Stop` hook matcher, and the install cache path move to the new prefix; the six `IGRSOFT_*` environment variables become `COMPANY_WORKFLOW_*` with no fallback read. Vendor identity — author `IGRSoft`, `support@igrsoft.com`, the `github.com/IGRSoft` URLs, `com.igrsoft.*` bundle IDs, and the marketplace name — is deliberately unchanged. BREAKING: `igrsoft:*` ids no longer resolve and there is no back-compat alias. See release-history row below for the full changelog.)
 - Claude Code min required: **2.1.220** (README.md is authoritative; nested delegation is off by default on 2.1.217–2.1.218 and the plugin's DV routing depends on it, so 2.1.219 is the functional floor — pinned to the band top per the v3.35.0 precedent)
 - Claude Code latest integrated band: **2.1.216→2.1.220**
 
@@ -36,6 +55,29 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-08-05: v4.0.3 — full legacy-logic removal (user-owned version scheme: 4.0.3, not the
+  round-2 4.1.0 target — re-affirmed at the FN gate; round 1 + round 2 shipped together). **Round 1** (deprecation cleanup + compaction across `agents/`,
+  `commands/`, `skills/`): removed legacy `--auto-plan`/`--auto-finalization` aliases (5 files +
+  README, only `--auto=[plan, decision, finalization]` remains); sunset `requires_ui_tests`
+  compat-mapping table (2 files, 6 sites); `igrsoft` rename residuals outside the vendor-identity
+  allow-list (7 files); 21 of 42 stale pre-4.0 version gates (21 kept, still needed to validate old
+  ledgers). Compaction: 34,119 → 34,035 tracked markdown lines. **Round 2** (user-approved,
+  aggressive scope, 13 themes — hooks/scripts/tests/benchmark): dual dedupe-key mechanism deleted
+  (`metadata.dedupe_key_extended` + `hooks/audit-dedup.sh`); pre-run-index artifact bare-basename
+  resolver rung removed; pre-#375 issue-title probe removed; `state.json .git.base_branch`
+  fallback removed from the integration-branch chain; single-file visual-evidence marker shape
+  dropped; redaction supersets removed (leak risk accepted for pre-4.0 identifiers); benchmark
+  `tokens` block decoding now strict (all 5 keys required, `history.json` migrated in place);
+  `state.mcp_session`, `--severity` legacy aliases, bare-name agent shim dropped; dead
+  `_inline_merge` deleted from `state-merge.sh`. Zero stage/agent/gate/threshold semantics change
+  on current-contract paths — every removal itemised with its repo-wide grep in
+  `development-0.md`. BREAKING (round 1): legacy `--auto-*` flags no longer recognised or
+  documented (undefined effect, not a parse error); a resumed pre-4.0 plan carrying
+  `requires_ui_tests` with no `test_mode` now silently falls to `scoped` test mode with no Design
+  Comparison and no deprecation note. BREAKING (round 2): pre-4.0 `.context/` artifacts, pre-#375
+  issue titles, and single-file visual-evidence markers no longer resolve via any compat path;
+  redacted identifiers may leak into GitHub issue bodies on a pre-4.0 resume; a partial benchmark
+  `tokens` block now raises instead of decoding with silent `None`s.
 - 2026-08-03: v4.0.1 — two silent publication-surface degradations. **Branch naming**:
   `commands/worktask.md` Step 3c is now UNCONDITIONAL with a BINDING line that
   `branch_is_conventional()` is the sole authority (an orchestrator judging "already named,
@@ -115,7 +157,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-07-29: v3.40.0 — suite fully green (281/0); new cross-plugin-refs contract test caught 2 dangling delegations; web/android capture scripts; android `and-*` agent rename propagated; `deps --upgrade` silent-audit fixed. ~12 files.
 - 2026-07-29: v3.39.0 — platform-agnostic orchestration: 36 XcodeBuildMCP grants removed (DV/DR/QA delegate to `/<plugin>:build-test`), Apple pre-warm deleted, Swift-Testing-for-all-platforms mandate and 4-platform schema gap fixed, Python comment-density and Android UI-detection bugs fixed. ~44 files.
 - 2026-07-29: v3.38.0 — compatible dev-plugin registry + onboarding checklist; ai-engineer wired in; publish-pl-issue prefix-regex leak (5 plugins) and pm-milestone/AR/SR/QA routing gaps fixed. ~15 files.
-- 2026-07-29: v3.37.2 — image hosting: tier-0 user-attachments LIVE via `drogers0/gh-image` (only tier that renders on private repos + takes binaries + commits nothing); gist tier proven unable to host any image (`gh gist create` refuses binaries) and fails fast; `manifest_unparseable` split from `no_captures`; `ASSET_GIST_PUBLIC` tri-state, auto-derived from repo visibility. Self-tests 37→38. 6 files.
 - 2026-07-28: v3.37.1 — model-name sweep: no superseded Opus/Sonnet generation named outside CHANGELOG; dated rows de-named; benchmark STAGE_TABLE repinned to Opus 5/Sonnet 5. ~14 files.
 ## Token Baselines
 

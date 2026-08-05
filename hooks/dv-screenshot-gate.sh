@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # DV screenshot-gate hook — blocks the developer agent's SubagentStop when the
-# DV implementation manifest is missing (company-workflow worktask plugin, v3.11.3+).
+# DV implementation manifest is missing (company-workflow worktask plugin).
 #
 # Closes the OV-56 failure class: a headless DV reasoning its way out of capture
 # with a checkbox + prose, and DR reclassifying the absent manifest as a
@@ -104,8 +104,7 @@ run_gate() {
         metadata: {
           worktask_id: $wid,
           reason: $reason,
-          dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":screenshot-gate"),
-          dedupe_key_extended: ((.parent_agent_id // "none") + ":" + (.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":screenshot-gate")
+          dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":screenshot-gate")
         }
       }') || { echo "dv-screenshot-gate: jq parse failed" >&2; return 0; }
     printf '%s\n' "$_row" >> "$_log_dir/audit.jsonl"
@@ -145,8 +144,7 @@ run_gate() {
         worktask_id: $wid,
         missing_manifest: $manifest,
         reason: "missing screenshots.md — run the dv-screenshot-capture skill (it selects the adapter for state.platform, with cli/fallback under it); headless is not a skip reason",
-        dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":screenshot-gate"),
-        dedupe_key_extended: ((.parent_agent_id // "none") + ":" + (.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":screenshot-gate")
+        dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":screenshot-gate")
       }
     }') || { echo "dv-screenshot-gate: jq parse failed" >&2; return 0; }
   printf '%s\n' "$_row" >> "$_log_dir/audit.jsonl"
@@ -182,7 +180,6 @@ if [ "$SELF_TEST" -eq 1 ]; then
     and .subject == "company-workflow:developer"
     and .metadata.worktask_id == "ov56-edit-mode-fix"
     and (.metadata.dedupe_key == "sess_b:agt_b:screenshot-gate")
-    and (.metadata.dedupe_key_extended == "agt_pb:sess_b:agt_b:screenshot-gate")
   ' >/dev/null 2>&1 \
     || { echo "dv-screenshot-gate: self-test FAIL (block: audit row)"; _fail=1; }
 

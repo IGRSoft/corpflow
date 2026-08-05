@@ -291,4 +291,3 @@ AI adds: <0.01% to total project cost
 | Phase Max | 160 hours (4 weeks) per Max |
 | Complexity | Sum of 5 factors (25 max) |
 | AI Cost | Base Tokens × Model Rate × Factors |
-

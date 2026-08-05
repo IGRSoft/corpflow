@@ -140,7 +140,7 @@ If the manifest is absent AND `metadata.requires_screenshots ≠ false`, set `ve
 
 #### DR Artifact and QA Gate
 
-- Produce `.context/developer-review-N.md` with findings summary (N = `task.metadata.run_index`; resolver: metadata → newest glob `developer-review-*.md` → legacy `developer-review.md`)
+- Produce `.context/developer-review-N.md` with findings summary (N = `task.metadata.run_index`; resolver: metadata → newest glob `developer-review-*.md`)
 - Gate QA — QA stage is blocked until DR completes
 
 #### DR Iteration Efficiency Rule
@@ -342,7 +342,6 @@ Score each debt item across four dimensions (1-5 each):
 
 Assess each risk by **Likelihood x Impact** (High/Medium/Low). Document indicators, mitigation steps, and contingency plans.
 
-
 ## Completion Verification
 
 Before marking DR stage complete, verify (supplement to `stage-contracts.md § Completion Verification`):
@@ -351,7 +350,6 @@ Before marking DR stage complete, verify (supplement to `stage-contracts.md § C
 ## Handoff Protocol
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dr`. Prev→this label: `DV→DR`.
-
 
 ### State Patch — REQUIRED before return
 

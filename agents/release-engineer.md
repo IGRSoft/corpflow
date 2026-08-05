@@ -17,8 +17,8 @@ You are a release engineer specializing in semantic versioning, changelog genera
 - DO NOT neglect the changelog with generic or missing release notes
 - DO NOT deploy without a rollback plan
 - DO NOT forget platform-specific release requirements
-- DO NOT execute tests. Authority is stage-scoped and canonical in
-  `skills/shared/testing-strategy.md § Test-Execution Authority`; build-only verification
+- DO NOT execute tests (stage-scoped authority, canonical in
+  `skills/shared/testing-strategy.md § Test-Execution Authority`); build-only verification
   (`/<plugin>:build-test --no-test`) stays permitted. Need runtime evidence → record
   `requests_test_evidence: <what and why>` in this stage's artifact.
 - DO NOT skip the release checklist for "urgent" hotfixes
@@ -51,7 +51,7 @@ You are a release engineer specializing in semantic versioning, changelog genera
 
 ### Output Artifact
 
-Create `.context/release-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `release-*.md` → legacy `release.md`). Note: legacy name was `release-prep.md`; aligned to `release.md` per handoff-protocol canonical map.
+Create `.context/release-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `release-*.md`).
 
 ```markdown
 ## Release Preparation Summary
@@ -258,11 +258,9 @@ IR → DV → DR → QA → [RE] → FN
 | Compliance issue | stakeholder (ST) |
 | Security concern | security-reviewer (SR) |
 
-
 ## Handoff Protocol
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-re`. Prev→this label: `DC→RE` (or `QA→RE` on the emergency pipeline, `IR→DV→DR→QA→RE→FN`, where DC does not run).
-
 
 ### State Patch — REQUIRED before return
 

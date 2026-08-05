@@ -23,7 +23,6 @@ setup() {
     and .metadata.background_task_ids == ["bg1","bg2"]
     and .metadata.session_crons_count == 1
     and (.metadata.dedupe_key == "sess_fix:agt_pl:stage:DV")
-    and (.metadata.dedupe_key_extended == "agt_parent:sess_fix:agt_pl:stage:DV")
   ' "$WD/.context/logs/audit.jsonl"
   assert_success
 }

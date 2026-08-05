@@ -204,4 +204,3 @@ Use this command:
 - Before `/test-plan` - Identify what needs testing
 - During QA stage - Verify coverage goals
 - In `/test-report` - Include coverage metrics
-

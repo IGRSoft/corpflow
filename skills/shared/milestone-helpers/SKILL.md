@@ -59,7 +59,7 @@ All subcommands accept pre-fetched JSON via `--file` so they are network-free an
 
 > **Orchestrator-side only.** The `git -C` forms below run from the **parent** session reaching *into* a worktree. Inside a worktree use plain `git` — the runtime blocks an isolated subagent from redirecting git at the shared checkout (`git -C`, `--git-dir`, `GIT_DIR`, `GIT_WORK_TREE`), so copying these there fails.
 
-| Operation | Legacy Command | Worktree Command |
+| Operation | Non-worktree Command | Worktree Command |
 |-----------|----------------|------------------|
 | Fetch base | `git fetch origin develop` | `git fetch origin develop` |
 | Create branch | `git checkout -b feature/{issue#}-{slug} origin/develop` | `git worktree add -b feature/{issue#}-{slug} .worktrees/milestone-{N}/{issue#} origin/develop` |
@@ -68,10 +68,9 @@ All subcommands accept pre-fetched JSON via `--file` so they are network-free an
 
 ### Commit, push, PR, cleanup
 
-| Operation | Legacy Command | Worktree Command |
+| Operation | Non-worktree Command | Worktree Command |
 |-----------|----------------|------------------|
 | Commit | `git commit -m "#{issue} feat: {title}"` | `git -C .worktrees/milestone-{N}/{issue#} commit -m "#{issue} feat: {title}"` |
 | Push branch | `git push -u origin feature/{issue#}-{slug}` | `git -C .worktrees/milestone-{N}/{issue#} push -u origin feature/{issue#}-{slug}` |
 | Create PR | `gh pr create --base develop --body "Closes #{issue}"` | `gh pr create --base develop --body "Closes #{issue}"` |
 | Cleanup | `git checkout develop` | `git worktree remove .worktrees/milestone-{N}/{issue#} && git worktree prune` |
-
