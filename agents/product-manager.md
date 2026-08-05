@@ -350,7 +350,7 @@ The PM MUST name each persisted per-frame file with a **placeholder token**, nev
 When invoked as PL0 stage agent:
 1. Compute `<plan_file>` per **Plan File Naming** (glob `.context/planning-*.md`, pick next N) and create `.context/<plan_file>` with the requirements template — **except on a `plan_revision` turn**, which reuses the frozen `plan_file` and rewrites it in place (§ Revision of the run in flight)
 2. Fill out `<plan_file>` with requirements, acceptance criteria, success metrics
-3. Assess complexity (0-50 scale) and create stage tasks via `TaskCreate`, setting `metadata.plan_file = "<plan_file>"` AND `metadata.run_index = N` on each
+3. Assess complexity (0-50 scale) and create stage tasks via `TaskCreate`, setting `metadata.plan_file = "<plan_file>"` AND `metadata.run_index = N` on each — **except on a `plan_revision` turn**, which never creates a second chain: `TaskUpdate` the existing stage tasks in place when the revision changes subjects, ACs, or the stage set (§ Revision of the run in flight)
 
 #### Post-publish verification (scaffolding step 4)
 
