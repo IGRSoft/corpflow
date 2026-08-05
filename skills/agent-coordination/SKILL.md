@@ -226,10 +226,10 @@ stage and must not appear in any completion checklist.
 
 | Actor | Action Examples |
 |-------|-----------------|
-| `hook:audit-subagent` (SubagentStop, plugin) **(authoritative)** | `subagent_stopped` (paired with cost-*.jsonl entry) — v3.10.0+. v3.10.6+ rows additionally carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`, and `dedupe_key_extended` (see § Dedupe Key Migration below). |
-| `hook:audit-tooluse` (PostToolUse, plugin) **(authoritative)** | `tool_invoked` for `TaskUpdate\|TaskCreate\|Write\|Edit` with `duration_ms` + `effort` — v3.10.0+ |
-| `hook:precompact` (PreCompact, plugin) **(authoritative)** | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` — v3.10.0+ |
-| `hook:agent-stop` (Stop, PL/FN/ST agents) **(authoritative)** | `stage_completion_hook` with `metadata.stage` — v3.10.0+. v3.10.6+ rows additionally carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`, and `dedupe_key_extended`. |
+| `hook:audit-subagent` (SubagentStop, plugin) **(authoritative)** | `subagent_stopped` (paired with cost-*.jsonl entry); rows carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`. |
+| `hook:audit-tooluse` (PostToolUse, plugin) **(authoritative)** | `tool_invoked` for `TaskUpdate\|TaskCreate\|Write\|Edit` with `duration_ms` + `effort` |
+| `hook:precompact` (PreCompact, plugin) **(authoritative)** | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` |
+| `hook:agent-stop` (Stop, PL/FN/ST agents) **(authoritative)** | `stage_completion_hook` with `metadata.stage`; rows carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`. |
 
 #### Writers — external & adapters
 
@@ -240,47 +240,19 @@ stage and must not appear in any completion checklist.
 | `preview-ensurer` skill | `preview_added` (one row per `#Preview` block written to source by SwiftSyntax driver — `metadata: {file, view_type, mock_strategy, lines_added}`) |
 | QA visual-diff wrapper (`scripts/visual-diff.sh`) | `visual_diff_run` (one row per RMSE diff invocation — `metadata: {reference, candidate, metric:"RMSE", value_percent, threshold_percent, verdict}`) |
 
-#### Hook authority + dedupe rule (v3.10.0+)
+#### Hook authority + dedupe rule
 
-**Hook authority + dedupe rule (v3.10.0+):** rows emitted by plugin hooks carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action remain forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are downgraded to **advisory**. Readers (`/cost-report`, resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`. Dedupe-key shapes:
+Rows emitted by plugin hooks carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action remain forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are downgraded to **advisory**. Readers (`/cost-report`, resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`. Dedupe-key shapes:
 
 #### Dedupe-key shapes — tool & subagent
 
 - `tool_invoked`: `"<session_id>:<tool_use_id>"`
-- `subagent_stopped`: `"<session_id>:<agent_id>:<task_id>:stop"` (v3.10.1+; the `<task_id>` segment disambiguates back-to-back DV0/DV1 split-task retries where `agent_id` is constant. Pre-v3.10.1 producers may emit the legacy shape `"<session_id>:<agent_id>:stop"` — readers MUST treat both prefixes as the same key for a single `(session, agent, task)` row to preserve dedupe across the upgrade. Orchestrator populates `task_id` in hook stdin where the runtime exposes it; the hook degrades to legacy shape automatically when it is absent.)
+- `subagent_stopped`: `"<session_id>:<agent_id>:stop"`
 
 #### Dedupe-key shapes — stage & issue
 
 - `stage_completion_hook`: `"<session_id>:<agent_id>:stage:<PL|FN|ST>"`
 - `github_issue_created`: `"<worktask_id>:<run_index>:gh_issue"` — collision on resume detects already-published; multi-track safety via `run_index` increment. Writer: orchestrator (via `skills/worktask/scripts/publish-pl-issue.sh` between PL approval and stage-loop entry).
-
-### Dedupe Key Migration (v3.10.6+, auto-detecting)
-
-v3.10.6 adds a second dedupe key — `metadata.dedupe_key_extended` — to every `subagent_stopped` and `stage_completion_hook` row. Both keys are written simultaneously; readers choose which to use based on a runtime auto-detection rule.
-
-#### Key definitions
-
-- `dedupe_key` (existing, BASE): `<session_id>:<agent_id>:stop` or `<session_id>:<agent_id>:stage:<stage>`. Compatibility-safe — every audit row carries this, every reader can grep it, every pre-v3.10.6 file is readable.
-- `dedupe_key_extended` (v3.10.6+): prepends `<parent_agent_id>:` to the base key. Today evaluates to `none:…` everywhere (parent_agent_id is `"none"`), so dedupes identically to base. When CC starts populating `parent_agent_id` in hook stdin, gains parent-aware granularity automatically — useful for multi-track parallel runs where the same `agent_id` appears under different dispatch parents.
-
-#### Auto-detection rule (full reader cut-over)
-
-**Auto-detection rule (full reader cut-over):** readers MUST call the canonical helper `hooks/audit-dedup.sh --check-mode` (plugin root: `${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`) which scans the tail of `.context/logs/audit.jsonl` and prints one word to stdout:
-
-- `base` — when no rows in the rolling 100-row window have `metadata.parent_agent_id != "none"`. Reader dedups on `metadata.dedupe_key`.
-- `extended` — when ≥1 row in the rolling 100-row window has a non-`"none"` `parent_agent_id`. Reader dedups on `metadata.dedupe_key_extended`.
-
-#### Cut-over & reader contract
-
-The helper handles cut-over transparently. On CC versions where parent_agent_id is unpopulated (today), it always returns `base`. The moment CC surfaces the field in hook stdin and a single row carries a real parent, all conforming readers switch to extended without redeploy.
-
-**Reader contract**: anything that dedupes audit rows (`/cost-report`, manual `jq` scripts, future automation) calls the helper exactly once at startup and pins the result for the rest of the run. Mixed-mode dedup within a single run is forbidden.
-
-#### Pre-v3.10.6 compat
-
-**Pre-v3.10.6 compat**: pre-v3.10.6 audit.jsonl files lack `dedupe_key_extended` — the helper detects absence on the first row and falls back to `base` even if `parent_agent_id` shows up in later rows. This keeps existing audit files readable without migration.
-
-The hook authority + dedupe rule from the previous paragraph still applies — `hook:*` rows remain authoritative; the only delta is which key (`dedupe_key` vs `dedupe_key_extended`) is used for the collision check.
 
 ### Schema
 
@@ -297,9 +269,9 @@ The hook authority + dedupe rule from the previous paragraph still applies — `
 }
 ```
 
-#### v3.10.6+ metadata fields
+#### Hook-written metadata fields
 
-For `subagent_stopped` and `stage_completion_hook` rows written by plugin hooks (v3.10.6+), `metadata` carries these optional fields in addition to action-specific extras:
+For `subagent_stopped` and `stage_completion_hook` rows written by plugin hooks, `metadata` carries these optional fields in addition to action-specific extras:
 
 - `duration_ms` (subagent_stopped only): number
 - `effort`: `"low"|"medium"|"high"|"xhigh"|"max"|"unknown"`
@@ -309,8 +281,7 @@ For `subagent_stopped` and `stage_completion_hook` rows written by plugin hooks 
 - `background_task_ids`: string[] — may contain `"unknown"` entries; see `references/hook-monitoring.md § BG-Task ID Schema Watch`
 - `session_crons_count`: integer ≥ 0
 - `session_cron_ids`: string[] — may contain `"unknown"` entries; see `references/hook-monitoring.md § BG-Task ID Schema Watch`
-- `dedupe_key`: string (BASE shape, always present)
-- `dedupe_key_extended`: string (v3.10.6+; see § Dedupe Key Migration)
+- `dedupe_key`: string (always present)
 
 ### Append Pattern (Bash)
 
@@ -463,7 +434,7 @@ Claude Code keys installed agents by the YAML frontmatter `name`, so two plugins
 
 #### Naming mitigation & authoring audit
 
-For new agents, prefer **plugin-scoped names** (`<plugin>-<role>`, e.g. `company-workflow-developer`) when the role is generic. For the 16 existing company-workflow agents, the orchestrator disambiguates today via `company-workflow:<name>` prefixes (see USER `CLAUDE.md § Orchestrator Rules` — bare names prepend `company-workflow:`; qualified names like `apple-developer:ios-developer` are used as-is), so no rename is forced — renaming would cascade into every `Task(subagent_type=…)` reference (high blast radius).
+For new agents, prefer **plugin-scoped names** (`<plugin>-<role>`, e.g. `company-workflow-developer`) when the role is generic. For the 16 existing company-workflow agents, the orchestrator disambiguates today via `company-workflow:<name>` prefixes (every `subagent_type` is fully qualified, e.g. `apple-developer:ios-developer`), so no rename is forced — renaming would cascade into every `Task(subagent_type=…)` reference (high blast radius).
 
 When authoring new agents via `/create-agent` / `/optimize-agent`, audit the `name:` field against known marketplace stems (`apple-developer:`, `security-scanning:`, `debugging-toolkit:`) before merging. `/optimize-agent § Frontmatter Audit` flags this as P1.
 
@@ -494,7 +465,7 @@ capture persists after the Monitor session ends — see `logging-conventions` sk
 
 ##### Common pattern
 
-**Common pattern**: start background Bash with `run_in_background: true`, note
+Start background Bash with `run_in_background: true`, note
 the returned shell ID, then attach `Monitor` to that ID. When Monitor detaches
 (timeout, stage transition), the `.log` file is still readable via `Read`.
 
@@ -768,7 +739,7 @@ Claude Code ships a native `/workflows` command and Workflow tool for **dynamic 
 ### When to reach for each
 
 - Reach for native dynamic workflows when you need quick parallelism without governance overhead (e.g., batch linting, parallel research, one-off data transforms).
-- Reach for the company-workflow worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks have two human checkpoints — the PL gate (plan approval after PL0) and the FN gate (finalization approval, which STOPs before commit/push/PR by default); both are bypassed by `--emergency`, the PL gate also by `--auto=[plan]` and the FN gate also by `--auto=[finalization]` (legacy aliases `--auto-plan`/`--auto-finalization`); `--auto=[decision]` additionally delegates PL open questions to a Fable-model decision pass without bypassing any gate. A batch orchestrator (`/megatask`) stamps `plan_gate`/`fn_gate: "bypass"` directly on each per-issue PL0.
+- Reach for the company-workflow worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks have two human checkpoints — the PL gate (plan approval after PL0) and the FN gate (finalization approval, which STOPs before commit/push/PR by default); both are bypassed by `--emergency`, the PL gate also by `--auto=[plan]` and the FN gate also by `--auto=[finalization]`; `--auto=[decision]` additionally delegates PL open questions to a Fable-model decision pass without bypassing any gate. A batch orchestrator (`/megatask`) stamps `plan_gate`/`fn_gate: "bypass"` directly on each per-issue PL0.
 
 ### Composition & workflow sizing
 
@@ -783,4 +754,3 @@ They can compose: a DV agent inside a company-workflow worktask may itself spin 
 ### Gate prompts (AskUserQuestion)
 
 > Claude reserves multiple-choice / AskUserQuestion prompts for genuine decisions that require user input. After the PL plan-approval gate, stage transitions are automatic — the PL gate itself is the one `AskUserQuestion` checkpoint; intra-loop transitions proceed without user confirmation. `AskUserQuestion` dialogs do not auto-continue on idle by default — a PL/FN gate park holds indefinitely until the operator answers; the idle-timeout auto-continue is an explicit `/config` opt-in and MUST stay off on hosts running gated worktasks.
-

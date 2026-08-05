@@ -26,7 +26,7 @@ No system `bats` or `kcov` required — `make bootstrap` auto-provisions via:
 ```
 tests/
   shell/
-    hooks/             # 9 bats files: agent-stop, anchor-preflight, audit-dedup, …
+    hooks/             # 8 bats files: agent-stop, anchor-preflight, audit-subagent, …
     worktask/          # 9 bats files: state-patch, publish-pl-issue, cache-lint, …
     dv-screenshot/     # 4 bats files: apple-canvas, cli-fallback, size-budget, visual-diff
     skills/            # 11 bats files: build-orchestrator, scan-secrets, build-context-set, …
@@ -44,7 +44,7 @@ tests/
     hooks/             # JSON/markdown fixtures: audit payloads, plan frontmatter, issues
     worktask/          # state.json samples, development.md snippets
     skills/            # Secret fixtures (synthetic), estimate inputs, TTT spec
-    README.md          # Fixture collision-safety index (audit-dedup.sh path-keyed names)
+    README.md          # Fixture collision-safety index (path-keyed names)
   COVERAGE.md          # Per-file coverage report + proxy exemptions (AC-3 gate)
 ```
 
@@ -147,12 +147,6 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 Path-keyed naming: if testing `skills/self-improvement/scripts/build-context-set.sh`, the test file is:
 ```
 tests/shell/skills/build-context-set.bats  # Not "self-improvement__build-context-set"
-```
-
-For the two `audit-dedup.sh` files (hook vs skill), use full paths:
-```
-tests/shell/hooks/audit-dedup.bats                          # hooks/audit-dedup.sh
-tests/shell/skills/agent-coordination__audit-dedup.bats    # skills/agent-coordination/scripts/audit-dedup.sh
 ```
 
 **Minimum test template:**

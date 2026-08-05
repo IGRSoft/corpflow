@@ -210,4 +210,3 @@ If Pencil MCP tools fail to load or calls error (e.g., Pencil.app not running):
 2. Include detailed layout descriptions and measurements
 3. Note in documentation that visual mockups were not generated
 4. Report the issue so it can be resolved for future tasks
-

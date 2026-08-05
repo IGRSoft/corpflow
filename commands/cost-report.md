@@ -32,7 +32,7 @@ Generate cost analysis for completed or in-progress worktasks with token usage b
 - `--export` - Export cost data to CSV
 - `--optimize` - Include optimization recommendations
 - `--detailed` - Show per-operation token breakdown (includes Background Activity)
-- `--bg-activity` - Show Background Activity table only (default off to keep summary compact; v3.10.6+)
+- `--bg-activity` - Show Background Activity table only (default off to keep summary compact)
 - `--compare <task-id>` - Compare costs with another task
 
 ## Output Format
@@ -110,9 +110,9 @@ Estimated Remaining: ~$0.15
 
 - Count of `cost-*.jsonl` rows grouped by `(stage, effort)` (effort source: `CLAUDE_EFFORT` env var and/or hook stdin `effort.level`).
 - Mismatch with the per-stage `effort:` declared in the agent frontmatter (see `skills/shared/model-selection.md`) — flag as **budget drift**; common cause is operator `/effort` override mid-run or PL0 dispatch metadata writer setting a non-default effort.
-- `unknown` rows are historical entries logged before effort capture (plugin v3.10.0) — current runtimes always export `CLAUDE_EFFORT`, so persistent new `unknown` rows indicate a broken hook environment.
+- `unknown` rows mean `CLAUDE_EFFORT` was not exported; current runtimes always export it, so a persistent `unknown` indicates a broken hook environment.
 
-### Background Activity (v3.10.6+, `--bg-activity` or `--detailed`)
+### Background Activity (`--bg-activity` or `--detailed`)
 
 ```
 ### Background Activity
@@ -128,18 +128,18 @@ Estimated Remaining: ~$0.15
 
 #### Background Activity — Counter Columns
 
-- `bg_tasks_active` = max(`metadata.background_tasks_count`) observed across hook rows for that stage in `audit.jsonl` (writers: `hook:audit-subagent`, `hook:agent-stop`; field added v3.10.6).
+- `bg_tasks_active` = max(`metadata.background_tasks_count`) observed across hook rows for that stage in `audit.jsonl` (writers: `hook:audit-subagent`, `hook:agent-stop`).
 - `session_crons` = same, for `metadata.session_crons_count`.
 - `dispatch_depth` = computed from the `metadata.parent_agent_id` chain — 0 when `"none"`, otherwise `1 + depth(parent)`. Sub-agents spawn sub-agents up to 3 levels deep by default (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`) — depths ≥ 1 appear whenever a stage agent delegates to a specialist. A `dispatch_depth` of 3 means the chain is on the default ceiling: the next delegation below it is refused unless the env override is raised.
 
 #### Background Activity — Notable Column & Dedup Mode
 
 - `notable` = comma-joined `metadata.background_task_ids` and `metadata.session_cron_ids` when count > 0; otherwise `—`. Watch for the literal `"unknown"` string — signals the canonical ID-field name has shifted (see `skills/agent-coordination/references/hook-monitoring.md § BG-Task ID Schema Watch`).
-- Aggregation MUST first call `hooks/audit-dedup.sh --check-mode` (plugin root: `${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`) to pick the authoritative key (`base` or `extended`), then group rows by stage and compute max/sum/depth. Pinning the mode at startup avoids mixed-mode dedup (forbidden per `skills/agent-coordination/SKILL.md § Dedupe Key Migration`).
+- Aggregation groups rows by stage on `metadata.dedupe_key` and computes max/sum/depth.
 
 #### Background Activity — Version Requirements
 
-Background activity columns require plugin v3.10.6+ audit rows. Earlier `audit.jsonl` rows lack these fields; values default to `0` / `—`. The helper `hooks/audit-dedup.sh --check-mode` decides whether to dedup on `dedupe_key` (base) or `dedupe_key_extended` (parent-aware) for correctness in multi-track parallel runs.
+Rows that lack the background-activity fields default to `0` / `—`.
 
 ### Optimization Report (`--optimize`)
 
@@ -205,9 +205,9 @@ one subagent invocation — the aggregator groups by `stage`, sums `input_tokens
 
 ### Audit Dedup Before Aggregation
 
-**Audit-trail input is deduplicated before aggregation** (v3.10.1+). The
+**Audit-trail input is deduplicated before aggregation.** The
 `### Effort Distribution` table sources `(stage, effort)` counts from
-`.context/logs/audit.jsonl`, which since v3.10.0 carries BOTH hook-emitted rows
+`.context/logs/audit.jsonl`, which carries BOTH hook-emitted rows
 (`actor: "hook:audit-tooluse"`) and forward-compatible agent-emitted rows. Pipe
 through the canonical dedup filter before counting:
 
@@ -231,9 +231,9 @@ filter against a synthetic fixture.
 
 The Cache Performance table additionally reads:
 
-- `cache_read_input_tokens` / `cache_creation_input_tokens` columns from the same JSONL (added in plugin v3.9.0; exported by Claude Code on `SubagentStop` as `CLAUDE_CACHE_READ_INPUT_TOKENS` / `CLAUDE_CACHE_CREATION_INPUT_TOKENS`).
-- `effort` column added in plugin v3.10.0; sourced from `CLAUDE_EFFORT` and powers `### Effort Distribution`.
-- `.context/logs/fallback-*.log` line counts for the F1 fallback column (one line per agent that fell back to legacy `metadata.context_files` mode; see `skills/shared/stage-contracts.md § F1`).
+- `cache_read_input_tokens` / `cache_creation_input_tokens` columns from the same JSONL (exported by Claude Code on `SubagentStop` as `CLAUDE_CACHE_READ_INPUT_TOKENS` / `CLAUDE_CACHE_CREATION_INPUT_TOKENS`).
+- `effort` column — sourced from `CLAUDE_EFFORT`; powers `### Effort Distribution`.
+- `.context/logs/fallback-*.log` line counts for the F1 fallback column (one line per agent that fell back to `metadata.context_files` mode; see `skills/shared/stage-contracts.md § F1`).
 
 ### Missing-Data Fallback
 
@@ -250,4 +250,3 @@ This command is used:
 - At stage transitions for optimization checks
 - At worktask completion for final analysis
 - By project-manager (FN stage) for budget reporting and timing recap
-

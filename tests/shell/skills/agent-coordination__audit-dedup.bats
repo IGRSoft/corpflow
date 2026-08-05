@@ -1,14 +1,12 @@
 #!/usr/bin/env bats
 # Contract tests for skills/agent-coordination/scripts/audit-dedup.sh
-# (PATH-KEYED filename: agent-coordination__audit-dedup.bats to avoid basename
-# collision with hooks/audit-dedup.sh; AC-2 gate resolves both independently.)
+# (PATH-KEYED filename: agent-coordination__audit-dedup.bats — the AC-2 gate matches
+# on path-derived stems, so a basename collision could never claim false coverage.)
 #
 # Contracts (from source + self-test):
 #   Reads audit.jsonl (file arg, - for stdin, or default .context/logs/audit.jsonl).
 #   For groups sharing metadata.dedupe_key: hook:* actor wins; agent rows dropped.
 #   Rows without dedupe_key pass through unchanged (singletons).
-#   4-segment subagent_stopped keys with :stop suffix are normalised to 3-segment
-#   for cross-shape dedup (legacy 3-seg vs new 4-seg collapse to one row).
 #   exit 2 if jq not found; exit 1 if source file unreadable; exit 0 on success.
 #   --self-test -> prints "self-test OK", exits 0.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"

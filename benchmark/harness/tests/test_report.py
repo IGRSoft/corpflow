@@ -55,8 +55,8 @@ class ReportTests(unittest.TestCase):
         expected = report._ratio_fmt(7403 / (574557 + 2597 + 7403) * 100)
         self.assertIn(f"{expected}%", html)
 
-    def test_cache_hit_degrades_for_legacy_record(self):
-        # Legacy live record (no cache keys) → cache-hit % row is an em-dash.
+    def test_cache_hit_degrades_when_cache_keys_are_null(self):
+        # Null cache keys → cache-hit % row is an em-dash.
         rec = _det_record()  # deterministic tokens all null → cache-hit degrades
         html = report.render_html({"deterministic": [rec]})
         self.assertIn("cache-hit %", html)

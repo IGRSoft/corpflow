@@ -5,7 +5,7 @@
 # Usage:
 #   handoff-harness.sh [--out DIR]
 #       Generates a synthetic state.json and 3 synthetic stage artifacts
-#       (PL, AR, DV) under DIR (default: a tempdir). Constructs a "legacy"
+#       (PL, AR, DV) under DIR (default: a tempdir). Constructs a "baseline"
 #       prompt (full-file inlining) and a "new" prompt (state.json + anchors
 #       only) for stages DV, DR, QA, DC, FN. Computes token counts using a
 #       wc-words proxy (words × 1.33 ≈ cl100k_base tokens), prints a
@@ -342,7 +342,7 @@ handoff:
 ## requirements
 
 EOF
-  # Pad with synthetic body to make the legacy-mode reading expensive.
+  # Pad with synthetic body to make the baseline-mode reading expensive.
   for i in $(seq 1 200); do echo "- requirement line $i with extra context describing the work to be done in this synthetic plan" >> "$d/.context/planning-0.md"; done
   cat >> "$d/.context/planning-0.md" <<'EOF'
 
@@ -458,7 +458,7 @@ run_token_count() {
 
   echo "Fixtures created at: $d"
   echo
-  printf '%-6s | %12s | %10s | %10s\n' "stage" "legacy_tok" "new_tok" "reduction"
+  printf '%-6s | %12s | %10s | %10s\n' "stage" "baseline_tok" "new_tok" "reduction"
   printf '%s\n' "------+--------------+------------+-----------"
 
   # New mode prompt: state.json blob + targeted anchor headers (frontmatter only).
@@ -467,7 +467,7 @@ run_token_count() {
 
   # Per-stage simulated reading scope.
   # POSIX-compatible: case-statement lookup instead of associative arrays.
-  legacy_files_for() {
+  baseline_files_for() {
     case "$1" in
       DV) echo ".context/planning-0.md .context/architecture.md" ;;
       DR) echo ".context/planning-0.md .context/architecture.md .context/development.md" ;;
@@ -487,10 +487,10 @@ run_token_count() {
 
   local rc=0 stage
   for stage in DV DR QA DC FN; do
-    local legacy=0 new=$state_tok
+    local baseline=0 new=$state_tok
     local rel
-    for rel in $(legacy_files_for "$stage"); do
-      legacy=$(( legacy + $(toks "$d/$rel") ))
+    for rel in $(baseline_files_for "$stage"); do
+      baseline=$(( baseline + $(toks "$d/$rel") ))
     done
     # New mode: state.json + ONLY the frontmatter block of the most relevant artifact
     for rel in $(new_files_for "$stage"); do
@@ -499,12 +499,12 @@ run_token_count() {
       new=$(( new + $(toks_str "$fm") ))
     done
     local reduction
-    reduction=$(awk -v l="$legacy" -v n="$new" 'BEGIN { if (l==0) print "0%"; else printf "%.0f%%", (l-n)*100.0/l }')
-    printf '%-6s | %12d | %10d | %10s\n' "$stage" "$legacy" "$new" "$reduction"
+    reduction=$(awk -v l="$baseline" -v n="$new" 'BEGIN { if (l==0) print "0%"; else printf "%.0f%%", (l-n)*100.0/l }')
+    printf '%-6s | %12d | %10d | %10s\n' "$stage" "$baseline" "$new" "$reduction"
 
     # Threshold: ≥30% reduction (AC-12).
     local pct
-    pct=$(awk -v l="$legacy" -v n="$new" 'BEGIN { if (l==0) print 0; else printf "%.0f", (l-n)*100.0/l }')
+    pct=$(awk -v l="$baseline" -v n="$new" 'BEGIN { if (l==0) print 0; else printf "%.0f", (l-n)*100.0/l }')
     if [[ "$pct" -lt 30 ]]; then
       echo "FAIL: stage=$stage reduction $pct% < 30% threshold" >&2
       rc=1
@@ -609,8 +609,8 @@ self_test_ar_gate() {
   _ar_case "noAR+noref/default"  "$ctx/state-no-ar.json" 0 0 -                                                  "$ctx/dv-no-ref.md"
   _ar_case "noAR+ref/default"    "$ctx/state-no-ar.json" 0 0 "warn: DV references architecture-0.md"               "$ctx/dv-valid.md"
   _ar_case "noAR+ref/strict"     "$ctx/state-no-ar.json" 1 0 "warn: DV references architecture-0.md"               "$ctx/dv-valid.md"
-  _ar_case "legacy/no-state"     -                       0 0 -                                                  "$ctx/dv-no-ref.md"
-  _ar_case "legacy/no-state+strict" -                    1 0 -                                                  "$ctx/dv-dangling.md"
+  _ar_case "baseline/no-state"   -                       0 0 -                                                  "$ctx/dv-no-ref.md"
+  _ar_case "baseline/no-state+strict" -                    1 0 -                                                  "$ctx/dv-dangling.md"
 
   # F5: an unreadable --state must be loud, not silently indistinguishable from "no AR".
   printf 'not json {{' > "$ctx/state-corrupt.json"

@@ -360,7 +360,7 @@ When `metadata.requires_screenshots: false` and DV captures nothing:
 
 ### PR body attachment
 
-**Do NOT** hand-author `![…](.context/…)` refs in the PR body — relative `.context/` paths never render in GitHub PR or issue bodies (camo image proxy fetches anonymously; private/internal raw URLs 404; relative markdown links unresolved). Root cause of the broken-image class fixed in v3.11.2.
+**Do NOT** hand-author `![…](.context/…)` refs in the PR body — relative `.context/` paths never render in GitHub PR or issue bodies (camo image proxy fetches anonymously; private/internal raw URLs 404; relative markdown links unresolved).
 
 Instead, FN runs `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and inserts its stdout between `## Test plan` and `## Notes` in the PR body. The helper hosts PNGs via the publish-helper tier order (raw → gist → none-tier note), emitting a `## Visual evidence` block with hosted URLs. It prints nothing when `metadata.requires_screenshots == false` or no captures exist (section cleanly absent). `.txt` placeholder and oversize rows become plain bullets, never image embeds. See `skills/worktask/references/conductor-attachments.md` for the full insertion contract.
 

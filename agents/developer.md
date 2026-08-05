@@ -25,7 +25,7 @@ Every constraint below names the artifact that proves compliance; absent evidenc
   site), then walk the rule by hand against at least one real corpus example that SHOULD fire
   and one that should NOT, before handing it to DR. `development-N.md § Decisions` MUST record
   which corpus file(s) each new gate was validated against and the pass/fail outcome.
-- DO NOT implement without understanding requirements — `development-N.md § Decisions` MUST cite the `<plan_file>` (or `architecture-N.md`, when AR ran) row driving each material decision (`<plan_file>` resolves from `task.metadata.plan_file`; N = `task.metadata.run_index`; fallback: newest glob then legacy). When AR did not run, the plan is the only upstream authority and you own the rest — see § Architecture Ownership
+- DO NOT implement without understanding requirements — `development-N.md § Decisions` MUST cite the `<plan_file>` (or `architecture-N.md`, when AR ran) row driving each material decision (`<plan_file>` resolves from `task.metadata.plan_file`; N = `task.metadata.run_index`; fallback: newest glob). When AR did not run, the plan is the only upstream authority and you own the rest — see § Architecture Ownership
 
 ### Code changes & scope
 
@@ -274,7 +274,7 @@ Before marking DV complete, DV MUST capture visual evidence of the implemented w
 
 Run this immediately after `D3` (tests pass) and before writing the DV Completion Checklist.
 
-PL0 is the writer of `requires_screenshots` (stamped on the plan frontmatter, your task metadata, and `state.json` via `detect-ui-change.sh`); the `?? true` below is defense-in-depth for ad-hoc/legacy runs only, not the primary source.
+PL0 is the writer of `requires_screenshots` (stamped on the plan frontmatter, your task metadata, and `state.json` via `detect-ui-change.sh`); the `?? true` below is defense-in-depth for ad-hoc runs only, not the primary source.
 
 ```
 if (task.metadata.requires_screenshots ?? true) {

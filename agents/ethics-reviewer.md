@@ -229,7 +229,6 @@ Before marking ET stage complete, verify:
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-et`. Prev→this label: `<invoker>→ET` (whichever stage triggered the ethics gate).
 
-
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage ET --prev <invoker>` (`skills/worktask/scripts/`; `<invoker>` = the stage that triggered the ethics gate) to atomically patch `stages.ET` + the `<invoker>→ET` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.

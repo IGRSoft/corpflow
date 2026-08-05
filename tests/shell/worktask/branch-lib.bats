@@ -360,7 +360,7 @@ TABLE
 }
 
 @test "branch_is_conventional: fix/ is removed cleanly — a fix/ branch is rejected" {
-  run bash -c ". '$PLUGIN_ROOT/$LIB'; branch_is_conventional 'fix/legacy-crash-on-startup'"
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; branch_is_conventional 'fix/crash-on-startup'"
   assert_failure 1
 }
 

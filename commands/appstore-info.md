@@ -191,4 +191,3 @@ This command is used:
 - When releasing a new app or significant version
 - When adding Ukrainian localisation to an existing App Store listing
 - Alongside `/release-notes` to populate the "What's New" field
-

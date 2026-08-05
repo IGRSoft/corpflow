@@ -197,17 +197,13 @@ EOS
   assert_output --partial "fail=0"
 }
 
-@test "sanitiser L7/L8: BOTH the current and the pre-3.42.0 artifact names are stripped" {
+@test "sanitiser L7/L8: current artifact names are stripped, clean prose survives" {
   cd "$WD"
-  # publish-pl-issue.sh:300 is a redaction superset: it kept `analyzing` when
-  # 3.42.0 renamed the AR artifact to `architecture`, because a leak filter that
-  # forgets a name can only leak more. Nothing asserted that branch before, so a
-  # cleanup pass could have dropped the token silently.
   {
     printf '## requirements\n\n'
     printf 'A clean requirement sentence that must survive sanitisation.\n'
     printf 'architecture-0.md\n'
-    printf 'analyzing-3.md\n'
+    printf 'development-3.md\n'
     for i in 1 2 3 4 5 6 7 8 9 10; do
       printf 'Clean narrative line %s carrying no forbidden token at all.\n' "$i"
     done
@@ -227,8 +223,8 @@ EOS
   body="$(cat "$WD/.context/logs/issue-body-0.tmp")"
   printf '%s' "$body" | grep -q 'architecture-0.md' && {
     echo "current artifact name leaked into the issue body"; return 1; }
-  printf '%s' "$body" | grep -q 'analyzing-3.md' && {
-    echo "PERMANENT-SUPERSET regressed: legacy name leaked into the issue body"; return 1; }
+  printf '%s' "$body" | grep -q 'development-3.md' && {
+    echo "artifact name leaked into the issue body"; return 1; }
   printf '%s' "$body" | grep -q 'Clean narrative line 1' || {
     echo "sanitiser over-stripped: clean prose did not survive"; return 1; }
   return 0

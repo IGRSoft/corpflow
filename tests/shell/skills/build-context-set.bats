@@ -23,9 +23,9 @@ setup() {
 @test "happy: extracts completed-task agents from TASK_LIST_JSON" {
   cat > "$WD/tasks.json" <<'JSON'
 [
-  {"status":"completed","metadata":{"agent":"developer"}},
-  {"status":"in_progress","metadata":{"agent":"qa-engineer"}},
-  {"status":"completed","metadata":{"agent":"product-manager"}}
+  {"status":"completed","metadata":{"agent":"company-workflow:developer"}},
+  {"status":"in_progress","metadata":{"agent":"company-workflow:qa-engineer"}},
+  {"status":"completed","metadata":{"agent":"company-workflow:product-manager"}}
 ]
 JSON
   # Run from WD so relative path checks hit our stub agent files.
@@ -45,32 +45,38 @@ JSON
   # On BSD/macOS sed, '\s' is the LITERAL char 's' (not whitespace), so the space after
   # 'agent:' is not removed. The value becomes " product-manager" and normalize emits
   # "agents/ product-manager.md" (note the embedded space) which does not exist; the
-  # `[ -f "$path" ] && echo` in the `set -euo pipefail` while-pipeline then returns
-  # non-zero and the script exits 1. Portability bug — REPORTED, not fixed (plan scope).
-  # Asserted cross-platform: GNU sed succeeds and emits the path; BSD sed fails to.
+  # `[ -f "$path" ]` test then fails and the path is simply never emitted.
+  # Portability bug — REPORTED, not fixed (plan scope). The script exits 0 either way
+  # (a read-helper must not fail the caller); the observable difference is the output:
+  # GNU sed emits the path, BSD sed emits nothing.
   mkdir -p "$WD/ctx"
   cat > "$WD/ctx/planning-0.md" <<'MD'
 ---
-agent: product-manager
+agent: company-workflow:product-manager
 ---
 # Planning
 MD
   TASK_LIST_JSON="" CONTEXT_DIR="$WD/ctx" \
     run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
   # Use *_output --partial (operates on the $output string) rather than *_line, which
   # errors with "lines: parameter null" when the script produces no stdout (BSD path).
-  if [ "$status" -eq 0 ]; then
-    assert_output --partial "agents/product-manager.md"   # GNU sed: bug not triggered
-  else
-    refute_output --partial "agents/product-manager.md"   # BSD/macOS sed: name mangled, non-zero exit
-  fi
+  case "$output" in
+    *"agents/company-workflow:product-manager.md"*)
+      # Neither sed dialect should ever emit the un-stripped qualified basename.
+      false ;;
+    *"agents/product-manager.md"*)
+      : ;;                                              # GNU sed: bug not triggered
+    *)
+      refute_output --partial "product-manager" ;;      # BSD/macOS sed: name mangled, nothing emitted
+  esac
 }
 
 @test "edge: cross-plugin refs (e.g. apple-developer:ios-developer) are dropped" {
   cat > "$WD/tasks.json" <<'JSON'
 [
   {"status":"completed","metadata":{"agent":"apple-developer:ios-developer"}},
-  {"status":"completed","metadata":{"agent":"developer"}}
+  {"status":"completed","metadata":{"agent":"company-workflow:developer"}}
 ]
 JSON
   TASK_LIST_JSON="$WD/tasks.json" CONTEXT_DIR="$WD/.ctx_none" \
@@ -84,8 +90,8 @@ JSON
 @test "edge: non-existent agent files are dropped (only disk-resident paths emitted)" {
   cat > "$WD/tasks.json" <<'JSON'
 [
-  {"status":"completed","metadata":{"agent":"nonexistent-ghost-agent"}},
-  {"status":"completed","metadata":{"agent":"developer"}}
+  {"status":"completed","metadata":{"agent":"company-workflow:nonexistent-ghost-agent"}},
+  {"status":"completed","metadata":{"agent":"company-workflow:developer"}}
 ]
 JSON
   TASK_LIST_JSON="$WD/tasks.json" CONTEXT_DIR="$WD/.ctx_none" \

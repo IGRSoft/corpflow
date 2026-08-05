@@ -2,6 +2,84 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.3] - 2026-08-05
+
+Full legacy-logic removal. Round 1 removed every rules-surface deprecation whose sunset window had
+elapsed from `agents/`, `commands/`, `skills/` with zero semantics change. Round 2 (user-approved,
+aggressive scope) then deleted the remaining legacy *logic* across hooks, scripts, tests, and the
+benchmark harness — accepting loss of pre-4.0 `.context/` read-support. Load-bearing current
+contracts (the F1–F4 fallback family, the `plan_file` path-vs-basename boundary, hook-vs-agent audit
+authority, CC `--json` camelCase coalescing, visual-QA degradation invariants) are kept but reworded
+away from the misleading word "legacy" — they are current behavior, not compatibility.
+
+### BREAKING
+
+- **Legacy `--auto-plan`/`--auto-finalization` flags removed.** Only `--auto=[plan, decision,
+  finalization]` remains. These aliases are no longer recognised or documented; no rule in
+  `worktask.md` governs an unrecognised top-level flag, so the effect of passing either legacy
+  flag is undefined by the docs going forward.
+- **`requires_ui_tests` back-compat mapping removed.** A resumed pre-4.0 `.context/planning-N.md`
+  that still presents `requires_ui_tests: true` with no `test_mode` now falls to the `scoped`
+  default and `ui_visual_check: false` — a legacy plan that asked for full regression plus Design
+  Comparison silently gets neither, with no deprecation note surfaced.
+- **Dual dedupe-key mechanism deleted.** `metadata.dedupe_key_extended` is no longer written by any
+  hook and `hooks/audit-dedup.sh` (the base/extended mode selector) is removed. The 3-segment
+  `dedupe_key` is the only documented shape; readers dedupe on it directly. `parent_agent_id` is
+  still captured, for observability only.
+- **Pre-run-index artifact names no longer resolve.** The artifact resolver's bare-basename rung
+  (`.context/<base>.md`) is gone from `state-patch.sh` and from every documented resolver chain —
+  only `<base>-<run_index>.md` and the newest-glob fallback remain.
+- **Pre-#375 issue-title probe removed.** `publish-pl-issue.sh` no longer builds `TITLE_LEGACY` or
+  re-probes the old slug title, so an issue published under the pre-#375 scheme is no longer found
+  by the anchor-loss recovery search and a duplicate may be opened.
+- **`state.json .git.base_branch` fallback removed** from the integration-branch chain; the
+  surviving order is `$FN_BASE_REF` → `state.json .metadata.base_ref` → `workspace.json
+  .git.base_branch` → `origin/HEAD` → unresolved.
+- **Single-file visual-evidence marker shape dropped.** `attach-visual-evidence.sh` reads only the
+  per-issue marker directory; `GH_MARKER_FILE` is no longer honoured.
+- **Redaction supersets removed — leak risk accepted.** `publish-pl-issue.sh` no longer strips the
+  `igrsoft:` plugin prefix or the pre-3.42.0 `analyzing-N.md` artifact name. A worktask resumed from
+  a pre-4.0 `.context/` can therefore publish those internal identifiers into a GitHub issue body.
+- **Strict benchmark token decoding.** A `tokens` block present in a benchmark record MUST carry all
+  five keys (`in`, `out`, `total`, `cache_read`, `cache_creation`); a partial block now raises
+  instead of decoding with silent `None`s. `benchmark/results/history.json` was migrated in place
+  (key-presence-only, explicit `null`s).
+- **`state.mcp_session`, `--severity` legacy aliases, and the bare-name agent shim dropped.**
+  `metadata.agent` and `subagent_type` MUST be fully-qualified `plugin:agent`; `--severity` accepts
+  only `P0`/`P1`/`P2`; `mcp_session` is gone from the state-ledger schema.
+
+### Removed
+
+- Legacy `--auto-plan`/`--auto-finalization` aliases and the `#### Legacy aliases (deprecated)`
+  table (5 files + `README.md`).
+- Sunset `requires_ui_tests` compat-mapping table (2 files, 6 sites).
+- `igrsoft` rename residuals outside the vendor-identity allow-list (7 files).
+- Stale pre-4.0 (`v3.x`) version gates: 21 of 42 matches removed in round 1; round 2 removed the
+  rest, including every `v3.x+` header peg across the 8 remaining hook/skill scripts.
+- Dead code: `_inline_merge` (the ~105-line inline state merger in `.claude/hooks/state-merge.sh`)
+  and its call site — `state-patch.sh` is the single merge implementation.
+- Files: `hooks/audit-dedup.sh`, `skills/shared/legacy-fallback-f1.md` (folded into
+  `handoff-protocol.md#f1-fallback`), `tests/shell/hooks/audit-dedup.bats`,
+  `benchmark/harness/tests/test_history_backcompat.py`, and 3 audit fixtures.
+- `norm_dk` cross-shape key normalisation from `skills/agent-coordination/scripts/audit-dedup.sh`
+  (it normalised a 4-segment key shape no writer ever emitted).
+- The `fallback_legacy` value from the `artifact_path_resolved` audit enum (now
+  `{ok, fallback_glob, miss}`) — unreachable once the bare-basename rung was removed.
+
+### Changed
+
+- Compaction pass across `agents/`, `commands/`, `skills/`: removed change-narration, deduped
+  repeated canon to a single source + pointers, collapsed redundant structure. Total tracked
+  markdown: 34,119 → 34,035 lines (`agents/` 4,722 → 4,694; `commands/` 9,329 → 9,292; `skills/`
+  20,068 → 20,049).
+- Reword sweep (rename-only, no behavior change): F1 is now "`context_files` mode" and is documented
+  as required behavior rather than backward compatibility; the `handoff-harness.sh` A/B arm is
+  "baseline" rather than "legacy"; `milestone-helpers` "Legacy Command" is "Non-worktree Command";
+  visual-QA degradation invariants are canonical in `visual-qa.md` with `testing-strategy.md`
+  pointing at them.
+- `build-context-set.sh` no longer exits non-zero when a probed candidate path does not exist
+  (each qualified agent ref probes agent/command/skill paths; a miss is normal).
+
 ## [4.0.2] - 2026-08-03
 
 A live worktask in a Conductor workspace shipped PR #382 from `ov166-skin-score-all-layers`

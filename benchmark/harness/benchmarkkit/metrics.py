@@ -57,17 +57,25 @@ class Tokens:
             "cache_creation": self.cache_creation,
         }
 
+    _KEYS = ("in", "out", "total", "cache_read", "cache_creation")
+
     @classmethod
     def from_dict(cls, d: Optional[dict]) -> "Tokens":
-        # Legacy records lacking cache keys decode to None — never fabricated.
+        # Absent tokens are legal (a record may omit the block entirely); a PRESENT
+        # block must carry all 5 keys. Partial blocks are rejected rather than
+        # silently decoded, so a truncated writer surfaces instead of reading as
+        # "measured, but no cache activity".
         if not d:
             return cls()
+        missing = [k for k in cls._KEYS if k not in d]
+        if missing:
+            raise ValueError(f"tokens block missing required key(s): {', '.join(missing)}")
         return cls(
-            input=d.get("in"),
-            output=d.get("out"),
-            total=d.get("total"),
-            cache_read=d.get("cache_read"),
-            cache_creation=d.get("cache_creation"),
+            input=d["in"],
+            output=d["out"],
+            total=d["total"],
+            cache_read=d["cache_read"],
+            cache_creation=d["cache_creation"],
         )
 
 

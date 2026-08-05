@@ -17,7 +17,7 @@ network failure, etc.) is resolved.
 
 - REQ-S1: Strict mode is opt-in via either `--strict` CLI flag or
   `metadata.gh_issue.strict: true` on state.json. Default (`STRICT=0`)
-  preserves the legacy non-blocking behaviour (fixtures 01–05).
+  preserves the non-blocking behaviour (fixtures 01–05).
 - REQ-S2: On `gh issue create` failure under strict mode, helper exits `1`
   and writes one audit row with `result: "failed"` and the classified
   reason (one of `label_create_failed`, `gh_api_error`, `auth_missing`,

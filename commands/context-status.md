@@ -241,4 +241,3 @@ This command is used:
 - Before error retries
 - When response quality degrades
 - By workflow-engineer for diagnostics
-

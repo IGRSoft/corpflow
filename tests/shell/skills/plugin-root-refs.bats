@@ -34,10 +34,11 @@ skills/worktask/references/handoff-protocol.md"
   assert_output ""
 }
 
-@test "contract: scripts reading the env var are the 3 known env-first fallbacks" {
+@test "contract: scripts reading the env var are the 4 known env-first fallbacks" {
   run bash -c 'cd "$PLUGIN_ROOT" && git ls-files -z -- "*.sh" \
     | xargs -0 grep -l "CLAUDE_PLUGIN_ROOT" 2>/dev/null | LC_ALL=C sort; true'
-  assert_output "hooks/anchor-preflight.sh
+  assert_output ".claude/hooks/state-merge.sh
+hooks/anchor-preflight.sh
 skills/dv-screenshot-capture/scripts/apple-canvas.sh
 skills/worktask/scripts/hook-install.sh"
 }

@@ -75,7 +75,7 @@ setup() {
 # ---------------------------------------------------------------------------
 # AR→DV architecture-reference gate (--state / --strict, 3.42.0).
 # Ships warn-only: violations are `warn:` + exit 0 unless --strict is passed.
-# The cases above this block are the AC-6 legacy pin — they must keep passing
+# The cases above this block are the AC-6 baseline pin — they must keep passing
 # unmodified, since a bare --validate-frontmatter never runs this gate.
 # ---------------------------------------------------------------------------
 
@@ -167,7 +167,7 @@ state_with_ar() {
   refute_output --partial "fail:"
 }
 
-@test "ar-gate: AC-6 legacy pin — no --state means the gate never runs" {
+@test "ar-gate: AC-6 baseline pin — no --state means the gate never runs" {
   # Same artifact that warns under --state with AR present: silent without it.
   dv_artifact "$WD/dv.md" 'dev: development.md#files-changed'
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv.md"

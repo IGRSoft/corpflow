@@ -130,8 +130,8 @@ class MetricsSchema(unittest.TestCase):
         self.assertIsNone(d["coverage_pct"])
         self.assertIsNone(PathMetrics.from_dict(d).coverage_pct)
 
-    def test_legacy_record_missing_coverage_key_decodes_none(self):
-        # An old record that omits coverage_pct decodes to None (not a fabricated 0.0), keeping
+    def test_record_missing_coverage_key_decodes_none(self):
+        # A record that omits coverage_pct decodes to None (not a fabricated 0.0), keeping
         # "absent" distinct from a measured zero for the renderer.
         d = _det_pm().to_dict()
         del d["coverage_pct"]

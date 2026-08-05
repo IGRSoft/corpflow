@@ -190,4 +190,3 @@ Return a summary of applied/skipped proposals and the commit SHAs created.
 - "Create a command template for platform-specific operations"
 - "Analyze agent handoff patterns for efficiency improvements"
 - "Apply approved self-improvement proposals from .context/learnings.md"
-

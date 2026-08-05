@@ -63,4 +63,3 @@ The plan follows `skills/request-plan/references/plan-template.md`:
 - `/worktask` — execute the recommended tier
 - `/estimate` — when hours, budget, or CSV export are needed instead of a rough cut
 - `/pm-requirements` — when a full PRD is needed instead of a lightweight plan
-

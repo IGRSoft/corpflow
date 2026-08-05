@@ -157,4 +157,3 @@ Execution with `parallel_tracks = 2`:
 The DAG is persisted on each issue and at the top level — see `schemas.md` (orchestrator v3.1) for
 `issues[].blocked_by`, `issues[].blocks`, `issues[].level`, `issues[].external_dependencies`,
 `topological_order`, and `dependency_warnings`.
-

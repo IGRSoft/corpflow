@@ -203,7 +203,11 @@ For the same reason megatask also stamps `decision_gate: "auto"` (default `"user
 per-issue `PL0`: that issue's `open_questions[]` route through the Fable-model decision pass
 (`commands/worktask.md § Step A.4`) instead of parking the batch on a human. Escalate-class
 questions are never auto-decided here either — they **PARK that single issue** while the batch
-continues with the remaining unblocked issues. Parking rides the existing failure path: the
+continues with the remaining unblocked issues.
+
+#### Parking an escalate-class question
+
+Parking rides the existing failure path: the
 per-issue worktask settles `execution.status: "failed"` + `execution.reason: "parked_escalation"`
 with an `escalation_parked` audit row (`commands/worktask.md § Step A.4 Escalation guard`), so the
 monitor frees the track and keeps dependents `blocked`; the batch summary lists each parked issue
@@ -399,4 +403,3 @@ gh issue view {ISSUE} --json number,title,labels,body,state
 
 See `references/` for the DAG algorithm, orchestrator/workspace schemas, git integration, and the
 agent-teams pattern.
-

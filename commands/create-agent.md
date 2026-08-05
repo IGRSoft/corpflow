@@ -202,4 +202,3 @@ This command is used by:
 - prompt-engineer agent for creating new agents
 - When expanding the agent ecosystem
 - For specialized domain agents
-

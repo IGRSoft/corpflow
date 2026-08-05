@@ -289,4 +289,3 @@ This command works with:
 - `/business-report` - Risk section
 - `/ethics-review` - Deep ethical analysis
 - `/ethics-review --lens harm` - Detailed harm evaluation
-

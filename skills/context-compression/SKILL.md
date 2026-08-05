@@ -382,10 +382,6 @@ After compaction, the orchestrator's next turn reads the most recent
 `post-compact-*.json`, follows the `resume_guide_ref`, and continues the
 execution loop from the first incomplete stage.
 
-> **Spec for this script** (implementation detail, not needed at runtime): the
-> original inline bash block above has been superseded by `scripts/post-compact-recovery.sh`
-> and is kept in `references/compression-examples.md` for historical reference.
-
 See `skills/worktask/references/resume.md` for the full state table and
 procedure (stub: `skills/worktask/SKILL.md § Resume After Interruption`).
 

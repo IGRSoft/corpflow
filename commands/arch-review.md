@@ -217,4 +217,3 @@ This command is used:
 - In AR stage - Formal architecture review
 - Before merging large PRs
 - When introducing new patterns
-

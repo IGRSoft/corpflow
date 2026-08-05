@@ -105,8 +105,7 @@ basename_for_stage() {
 # Resolution order (per handoff-protocol.md#stage-artifact-map):
 #   1. Exact .context/<base>-<RUN_INDEX>.md when RUN_INDEX is known.
 #   2. Highest-N numbered artifact (newest run_index).
-#   3. Legacy bare .context/<base>.md.
-#   4. Empty (absent) — never yields a literal '*'.
+#   3. Empty (absent) — never yields a literal '*'.
 resolve_artifact() {
   local base="$1" ctx="${2:-.context}"
   [[ -z "$base" ]] && {
@@ -136,13 +135,7 @@ resolve_artifact() {
     return 0
   fi
 
-  # 3. Legacy bare basename.
-  if [[ -f "${ctx}/${base}.md" ]]; then
-    printf '%s' "${ctx}/${base}.md"
-    return 0
-  fi
-
-  # 4. No match.
+  # 3. No match.
   printf ''
 }
 
@@ -474,32 +467,6 @@ EOART
     printf 'T6: disk-guard degrade on unparseable df → patch applied: ok\n'
   else
     printf 'T6: disk-guard degrade: FAIL\n' >&2
-    exit 1
-  fi
-
-  # ---- T7: legacy bare artifact fallback ----
-  cat > .context/state.json << 'EOSTATE'
-{"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","stages":{"PL":{"status":"completed","verdict":"ok"}},"facts":{"verdicts":{"PL":"ok"}},"handoffs":{}}
-EOSTATE
-  cat > .context/coordination.md << 'EOART'
----
-handoff:
-  stage: TL
-  verdict: ok
-  summary: "legacy bare artifact"
-  refs: { plan: planning-0.md#requirements }
----
-EOART
-  bash "$SELF" --stage TL \
-    || {
-      printf 'T7: state-patch returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.stages.TL.status == "completed" and (.stages.TL.artifact | endswith("coordination.md"))' \
-    .context/state.json > /dev/null; then
-    printf 'T7: legacy bare artifact fallback: ok\n'
-  else
-    printf 'T7: legacy bare artifact fallback: FAIL\n' >&2
     exit 1
   fi
 

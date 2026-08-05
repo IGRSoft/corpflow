@@ -15,7 +15,7 @@ version: 0.3.0
 
 Single source of truth for task worktask management using the Task System.
 
-## Worktask Evolution (v2.0)
+## Pipelines
 
 ```
 9-stage:   PL → AR → TL → DV → DR → QA → DC → FN → ST
@@ -260,7 +260,7 @@ Before executing any worktask stage, the orchestrator MUST validate:
 7. **Workspace existence** (megatask per-issue/worktree mode only): verify `metadata.workspace_path` directory exists and `workspace.json` is readable
 ### Validation check 8
 
-8. **Artifact path resolution check** (non-blocking): for the next task's `metadata.run_index`, resolve the upstream artifact via the `stageArtifactPath()` helper below. Emit one `artifact_path_resolved` audit row with `result ∈ {ok, fallback_glob, fallback_legacy, miss}` and `metadata.resolved_path`. A `miss` result means the upstream stage produced no artifact and is treated by F3 in `references/handoff-protocol.md#fallback-paths` — warn but proceed. Catches run_index drift early (off-by-one between PL0 and stage tasks) before downstream stages burn tokens on fallback reads.
+8. **Artifact path resolution check** (non-blocking): for the next task's `metadata.run_index`, resolve the upstream artifact via the `stageArtifactPath()` helper below. Emit one `artifact_path_resolved` audit row with `result ∈ {ok, fallback_glob, miss}` and `metadata.resolved_path`. A `miss` result means the upstream stage produced no artifact and is treated by F3 in `references/handoff-protocol.md#fallback-paths` — warn but proceed. Catches run_index drift early (off-by-one between PL0 and stage tasks) before downstream stages burn tokens on fallback reads.
 ### Validation check 9
 
 9. **Hook installation check** (first stage only): Verify `state-merge.sh` SubagentStop hook is operational. Check: (a) `.claude/hooks/state-merge.sh` exists and is executable, OR (b) the plugin's `plugin.json` registers the SubagentStop hook entry. If neither is true, emit a warning: `"⚠ state-merge.sh hook not installed — run hook-install.sh"`. Do NOT block — the orchestrator's Step 6.5 provides Layer 3 coverage. See `references/initialization-patterns.md#hook-installation`.
@@ -322,7 +322,7 @@ const stateRaw = fs.existsSync(".context/state.json")
   : null;
 // stateRaw goes inline into preamble section [3] as a fenced JSON code block.
 // If null, F1 fallback applies: orchestrator uses metadata.context_files only,
-// no cache-friendly preamble (legacy mode).
+// no cache-friendly preamble (`context_files` mode).
 ```
 
 #### Artifact path helper
@@ -347,7 +347,7 @@ function stageArtifactPath(code: string, runIndex: number): string {
   const base = ARTIFACT_BASE[code];
   const numbered = `.context/${base}-${runIndex}.md`;
   if (fs.existsSync(numbered)) return numbered;
-  // Newest-glob fallback (covers legacy or out-of-band writes)
+  // Newest-glob fallback (covers out-of-band writes)
   const matches = glob.sync(`.context/${base}-*.md`).sort((a, b) => {
     const n = (f: string) => parseInt(f.match(/-([0-9]+)\.md$/)?.[1] ?? "0", 10);
     return n(a) - n(b);
@@ -443,7 +443,7 @@ Before entering this loop, verify:
 - `"checkpoint"` (default): require BOTH PL0 `completed` AND an `approval_received` audit line with
   `subject:"PL<run_index>"` in `.context/logs/audit.jsonl` before loop entry. If the line is
   absent, STOP — return to `commands/worktask.md § Step A.5` to fulfil the gate.
-- `"bypass"` (`--auto=[plan]` — legacy `--auto-plan` — / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator): PL0 `completed` alone is sufficient; no approval line — except when Signal 2b escalated items exist, whose `approval_received` row is still required.
+- `"bypass"` (`--auto=[plan]` / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator): PL0 `completed` alone is sufficient; no approval line — except when Signal 2b escalated items exist, whose `approval_received` row is still required.
 
 ##### Signal 2b (decision gate)
 
@@ -457,7 +457,7 @@ carrier bypasses neither `plan_gate` nor `fn_gate`.
 
 ##### Signal 3 (FN gate)
 
-FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`). The orchestrator STOPs immediately before the FN `Task()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto=[finalization]` — legacy `--auto-finalization` — / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator). See loop step 4.9 and § FN Gate.
+FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`). The orchestrator STOPs immediately before the FN `Task()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto=[finalization]` / `--emergency`, or stamped directly per-issue by the `/megatask` batch orchestrator). See loop step 4.9 and § FN Gate.
 
 #### After PL0 — steps 1–3
 
@@ -470,9 +470,7 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 ##### Step 3 — publish snippet
 
      ```bash
-     PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
-     # Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
-     # above this skill's base directory (see skills/shared/plugin-root-resolution.md).
+     PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
      [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
      HELPER="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue.sh"
      if [ -f "$HELPER" ]; then
@@ -496,7 +494,6 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 ##### Step 3 — non-blocking & skip rules
 
      The trailing `; true` masks the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error, etc.) MUST NEVER propagate as orchestrator failure. Skip entirely when `--no-gh-issue` was supplied on the CLI (PL0 sets `task.metadata.no_gh_issue: true`; the helper short-circuits internally and audits `deferred`/`opted_out`). Under megatask per-issue mode (`state.json:metadata.milestone` set, or `workspace.json` present), the helper exits `0` immediately with `reason: "milestone_mode"` — no `gh` API call of any kind is made. A **second or later worktask run in the same `.context/`** does NOT open a duplicate issue: the helper resolves the run-independent `.context/gh-issue.json` anchor and posts a follow-up comment instead (`metadata.mode: "comment"`; see `skills/gh-issue-dedup`). See `### PL Issue Publish` below for sanitiser rules and the non-blocking guarantee.
-
 
 #### Steps 1–3
 
@@ -856,7 +853,7 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
 ##### Step 4.9 — bypass path
 
 ```typescript
-      } else {  // "bypass" — stamped by --auto=[finalization] (legacy --auto-finalization) / --emergency, or directly per-issue by /megatask
+      } else {  // "bypass" — stamped by --auto=[finalization] / --emergency, or directly per-issue by /megatask
         // (e) Emit `fn_gate_bypass subject:"FN<N>"` (reason: "unattended") and
         //     fall through to delegate FN — commit/push/PR unattended.
         appendAudit({ actor: "orchestrator", action: "fn_gate_bypass",
@@ -906,7 +903,6 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
     //     Plugin resolution: skills/shared/compatible-plugins.md § Registry.
 
 ```
-
 
 #### Step 5d
 
@@ -1174,7 +1170,7 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
 - NEVER skip TaskUpdate calls (both in_progress and completed)
 - NEVER execute a stage without checking blockedBy dependencies are completed
 - ALWAYS pass `model` from task metadata to the Agent tool (e.g. `model: opus` → `model: "opus"`); omitting/mismatching is a violation. Do NOT rely on frontmatter inheritance
-- `metadata.agent`: bare names → `company-workflow:<name>`, plugin-qualified (`apple-developer:ios-developer`) used as-is. Detection: presence of `:`
+- `metadata.agent`: always fully-qualified `plugin:agent` (`company-workflow:developer`, `apple-developer:ios-developer`)
 - If a stage agent fails after 3 retries, escalate per the error handling chain
 
 ##### Key rules — completion & tooling
@@ -1227,7 +1223,7 @@ The helper is **non-blocking by contract** (default): orchestrator wraps it in a
 
 ##### Recovery-search compatibility
 
-`resolve_context_issue_search()` recovers a lost `.context` ↔ issue binding by exact-title search, so changing title generation orphans issues published under the pre-#375 slug title. Accepted, with a probe: the search tries the current title, then the legacy `facts.goal`-or-slug title, and only when the first misses. Drop the second probe once the pre-#375 issue corpus is closed.
+`resolve_context_issue_search()` recovers a lost `.context` ↔ issue binding by exact-title search against the current title, so changing title generation orphans issues published under an older title scheme.
 
 #### External-ticket extraction
 
@@ -1355,7 +1351,7 @@ The FN gate is the **pre-finalization human checkpoint**. Carried by `PL0.metada
 ### FN gate paths
 
 - **`checkpoint`** (default): loop step 4.9 runs the Pre-gate Conductor-attachments writer (local-only), emits `fn_gate_waiting subject:"FN<N>"`, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. On approval → append `approval_received subject:"FN<N>"` then delegate FN (commit/push/PR). On reject → append `approval_rejected subject:"FN<N>"` and STOP (do NOT delegate FN).
-- **`bypass`** (stamped only by `--auto=[finalization]` — legacy `--auto-finalization` — or `--emergency`, or directly per-issue by the `/megatask` batch orchestrator): loop step 4.9 runs the writer, emits `fn_gate_bypass subject:"FN<N>"` (`reason: "unattended"`), then delegates FN unattended. In dynamic mode the same bypass path applies on workflow return.
+- **`bypass`** (stamped only by `--auto=[finalization]` or `--emergency`, or directly per-issue by the `/megatask` batch orchestrator): loop step 4.9 runs the writer, emits `fn_gate_bypass subject:"FN<N>"` (`reason: "unattended"`), then delegates FN unattended. In dynamic mode the same bypass path applies on workflow return.
 
 ### At the FN stage
 
@@ -1368,9 +1364,7 @@ After the execution loop exits (all stage tasks completed — this runs whether 
 ### Post-capture publish snippet
 
 ```bash
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
-# Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
-# above this skill's base directory (see skills/shared/plugin-root-resolution.md).
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
 [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
 HELPER="$PLUGIN_ROOT/skills/worktask/scripts/attach-visual-evidence.sh"
 if [ -f "$HELPER" ]; then
@@ -1402,9 +1396,7 @@ After the post-capture issue update above (and after FN has created/merged the P
 ### Completion snippet
 
 ```bash
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
-# Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
-# above this skill's base directory (see skills/shared/plugin-root-resolution.md).
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
 [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
 HELPER="$PLUGIN_ROOT/skills/worktask/scripts/attach-visual-evidence.sh"
 if [ -f "$HELPER" ]; then
@@ -1447,7 +1439,7 @@ The FN gate defaults to `"checkpoint"` (see § FN Gate): PL0 stamps `metadata.fn
 
 ### FN Finalization Gate — bypass and audit rows
 
-`--auto=[finalization]` (legacy `--auto-finalization`) and `--emergency` (and the `/megatask` batch orchestrator, per-issue) stamp `fn_gate: "bypass"` to finalize unattended (`--auto=[plan]` never bypasses FN — it is orthogonal to the plan gate; `--auto=[decision]` bypasses no gate — see § Auto-Decision Delegation). On the checkpoint path the orchestrator writes `fn_gate_waiting` then `approval_received`/`approval_rejected`; on bypass it writes a single `fn_gate_bypass` audit line (`reason: "unattended"`) — all with `subject:"FN<run_index>"` (see § FN Gate).
+`--auto=[finalization]` and `--emergency` (and the `/megatask` batch orchestrator, per-issue) stamp `fn_gate: "bypass"` to finalize unattended (`--auto=[plan]` never bypasses FN — it is orthogonal to the plan gate; `--auto=[decision]` bypasses no gate — see § Auto-Decision Delegation). On the checkpoint path the orchestrator writes `fn_gate_waiting` then `approval_received`/`approval_rejected`; on bypass it writes a single `fn_gate_bypass` audit line (`reason: "unattended"`) — all with `subject:"FN<run_index>"` (see § FN Gate).
 
 ## Scripts
 

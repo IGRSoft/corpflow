@@ -21,7 +21,7 @@ reviewable thread instead of scattering a new issue per re-plan.
 
 ## Why state.json alone can't enforce this
 
-`publish-pl-issue.sh` historically deduped only on `state.json:metadata.github_issue_url`. But
+`state.json:metadata.github_issue_url` alone is not a sufficient dedupe key:
 `commands/worktask.md` **re-seeds `state.json` from scratch on every fresh `/worktask`**, and the
 seed writes no `metadata` key — so that URL is wiped on each new `run_index`. The guard therefore
 only caught a *resume of the same run*; a second, separate worktask lost the URL and opened a

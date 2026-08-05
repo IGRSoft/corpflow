@@ -329,18 +329,14 @@ fn_batch_scope() {
 # Single source of truth for "what is the integration branch", ranked:
 #   1. $FN_BASE_REF                          explicit operator/test override
 #   2. state.json .metadata.base_ref         stamped by PL0, mirrors task metadata
-#   3. state.json .git.base_branch           legacy ledger field, orchestrator seed
-#   4. workspace.json .git.base_branch       /megatask per-issue record
-#   5. git symbolic-ref refs/remotes/origin/HEAD
+#   3. workspace.json .git.base_branch       /megatask per-issue record
+#   4. git symbolic-ref refs/remotes/origin/HEAD
 #   -  unresolved                            reported, never guessed
 # There is deliberately NO hardcoded literal. Callers degrade non-blocking.
 resolve_base_ref() {
   local v="${FN_BASE_REF:-}"
   if [ -z "$v" ] && command -v jq > /dev/null 2>&1; then
     v=$(jq -r '.metadata.base_ref // empty' "${STATE_PATH:-.context/state.json}" 2> /dev/null || printf '')
-    if [ -z "$v" ]; then
-      v=$(jq -r '.git.base_branch // empty' "${STATE_PATH:-.context/state.json}" 2> /dev/null || printf '')
-    fi
     if [ -z "$v" ]; then
       local ws="${WORKSPACE_ROOT:-$PWD}/workspace.json"
       if [ -f "$ws" ]; then

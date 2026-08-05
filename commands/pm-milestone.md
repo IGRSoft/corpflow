@@ -292,4 +292,3 @@ Next: `/megatask {N}` to execute all tickets
 - `/megatask N` — executes created tickets
 - `skills/megatask` — reads ticket body for agent assignments and metadata
 - Priority labels (`P0`–`P3`) parsed by megatask priority sorting
-

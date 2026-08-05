@@ -85,7 +85,7 @@ A change is worth flagging when:
 ### Output, severity, and ethics options
 
 - `--output <summary|detailed>` - Output verbosity for `--depth deep` (default: `detailed`). Ignored in surface mode, which always writes the findings artifact format below.
-- `--severity <level>` - Minimum severity to report: `P2`, `P1`, `P0` (legacy aliases `info`→`P2`, `warning`→`P1`, `error`/`critical`→`P0` are accepted for backward compatibility and normalized to the canonical P-scale). Detection (Phase 1) is never filtered by this option — it only gates what is written to the findings artifact.
+- `--severity <level>` - Minimum severity to report: `P2`, `P1`, `P0`. Detection (Phase 1) is never filtered by this option — it only gates what is written to the findings artifact.
 - `--ethics` - Include constitutional compliance checks
 
 ## Getting the diff and context
@@ -208,17 +208,17 @@ Do NOT skip this — it catches the misses. (On a small diff per the Phase-1 siz
 
 ## Severity scheme (P0/P1/P2 — canonical)
 
-P0/P1/P2 is the single canonical severity scheme for this command. The legacy `Critical / Warning / Info` (and `error / warning / info`) labels survive ONLY as the alias map below — they are not a competing rubric:
+P0/P1/P2 is the single canonical severity scheme for this command.
 
 ### Severity table
 
-| Canonical | Legacy alias | Definition |
-|-----------|--------------|------------|
-| **P0** (blocker) | Critical / error | Crash, data loss/corruption, security vulnerability, broken build/contract, or a regression to core behavior. High confidence. |
-| **P1** (high) | Warning | Likely-incorrect behavior, unhandled error/edge path, concurrency hazard, resource leak, contract risk, or an unmet stated acceptance requirement, with a **read-confirmed or directly-cited** trigger (or a hard-to-test class you are somewhat-sure-or-more about, per the routing rule). |
-| **P2** (nice-to-have / suspected) | Info | Lower-impact issues, unproven-but-located suspicions, BLOCKED-verification concerns, change-exposed-but-not-newly-reachable pre-existing weaknesses (tagged `[verify-later]`), minor maintainability. |
+| Canonical | Definition |
+|-----------|------------|
+| **P0** (blocker) | Crash, data loss/corruption, security vulnerability, broken build/contract, or a regression to core behavior. High confidence. |
+| **P1** (high) | Likely-incorrect behavior, unhandled error/edge path, concurrency hazard, resource leak, contract risk, or an unmet stated acceptance requirement, with a **read-confirmed or directly-cited** trigger (or a hard-to-test class you are somewhat-sure-or-more about, per the routing rule). |
+| **P2** (nice-to-have / suspected) | Lower-impact issues, unproven-but-located suspicions, BLOCKED-verification concerns, change-exposed-but-not-newly-reachable pre-existing weaknesses (tagged `[verify-later]`), minor maintainability. |
 
-Tag every kept finding with its canonical P-level. The methodology definitions above take precedence over the baseline alias mapping.
+Tag every kept finding with its canonical P-level.
 
 ## Examples
 
@@ -233,7 +233,7 @@ Tag every kept finding with its canonical P-level. The methodology definitions a
 
 ## Output Format
 
-Findings are written to the DR findings artifact `.context/developer-review-N.md § Findings` (N = `task.metadata.run_index`; resolver: metadata → newest glob `developer-review-*.md` → legacy `developer-review.md`). Findings are NOT posted as inline diff comments — this command has no diff-comment tool and runs read-only.
+Findings are written to the DR findings artifact `.context/developer-review-N.md § Findings` (N = `task.metadata.run_index`; resolver: metadata → newest glob `developer-review-*.md`). Findings are NOT posted as inline diff comments — this command has no diff-comment tool and runs read-only.
 
 ### Finding entry format
 
@@ -485,7 +485,7 @@ Recommendation: disclose in privacy settings and allow opt-out.
 
 | Item | Change | Recommendation |
 |------|--------|----------------|
-| Legacy API wrapper | Extended | Consider refactoring |
+| Auth API wrapper | Extended | Consider refactoring |
 
 ## Test Coverage Impact
 

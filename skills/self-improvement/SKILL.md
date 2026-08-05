@@ -153,7 +153,7 @@ Full table in `references/target-mapping.md` (spec; the happy path no longer req
 
 #### Versioning Note
 
-**Versioning note:** each proposal block that modifies a file's frontmatter MUST instruct prompt-engineer to bump `version: x.y.z` (semver minor for additions, patch for wording tweaks).
+Each proposal block that modifies a file's frontmatter MUST instruct prompt-engineer to bump `version: x.y.z` (semver minor for additions, patch for wording tweaks).
 
 ## Output Contract
 

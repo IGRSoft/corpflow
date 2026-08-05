@@ -234,4 +234,3 @@ Steps (matches the failure cascade above):
 7. Emit manifest row + audit JSON.
 
 Logs land in `.context/logs/build-developer-<ts>.log` and `.context/logs/canvas-render-<ts>.log` (per logging-conventions).
-

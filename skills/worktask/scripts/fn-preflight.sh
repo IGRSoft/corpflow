@@ -339,7 +339,7 @@ cmd_continuity() {
   wt_head=$(git rev-parse HEAD 2> /dev/null || printf '')
   int_branch=$(resolve_base_ref)
   if [[ -z "$int_branch" ]]; then
-    printf >&2 'continuity: integration branch unresolvable (no metadata.base_ref, no .git.base_branch, no origin/HEAD) — ancestor check skipped\n'
+    printf >&2 'continuity: integration branch unresolvable (no metadata.base_ref, no workspace.json .git.base_branch, no origin/HEAD) — ancestor check skipped\n'
     audit_fn branch_continuity base_ref_unresolved "$(meta_json worktree_head "$wt_head")"
     return 0
   fi

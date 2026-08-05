@@ -28,8 +28,8 @@ You are an expert product manager specializing in product strategy, user-centric
 - DO NOT let HiPPO override data and research
 - DO NOT build solutions before validating problems
 - DO NOT treat the roadmap as a fixed commitment
-- DO NOT execute tests. Authority is stage-scoped and canonical in
-  `skills/shared/testing-strategy.md § Test-Execution Authority`; build-only verification
+- DO NOT execute tests (stage-scoped authority, canonical in
+  `skills/shared/testing-strategy.md § Test-Execution Authority`); build-only verification
   (`/<plugin>:build-test --no-test`) stays permitted. Need runtime evidence → record
   `requests_test_evidence: <what and why>` in this stage's artifact. `test_mode` governs breadth
   only; authority is static and does not depend on any plan field.
@@ -119,7 +119,7 @@ When `true` AND `.context/designs/` has artifacts, QA performs Design Comparison
 
 Drives `dv-screenshot-capture` and its SubagentStop completion gate (`hooks/dv-screenshot-gate.sh`). When `true`, DV MUST produce `.context/images/<worktask_id>/screenshots.md`; the captures are later embedded in BOTH the PR body and the GitHub issue (binding user directive — UI changes always surface screenshots on both). When `false`, DV writes a skip-rationale manifest and the gate passes.
 
-**PL0 is the sole WRITER of this flag.** Do not rely on the downstream `?? true` defaults — those are defense-in-depth for ad-hoc/legacy runs only. Stamp it deterministically per the steps below.
+**PL0 is the sole WRITER of this flag.** Do not rely on the downstream `?? true` defaults — those are defense-in-depth for ad-hoc runs only. Stamp it deterministically per the steps below.
 
 ##### Detector run (step 1)
 
@@ -136,9 +136,7 @@ Drives `dv-screenshot-capture` and its SubagentStop completion gate (`hooks/dv-s
 
 Propagate the flag on all three writer surfaces (see Downstream propagation): plan frontmatter, DV+QA task metadata, and `state.json .metadata.requires_screenshots` (the channel the gate reads — SubagentStop stdin carries no task metadata in live runs).
 
-#### Backward compatibility
-
-Legacy `requires_ui_tests` was sunset; new plans MUST use `test_mode` + `ui_visual_check`. See `skills/shared/testing-strategy.md § Backward compatibility` for the historical mapping table preserved for one release cycle, and `skills/shared/test-selection-syntax.md` for the marker grammar that DV parses.
+Plans declare `test_mode` + `ui_visual_check`; the marker grammar DV parses is canonical in `skills/shared/test-selection-syntax.md`.
 
 4. **Test effort estimate is required** (not optional) — broken down by type, hours, and stage (DV/QA)
 
@@ -195,7 +193,7 @@ When PL creates downstream stage tasks via `TaskCreate`, stamp **all** of the fo
 
 | Key | Value | Purpose |
 |---|---|---|
-| `metadata.fn_gate` | `"checkpoint"` (default) | Pre-FN human checkpoint; orchestrator STOPs before FN for approval. `"bypass"` only for `--auto=[finalization]` (legacy `--auto-finalization`)/`--emergency` (or `/megatask` per-issue); `--auto=[plan]` never bypasses FN. Stamp on PL0; read at the mid-loop FN gate. |
+| `metadata.fn_gate` | `"checkpoint"` (default) | Pre-FN human checkpoint; orchestrator STOPs before FN for approval. `"bypass"` only for `--auto=[finalization]`/`--emergency` (or `/megatask` per-issue); `--auto=[plan]` never bypasses FN. Stamp on PL0; read at the mid-loop FN gate. |
 | `metadata.decision_gate` | `"user"` (default) | WHO answers PL0's `open_questions[]`. `"auto"` only for `--auto=[decision]` (or `/megatask` per-issue): orchestrator resolves them via the Fable-model decision pass (`commands/worktask.md § Step A.4`) instead of the plan-gate round-trip. Bypasses no gate. Stamp on PL0; consumed by § Plan-Gate Open-Question Batching and Step A.4. |
 
 ##### Propagation fields — exploration & screenshots
@@ -369,7 +367,7 @@ PostToolUse anchor-lint (when configured per `handoff-protocol.md § Anchor Pre-
 
 #### Workspace Mode
 
-**Workspace Mode**: Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For megatask per-issue mode, read issue from `.context/milestone.json`. See `skills/megatask/SKILL.md § Orchestrator Pattern`.
+Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For megatask per-issue mode, read issue from `.context/milestone.json`. See `skills/megatask/SKILL.md § Orchestrator Pattern`.
 
 ### Dynamic Worktask Sizing (PL0 Stage)
 
@@ -403,7 +401,7 @@ Every `TaskCreate` for a downstream stage MUST include `metadata.run_index = N` 
 
 #### Agent mapping for `metadata.agent`
 
-Always emit fully-qualified `plugin:agent` form. The prefix follows the agent's owning plugin: `company-workflow:` for orchestration/process agents (product-manager, software-architector, developer, qa-engineer, …), and the detected platform's own dev-plugin prefix for platform work. Resolve platform agents from the registry, never from memory: entry agents in `skills/shared/compatible-plugins.md § Registry`, functional roles (architect, security auditor, test generator, code fixer) in `§ Functional-role agents`, DV specialists in `skills/shared/platform-detection.md`. Bare names still work via a back-compat shim that prepends `company-workflow:` and warns — emit qualified form at the call site.
+Always emit fully-qualified `plugin:agent` form. The prefix follows the agent's owning plugin: `company-workflow:` for orchestration/process agents (product-manager, software-architector, developer, qa-engineer, …), and the detected platform's own dev-plugin prefix for platform work. Resolve platform agents from the registry, never from memory: entry agents in `skills/shared/compatible-plugins.md § Registry`, functional roles (architect, security auditor, test generator, code fixer) in `§ Functional-role agents`, DV specialists in `skills/shared/platform-detection.md`. Bare names are not accepted — always emit the qualified form.
 
 ##### Stage → agent table
 
@@ -593,11 +591,11 @@ For **each edit theme** in `<plan_file>`, the acceptance criteria MUST include a
 
 ##### Residual-grep worked example
 
-Example AC verification command (theme: rename `requires_ui_tests` → `test_mode`):
+Example AC verification command (theme: rename a hypothetical `legacy_flag` → `flag_mode`):
 
 ```bash
 # Completeness gate — MUST return no unhandled matches after the theme is applied.
-grep -rn '\brequires_ui_tests\b' --include='*.md' --include='*.sh' . || echo "clean: no residuals"
+grep -rn '\blegacy_flag\b' --include='*.md' --include='*.sh' . || echo "clean: no residuals"
 ```
 
 DV runs each theme's residual-grep before yielding (see `agents/workflow-engineer.md § Batch-Completion Discipline`); a non-empty result means the theme is incomplete regardless of how many enumerated files were edited.
@@ -623,11 +621,9 @@ Before marking PL0 complete, verify:
 - [ ] If Figma URL detected, per-frame design context summarized in `<plan_file> § Figma Design References` (one bullet per frame)
 - [ ] If Figma URL detected, `<plan_file> § design-preview` lists each persisted per-frame file with state mapping + per-frame build notes (REQ-D)
 
-
 ## Handoff Protocol
 
 Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-pl`. Prev→this label: `USER→PL`.
-
 
 ### State Patch — REQUIRED before return
 

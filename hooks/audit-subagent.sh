@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SubagentStop → audit.jsonl writer (company-workflow worktask plugin, v3.10.0+).
+# SubagentStop → audit.jsonl writer (company-workflow worktask plugin).
 # Replaces prose-instructed `subagent_stopped` row emission. Pairs with
 # cost-log.sh; both fire on SubagentStop, both target .context/logs/.
 #
@@ -42,8 +42,7 @@ ROW=$(printf '%s' "$PAYLOAD" | jq -c \
       background_task_ids: ((.background_tasks // []) | map(.id // .task_id // "unknown")),
       session_crons_count: ((.session_crons // []) | length),
       session_cron_ids: ((.session_crons // []) | map(.id // .cron_id // "unknown")),
-      dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":stop"),
-      dedupe_key_extended: ((.parent_agent_id // "none") + ":" + (.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":stop")
+      dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":stop")
     }
   }') || {
     echo "audit-subagent: jq parse failed" >&2
@@ -59,7 +58,6 @@ if [ "$SELF_TEST" -eq 1 ]; then
     and .metadata.background_task_ids == ["bg1","bg2"]
     and .metadata.session_crons_count == 1
     and .metadata.session_cron_ids == ["cr1"]
-    and .metadata.dedupe_key_extended == "agt_parent:sess_test:agt_test:stop"
   ' >/dev/null \
     || { echo "audit-subagent: self-test FAIL"; exit 1; }
   echo "audit-subagent: self-test OK"

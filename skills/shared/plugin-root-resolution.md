@@ -91,7 +91,7 @@ paths — graceful deferral, never a hard error.
 ### Prose and shell-script paths
 
 - **Prose instructions** write helper paths plugin-root-relative (e.g.
-  `hooks/audit-dedup.sh --check-mode`) followed by:
+  `hooks/megatask-monitor.sh`) followed by:
   "(plugin root: `${CLAUDE_PLUGIN_ROOT}` if available, else resolve per
   `skills/shared/plugin-root-resolution.md`)".
 - **Shell scripts** (never load-substituted, only executed) use env-first with a

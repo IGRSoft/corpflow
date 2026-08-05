@@ -228,7 +228,7 @@ External agent should:
 
 ## Direct Orchestrator Dispatch
 
-The orchestrator loop dispatches `metadata.agent` directly. **Convention**: always emit fully-qualified `plugin:agent` form (e.g., `company-workflow:developer`, `apple-developer:ios-developer`). A back-compat shim still prepends `company-workflow:` to bare names but logs a deprecation warning. This convention enables PL0 to route stages to any plugin agent — `company-workflow:`, `apple-developer:`, or any other installed plugin — using identical syntax at every call site.
+The orchestrator loop dispatches `metadata.agent` directly. **Convention**: always emit fully-qualified `plugin:agent` form (e.g., `company-workflow:developer`, `apple-developer:ios-developer`). This convention enables PL0 to route stages to any plugin agent — `company-workflow:`, `apple-developer:`, or any other installed plugin — using identical syntax at every call site.
 
 ### Direct dispatch example
 
@@ -257,7 +257,7 @@ Use direct dispatch when:
 - PL0 can determine at planning time that no company-workflow routing is needed
 - The external agent's handoff format (see below) is used for stage continuity
 
-Bare names like `"developer"` continue to resolve to `company-workflow:developer` — fully backward compatible.
+Every `metadata.agent` value carries its plugin prefix.
 
 ### Skill Name Resolution
 

@@ -119,4 +119,3 @@ Test effort is embedded in subtask estimates:
 |---------|--------|--------|
 | Implement login | 4 | 6 |
 | Write login tests | 1 | 2 |
-

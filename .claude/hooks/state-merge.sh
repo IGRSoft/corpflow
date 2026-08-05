@@ -10,7 +10,7 @@
 #     silently. Otherwise atomic-merge and exit 0.
 #   - YAML parsing: prefer `yq`; fallback to inline awk subset (we own the
 #     handoff: schema so a strict subset parser is safe).
-#   - state.json absent: log INFO and exit 0 (path F1 — legacy mode).
+#   - state.json absent: log INFO and exit 0 (path F1 — `context_files` mode).
 #   - Frontmatter missing: derive minimal handoff from $CLAUDE_AGENT_NAME
 #     and $CLAUDE_ARTIFACT_PATH; merge minimal record.
 #
@@ -21,8 +21,8 @@
 # Implementation:
 #   All merge logic lives in skills/worktask/scripts/state-patch.sh.
 #   This hook is a thin delegating wrapper — exit 0 guard wraps the call.
-#   Path: HOOK_DIR goes up two levels (out of hooks/, out of .claude/) to
-#   reach the repo root, then into skills/worktask/scripts/state-patch.sh.
+#   Path: $CLAUDE_PLUGIN_ROOT first (a project-local copy of this hook has no
+#   skills/ tree beside it), else HOOK_DIR up two levels to the repo root.
 #
 # Usage (manual self-test):
 #   state-merge.sh --self-test
@@ -41,10 +41,6 @@ LOG="$LOG_DIR/state-merge.log"
 log() {
   printf '%s [%s] %s\n' "$(date -u +%FT%TZ)" "${1:-INFO}" "${2:-}" >> "$LOG" 2> /dev/null || true
 }
-
-# ---------- Legacy inline fallback ----------
-# Used only when state-patch.sh is absent (e.g. transitional period / plugin update).
-# Defined before main flow so shellcheck sees it as reachable.
 
 _basename_for_stage() {
   case "$1" in
@@ -65,120 +61,18 @@ _basename_for_stage() {
   esac
 }
 
-_inline_merge() {
-  local ART="${CLAUDE_ARTIFACT_PATH:-}"
-  local STAGE="${CLAUDE_TASK_METADATA_STAGE:-}"
-  local AGENT="${CLAUDE_AGENT_NAME:-}"
-  local STATE_JSON=".context/state.json"
-
-  _resolve_artifact_inline() {
-    local base="$1" ri="" newest=""
-    [[ -z "$base" ]] && {
-      printf ''
-      return 0
-    }
-    if [[ -f "$STATE_JSON" ]] && command -v jq > /dev/null 2>&1; then
-      ri=$(jq -r '.run_index // empty' "$STATE_JSON" 2> /dev/null || printf '')
-    fi
-    if [[ -n "${ri:-}" && -f ".context/${base}-${ri}.md" ]]; then
-      printf '.context/%s-%s.md' "$base" "$ri"
-      return 0
-    fi
-    # shellcheck disable=SC2012  # ls needed for numeric-sort on controlled names
-    newest=$(ls -1 ".context/${base}-"*.md 2> /dev/null \
-      | sed -E 's/.*-([0-9]+)\.md$/\1 &/' \
-      | grep -E '^[0-9]+ ' \
-      | sort -k1,1 -n \
-      | tail -1 \
-      | sed -E 's/^[0-9]+ //') || newest=""
-    if [[ -n "$newest" && -f "$newest" ]]; then
-      printf '%s' "$newest"
-      return 0
-    fi
-    if [[ -f ".context/${base}.md" ]]; then
-      printf '.context/%s.md' "$base"
-      return 0
-    fi
-    printf ''
-  }
-
-  if [[ -z "$ART" && -n "$STAGE" ]]; then
-    ART=$(_resolve_artifact_inline "$(_basename_for_stage "$STAGE")")
-  fi
-  if [[ -z "$ART" || ! -f "$ART" ]]; then
-    log WARN "inline: no artifact resolved (stage=$STAGE)"
-    exit 0
-  fi
-  if [[ ! -f "$STATE_JSON" ]]; then
-    log INFO "inline: state.json absent — F1 fallback"
-    exit 0
-  fi
-
-  local FM="" PARSED_STAGE="" PARSED_VERDICT="" PARSED_SUMMARY=""
-  if command -v yq > /dev/null 2>&1; then
-    FM=$(yq eval 'select(documentIndex == 0) | .handoff' "$ART" 2> /dev/null || true)
-  fi
-  if [[ -z "$FM" || "$FM" == "null" ]]; then
-    local RAW=""
-    RAW=$(awk '/^---$/{ c++; next } c==1' "$ART" 2> /dev/null || true)
-    if [[ -z "$RAW" ]]; then
-      PARSED_STAGE="${STAGE:-${AGENT:-UNKNOWN}}"
-      PARSED_VERDICT="ok"
-      PARSED_SUMMARY="auto-generated (fallback)"
-    else
-      PARSED_STAGE=$(awk -F: '/^[[:space:]]*stage:/ { gsub(/[[:space:]"]+/,"",$2); print $2; exit }' <<< "$RAW")
-      PARSED_VERDICT=$(awk -F: '/^[[:space:]]*verdict:/ { gsub(/[[:space:]"]+/,"",$2); print $2; exit }' <<< "$RAW")
-      PARSED_SUMMARY=$(awk -F: '/^[[:space:]]*summary:/ { sub(/^[[:space:]]*summary:[[:space:]]*/,""); gsub(/^"|"$/,""); print; exit }' <<< "$RAW")
-      [[ -z "$PARSED_VERDICT" ]] && PARSED_VERDICT="ok"
-      [[ -z "$PARSED_SUMMARY" ]] && PARSED_SUMMARY="(auto)"
-    fi
-  else
-    PARSED_STAGE=$(yq eval 'select(documentIndex == 0) | .handoff.stage // ""' "$ART" 2> /dev/null || true)
-    PARSED_VERDICT=$(yq eval 'select(documentIndex == 0) | .handoff.verdict // "ok"' "$ART" 2> /dev/null || true)
-    PARSED_SUMMARY=$(yq eval 'select(documentIndex == 0) | .handoff.summary // ""' "$ART" 2> /dev/null || true)
-    [[ -z "$PARSED_VERDICT" ]] && PARSED_VERDICT="ok"
-    [[ -z "$PARSED_SUMMARY" ]] && PARSED_SUMMARY="(auto)"
-  fi
-
-  [[ -z "$PARSED_STAGE" ]] && {
-    log WARN "inline: no stage extracted"
-    exit 0
-  }
-
-  local CS="" CV=""
-  CS=$(jq -r --arg s "$PARSED_STAGE" '.stages[$s].status // ""' "$STATE_JSON" 2> /dev/null || printf '')
-  CV=$(jq -r --arg s "$PARSED_STAGE" '.stages[$s].verdict // ""' "$STATE_JSON" 2> /dev/null || printf '')
-  if [[ "$CS" == "completed" && "$CV" == "$PARSED_VERDICT" ]]; then
-    log INFO "inline: idempotent"
-    exit 0
-  fi
-
-  local PATCH TMP
-  PATCH=$(jq -cn --arg stage "$PARSED_STAGE" --arg artifact "$ART" --arg verdict "$PARSED_VERDICT" \
-    '{stages:{($stage):{status:"completed",artifact:$artifact,verdict:$verdict}}}')
-  TMP=".context/.state.json.$$.${RANDOM}.tmp"
-  if jq --argjson p "$PATCH" '. * $p' "$STATE_JSON" > "$TMP" 2>> "$LOG"; then
-    sync "$TMP" 2> /dev/null || sync 2> /dev/null || true
-    mv -f "$TMP" "$STATE_JSON"
-    log INFO "inline: merged stages.$PARSED_STAGE verdict=$PARSED_VERDICT"
-  else
-    rm -f "$TMP" 2> /dev/null || true
-    log ERROR "inline: jq merge failed"
-  fi
-  # Suppress unused-variable warning: PARSED_SUMMARY is informational only.
-  : "$PARSED_SUMMARY"
-  exit 0
-}
-
 # ---------- Self-test ----------
 # Re-run all original hook self-test cases by delegating to state-patch.sh --self-test.
 # The cases cover: explicit artifact, idempotency, numbered artifact resolution (exact
-# run_index + highest-N), legacy bare fallback, and absent-artifact no-op.
+# run_index + highest-N), and absent-artifact no-op.
 if [[ "${1:-}" == "--self-test" ]]; then
   HOOK_DIR=$(cd "$(dirname "$0")" && pwd)
   # .claude/hooks/ is two levels below the repo root; go up two levels to reach
   # the repo root, then descend into skills/worktask/scripts/.
-  PATCH_SCRIPT="${HOOK_DIR}/../../skills/worktask/scripts/state-patch.sh"
+  PATCH_SCRIPT="${CLAUDE_PLUGIN_ROOT:-${HOOK_DIR}/../..}/skills/worktask/scripts/state-patch.sh"
+  if [[ ! -f "$PATCH_SCRIPT" ]]; then
+    PATCH_SCRIPT="${HOOK_DIR}/../../skills/worktask/scripts/state-patch.sh"
+  fi
   if [[ ! -f "$PATCH_SCRIPT" ]]; then
     printf 'self-test: state-patch.sh not found at %s\n' "$PATCH_SCRIPT" >&2
     exit 1
@@ -201,14 +95,18 @@ fi
 
 # ---------- Locate state-patch.sh ----------
 HOOK_DIR=$(cd "$(dirname "$0")" && pwd)
-# Up two levels: out of hooks/, out of .claude/ → repo root → skills/...
-PATCH_SCRIPT="${HOOK_DIR}/../../skills/worktask/scripts/state-patch.sh"
+# Plugin root first: worktask.md Step 3b copies this hook into <project>/.claude/hooks/,
+# where the relative arm resolves to a skills/ tree that does not exist. state-patch.sh is
+# the only merge implementation, so failing to find it silently disables the Layer-2 net.
+PATCH_SCRIPT="${CLAUDE_PLUGIN_ROOT:-${HOOK_DIR}/../..}/skills/worktask/scripts/state-patch.sh"
+if [[ ! -f "$PATCH_SCRIPT" ]]; then
+  PATCH_SCRIPT="${HOOK_DIR}/../../skills/worktask/scripts/state-patch.sh"
+fi
 
 if [[ ! -f "$PATCH_SCRIPT" ]]; then
-  log WARN "state-patch.sh not found at $PATCH_SCRIPT — falling back to legacy inline merge"
-  # Legacy inline fallback so the hook continues to work if the skills tree is
-  # absent (e.g. during a plugin update that hasn't landed state-patch.sh yet).
-  _inline_merge
+  # Exit 0, never non-zero: a SubagentStop hook must not block the stage transition.
+  log WARN "state-patch.sh not found at $PATCH_SCRIPT — skipping state merge"
+  exit 0
 fi
 
 # ---------- Delegate to state-patch.sh ----------

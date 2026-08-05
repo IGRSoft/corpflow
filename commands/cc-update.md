@@ -313,4 +313,3 @@ PL0 must set `metadata.agent: "company-workflow:prompt-engineer"` on the impleme
 | Scenario | Behavior |
 |----------|----------|
 | Team-tool removed by a band (e.g. TeamCreate/TeamDelete → implicit team) | Rewrite the team/coordination docs to the new model (`Agent(name: …)` spawn, `team_name` ignored). Bump **Minor**, not Major, when the removed tools were never in any agent's `tools:` frontmatter — no breaking change to plugin agents, only reference-doc corrections. |
-

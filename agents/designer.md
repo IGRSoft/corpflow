@@ -193,4 +193,3 @@ If Pencil MCP tools fail to load or calls error:
 1. Document the design specifications in text form only
 2. Include detailed layout descriptions and measurements
 3. Note in documentation that visual mockups were not generated
-

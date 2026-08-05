@@ -252,4 +252,3 @@ This command works with:
 - `/pm-roadmap` - Break roadmap into sprints
 - `/pm-prioritize` - Prioritize sprint items
 - `/estimate` - Estimate story points
-

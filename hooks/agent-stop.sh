@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop event multiplexer for PL/FN/ST worktask-boundary agents (v3.10.0+).
+# Stop event multiplexer for PL/FN/ST worktask-boundary agents.
 # Wired via agent frontmatter `hooks:`.
 #
 # Writes one canonical `stage_completion_hook` row to
@@ -52,8 +52,7 @@ ROW=$(printf '%s' "$PAYLOAD" | jq -c \
       background_task_ids: ((.background_tasks // []) | map(.id // .task_id // "unknown")),
       session_crons_count: ((.session_crons // []) | length),
       session_cron_ids: ((.session_crons // []) | map(.id // .cron_id // "unknown")),
-      dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":stage:" + $stage),
-      dedupe_key_extended: ((.parent_agent_id // "none") + ":" + (.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":stage:" + $stage)
+      dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":stage:" + $stage)
     }
   }') || {
     echo "agent-stop: jq parse failed" >&2
@@ -70,7 +69,6 @@ if [ "$SELF_TEST" -eq 1 ]; then
     and .metadata.background_task_ids == ["bg1","bg2"]
     and .metadata.session_crons_count == 1
     and .metadata.session_cron_ids == ["cr1"]
-    and (.metadata.dedupe_key_extended | startswith("agt_parent:sess_test:agt_pl:stage:"))
   ' >/dev/null \
     || { echo "agent-stop: self-test FAIL"; exit 1; }
   echo "agent-stop: self-test OK"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostToolUse → anchor-lint pre-flight (company-workflow worktask plugin, v3.23.3+).
+# PostToolUse → anchor-lint pre-flight (company-workflow worktask plugin).
 #
 # Managed plugin hook (registered in .claude-plugin/plugin.json). Fires on
 # Write|Edit. Gates on the canonical worktask-artifact filename regex

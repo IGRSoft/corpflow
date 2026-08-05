@@ -3,7 +3,7 @@
 ## Conventions used in this document
 
 - **`planFile`** — the plan filename PL produced for the current worktask run (`planning-N.md`, e.g. `planning-0.md`, `planning-3.md`). Computed by PL0 per `agents/product-manager.md § Plan File Naming`. Every downstream task carries it as `metadata.plan_file`; the same value is interpolated into `context_files`. Stage agents resolve the plan file from `task.metadata.plan_file` first, then newest `.context/planning-*.md`.
-- **handoff-protocol mode** — the preferred metadata mode (per `skills/worktask/references/handoff-protocol.md`): tasks carry `state_file` + `context_refs` (anchor list); legacy `context_files` is the F1 fallback (state.json absent — see `skills/shared/legacy-fallback-f1.md`). Examples below show both forms — use `context_refs` for new code; keep `context_files` as the safety net.
+- **handoff-protocol mode** — the preferred metadata mode (per `skills/worktask/references/handoff-protocol.md`): tasks carry `state_file` + `context_refs` (anchor list); `context_files` is the F1 fallback (state.json absent — see `../../worktask/references/handoff-protocol.md#f1-fallback`). Examples below show both forms — use `context_refs` for new code; keep `context_files` as the safety net.
 
 ## PL0 state.json Initialization (Phase 1)
 
@@ -29,15 +29,10 @@ done
 
 ### plan_file shape boundary
 
-**`plan_file` shape boundary** — `state.json.plan_file` holds a **workspace-relative
-path** (`.context/planning-N.md`); `task.metadata.plan_file` holds a **bare
-basename** (`planning-N.md`). Both shapes are legal. Every reader MUST accept
-either: try the value as given, then its basename resolved against the directory
-holding `state.json`.
-
-Both shapes appear in this file: the state seed below writes the **path** shape; every
-`TaskCreate` snippet further down writes the **basename** shape. Canonical statement:
-`handoff-protocol.md § plan_file shape boundary`.
+Both shapes appear in this file: the state seed below writes the **path** shape
+(`.context/planning-N.md`); every `TaskCreate` snippet further down writes the **basename**
+shape (`planning-N.md`). Both are legal and every reader MUST accept either — the rule and
+its resolution order are canonical in `handoff-protocol.md § plan_file shape boundary`.
 
 ### Seed snippet — atomic write
 
@@ -82,7 +77,7 @@ is never absent. On a `/megatask` per-issue run the issue title is the goal.
 
 `facts.dispatched_agents: []` is seeded (additive, version:1) so the orchestrator loop appends per-`task_id` dispatch entries in place. The other v1 additive fields (`stages.<CODE>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are written on demand — never seeded; their absence is meaningful. Schema: `handoff-protocol.md#state-json-schema`.
 
-Subsequent stage agents read `.context/state.json` first; if absent, they fall back to legacy `metadata.context_files` mode (path F1 — see `skills/shared/legacy-fallback-f1.md`; matrix at `handoff-protocol.md#fallback-paths`).
+Subsequent stage agents read `.context/state.json` first; if absent, they fall back to `metadata.context_files` mode (path F1 — see `handoff-protocol.md#f1-fallback`; matrix at `handoff-protocol.md#fallback-paths`).
 
 ## Hook Installation
 
@@ -135,7 +130,7 @@ const ar0 = TaskCreate({
       `${planFile}#scope`,
       `${planFile}#acceptance-criteria`
     ]),
-    // Legacy fallback (path F1) — kept so worktask runs even if state.json absent:
+    // F1 fallback — kept so the worktask runs even if state.json is absent:
     context_files: `${planFile},.context/errors/software-architector.md`,
     plan_file: planFile,
     worktask_id: worktaskId, priority: "medium"
@@ -385,7 +380,7 @@ TaskUpdate({ taskId: "1", status: "completed" });
 
 ## Task Execution Pattern
 
-When a task starts, the executor reads `metadata.agent` and spawns the agent. **Convention**: `metadata.agent` MUST be fully-qualified `plugin:agent` form (e.g., `company-workflow:developer`, `apple-developer:ios-developer`). Bare names are accepted by the back-compat shim below but are deprecated and should be replaced.
+When a task starts, the executor reads `metadata.agent` and spawns the agent. **Convention**: `metadata.agent` MUST be fully-qualified `plugin:agent` form (e.g., `company-workflow:developer`, `apple-developer:ios-developer`). Bare names are not accepted.
 
 ### Resolve agent & model
 
@@ -394,9 +389,7 @@ const task = TaskGet({ taskId: currentTaskId });
 const agentType = task.metadata.agent;  // e.g., "company-workflow:developer" or "apple-developer:ios-developer"
 const model = task.metadata.model;      // e.g., "haiku"
 
-// Back-compat shim: qualified names used as-is. Bare names prepend "company-workflow:" and
-// log a deprecation warning — emit qualified form at the call site instead.
-const subagentType = agentType.includes(':') ? agentType : `company-workflow:${agentType}`;
+const subagentType = agentType;  // already fully-qualified `plugin:agent`
 ```
 
 ### Build prompt & dispatch
@@ -416,7 +409,7 @@ for (const artifact of previousArtifacts) {
 }
 
 Task({
-  subagent_type: subagentType,           // qualified `plugin:agent` (bare → "company-workflow:{name}" via back-compat shim)
+  subagent_type: subagentType,           // qualified `plugin:agent`
   model: model,                           // explicit model — do NOT rely on frontmatter inheritance
   prompt: prompt                           // context-enriched instructions
 });
