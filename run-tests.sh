@@ -22,6 +22,12 @@ cd "$PLUGIN_ROOT"
 
 BATS="$PLUGIN_ROOT/tests/vendor/bats-core/bin/bats"
 COVERAGE="${COVERAGE:-0}"
+# Opt-in: a skipped Swift phase stays advisory so hosts with no Apple toolchain
+# still pass; set to 1 where Swift coverage is actually being claimed.
+RUN_TESTS_REQUIRE_SWIFT="${RUN_TESTS_REQUIRE_SWIFT:-0}"
+
+# Reported even when the suite is green, so green is never read as "everything ran".
+skipped_phases=()
 
 for arg in "$@"; do
   case "$arg" in
@@ -82,6 +88,7 @@ if [ "${#shell_tests[@]}" -gt 0 ]; then
   "$BATS" "${shell_tests[@]}" || rc=$?
 else
   warn "no .bats files found under tests/shell"
+  skipped_phases+=("bats (no .bats files under tests/shell)")
 fi
 
 # --- run swift test phases (ttt-template artifact only) ----------------------
@@ -97,6 +104,7 @@ for pkg in "${swift_packages[@]}"; do
     ( cd "$pkg" && swift test ) || rc=$?
   else
     warn "SKIP swift test → ${pkg#$PLUGIN_ROOT/} (no usable swift toolchain)"
+    skipped_phases+=("swift test → ${pkg#$PLUGIN_ROOT/} (no usable swift toolchain)")
   fi
 done
 
@@ -108,6 +116,17 @@ note "python3 -m unittest → benchmark/harness/tests (harness suite)"
 ( cd "$PLUGIN_ROOT/benchmark/harness" \
     && PYTHONPATH="$PLUGIN_ROOT/benchmark/harness/tests" \
        python3 -m unittest discover -s tests -t . -p 'test_*.py' ) || rc=$?
+
+if [ "${#skipped_phases[@]}" -gt 0 ]; then
+  warn "SKIPPED PHASES: ${#skipped_phases[@]}"
+  for phase in "${skipped_phases[@]}"; do
+    warn "  - $phase"
+  done
+  if [ "$RUN_TESTS_REQUIRE_SWIFT" = "1" ] && [ "$SWIFT_USABLE" -ne 1 ]; then
+    warn "RUN_TESTS_REQUIRE_SWIFT=1 and the Swift phase was skipped — failing the run"
+    rc=1
+  fi
+fi
 
 if [ "$rc" -eq 0 ]; then
   note "ALL GREEN"

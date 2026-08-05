@@ -151,7 +151,7 @@ cmd_base_branch() {
     extracted=$(printf '%s' "$body" \
       | grep -Ei '^[[:space:]]*base_branch:[[:space:]]*[a-zA-Z0-9/_.-]+' \
       | head -n1 \
-      | sed 's/.*base_branch:[[:space:]]*//' \
+      | sed 's/.*base_branch:[[:space:]]*//I' \
       | tr -d '[:space:]' \
       || true)
     if [[ -n "$extracted" ]]; then

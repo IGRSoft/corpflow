@@ -52,17 +52,64 @@ CYCLE="${FIXTURES}/skills/orchestrator-cycle.json"
   assert_output --partial "cycle"
 }
 
-@test "KNOWN BUG: 'Blocked by #N' phrasing triggers a false cycle (build-orchestrator.sh:146)" {
-  # The "Blocks: #N" edge regex /(?i)blocks?\s*:?[^\n]*/ ALSO matches "Blocked by"
-  # (because "blocks?" matches the "Block" in "Blocked"), so a body using "Blocked by #N"
-  # gets a spurious reverse edge (this->N) on top of the correct blocked_by edge (N->this),
-  # forming a 2-cycle. An otherwise-acyclic graph is then wrongly rejected as a cycle (exit 5).
-  # Asserted-as-is and REPORTED, not fixed (plan scope = report contract bugs, don't fix here).
+# --- R4.2: edge-keyword matching (reverse/forward pair, distinct observables) ---
+# The old regex /(?i)blocks?\s*:?[^\n]*/ was unanchored, so the "Block" inside
+# "Blocked by" was read as the "Blocks" keyword. A "Blocked by #N" body therefore
+# minted a spurious reverse edge (this->N) on top of the correct one (N->this),
+# forming a 2-cycle that failed an acyclic graph outright. Fixed to \bblocks?\b.
+#
+# The two tests below deliberately observe DIFFERENT fields — the reverse-edge test
+# reads the ROOT issue's blocked_by, the forward-edge test reads the LEAF's — so a
+# regression in one direction cannot be masked by the other still passing.
+
+@test "edge: 'Blocked by #N' yields the correct wave order and no reverse edge" {
   WD="$(mk_tmpworkdir)"
   printf '[{"issue":1,"title":"A","labels":["P0"],"body":"root"},{"issue":2,"title":"B","labels":["P1"],"body":"Blocked by #1"}]' > "$WD/bb.json"
-  run_script "$SCRIPT" --file "$WD/bb.json" --group m
-  assert_failure
-  assert_output --partial "cycle"
+  local orch_json
+  orch_json="$(bash "$PLUGIN_ROOT/$SCRIPT" --file "$WD/bb.json" --group m)"
+  # Observable A: the root must stay unblocked. Under the old regex it was
+  # blocked_by [2], which is what made the graph cyclic.
+  run jq -c '.issues[] | select(.number==1) | [.level, .status, .blocked_by]' <<< "$orch_json"
+  assert_output '[0,"ready",[]]'
+  # Observable B: the wave order itself, which the old regex could not produce at
+  # all (the run died at exit 5 before emitting any JSON).
+  run jq -c '.topological_order' <<< "$orch_json"
+  assert_output '[1,2]'
+  # A spurious edge would also surface here as a self-edge/external warning.
+  run jq -c '.dependency_warnings' <<< "$orch_json"
+  assert_output '[]'
+}
+
+@test "edge: 'Blocks: #N' creates the forward edge in the correct direction" {
+  WD="$(mk_tmpworkdir)"
+  printf '[{"issue":1,"title":"A","labels":["P0"],"body":"Blocks: #2"},{"issue":2,"title":"B","labels":["P1"],"body":"leaf"}]' > "$WD/fw.json"
+  local orch_json
+  orch_json="$(bash "$PLUGIN_ROOT/$SCRIPT" --file "$WD/fw.json" --group m)"
+  # Distinct observable from the test above: the LEAF's blocked_by list.
+  run jq -c '.issues[] | select(.number==2) | [.level, .status, .blocked_by]' <<< "$orch_json"
+  assert_output '[1,"blocked",[1]]'
+}
+
+@test "edge: singular 'Block: #N' still registers as a forward edge" {
+  # The fix is \bblocks?\b, not \bblocks\b: dropping the optional plural would have
+  # silently stopped creating edges for a spelling the old regex accepted.
+  WD="$(mk_tmpworkdir)"
+  printf '[{"issue":1,"title":"A","labels":["P0"],"body":"Block: #2"},{"issue":2,"title":"B","labels":["P1"],"body":"leaf"}]' > "$WD/sg.json"
+  local orch_json
+  orch_json="$(bash "$PLUGIN_ROOT/$SCRIPT" --file "$WD/sg.json" --group m)"
+  run jq -c '.issues[] | select(.number==2) | .blocked_by' <<< "$orch_json"
+  assert_output '[1]'
+}
+
+@test "edge: the word 'blocker' in prose does not create an edge" {
+  # Trailing \b: "blocker" is not the keyword. The old unanchored regex read it as
+  # one and built a real dependency out of a passing mention.
+  WD="$(mk_tmpworkdir)"
+  printf '[{"issue":1,"title":"A","labels":["P0"],"body":"see blocker #2 for context"},{"issue":2,"title":"B","labels":["P1"],"body":"leaf"}]' > "$WD/pr.json"
+  local orch_json
+  orch_json="$(bash "$PLUGIN_ROOT/$SCRIPT" --file "$WD/pr.json" --group m)"
+  run jq -c '[.issues[] | .blocked_by] | flatten' <<< "$orch_json"
+  assert_output '[]'
 }
 
 @test "failure: non-array JSON input exits 1" {

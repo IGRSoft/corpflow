@@ -1,130 +1,247 @@
-# Conductor Attachments — FN Templates
+#!/usr/bin/env bash
+# attachments-preseed.sh — renders the two Conductor-convention attachments
+# (`.context/attachments/PR instructions.md` and `Review request.md`).
+#
+# Canonical template source: skills/worktask/references/conductor-attachments.md
+# (§ Template — `PR instructions.md`, § Template — `Review request.md`). The
+# bodies below are the concatenation of that file's `Template part N` fenced
+# blocks in order, verbatim; the placeholder tokens are the ones its
+# § Data sources table defines. Keep the two in sync — this script is Writer 1
+# (orchestrator pre-gate, skills/worktask/references/fn-gate.md) and the FN
+# agent's Writer 2 renders from the same document.
+#
+# Usage:
+#   attachments-preseed.sh [--workdir DIR] [--worktask-id ID] [--branch NAME]
+#                          [--base-branch NAME] [--run-index N]
+#                          [--commit-type TYPE] [--issue-ref N]
+#                          [--uncommitted N] [--upstream NAME|--no-upstream]
+#                          [--ts ISO8601]
+#   attachments-preseed.sh --self-test
+#
+# Exit codes: 0 written, 2 usage, 3 base branch unresolved.
+#
+# Every input is auto-resolved from git / .context/state.json when the flag is
+# omitted, so the orchestrator can invoke it with no arguments from the
+# worktask root.
 
-Templates and emission rules for the two Conductor-convention files the FN
-stage writes into `.context/attachments/`. Read by `agents/project-manager.md`
-(FN Stage) and validated by `skills/shared/stage-contracts.md` (FN row).
+set -euo pipefail
 
-## Why these files exist
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-Conductor (the parallel-agents Mac app) injects attachments from
-`.context/attachments/` into new sessions when the user clicks UI actions:
+WORKDIR="."
+WORKTASK_ID=""
+BRANCH=""
+BASE_BRANCH=""
+RUN_INDEX=""
+COMMIT_TYPE=""
+ISSUE_REF=""
+UNCOMMITTED=""
+UPSTREAM=""
+UPSTREAM_SET=0
+ISO_TS=""
+MODE="write"
 
-| Conductor action | File injected |
-|------------------|---------------|
-| **Create PR**       | `.context/attachments/PR instructions.md` |
-| **Request Review**  | `.context/attachments/Review request.md` |
+usage() {
+  cat >&2 <<'USAGE'
+usage: attachments-preseed.sh [--workdir DIR] [--worktask-id ID] [--branch NAME]
+                              [--base-branch NAME] [--run-index N]
+                              [--commit-type TYPE] [--issue-ref N]
+                              [--uncommitted N] [--upstream NAME|--no-upstream]
+                              [--ts ISO8601]
+       attachments-preseed.sh --self-test
+USAGE
+}
 
-If absent, Conductor falls back to its built-in defaults — generic, with no
-worktask context (no DR/QA verdicts, no conventional-commit type, no resolved
-base branch, no link to `.context/complete-summary-N.md`).
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --workdir)      WORKDIR="${2:?--workdir needs a value}"; shift 2 ;;
+    --worktask-id)  WORKTASK_ID="${2:?--worktask-id needs a value}"; shift 2 ;;
+    --branch)       BRANCH="${2:?--branch needs a value}"; shift 2 ;;
+    --base-branch)  BASE_BRANCH="${2:?--base-branch needs a value}"; shift 2 ;;
+    --run-index)    RUN_INDEX="${2:?--run-index needs a value}"; shift 2 ;;
+    --commit-type)  COMMIT_TYPE="${2:?--commit-type needs a value}"; shift 2 ;;
+    --issue-ref)    ISSUE_REF="${2:?--issue-ref needs a value}"; shift 2 ;;
+    --uncommitted)  UNCOMMITTED="${2:?--uncommitted needs a value}"; shift 2 ;;
+    --upstream)     UPSTREAM="${2:?--upstream needs a value}"; UPSTREAM_SET=1; shift 2 ;;
+    --no-upstream)  UPSTREAM=""; UPSTREAM_SET=1; shift ;;
+    --ts)           ISO_TS="${2:?--ts needs a value}"; shift 2 ;;
+    --self-test)    MODE="self-test"; shift ;;
+    -h|--help)      usage; exit 2 ;;
+    *) printf >&2 'attachments-preseed.sh: unknown arg: %s\n' "$1"; usage; exit 2 ;;
+  esac
+done
 
-The FN stage produces both files so:
+# ---------------------------------------------------------------- audit ----
 
-1. The FN agent reads `PR instructions.md` and follows it for `gh pr create`
-   (single source of truth — same template the user sees if they re-trigger
-   the action via Conductor later).
-2. Subsequent Conductor-driven actions in the same workspace inherit
-   worktask-aware prompts.
+audit_failed() {
+  local reason="$1" dir="$WORKDIR/.context/logs"
+  mkdir -p "$dir"
+  printf '{"actor":"orchestrator","action":"fn_attachments_preseed_failed","subject":"FN%s","result":"error","reason":"%s"}\n' \
+    "${RUN_INDEX:-0}" "$reason" >> "$dir/audit.jsonl"
+}
 
-## When to write
+# ------------------------------------------------------------ resolvers ----
 
-**Two writers, idempotent**: the orchestrator writes both files PRE-FN-GATE
-(so Conductor sees them even if the user never approves the gate). The FN
-agent re-writes them with final data after gate approval. Both writers source
-from this template — single source of truth.
+json_str() {
+  # $1 = file, $2..= jq path segments. Prints the value or nothing. jq is a
+  # hard prerequisite of the suite, but the writer must still degrade to its
+  # documented defaults on a host without it rather than abort the FN gate.
+  [[ -f "$1" ]] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  jq -r "$2 // empty" "$1" 2>/dev/null || return 0
+}
 
-| Writer | When | Data quality |
-|--------|------|-------------|
-| Orchestrator pre-gate | Immediately before the FN gate's `return` in `skills/worktask/SKILL.md` (gated path only; bypass path falls through to delegation) | Best-available: DR/QA verdicts from upstream artifacts, git state at gate time |
-| FN agent post-approval | In `agents/project-manager.md § FN Stage`, before `gh pr create` | Final: same sources but fresher git state (post-commit) |
+first_match() {
+  # $1 = file, $2 = grep -E pattern. Prints the first matching whole line.
+  [[ -f "$1" ]] || return 0
+  grep -m1 -E "$2" "$1" 2>/dev/null || return 0
+}
 
-### Writer 1 — Orchestrator pre-gate (tool-explicit)
+section_bullets() {
+  # $1 = file, $2 = heading text. Emits the section's non-blank lines as `- `
+  # bullets, or nothing when the file or section is absent/empty.
+  [[ -f "$1" ]] || return 0
+  awk -v h="$2" '
+    $0 ~ "^## " h {found=1; next}
+    found && /^## / {found=0}
+    found && NF {print "- " $0}
+  ' "$1"
+}
 
-Runs as **Step 1 of the *Effect, in order* list** in `skills/worktask/references/fn-gate.md` — not as a separate phase. The full procedure lives in `fn-gate.md § Pre-gate Conductor-attachments writer` (gate detection stays in `skills/worktask/SKILL.md § FN Gate`). Three separate `test -f` trip-wires (Effect steps 2, 3, 6) wrap this writer so a skipped or partially-completed run cannot reach `return` silently. Fires on the gated path only. Goal: Conductor sees worktask-aware files even if the user never approves the gate.
+STATE="$WORKDIR/.context/state.json"
 
-### Writer 2 — FN agent post-approval
+if [[ -z "$RUN_INDEX" ]]; then
+  RUN_INDEX="$(json_str "$STATE" '.run_index')"
+  RUN_INDEX="${RUN_INDEX:-0}"
+fi
 
-In `agents/project-manager.md § FN Stage`, immediately before `gh pr create`:
+if [[ -z "$WORKTASK_ID" ]]; then
+  WORKTASK_ID="$(json_str "$STATE" '.worktask_id')"
+  WORKTASK_ID="${WORKTASK_ID:-unknown}"
+fi
 
-```bash
-mkdir -p .context/attachments
-```
+if [[ -z "$BRANCH" ]]; then
+  BRANCH="$(git -C "$WORKDIR" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  [[ -n "$BRANCH" ]] || BRANCH="$(json_str "$STATE" '.facts.branch')"
+  BRANCH="${BRANCH:-HEAD}"
+fi
 
-Then `Write` both files using the templates below, overwriting any pre-seed from Writer 1 (no skip, no merge — always overwrite from scratch). Pre-existing files are expected and normal; do not assume the pre-seed is current.
+# Base-branch resolution order is conductor-attachments.md § Git & branch state,
+# highest first. There is deliberately NO literal fallback: an unresolved base
+# would silently target the wrong branch in the rendered `gh pr create` command.
+if [[ -z "$BASE_BRANCH" ]]; then
+  BASE_BRANCH="${FN_BASE_REF:-}"
+  [[ -n "$BASE_BRANCH" ]] || BASE_BRANCH="$(json_str "$STATE" '.metadata.base_ref')"
+  [[ -n "$BASE_BRANCH" ]] || BASE_BRANCH="$(json_str "$STATE" '.git.base_branch')"
+  [[ -n "$BASE_BRANCH" ]] || BASE_BRANCH="$(json_str "$WORKDIR/workspace.json" '.git.base_branch')"
+  if [[ -z "$BASE_BRANCH" ]]; then
+    BASE_BRANCH="$(git -C "$WORKDIR" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true)"
+    BASE_BRANCH="${BASE_BRANCH#refs/remotes/origin/}"
+  fi
+fi
+if [[ -z "$BASE_BRANCH" ]] && [[ "$MODE" != "self-test" ]]; then
+  printf >&2 'attachments-preseed.sh: base branch unresolved — pass --base-branch\n'
+  audit_failed "base_branch_unresolved"
+  exit 3
+fi
 
-**Post-write verify (mirror of Writer 1's gate trip-wire)** — immediately after both `Write` calls:
+if [[ -z "$COMMIT_TYPE" ]]; then
+  # conductor-attachments.md § Plan, issue & verdict fields: the type comes from
+  # facts.goal via branch-lib's derive_type, NOT from the plan file.
+  GOAL="$(json_str "$STATE" '.facts.goal')"
+  if [[ -n "$GOAL" && -r "$SELF_DIR/branch-lib.sh" ]]; then
+    # shellcheck source=/dev/null
+    . "$SELF_DIR/branch-lib.sh"
+    COMMIT_TYPE="$(derive_type "$GOAL")"
+  fi
+  COMMIT_TYPE="${COMMIT_TYPE:-feature}"
+fi
 
-```bash
-test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md" && echo OK
-```
+if [[ -z "$ISSUE_REF" ]]; then
+  ISSUE_REF="$(json_str "$WORKDIR/workspace.json" '.issue_number')"
+  [[ -n "$ISSUE_REF" ]] || ISSUE_REF="$(json_str "$STATE" '.metadata.issue_ref')"
+fi
+ISSUE_REF="${ISSUE_REF#\#}"
 
-On `OK`, run `gh pr create` using the data from `PR instructions.md`. On failure, abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and do NOT proceed to `gh pr create` — opening a PR without the attachments leaves Conductor in the degraded state Writer 1's trip-wire was designed to prevent.
+if [[ -z "$UNCOMMITTED" ]]; then
+  UNCOMMITTED="$(git -C "$WORKDIR" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+  UNCOMMITTED="${UNCOMMITTED:-0}"
+fi
 
-### Known emission-rule defects
+if [[ "$UPSTREAM_SET" -eq 0 ]]; then
+  UPSTREAM="$(git -C "$WORKDIR" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+fi
+if [[ -n "$UPSTREAM" ]]; then
+  UPSTREAM_LINE="Upstream tracking: origin/${BRANCH}."
+else
+  UPSTREAM_LINE="No upstream branch yet — use \`git push -u origin ${BRANCH}\`."
+fi
 
-#### How to fix one safely
+ISO_TS="${ISO_TS:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
-Three defects below are reproduced verbatim by
-`skills/worktask/scripts/attachments-preseed.sh` rather than silently smoothed, because the script's
-contract is fidelity to this document. **Do not fix one by editing a fenced template body alone** —
-`attachments-preseed.bats` P2 and P12 re-derive their expectations from these blocks at run time, so
-the document and the script must change in the same commit.
+CTX="$WORKDIR/.context"
+DR_FILE="$CTX/developer-review-${RUN_INDEX}.md"
+QA_FILE="$CTX/testing-${RUN_INDEX}.md"
 
-#### The three defects
+DR_VERDICT="$(first_match "$DR_FILE" 'Approval Status')"
+DR_VERDICT="${DR_VERDICT:-unknown}"
+QA_VERDICT="$(first_match "$QA_FILE" 'GO/NO-GO')"
+QA_VERDICT="${QA_VERDICT:-unknown}"
 
-1. **`<N>` is overloaded.** It means the uncommitted-file count in template parts 1 and 3, and the
-   **issue number** in part 7's `Closes #<N>` checklist row. The two are not distinguishable by
-   token substitution; the script only renders correctly because it matches the surrounding text.
-   Fix: rename the checklist token to `<ISSUE>`, which this file already uses for that meaning.
-2. **No blank line before `## 2. Push`.** Template part 3 is the only fenced body that ends without
-   a trailing blank line, so concatenating it with part 3b runs the two sections together.
-3. **Authoring comments are shipped.** `<!-- If issue ref present: … -->` and the two
-   `<!-- One bullet per … -->` notes sit *inside* the fenced bodies, so the "no separators added or
-   removed" rule emits them into the real attachment. Harmless but near-certainly unintended; if
-   they should be stripped, this section is the only thing that can decide it.
+DR_CONCERNS="$(section_bullets "$DR_FILE" 'Issues Found')"
+DR_CONCERNS="${DR_CONCERNS:-(none flagged)}"
+QA_NOTES="$(section_bullets "$QA_FILE" 'Results')"
+QA_NOTES="${QA_NOTES:-(none)}"
 
-## Data sources
+if [[ -n "$ISSUE_REF" ]]; then
+  ISSUE_LINE="- Issue: #${ISSUE_REF} — include \`Closes #${ISSUE_REF}\` in the PR body to auto-close on merge."
+else
+  ISSUE_LINE=""
+fi
 
-### Git & branch state
+# ----------------------------------------------------------- rendering ----
 
-| Field | Source |
-|-------|--------|
-| Current branch | `git rev-parse --abbrev-ref HEAD` |
-| Branch (PR head) | `state.json § facts.branch` — **planned** name from PL start. **Validate first** (`^[A-Za-z0-9._/-]+$` — `project-manager.md § Validating facts.branch`). Push: `git push -u origin HEAD:refs/heads/<facts.branch>` (topology-independent) |
-| Target / base branch | One resolution order, highest first: `$FN_BASE_REF`, `state.json § metadata.base_ref`, `state.json § git.base_branch`, `workspace.json § git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then unresolved (no literal fallback). Canonical: `handoff-protocol.md § state.json schema`; implemented in `fn-preflight.sh` `resolve_base_ref` |
-| Uncommitted change count | `git status --porcelain \| wc -l` |
-| Upstream tracked? | `git rev-parse --abbrev-ref --symbolic-full-name @{u}` (non-zero exit = no upstream) |
+substitute() {
+  # Reads $1, resolves every placeholder, writes back. The `X` sentinel keeps
+  # command substitution from eating the template's trailing newlines, which
+  # the byte-equivalence contract in conductor-attachments.md depends on.
+  local f="$1" c
+  c="$(cat "$f"; printf 'X')"
+  c="${c%X}"
 
-### Plan, issue & verdict fields
+  # `<N>` is overloaded in the source template — it is the uncommitted count in
+  # part 1/part 3 and the ISSUE number in part 7's `Closes #<N>` checklist row.
+  # Substituting it globally would rewrite the checklist, so both intended
+  # sites are matched with their surrounding text instead.
+  c="${c//- Uncommitted changes: <N>/- Uncommitted changes: ${UNCOMMITTED}}"
+  c="${c//The worktask reports \`<N>\`/The worktask reports \`${UNCOMMITTED}\`}"
 
-| Field | Source |
-|-------|--------|
-| Conventional-commit type | `state.json § facts.goal` via `branch-lib.sh:derive_type` (`git-conventions.md § Branch Naming`); defaults to `feature`. Not the plan — no template emits `## Goal` |
-| Plan document (other fields) | `FN0.metadata.plan_file` (basename; `handoff-protocol.md § plan_file shape boundary`), else newest `.context/planning-*.md` |
-| Issue ref | `workspace.json § issue_number` (milestone mode) or `metadata.issue_ref` from PL0; else omit |
-| DR verdict | First "Approval Status" line in `.context/developer-review-N.md` (N from `run_index`) |
-| QA verdict | First "GO/NO-GO" line in `.context/testing-N.md` (N from `run_index`) |
-| DR concerns | Lines under `## Issues Found` in `.context/developer-review-N.md` |
-| QA blocking defects | Lines under `## Results` flagged blocking in `.context/testing-N.md` |
-| Worktask ID | `PL0.metadata.worktask_id` |
-| Timestamp | ISO 8601, UTC, second precision |
+  if [[ -n "$ISSUE_LINE" ]]; then
+    c="${c//<ISSUE_LINE>/${ISSUE_LINE}}"
+  else
+    c="${c//<ISSUE_LINE>$'\n'/}"
+  fi
+  if [[ -n "$ISSUE_REF" ]]; then
+    c="${c//<ISSUE>/${ISSUE_REF}}"
+  fi
 
-### Probe & placeholder fields
+  c="${c//<WORKTASK_ID>/${WORKTASK_ID}}"
+  c="${c//<ISO_TS>/${ISO_TS}}"
+  c="${c//<BASE_BRANCH>/${BASE_BRANCH}}"
+  c="${c//<BRANCH>/${BRANCH}}"
+  c="${c//<UPSTREAM_LINE>/${UPSTREAM_LINE}}"
+  c="${c//<TYPE>/${COMMIT_TYPE}}"
+  c="${c//<DR_VERDICT>/${DR_VERDICT}}"
+  c="${c//<QA_VERDICT>/${QA_VERDICT}}"
+  c="${c//<DR_CONCERNS_BULLETS>/${DR_CONCERNS}}"
+  c="${c//<QA_NOTES_BULLETS>/${QA_NOTES}}"
 
-| Field | Source |
-|-------|--------|
-| Existing PR URL (idempotency probe) | `gh pr view --json url,state -q '"\(.state) \(.url)"' 2>/dev/null` (empty = no PR). Resolved by the consumer agent at execute time, NOT by the FN-stage writer |
-| `<CLOSES_LINE>` placeholder | `Closes #<ISSUE>` if `ISSUE_REF` present, else empty line |
-| `<ISSUE_LINE>` placeholder | `- Issue: #<ISSUE> — include \`Closes #<ISSUE>\` in the PR body to auto-close on merge.` if `ISSUE_REF` present, else empty string (line omitted) |
-| `<UPSTREAM_LINE>` placeholder | `Upstream tracking: origin/<BRANCH>.` if `git rev-parse @{u}` succeeds, else `No upstream branch yet — use \`git push -u origin <BRANCH>\`.` |
+  printf '%s' "$c" > "$f"
+}
 
-## Template — `PR instructions.md`
-
-**Emission rule**: the attachment file content is the concatenation of the fenced bodies of the `Template part N` blocks below, in order (part 1 first), with no separators added or removed — template text is byte-equivalent to the original single template.
-
-#### Template part 1
-
-~~~markdown
+write_pr_instructions() {
+  local out="$1"
+  cat > "$out" <<'PRESEED_EOF'
 <!-- Generated by company-workflow FN stage. worktask_id: <WORKTASK_ID>, ts: <ISO_TS> -->
 
 The company-workflow worktask has finished and is ready to ship.
@@ -139,11 +256,6 @@ The company-workflow worktask has finished and is ready to ship.
 
 The user requested a PR. Follow the steps below.
 
-~~~
-
-#### Template part 2
-
-~~~markdown
 ## 0. Skill precedence
 
 If you have any skill related to creating PRs, invoke it now. Instructions there take precedence over this file.
@@ -152,29 +264,15 @@ If you have any skill related to creating PRs, invoke it now. Instructions there
 
 - Check for an existing PR: `gh pr view --json url,state -q '"\(.state) \(.url)"' 2>/dev/null`. If one exists and is **OPEN**, push new commits to its branch and **stop** — do not open a duplicate. Report the existing URL.
 - `git fetch origin <BASE_BRANCH>` and confirm no merge conflicts: `git merge-tree $(git merge-base HEAD origin/<BASE_BRANCH>) HEAD origin/<BASE_BRANCH>` (empty output = clean).
-~~~
-
-#### Template part 3
-
-~~~markdown
 - Self-review the diff with `mcp__conductor__GetWorkspaceDiff` (start `stat: true`, then drill into hot files). Look for: debug prints, commented-out code, hardcoded secrets/keys, unintended large binaries, unrelated formatting churn. If any are found, fix them and add a follow-up commit before continuing — do not push junk.
 - Confirm working tree is clean: `git status --porcelain` should be empty (or only intentional WIP). The worktask reports `<N>` uncommitted changes; reconcile any drift before pushing.
 - The branch was already named once, at the start of planning (`skills/shared/git-conventions.md § Branch Naming`) — nothing renames it here.
-~~~
 
-#### Template part 3b
-
-~~~markdown
 ## 2. Push
 
 - Validate `facts.branch` (`^[A-Za-z0-9._/-]+$`; empty/failed → plain push), then push under the ledger name: `git push -u origin HEAD:refs/heads/<facts.branch>`. Otherwise, if upstream is already set to that name, plain `git push`.
 - Do **NOT** amend or squash existing commits unless the user explicitly asks. The worktask's commit boundaries carry stage context.
 
-~~~
-
-#### Template part 4
-
-~~~markdown
 ## 3. Open the PR
 
 Run `gh pr create --base <BASE_BRANCH>` with:
@@ -201,35 +299,15 @@ Run `gh pr create --base <BASE_BRANCH>` with:
   Closes #<ISSUE>
   ```
 
-~~~
-
-#### Template part 5
-
-~~~markdown
   **Visual evidence section** (between `## Test plan` and `## Notes`): on a UI-change run, run `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and insert its stdout verbatim. The helper self-gates — it prints the `## Visual evidence` block (hosted image refs + manifest reference) when `metadata.requires_screenshots == true` AND captures exist, and prints **nothing** otherwise (flag false / no captures). Insert the block only when stdout is non-empty; never hand-author the section. Image hosting reuses the publish-helper host tiers; the manifest reference is path-free, so no `.context/` path reaches the body. Invoke it unconditionally; the empty-stdout case omits the section. `fn-preflight.sh pr-body` verifies the helper's `visual_evidence_pr_emitted` row for **this** run and blocks a body that dropped the block — a hand-authored body will not pass, and it then runs `pr-body-lint.sh` (warn-only) over the sanitised body.
 
-~~~
-
-#### Template part 5b — degraded visual evidence
-
-~~~markdown
   **If captures exist but none embedded**, the helper prints a `NOTICE` on stderr and writes a `visual_evidence_degraded` audit row carrying `captured`, `embedded` and a `reason`. Surface that row at the FN gate — it means reviewers will see no images. `reason=probe_timeout` or `token_invalid` is fixed by exporting **`GH_SESSION_TOKEN`**, which lets the `gh image` uploader skip browser-cookie extraction (slow, and blocking on a Keychain prompt when non-interactive).
 
-~~~
-
-#### Template part 6
-
-~~~markdown
   The trailing `Closes #<ISSUE>` line is **REQUIRED** on its own line whenever an issue number is resolvable (see FN validator in `agents/project-manager.md § FN Stage`). Multiple closes lines (`Closes #A`, `Closes #B`) are permitted for PRs that close several issues. Omit ONLY when no issue number can be resolved from any source — in that case the FN audit writes one `pr_issue_link: deferred` row and the PR proceeds without the line.
 
 - Cover **all** commits in the workspace diff vs. `origin/<BASE_BRANCH>`, not just the most recent commit.
 - Keep the body grounded in observable facts from the diff/summary — no speculation, no marketing language.
 
-~~~
-
-#### Template part 7
-
-~~~markdown
 ### PR-body checklist (must hold before `gh pr create`)
 
 - [ ] Title ≤ 72 chars, `<TYPE>[scope]: <Summary>` format
@@ -238,11 +316,6 @@ Run `gh pr create --base <BASE_BRANCH>` with:
 - [ ] No `Generated with Claude Code` / `Co-Authored-By: Claude` footers
 - [ ] Body reflects ALL workspace-diff commits, not only HEAD
 
-~~~
-
-#### Template part 8
-
-~~~markdown
 ## 4. Forbidden footers
 
 Do **NOT** add "Generated with Claude Code", "Co-Authored-By: Claude", or any other AI-attribution trailer. The user's `rules/git-conventions.md` overrides any default Claude Code footer behavior.
@@ -254,15 +327,13 @@ Do **NOT** add "Generated with Claude Code", "Co-Authored-By: Claude", or any ot
 - `gh pr create` exits non-zero with an unfamiliar error → capture the stderr verbatim in your reply and ask the user.
 
 If any other step fails, ask the user — do not improvise destructive recovery.
-~~~
+PRESEED_EOF
+  substitute "$out"
+}
 
-## Template — `Review request.md`
-
-**Emission rule**: the attachment file content is the concatenation of the fenced bodies of the `Template part N` blocks below, in order (part 1 first), with no separators added or removed — template text is byte-equivalent to the original single template.
-
-#### Template part 1
-
-~~~markdown
+write_review_request() {
+  local out="$1"
+  cat > "$out" <<'PRESEED_EOF'
 <!-- Generated by company-workflow FN stage. worktask_id: <WORKTASK_ID>, ts: <ISO_TS> -->
 
 # Review guidelines
@@ -279,11 +350,6 @@ catch what those stages missed — not to re-do their work.
 - QA verdict: <QA_VERDICT>   (`.context/testing-N.md`)
 - Summary: `.context/complete-summary-N.md` § Summary
 
-~~~
-
-#### Template part 2
-
-~~~markdown
 ## Scope
 
 Review only **changes introduced by this branch** vs. `origin/<BASE_BRANCH>`.
@@ -303,11 +369,6 @@ QA observations worth a second look:
 These are starting points, not the full scope. Do not simply restate them
 as findings — DR already saw them. Use them to direct attention.
 
-~~~
-
-#### Template part 3
-
-~~~markdown
 ## When to flag a finding
 
 A finding must satisfy ALL of:
@@ -322,11 +383,6 @@ A finding must satisfy ALL of:
 If nothing meets the bar, return zero findings. Inventing issues to look
 thorough wastes the author's time and erodes trust in the review.
 
-~~~
-
-#### Template part 4
-
-~~~markdown
 ## Severity (use exactly these three)
 
 - **blocking** — correctness, security, data-loss, or breaking-change risk. Must fix before merge.
@@ -335,11 +391,6 @@ thorough wastes the author's time and erodes trust in the review.
 
 Severity must match impact. Do not inflate to be heard.
 
-~~~
-
-#### Template part 5
-
-~~~markdown
 ## Do NOT flag
 
 - Style or formatting if the linter passes.
@@ -350,11 +401,6 @@ Severity must match impact. Do not inflate to be heard.
 - Speculative future scaling concerns with no current impact.
 - Items DR or QA already explicitly accepted (see Focus areas above).
 
-~~~
-
-#### Template part 6
-
-~~~markdown
 ## Comment style
 
 - One comment per distinct issue. Use a multi-line range only when needed.
@@ -363,11 +409,6 @@ Severity must match impact. Do not inflate to be heard.
 - Tone: matter-of-fact, not accusatory; not flattering. No "Great job", no "Thanks for".
 - Prefer questions over commands when uncertain ("What happens if `items` is empty?" beats "Add a length check.").
 
-~~~
-
-#### Template part 7
-
-~~~markdown
 ## Getting the diff
 
 Prefer `mcp__conductor__GetWorkspaceDiff` (start with `stat: true`, then request specific files).
@@ -386,11 +427,6 @@ If the diff exceeds ~1000 changed lines, focus on the highest-risk files
 first (auth, persistence, public APIs, config). Note in your summary that
 review was scoped due to size — do not silently skip files.
 
-~~~
-
-#### Template part 8
-
-~~~markdown
 ## Output
 
 1. **Inline comments first** — post via `mcp__conductor__DiffComment`, one per unique issue, severity prefix (e.g. `**blocking**: …`).
@@ -415,17 +451,41 @@ If verdict is **approve** with zero findings, write only:
 ## Review summary
 Verdict: approve. No findings meet the bar.
 ```
-~~~
+PRESEED_EOF
+  substitute "$out"
+}
 
-## Idempotency
+emit() {
+  local dir="$WORKDIR/.context/attachments"
+  mkdir -p "$dir"
+  write_pr_instructions "$dir/PR instructions.md"
+  write_review_request "$dir/Review request.md"
+  printf '%s\n' "$dir/PR instructions.md" "$dir/Review request.md"
+}
 
-Both files are overwritten on every FN run. The header comment
-(`worktask_id` + `ts`) provides traceability without requiring append-only
-history. Stage agents that run after FN MUST NOT modify these files.
+# ----------------------------------------------------------- self-test ----
 
-## Cross references
+if [[ "$MODE" == "self-test" ]]; then
+  td="$(mktemp -d -t preseed-selftest-XXXXXX)"
+  trap 'rm -rf "$td"' EXIT
+  WORKDIR="$td"; BASE_BRANCH="main"; BRANCH="feature/x"; WORKTASK_ID="self-test"
+  UNCOMMITTED=0; UPSTREAM=""; UPSTREAM_LINE="No upstream branch yet — use \`git push -u origin ${BRANCH}\`."
+  mkdir -p "$td/.context"
+  emit >/dev/null
+  rc=0
+  for f in "$td/.context/attachments/PR instructions.md" "$td/.context/attachments/Review request.md"; do
+    [[ -s "$f" ]] || { printf >&2 'FAIL: %s not written\n' "$f"; rc=1; }
+    # Every placeholder the § Data sources table defines must be resolved. The
+    # skeleton's own angle-bracket prose (<Change 1>, <severity>, …) is not a
+    # placeholder, so the check is on the exact token list, not on `<...>`.
+    if grep -qE '<(WORKTASK_ID|ISO_TS|BRANCH|BASE_BRANCH|UPSTREAM_LINE|DR_VERDICT|QA_VERDICT|DR_CONCERNS_BULLETS|QA_NOTES_BULLETS|ISSUE_LINE)>' "$f"; then
+      printf >&2 'FAIL: unresolved placeholder in %s\n' "$f"; rc=1
+    fi
+  done
+  if [[ $rc -eq 0 ]]; then
+    echo "PASS: attachments-preseed.sh --self-test"
+  fi
+  exit "$rc"
+fi
 
-- `agents/project-manager.md § FN Stage` — the writer
-- `skills/shared/stage-contracts.md` § FN row — validation
-- `skills/worktask/SKILL.md § FN Gate` — pre-FN summary (separate artifact, not these files)
-- `rules/git-conventions.md` — commit format referenced from `PR instructions.md`
+emit

@@ -7,6 +7,13 @@
 #   - prefix-lint <log.jsonl>: consistent sections => "no drift", exit 0;
 #     drifted sections => "DRIFT" on stderr, exit 1
 #   - --self-test => "ALL PASS", exit 0
+#
+# RK5 (stderr honesty): the diagnostics below are asserted against the stream
+# that actually carries them, via `run_script_env --separate-stderr`. Under a
+# plain `run` the two streams are merged into $output, so every "on stderr"
+# claim in this file was satisfied by a message printed on stdout — and the
+# reverse. Each test now also pins the OTHER stream, which is what makes the
+# routing itself falsifiable.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 SCRIPT="skills/worktask/scripts/cache-lint.sh"
@@ -56,41 +63,51 @@ EOF
 }
 
 @test "happy: --anchor-lint on a complete DV artifact passes (exit 0, 'ok')" {
-  run bash "$PLUGIN_ROOT/$SCRIPT" --anchor-lint "$WD/development-0.md"
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/development-0.md"
   assert_success
   assert_output --partial "ok"
 }
 
 @test "failure: --anchor-lint on a DV artifact missing required H2s fails (exit 1)" {
-  run bash "$PLUGIN_ROOT/$SCRIPT" --anchor-lint "$WD/incomplete-dev.md"
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/incomplete-dev.md"
   assert_failure 1
-  assert_output --partial "FAIL"
-  assert_output --partial "missing"
+  [[ "$stderr" == *"FAIL"* ]]
+  [[ "$stderr" == *"missing"* ]]
+  # The failure is a diagnostic, not output a caller would consume.
+  assert_output ""
 }
 
 @test "happy: prefix-lint with stable sections reports no drift (exit 0)" {
-  run bash "$PLUGIN_ROOT/$SCRIPT" "$WD/stable.jsonl"
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/stable.jsonl"
   assert_success
   assert_output --partial "no drift"
+  # A clean run is silent on stderr.
+  assert_equal "$stderr" ""
 }
 
 @test "failure: prefix-lint with drifted contract-reminder reports DRIFT (exit 1)" {
-  run bash "$PLUGIN_ROOT/$SCRIPT" "$WD/drift.jsonl"
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/drift.jsonl"
   assert_failure 1
-  assert_output --partial "DRIFT"
+  # The header claims "DRIFT on stderr" — assert exactly that, and that stdout
+  # stays clean so a consumer piping stdout sees nothing misleading.
+  [[ "$stderr" == *"DRIFT"* ]]
+  [[ "$stderr" == *"section [1] contract-reminder"* ]]
+  assert_output ""
 }
 
 @test "failure: prefix-lint catches an ISO-8601 timestamp in section [2] (REQ-3/AC-4)" {
-  run bash "$PLUGIN_ROOT/$SCRIPT" "$WD/forbidden-timestamp.jsonl"
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/forbidden-timestamp.jsonl"
   assert_failure 1
-  assert_output --partial "forbidden-token-lint"
-  assert_output --partial "timestamp"
+  [[ "$stderr" == *"forbidden-token-lint"* ]]
+  [[ "$stderr" == *"timestamp"* ]]
+  assert_output ""
 }
 
 @test "happy: prefix-lint with no forbidden tokens still reports no drift (REQ-3/AC-4)" {
-  run bash "$PLUGIN_ROOT/$SCRIPT" "$WD/forbidden-clean.jsonl"
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/forbidden-clean.jsonl"
   assert_success
   assert_output --partial "no drift"
+  assert_equal "$stderr" ""
 }
 
 @test "happy: --filename-lint on canonical artifacts passes (exit 0, 'canonical')" {

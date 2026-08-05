@@ -16,7 +16,7 @@ Bash via kcov or documented assertion-density proxy (macOS case).
 
 | Tool | Status | Notes |
 |------|--------|-------|
-| kcov (bash) | **Installed via brew** (`kcov 43` at `/opt/homebrew/bin/kcov`) | Tier-1 system probe found nothing; tier-2 brew succeeded. All bash/shell scripts are instrumentable. |
+| kcov (bash) | **Installed but UNUSABLE on macOS** (`kcov 43` at `/opt/homebrew/bin/kcov`) | Present, so it *is* the default `make coverage` path — and it runs away there: a bounded probe produced 352 MB of output in 90 s without completing a single target. It mis-parses bash 3.2's `BASH_VERSINFO` guards. Real line coverage requires a GNU/Linux host (bash ≥4); on macOS the assertion-density proxy below is the gate. |
 | coverage.py (python) | **opportunistic** | When installed: measures `tests/python` + `benchmark/harness/tests` via `python3 -m unittest`. When absent: behavioral/gate assertions remain hard gate, no clean-clone dependency. |
 | swift test --enable-code-coverage (Swift) | **Built into the Swift 6 toolchain** | llvm-cov export JSON per package (`swift test --show-codecov-path`); aggregate line gate via jq. |
 
@@ -68,7 +68,7 @@ requirement on clean clones.
 
 | Package | Suite size | Coverage approach |
 |---------|-----------|-------------------|
-| `benchmark/harness` (benchmarkkit + benchmarklive) | 95 tests / 16 modules | opportunistic coverage.py |
+| `benchmark/harness` (benchmarkkit + benchmarklive) | 202 tests / 16 modules | opportunistic coverage.py |
 
 Harness tests exercise the schema decoder (vendored history.json), rotation,
 generators (real `swift test` on generated apps), deterministic/live pipelines,
@@ -94,10 +94,25 @@ without completing. Per the LOCKED plan's open-question q3, where no coverage to
 use the **assertion-density proxy**: every shell script has a dedicated test file with ≥3 real
 scenario `@test`s (happy / edge / failure-exit) asserting its documented contracts.
 
-- **32/32** shell scripts + hooks have a dedicated `.bats` file (path-keyed where basenames
-  collide); **34/34** total deterministic targets covered (incl. 2 Python).
-- **499** `@test` assertions across the shell suite; **min 3 / avg ~10 / max 25** per file.
-- Highest-density (high-logic) targets: `state-patch` 25 (4 conditional-edge cases added in 3.42.0), `handoff-harness` 14 (7 AR->DV gate cases added in 3.42.0), `scan-secrets` 14, `cache-lint` 12 (4 filename-grammar cases added in 3.42.0), `post-compact-recovery`/`milestone-helpers`/`map-and-filter`/`agent-coordination__audit-dedup` 9, `build-orchestrator`/`changelog-from-git` 8.
+- **43/43** shell scripts + hooks have a dedicated `.bats` file (path-keyed where basenames
+  collide); **45/45** total deterministic targets covered (43 shell + 2 Python). **Zero exemptions.**
+- **680** `@test` assertions across **53** `.bats` files — the 43 script-dedicated files plus 10
+  meta / repo-invariant files that guard contracts rather than one script. **Min 3 / avg ~13 / max 58**
+  per file; the ≥3 rule now has no exceptions.
+- Highest-density targets: `test-execution-gate` 58, `branch-name.sh` 57, `branch-lib` 44,
+  `fn-preflight` 41, `state-patch` 25, `test-helper` 23, `pr-body-lint` 19,
+  `attach-visual-evidence`/`milestone-helpers` 18, `scan-secrets` 17,
+  `publish-pl-issue`/`handoff-harness` 14.
+
+**These counts are regenerated, never incremented** — they and `tests/README.md`'s had drifted apart
+(34/34 here against 36/36 there, both wrong). Re-derive with the commands recorded in
+`tests/README.md § Bash`; both documents must be regenerated from the same run.
+
+`tests/shell/meta/coverage-proxy.bats` enforces the first bullet as an **executable** gate: it walks
+`hooks/*.sh`, `.claude/hooks/*.sh` and `skills/**/scripts/*.sh` and fails if any script lacks a
+dedicated `.bats` with ≥3 `@test`. Its checker takes the repo root and tests root as arguments, so
+its own failure paths (under-tested script, absent test file) are exercised against synthetic trees
+rather than merely described. Dropping coverage now costs a reviewed diff.
 
 To measure real bash line coverage, run `make coverage` on a **GNU/Linux** host (bash ≥4 +
 kcov) where the `make coverage` target now works (the `$#`-expansion bug in the kcov stem
@@ -121,6 +136,9 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `hooks/dv-screenshot-gate.sh` | `tests/shell/hooks/dv-screenshot-gate.bats` | — | — | — |
 | `hooks/megatask-monitor.sh` | `tests/shell/hooks/megatask-monitor.bats` | — | — | — |
 | `hooks/precompact-checkpoint.sh` | `tests/shell/hooks/precompact-checkpoint.bats` | — | — | — |
+| `hooks/comment-standard-context.sh` | `tests/shell/hooks/comment-standard-context.bats` | — | — | — |
+| `hooks/dv-comment-density-gate.sh` | `tests/shell/hooks/comment-density-gate.bats` (aliased) | — | — | — |
+| `hooks/test-execution-gate.sh` | `tests/shell/hooks/test-execution-gate.bats` | — | — | — |
 | `.claude/hooks/state-merge.sh` | `tests/shell/hooks/state-merge.bats` | — | — | — |
 
 ### Shell scripts — dv-screenshot (DV0c, kcov)
@@ -131,6 +149,8 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/dv-screenshot-capture/scripts/cli-fallback.sh` | `tests/shell/dv-screenshot/cli-fallback.bats` | — | — | — |
 | `skills/dv-screenshot-capture/scripts/size-budget.sh` | `tests/shell/dv-screenshot/size-budget.bats` | — | — | — |
 | `skills/dv-screenshot-capture/scripts/visual-diff.sh` | `tests/shell/dv-screenshot/visual-diff.bats` | — | — | — |
+| `skills/dv-screenshot-capture/scripts/web-capture.sh` | `tests/shell/dv-screenshot/web-capture.bats` | — | — | — |
+| `skills/dv-screenshot-capture/scripts/android-capture.sh` | `tests/shell/dv-screenshot/android-capture.bats` | — | — | — |
 
 ### Shell scripts — worktask-core (DV0a, kcov)
 
@@ -144,9 +164,13 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/detect-ui-change.sh` | `tests/shell/worktask/detect-ui-change.bats` | — | — | — |
 | `skills/worktask/scripts/handoff-harness.sh` | `tests/shell/worktask/handoff-harness.bats` | — | — | — |
 | `skills/worktask/scripts/hook-install.sh` | `tests/shell/worktask/hook-install.bats` | — | — | — |
+| `skills/worktask/scripts/attachments-preseed.sh` | `tests/shell/worktask/attachments-preseed.bats` | — | — | — |
 | `skills/worktask/scripts/attachments-preseed-test.sh` | `tests/shell/worktask/attachments-preseed-test.bats` | — | — | — |
 | `skills/worktask/scripts/state-patch.sh` | `tests/shell/worktask/state-patch.bats` | — | — | — |
 | `skills/worktask/scripts/pr-body-lint.sh` | `tests/shell/worktask/pr-body-lint.bats` | — | — | — |
+| `skills/worktask/scripts/branch-name.sh` | `tests/shell/worktask/branch-name.sh.bats` | — | — | — |
+| `skills/worktask/scripts/branch-lib.sh` | `tests/shell/worktask/branch-lib.bats` | — | — | — |
+| `skills/worktask/scripts/fn-preflight.sh` | `tests/shell/worktask/fn-preflight.bats` | — | — | — |
 
 ### Shell scripts — other-skill (DV0b, kcov)
 
@@ -169,7 +193,30 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | Source file | Test file | Test methods |
 |-------------|-----------|-----------|
 | `skills/estimation-methodology/scripts/estimate-calc.py` | `tests/python/test_estimate_calc.py` | 21 |
-| `skills/appstore-screenshots/scripts/layout-calc.py` | `tests/python/test_layout_calc.py` | 17 |
+| `skills/appstore-screenshots/scripts/layout-calc.py` | `tests/python/test_layout_calc.py` | 16 |
+
+### Meta / repo-invariant tests (no single source script — not part of the 43)
+
+These 10 files guard cross-cutting contracts, so they have no row in the tables above and are
+excluded from the 43/43 denominator. They are counted in the 53 `.bats` / 680 `@test` totals.
+
+| Test file | Contract guarded |
+|-----------|------------------|
+| `tests/shell/meta/coverage-proxy.bats` | Every shell script has a dedicated `.bats` with ≥3 `@test`; exemption list stays empty and cannot outlive its script |
+| `tests/shell/lib/test-helper.bats` | The frozen `test_helper.bash` API — child-only env mutation, stream splitting, stub/mock behaviour |
+| `tests/shell/skills/test-authority-matrix.bats` | Stage test-execution authority table |
+| `tests/shell/skills/cross-plugin-refs.bats` | Every cross-plugin command/agent reference resolves |
+| `tests/shell/skills/plugin-root-refs.bats` | `${CLAUDE_PLUGIN_ROOT}` composed-token grammar (a **predicate**, not a frozen line count — see below) |
+| `tests/shell/worktask/artifact-map-parity.bats` | Stage↔artifact map matches `ARTIFACT_RE` |
+| `tests/shell/worktask/manifest-parity.bats` | `plugin.json` / `marketplace.json` / filesystem / README version + registration parity |
+| `tests/shell/worktask/gh-issue-dedup.bats` | Issue dedupe-anchor contract |
+| `tests/shell/benchmark/run-benchmark.bats` | The paid-dispatch barrier — no `--live`, no spend |
+| `tests/shell/benchmark/canvas-e2e-guards.bats` | Canvas E2E audit-row gate |
+
+**Note for anyone editing docs:** `plugin-root-refs.bats` used to freeze a markdown line count at 5
+and a literal whitelist of files, which made routine documentation edits red the suite. Both arms
+were replaced by a grammar predicate over each occurrence plus explicit growth-tolerance tests, so
+adding docs and agents no longer requires touching this test.
 
 ## Proxy exemptions (QA fills; each must name a specific file + reason)
 

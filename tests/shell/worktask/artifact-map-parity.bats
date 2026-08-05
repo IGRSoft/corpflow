@@ -87,15 +87,27 @@ EOF
   # The regex is structured differently (development carries an optional
   # -<stream> suffix and sits outside the alternation), so assert coverage by
   # matching a real path per stage rather than comparing text.
+  # Both the self-test and the regex extraction are loop-invariant: run each
+  # once. Repeating them per stage cost 13 subprocess pairs and asserted the
+  # same thing 13 times.
+  run bash "$PLUGIN_ROOT/hooks/anchor-preflight.sh" --self-test
+  assert_success
+
+  local artifact_re
+  artifact_re="$(grep -oE "ARTIFACT_RE='[^']+'" "$PLUGIN_ROOT/hooks/anchor-preflight.sh" \
+    | sed "s/ARTIFACT_RE='//; s/'$//")"
+  [ -n "$artifact_re" ]
+
   local stage base rc=0
   while IFS='=' read -r stage base; do
-    run bash "$PLUGIN_ROOT/hooks/anchor-preflight.sh" --self-test
-    assert_success
-    printf '%s' ".context/${base}-0.md" \
-      | grep -qE "$(grep -oE "ARTIFACT_RE='[^']+'" "$PLUGIN_ROOT/hooks/anchor-preflight.sh" | sed "s/ARTIFACT_RE='//; s/'$//")" \
+    printf '%s' ".context/${base}-0.md" | grep -qE "$artifact_re" \
       || { echo "ARTIFACT_RE does not accept .context/${base}-0.md (stage=$stage)"; rc=1; }
   done < <(expected_map)
   [ "$rc" -eq 0 ]
+  # Falsification guard: the regex must not accept an arbitrary artifact name,
+  # or the coverage loop above would pass no matter what the map contained.
+  run bash -c 'printf "%s" ".context/not-an-artifact-0.md" | grep -qE "$1"' _ "$artifact_re"
+  assert_failure
 }
 
 @test "parity: handoff-protocol.md #stage-artifact-map matches the canonical map" {

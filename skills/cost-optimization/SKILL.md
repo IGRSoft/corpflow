@@ -178,6 +178,12 @@ for the `/cost-report` aggregator and the FN-stage timing recap.
 
 ### SubagentStop Hook
 
+**This capture is opt-in and is not shipped with the plugin.** There is no `cost-log.sh` in this
+repository — `.claude/hooks/` contains only `state-merge.sh`. To enable cost capture you create the
+script yourself from the body below (any path you like; the wiring is shown at
+`.claude/hooks/cost-log.sh` purely as a convention) and register it in your project settings. If you
+have never done this, no cost JSONL exists and `/cost-report` has nothing to aggregate.
+
 Add to project `settings.json`:
 
 ```json
@@ -194,7 +200,7 @@ Add to project `settings.json`:
 }
 ```
 
-### Capture Script (`.claude/hooks/cost-log.sh`)
+### Capture Script — create this yourself (suggested path `.claude/hooks/cost-log.sh`)
 
 ```bash
 #!/usr/bin/env bash

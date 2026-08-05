@@ -165,6 +165,33 @@ no_screenshots() {
   assert_output --partial "fast-forward safe"
 }
 
+@test "continuity: a diverged HEAD records the cherry-pick fallback and still exits 0" {
+  # Carried from DV2/DV3: only the ancestor arm was covered, so the branch that
+  # actually changes FN0's merge strategy had no test at all.
+  cd "$WD"
+  git init -q .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
+  git branch -q integration
+  # One commit on the checked-out branch that `integration` does not carry, so
+  # HEAD is not an ancestor of it.
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "worktask work"
+  jq '.metadata.base_ref="integration"' .context/state.json > s && mv s .context/state.json
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" continuity
+  # Divergence is a documented fallback, not a hard block.
+  assert_success
+  [[ "$stderr" == *"diverged"* ]]
+  [[ "$stderr" == *"cherry-pick"* ]]
+  # commit_count is the observable that proves the divergence was MEASURED rather
+  # than merely detected — a row with the right verdict but a wrong/zero count
+  # would mean the operator is told nothing about how much work is at risk.
+  run jq -se 'map(select(.action=="branch_continuity"))[-1]
+              | [.result, .metadata.integration_branch, .metadata.commit_count]' \
+    .context/logs/audit.jsonl
+  assert_output --partial '"diverged_cherry_pick"'
+  assert_output --partial '"integration"'
+  assert_output --partial '1'
+}
+
 # ---------------------------------------------------------------------------
 # pr-body — body-composition gate (REQ-4/REQ-5/REQ-6)
 # ---------------------------------------------------------------------------

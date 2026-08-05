@@ -502,7 +502,8 @@ DV's `.context/images/<worktask_id>/screenshots.md` manifest
 carries an optional trailing `Design Ref` column populated with the matching
 `figma-registry.md` row `ID` (see `skills/dv-screenshot-capture/SKILL.md § Registry
 tagging`). QA joins `screenshots.md.Design Ref → figma-registry.md.ID` by ID equality;
-the mapped DV image is both the RMSE `--candidate` (`scripts/visual-diff.sh`) and the
+the mapped DV image is both the RMSE `--candidate`
+(`skills/dv-screenshot-capture/scripts/visual-diff.sh`) and the
 vision input. Live re-capture is the fallback only — used when no DV image maps.
 
 #### Verdict reconciliation (by reference)

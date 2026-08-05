@@ -143,7 +143,11 @@ build_orchestrator() {
            scan("#(\\d+)") | .[0] | tonumber | select(. > 0) |
            {from: ., to: $iss.number} ]) +
       # "Blocks" lines: each #N means edge $iss.number -> N
-      ([ $iss.body | scan("(?i)blocks?\\s*:?[^\n]*") |
+      # \b on both sides: an unanchored `blocks?` substring-matches the "Block" in
+      # "Blocked by", which minted a reverse edge on top of the correct one and
+      # turned acyclic graphs into false cycles. The `s?` is kept so the singular
+      # "Block: #N" spelling still registers.
+      ([ $iss.body | scan("(?i)\\bblocks?\\b\\s*:?[^\n]*") |
            scan("#(\\d+)") | .[0] | tonumber | select(. > 0) |
            {from: $iss.number, to: .} ])
     ] | flatten) as $raw_edges |

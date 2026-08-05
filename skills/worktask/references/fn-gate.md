@@ -29,41 +29,48 @@ The Conductor-attachments writer runs on the gated path so later sessions inheri
 
 The writer is unconditional on the gated (`checkpoint`) path; the bypass path falls through to FN-agent Writer 2 (in `agents/project-manager.md § FN Stage`). It is idempotent: every FN-gate entry overwrites both files from scratch. Run it directly — do not delegate to a subagent.
 
-### Step 1 — gather git state
+### Run the writer
 
-Steps:
+One Bash call from the worktask root. The script resolves git state, the ledger
+fields and the DR/QA verdicts itself, then renders both files from
+`skills/worktask/references/conductor-attachments.md`:
 
-1. **Gather all git state in one Bash call** (single tool invocation reduces the chance of abandoning mid-sequence; parse the four values from the output):
+```bash
+skills/worktask/scripts/attachments-preseed.sh
+```
 
-   ```bash
-   mkdir -p .context/attachments
-   echo "BRANCH=$(git rev-parse --abbrev-ref HEAD)"
-   echo "BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo main)"
-   echo "UNCOMMITTED=$(git status --porcelain | wc -l | tr -d ' ')"
-   echo "UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo 'no upstream')"
-   ```
+#### Flags and exit codes
 
-### Steps 2–4 — read plan & verdict inputs
+Exit 0 — both files written, their paths printed. Exit 3 — base branch
+unresolved (below). Exit 2 — usage. Every resolved input has a flag override
+(`--base-branch`, `--commit-type`, `--issue-ref`, `--run-index`,
+`--worktask-id`, `--branch`, `--uncommitted`, `--upstream` / `--no-upstream`,
+`--ts`, `--workdir`); `--help` lists them.
 
-2. `Read: <plan_file>` (resolve via `FN0.metadata.plan_file`; fallback newest `.context/planning-*.md`) → derive COMMIT_TYPE from first match of `\b(fix|refactor|perf|docs|chore|test|ci|build|style|feat)\b` (default `feat`).
-3. `Read: .context/developer-review-N.md` (N = `FN0.metadata.run_index`) → DR_VERDICT, DR_CONCERNS.
-4. `Read: .context/testing-N.md` → QA_VERDICT, QA_NOTES.
-### Steps 5–6 — write attachments
-
-5. `Write: .context/attachments/PR instructions.md` using template in `skills/worktask/references/conductor-attachments.md § Template — PR instructions.md`.
-6. `Write: .context/attachments/Review request.md` using template in `skills/worktask/references/conductor-attachments.md § Template — Review request.md`.
+Do not hand-render the templates. The script is the single implementation both
+of this gate's writer and of the contract `tests/shell/worktask/attachments-preseed.bats`
+pins against `conductor-attachments.md`, so a hand-written copy drifts silently.
 
 Verification is owned by the *Effect, in order* list (step 2 immediately after this writer, step 6 immediately before `return`). Do not skip those — they exist because partial writer completion has happened in practice.
 
 ### Fault tolerance — per-input policy
 
-Each Read is independent; do NOT wrap the whole sequence in a single try/catch — failure of one optional input must not skip the Writes:
+The script applies this policy internally; it is restated here because the
+*Effect, in order* trip-wires and the pre-FN summary depend on it. Field
+sources are canonical in `conductor-attachments.md § Data sources`.
 
 | Input | Required? | If missing |
 |-------|-----------|-----------|
-| Plan file (step 2) | **Required** | Abort writer. Audit `fn_attachments_preseed_failed` with `reason: "plan_file_missing"`. The *Effect, in order* step 2 trip-wire will surface this to the user; do not write empty templates. |
-| `developer-review-N.md` (step 3) | Optional | Defaults: `DR_VERDICT="unknown"`, `DR_CONCERNS="(none flagged)"`. Proceed to write. |
-| `testing-N.md` (step 4) | Optional | Defaults: `QA_VERDICT="unknown"`, `QA_NOTES="(none)"`. Proceed to write. |
+| Base branch | **Required** | Abort: exit 3, audit `fn_attachments_preseed_failed` with `reason: "base_branch_unresolved"`, neither file written. There is deliberately no literal fallback — a guessed base renders the wrong `gh pr create --base`. Pass `--base-branch` or stamp `metadata.base_ref`. |
+| `developer-review-N.md` | Optional | Defaults: `DR_VERDICT="unknown"`, `DR_CONCERNS="(none flagged)"`. Both files are still written. |
+| `testing-N.md` | Optional | Defaults: `QA_VERDICT="unknown"`, `QA_NOTES="(none)"`. Both files are still written. |
+
+#### The plan file is not an input
+
+No template field derives from it: the
+conventional-commit type comes from `facts.goal` via `branch-lib.sh:derive_type`
+per `conductor-attachments.md § Plan, issue & verdict fields`, which states the
+point explicitly ("Not the plan — no template emits `## Goal`").
 
 ## Audit
 

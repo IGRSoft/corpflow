@@ -89,3 +89,49 @@ EOF
   assert_success
   assert_output --partial "self-test OK"
 }
+
+@test "concurrency: simultaneous sweeps leave valid JSON and no lost update" {
+  # Evidence gate for the R4.6 locking decision: SubagentStop/Stop can fire for
+  # several agents at once, so more than one sweep can be reconciling the same
+  # orchestrator.json. This test states what actually happens under that race —
+  # it is the input to whether a lock is needed, not a placeholder for one.
+  _seed_group "$WD"
+  cat > "$WD/.worktrees/milestone-9/41/workspace.json" <<'EOF'
+{ "version":"2.0","isolation":"worktree","execution":{"status":"completed","pr":"https://x/pull/1"} }
+EOF
+  cat > "$WD/.worktrees/milestone-9/42/workspace.json" <<'EOF'
+{ "version":"2.0","isolation":"worktree","execution":{"status":"in_progress"} }
+EOF
+
+  local i
+  for i in 1 2 3 4 5 6 7 8; do
+    env WORKSPACE_ROOT="$WD" CLAUDE_PROJECT_DIR="$WD" \
+      bash "$PLUGIN_ROOT/$SCRIPT" < /dev/null > /dev/null 2>&1 &
+  done
+  wait
+
+  local orch="$WD/.worktrees/milestone-9/orchestrator.json"
+  # 1. The ledger is still parseable — an interleaved partial write would not be.
+  run jq -e . "$orch"
+  assert_success
+  # 2. The settle is applied exactly once: counts stay consistent with 2 issues,
+  #    so no sweep re-applied another's transition on a stale read.
+  run jq -e '
+       (.issues | length) == 2
+    and (.issues[] | select(.number==41) | .status=="completed" and .track==null)
+    and (.issues[] | select(.number==42) | .status=="ready" and ((.blocked_by|length)==0))
+    and (.tracks["1"].issue_number==null)
+    and (.progress.completed==1 and .progress.ready==1
+         and .progress.blocked==0 and .progress.in_progress==0)
+    and ((.progress.completed + .progress.ready + .progress.blocked
+          + .progress.in_progress + .progress.failed) == .progress.total)
+  ' "$orch"
+  assert_success
+  # 3. Every audit line is a complete JSON object (no interleaved append).
+  run bash -c '
+    while IFS= read -r l; do
+      [ -n "$l" ] || continue
+      printf "%s" "$l" | jq -e . > /dev/null || exit 1
+    done < "$1"' _ "$WD/.context/logs/audit.jsonl"
+  assert_success
+}

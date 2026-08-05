@@ -76,7 +76,7 @@ To enable RMSE verdict in the smoke, drop a reference PNG at:
 The reference lives under `.context/designs/` (design reference) and is diffed
 against the DV render in `.context/images/` (candidate) — the same
 `designs/`=reference, `images/`=candidate split QA uses in production. The harness
-will then invoke `scripts/visual-diff.sh`. Without `design-ref.png`, the harness
+will then invoke `skills/dv-screenshot-capture/scripts/visual-diff.sh`. Without `design-ref.png`, the harness
 skips the diff step.
 
 ## Limitations (v1)

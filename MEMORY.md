@@ -4,7 +4,22 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.4** (Gate-revision semantics + 4 rule fixes. The spec carried ONE concept
+- Plugin version: **4.0.5** (Test-suite stringency hardening: 45 `.bats` / 501 `@test` → **53 / 680**,
+  every claim re-derived by mutation rather than ratified. Six production defects fixed, each landing
+  in one commit with the pinned "KNOWN BUG" test flipped to assert correct behaviour. One is a
+  **downstream security disclosure**: `scan-secrets.sh` recovered each rule's regex with a greedy
+  `${entry##*|}`, truncating the only built-in pattern containing an alternation, so **no released
+  version ever detected `mysql://`/`postgres://`/`mongodb://` credentials on any `grep` dialect** —
+  GNU rejects the unmatched `)`, BSD accepts it as a literal, and the `2>/dev/null` hid the former.
+  Runner integrity: `make coverage` no longer discards the Python phase's exit code, `run-tests.sh`
+  reports skipped phases and gains an opt-in `RUN_TESTS_REQUIRE_SWIFT` gate. 7 additive bats helpers
+  (`run_script` frozen, byte-identical); `examples/tictactoe`'s 1817-line byte-identical duplicate of
+  `benchmark/ttt-template` deleted; a `coverage-proxy` meta-gate now reds when a script has no
+  dedicated `.bats`; `state-merge.sh` repairs a corrupt ledger backup-first instead of no-oping.
+  Known-unfinished, disclosed rather than smoothed: `make coverage` is unreachable-clean on macOS
+  (pre-existing kcov runaway), `scan-secrets --self-test` still covers 2 of 6 patterns, and
+  `run-tests.sh`'s clean-clone guarantee silently requires `python3 >= 3.10`.
+  Previous release 4.0.4 — gate-revision semantics + 4 rule fixes. The spec carried ONE concept
   ("a PL invocation") where the pipeline has TWO — a new run (allocate N+1, reset facts, create
   tasks) vs a revision of the run in flight (reuse N, edit in place, preserve facts, update
   tasks); only the first was specified. Plan-gate rejection now routes to
@@ -30,7 +45,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
   rename residuals outside the vendor-identity allow-list, 21 of 42 stale pre-4.0 version gates —
   plus a token-compaction pass, 34,119 → 34,035 tracked markdown lines. Round 2 — user-approved
   aggressive legacy-*logic* removal (13 themes) across hooks, scripts, tests, and the benchmark
-  harness: the dual dedupe-key mechanism (`metadata.dedupe_key_extended` + `hooks/audit-dedup.sh`)
+  harness: the dual dedupe-key mechanism (`metadata.dedupe_key_extended` + `skills/agent-coordination/scripts/audit-dedup.sh`)
   deleted; pre-4.0 `.context/` read-compat dropped (bare-basename artifact resolver rung, pre-#375
   issue-title probe, single-file visual-evidence marker shape, `state.json .git.base_branch`
   fallback); redaction supersets removed (leak risk accepted for pre-4.0 identifiers);
@@ -75,6 +90,17 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-08-05: v4.0.5 — test-suite stringency hardening: 45 `.bats` / 501 `@test` → 53 / 680, bats
+  `skip` directives 1 → 0, and every fix pinned by a mutation that reds only its own file (9 of 9,
+  zero coupling). Six production defects: the `scan-secrets.sh` greedy field split that blinded
+  `database-url` detection in **every released version** (shipped as a downstream security
+  disclosure), `build-orchestrator.sh`'s unanchored `blocks?` inventing dependency cycles from
+  "Blocked by" prose, a redundant second `git diff` in `detect-user-changes.sh`, a case-mismatched
+  `sed` strip in `milestone-helpers.sh`, GNU-only `\s` in `build-context-set.sh`, and
+  `state-merge.sh` no-oping on a corrupt ledger instead of repairing it backup-first. Runner
+  integrity (`make coverage` propagates the Python rc; `run-tests.sh` reports skipped phases),
+  7 additive bats helpers, `attachments-preseed.sh` extracted, `examples/tictactoe`'s 1817-line
+  duplicate deleted, and a `coverage-proxy` meta-gate against future coverage gaps. ~97 paths.
 - 2026-08-05: v4.0.4 — gate-revision semantics: plan-gate rejection is an in-place revision of the
   run in flight (frozen `run_index`/`plan_file`, `plan_revision: true` re-dispatch, additive
   `facts.*` patch, `TaskUpdate` not `TaskCreate`, no issue re-publish, `revision_count` +
@@ -91,7 +117,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
   allow-list (7 files); 21 of 42 stale pre-4.0 version gates (21 kept, still needed to validate old
   ledgers). Compaction: 34,119 → 34,035 tracked markdown lines. **Round 2** (user-approved,
   aggressive scope, 13 themes — hooks/scripts/tests/benchmark): dual dedupe-key mechanism deleted
-  (`metadata.dedupe_key_extended` + `hooks/audit-dedup.sh`); pre-run-index artifact bare-basename
+  (`metadata.dedupe_key_extended` + `skills/agent-coordination/scripts/audit-dedup.sh`); pre-run-index artifact bare-basename
   resolver rung removed; pre-#375 issue-title probe removed; `state.json .git.base_branch`
   fallback removed from the integration-branch chain; single-file visual-evidence marker shape
   dropped; redaction supersets removed (leak risk accepted for pre-4.0 identifiers); benchmark
@@ -184,7 +210,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-07-30: v3.41.0 — branch naming PL-stage entry point + shared library; FN `branch-name` subcommand removed entirely; vocabulary extended to `feature`/`feat` (backward compatible); rank-4 issue resolver tightened; shell-injection hardening (input gate + validation at 3 consumption hops); symlink ACE + CDPATH + audit-row-loss fixes. 340 bats green. ~20 files.
 - 2026-07-29: v3.40.0 — suite fully green (281/0); new cross-plugin-refs contract test caught 2 dangling delegations; web/android capture scripts; android `and-*` agent rename propagated; `deps --upgrade` silent-audit fixed. ~12 files.
 - 2026-07-29: v3.39.0 — platform-agnostic orchestration: 36 XcodeBuildMCP grants removed (DV/DR/QA delegate to `/<plugin>:build-test`), Apple pre-warm deleted, Swift-Testing-for-all-platforms mandate and 4-platform schema gap fixed, Python comment-density and Android UI-detection bugs fixed. ~44 files.
-- 2026-07-29: v3.38.0 — compatible dev-plugin registry + onboarding checklist; ai-engineer wired in; publish-pl-issue prefix-regex leak (5 plugins) and pm-milestone/AR/SR/QA routing gaps fixed. ~15 files.
 ## Token Baselines
 
 Authoritative per-surface baselines: `skills/cost-optimization/references/token-baselines.md`. This file no longer mirrors them.

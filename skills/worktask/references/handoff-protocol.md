@@ -1002,7 +1002,33 @@ Four documented degradation paths. Worktask MUST complete in all four (AC-16, AC
 | Path | Trigger | Behavior |
 |------|---------|----------|
 | F3 | Agent writes artifact **without frontmatter** | Orchestrator logs WARN `frontmatter missing in <artifact>`. Derives minimal handoff: `{stage, verdict: ok, summary: <first 200 chars of return>, refs: {artifact: <path>}}`. Worktask proceeds. |
-| F4 | state.json **corrupt** (invalid JSON or schema mismatch) | Quarantine to `.context/state.json.bad.<unix-ts>`. Regenerate from PL0 + completed-stage frontmatter walk. Audit log to `.context/logs/state-recovery.log`. Continue. |
+| F4 | state.json **corrupt** (invalid JSON or schema mismatch) | Back up to `.context/state.json.corrupt.<iso-ts>`. Rebuild the **skeleton only**, then recover **exactly the one stage being patched** by delegating to `state-patch.sh` unchanged. Audit row `state_repair` in `.context/logs/audit.jsonl`. Continue. |
+
+#### F4 — partial recovery, by design {#f4-partial}
+
+This table previously described a fuller contract than the hook implements. The divergences are the
+shipped behaviour, upheld on review rather than treated as defects.
+
+- **Backup is `.context/state.json.corrupt.<iso-ts>`**, not `.bad.<unix-ts>` — sorting by name sorts
+  by time, and the suffix says what happened.
+- **The audit trail is a `state_repair` row in `.context/logs/audit.jsonl`**, not a separate
+  `state-recovery.log`. One audit surface, not two.
+- **There is no completed-stage frontmatter walk.** The hook rebuilds the skeleton (including an
+  empty `stages: {}`) and recovers only the stage whose patch triggered the repair.
+
+#### F4 — consequences for readers {#f4-consequences}
+
+A repaired ledger can legitimately show **fewer completed stages** than `.context/` contains, since
+earlier stages are not replayed from their artifacts. When reconstructing history after a repair,
+read the artifacts, not the ledger.
+
+The full walk was considered and declined: it would make the hook a second, divergent implementation
+of the artifact parser that `state-patch.sh` already owns.
+
+**Fail-safe.** If the backup itself cannot be written (e.g. unwritable `.context/`), the repair
+aborts, `state.json` is left **byte-identical**, no backup and no audit row are written, and the hook
+still exits 0. Corrupt-and-untouched is the designed outcome; the repair never destroys the original.
+An unchanged ledger is therefore not evidence the hook failed to run.
 
 #### F1 — `context_files` mode {#f1-fallback}
 

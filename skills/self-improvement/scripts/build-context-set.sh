@@ -55,22 +55,25 @@ fi
 # Source 2 — .context/*.md metadata trailers.
 if [ -d "$CONTEXT_DIR" ]; then
   # Parse YAML-ish metadata blocks (`agent: <value>` lines)
-  grep -rhE '^\s*agent:\s*' "$CONTEXT_DIR" 2>/dev/null \
-    | sed -E 's/^\s*agent:\s*//; s/\s+$//; s/^["'\'']//; s/["'\'']$//' \
+  # POSIX classes, not `\s`: BSD/macOS sed and grep read `\s` as a literal `s`,
+  # which leaves the extracted value with its leading space. `awk -F:` then sees
+  # " company-workflow" and the ref is discarded as cross-plugin.
+  grep -rhE '^[[:space:]]*agent:[[:space:]]*' "$CONTEXT_DIR" 2>/dev/null \
+    | sed -E 's/^[[:space:]]*agent:[[:space:]]*//; s/[[:space:]]+$//; s/^["'\'']//; s/["'\'']$//' \
     >> "$raw" || true
 
-  grep -rhE '^\s*embedded_commands:\s*' "$CONTEXT_DIR" 2>/dev/null \
-    | sed -E 's/^\s*embedded_commands:\s*//; s/\s+$//' \
+  grep -rhE '^[[:space:]]*embedded_commands:[[:space:]]*' "$CONTEXT_DIR" 2>/dev/null \
+    | sed -E 's/^[[:space:]]*embedded_commands:[[:space:]]*//; s/[[:space:]]+$//' \
     | tr ',' '\n' \
-    | sed -E 's/^\s+//; s/\s+$//' \
+    | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
     >> "$raw" || true
 fi
 
 # Source 3 — git log `Agent:` trailers since BASELINE_SHA.
 if [ -n "${BASELINE_SHA:-}" ]; then
   git log "${BASELINE_SHA}..HEAD" --format='%B' 2>/dev/null \
-    | grep -E '^Agent:\s*' \
-    | sed -E 's/^Agent:\s*//' \
+    | grep -E '^Agent:[[:space:]]*' \
+    | sed -E 's/^Agent:[[:space:]]*//' \
     >> "$raw" || true
 fi
 

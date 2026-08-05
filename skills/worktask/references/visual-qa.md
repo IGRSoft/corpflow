@@ -45,7 +45,7 @@ for each registry row R:
       rmse = None
       vision = multimodal_compare(R.Screenshot, dv_img-or-live)
   else:
-      run scripts/visual-diff.sh \
+      run skills/dv-screenshot-capture/scripts/visual-diff.sh \
           --reference .context/designs/<R.Screenshot> \
           --candidate <dv_img> \
           --threshold 8 --worktask-id <worktask_id> --slug <R.ID>   # self-degrades; emits visual_diff_run

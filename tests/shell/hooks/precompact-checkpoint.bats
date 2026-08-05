@@ -48,3 +48,65 @@ setup() {
   assert_success
   assert_output --partial "self-test OK"
 }
+
+# --- checkpoint fidelity ------------------------------------------------------
+# `ls state.checkpoint-*.json` only proved a file appeared. A hook that wrote an
+# empty file, a truncated copy, or the wrong ledger satisfied it — which is the
+# one failure mode that matters, since the checkpoint exists to be restored from.
+
+@test "fidelity: the checkpoint is byte-for-byte the ledger it snapshotted" {
+  local state="$WD/.context/state.json"
+  # A non-trivial ledger: nested stages, arrays, unicode and a float.
+  cat > "$state" <<'JSON'
+{"version":1,"worktask_id":"wt-fidelity","run_index":3,"platform":"systems",
+ "stages":{"PL":{"status":"complete","verdict":"ok"},
+           "DV":{"status":"in_progress","progress":{"completed_batches":["B1","B2"],"ratio":0.75}}},
+ "facts":{"files_modified":["a.md","b/c.md"],"note":"ünïcode — em dash"},
+ "handoffs":{"PL→DV":{"summary":"go"}}}
+JSON
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+
+  local ckpt
+  ckpt="$(ls "$WD/.context/"state.checkpoint-*.json)"
+  [ -n "$ckpt" ]
+  [ -s "$ckpt" ]
+  # Semantic equality, key order independent.
+  run bash -c 'diff <(jq -S . "$1") <(jq -S . "$2")' _ "$state" "$ckpt"
+  assert_success
+  assert_output ""
+  # And the nested content really survived, not just a valid-JSON stub.
+  run jq -r '.stages.DV.progress.completed_batches | join(",")' "$ckpt"
+  assert_output "B1,B2"
+  run jq -r '.facts.note' "$ckpt"
+  assert_output "ünïcode — em dash"
+}
+
+@test "fidelity: the original ledger is left untouched by the checkpoint" {
+  local state="$WD/.context/state.json"
+  printf '%s' '{"run_index":0,"stages":{"DV":{"status":"in_progress"}}}' > "$state"
+  local before
+  before="$(cat "$state")"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run cat "$state"
+  assert_output "$before"
+}
+
+@test "fidelity: a second checkpoint does not clobber the first" {
+  local state="$WD/.context/state.json"
+  printf '%s' '{"run_index":0,"stages":{},"facts":{"seq":1}}' > "$state"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  # Timestamped names are second-resolution; make the second one distinct.
+  sleep 1
+  printf '%s' '{"run_index":0,"stages":{},"facts":{"seq":2}}' > "$state"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+
+  run bash -c 'ls "$1"/.context/state.checkpoint-*.json | wc -l | tr -d " "' _ "$WD"
+  assert_output "2"
+  # Each snapshot kept its own generation of the ledger.
+  run bash -c 'for f in "$1"/.context/state.checkpoint-*.json; do jq -r ".facts.seq" "$f"; done | sort | tr "\n" ","' _ "$WD"
+  assert_output "1,2,"
+}

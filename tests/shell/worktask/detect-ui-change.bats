@@ -62,6 +62,65 @@ setup() {
   refute_output "null"
 }
 
+@test "S2: a figma-registry.md in DESIGNS_DIR fires S2 and nothing else" {
+  mkdir -p "$WD/designs"
+  printf '# Figma registry\n' > "$WD/designs/figma-registry.md"
+  # nonui.md carries no S3 keyword, so an exact ["S2"] proves the probe fired on
+  # its own rather than riding on another signal.
+  run env DESIGNS_DIR="$WD/designs" bash "$PLUGIN_ROOT/$SCRIPT" "$WD/nonui.md"
+  assert_success
+  local json="$output"
+  run jq -cr '.signals' <<<"$json"
+  assert_output '["S2"]'
+  run jq -r '.requires_screenshots' <<<"$json"
+  assert_output "true"
+}
+
+@test "S2: a bare *.png in DESIGNS_DIR is the second, independent trigger" {
+  mkdir -p "$WD/designs"
+  printf 'not really a png\n' > "$WD/designs/mock.png"
+  run env DESIGNS_DIR="$WD/designs" bash "$PLUGIN_ROOT/$SCRIPT" "$WD/nonui.md"
+  assert_success
+  local json="$output"
+  run jq -cr '.signals' <<<"$json"
+  assert_output '["S2"]'
+}
+
+@test "S2: an empty DESIGNS_DIR fires nothing (control for the two above)" {
+  mkdir -p "$WD/designs"
+  run env DESIGNS_DIR="$WD/designs" bash "$PLUGIN_ROOT/$SCRIPT" "$WD/nonui.md"
+  assert_success
+  local json="$output"
+  run jq -cr '.signals' <<<"$json"
+  assert_output '[]'
+}
+
+@test "S4: a UI path class under an admitted platform fires S4 and nothing else" {
+  # .tsx is deliberate: it is in UI_PATH_CLASSES but matches no UI_KEYWORD, so
+  # S3 cannot mask a broken S4. (Views/, res/layout etc. all trip S3 as well.)
+  printf '## scope\nrewrite src/App.tsx\n' > "$WD/s4.md"
+  run env DESIGNS_DIR="$WD/none" bash "$PLUGIN_ROOT/$SCRIPT" "$WD/s4.md" --platform web
+  assert_success
+  local json="$output"
+  run jq -cr '.signals' <<<"$json"
+  assert_output '["S4"]'
+  run jq -r '.requires_screenshots' <<<"$json"
+  assert_output "true"
+}
+
+@test "S4: the same plan on a non-admitted platform fires nothing" {
+  # Falsification arm for the case statement at :122-127 — without it the S4
+  # test above would pass even if the platform gate were deleted.
+  printf '## scope\nrewrite src/App.tsx\n' > "$WD/s4.md"
+  run env DESIGNS_DIR="$WD/none" bash "$PLUGIN_ROOT/$SCRIPT" "$WD/s4.md" --platform systems
+  assert_success
+  local json="$output"
+  run jq -cr '.signals' <<<"$json"
+  assert_output '[]'
+  run jq -r '.requires_screenshots' <<<"$json"
+  assert_output "false"
+}
+
 @test "contract: --self-test passes (smoke, NON-counting)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success

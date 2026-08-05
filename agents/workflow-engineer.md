@@ -134,11 +134,11 @@ All changes committed to the issue branch, branch pushed to origin, PR created w
 
 #### Runbook — Steps 4-5 and Prevention
 
-4. **F4 recovery** (corrupt state.json): If `jq . .context/state.json` fails, quarantine and rebuild:
-   ```bash
-   mv .context/state.json ".context/state.json.bad.$(date +%s)"
-   # Re-run PL0 initialization to re-seed, then run step 3 above
-   ```
+4. **F4 recovery** (corrupt state.json): automatic. `.claude/hooks/state-merge.sh` backs the file up
+   to `.context/state.json.corrupt.<iso-ts>`, rebuilds the skeleton and recovers **only the stage
+   being patched** — re-run step 3 above to replay the rest. If the backup cannot be written the
+   repair aborts and `state.json` is left byte-identical, so an unchanged ledger is not evidence the
+   hook failed to run. Full contract: `references/handoff-protocol.md#f4-partial`.
 5. **Validate artifact filenames**: `bash "<plugin-root>/skills/worktask/scripts/cache-lint.sh" --filename-lint .context/` — non-canonical names (e.g. `arch-0.md` not `architecture-0.md`) block hook artifact resolution
 
 **Prevention**: Ensure `commands/worktask.md` Phase 1 step 3b runs at worktask start. The plugin.json hook registration gives automatic Layer 2 coverage without project-local install.

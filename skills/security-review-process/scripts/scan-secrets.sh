@@ -89,12 +89,41 @@ emit_line() {
 }
 
 # ---------------------------------------------------------------------------
+# validate_patterns
+# Compile-check every built-in ERE once, before the scan. A pattern the local grep
+# rejects otherwise fails per-file with no signal at all, which turns a broken
+# detector into a clean-looking scan — the worst failure mode for a scanner.
+# Necessary but NOT sufficient: dialects disagree on what is invalid (BSD accepts an
+# unmatched `)` as a literal), so this cannot catch a pattern that compiles yet
+# matches the wrong thing. That half is covered by the per-pattern specimen
+# assertions in tests/shell/skills/scan-secrets.bats.
+# ---------------------------------------------------------------------------
+validate_patterns() {
+  local entry label regex err rc
+  for entry in "${PATTERNS[@]}"; do
+    label="${entry#*|}"
+    label="${label%%|*}"
+    regex="${entry#*|}"
+    regex="${regex#*|}"
+    rc=0
+    # /dev/null is empty, so rc 1 ("no match") means the pattern compiled.
+    err=$(grep -qE -- "$regex" /dev/null 2>&1) || rc=$?
+    if [[ $rc -gt 1 ]]; then
+      printf >&2 'scan-secrets: built-in pattern %s is invalid: %s\n' "$label" "$err"
+      exit 2
+    fi
+  done
+}
+
+# ---------------------------------------------------------------------------
 # fallback_scan ROOT
 # Grep-based scan against built-in patterns.  Prints findings; returns 1 if any.
 # ---------------------------------------------------------------------------
 fallback_scan() {
   local root="$1"
   local found=0
+
+  validate_patterns
 
   # Collect matching files into a NUL-delimited temp file.
   local tmpfile
@@ -124,16 +153,23 @@ fallback_scan() {
       severity="${entry%%|*}"
       label="${entry#*|}"
       label="${label%%|*}"
-      regex="${entry##*|}"
+      # Strip exactly the two leading fields; the regex is the whole remainder.
+      # `${entry##*|}` would strip through the LAST `|`, which truncates any
+      # pattern containing an alternation (database-url) into a malformed ERE.
+      regex="${entry#*|}"
+      regex="${regex#*|}"
 
       # grep -nE: line numbers, ERE; -I: skip binary; output is "lineno:match".
       # We only need lineno, so cut to first field.
+      # grep's stderr is deliberately NOT discarded: a `2> /dev/null` here hid a
+      # dead pattern for the whole life of the database-url regex, and would hide
+      # the next one identically. Unreadable files are worth surfacing too.
       while IFS= read -r lineno; do
         [[ -z "$lineno" ]] && continue
         relpath="${filepath#"$root"/}"
         emit_line "$relpath" "$lineno" "$severity" "$label"
         found=1
-      done < <(grep -nEI -- "$regex" "$filepath" 2> /dev/null | cut -d: -f1 || true)
+      done < <(grep -nEI -- "$regex" "$filepath" | cut -d: -f1 || true)
     done
   done < "$tmpfile"
 

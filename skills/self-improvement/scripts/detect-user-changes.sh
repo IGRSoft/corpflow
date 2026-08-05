@@ -72,17 +72,14 @@ EXCLUDES=(
   ':(exclude)skills/self-improvement/**'
 )
 
-{
-  git diff "$BASELINE" -- "${EXCLUDES[@]}"
-  git diff -- "${EXCLUDES[@]}"   # unstaged working-tree edits
-} > "$DIFF_OUT" 2>/dev/null || true
+# `git diff <commit>` diffs the baseline against the WORKING TREE, so staged and
+# unstaged edits are already included. Unioning a second bare `git diff` on top
+# replayed every uncommitted hunk twice — duplicated in the patch, double-counted
+# in the numstat totals.
+git diff "$BASELINE" -- "${EXCLUDES[@]}" > "$DIFF_OUT" 2>/dev/null || true
 
 # Per-file change summary (additions/removals)
-# Merge committed + uncommitted stats.
-{
-  git diff --numstat "$BASELINE" -- "${EXCLUDES[@]}" 2>/dev/null || true
-  git diff --numstat -- "${EXCLUDES[@]}" 2>/dev/null || true
-} | awk '
+{ git diff --numstat "$BASELINE" -- "${EXCLUDES[@]}" 2>/dev/null || true; } | awk '
   NF == 3 && $1 != "-" && $2 != "-" {
     add[$3] += $1
     rem[$3] += $2

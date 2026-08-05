@@ -2,6 +2,112 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.5] - 2026-08-05
+
+Test-suite stringency hardening. The suite went from 45 files / 501 tests to **53 / 680**, every
+claim in it re-derived by mutation rather than ratified, and four production defects the old tests
+had characterised as "known bugs" were fixed. One of those four is a **security disclosure for
+downstream consumers** and is listed first.
+
+### Security
+
+- **DISCLOSURE — `scan-secrets.sh` never detected credentials in database URLs. If you have run this
+  plugin's security-review stage in your own repository, your past scans may have missed
+  `mysql://`, `postgres://` and `mongodb://` credentials, and a clean result did not mean they were
+  absent.** This is not a newly introduced regression; it is a defect that shipped from the
+  beginning.
+
+  - **What was wrong.** The built-in fallback scanner stored each rule as
+    `label|severity|regex` and recovered the pattern with `${entry##*|}` — a *greedy* strip to the
+    **last** `|`. Exactly one built-in pattern, `database-url`, contains an alternation, so its
+    regex was truncated mid-group to `mongodb)://[^@[:space:]]{3,}@` — an ERE with an unmatched `)`.
+  - **It failed on every dialect, but by two different mechanisms — and neither was noisy.** GNU
+    `grep` and `ugrep` **reject** the pattern (exit 2, parse error). BSD `/usr/bin/grep`, which is
+    what this script actually resolves at runtime on macOS, **accepts** it and treats the unmatched
+    `)` as a *literal* character — exit 1, no diagnostic, matching only the impossible text
+    `mongodb)://…`. Either way nothing real was ever matched, and because the `grep` call sent
+    stderr to `/dev/null`, even the GNU parse error was swallowed. The scan reported completion with
+    no finding and no diagnostic on both paths.
+  - **Do not assume a loud failure would have alerted you.** On the BSD path there was never
+    anything to see: no error was produced at all, not merely suppressed.
+  - **Which versions are affected: all of them.** `git log --reverse` on the script shows a single
+    prior commit, `01c6f6f` (2026-06-29), which introduced both the file and the broken pattern.
+    **No released version ever detected these credentials, on any `grep` dialect** — on GNU because
+    the pattern was rejected, on BSD because it was accepted as a literal that matches nothing.
+  - **Blast radius.** `scan-secrets.sh` is a shipped artifact, so every repository that has run the
+    security-review stage since 2026-06-29 has run the broken pattern. The other five built-in
+    patterns (AWS keys, private keys, generic tokens, and the rest) were unaffected and continued
+    to fire normally; only the `database-url` class was blind. Repos configured to use `gitleaks`
+    took the gitleaks path and are not affected.
+  - **What to do.** Re-scan with this version. The fixed scanner reports
+    `<file>:<line>:Critical:database-url` for all three schemes.
+  - **Bounding the claim for *this* repository.** A retrospective scan was run here and is
+    **clean**: 234 tracked files plus a 200-revision history sweep produced no real finding. Every
+    hit is either a test fixture on an RFC 2606 `.invalid` host or a deliberate literal in the
+    scanner's own `--self-test`. That result bounds this repository only and says nothing about
+    yours.
+
+- `scan-secrets.sh` now validates all six patterns at startup (an O(6) compile check) and no longer
+  sends `grep`'s stderr to `/dev/null`, so a malformed pattern is fatal and named instead of
+  silently producing an empty scan. **This is necessary but not sufficient, and would not have
+  caught the original bug** — BSD `grep` accepts `mongodb)://` as a valid ERE, so the compile check
+  passes it. Semantic truncation is caught only by the new per-scheme specimen tests.
+- **Known limitation, unfixed and disclosed:** `scan-secrets.sh --self-test` still exercises only 2
+  of the 6 built-in patterns, and `--self-test` is exactly what runs on hosts without `bats`. The
+  script's self-contained check remains weaker than its external suite; that coverage was narrowed
+  by **zero** in this change.
+- **Known limitation, introduced here:** removing the stderr suppression means an unreadable file
+  now emits `Permission denied` six times (once per pattern) and the scan still exits 0. Not fixed,
+  because the only lever that makes a file unreadable is permissions, and such a test would pass
+  vacuously under root.
+
+### Fixed
+
+- **`build-orchestrator.sh` produced false dependency cycles.** The `blocks?` regex also matched
+  "Blocked by", adding a spurious reverse edge and failing the DAG build with exit 5. Now
+  `\bblocks?\b`.
+- **`build-context-set.sh` silently dropped agent paths on macOS.** GNU-only `\s` escapes mangled
+  leading whitespace under BSD `sed`, and `set -e` then exited the pipeline. All **7** affected
+  sites now use `[[:space:]]` (the original report named only 2).
+- **`detect-user-changes.sh` double-counted every change.** A redundant second `git diff` ran in
+  both the patch and the numstat blocks.
+- **`milestone-helpers.sh` base-branch strip was case-sensitive** while its detection was not, so a
+  `BASE_BRANCH:` declaration was detected and then not stripped. `sed` gains the `I` flag.
+- **`state-merge.sh` could not recover a corrupt state ledger.** It now rebuilds the skeleton and
+  falls through to the unchanged `state-patch.sh` delegation, backing up the corrupt file first and
+  aborting without modification if the backup cannot be written.
+- **The Python phase's exit status was discarded**, so a failing Python suite could not fail
+  `make test`. The suite rc now propagates.
+- Documentation drift: `tests/README.md` and `tests/COVERAGE.md` disagreed with each other (36/36
+  vs 34/34 targets) and both disagreed with the tree. Both are regenerated from recorded commands.
+  Dead references to `skills/agent-coordination/scripts/audit-dedup.sh` and to a `cost-log.sh` that was never shipped are
+  corrected.
+
+### Added
+
+- `RUN_TESTS_REQUIRE_SWIFT=1` — opt-in gate making a skipped Swift phase a failure. The default exit
+  status is unchanged; without it a Swift-less host still exits 0 and reports `SKIPPED PHASES`.
+- `tests/shell/meta/coverage-proxy.bats` — a standing gate requiring every shell script to have a
+  dedicated `.bats` with ≥3 real scenarios. Exemption list is empty.
+- `skills/worktask/scripts/attachments-preseed.sh` — renders both Conductor attachments from their
+  canonical templates, replacing six manual writer steps.
+
+### Changed
+
+- **`run-tests.sh`'s clean-clone guarantee now names `python3 >= 3.10`.** The guarantee was always
+  conditional on it and never said so: `validate-export.sh` embeds a validator using PEP 604
+  `X | None` annotations evaluated at runtime, which raise `TypeError` on 3.9. macOS ships 3.9.6 as
+  `/usr/bin/python3`, so on a stock Mac the suite returns 1 until a newer `python3` is on `PATH`.
+  This is a pre-existing defect in an untouched file — documented here, not fixed.
+
+### Known issues
+
+- `make coverage` is unreachable on macOS: the kcov branch runs away (352 MB of output in 90 s
+  without completing a single target) and `benchmark/ttt-template` sits at 84.5 % against an 85 %
+  gate behind it. The binding green criterion is `./run-tests.sh` rc 0.
+- `state-merge.sh`'s repair writes through a `$$`-suffixed temp path that still follows a dangling
+  symlink — same weakness class as the one fixed in its backup path, different code path.
+
 ## [4.0.4] - 2026-08-05
 
 Gate-revision semantics. The spec carried one concept ("a PL invocation") where the pipeline has
@@ -71,7 +177,7 @@ away from the misleading word "legacy" — they are current behavior, not compat
   default and `ui_visual_check: false` — a legacy plan that asked for full regression plus Design
   Comparison silently gets neither, with no deprecation note surfaced.
 - **Dual dedupe-key mechanism deleted.** `metadata.dedupe_key_extended` is no longer written by any
-  hook and `hooks/audit-dedup.sh` (the base/extended mode selector) is removed. The 3-segment
+  hook and `skills/agent-coordination/scripts/audit-dedup.sh` (the base/extended mode selector) is removed. The 3-segment
   `dedupe_key` is the only documented shape; readers dedupe on it directly. `parent_agent_id` is
   still captured, for observability only.
 - **Pre-run-index artifact names no longer resolve.** The artifact resolver's bare-basename rung
@@ -106,7 +212,7 @@ away from the misleading word "legacy" — they are current behavior, not compat
   rest, including every `v3.x+` header peg across the 8 remaining hook/skill scripts.
 - Dead code: `_inline_merge` (the ~105-line inline state merger in `.claude/hooks/state-merge.sh`)
   and its call site — `state-patch.sh` is the single merge implementation.
-- Files: `hooks/audit-dedup.sh`, `skills/shared/legacy-fallback-f1.md` (folded into
+- Files: `skills/agent-coordination/scripts/audit-dedup.sh`, `skills/shared/legacy-fallback-f1.md` (folded into
   `handoff-protocol.md#f1-fallback`), `tests/shell/hooks/audit-dedup.bats`,
   `benchmark/harness/tests/test_history_backcompat.py`, and 3 audit fixtures.
 - `norm_dk` cross-shape key normalisation from `skills/agent-coordination/scripts/audit-dedup.sh`

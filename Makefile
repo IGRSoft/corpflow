@@ -126,17 +126,19 @@ coverage: bootstrap
 	    ok=$$(jq -n --argjson p "$$pct" --argjson m "$(COV_MIN)" '$$p >= $$m'); \
 	    [ "$$ok" = "true" ] || { echo "[coverage] FAIL: $$pkg below $(COV_MIN)%"; exit 1; }; \
 	  done
-	@echo "[coverage] python phase (opportunistic coverage.py; report-only, no clean-clone dep)…"
-	@if command -v coverage >/dev/null 2>&1; then \
+	@echo "[coverage] python phase (coverage.py measures when present; the suites always gate)…"
+	@py_rc=0; \
+	  if command -v coverage >/dev/null 2>&1; then \
 	    echo "[coverage]   coverage.py present — measuring the Python suites"; \
-	    coverage run -m unittest discover -s "$(PLUGIN_ROOT)/tests/python" -p 'test_*.py' >/dev/null 2>&1 || true; \
-	    ( cd "$(HARNESS_DIR)" && PYTHONPATH="$(HARNESS_DIR)/tests" coverage run -a -m unittest discover -s tests -t . -p 'test_*.py' >/dev/null 2>&1 ) || true; \
+	    coverage run -m unittest discover -s "$(PLUGIN_ROOT)/tests/python" -p 'test_*.py' || py_rc=$$?; \
+	    ( cd "$(HARNESS_DIR)" && PYTHONPATH="$(HARNESS_DIR)/tests" coverage run -a -m unittest discover -s tests -t . -p 'test_*.py' ) || py_rc=$$?; \
 	    coverage report || true; \
 	  else \
 	    echo "[coverage]   coverage.py absent — running the Python suites uninstrumented (behavioral gate)"; \
-	    python3 -m unittest discover -s "$(PLUGIN_ROOT)/tests/python" -p 'test_*.py'; \
-	    ( cd "$(HARNESS_DIR)" && PYTHONPATH="$(HARNESS_DIR)/tests" python3 -m unittest discover -s tests -t . -p 'test_*.py' ); \
-	  fi
+	    python3 -m unittest discover -s "$(PLUGIN_ROOT)/tests/python" -p 'test_*.py' || py_rc=$$?; \
+	    ( cd "$(HARNESS_DIR)" && PYTHONPATH="$(HARNESS_DIR)/tests" python3 -m unittest discover -s tests -t . -p 'test_*.py' ) || py_rc=$$?; \
+	  fi; \
+	  [ "$$py_rc" -eq 0 ] || { echo "[coverage] FAIL: Python suite(s) failed (rc=$$py_rc)"; exit "$$py_rc"; }
 	@echo "[coverage] done."
 
 # ---------------------------------------------------------------------------
