@@ -27,12 +27,10 @@ setup() {
   cp "$FIXTURES/worktask/sanitiser-input.md" "$WD/.context/clean-plan.md"
   # tiny valid PNG header used as the {{asset:preview.png}} source
   printf '\x89PNG\r\n\x1a\n' > "$WD/.context/designs/preview.png"
-  # no-op gh stub: satisfies `command -v gh` and `gh auth status` without API calls
-  cat > "$WD/bin/gh" <<'EOS'
-#!/usr/bin/env bash
-exit 0
-EOS
-  chmod +x "$WD/bin/gh"
+  # Recording gh double (mock_gh) rather than a bare `exit 0` script: it still
+  # satisfies `command -v gh` and every probe, but every invocation is captured
+  # so tests can assert what the script actually asked GitHub to do.
+  mock_gh --default-exit 0
   LAST_AUDIT() { tail -1 "$WD/.context/logs/audit.jsonl"; }
 }
 
@@ -72,7 +70,7 @@ EOS
   # mostly-paths plan -> strip>50% -> sanitiser_aborted; the design-preview anchor
   # carries {{asset:preview.png}} which resolve_design_assets rewrites to a hosted
   # ![]() line in the aborted-body tmp using the gist mock base.
-  run env PATH="$WD/bin:$PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 \
+  run env PATH="$STUB_PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 \
     ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="https://mock.gist/raw" \
     bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
@@ -113,7 +111,7 @@ EOS
   cd "$WD"
   cp "$FIXTURES/worktask/mostly-paths-plan.md" "$WD/.context/planning-2.md"
   jq '.plan_file = "planning-2.md"' .context/state.json > s2 && mv s2 .context/state.json
-  run env PATH="$WD/bin:$PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 \
+  run env PATH="$STUB_PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 \
     ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="https://mock.gist/raw" \
     bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
@@ -126,12 +124,14 @@ EOS
 @test "PP2: absent plan_file exits 1 and names both candidates on stderr (REQ-3)" {
   cd "$WD"
   jq '.plan_file = "ghost-plan.md"' .context/state.json > s2 && mv s2 .context/state.json
-  run env PATH="$WD/bin:$PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 \
-    bash "$PLUGIN_ROOT/$SCRIPT"
+  # RK5 (stderr honesty): this test's name claims the candidates are named "on
+  # stderr", but a plain `run` merges the streams, so it passed either way.
+  run_script_env --cwd "$WD" --stub-path --env "WORKSPACE_ROOT=$WD" \
+    --env DRY_RUN=1 --separate-stderr -- "$SCRIPT"
   assert_failure 1
-  assert_output --partial "FATAL plan_unreadable"
-  assert_output --partial "ghost-plan.md"
-  assert_output --partial ".context/ghost-plan.md"
+  [[ "$stderr" == *"FATAL plan_unreadable"* ]]
+  [[ "$stderr" == *"ghost-plan.md"* ]]
+  [[ "$stderr" == *".context/ghost-plan.md"* ]]
   run jq -r '.metadata.reason' <(tail -1 "$WD/.context/logs/audit.jsonl")
   assert_output "plan_unreadable"
 }
@@ -147,7 +147,7 @@ EOS
   jq 'del(.facts.goal) | .worktask_id = "ov-164-catalog-image-blinking"' \
     .context/state.json > s2 && mv s2 .context/state.json
 
-  run env PATH="$WD/bin:$PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 GH_ISSUE_SEARCH=0 \
+  run env PATH="$STUB_PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 GH_ISSUE_SEARCH=0 \
     bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_output --partial '--title "OV-164 Product list images are blinking before rendering"'
@@ -167,7 +167,7 @@ EOS
   jq 'del(.facts.goal) | .worktask_id = "wt-no-sources"' \
     .context/state.json > s2 && mv s2 .context/state.json
 
-  run env PATH="$WD/bin:$PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 GH_ISSUE_SEARCH=0 \
+  run env PATH="$STUB_PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 GH_ISSUE_SEARCH=0 \
     bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_output --partial '--title "wt-no-sources"'
@@ -183,7 +183,7 @@ EOS
   jq '.facts.goal = "OV-164 Ship the catalog image cache"' \
     .context/state.json > s2 && mv s2 .context/state.json
 
-  run env PATH="$WD/bin:$PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 GH_ISSUE_SEARCH=0 \
+  run env PATH="$STUB_PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 GH_ISSUE_SEARCH=0 \
     bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_output --partial '--title "OV-164 Ship the catalog image cache"'
@@ -209,7 +209,7 @@ EOS
     done
   } > "$WD/.context/plan.md"
 
-  run env PATH="$WD/bin:$PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  run env PATH="$STUB_PATH" WORKSPACE_ROOT="$WD" DRY_RUN=1 bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
 
   # Ratio stayed under the abort threshold, so this exercises the emit path.
@@ -228,4 +228,79 @@ EOS
   printf '%s' "$body" | grep -q 'Clean narrative line 1' || {
     echo "sanitiser over-stripped: clean prose did not survive"; return 1; }
   return 0
+}
+
+@test "publish: the create path invokes gh issue create with the rendered body and records the URL" {
+  cd "$WD"
+  # A plan that survives sanitisation (strip ratio <=50%) reaches the create
+  # branch. Routing the probes through mock_gh keeps the run offline while the
+  # recorder captures the exact argv the script would send to GitHub.
+  cat > "$WD/.context/publish-plan.md" <<'MD'
+# Add a rate limiter to the ingest queue
+
+## requirements
+
+The ingest queue must reject bursts above the configured ceiling.
+Callers receive a retriable error rather than a dropped message.
+
+## acceptance-criteria
+
+AC-1: a burst above the ceiling is rejected with a retriable error.
+AC-2: traffic below the ceiling is unaffected.
+
+## scope
+
+In scope: the ingest queue admission check and its metrics.
+Out of scope: the downstream consumer and its retry policy.
+
+## complexity
+
+Score: 12/50 (Low).
+MD
+  jq '.plan_file = ".context/publish-plan.md"' .context/state.json > s2 && mv s2 .context/state.json
+  # owner/repo is parsed from `git remote get-url origin`; without it the script
+  # defers with reason=no_remote long before the create branch.
+  mk_git_fixture --dir "$WD" --remote 'git@github.com:o/r.git' >/dev/null
+  mock_gh --default-exit 0 \
+    --route 'auth status=0:' \
+    --route 'repo view=0:private' \
+    --route 'issue list=0:[]' \
+    --route 'issue view=0:' \
+    --route 'label list=0:' \
+    --route 'label create=0:' \
+    --route 'issue create=0:https://github.com/o/r/issues/42'
+
+  run env PATH="$STUB_PATH" WORKSPACE_ROOT="$WD" ASSET_HOST_MODE=none \
+    GH_ISSUE_SEARCH=0 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+
+  # Locate the create invocation among the recorded calls.
+  local n=0 idx=0 line
+  while IFS= read -r line; do
+    n=$((n + 1))
+    case "$line" in "issue create "*) idx="$n" ;; esac
+  done <<< "$(stub_log gh)"
+  [ "$idx" -gt 0 ] || fail "gh issue create was never invoked; calls were:
+$(stub_log gh)
+audit: $(cat "$WD/.context/logs/audit.jsonl")
+script output: $output"
+
+  run stub_log --argv gh --call "$idx"
+  assert_line "issue"
+  assert_line "create"
+  assert_line "--title"
+  assert_line "--body-file"
+  # The --body-file argument must carry a real path, not an empty placeholder.
+  local body_arg=0 want_next=0
+  while IFS= read -r line; do
+    if [ "$want_next" -eq 1 ]; then [ -n "$line" ] && body_arg=1; break; fi
+    [ "$line" = "--body-file" ] && want_next=1
+  done <<< "$output"
+  [ "$body_arg" -eq 1 ]
+
+  # The returned URL is persisted for the idempotency guard and audited.
+  run jq -r '.metadata.github_issue_url' "$WD/.context/state.json"
+  assert_output "https://github.com/o/r/issues/42"
+  assert_audit_row github_issue_created --file "$WD/.context/logs/audit.jsonl" \
+    --jq '.metadata.url == "https://github.com/o/r/issues/42"'
 }
