@@ -99,7 +99,10 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 
 > **BINDING CONSTRAINTS FOR PHASE 1**
 > 1. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/designs .context/images .context/errors` and TaskCreate/TaskUpdate calls are permitted. ALL file modifications belong to DV stage or later.
-> 2. **Context-Interruption Recovery**: If worktask execution is interrupted (auth flows, tool failures), upon resumption MUST verify that the PL0 task exists with status `completed`. If not, restart from the appropriate phase. (There are two human checkpoints — the PL gate at Step A.5 and the FN gate before finalization; the FN gate check applies (STOP on `checkpoint`, proceed on `bypass`) — `skills/worktask/SKILL.md § FN Gate`.)
+
+### Phase 1 binding constraint 2 — Context-Interruption Recovery
+
+> 2. **Context-Interruption Recovery**: If worktask execution is interrupted (auth flows, tool failures), upon resumption MUST verify that the PL0 task exists with status `completed`. If not, restart from the appropriate phase — **except** when PL0 is `in_progress` with stage tasks present and the audit tail has a `plan_revision_dispatched` row with no later `approval_received` for `PL<run_index>`: that is a plan revision in flight, resumed per § Plan-revision re-dispatch (re-dispatch PM with `plan_revision: true`; never the fresh-run path). (There are two human checkpoints — the PL gate at Step A.5 and the FN gate before finalization; the FN gate check applies (STOP on `checkpoint`, proceed on `bypass`) — `skills/worktask/SKILL.md § FN Gate`.)
 
 ### Steps 1–3 — Parse flags and create context folders
 
