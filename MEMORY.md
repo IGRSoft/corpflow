@@ -4,7 +4,27 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.3** (Round 1 — deprecation cleanup + compaction across `agents/`,
+- Plugin version: **4.0.4** (Gate-revision semantics + 4 rule fixes. The spec carried ONE concept
+  ("a PL invocation") where the pipeline has TWO — a new run (allocate N+1, reset facts, create
+  tasks) vs a revision of the run in flight (reuse N, edit in place, preserve facts, update
+  tasks); only the first was specified. Plan-gate rejection now routes to
+  `commands/worktask.md § Plan-revision re-dispatch`: `run_index`/`plan_file` FROZEN for the life
+  of a run, PM re-dispatched with `plan_revision: true`, four BINDING invariants (edit
+  `planning-N.md` in place / patch `facts.*` additively / `TaskUpdate` not `TaskCreate` / no issue
+  re-publish), `revision_count` + one `plan_revision_dispatched` audit row, plan gate re-entered on
+  return. Fixes four field failures: `facts.decisions[]` silently wiped by the Step-4 reset, a
+  forked plan file, a duplicated stage chain stranded at `run_index: 1`, and a split
+  `<worktask_id>:<run_index>:gh_issue` anchor. The FN gate gains the symmetric reject-resume path
+  (`skills/worktask/SKILL.md § FN gate rejection`) — route to the owning stage, index frozen,
+  completed stages never re-run wholesale, gate re-presented on completion. Rule fixes:
+  `prompt-engineer` gains the `Skill` tool grant (its mandatory embedded-command contract was
+  unrunnable) and a DV-stage yield-discipline pointer to `workflow-engineer § Batch-Completion
+  Discipline`; `product-manager` extends the staleness rule from FILE lists to `file:line`
+  citations (approximate locators — re-locate by quoted text) and closes the `(unverified)` escape
+  hatch on AC verification commands (the mark covers the RESULT's representativeness, never the
+  command's validity — a shipped `grep -viv` triple negation reported everything "clean"). Spec/
+  docs only — no script, hook, or test-logic changes. Previous release 4.0.3 — Round 1:
+  deprecation cleanup + compaction across `agents/`,
   `commands/`, `skills/`: every elapsed-sunset rules deprecation removed — legacy `--auto-plan`/
   `--auto-finalization` aliases, the sunset `requires_ui_tests` compat-mapping table, `igrsoft`
   rename residuals outside the vendor-identity allow-list, 21 of 42 stale pre-4.0 version gates —
@@ -55,6 +75,14 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-08-05: v4.0.4 — gate-revision semantics: plan-gate rejection is an in-place revision of the
+  run in flight (frozen `run_index`/`plan_file`, `plan_revision: true` re-dispatch, additive
+  `facts.*` patch, `TaskUpdate` not `TaskCreate`, no issue re-publish, `revision_count` +
+  `plan_revision_dispatched` audit row, plan gate re-entered), fixing silent `facts.decisions[]`
+  loss, a forked plan, a stranded second stage chain, and a split issue anchor; symmetric FN-gate
+  reject-resume path specified. Four rule fixes: `Skill` tool grant + DV yield discipline for
+  `prompt-engineer`; approximate `file:line` locators + syntactic validation of AC verification
+  commands for `product-manager`.
 - 2026-08-05: v4.0.3 — full legacy-logic removal (user-owned version scheme: 4.0.3, not the
   round-2 4.1.0 target — re-affirmed at the FN gate; round 1 + round 2 shipped together). **Round 1** (deprecation cleanup + compaction across `agents/`,
   `commands/`, `skills/`): removed legacy `--auto-plan`/`--auto-finalization` aliases (5 files +
@@ -157,7 +185,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-07-29: v3.40.0 — suite fully green (281/0); new cross-plugin-refs contract test caught 2 dangling delegations; web/android capture scripts; android `and-*` agent rename propagated; `deps --upgrade` silent-audit fixed. ~12 files.
 - 2026-07-29: v3.39.0 — platform-agnostic orchestration: 36 XcodeBuildMCP grants removed (DV/DR/QA delegate to `/<plugin>:build-test`), Apple pre-warm deleted, Swift-Testing-for-all-platforms mandate and 4-platform schema gap fixed, Python comment-density and Android UI-detection bugs fixed. ~44 files.
 - 2026-07-29: v3.38.0 — compatible dev-plugin registry + onboarding checklist; ai-engineer wired in; publish-pl-issue prefix-regex leak (5 plugins) and pm-milestone/AR/SR/QA routing gaps fixed. ~15 files.
-- 2026-07-28: v3.37.1 — model-name sweep: no superseded Opus/Sonnet generation named outside CHANGELOG; dated rows de-named; benchmark STAGE_TABLE repinned to Opus 5/Sonnet 5. ~14 files.
 ## Token Baselines
 
 Authoritative per-surface baselines: `skills/cost-optimization/references/token-baselines.md`. This file no longer mirrors them.
