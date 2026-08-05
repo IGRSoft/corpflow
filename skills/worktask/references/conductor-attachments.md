@@ -60,6 +60,29 @@ test -f ".context/attachments/PR instructions.md" && test -f ".context/attachmen
 
 On `OK`, run `gh pr create` using the data from `PR instructions.md`. On failure, abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and do NOT proceed to `gh pr create` — opening a PR without the attachments leaves Conductor in the degraded state Writer 1's trip-wire was designed to prevent.
 
+### Known emission-rule defects
+
+#### How to fix one safely
+
+Three defects below are reproduced verbatim by
+`skills/worktask/scripts/attachments-preseed.sh` rather than silently smoothed, because the script's
+contract is fidelity to this document. **Do not fix one by editing a fenced template body alone** —
+`attachments-preseed.bats` P2 and P12 re-derive their expectations from these blocks at run time, so
+the document and the script must change in the same commit.
+
+#### The three defects
+
+1. **`<N>` is overloaded.** It means the uncommitted-file count in template parts 1 and 3, and the
+   **issue number** in part 7's `Closes #<N>` checklist row. The two are not distinguishable by
+   token substitution; the script only renders correctly because it matches the surrounding text.
+   Fix: rename the checklist token to `<ISSUE>`, which this file already uses for that meaning.
+2. **No blank line before `## 2. Push`.** Template part 3 is the only fenced body that ends without
+   a trailing blank line, so concatenating it with part 3b runs the two sections together.
+3. **Authoring comments are shipped.** `<!-- If issue ref present: … -->` and the two
+   `<!-- One bullet per … -->` notes sit *inside* the fenced bodies, so the "no separators added or
+   removed" rule emits them into the real attachment. Harmless but near-certainly unintended; if
+   they should be stripped, this section is the only thing that can decide it.
+
 ## Data sources
 
 ### Git & branch state
