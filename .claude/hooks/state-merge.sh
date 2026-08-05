@@ -11,6 +11,10 @@
 #   - YAML parsing: prefer `yq`; fallback to inline awk subset (we own the
 #     handoff: schema so a strict subset parser is safe).
 #   - state.json absent: log INFO and exit 0 (path F1 — `context_files` mode).
+#   - state.json corrupt: back the original up to state.json.corrupt.<ts>, rebuild a
+#     skeleton so the merge below can proceed, and audit it. The backup is never
+#     skipped and the original is never destroyed; if it cannot be verified the
+#     repair aborts and the corrupt file is left exactly as found.
 #   - Frontmatter missing: derive minimal handoff from $CLAUDE_AGENT_NAME
 #     and $CLAUDE_ARTIFACT_PATH; merge minimal record.
 #
@@ -107,6 +111,109 @@ if [[ ! -f "$PATCH_SCRIPT" ]]; then
   # Exit 0, never non-zero: a SubagentStop hook must not block the stage transition.
   log WARN "state-patch.sh not found at $PATCH_SCRIPT — skipping state merge"
   exit 0
+fi
+
+# ---------- Corrupt-ledger repair ----------
+# state-patch.sh cannot merge into a ledger it cannot parse: it logs the jq failure and
+# leaves the file alone, so one corrupt write silently swallows every later stage. The
+# repair rebuilds the SKELETON ONLY and re-enters the delegation below, which still owns
+# the field merge — nothing here parses handoff fields, and state-patch.sh is unchanged.
+#
+# Invariant: the corrupt original is copied aside and verified byte-equal BEFORE anything
+# is written, and an unverifiable backup aborts the repair. A corrupt ledger is
+# recoverable; a destroyed one is not.
+STATE_FILE=".context/state.json"
+
+# First unused name in the base, base-1, base-2 … series.
+# `-L` as well as `-e`: `-e` is false for a DANGLING symlink, so a pre-planted broken
+# link would read as a free name, `cp` would follow it to the link's target, and the
+# `cmp -s` guard would dereference the same link and pass — a silent write-through.
+_repair_backup_path() {
+  local candidate="$1" i=1
+  while [[ -e "$candidate" || -L "$candidate" ]]; do
+    candidate="$1-$i"
+    i=$((i + 1))
+  done
+  printf '%s' "$candidate"
+}
+
+# Scrape a JSON string field out of bytes that no longer parse. Best-effort by
+# construction: empty output means "no salvage", not "field absent".
+_salvage_field() {
+  local out
+  if out=$(sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$1" 2> /dev/null); then
+    printf '%s' "${out%%$'\n'*}"
+  fi
+}
+
+# ALWAYS returns 0. Every non-repair path returns silently and leaves the corrupt file
+# untouched, which is the pre-existing behaviour this must stay byte-identical to; only
+# a repair that starts and then fails is worth a log line.
+_repair_corrupt_state() {
+  local art="${CLAUDE_ARTIFACT_PATH:-}" fm backup tmp wt_id platform row n=0 suffix
+
+  [[ -n "$art" && -f "$art" ]] || return 0
+  fm=$(sed -n '1,40p' "$art" 2> /dev/null) || return 0
+  # Subset check only — enough to know a rebuild is warranted. state-patch.sh below is
+  # the authoritative parser.
+  [[ $fm == *handoff:* ]] || return 0
+  [[ $fm =~ [[:space:]]stage:[[:space:]]*[A-Za-z] ]] || return 0
+
+  # run_index from the artifact's -N.md suffix: the same source state-patch.sh resolves
+  # artifacts by, so the rebuilt skeleton cannot be labelled for a different run.
+  suffix="${art##*-}"
+  suffix="${suffix%.md}"
+  if [[ $suffix =~ ^[0-9]+$ ]]; then n="$suffix"; fi
+
+  backup=$(_repair_backup_path "$STATE_FILE.corrupt.$(date -u +%Y%m%dT%H%M%SZ)")
+  if ! cp "$STATE_FILE" "$backup" 2> /dev/null || ! cmp -s "$STATE_FILE" "$backup"; then
+    log WARN "corrupt state.json: backup to $backup failed or unverifiable — repair aborted, file untouched"
+    if [[ -e "$backup" ]] && ! rm -f "$backup" 2> /dev/null; then
+      log WARN "corrupt state.json: partial backup left at $backup"
+    fi
+    return 0
+  fi
+
+  wt_id=$(_salvage_field "$STATE_FILE" worktask_id)
+  [[ -n "$wt_id" ]] || wt_id="${CLAUDE_WORKTASK_ID:-unknown}"
+  platform=$(_salvage_field "$STATE_FILE" platform)
+  [[ -n "$platform" ]] || platform="all"
+
+  # Same directory as the target so the rename is atomic.
+  tmp=".context/.state.json.repair.$$.tmp"
+  if ! jq -cn --arg id "$wt_id" --arg plat "$platform" --argjson n "$n" '
+      { version: 1, worktask_id: $id,
+        plan_file: (".context/planning-" + ($n | tostring) + ".md"),
+        platform: $plat, run_index: $n,
+        stages: {}, facts: {}, handoffs: {}, metadata: {} }' > "$tmp" 2> /dev/null; then
+    log WARN "corrupt state.json: skeleton write failed — file untouched (backup at $backup)"
+    if [[ -e "$tmp" ]] && ! rm -f "$tmp" 2> /dev/null; then
+      log WARN "corrupt state.json: stale temp left at $tmp"
+    fi
+    return 0
+  fi
+  if ! mv -f "$tmp" "$STATE_FILE"; then
+    log WARN "corrupt state.json: rename failed — file untouched (backup at $backup)"
+    return 0
+  fi
+
+  if row=$(jq -cn --arg ts "$(date -u +%FT%TZ)" --arg id "$wt_id" --arg backup "$backup" \
+    --argjson n "$n" --arg stage "${CLAUDE_TASK_METADATA_STAGE:-}" --arg art "$art" '
+      { ts: $ts, actor: "hook:state-merge", action: "state_repair", subject: $id,
+        result: "repaired",
+        metadata: { reason: "corrupt_state_json", backup: $backup, run_index: $n,
+                    stage: $stage, artifact: $art } }' 2> /dev/null); then
+    printf '%s\n' "$row" >> "$LOG_DIR/audit.jsonl"
+  fi
+  log INFO "corrupt state.json rebuilt from $art (backup=$backup run_index=$n) — delegating merge"
+  return 0
+}
+
+# Idempotent by construction: after a repair the ledger parses, so a re-run does not
+# re-enter this block — no second backup, no second audit row.
+if [[ -f "$STATE_FILE" ]] && command -v jq > /dev/null 2>&1 \
+  && ! jq -e . "$STATE_FILE" > /dev/null 2>&1; then
+  _repair_corrupt_state
 fi
 
 # ---------- Delegate to state-patch.sh ----------
