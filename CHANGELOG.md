@@ -2,6 +2,54 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.4] - 2026-08-05
+
+Gate-revision semantics. The spec carried one concept ("a PL invocation") where the pipeline has
+two — starting a **new run** (allocate N+1, reset facts, create tasks) versus **revising the run
+in flight** (reuse N, edit in place, preserve facts, update tasks). Only the first was specified,
+so following the plan-gate rejection line verbatim silently forked the run. Both gates now specify
+their revision path. Plus four rule fixes traced to observed failures in the 4.0.3 worktask.
+
+### Fixed
+
+- **Plan-gate rejection no longer forks the run (data loss).** Re-dispatching PM after a rejection
+  allocated `planning-1.md` while the run was still on `planning-0.md`, which (1) wiped `facts.*`
+  via the Step-4 state.json reset — erasing the `facts.decisions[]` the user had just supplied at
+  that gate, (2) froze the plan under revision as "historical" and split AC baselines across two
+  files, (3) `TaskCreate`d a second stage chain at `run_index: 1`, stranding the original tasks
+  `pending` forever, and (4) bumped the `<worktask_id>:<run_index>:gh_issue` dedupe anchor so the
+  revision read as a later run. `commands/worktask.md` now routes the rejection to
+  § Plan-revision re-dispatch: `run_index`/`plan_file` frozen for the life of a run, PM
+  re-dispatched with `plan_revision: true`, a four-row BINDING invariant table (edit in place /
+  patch `facts.*` additively / `TaskUpdate` not `TaskCreate` / no issue re-publish),
+  `metadata.revision_count` bookkeeping with one `plan_revision_dispatched` audit row, and a
+  re-entry into the plan gate on return.
+- **`agents/prompt-engineer.md` could not run its own embedded-command contract.** No `Skill` tool
+  in the frontmatter grant, so a DV-stage dispatch carrying a mandatory
+  `Skill("skill-creator:skill-creator", …)` contract had to escalate and apply the skill body
+  manually as a disclosed substitute. `Skill` added.
+- **AC verification commands could ship syntactically broken.** The
+  `(unverified — dry-run required after theme lands)` mark excused everything, including
+  invalidity — a shipped plan carried `grep -viv -e … -e …` (triple negation, a no-op reporting
+  everything "clean") and three downstream stages independently re-derived the correct form. The
+  mark now covers only the RESULT's representativeness, never the command's validity.
+
+### Added
+
+- **FN-gate rejection resume path** (`skills/worktask/SKILL.md § FN gate rejection`) — the same
+  conflation at the second gate, which previously ended at "STOP (do NOT delegate FN)" with no
+  defined resume. Now symmetric with the plan gate: feedback routed to the owning stage (DV fix
+  round / DC re-stamp / plan amendment), `run_index` frozen, completed stages never re-run
+  wholesale, `revision_count` bookkeeping, and the FN gate re-presented on completion.
+- **DV-stage yield discipline for `agents/prompt-engineer.md`** — across one worktask it stopped
+  mid-theme at least four times, each needing an orchestrator nudge to finish its own stage
+  contract. Now points at `agents/workflow-engineer.md § Batch-Completion Discipline (DV
+  execution)`, the rule that already existed but was unreachable from this agent.
+- **`file:line` citations are starting sets too** (`agents/product-manager.md`) — the staleness
+  rule that already covered enumerated FILE lists now covers LINE numbers cited in theme prose:
+  cite as an approximate locator, require DV to re-locate the anchor by quoted text before
+  editing.
+
 ## [4.0.3] - 2026-08-05
 
 Full legacy-logic removal. Round 1 removed every rules-surface deprecation whose sunset window had
