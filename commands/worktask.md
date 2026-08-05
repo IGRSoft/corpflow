@@ -2,7 +2,7 @@
 name: worktask
 description: Initialize a new worktask task with proper folder structure and Task System integration
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]]'
-version: 0.3.0
+version: 0.4.0
 model: opus
 allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(company-workflow:product-manager)
 ---
@@ -265,7 +265,7 @@ Also stamp `decision_gate`: default `decision_gate: "user"` (PL open questions s
 ### Steps 5–6 — Dispatch the PL agent
 
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
-6. **Delegate to PL agent**: `Task({ subagent_type: "company-workflow:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative.
+6. **Delegate to PL agent**: `Task({ subagent_type: "company-workflow:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative. Glob+increment applies to a **new run** only: a plan-gate revision re-dispatches PM with `plan_revision: true` and reuses the frozen index (§ Plan-revision re-dispatch).
 #### Step 6 — record dropped stages
 
    - **Record dropped and added stages**: when PL0's dynamic sizing omits any of the full 9-stage pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PM stamps the PL0 task's `metadata.skipped_stages` (`{stage, reason}` list) so `state.json` self-documents the drops; when PL0 includes a stage beyond the tier default (AR0 forced at a low tier, TL0 at any tier), it stamps the symmetric `metadata.added_stages` with the identical `{stage, reason}` shape. See `agents/product-manager.md § Dynamic Worktask Sizing (PL0 Stage)`.
@@ -386,7 +386,39 @@ The step-2 summary MUST show both decisions explicitly, each with its one-line r
    ```json
    {"ts":"<ISO>","actor":"orchestrator","action":"approval_rejected","subject":"PL<N>","result":"rejected"}
    ```
-   STOP — do NOT enter the stage loop. Surface the user's feedback; re-run PL0 if revisions are needed.
+   STOP — do NOT enter the stage loop. Surface the user's feedback. If the user wants revisions,
+   re-dispatch PM per § Plan-revision re-dispatch below — a revision is NOT a new run.
+
+##### Plan-revision re-dispatch (gate rejection only)
+
+A gate rejection revises the run **in flight**; it never starts a new one. `run_index` and
+`plan_file` are FROZEN for the life of a run — allocating `planning-<N+1>.md` here forks the plan,
+wipes the `facts.decisions[]` the user just supplied at this gate, strands the stage-task chain on
+the old index, and splits the published-issue record. Re-dispatch product-manager with
+`plan_revision: true` in the prompt, carrying the user's feedback verbatim.
+
+##### Plan-revision invariants (BINDING)
+
+| # | Do | Never |
+|---|---|---|
+| 1 | Edit the existing `planning-<N>.md` in place | Allocate `planning-<N+1>.md` |
+| 2 | Patch `facts.*` additively — `facts.decisions[]` survives | Run the state.json reset |
+| 3 | `TaskUpdate` the existing stage tasks | `TaskCreate` a second stage chain |
+| 4 | Leave the published GitHub issue as-is | Re-publish or re-anchor the issue |
+
+PM's own arm of this contract: `agents/product-manager.md § Revision of the run in flight`.
+
+##### Plan-revision bookkeeping
+
+Set the PL0 task back to `in_progress`, increment `metadata.revision_count` (absent → `1`), and
+append exactly one audit row before dispatching:
+
+```json
+{"ts":"<ISO>","actor":"orchestrator","action":"plan_revision_dispatched","subject":"PL<N>","result":"ok","metadata":{"revision_count":<count>}}
+```
+
+On PM's return, re-enter the plan gate at Step A.5 — the revised plan needs its own approval, and
+Step A still runs exactly once per run (the issue is published after the *approved* plan).
 
 #### Plan gate bypass path
 
