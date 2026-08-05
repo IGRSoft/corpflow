@@ -10,7 +10,7 @@ Read at gate time from `skills/worktask/SKILL.md § FN Gate` (stub). This file i
 
 ### Effect (checkpoint — the gated path)
 
-When `fn_gate == "checkpoint"`: the orchestrator runs the **Pre-gate Conductor-attachments writer** (below), appends the `fn_gate_waiting` audit line, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. On approval → append `approval_received` then delegate FN (commit, push, PR). On reject → append `approval_rejected` and STOP — do NOT delegate FN; surface the user's feedback.
+When `fn_gate == "checkpoint"`: the orchestrator runs the **Pre-gate Conductor-attachments writer** (below), appends the `fn_gate_waiting` audit line, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. On approval → append `approval_received` then delegate FN (commit, push, PR). On reject → append `approval_rejected` and STOP — do NOT delegate FN; surface the user's feedback, then resume per `skills/worktask/SKILL.md § FN gate rejection — resume path` (route each item to its owning stage, `run_index` frozen, re-present this gate on completion).
 ### Effect (bypass)
 
 The orchestrator runs the Pre-gate Conductor-attachments writer (or, on the bypass path, FN-agent Writer 2 in `agents/project-manager.md § FN Stage`), appends the `fn_gate_bypass` audit line, then proceeds directly into the FN stage (commit, push, PR — unattended).
@@ -67,7 +67,7 @@ Each Read is independent; do NOT wrap the whole sequence in a single try/catch �
 
 ## Audit
 
-All four FN-gate audit lines use `subject:"FN<run_index>"` (`N` = `state.json.run_index`), mirroring the PL-gate `subject:"PL<run_index>"` scheme. `resume.md` row 15 reads the `fn_gate_waiting` / `approval_received` lines to decide whether to STOP or proceed.
+All five FN-gate audit lines use `subject:"FN<run_index>"` (`N` = `state.json.run_index`), mirroring the PL-gate `subject:"PL<run_index>"` scheme. `resume.md` row 15 reads the `fn_gate_waiting` / `approval_received` lines to decide whether to STOP or proceed.
 
 **Checkpoint path** (default) — park, then approve OR reject:
 
@@ -75,7 +75,14 @@ All four FN-gate audit lines use `subject:"FN<run_index>"` (`N` = `state.json.ru
 {"actor":"orchestrator","action":"fn_gate_waiting","subject":"FN<N>","result":"ok"}
 {"actor":"orchestrator","action":"approval_received","subject":"FN<N>","result":"ok"}
 {"actor":"orchestrator","action":"approval_rejected","subject":"FN<N>","result":"rejected"}
+{"actor":"orchestrator","action":"fn_revision_dispatched","subject":"FN<N>","result":"ok","metadata":{"revision_count":1,"routed_to":"DV"}}
 ```
+
+### Audit — reject-resume line
+
+The fifth line is written once per fix round on the resume path (`skills/worktask/SKILL.md § FN gate rejection — resume path`); `routed_to` is the owning stage code.
+
+### Audit — bypass path
 
 **Bypass path** (`--auto=[finalization]` / `--emergency`, or a gate stamped `"bypass"` by `/megatask`) — a single line before the FN stage runs:
 

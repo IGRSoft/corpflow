@@ -2,7 +2,7 @@
 name: worktask
 description: Complete staged worktask system with dynamic sizing, task initialization, and stage management. Use when executing multi-stage worktasks, initializing tasks, or managing worktask state.
 effort: high
-version: 0.3.0
+version: 0.4.0
 ---
 
 > **INVOCATION GATE**: If you are reading this skill because the orchestrator delegated directly
@@ -844,9 +844,16 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
         // (d) AskUserQuestion: approve to finalize (commit/push/PR), or stop.
         //     On approval → append `approval_received subject:"FN<N>"`, then
         //     fall through to delegate FN.
-        //     On reject → append `approval_rejected subject:"FN<N>"` and STOP
-        //     (do NOT delegate FN; surface feedback).
         // appendAudit({ ...action:"approval_received", subject:`FN${N}`, result:"ok" });
+```
+
+##### Step 4.9 — checkpoint path, reject arm
+
+```typescript
+        //     On reject → append `approval_rejected subject:"FN<N>"` and STOP
+        //     (do NOT delegate FN). Surface the feedback, then resume per
+        //     § FN gate rejection — resume path: route the fix to its owning
+        //     stage, run_index frozen, re-present this gate on completion.
         // appendAudit({ ...action:"approval_rejected", subject:`FN${N}`, result:"rejected" }); // STOP
 ```
 
@@ -1350,12 +1357,33 @@ The FN gate is the **pre-finalization human checkpoint**. Carried by `PL0.metada
 
 ### FN gate paths
 
-- **`checkpoint`** (default): loop step 4.9 runs the Pre-gate Conductor-attachments writer (local-only), emits `fn_gate_waiting subject:"FN<N>"`, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. On approval → append `approval_received subject:"FN<N>"` then delegate FN (commit/push/PR). On reject → append `approval_rejected subject:"FN<N>"` and STOP (do NOT delegate FN).
+- **`checkpoint`** (default): loop step 4.9 runs the Pre-gate Conductor-attachments writer (local-only), emits `fn_gate_waiting subject:"FN<N>"`, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. On approval → append `approval_received subject:"FN<N>"` then delegate FN (commit/push/PR). On reject → append `approval_rejected subject:"FN<N>"` and STOP (do NOT delegate FN), then resume per § FN gate rejection — resume path.
 - **`bypass`** (stamped only by `--auto=[finalization]` or `--emergency`, or directly per-issue by the `/megatask` batch orchestrator): loop step 4.9 runs the writer, emits `fn_gate_bypass subject:"FN<N>"` (`reason: "unattended"`), then delegates FN unattended. In dynamic mode the same bypass path applies on workflow return.
+
+### FN gate rejection — resume path
+
+A rejection at the FN gate is a **fix round inside the run in flight**, symmetric with the plan
+gate's revision path (`commands/worktask.md § Plan-revision re-dispatch`) — not a new run and not
+a restart. Surface the user's feedback verbatim, then route each item to the stage that owns it:
+
+| Feedback is about | Route to | Shape |
+|---|---|---|
+| Code / tests / missing edits | DV | Fix round on the existing DV task (`retry_count++`), feedback embedded as a remediation block per loop step 4.6 |
+| Docs, README, changelog wording | DC | Re-stamp on the existing DC task |
+| Scope, ACs, or the plan itself | PL | Plan revision per § Plan-revision re-dispatch — the plan gate is re-presented first |
+
+### FN gate rejection — invariants
+
+`run_index` and `plan_file` stay frozen throughout; completed stages are never re-run wholesale —
+only the owning stage's task is reopened (`TaskUpdate` to `in_progress`), and stages that were
+already green stay green. Increment `metadata.revision_count` on the FN task (absent → `1`) and
+append one `fn_revision_dispatched subject:"FN<N>"` audit row per fix round. When the routed stage
+completes, re-run the pre-FN summary and re-present the FN gate — approval is per presentation,
+never inherited from an earlier one.
 
 ### At the FN stage
 
-**At the FN stage — Read `references/fn-gate.md`** for the full procedure: the Pre-gate Conductor-attachments writer (run on both paths so Conductor's *Create PR* / *Request Review* actions inherit worktask context) and the four audit lines.
+**At the FN stage — Read `references/fn-gate.md`** for the full procedure: the Pre-gate Conductor-attachments writer (run on both paths so Conductor's *Create PR* / *Request Review* actions inherit worktask context) and the five audit lines.
 
 ## Post-capture issue update (Visual evidence)
 
