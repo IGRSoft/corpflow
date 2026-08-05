@@ -5,7 +5,7 @@ model: opus
 color: blue
 effort: high
 maxTurns: 40
-version: 0.9.0
+version: 0.10.0
 # tools: Bash(curl:*) is NARROWLY scoped to curl only (NOT bare Bash) so PL0 can
 # persist Figma screenshots IN THE SAME PL TURN. get_screenshot returns a
 # short-lived image URL that expires before the post-approval Phase 2 window
@@ -161,6 +161,8 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 - **First plan**: `.context/planning-0.md`
 - **Subsequent plans**: `.context/planning-N.md` where N = max existing index + 1
 
+Both rows describe a **new run**. A plan-gate revision is not a new run and allocates nothing — see § Revision of the run in flight below.
+
 #### Algorithm (run as PL0 step 1)
 
 1. Glob `.context/planning-*.md`. Extract the integer suffix from each match.
@@ -171,9 +173,22 @@ Each PL invocation produces a numbered plan file in `.context/` and stamps a sha
 
 > **PL0 is the authoritative writer.** Any `plan_file` / `run_index` already present in a pre-seeded `state.json` (the orchestrator's Phase-1 step 3a seed) is **provisional** — PL0 MUST recompute `N` via the step-1 glob and treat that result as authoritative, regardless of the seeded value. **Never write to a `planning-${N}.md` that already exists on disk**; if the computed target exists, the glob was stale — recompute `N`. The reader resolution order in the note below (`metadata.plan_file` first) applies to *downstream stages* consuming a finalized plan; it does **not** govern PL0's own write-target selection.
 
+##### Revision of the run in flight (NOT a new index)
+
+> **BINDING.** When the dispatch prompt carries `plan_revision: true` (a plan-gate rejection —
+> `commands/worktask.md § Plan-revision re-dispatch`), this turn revises the run in flight, not a
+> new run. **Skip algorithm steps 1–3**: `run_index` and `plan_file` are frozen, so edit the
+> current `.context/<plan_file>` in place. **Skip the Step-4 reset** below — patch `facts.*`
+> additively instead, so `facts.decisions[]` (the answers just given at the gate) and every other
+> fact gathered this run survive. **Do not create stage tasks** — `TaskUpdate` the existing chain
+> in place when the revision changes subjects, ACs, or the stage set. The never-overwrite rule
+> above protects the historical plans of **finished** runs; a plan under active revision is not
+> history, and rewriting it is the point.
+
 #### Step 4 — state.json reset
 
-4. **state.json reset** (new run in existing `.context/`): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, `metadata.requires_screenshots` set to the detector's value (the channel `hooks/dv-screenshot-gate.sh` and `attach-visual-evidence.sh` read), `metadata.base_ref` set to the detected integration branch (see **Integration-branch detection** below), and empty `facts.*` (preserves `version`, `worktask_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
+4. **state.json reset** (new run in existing `.context/`; **skipped on a `plan_revision` turn** —
+   see above): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, `metadata.requires_screenshots` set to the detector's value (the channel `hooks/dv-screenshot-gate.sh` and `attach-visual-evidence.sh` read), `metadata.base_ref` set to the detected integration branch (see **Integration-branch detection** below), and empty `facts.*` (preserves `version`, `worktask_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
 
 ##### Step 4 — plan_file shape
 
@@ -333,7 +348,7 @@ The PM MUST name each persisted per-frame file with a **placeholder token**, nev
 
 ### PL0 Scaffolding (when invoked for worktask planning)
 When invoked as PL0 stage agent:
-1. Compute `<plan_file>` per **Plan File Naming** (glob `.context/planning-*.md`, pick next N) and create `.context/<plan_file>` with the requirements template
+1. Compute `<plan_file>` per **Plan File Naming** (glob `.context/planning-*.md`, pick next N) and create `.context/<plan_file>` with the requirements template — **except on a `plan_revision` turn**, which reuses the frozen `plan_file` and rewrites it in place (§ Revision of the run in flight)
 2. Fill out `<plan_file>` with requirements, acceptance criteria, success metrics
 3. Assess complexity (0-50 scale) and create stage tasks via `TaskCreate`, setting `metadata.plan_file = "<plan_file>"` AND `metadata.run_index = N` on each
 
@@ -577,6 +592,19 @@ When writing grep-based verification steps in `<plan_file>` (e.g., AC validation
   other repo idiosyncrasies that only show up when actually run — catching this at PL0 is
   cheaper than a DR/QA re-diagnosis mid-pipeline.
 
+#### The `(unverified)` mark never excuses an invalid command
+
+The `(unverified — dry-run required after theme lands)` escape hatch covers **only** the
+representativeness of the RESULT (present-state data cannot yet show the post-edit answer). It
+never covers the command's **validity**. Before writing any such command into `<plan_file>`, run
+it once against present-state data and confirm it executes without a usage/syntax error, on a
+plausible input, with each flag doing what the prose claims.
+
+A broken flag combination is a shipped defect, not an unverified one: `grep -viv -e A -e B`
+(triple negation) reports everything "clean" and passes silently — three downstream stages then
+re-derive the correct form. If the command cannot run at all before the edit, simplify it until
+some form of it can.
+
 #### Per-theme residual-grep completeness gate (REQUIRED)
 
 An enumerated edit-file list goes stale: the repo evolves between plan authoring and DV execution, so files matching a theme's pattern can appear that the list never named. Treat every enumerated file list as a **starting set**, not the known universe — the completeness gate is a repo-wide grep, not the list.
@@ -600,11 +628,15 @@ grep -rn '\blegacy_flag\b' --include='*.md' --include='*.sh' . || echo "clean: n
 
 DV runs each theme's residual-grep before yielding (see `agents/workflow-engineer.md § Batch-Completion Discipline`); a non-empty result means the theme is incomplete regardless of how many enumerated files were edited.
 
+##### `file:line` citations are starting sets too
+
+The same staleness applies to any `file:line` reference cited in a theme's prose (e.g. carried over from an exploration pass). Cite it as an **approximate locator** — "near line N as of planning time" — and require DV to re-locate the real anchor before editing: a function/section boundary, or a grep for the quoted text. A line number is never authoritative by execution time; the quoted text is.
+
 ##### PL0 completion checklist
 
 Before marking PL0 complete, verify:
 - [ ] If a version bump is in scope, the version-ordering check ran; any `proposed_version < max_released_version` regression is surfaced in `## risks` and user-confirmed (per Version Bump Planning)
-- [ ] `<plan_file>` written to `.context/planning-N.md` with the next free N (per Plan File Naming)
+- [ ] `<plan_file>` written to `.context/planning-N.md` with the next free N (per Plan File Naming) — on a `plan_revision` turn, rewritten in place at the frozen N, with `facts.*` preserved (§ Revision of the run in flight)
 - [ ] `<plan_file>` contains all acceptance criteria
 - [ ] Test strategy section present with specific test scenarios and file paths
 - [ ] Test effort estimate included (required, not optional)
