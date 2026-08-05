@@ -68,18 +68,21 @@ bash_payload() {
 
 @test "6: jq absent -> exit 0 silently, no decision (FO-9)" {
   state_with DR
-  local fakebin
-  fakebin="$(mk_tmpworkdir)"
-  # PATH with no jq: only core utilities the script's own shebang needs.
-  run env CLAUDE_PROJECT_DIR="$WD" PATH="/usr/bin:/bin" bash -c '
-    command -v jq >/dev/null 2>&1 && exit 77   # skip guard: real jq still on PATH
-    exec bash "'"$PLUGIN_ROOT/$SCRIPT"'"
-  ' <<< "$(bash_payload './run-tests.sh')"
-  if [ "$status" -eq 77 ]; then
-    skip "jq present on /usr/bin:/bin in this environment; branch not exercisable without a chroot"
-  fi
+  # The script probes for jq with `command -v jq`, so hiding jq is enough to
+  # exercise the branch — no chroot and no skip. The old form set
+  # PATH=/usr/bin:/bin and skipped whenever the host happened to have jq there,
+  # which on most developer machines meant the branch never ran at all.
+  run_script_env --hide jq --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" -- "$SCRIPT"
   assert_success
   [ -z "$output" ]
+  [ ! -f "$WD/.context/logs/audit.jsonl" ]
+
+  # Falsification pair: the identical payload with jq present is denied, so the
+  # silent allow above is attributable to jq's absence and nothing else.
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
 }
 
 @test "7: COMPANY_WORKFLOW_TEST_GATE=off -> allow even for a banned stage" {

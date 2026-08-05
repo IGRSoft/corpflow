@@ -58,6 +58,35 @@ EOS
   assert_output --partial "Manifest:"
 }
 
+@test "gist verify: the reachability probe rejecting degrades the embed (real fail arm)" {
+  # Carried from DV3. Reaching gist_raw_url_reachable's REJECT arm needs
+  # GIST_RAW_URL_BASE="" — publish-pl-issue.sh:808 synthesises and returns early
+  # whenever it is set, which is why every other gist test here leaves
+  # GIST_VERIFY_FORCE inert — plus a mocked `gh gist create` for the upload.
+  stub_cmd gh --stdout 'https://gist.github.com/abc123'
+  run env STATE_FILE="$WD/state-true.json" WORKSPACE_ROOT="$WD" \
+    MANIFEST_FILE="$WD/screenshots.md" \
+    ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="" \
+    GIST_VERIFY_FORCE=fail PATH="$STUB_PATH" \
+    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  # REQ-1: a URL that failed render-verification must never reach the PR body.
+  refute_output --partial "https://gist.github.com/abc123/raw/dv-01-test.png"
+}
+
+@test "gist verify: the same wiring with the probe passing does emit the embed" {
+  # Falsification arm for the test above: identical except the verdict, so the
+  # missing embed there is attributable to the probe rather than a broken mock.
+  stub_cmd gh --stdout 'https://gist.github.com/abc123'
+  run env STATE_FILE="$WD/state-true.json" WORKSPACE_ROOT="$WD" \
+    MANIFEST_FILE="$WD/screenshots.md" \
+    ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="" \
+    GIST_VERIFY_FORCE=pass PATH="$STUB_PATH" \
+    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  assert_output --partial "https://gist.github.com/abc123/raw/dv-01-test.png"
+}
+
 @test "edge: --emit pr with true flag but no manifest/captures → empty stdout, audit no_captures" {
   # No MANIFEST_FILE set → manifest_path resolves to a non-existent path → no_captures.
   run env STATE_FILE="$WD/state-true.json" WORKSPACE_ROOT="$WD" \
@@ -234,6 +263,43 @@ _degraded_row() {
     GIST_VERIFY_FORCE=pass \
     bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
   assert_success
+  run _degraded_row
+  assert_output ""
+}
+
+# --- the render-verify probe is UNREACHABLE under the mock base --------------
+# Every gist test in this file sets GIST_RAW_URL_BASE and then sets
+# GIST_VERIFY_FORCE=pass, with a comment claiming the latter "bypasses the
+# anonymous HEAD probe". It does not: publish-pl-issue.sh:808-809 returns the
+# synthesised URL early whenever GIST_RAW_URL_BASE is non-empty, which is BEFORE
+# the gist_raw_url_reachable call at :829. GIST_VERIFY_FORCE is inert in this
+# configuration, so the `fail) return 1` arm has no coverage here in either
+# direction. The script's own self-tests reach it by setting GIST_RAW_URL_BASE=""
+# (:2029, :2041, :2104, :2118) and mocking the upload instead.
+# Pinned as characterisation; real fail-arm coverage is routed to DV4.
+
+@test "characterisation: GIST_VERIFY_FORCE is inert while GIST_RAW_URL_BASE is set" {
+  _mk_manifest 1
+  run env STATE_FILE="$WD/state-true.json" WORKSPACE_ROOT="$WD" \
+    MANIFEST_FILE="$WD/screenshots.md" \
+    ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="https://mock.gist/raw" \
+    GIST_VERIFY_FORCE=pass \
+    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  local pass_out="$output"
+
+  run env STATE_FILE="$WD/state-true.json" WORKSPACE_ROOT="$WD" \
+    MANIFEST_FILE="$WD/screenshots.md" \
+    ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="https://mock.gist/raw" \
+    GIST_VERIFY_FORCE=fail \
+    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+
+  # Identical under both hook values, and the embed survives even under `fail` —
+  # the two facts that together prove the probe was never consulted. Moving the
+  # verify ahead of the mock short-circuit turns this red, which is the signal.
+  assert_output "$pass_out"
+  assert_output --partial "](https://mock.gist/raw/dv-01"
   run _degraded_row
   assert_output ""
 }

@@ -57,3 +57,58 @@ SCRIPT="skills/megatask/scripts/init-worktree.sh"
   assert_success
   assert_output --partial "self-test OK"
 }
+
+# --- real (non-dry-run) worktree creation ------------------------------------
+# Every test above is --dry-run, i.e. asserts the printed plan. The script's
+# actual effect — `git fetch origin <base>` then `git worktree add -b <branch>
+# <path> origin/<base>` (:278-279) — was exercised only inside the script's own
+# --self-test, which is the thing this suite exists to stop trusting.
+
+@test "real run: creates the worktree, the branch, and the workspace record" {
+  local origin repo
+  # A local "remote" so `git fetch origin master` resolves without a network.
+  origin="$(mk_git_fixture --branch master \
+            --file 'README.md:seed\n' --commit 'chore: seed')"
+  repo="$(mk_git_fixture --branch master --remote "$origin" \
+          --file 'README.md:seed\n' --commit 'chore: seed')"
+
+  run_script_env --cwd "$repo" -- "$SCRIPT" \
+    --issue 7 --title "Add Feature" --group milestone-3 --repo-root "$repo"
+  assert_success
+
+  # The worktree directory exists and git knows about it.
+  [ -d "$repo/.worktrees/milestone-3/7" ]
+  run git -C "$repo" worktree list
+  assert_output --partial ".worktrees/milestone-3/7"
+
+  # It is checked out on the planned branch, not on the base branch.
+  run git -C "$repo/.worktrees/milestone-3/7" rev-parse --abbrev-ref HEAD
+  assert_output "feature/7-add-feature"
+
+  # The branch exists in the parent repo's ref namespace too.
+  run git -C "$repo" rev-parse --verify --quiet "refs/heads/feature/7-add-feature"
+  assert_success
+}
+
+@test "real run: a second issue in the same group gets its own worktree" {
+  local origin repo
+  origin="$(mk_git_fixture --branch master \
+            --file 'README.md:seed\n' --commit 'chore: seed')"
+  repo="$(mk_git_fixture --branch master --remote "$origin" \
+          --file 'README.md:seed\n' --commit 'chore: seed')"
+
+  run_script_env --cwd "$repo" -- "$SCRIPT" \
+    --issue 7 --title "Add Feature" --group milestone-3 --repo-root "$repo"
+  assert_success
+  run_script_env --cwd "$repo" -- "$SCRIPT" \
+    --issue 8 --title "Second Thing" --group milestone-3 --repo-root "$repo"
+  assert_success
+
+  [ -d "$repo/.worktrees/milestone-3/7" ]
+  [ -d "$repo/.worktrees/milestone-3/8" ]
+  run git -C "$repo/.worktrees/milestone-3/8" rev-parse --abbrev-ref HEAD
+  assert_output "feature/8-second-thing"
+  # The first worktree is untouched by the second run.
+  run git -C "$repo/.worktrees/milestone-3/7" rev-parse --abbrev-ref HEAD
+  assert_output "feature/7-add-feature"
+}

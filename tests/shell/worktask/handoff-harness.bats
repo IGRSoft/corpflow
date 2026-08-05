@@ -28,8 +28,40 @@ setup() {
   run bash "$PLUGIN_ROOT/$SCRIPT" --out "$WD/out"
   assert_success
   assert_output --partial "PASS: all stages"
-  # spot-check that the table was printed
-  assert_output --partial "%"
+
+  # Re-derive the claim from the table's own numbers rather than asserting that
+  # a "%" appeared somewhere: the previous spot-check was satisfied by the
+  # header row alone and could not fail while "PASS: all stages" was asserted.
+  local rows=0 line stage baseline new pct want
+  while IFS= read -r line; do
+    case "$line" in
+      *"|"*"|"*"|"*) ;;
+      *) continue ;;
+    esac
+    stage="$(printf '%s' "$line" | awk -F'|' '{gsub(/ /,"",$1); print $1}')"
+    case "$stage" in stage|*-*|'') continue ;; esac
+    baseline="$(printf '%s' "$line" | awk -F'|' '{gsub(/ /,"",$2); print $2}')"
+    new="$(printf '%s' "$line" | awk -F'|' '{gsub(/ /,"",$3); print $3}')"
+    pct="$(printf '%s' "$line" | awk -F'|' '{gsub(/[ %]/,"",$4); print $4}')"
+    rows=$((rows + 1))
+    [ "$baseline" -gt 0 ]
+    # AC-12: the anchored prompt must be at most 70% of the inlined baseline.
+    [ $((new * 100)) -le $((baseline * 70)) ] \
+      || fail "stage=$stage new=$new is more than 70% of baseline=$baseline"
+    # The printed percentage must be the one those two numbers imply.
+    want="$(awk -v l="$baseline" -v n="$new" 'BEGIN { printf "%.0f", (l-n)*100.0/l }')"
+    [ "$pct" = "$want" ] \
+      || fail "stage=$stage printed reduction ${pct}% but numbers imply ${want}%"
+  done <<< "$output"
+  [ "$rows" -ge 5 ] || fail "expected a row per stage, parsed $rows"
+
+  # Independent corroboration in bytes: the generated artifacts are what the
+  # baseline inlines, so the winning prompt must be far smaller than they are.
+  local artifact_bytes new_bytes
+  artifact_bytes="$(cat "$WD/out/.context/"*.md "$WD/out/.context/state.json" | wc -c | tr -d ' ')"
+  [ "$artifact_bytes" -gt 0 ]
+  new_bytes="$(wc -c < "$WD/out/.context/state.json" | tr -d ' ')"
+  [ $((new_bytes * 100)) -le $((artifact_bytes * 70)) ]
 }
 
 @test "happy: --validate-frontmatter on a valid DV artifact passes (exit 0)" {

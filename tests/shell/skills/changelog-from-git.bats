@@ -86,3 +86,67 @@ SUBJECTS="${FIXTURES}/skills/changelog-subjects.txt"
   assert_success
   assert_output --partial "PASS"
 }
+
+# --- primary mode: a real git range ------------------------------------------
+# Every test above drives --file, which bypasses git entirely. The script's
+# documented primary input ($1 = "v1.1.0..HEAD") went completely untested, so a
+# regression in the `git log "$range" --pretty=format:'%s'` call — the one path
+# a release actually uses — would not have failed a single assertion.
+
+_range_repo() {
+  mk_git_fixture --branch main \
+    --file 'a.txt:1\n' --commit 'chore: scaffold' \
+    --file 'b.txt:1\n' --commit 'feat(auth): add OAuth2 login' \
+    --file 'c.txt:1\n' --commit 'fix: resolve crash on empty input' \
+    --file 'd.txt:1\n' --commit 'docs: update README' \
+    --file 'e.txt:1\n' --commit 'refactor: simplify token cache' \
+    --file 'f.txt:1\n' --commit 'Non-conventional commit message'
+}
+
+@test "git range: typed commits are routed to their sections" {
+  local repo
+  repo="$(_range_repo)"
+  local base
+  base="$(git -C "$repo" rev-parse HEAD~5)"
+  run_script_env --cwd "$repo" -- "$SCRIPT" "${base}..HEAD" \
+    --version "1.0.0" --date "2024-01-15"
+  assert_success
+  assert_output --partial "## [1.0.0] - 2024-01-15"
+  assert_output --partial "### Added"
+  assert_output --partial "**auth**: add OAuth2 login"
+  assert_output --partial "### Fixed"
+  assert_output --partial "resolve crash on empty input"
+  assert_output --partial "### Changed"
+  assert_output --partial "simplify token cache"
+  assert_output --partial "### Other"
+  assert_output --partial "Non-conventional commit message"
+  # docs is suppressed, and the pre-range commit is outside the window.
+  refute_output --partial "update README"
+  refute_output --partial "scaffold"
+}
+
+@test "git range: the range bound is honoured, not ignored" {
+  local repo base
+  repo="$(_range_repo)"
+  # Only the last two commits: refactor + the non-conventional one.
+  base="$(git -C "$repo" rev-parse HEAD~2)"
+  run_script_env --cwd "$repo" -- "$SCRIPT" "${base}..HEAD"
+  assert_success
+  assert_output --partial "simplify token cache"
+  assert_output --partial "Non-conventional commit message"
+  # Commits before the bound must not leak in.
+  refute_output --partial "add OAuth2 login"
+  refute_output --partial "resolve crash on empty input"
+}
+
+@test "git range: a range with no changelog-worthy commits emits the notice" {
+  local repo base
+  repo="$(mk_git_fixture --branch main \
+        --file 'a.txt:1\n' --commit 'chore: scaffold' \
+        --file 'b.txt:1\n' --commit 'docs: update README' \
+        --file 'c.txt:1\n' --commit 'test: add coverage')"
+  base="$(git -C "$repo" rev-parse HEAD~2)"
+  run_script_env --cwd "$repo" -- "$SCRIPT" "${base}..HEAD"
+  assert_success
+  assert_output --partial "no changelog-worthy"
+}
