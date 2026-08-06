@@ -504,6 +504,54 @@ EOART
     exit 1
   fi
 
+  # ---- T10: remediation re-merge — same verdict, new summary must refresh the handoff edge ----
+  make_state
+  cat > .context/development-0.md << 'EOART'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "first pass, pre-review"
+  refs: { dev: development.md#files-changed }
+---
+EOART
+  bash "$SELF" --stage DV --prev AR --artifact .context/development-0.md \
+    || {
+      printf 'T10: state-patch returned non-zero (round 1)\n' >&2
+      exit 1
+    }
+  cat > .context/development-0.md << 'EOART'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "remediated after DR round 1"
+  refs: { dev: development.md#files-changed }
+---
+EOART
+  bash "$SELF" --stage DV --prev AR --artifact .context/development-0.md \
+    || {
+      printf 'T10: state-patch returned non-zero (round 2)\n' >&2
+      exit 1
+    }
+  if jq -e '(.handoffs["AR→DV"] // "") | test("remediated after DR round 1")' \
+    .context/state.json > /dev/null; then
+    printf 'T10: same-verdict remediation refreshes handoff edge: ok\n'
+  else
+    printf 'T10: same-verdict remediation left a stale handoff edge: FAIL\n' >&2
+    jq '.handoffs' .context/state.json >&2
+    exit 1
+  fi
+  # A third identical run must still be a byte-identical no-op (T2 invariant preserved).
+  cp .context/state.json .context/state.before
+  bash "$SELF" --stage DV --prev AR --artifact .context/development-0.md
+  if cmp -s .context/state.json .context/state.before; then
+    printf 'T10: unchanged re-run stays idempotent: ok\n'
+  else
+    printf 'T10: unchanged re-run must not rewrite state: FAIL\n' >&2
+    exit 1
+  fi
+
   # ---- T9: B3 bounds — decisions clamp to newest-8, dispatched_agents to 6 ----
   # Seed 10 decisions (d0..d9) + 8 dispatched_agents (mix launched/completed), then
   # patch any stage; atomic_merge must clamp both arrays at the single chokepoint.
@@ -660,13 +708,36 @@ if command -v jq > /dev/null 2>&1; then
     "$STATE_PATH" 2> /dev/null || printf '')
   CURRENT_VERDICT=$(jq -r --arg s "$PARSED_STAGE" '.stages[$s].verdict // ""' \
     "$STATE_PATH" 2> /dev/null || printf '')
+  CURRENT_ARTIFACT=$(jq -r --arg s "$PARSED_STAGE" '.stages[$s].artifact // ""' \
+    "$STATE_PATH" 2> /dev/null || printf '')
 else
-  CURRENT_STATUS="" CURRENT_VERDICT=""
+  CURRENT_STATUS="" CURRENT_VERDICT="" CURRENT_ARTIFACT=""
 fi
 
+# A remediation loop re-completes a stage at the same verdict with a fresh artifact and summary,
+# so skip only when the patch would change nothing — verdict, artifact, and handoff edge all current.
 if [[ "$CURRENT_STATUS" == "completed" && "$CURRENT_VERDICT" == "$PARSED_VERDICT" ]]; then
-  log_msg INFO "idempotent: stages.${PARSED_STAGE} already completed verdict=${PARSED_VERDICT}"
-  exit 0
+  PATCH_IS_NOOP=1
+  if [[ "$CURRENT_ARTIFACT" != "$ART" ]]; then
+    PATCH_IS_NOOP=0
+  fi
+  if [[ -n "$PREV_ARG" ]] && command -v jq > /dev/null 2>&1; then
+    # Mirrors the handoff value built below; keep the two in step.
+    WOULD_HANDOFF=$(jq -rn --arg summary "$PARSED_SUMMARY" --arg ref "$(basename "$ART")" \
+      '(($summary) + " ref:" + $ref) | .[0:300]' 2> /dev/null || printf '')
+    CURRENT_HANDOFF=$(jq -r --arg k "${PREV_ARG}→${PARSED_STAGE}" '.handoffs[$k] // ""' \
+      "$STATE_PATH" 2> /dev/null || printf '')
+    if [[ "$CURRENT_HANDOFF" != "$WOULD_HANDOFF" ]]; then
+      PATCH_IS_NOOP=0
+    fi
+  fi
+
+  if [[ "$PATCH_IS_NOOP" == "1" ]]; then
+    log_msg INFO "idempotent: stages.${PARSED_STAGE} already completed verdict=${PARSED_VERDICT}"
+    exit 0
+  fi
+  log_msg INFO \
+    "re-merge: stages.${PARSED_STAGE} verdict unchanged (${PARSED_VERDICT}) but artifact/handoff differ"
 fi
 
 # ---------- Build patch + atomic write ----------

@@ -361,3 +361,29 @@ EOF
   run jq -r '.handoffs | has("PL→DV")' .context/state.json
   assert_output "false"
 }
+
+@test "remediation: same verdict with a new summary refreshes the handoffs edge" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev AR --artifact .context/development-0.md
+  run jq -r '.handoffs["AR→DV"]' .context/state.json
+  assert_output --partial "DV0a fixture development artifact"
+
+  # A DV→DR→DV loop re-completes DV at the same verdict; the edge must follow the new summary.
+  sed -i.bak 's/DV0a fixture development artifact/remediated after DR round 1/' \
+    .context/development-0.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev AR --artifact .context/development-0.md
+  assert_success
+  run jq -r '.handoffs["AR→DV"]' .context/state.json
+  assert_output --partial "remediated after DR round 1"
+  refute_output --partial "DV0a fixture development artifact"
+}
+
+@test "remediation: an unchanged re-run is still byte-identical (idempotence preserved)" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev AR --artifact .context/development-0.md
+  cp .context/state.json snap
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev AR --artifact .context/development-0.md
+  assert_success
+  run diff -q .context/state.json snap
+  assert_success
+}

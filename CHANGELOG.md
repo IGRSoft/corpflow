@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.8] - 2026-08-06
+
+`state-patch.sh` skipped its write whenever a stage was already `completed` at the same
+verdict. A review-remediation loop is exactly that shape — DV completes `ok`, DR requests
+changes, DV remediates and re-completes `ok` — so the second call short-circuited and left
+`handoffs["PREV→CODE"]` describing the pre-remediation artifact, with no flag to correct it.
+The stage record and the artifact reference stayed correct, so nothing failed loudly; the
+inline summary a later stage reads just described work that had since been redone.
+
+### Fixed
+
+- **The idempotency guard now compares the whole patch, not just status and verdict**
+  (`skills/worktask/scripts/state-patch.sh`). It additionally compares
+  `stages.<CODE>.artifact` and, when `--prev` is given, the handoff edge the call would
+  write. Identical inputs still exit early and leave `state.json` byte-identical; a changed
+  artifact or summary now re-merges and logs `re-merge: ... artifact/handoff differ`.
+  Observed twice in one worktask (`AR→DV` and `DV→DR`), once on a review agent's own patch.
+
+### Added
+
+- **Regression coverage for the remediation loop** — self-test `T10` (same-verdict re-merge
+  refreshes the edge; a third unchanged run stays byte-identical) plus two `bats` cases in
+  `tests/shell/worktask/state-patch.bats`. Verified against the pre-fix script, which leaves
+  the stale edge in place.
+
 ## [4.0.7] - 2026-08-06
 
 Branch naming's `--goal` took the raw task description, so a multi-sentence description

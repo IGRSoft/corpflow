@@ -4,14 +4,22 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.7** — branch naming R1-R4 (title-driven `--goal`, end-to-end truncation
-  visibility, one-shot pre-commit refinement via new `refine-branch-target.sh`) plus the
-  once-only rename invariant reconciled across 8 docs. Orchestrator recommendation was `4.1.0`
+- Plugin version: **4.0.8** — `state-patch.sh` idempotency guard now compares the whole patch
+  (artifact and handoff edge, not just status and verdict), so a review-remediation loop that
+  re-completes a stage at the same verdict refreshes `handoffs["PREV→CODE"]` instead of
+  stranding it on pre-remediation prose. Identical inputs remain byte-identical no-ops.
+  Regression coverage: self-test `T10` plus two `bats` cases, verified against the pre-fix
+  script. Observed twice in one worktask (`AR→DV`, `DV→DR`), once on a review agent's own
+  patch. Full narrative: `CHANGELOG.md § [4.0.8]`.
+
+### Previous release narratives
+
+- Plugin version (previous): **4.0.7** — branch naming R1-R4 (title-driven `--goal`, end-to-end
+  truncation visibility, one-shot pre-commit refinement via new `refine-branch-target.sh`) plus
+  the once-only rename invariant reconciled across 8 docs. Orchestrator recommendation was `4.1.0`
   (MINOR: new script, new public `--print-target` flag, three new `branch-lib.sh` functions,
   new pipeline step A.4b); user decided `4.0.7` at the finalization gate — decision of record.
   Full narrative: `CHANGELOG.md § [4.0.7]`.
-
-### Previous release narratives
 
 - Plugin version (previous): **4.0.6** (Test-execution gate closes the flag-carrying full-suite hole at DV: the
   classifier now strips each runner's mandatory non-selecting flags — quote-aware, so
@@ -114,6 +122,16 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 | 2.1.51→2.1.76 | cc-features-2.1.51-76.md | v3.1.0/v3.2.0 |
 
 ## Release History (last 12, newest first)
+
+- 2026-08-06: v4.0.8 — `state-patch.sh` idempotency guard widened from (status, verdict) to the
+  full patch: it now also compares `stages.<CODE>.artifact` and, under `--prev`, the handoff edge
+  the call would write. A DV→DR→DV remediation loop re-completes at the same verdict, which the
+  old guard read as a no-op, leaving `handoffs["PREV→CODE"]` on the pre-remediation summary with
+  no flag to correct it. Identical inputs still exit early byte-identical; a changed artifact or
+  summary re-merges and logs `re-merge: ... artifact/handoff differ`. Regression coverage:
+  self-test `T10` (refresh + third-run idempotence) and two `bats` cases, both verified to fail
+  against the pre-fix script. Found in an apple-developer worktask where it fired twice
+  (`AR→DV`, `DV→DR`) — the second on a review agent's own patch.
 
 - 2026-08-06: v4.0.7 — branch naming R1-R4 (user decided PATCH at the finalization gate over
   the orchestrator's MINOR recommendation — see § Version Tracking): `--goal` takes a concise
