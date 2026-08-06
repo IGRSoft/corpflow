@@ -8,8 +8,8 @@
 #   loudly — see each caller's own guard.
 #
 #   Symbols: BRANCH_TYPES, branch_type_regex, branch_is_conventional, resolve_goal,
-#   derive_type, derive_ticket, derive_slug, target_branch_name, meta_json, audit_fn,
-#   fn_batch_scope, resolve_base_ref.
+#   derive_type, derive_ticket, slug_body, slug_budget, slug_is_truncated, derive_slug,
+#   target_branch_name, meta_json, audit_fn, fn_batch_scope, resolve_base_ref.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -150,19 +150,12 @@ derive_ticket() {
   printf '%s' "$k" | tr '[:upper:]' '[:lower:]'
 }
 
-# Kebab slug from a free-text goal, no leading/trailing '-'. `tr '\n' ' '` runs before
-# the collapse: a multi-line task description (this function's caller may now pass one,
-# unlike the old goal-only source) would otherwise survive as embedded newlines through
-# `sed`/`cut`'s line-oriented view and yield a two-line slug, which then fails
-# `git branch -m` outright.
-#
-# $2 is the optional ticket, which is budgeted INSIDE the 48-char cap (and stripped from
-# the slug body, or the key would appear twice in one branch name). Truncation drops the
-# trailing PARTIAL segment rather than cutting mid-word — `cut -c1-48` alone produced
-# `…-blinking-before-r`. One whole word always survives, even one longer than the budget:
-# an empty slug makes target_branch_name refuse, which is worse than a long name.
-derive_slug() {
-  local ticket="${2:-}" body budget=48 keep next
+# Uncapped kebab body, no leading/trailing '-'. `tr '\n' ' '` runs before the collapse:
+# a multi-line goal would otherwise survive as embedded newlines through `sed`/`cut`'s
+# line-oriented view and yield a two-line slug, which fails `git branch -m` outright.
+# $2 is the optional ticket, stripped from the body or the key appears twice in one name.
+slug_body() {
+  local ticket="${2:-}" body
   body=$(printf '%s' "${1:-}" |
     tr '\n' ' ' |
     tr '[:upper:]' '[:lower:]' |
@@ -180,9 +173,41 @@ derive_slug() {
     done
     body="${body#-}"
     body="${body%-}"
+  fi
+  printf '%s' "$body"
+}
+
+# Effective slug budget: the ticket segment and its separator are spent inside the
+# same 48 characters. Floored at 1 so a pathologically long key cannot ask for a
+# zero-length slug, which target_branch_name would refuse outright.
+slug_budget() {
+  local ticket="${1:-}" budget=48
+  if [ -n "$ticket" ]; then
     budget=$((budget - ${#ticket} - 1))
     [ "$budget" -ge 1 ] || budget=1
   fi
+  printf '%s' "$budget"
+}
+
+# Exit code only (0 = the budget dropped content), argv identical to derive_slug.
+# A predicate rather than a flag set inside derive_slug: callers obtain the slug
+# through command substitution, so any variable assigned there dies with the subshell.
+# `slug_body` never emits a trailing '-', so an over-budget body always loses at
+# least one real character on every branch of derive_slug's tail.
+slug_is_truncated() {
+  local body budget
+  body=$(slug_body "${1:-}" "${2:-}")
+  budget=$(slug_budget "${2:-}")
+  [ "${#body}" -gt "$budget" ]
+}
+
+# Budget-capped kebab slug. Truncation drops the trailing PARTIAL segment rather than
+# cutting mid-word. One whole word always survives, even one longer than the budget: an
+# empty slug makes target_branch_name refuse, which is worse than a long name.
+derive_slug() {
+  local ticket="${2:-}" body budget keep next
+  body=$(slug_body "${1:-}" "$ticket")
+  budget=$(slug_budget "$ticket")
 
   if [ "${#body}" -le "$budget" ]; then
     printf '%s' "$body" | sed -e 's/-*$//'

@@ -265,12 +265,22 @@ Every stage writes `<basename>-N.md` where N = the `planning-N.md` index for thi
 
 The branch was already named once, by the **orchestrator**, at `commands/worktask.md § Step 3c` —
 before this PL0 turn began, immediately after the state.json seed and before `TaskCreate` for
-PL0 itself. PM MUST NOT invoke `branch-name.sh` at any point; the once-only rule
-(`skills/shared/git-conventions.md § Branch Naming`) means exactly one run per worktask, and
-that run already happened. PM only *reads* the result: `state.json facts.branch` carries the
+PL0 itself. PM MUST NOT invoke `branch-name.sh` **in rename mode** at any point; the once-only
+rule (`skills/shared/git-conventions.md § Branch Naming`) means exactly one rename-mode run per
+worktask, and that run already happened.
+
+#### Branch naming — query modes are free, refinement is not PM's
+
+The query modes (`--check`, `--print-types`, `--print-target`) and `BRANCH_NAME_PRINT=1` write
+nothing — no rename, no state, no audit row — and are free to use. The one-shot refinement of
+the *planned* name is an **orchestrator** step after PL0 returns
+(`commands/worktask.md § Step A.4b`); PM never runs it, and a plan revision never re-refines.
+
+PM only *reads* the result: `state.json facts.branch` carries the
 name the orchestrator stamped from the script's `branch=<name>` / `target_branch=<name>`
 stdout lines (`branch-name.sh` itself never writes state.json). In a host workspace that name
-is the **planned remote** name and will not match the local branch — see
+may not match the local branch on the opt-out and no-op arms; on the default worktree path the
+two agree — see
 `skills/worktask/references/workspace-modes.md § Host mapping — handled, not just noted`.
 Full argv/env/exit-code contract: the script's own `--help`.
 

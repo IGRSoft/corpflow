@@ -4,7 +4,16 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.6** (Test-execution gate closes the flag-carrying full-suite hole at DV: the
+- Plugin version: **4.0.7** — branch naming R1-R4 (title-driven `--goal`, end-to-end truncation
+  visibility, one-shot pre-commit refinement via new `refine-branch-target.sh`) plus the
+  once-only rename invariant reconciled across 8 docs. Orchestrator recommendation was `4.1.0`
+  (MINOR: new script, new public `--print-target` flag, three new `branch-lib.sh` functions,
+  new pipeline step A.4b); user decided `4.0.7` at the finalization gate — decision of record.
+  Full narrative: `CHANGELOG.md § [4.0.7]`.
+
+### Previous release narratives
+
+- Plugin version (previous): **4.0.6** (Test-execution gate closes the flag-carrying full-suite hole at DV: the
   classifier now strips each runner's mandatory non-selecting flags — quote-aware, so
   `-destination "platform=iOS Simulator,name=iPhone 16 Pro"` no longer reads as a narrowed run —
   before deciding whether an argument survived. `xcodebuild`/`dotnet`/`gradle`/`npm`,`pnpm`,`yarn`/
@@ -106,6 +115,17 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-08-06: v4.0.7 — branch naming R1-R4 (user decided PATCH at the finalization gate over
+  the orchestrator's MINOR recommendation — see § Version Tracking): `--goal` takes a concise
+  imperative title (was the raw
+  task description, silently truncating mid-phrase into the slug); `BRANCH_NAME_PRINT=1` documented
+  as a free preview, the "do not re-invoke" prohibition narrowed to rename mode only; truncation
+  visible end to end (`slug_truncated=1`, `branch_slug_truncated` audit row, Step A.5 gate summary);
+  new `refine-branch-target.sh` at Step A.4b refines the planned name once, pre-commit, ledger-only,
+  no git mutation, exit 0 always. Once-only rename invariant reconciled across 8 sites (rename once
+  at PL start; planned name refinable once more, pre-commit). `tests/COVERAGE.md` `@test` total
+  680→683 (QA's 3 added cases). R5 (bare-issue ticket grammar), `cache-lint.sh:92` (non-deterministic
+  on artifact content), and `state-patch.sh`'s completed-stage idempotency short-circuit deferred.
 - 2026-08-05: v4.0.6 — test-execution gate: runner-aware, quote-aware strip of non-selecting flags
   closes the flag-carrying full-suite hole at DV (`xcodebuild`/`dotnet`/`gradle`/`npm`/`pnpm`/`yarn`/
   `cargo --release` invert allow→deny; genuine selectors unaffected). `--only-testing:` spelling
@@ -232,7 +252,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
   cases), vendored `hooks/` bats module 106/106, shellcheck at the one-item SC2016 baseline. 4 files.
 - 2026-07-30: v3.41.1 — test-execution authority enforcement via stage-scoped policy matrix; DV auto-promotion capped at module-scope; SR/RE tool-grant narrowing (bare Bash → scoped allow-lists); new `PreToolUse` hook `hooks/test-execution-gate.sh` with fail-open guards; 27 new hook test scenarios + 6 parity tests; 8 sections restructured for size compliance. 394 bats green. ~25 files.
 - 2026-07-30: v3.41.0 — branch naming PL-stage entry point + shared library; FN `branch-name` subcommand removed entirely; vocabulary extended to `feature`/`feat` (backward compatible); rank-4 issue resolver tightened; shell-injection hardening (input gate + validation at 3 consumption hops); symlink ACE + CDPATH + audit-row-loss fixes. 340 bats green. ~20 files.
-- 2026-07-29: v3.40.0 — suite fully green (281/0); new cross-plugin-refs contract test caught 2 dangling delegations; web/android capture scripts; android `and-*` agent rename propagated; `deps --upgrade` silent-audit fixed. ~12 files.
+
 ## Token Baselines
 
 Authoritative per-surface baselines: `skills/cost-optimization/references/token-baselines.md`. This file no longer mirrors them.

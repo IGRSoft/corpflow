@@ -555,3 +555,208 @@ EOF
   assert_success
   refute_output --partial "unreachable"
 }
+
+# ---------------------------------------------------------------------------
+# AC-10 case 8 (R6) — branch-divergence: has anything outside the pipeline
+# renamed the local branch since the naming step?
+#
+# The comparison base is the `to` of the last `branch_renamed / ok` row, NOT
+# facts.branch. That choice is what makes the check useful AND what makes R4
+# structurally unable to trip it — both are asserted below, because the
+# orthogonality is a design claim, not an accident.
+# ---------------------------------------------------------------------------
+
+mk_div_repo() {
+  local branch="${1:-feature/add-a-new-login-flow}"
+  git init -q -b "$branch" "$WD"
+  git -C "$WD" -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m work
+}
+
+# The row branch-name.sh writes on a successful rename.
+mk_renamed_ok_row() {
+  jq -cn --arg to "$1" \
+    '{ts:"2026-01-01T00:00:00Z", actor:"product-manager", action:"branch_renamed",
+      subject:"PL2", result:"ok", task_id:"PL0",
+      metadata:{from:"moab-v1", to:$to, origin_stage:"PL",
+                dedupe_key:"wt-demo:2:branch_renamed"}}' \
+    >> "$WD/.context/logs/audit.jsonl"
+}
+
+# Reads with the same AD-9-tolerant idiom the script uses: one corrupt line in the fixture
+# must not break the assertion helper either.
+div_row() {
+  jq -rs -R "[ split(\"\n\")[] | fromjson? | objects
+    | select(.action==\"branch_divergence_detected\") | .$1 ] | (last // \"\")" \
+    "$WD/.context/logs/audit.jsonl"
+}
+
+@test "branch-divergence: a third-party rename is detected and classed third_party" {
+  cd "$WD"
+  mk_div_repo "which-stages-ran-tests"
+  mk_renamed_ok_row "feature/add-a-new-login-flow"
+  run bash "$PLUGIN_ROOT/$SCRIPT" branch-divergence
+  assert_success
+  assert_output --partial "renamed by something outside the pipeline"
+  run div_row 'metadata.class'
+  assert_output "third_party"
+  run div_row 'result'
+  assert_output "warn"
+  run div_row 'metadata.local'
+  assert_output "which-stages-ran-tests"
+  run div_row 'metadata.renamed_to'
+  assert_output "feature/add-a-new-login-flow"
+  run div_row 'metadata.source'
+  assert_output "fn_preflight"
+}
+
+@test "branch-divergence: local matching the ok row is expected, not third_party" {
+  cd "$WD"
+  mk_div_repo "feature/add-a-new-login-flow"
+  mk_renamed_ok_row "feature/add-a-new-login-flow"
+  run bash "$PLUGIN_ROOT/$SCRIPT" branch-divergence
+  assert_success
+  assert_output --partial "class=expected"
+  run div_row 'metadata.class'
+  assert_output "expected"
+}
+
+# The deferred / no-op arms never renamed anything, so there is no ok row and nothing
+# can be classed third_party — divergence there is designed, not external.
+@test "branch-divergence: no branch_renamed ok row means expected, never third_party" {
+  cd "$WD"
+  mk_div_repo "moab-v1"
+  jq -cn '{ts:"2026-01-01T00:00:00Z", actor:"product-manager", action:"branch_renamed",
+           subject:"PL2", result:"skipped", task_id:"PL0",
+           metadata:{reason:"host_workspace_worktree", branch:"moab-v1",
+                     target:"feature/add-a-new-login-flow", origin_stage:"PL",
+                     dedupe_key:"wt-demo:2:branch_renamed"}}' \
+    >> .context/logs/audit.jsonl
+  jq '.facts.branch = "feature/add-a-new-login-flow"' .context/state.json > s && mv s .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" branch-divergence
+  assert_success
+  run div_row 'metadata.class'
+  assert_output "expected"
+  run div_row 'metadata.renamed_to'
+  assert_output ""
+}
+
+# R4 rewrites facts.branch and never touches git. Because the base is the ok row's `to`
+# and not facts.branch, a refinement cannot look like an external rename.
+@test "branch-divergence: an R4 refinement cannot trip the check (orthogonality)" {
+  cd "$WD"
+  mk_div_repo "feature/add-a-new-login-flow"
+  mk_renamed_ok_row "feature/add-a-new-login-flow"
+  # Exactly what refine-branch-target.sh does: the LEDGER moves, git does not.
+  jq '.facts.branch = "feature/derive-branch-names-from-a-title"' .context/state.json > s \
+    && mv s .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" branch-divergence
+  assert_success
+  run div_row 'metadata.class'
+  assert_output "expected"
+  # The row still records the disagreement it saw — it just does not call it third_party.
+  run div_row 'metadata.ledger'
+  assert_output "feature/derive-branch-names-from-a-title"
+  run div_row 'metadata.local'
+  assert_output "feature/add-a-new-login-flow"
+  # Had the check compared against facts.branch, this would have been third_party.
+  refute_output "feature/derive-branch-names-from-a-title"
+}
+
+@test "branch-divergence: non-blocking — exit 0 on every arm, including detection" {
+  cd "$WD"
+  mk_div_repo "which-stages-ran-tests"
+  mk_renamed_ok_row "feature/add-a-new-login-flow"
+  run bash "$PLUGIN_ROOT/$SCRIPT" branch-divergence
+  assert_success
+  # no repo at all
+  rm -rf .git
+  run bash "$PLUGIN_ROOT/$SCRIPT" branch-divergence
+  assert_success
+  # no audit log at all
+  rm -f .context/logs/audit.jsonl
+  run bash "$PLUGIN_ROOT/$SCRIPT" branch-divergence
+  assert_success
+}
+
+@test "branch-divergence: jq unavailable — skipped, exit 0, no row" {
+  cd "$WD"
+  mk_div_repo "which-stages-ran-tests"
+  mk_renamed_ok_row "feature/add-a-new-login-flow"
+  local nobin tool p
+  nobin="$WD/nobin"
+  mkdir -p "$nobin"
+  for tool in git grep sed tr cut date mkdir bash sh env printf true false cat awk readlink dirname basename; do
+    p=$(command -v "$tool" 2> /dev/null) || continue
+    ln -sf "$p" "$nobin/$tool"
+  done
+  run env PATH="$nobin" bash "$PLUGIN_ROOT/$SCRIPT" branch-divergence
+  assert_success
+  assert_output --partial "jq unavailable"
+  run bash -c "grep -c branch_divergence_detected .context/logs/audit.jsonl || true"
+  assert_output "0"
+}
+
+# AD-9 idiom: one unparsable line must not blind the scan.
+@test "branch-divergence: a corrupt audit line does not blind the scan" {
+  cd "$WD"
+  mk_div_repo "which-stages-ran-tests"
+  printf 'not json at all\n' >> .context/logs/audit.jsonl
+  mk_renamed_ok_row "feature/add-a-new-login-flow"
+  run bash "$PLUGIN_ROOT/$SCRIPT" branch-divergence
+  assert_success
+  run div_row 'metadata.class'
+  assert_output "third_party"
+}
+
+@test "branch-divergence: the most recent ok row wins" {
+  cd "$WD"
+  mk_div_repo "feature/second-name"
+  mk_renamed_ok_row "feature/first-name"
+  mk_renamed_ok_row "feature/second-name"
+  run bash "$PLUGIN_ROOT/$SCRIPT" branch-divergence
+  assert_success
+  run div_row 'metadata.class'
+  assert_output "expected"
+  run div_row 'metadata.renamed_to'
+  assert_output "feature/second-name"
+}
+
+@test "branch-divergence: detached HEAD is expected, never third_party" {
+  cd "$WD"
+  mk_div_repo "feature/add-a-new-login-flow"
+  mk_renamed_ok_row "feature/add-a-new-login-flow"
+  git checkout -q --detach HEAD
+  run bash "$PLUGIN_ROOT/$SCRIPT" branch-divergence
+  assert_success
+  run div_row 'metadata.class'
+  assert_output "expected"
+  run div_row 'metadata.local'
+  assert_output ""
+}
+
+@test "branch-divergence: is not part of the all pipeline" {
+  cd "$WD"
+  mk_div_repo "which-stages-ran-tests"
+  mk_renamed_ok_row "feature/add-a-new-login-flow"
+  mk_attachments
+  mk_body
+  run bash "$PLUGIN_ROOT/$SCRIPT" all --body "$WD/body.md"
+  run bash -c "grep -c branch_divergence_detected .context/logs/audit.jsonl || true"
+  assert_output "0"
+}
+
+# Companion to AC-10/3d: `fromjson?` alone survives an unparsable line but NOT a
+# well-formed non-object one, which parses and then dies on `.action` — silently
+# suppressing detection of a real third-party rename.
+@test "branch-divergence: a well-formed non-object audit line does not suppress detection" {
+  cd "$WD"
+  mk_div_repo "which-stages-ran-tests"
+  printf '123\n[1,2]\n"a bare string"\n' >> .context/logs/audit.jsonl
+  mk_renamed_ok_row "feature/add-a-new-login-flow"
+  run bash "$PLUGIN_ROOT/$SCRIPT" branch-divergence
+  assert_success
+  run div_row 'metadata.class'
+  assert_output "third_party"
+  run div_row 'metadata.renamed_to'
+  assert_output "feature/add-a-new-login-flow"
+}

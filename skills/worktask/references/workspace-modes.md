@@ -75,10 +75,14 @@ name that happens not to match — e.g. `spike-oauth-poc` — is indistinguishab
 host-provisioned one and **will** be renamed; there is no mechanism that detects "the
 user named this deliberately" versus "the host assigned this by default". If that
 matters in your workflow, rename to a conventional form yourself before invoking
-`/worktask`, or accept the rename as part of what the pipeline does. The host-workspace
-arm below narrows the blast radius (inside a linked worktree nothing is renamed at all)
-without solving this — a deliberate name in a plain checkout is still indistinguishable
-from a host-assigned one.
+`/worktask`, or accept the rename as part of what the pipeline does.
+
+#### Scope of the authorization — R6 widens the caveat
+
+Since R6 the host-workspace arm **widens** this caveat rather than narrowing it: a linked worktree is
+renamed too, so a deliberate name is indistinguishable from a host-assigned one in *every*
+checkout, not just plain ones. `BRANCH_NAME_WORKTREE_RENAME=0` restores the previous
+defer-to-host behaviour inside worktrees.
 
 #### Timing
 
@@ -86,7 +90,11 @@ The rename runs at the very start of planning — before PL0 exists, and therefo
 the plan-approval gate, the pipeline's only human checkpoint. If the operator later
 declines the plan, the branch has already been renamed and nothing renames it back
 automatically. `--auto=[plan]`, `--emergency`, and `/megatask` remove the approval gate
-entirely, so this rename is the only pre-approval action any of them take.
+entirely, so this rename is the only pre-approval action any of them take. R6 widens *which
+runs* take it: the rename now fires inside linked worktrees too, so the set is every checkout
+with a non-conventional name rather than plain checkouts only. `/megatask` and `--emergency`
+are unaffected (they self-disable at the first ladder position); `--auto=[plan]` is the exposed
+combination, and `BRANCH_NAME_WORKTREE_RENAME=0` is the mitigation.
 
 #### Rollback
 
@@ -105,31 +113,51 @@ should carry. Blocking the rename never blocks the target.
 | Upstream tracked | no-op — a rename orphans the remote ref | derived |
 | On the integration branch | refuses | empty — never a PR head |
 | Target name exists | no-op | derived |
-| **Host workspace (linked worktree)** | **no rename — host's name kept** | **derived** |
+| **Host workspace (linked worktree)** | **renamed (default) — `BRANCH_NAME_WORKTREE_RENAME=0` keeps the host's name** | **derived** |
 | jq unavailable | no-op — batch scope unknowable | derived if `--goal` passed |
 | Detached HEAD / no repo / batch routing | skipped | empty |
 
 Running at PL start retires the hazard the upstream guards catch — no push yet to orphan.
 
-#### Host mapping — handled, not just noted
+#### Host mapping — updated, not preserved
 
-The host maps the workspace to its original branch name, so a local rename leaves that
-mapping stale. Under a linked worktree — the shape every worktree-based host provisions,
-detected as `git rev-parse --git-dir != --git-common-dir`, which is the only signal a host
-workspace reliably leaves (Conductor writes no `workspace.json` in `$PWD`, so none of
-`fn_batch_scope`'s five signals fire) — `branch-name.sh` therefore **keeps the local name
-and emits the derived `target_branch=` instead**, auditing `branch_renamed / skipped` with
-`reason: host_workspace_worktree`.
+Inside a linked worktree the naming step **renames the local branch**, like any other
+checkout, so `branch=` and `target_branch=` agree. The host's branch↔workspace mapping is
+updated by that rename — deliberately: a host-assigned placeholder is not a name worth
+preserving, and a host may rename the branch again mid-run without telling the pipeline
+(observed: Conductor renamed a branch from `cape-town` to a chat-topic slug mid-run, with no
+notification and no audit row). Set `BRANCH_NAME_WORKTREE_RENAME=0` to restore the previous
+defer-to-host behaviour, in which the local name is kept and only `target_branch=` is derived,
+auditing `branch_renamed / skipped` with `reason: host_workspace_worktree`.
+
+#### Host mapping — detection is unchanged, only what it gates
+
+The detection is unchanged — only what it gates. A linked worktree is the shape every
+worktree-based host provisions, detected as `git rev-parse --git-dir != --git-common-dir`,
+which is the only signal a host workspace reliably leaves (Conductor writes no
+`workspace.json` in `$PWD`, so none of `fn_batch_scope`'s five signals fire).
+
+The rename is disclosed on stdout at the moment it happens, naming both the re-sync
+consequence and the opt-out, and repeated in the Step A.5 plan-gate summary.
 
 #### Host mapping — where the target lands
 
 The orchestrator stamps that target into `facts.branch` (`commands/worktask.md § Step 3c —
 which of the two names gets stamped`) and FN's existing
 `git push -u origin HEAD:refs/heads/<facts.branch>` gives the PR a conventional head
-(`agents/project-manager.md § Final FN steps`). The host's mapping stays intact and the PR
-head is still right — the two are not in conflict, and neither is traded for the other.
-This is the mechanism that keeps `facts.branch` deliberately **different** from the local
-branch name in a host workspace. That divergence is the designed outcome here, not drift.
+(`agents/project-manager.md § Final FN steps`).
+
+On the **default** worktree path the two names now agree, so there is no divergence left to
+reconcile. Divergence remains designed on the **opt-out** path and on the `upstream_tracked`,
+`target_exists` and `jq_unavailable` arms — that is where this mechanism still applies.
+
+#### Host mapping — divergence is now observed
+
+Divergence is now *observed* rather than merely tolerated: `fn-preflight.sh branch-divergence`
+classes it `expected` (any of the arms above, or an R4 refinement) or `third_party` (something
+outside the pipeline renamed the branch after the naming step). Only `third_party` is surfaced
+at the FN gate. The comparison base is the `to` of the last `branch_renamed / ok` row — not
+`facts.branch` — which is what keeps an R4 refinement from ever looking like an external rename.
 
 ## Task ID Namespacing
 

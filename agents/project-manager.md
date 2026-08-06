@@ -141,11 +141,30 @@ workspace: `skills/worktask/references/workspace-modes.md § Branch naming under
 workspace`). FN never re-derives or re-renames the branch; it reads `facts.branch` from the
 ledger for the PR head (above).
 
-`facts.branch` **may legitimately differ from the local branch name** — inside a host
-workspace (linked worktree) the naming step keeps the host's local name and plans the
-conventional one for the remote instead. That is the designed outcome, not drift: the push
-refspec `HEAD:refs/heads/<facts.branch>` is exactly what makes both true at once. Do not
-"correct" the mismatch by falling back to `git rev-parse`.
+##### Branch naming — the ledger value may have been refined once
+
+The value FN reads may have been **refined once**, before publish, from the approved plan's
+title (`commands/worktask.md § Step A.4b` — a ledger-only write, no git mutation, no second
+rename). FN still re-validates it against `^[A-Za-z0-9._/-]+$` exactly as before; nothing
+about the FN arm changes.
+
+`facts.branch` **may legitimately differ from the local branch name** on the
+`upstream_tracked` and `target_exists` arms, and inside a linked worktree when
+`BRANCH_NAME_WORKTREE_RENAME=0` is set — there the naming step keeps the host's local name
+and plans the conventional one for the remote instead. On the **default** worktree path the
+branch is renamed and the two agree. Where they differ, that is the designed outcome, not
+drift: the push refspec `HEAD:refs/heads/<facts.branch>` is exactly what makes both true at
+once. Do not "correct" the mismatch by falling back to `git rev-parse`.
+
+##### Branch naming — check for an external rename before pushing
+
+Run `bash skills/worktask/scripts/fn-preflight.sh branch-divergence` before the push. It is
+read-only, exits 0 always and never blocks. It compares the local branch against the `to` of
+the last `branch_renamed / ok` row — **not** against `facts.branch`, so an R4 refinement can
+never trip it — and writes one `branch_divergence_detected / warn` row classed `expected` or
+`third_party`. Surface a `third_party` result at the FN gate before pushing: it means
+something outside the pipeline (a host, a human) renamed the branch mid-run, which FN's
+charset re-validation structurally cannot catch because such a name passes it perfectly well.
 
 #### Recurring-defect escalation
 

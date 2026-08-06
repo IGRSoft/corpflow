@@ -16,7 +16,17 @@
 #                    the sanitised body (warn-only; never changes this verdict).
 #     continuity     the worktree HEAD is an ancestor of the integration branch, else
 #                    log a diverged→cherry-pick diagnostic + audit row (never blocks).
+#     branch-divergence
+#                    has anything outside the pipeline renamed the local branch since the
+#                    naming step? Compares the local name against the `to` of the last
+#                    `branch_renamed / ok` row — NOT against facts.branch, which is the
+#                    planned REMOTE name and legitimately differs on several arms. Classes
+#                    the result `third_party` or `expected`; only `third_party` is surfaced
+#                    at the FN gate. Read-only, exit 0 always, never blocks.
 #     all            attachments → pr-body → validate-pr → continuity.
+#
+#   `branch-divergence` is deliberately NOT in `all`: it is a separate subcommand so it is
+#   independently testable and cannot perturb `continuity`'s existing rows.
 #
 #   `pr-body` runs BEFORE `validate-pr` because it rewrites the body in place: the
 #   body whose `Closes #<n>` line is validated must be the byte-identical body that
@@ -367,6 +377,62 @@ cmd_continuity() {
   return 0 # diverged is a documented fallback, not a hard block
 }
 
+# Has anything outside this pipeline renamed the local branch since the naming step?
+#
+# The comparison base is the `to` of the most recent `branch_renamed / ok` row, NOT
+# `facts.branch`. That distinction is what makes the check useful: `facts.branch` is the
+# PLANNED REMOTE name and is legitimately different from the local name on several arms, so
+# comparing against it fires on every worktree run and gets ignored. It also makes R4
+# structurally unable to trip this — R4 rewrites `facts.branch` and never touches git, so a
+# refinement cannot look like an external rename.
+#
+# Read-only, exit 0 always, at most one row, never blocks: divergence is a legitimate
+# designed state on the opt-out, upstream_tracked, target_exists and jq_unavailable arms.
+cmd_branch_divergence() {
+  local log="${CONTEXT_DIR}/logs/audit.jsonl" local_name ledger renamed_to class
+  local_name=$(git rev-parse --abbrev-ref HEAD 2> /dev/null || printf '')
+  if [[ "$local_name" == "HEAD" ]]; then local_name=""; fi
+
+  if ! command -v jq > /dev/null 2>&1; then
+    printf 'branch-divergence: jq unavailable — check skipped\n'
+    return 0
+  fi
+  ledger=$(jq -r '.facts.branch // ""' "$STATE_PATH" 2> /dev/null || printf '')
+  [[ "$ledger" == "null" ]] && ledger=""
+
+  renamed_to=""
+  if [[ -f "$log" ]]; then
+    # `fromjson? | objects` — the first survives an unparsable line, the second a
+    # well-formed NON-object one (`123`, `[1,2]`), which would otherwise abort the scan on
+    # `.action` and silently suppress detection of a real third-party rename.
+    # `last` takes the most recent ok row, so a re-run's row wins over an earlier one.
+    renamed_to=$(jq -rs -R \
+      '[ split("\n")[] | fromjson? | objects
+         | select(.action == "branch_renamed" and .result == "ok") | .metadata.to ]
+       | (last // "")' "$log" 2> /dev/null) || renamed_to=""
+  fi
+
+  # third_party requires an ok row to compare against; everything else is a designed
+  # divergence (or none at all) and stays an audit row only.
+  if [[ -n "$renamed_to" ]] && [[ -n "$local_name" ]] && [[ "$local_name" != "$renamed_to" ]]; then
+    class="third_party"
+  else
+    class="expected"
+  fi
+
+  audit_fn branch_divergence_detected warn \
+    "$(meta_json class "$class" ledger "$ledger" local "$local_name" \
+      renamed_to "$renamed_to" source "${DIVERGENCE_SOURCE:-fn_preflight}")"
+
+  if [[ "$class" == "third_party" ]]; then
+    printf 'branch-divergence: local branch is %s but this run renamed it to %s — renamed by something outside the pipeline\n' \
+      "$local_name" "$renamed_to"
+  else
+    printf 'branch-divergence: no external rename detected (class=expected)\n'
+  fi
+  return 0
+}
+
 # ---------- Argument parsing ----------
 COMMAND=""
 while [[ $# -gt 0 ]]; do
@@ -387,7 +453,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h | --help) usage ;;
-    attachments | resolve-issue | validate-pr | pr-body | continuity | all)
+    attachments | resolve-issue | validate-pr | pr-body | continuity | branch-divergence | all)
       COMMAND="$1"
       shift
       ;;
@@ -409,6 +475,7 @@ case "$COMMAND" in
   validate-pr) cmd_validate_pr ;;
   pr-body) cmd_pr_body ;;
   continuity) cmd_continuity ;;
+  branch-divergence) cmd_branch_divergence ;;
   all)
     cmd_attachments && cmd_pr_body && cmd_validate_pr && cmd_continuity
     ;;

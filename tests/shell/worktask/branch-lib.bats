@@ -39,12 +39,13 @@ mk_no_jq_path() {
 # ---------------------------------------------------------------------------
 # T2 — symbol inventory: all 10 required functions defined after one source.
 # ---------------------------------------------------------------------------
-@test "T2: all 11 required symbols are defined after sourcing" {
+@test "T2: all 14 required symbols are defined after sourcing" {
   cd "$WD"
   run bash -c "
     . '$PLUGIN_ROOT/$LIB'
     for f in branch_type_regex branch_is_conventional resolve_goal derive_type \
-             derive_ticket derive_slug target_branch_name meta_json audit_fn \
+             derive_ticket slug_body slug_budget slug_is_truncated derive_slug \
+             target_branch_name meta_json audit_fn \
              fn_batch_scope resolve_base_ref; do
       type -t \"\$f\" > /dev/null 2>&1 || { printf 'MISSING: %s\n' \"\$f\"; exit 1; }
     done
@@ -332,6 +333,111 @@ TABLE
   run bash -c ". '$PLUGIN_ROOT/$LIB'; target_branch_name feature ''"
   assert_failure
   assert_output ""
+}
+
+# ---------------------------------------------------------------------------
+# slug_is_truncated — AC-4 (8 assertions). The budget is 48; a ticket and its
+# separator are spent inside it.
+# ---------------------------------------------------------------------------
+
+# Bodies pinned by construction, not by eye: 5x8 chars + "abc" + 5 separators = 48.
+BODY_48="a2345678 b2345678 c2345678 d2345678 e2345678 abc"
+BODY_49="a2345678 b2345678 c2345678 d2345678 e2345678 abcd"
+
+@test "AC-4/1: a long goal with no ticket is truncated" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'
+    slug_is_truncated 'Product list images are blinking before rendering on the catalog screen' ''"
+  assert_success
+}
+
+@test "AC-4/2: a short goal with no ticket is not truncated" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; slug_is_truncated 'Add login flow' ''"
+  assert_failure 1
+}
+
+@test "AC-4/3: a goal exactly at the budget boundary is not truncated" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'
+    b=\$(slug_body '$BODY_48' '')
+    [ \"\${#b}\" -eq 48 ] || { printf 'BODY LEN %s, want 48\n' \"\${#b}\"; exit 2; }
+    slug_is_truncated '$BODY_48' ''"
+  assert_failure 1
+}
+
+@test "AC-4/4: a goal one character over the budget is truncated" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'
+    b=\$(slug_body '$BODY_49' '')
+    [ \"\${#b}\" -eq 49 ] || { printf 'BODY LEN %s, want 49\n' \"\${#b}\"; exit 2; }
+    slug_is_truncated '$BODY_49' ''"
+  assert_success
+}
+
+@test "AC-4/5: ticket present, body inside the reduced budget — not truncated" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'
+    [ \"\$(slug_budget ov-164)\" = 41 ] || { printf 'BUDGET %s, want 41\n' \"\$(slug_budget ov-164)\"; exit 2; }
+    slug_is_truncated 'OV-164 aaaaaaaa bbbbbbbb cccccccc dddddddd eeeee' 'ov-164'"
+  assert_failure 1
+}
+
+@test "AC-4/6: ticket present, body over the reduced budget — truncated" {
+  # Identical to AC-4/5 plus one character: the ticket segment is what makes it overflow.
+  run bash -c ". '$PLUGIN_ROOT/$LIB'
+    slug_is_truncated 'OV-164 aaaaaaaa bbbbbbbb cccccccc dddddddd eeeeee' 'ov-164'"
+  assert_success
+}
+
+@test "AC-4/7: one word longer than the budget — truncated, slug still non-empty" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'
+    slug_is_truncated 'supercalifragilisticexpialidociousnessfactorial tail' ''"
+  assert_success
+  run bash -c ". '$PLUGIN_ROOT/$LIB'
+    derive_slug 'supercalifragilisticexpialidociousnessfactorial tail' ''"
+  assert_success
+  assert_output "supercalifragilisticexpialidociousnessfactorial"
+}
+
+# The defect this predicate exists to avoid: `slug=$(derive_slug …)` runs in a subshell,
+# so a flag assigned inside the derivation can never reach the caller.
+@test "AC-4/8: the answer is identical called directly and through command substitution" {
+  run bash -c "
+    . '$PLUGIN_ROOT/$LIB'
+    rc=0
+    while IFS= read -r goal; do
+      [ -n \"\$goal\" ] || continue
+      direct=0; slug_is_truncated \"\$goal\" '' || direct=1
+      sub=\$( slug_is_truncated \"\$goal\" '' && printf 0 || printf 1 )
+      s=\$(derive_slug \"\$goal\" '')
+      [ -n \"\$s\" ] || { printf 'EMPTY SLUG: %s\n' \"\$goal\"; rc=1; }
+      [ \"\$direct\" = \"\$sub\" ] || { printf 'DISAGREE (%s vs %s): %s\n' \"\$direct\" \"\$sub\" \"\$goal\"; rc=1; }
+    done <<'TABLE'
+Product list images are blinking before rendering on the catalog screen
+Add login flow
+$BODY_48
+$BODY_49
+supercalifragilisticexpialidociousnessfactorial tail
+TABLE
+    exit \$rc
+  "
+  assert_success
+}
+
+@test "slug_budget: no ticket is 48; a ticket spends its own length plus a separator" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; slug_budget ''"
+  assert_output "48"
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; slug_budget 'ov-156'"
+  assert_output "41"
+  # Floored at 1: a zero-length slug would make target_branch_name refuse outright.
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; slug_budget 'verylongprojectkey-123456789012345678901234567890'"
+  assert_output "1"
+}
+
+@test "slug_body: uncapped, ticket-stripped, never a trailing separator" {
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; slug_body 'OV-156 reconstruction scan flow!!!' 'ov-156'"
+  assert_success
+  assert_output "reconstruction-scan-flow"
+  run bash -c ". '$PLUGIN_ROOT/$LIB'
+    b=\$(slug_body 'Product list images are blinking before rendering on the catalog screen' '')
+    printf '%s' \"\${#b}\""
+  assert_output "71"
 }
 
 # ---------------------------------------------------------------------------

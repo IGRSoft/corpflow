@@ -2,6 +2,149 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.7] - 2026-08-06
+
+Branch naming's `--goal` took the raw task description, so a multi-sentence description
+silently truncated mid-phrase into the branch slug — the original incident was operator
+error compounded by doc wording that discouraged the cheap fix (a free preview) and hid the
+free one (query modes). This release ships the branch-naming R1-R4 fix, R6's linked-worktree
+rename behaviour flip, and documentation reconciliation together.
+
+**This release changes default git behaviour on every linked-worktree machine** (Conductor
+and similar host-workspace setups) — see `### Changed — R6` below before upgrading.
+
+### Changed
+
+- **`--goal` now takes a concise imperative title**, not the raw task description
+  (`commands/worktask.md § Step 3c`, `skills/worktask/SKILL.md § Validation check 10`).
+  `BRANCH_NAME_PRINT=1` is documented as a free preview — no rename, no audit row — and the
+  "do not re-invoke" prohibition is narrowed to **rename mode** only, so the query modes
+  (`--check`/`--print-types`/`--print-target`) stay free to use.
+- **Truncation is now visible end to end**: `branch-lib.sh` gains `slug_body`/`slug_budget`/
+  `slug_is_truncated` (`derive_slug` refactored onto them); `branch-name.sh` emits
+  `slug_truncated=1` conditionally; Step 3c writes a `branch_slug_truncated` audit row; the
+  Step A.5 plan-gate summary surfaces the derived name and the truncation warning.
+
+### Changed — refinement window & invariant reconciliation
+
+- **The planned branch name gets one pre-commit refinement window.** New
+  `skills/worktask/scripts/refine-branch-target.sh`, invoked at new Step A.4b, refines the
+  planned target once from the approved plan's own `title:` before the issue is published —
+  six gates, a closed 15-token noop reason set, one `branch_target_refined` audit row, atomic
+  ledger write, **no git mutation**, exit 0 always.
+- **Once-only rule reconciled across 8 sites** (`skills/shared/git-conventions.md`,
+  `skills/worktask/references/handoff-protocol.md`, `skills/worktask/references/resume.md`,
+  `agents/project-manager.md`, `agents/product-manager.md`, `commands/worktask.md`,
+  `skills/worktask/SKILL.md`, `skills/shared/task-system.md`): the **rename** happens exactly
+  once, at the start of planning; the **planned name** on the ledger may additionally be
+  refined at most once per run, pre-commit, ledger-only, with no git mutation.
+
+### Changed — R6: linked worktrees now rename their own branch
+
+**Behaviour flip, opt-out available.** `branch-name.sh` now renames the local branch inside
+a linked worktree (Conductor and similar host-workspace setups) instead of deferring to
+whatever name the host assigned. `is_host_workspace` still detects a worktree, but its early
+`return 0` is gone: a hit now sets `IN_WORKTREE=1` and falls through to the existing
+`target_exists` → `git branch -m` tail, same as any other workspace. On success `branch=`
+and `target_branch=` are equal.
+
+#### R6 — why, and the risk
+
+The deferred behaviour assumed the host owns a meaningful, stable branch name. Falsified
+live, in this very worktask — Step 3c saw `cape-town` (a placeholder), and by the
+finalization gate Conductor had **silently renamed the branch mid-run** to
+`which-stages-ran-tests` (derived from the chat topic), so `facts.branch` diverged from the
+actual local branch with nothing detecting it. Neither name was shippable, and nothing in the
+old design could tell. **Risk, stated plainly**: a host that keys its own workspace tracking
+to the branch name may need to re-sync after this rename. Documented rather than discovered.
+
+#### R6 — the opt-out and the new guard
+
+**Opt-out**: `BRANCH_NAME_WORKTREE_RENAME=0` (literal `0` only) restores the previous
+defer-to-host behaviour. Subtractive at guard-ladder position 8 — it can only restore a
+behaviour a higher guard already permitted, never authorize a rename a higher guard refused.
+**This is the line an upgrading user most needs to find** if their host relies on the old
+behaviour. **New `already_named` guard** at ladder position 4, keyed on the `branch_renamed`
+audit dedupe key rather than the branch name — a host rename makes the branch
+non-conventional again, and a name-based guard would have authorized a *second* rename.
+
+#### R6 — divergence detection and disclosure
+
+**New `fn-preflight.sh branch-divergence`** (also runs on resume): non-blocking, exit-0-
+always, excluded from `all`. Compares local HEAD against the `to` of the last
+`branch_renamed / ok` audit row, classifying `expected` vs `third_party`, and surfaces only
+`third_party`. **Mandatory disclosure**: a stdout line at rename time names the host re-sync
+risk and the opt-out; the Step A.5 gate summary carries a matching line. Both reach a user
+already running the pipeline — neither reaches a user deciding whether to *upgrade*, which is
+why this CHANGELOG entry is the third disclosure surface. 12 reconciliation sites, including
+Step 3c's "never revert this step's rename" rule, which was previously moot inside a worktree
+and is now live there too.
+
+### Fixed
+
+- **Audit-scan `fromjson?` guard completed against well-formed non-object lines.** R1's AD-9
+  hardening closed the *unparsable*-line half of this class but left the well-formed
+  *non-object* half open (`123`, `[1,2]`, `"str"` parse cleanly, then abort on the first
+  field access) — and the failure is **position-dependent**: whether the bad line sits
+  before or after the row a scan is looking for.
+
+#### Fixed — all four scans, `objects` load-bearing in each
+
+| scan | jq form | bad line before match | bad line after match |
+|---|---|---|---|
+| `branch-name.sh already_named` | slurped | rc 5, fails open | rc 5, fails open |
+| `fn-preflight.sh branch-divergence` | slurped | rc 5, detection suppressed | rc 5, suppressed |
+| `refine-branch-target.sh` once-guard | streaming | rc 0, holds | **rc 5, fails open** |
+| `refine-branch-target.sh` incumbent-truncation | streaming | rc 0, holds | rc 5, fails closed |
+
+#### Fixed — why "after the match" is the common case, not the edge case
+
+Audit logs are **append-only**, and the streaming pair's own rows land unusually early: the
+once-guard scans for `branch_target_refined / ok`, written at Step A.4b, and the
+incumbent-truncation check scans for `branch_slug_truncated`, written even earlier at Step
+3c — both in Phase 1, before any stage dispatch. Every later stage's row necessarily
+accumulates *after* them, so "bad line after the match" isn't merely the common case for
+these two scans, it's very nearly guaranteed. Demonstrated end to end against the
+un-hardened once-guard: a second refinement was authorized (`ok_rows=2`, the ledger value
+overwritten); hardened, it correctly declines `already_refined` (`ok_rows=1`). All four scans
+now use `fromjson? | objects`; the same gap existed in three test helpers, which is why the
+new cases initially failed against already-correct production code — a fixture line must not
+be able to break the assertion helper and mask the real result.
+
+### Fixed — COVERAGE.md re-measurement
+
+- `tests/COVERAGE.md`'s bash `@test` total was stale three times this release: first after QA
+  closed three P2 coverage gaps (AC-7/23-25) in `refine-branch-target.bats` (680→683), then a
+  self-contradictory `683`/`53` after R6, then a fourth-assertion undercount from a race
+  between two parallel stages. Superseded by a single direct re-measurement taken after both
+  stages settled: **787 `@test` across 54 `.bats` files**, `branch-name.sh` now the
+  highest-density target at 90.
+
+### Known limits (deferred, not shipped this release)
+
+- **R5** — ticket derivation for a bare GitHub issue number (`#N`) is deliberately deferred
+  pending an explicit grammar decision: mint an `issue-390-` segment, or document that repos
+  minting their own issue numbers stay ticket-less. Never fabricate an alphabetic tracker key
+  from a bare issue number.
+- **`cache-lint.sh:92`** (`--anchor-lint`'s `extract_stage()`) pipes whole markdown files to
+  `yq` under `|| true` and is non-deterministic on artifact content — confirmed by review: it
+  passed against one stage artifact and failed against another for no reason but body length.
+  It cannot serve as a gate for any stage until `:92` is routed through the existing
+  frontmatter-scoped helper at `:485`. Not fixed here — out of this release's scope; routed
+  to DV for the next touch of the script.
+- **`skills/agent-coordination/scripts/audit-dedup.sh:84`** has the identical well-formed-
+  non-object `fromjson?` gap this release's audit-scan fix closed elsewhere
+  (`[inputs | select(length > 0) | fromjson?] as $rows` then `.value + {__idx: .key}`,
+  with no `objects` filter). Pre-existing, not introduced by R4 or R6, left unfixed here —
+  same one-token fix as the four scans above.
+
+### Known limits, continued
+
+- **`state-patch.sh` idempotency** short-circuits when a stage is already `completed`,
+  silently dropping a remediation cycle's handoff summary. A remediation round in this very
+  release needed a manual `stages.DV.status` reset to re-apply. Not fixed here; needs a
+  design call (always re-merge summary fields vs. document the manual-reset procedure).
+
 ## [4.0.6] - 2026-08-05
 
 The test-execution gate advertised "DV may not run the full suite" but did not enforce it for any
