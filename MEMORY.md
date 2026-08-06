@@ -4,15 +4,24 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.8** — `state-patch.sh` idempotency guard now compares the whole patch
-  (artifact and handoff edge, not just status and verdict), so a review-remediation loop that
+- Plugin version: **4.0.9** — opt-in change→test selection: a three-layer dependency matrix
+  (L1 derived-live path rules, L2 `tests/selection/matrix.tsv` glob table, L3 an ALWAYS floor)
+  behind `./run-tests.sh --changed`, so an edit to one agent, command, skill, hook, or script
+  runs only the dependent `.bats`. Fail-closed on seven triggers (F1-F7) — unknown path, tooling
+  edit, or absent base all widen to the full suite. DV selections over 50% of the tree exit 65
+  and hand the run to QA rather than letting DV run the suite it lacks authority for. The
+  execution gate is argument-aware. Default behaviour is unchanged: bare `./run-tests.sh` is
+  still a full run. Full narrative: `CHANGELOG.md § [4.0.9]`.
+
+### Previous release narratives
+
+- Plugin version (previous): **4.0.8** — `state-patch.sh` idempotency guard now compares the whole
+  patch (artifact and handoff edge, not just status and verdict), so a review-remediation loop that
   re-completes a stage at the same verdict refreshes `handoffs["PREV→CODE"]` instead of
   stranding it on pre-remediation prose. Identical inputs remain byte-identical no-ops.
   Regression coverage: self-test `T10` plus two `bats` cases, verified against the pre-fix
   script. Observed twice in one worktask (`AR→DV`, `DV→DR`), once on a review agent's own
   patch. Full narrative: `CHANGELOG.md § [4.0.8]`.
-
-### Previous release narratives
 
 - Plugin version (previous): **4.0.7** — branch naming R1-R4 (title-driven `--goal`, end-to-end
   truncation visibility, one-shot pre-commit refinement via new `refine-branch-target.sh`) plus
@@ -122,6 +131,22 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 | 2.1.51→2.1.76 | cc-features-2.1.51-76.md | v3.1.0/v3.2.0 |
 
 ## Release History (last 12, newest first)
+
+- 2026-08-06: v4.0.9 — change→test dependency matrix, opt-in behind `./run-tests.sh --changed`
+  (plus `--base <ref>`, `--print-selection`, and `COMPANY_WORKFLOW_TEST_SELECT=0` to disable).
+  Three layers: L1 derived-live path rules, L2 a 24-row `tests/selection/matrix.tsv` glob table,
+  L3 an ALWAYS floor of 47 tests that every scoped run includes. Selection is fail-closed —
+  triggers F1-F7 (unknown path, edits to the runner/selector itself, missing base ref, and four
+  others) widen to the full suite rather than under-run. A DV selection exceeding 50% of the tree
+  exits 65 and hands off to QA, since DV has no full-suite authority. `hooks/test-execution-gate.sh`
+  now classifies by argument. Deliberately not shipped: `make coverage-changed` — `--changed
+  --coverage` is a hard exit 64, because kcov's denominator is the source set and does not shrink
+  with the test set, so a scoped coverage number reads as a code regression rather than a
+  measurement artifact — and module correlation, so a `SKILL.md` edit no longer pulls in that
+  skill's script tests. The latter is the release's main residual false-negative risk, bounded by
+  the reachability and non-script-coverage guards; the fix for any gap found in practice is a
+  targeted matrix row, not a blanket rule. Bare `./run-tests.sh` is unchanged. Guard suite:
+  `tests/shell/meta/test-selection.bats`.
 
 - 2026-08-06: v4.0.8 — `state-patch.sh` idempotency guard widened from (status, verdict) to the
   full patch: it now also compares `stages.<CODE>.artifact` and, under `--prev`, the handoff edge

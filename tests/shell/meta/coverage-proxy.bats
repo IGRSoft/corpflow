@@ -11,22 +11,14 @@
 # It is a PROXY, not a coverage measurement: it proves a dedicated test file
 # exists and is non-trivial, not that the script's branches are exercised.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
+load "${BATS_TEST_DIRNAME}/../../lib/select_lib.bash"
 
 # A file below this many @tests is a placeholder, not coverage.
 MIN_TESTS=3
 
-# Aliases: script basename -> .bats basename, for the cases where the test file
-# legitimately does not echo the script name. Each entry is a deliberate
-# exception; an unlisted mismatch is a gap, which is the point.
-_alias_for() {
-  case "$1" in
-    # Hook file is dv- prefixed; the test drops the prefix its siblings don't use.
-    dv-comment-density-gate.sh) echo "comment-density-gate.bats" ;;
-    # Test is skill-prefixed to disambiguate a very generic script name.
-    audit-dedup.sh) echo "agent-coordination__audit-dedup.bats" ;;
-    *) echo "" ;;
-  esac
-}
+# The resolver lives in select_lib.bash so this checker and the change→test
+# selector cannot drift apart: a third alias added there is seen by both.
+_alias_for() { sel_alias_for "$@"; }
 
 # Exemptions: scripts allowed to ship without a dedicated .bats.
 # EMPTY BY DESIGN — every script in the tree is covered as of Phase 3. Adding an
@@ -38,28 +30,9 @@ _is_exempt() {
   esac
 }
 
-# Enumerate candidate scripts under an arbitrary root, so the checker below can
-# be pointed at a synthetic tree and proven to fail.
-_all_scripts() {
-  local root="$1"
-  (
-    cd "$root" 2>/dev/null || exit 0
-    ls hooks/*.sh 2>/dev/null
-    find .claude/hooks -name '*.sh' -type f 2>/dev/null
-    find skills -path '*/scripts/*.sh' -type f 2>/dev/null
-  ) | sort -u
-}
+_all_scripts() { sel_all_scripts "$@"; }
 
-# Resolve a script to its dedicated .bats under $2, or print nothing.
-_resolve_bats() {
-  local base="$1" troot="$2" want f
-  want="$(_alias_for "$base")"
-  [ -z "$want" ] && want="${base%.sh}.bats"
-  f="$(find "$troot" -name "$want" -type f 2>/dev/null | head -1)"
-  # Some tests retain the .sh in their name (branch-name.sh -> branch-name.sh.bats).
-  [ -z "$f" ] && f="$(find "$troot" -name "${base}.bats" -type f 2>/dev/null | head -1)"
-  echo "$f"
-}
+_resolve_bats() { sel_resolve_bats "$@"; }
 
 # Prints one "<script><TAB><reason>" line per uncovered script; silent when clean.
 _scan_gaps() {
@@ -149,8 +122,13 @@ _scan_gaps() {
 # --- hygiene: the alias and exemption tables must not rot -------------------
 
 @test "C6: every alias names a script and a .bats that both still exist" {
-  local base
-  for base in dv-comment-density-gate.sh audit-dedup.sh; do
+  local base keys key_count=0
+  keys="$(sel_alias_keys)"
+  # Without the count guard this test passes vacuously on an empty key list —
+  # the same failure mode C1 exists to prevent.
+  while IFS= read -r base; do
+    [ -n "$base" ] || continue
+    key_count=$((key_count + 1))
     local want; want="$(_alias_for "$base")"
     [ -n "$want" ] || fail "alias table lost its entry for $base"
     run find "$PLUGIN_ROOT" -name "$base" -not -path '*/.git/*' -type f
@@ -159,7 +137,8 @@ _scan_gaps() {
     run find "$PLUGIN_ROOT/tests/shell" -name "$want" -type f
     assert_success
     [ -n "$output" ] || fail "alias entry $base -> $want names a .bats that no longer exists"
-  done
+  done <<< "$keys"
+  [ "$key_count" -ge 1 ] || fail "sel_alias_keys returned no keys; C6 would pass vacuously"
 }
 
 @test "C7: no exemption is stale — an exempt script must still exist" {

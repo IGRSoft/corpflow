@@ -15,6 +15,12 @@
 #                 --enable-code-coverage for the packages); same as COVERAGE=1.
 #                 Delegates coverage gating to make.
 #   --quiet       less chatty bats output (bats default is already terse).
+#   --changed     run only the .bats the change→test matrix selects (opt-in).
+#   --base <ref>  diff base for --changed (default origin/master → master → HEAD~1).
+#   --print-selection  emit the selection plan and run nothing.
+#
+# COMPANY_WORKFLOW_TEST_SELECT=0 hard-disables selection; a bare invocation is
+# byte-for-byte the same full suite it has always been.
 set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,13 +35,38 @@ RUN_TESTS_REQUIRE_SWIFT="${RUN_TESTS_REQUIRE_SWIFT:-0}"
 # Reported even when the suite is green, so green is never read as "everything ran".
 skipped_phases=()
 
-for arg in "$@"; do
-  case "$arg" in
-    --coverage) COVERAGE=1 ;;
-    --quiet)    : ;;  # bats is terse by default; reserved
-    *) echo "run-tests.sh: unknown arg '$arg'" >&2; exit 64 ;;
+SELECT_CHANGED=0
+PRINT_SELECTION=0
+SELECT_BASE=""
+TEST_SELECT="${COMPANY_WORKFLOW_TEST_SELECT:-1}"
+# Test seam: lets a guard drive the cap and fallback paths without a real
+# selection. Not part of the documented flag surface.
+SELECTOR="${RUN_TESTS_SELECTOR:-$PLUGIN_ROOT/tests/bin/select-tests.sh}"
+
+# `while`/`shift`, not `for arg in "$@"`: a `for` loop cannot consume a flag's
+# value, so `--base master` would reach the default arm and exit 64 on `master`.
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --coverage)        COVERAGE=1 ;;
+    --quiet)           : ;;  # bats is terse by default; reserved
+    --changed)         SELECT_CHANGED=1 ;;
+    --print-selection) PRINT_SELECTION=1; SELECT_CHANGED=1 ;;
+    --base)
+      if [ "$#" -lt 2 ]; then echo "run-tests.sh: --base needs a value" >&2; exit 64; fi
+      SELECT_BASE="$2"; shift
+      ;;
+    *) echo "run-tests.sh: unknown arg '$1'" >&2; exit 64 ;;
   esac
+  shift
 done
+
+# kcov's denominator is the source set, independent of which .bats ran, and the
+# coverage branch short-circuits before the test list is read — so this pair would
+# silently produce a full coverage run that ignored --changed.
+if [ "$SELECT_CHANGED" -eq 1 ] && [ "$COVERAGE" = "1" ]; then
+  echo "run-tests.sh: --changed and --coverage are mutually exclusive (coverage is a full-suite activity; see tests/COVERAGE.md)" >&2
+  exit 64
+fi
 
 note() { printf '\033[1;34m[run-tests]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[run-tests]\033[0m %s\n' "$*" >&2; }
@@ -73,6 +104,92 @@ shell_tests=()
 while IFS= read -r f; do shell_tests+=("$f"); done < <(
   find "$PLUGIN_ROOT/tests/shell" -type f -name '*.bats' 2>/dev/null | sort
 )
+
+# --- change→test selection (opt-in) ------------------------------------------
+# The find above stays the full set: it is both the fallback and the superset the
+# selection is checked against. A FULL verdict or a selector crash runs everything.
+dv_in_progress() {
+  local ctx="${CLAUDE_PROJECT_DIR:-$PLUGIN_ROOT}/.context/state.json"
+  [ -r "$ctx" ] || return 1
+  local running
+  running="$(jq -r '[.stages // {} | to_entries[] | select(.value.status == "in_progress") | .key] | join(",")' \
+    "$ctx" 2>/dev/null)" || return 1
+  # Ambiguity is not DV: two in-progress stages means the ledger cannot say whose
+  # authority applies, and refusing on a guess would block a human mid-run.
+  [ "$running" = "DV" ]
+}
+
+if [ "$SELECT_CHANGED" -eq 1 ] && [ "$TEST_SELECT" = "0" ]; then
+  # --print-selection must still run nothing when selection is disabled; falling
+  # through here would turn a "show me the plan" request into a full suite run.
+  if [ "$PRINT_SELECTION" -eq 1 ]; then
+    printf 'VERDICT\tFULL\tDISABLED\tCOMPANY_WORKFLOW_TEST_SELECT=0\n'
+    exit 0
+  fi
+  warn "COMPANY_WORKFLOW_TEST_SELECT=0 — selection disabled, running the full suite"
+  SELECT_CHANGED=0
+fi
+
+if [ "$SELECT_CHANGED" -eq 1 ]; then
+  sel_args=(--changed)
+  [ -n "$SELECT_BASE" ] && sel_args+=(--base "$SELECT_BASE")
+  sel_err="$(mktemp "${TMPDIR:-/tmp}/rtsel.XXXXXX")"
+  sel_rc=0
+  sel_out="$("$SELECTOR" "${sel_args[@]}" 2>"$sel_err")" || sel_rc=$?
+
+  if [ "$PRINT_SELECTION" -eq 1 ]; then
+    # One renderer: the selector's stream verbatim, so there is no second format
+    # that can drift from what the run actually used.
+    printf '%s\n' "$sel_out"
+    [ "$sel_rc" -eq 0 ] || { warn "selector exited $sel_rc"; cat "$sel_err" >&2; }
+    rm -f "$sel_err"
+    exit 0
+  fi
+
+  sel_verdict="$(printf '%s\n' "$sel_out" | awk -F'\t' '$1 == "VERDICT" { print $2; exit }')"
+  if [ "$sel_rc" -ne 0 ]; then
+    warn "selector crashed (rc=$sel_rc) — falling back to the full suite"
+    cat "$sel_err" >&2 || true
+  elif [ "$sel_verdict" = "FULL" ]; then
+    note "selection verdict FULL ($(printf '%s\n' "$sel_out" | awk -F'\t' '$1 == "VERDICT" { print $3 " " $4; exit }')) — running the full suite"
+  else
+    if [ "$sel_verdict" = "WIDE" ]; then
+      if dv_in_progress; then
+        warn "$(printf '%s\n' "$sel_out" | awk -F'\t' '$1 == "VERDICT" { print $4; exit }')"
+        warn "this exceeds DV's scoped authority — hand off to QA for the full suite"
+        rm -f "$sel_err"
+        exit 65
+      fi
+      warn "selection is WIDE; proceeding because no DV stage is in progress"
+    fi
+    selected=()
+    while IFS= read -r f; do
+      [ -n "$f" ] && selected+=("$PLUGIN_ROOT/$f")
+    done < <(printf '%s\n' "$sel_out" | awk -F'\t' '$1 == "SELECT" { print $2 }' | LC_ALL=C sort -u)
+
+    if [ "${#selected[@]}" -eq 0 ]; then
+      warn "selection was empty — falling back to the full suite"
+    else
+      # Both sides through LC_ALL=C sort: comm false-reports on a non-C locale.
+      extra="$(comm -13 \
+        <(printf '%s\n' "${shell_tests[@]}" | LC_ALL=C sort) \
+        <(printf '%s\n' "${selected[@]}" | LC_ALL=C sort))"
+      if [ -n "$extra" ]; then
+        warn "selection is not a subset of the discovered suite — falling back to the full suite"
+        warn "  unexpected: $extra"
+      else
+        deselected="$(comm -23 \
+          <(printf '%s\n' "${shell_tests[@]}" | LC_ALL=C sort) \
+          <(printf '%s\n' "${selected[@]}" | LC_ALL=C sort) | grep -c . || true)"
+        # A DESELECTED: prefix keeps "ALL GREEN" from ever reading as "everything ran".
+        skipped_phases+=("DESELECTED: ${deselected:-0} of ${#shell_tests[@]} bats file(s) not selected by --changed")
+        shell_tests=("${selected[@]}")
+        note "scoped selection: ${#shell_tests[@]} of $(( ${#shell_tests[@]} + ${deselected:-0} )) bats file(s)"
+      fi
+    fi
+  fi
+  rm -f "$sel_err"
+fi
 
 rc=0
 

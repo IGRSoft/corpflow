@@ -2,6 +2,77 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.9] - 2026-08-06
+
+Every test run was the whole suite. Editing one agent doc, one hook, or one script ran all
+55 `.bats` files, so the dev loop paid full-suite latency for a one-file change and the only
+lever was to skip testing entirely. The obstacle to fixing it is that a wrong selector is
+silently green — it under-runs and reports success — so the change is built to over-select
+by construction: three independent layers unioned, a floor that every run includes, and
+seven triggers that abandon selection and run everything. Selection is opt-in and off by
+default; a bare `./run-tests.sh` is byte-identical to what it was.
+
+### Added
+
+- **A three-layer change→test dependency matrix.** L1 is computed live from the tree — every
+  repo path a `.bats` names literally, plus the `X.sh` → `X.bats` convention resolver, which
+  matters because 13 scripts have more than one consumer and convention alone returns one of
+  them. L2 is `tests/selection/matrix.tsv` (24 rows), for dependencies that are a *pattern*
+  rather than a path, where the glob lives inside the script the test invokes. L3 is the
+  ALWAYS floor, a constant in `tests/lib/select_lib.bash`: `lib/test-helper`,
+  `meta/coverage-proxy`, `skills/plugin-root-refs`, and `worktask/manifest-parity` — 47 of
+  811 tests, included in every scoped run. The engine lives in `tests/lib/select_lib.bash`
+  and `tests/bin/select-tests.sh`.
+- **An opt-in runner surface** (`run-tests.sh`, `Makefile`). `--changed` runs the selection,
+  `--base <ref>` picks the diff base, and `--print-selection` prints the plan and runs
+  nothing. `make test-changed`, `make test-changed BASE=master`, and `make test-select` wrap
+  the three. `COMPANY_WORKFLOW_TEST_SELECT=0` disables selection entirely. Passing
+  `--changed` with `--coverage` is a hard **exit 64**, not a silent full run.
+- **Fail-closed triggers F1–F7.** An unrecognised path, an unresolvable base, an empty
+  changed set, a delete under `tests/`, `hooks/`, `.claude/hooks/` or a skill `scripts/`
+  directory, a change to the runner or the selector itself, and an unparseable matrix each
+  yield a `FULL` verdict and run everything. `--print-selection` names the trigger id, so a
+  widened run says why it widened instead of looking like a slow selection.
+- **A >50% widening cap with a hand-off to QA** (`run-tests.sh`). A selection covering more
+  than half the file count emits `WIDE`. If `.context/state.json` shows the DV stage in
+  progress the run exits **65** and hands the suite to QA, since DV has no full-suite
+  authority; for everyone else `WIDE` is informational and the run proceeds.
+- **A 17-guard suite** (`tests/shell/meta/test-selection.bats`). It drives the real selection
+  entry point rather than asserting on the matrix data, refuses a matrix row without a
+  rationale, refuses a glob matching no tracked path, refuses a `.bats` no layer can reach,
+  and plants violations to require the checker to name them — the fail-closed and cap
+  behaviours are falsification tests, not assertions about output text.
+
+### Changed
+
+- **The test-execution gate now classifies by argument** (`hooks/test-execution-gate.sh`).
+  `run-tests.sh` has a selection surface, so a bare invocation is still `full_test_run` while
+  `--changed`/`--base` read as `scoped_test_run` and `--print-selection` as `build_only`.
+  DV may therefore run a scoped suite it previously could not. Matching is padded-segment and
+  anchored, so `cat run-tests.sh` does not classify as a test run. The widening cap is
+  deliberately **not** enforced here: only the runner knows the selection size, and this hook
+  stays a cheap `PreToolUse` classifier.
+- **`tests/shell/meta/coverage-proxy.bats`** now drives the resolver extracted into
+  `tests/lib/select_lib.bash` through shims instead of carrying its own copy, and its
+  script-inventory check iterates the alias keys. The resolver's `find | head -1`
+  filesystem-order dependence is fixed with `LC_ALL=C sort`, so a multi-match is stable.
+
+### Deliberately not shipped
+
+- **No `make coverage-changed`**, and `--changed --coverage` is a hard exit 64 rather than a
+  no-op (`tests/COVERAGE.md`). kcov's denominator is the **source** set and does not shrink
+  when fewer tests run, so a scoped coverage run lowers the numerator only — the bash branch
+  has no percentage gate to catch it and would report a drop that looks like a regression in
+  the code rather than in the measurement, while the Swift branch's ≥85% gate would fail for
+  a reason unrelated to the change under test. Coverage is a full-suite QA activity.
+- **No module correlation.** A `SKILL.md` edit does not pull in that skill's script tests.
+  This is the release's main residual false-negative risk: a reference-doc edit whose path no
+  test names literally selects only the ALWAYS floor. It is bounded by the reachability and
+  non-script-coverage guards, and the fix for any gap found in practice is a targeted matrix
+  row, not a blanket rule.
+- **No `/test-select` slash command** — manifest parity asserts the marketplace command list
+  against the commands directory, so adding one carries its own blast radius.
+
 ## [4.0.8] - 2026-08-06
 
 `state-patch.sh` skipped its write whenever a stage was already `completed` at the same
