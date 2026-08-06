@@ -24,7 +24,28 @@ state_with() {
 
 bash_payload() {
   # bash_payload <command> -> JSON on stdout
-  printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(jq -Rn --arg c "$1" '$c')"
+  #
+  # A malformed payload makes the hook fail OPEN: it emits nothing and writes
+  # no audit row, which is byte-for-byte what a legitimate allow looks like.
+  # Every "expected allow" case here asserts empty output, so a build failure
+  # would pass as a green test. Guarding at the call sites is not enough —
+  # most call this inline inside `<<< "$(bash_payload …)"`, where a non-zero
+  # return is discarded by the redirection — so failures are recorded to a
+  # file that teardown checks, which no subshell can swallow.
+  local json payload
+  json="$(jq -Rn --arg c "$1" '$c' 2>/dev/null)"
+  payload="$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$json")"
+  jq -e . >/dev/null 2>&1 <<< "$payload" \
+    || printf 'bash_payload produced invalid JSON for: %s\n' "$1" >> "$WD/.payload-build-errors"
+  printf '%s' "$payload"
+}
+
+teardown() {
+  # Fails the test if any bash_payload call in it built an invalid payload.
+  [ -s "$WD/.payload-build-errors" ] || return 0
+  echo "--- payload build failures (a fixture may have passed vacuously) ---"
+  cat "$WD/.payload-build-errors"
+  return 1
 }
 
 @test "1: DV in progress + ./run-tests.sh via QA-only exemption does NOT apply -> DV full is denied (see 14); DV scoped allowed" {
@@ -496,7 +517,9 @@ bash_payload() {
     run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
     assert_success
   done
-  run jq -s -e 'map(.metadata.class) | unique | length == 1 and .[0] == "scoped_test_run"' \
+  # Order-invariance is what this asserts; `-scheme MyApp` is non-selecting, so
+  # the shared class is full_test_run. Deny at DR is unchanged either way.
+  run jq -s -e 'map(.metadata.class) | unique | length == 1 and .[0] == "full_test_run"' \
     "$WD/.context/logs/audit.jsonl"
   assert_success
 }
@@ -534,4 +557,187 @@ bash_payload() {
   assert_success
   [ -z "$output" ]
   [ ! -d "$WD/.context" ]
+}
+
+# --- R1/R2: non-selecting runner flags no longer read as scoping ---
+
+@test "R1-1: multi-flag 'xcodebuild test' denies at DV (every executable invocation carries flags)" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'xcodebuild test -project a.xcodeproj -scheme overlay -destination generic/platform=iOS')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  run jq -e '.metadata.class == "full_test_run" and .metadata.command_head == "xcodebuild"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "R1-2: '-only-testing:' keeps a scoped xcodebuild run ALLOWED at DV (the over-deny direction)" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'xcodebuild test -project a.xcodeproj -scheme s -only-testing:UnitTests/LogTests')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R1-3: QA remains the sole full-suite authority for the same multi-flag command" {
+  state_with QA
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'xcodebuild test -project a.xcodeproj -scheme s -destination d')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R1-4: 'xcodebuild build' with the same flags still ALLOWS at DV (not test execution)" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'xcodebuild build -project a.xcodeproj -scheme s')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R1-5: 'gradle test -p .' denies at DV (project-dir is not a selector)" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'gradle test -p .')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "R1-6: 'dotnet test MySolution.sln' denies at DV (the solution positional names what to build)" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'dotnet test MySolution.sln')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "R1-7: 'npm test -- --ci' denies at DV (the separator is not an argument)" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'npm test -- --ci')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "R2-1: 'cargo test --release' denies at DV (a build configuration is not a selection)" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'cargo test --release')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "R2-2: 'cargo test --release foo' still ALLOWS at DV (a real selector survives the strip)" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'cargo test --release foo')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R1-8: a value-consuming flag missing its value must not swallow the token that follows" {
+  # The surviving token must NOT be in the explicit selector list: that limb
+  # matches on the whole segment BEFORE the strip runs, so an `-only-testing:`
+  # case here passes with the guard deleted and proves nothing. `-MyScheme`
+  # reaches the strip, and this case flips to a deny when the guard is removed.
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'xcodebuild test -project a -scheme -MyScheme')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R1-8 companion: '-only-testing:' after a valueless flag also allows (decided by the selector limb, not the guard)" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'xcodebuild test -scheme -only-testing:UnitTests/LogTests')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R1-9: 'go test ./...' is UNCHANGED by the strip (whole-tree positionals stay a policy limit)" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'go test ./...')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R9: FN has no test-execution authority -> deny" {
+  # Passes the day it is written: the stage limb already denies every stage but
+  # DV/QA. Kept as a parity lock so a later edit to that limb cannot quietly
+  # drop the row — not a bug catch, so do not delete it as a never-failing test.
+  state_with FN
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'swift test')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  run jq -e '.metadata.stage == "FN"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+# --- P1-2: quoted multi-word flag values are ONE token ---
+
+@test "R1-10: a simulator destination denies at DV in all three quoting forms" {
+  # A destination containing a space is the NORMAL shape for an iOS project and
+  # is what the reported incident actually passed; before the tokenizer only the
+  # space-free forms denied, so the fix missed its own motivating case.
+  state_with DV
+  local base='xcodebuild test -project a.xcodeproj -scheme overlay -destination '
+  local cmd
+  for dest in 'generic/platform=iOS' '"platform=iOS Simulator,name=iPhone 16 Pro"' "'platform=iOS Simulator,name=iPhone 16 Pro'"; do
+    rm -f "$WD/.context/logs/audit.jsonl"
+    cmd="${base}${dest}"
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
+    assert_success
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' \
+      || fail "expected deny for: $cmd"
+  done
+}
+
+@test "R1-11: 'dotnet test \"My Solution.sln\"' denies (a quoted solution positional is still non-selecting)" {
+  state_with DV
+  local cmd='dotnet test "My Solution.sln"'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "R1-12: a quoted destination PLUS a real selector still ALLOWS at DV" {
+  state_with DV
+  local cmd='xcodebuild test -project a -scheme overlay -destination "platform=iOS Simulator,name=iPhone 16 Pro" -only-testing:UnitTests/LogTests'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R1-13: an unterminated quote strips nothing and ALLOWS (ambiguous parse degrades to today's behaviour)" {
+  state_with DV
+  local cmd='xcodebuild test -project a -scheme overlay -destination "platform=iOS Simulator'
+  local payload
+  payload="$(bash_payload "$cmd")"
+  [ -n "$payload" ]
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  [ -z "$output" ]
+}
+
+# --- P1-A: `-c` is value-taking on some runners and valueless on others ---
+
+@test "R1-14: 'go test -c' compiles and runs nothing -> ALLOWS at DV and at a banned stage" {
+  # Go's -c is valueless; the shared value-consuming strip ate the following
+  # token (or ran off the end of the line) and denied a compile as a full run.
+  for stage in DV DR; do
+    state_with "$stage"
+    for cmd in 'go test -c' 'go test -c ./pkg'; do
+      run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
+      assert_success
+      [ -z "$output" ] || fail "expected allow at $stage for: $cmd (got: $output)"
+    done
+  done
+}
+
+@test "R1-15: rspec's '-c' is --colour, not a config path -> the spec file still selects" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'rspec -c spec/models/user_spec.rb')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R1-16: value-taking '-c' runners are unaffected — the value is still consumed" {
+  state_with DV
+  for cmd in 'swift test -c release' 'dotnet test -c Release' 'go test' 'rspec'; do
+    rm -f "$WD/.context/logs/audit.jsonl"
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
+    assert_success
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' \
+      || fail "expected deny for: $cmd"
+  done
 }
