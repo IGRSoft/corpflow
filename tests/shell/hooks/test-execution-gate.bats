@@ -741,3 +741,29 @@ teardown() {
       || fail "expected deny for: $cmd"
   done
 }
+
+@test "R1-17: gradle's task is found order-independently — flags-before-task denies the same" {
+  # A first-token read saw `-p` here, mistook the project dir for a surviving
+  # positional, and let the full run through as scoped.
+  state_with DV
+  for cmd in 'gradle -p . test' './gradlew -p app testDebugUnitTest'; do
+    rm -f "$WD/.context/logs/audit.jsonl"
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
+    assert_success
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' \
+      || fail "expected deny for: $cmd"
+  done
+  # The over-deny guard: a real selector still allows in the same shape.
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'gradle -p . test --tests com.foo.Bar')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R1-18: flags-before-task build-only gradle tasks ALLOW at a banned stage (was a false deny)" {
+  # `gradle -p . assembleAndroidTest` compiles a test APK and runs nothing;
+  # the first-token read classified it a scoped test run and denied it at DR.
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'gradle -p . assembleAndroidTest')"
+  assert_success
+  [ -z "$output" ]
+}

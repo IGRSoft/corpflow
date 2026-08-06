@@ -11,7 +11,10 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
   `cargo --release` full runs invert allow→deny at DV; genuine selectors still allow. The `-c`
   generalisation additionally fixed two PRE-EXISTING false denies (`go test -c`, `rspec -c`), and
   the `--only-testing:` double-dash spelling defect — a selector limb that never matched a real
-  invocation — is corrected. Fixtures 24→37 self-test, 58→78 bats. Prose reconciled in the same
+  invocation — is corrected; the gradle task token is found order-independently, so
+  `gradle -p . test` denies like `gradle test -p .` (and flags-first build-only tasks such as
+  `gradle -p . assembleAndroidTest` stop false-denying). Fixtures 24→40 self-test, 58→80 bats.
+  Prose reconciled in the same
   patch: the authority matrix's DV row documented the bug as the contract, and the finalization
   stage's own duty list, checklist and shared stage-table row instructed it to run tests it is
   forbidden and unable to run — FN now verifies QA's recorded evidence instead. Known limits stated
@@ -106,7 +109,8 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-08-05: v4.0.6 — test-execution gate: runner-aware, quote-aware strip of non-selecting flags
   closes the flag-carrying full-suite hole at DV (`xcodebuild`/`dotnet`/`gradle`/`npm`/`pnpm`/`yarn`/
   `cargo --release` invert allow→deny; genuine selectors unaffected). `--only-testing:` spelling
-  defect fixed; `go test -c` / `rspec -c` false denies removed. Fixtures 24→37 / 58→78. Prose
+  defect fixed; `go test -c` / `rspec -c` / flags-first gradle false denies removed. Fixtures
+  24→40 / 58→80. Prose
   reconciled: DV authority-matrix note no longer documents the bug as the contract, and FN's duty
   list/checklist/stage-table row now verify QA's recorded evidence instead of running tests FN is
   forbidden and unable to run.

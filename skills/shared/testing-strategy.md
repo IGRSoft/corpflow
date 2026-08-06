@@ -305,8 +305,9 @@ run no longer escapes by carrying configuration: `xcodebuild test` with `-projec
 `-scheme` / `-destination` / `-sdk` / `-arch` / result-bundle and derived-data paths — **including
 quoted multi-word values** such as `-destination "platform=iOS Simulator,name=iPhone 16 Pro"`,
 which was the reported incident's actual shape — plus `dotnet test <solution|project>`,
-`gradle test -p .`, `npm`/`pnpm`/`yarn test` with `--ci`/`--watch`/`--silent`/the bare `--`
-separator, and `cargo test --release`.
+`gradle test -p .` (the gradle task is found order-independently, so the flags-before-task
+spelling `gradle -p . test` classifies identically), `npm`/`pnpm`/`yarn test` with
+`--ci`/`--watch`/`--silent`/the bare `--` separator, and `cargo test --release`.
 
 ##### What still classifies scoped
 

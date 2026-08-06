@@ -17,8 +17,13 @@ caller had narrowed the run.
   `-destination "platform=iOS Simulator,name=iPhone 16 Pro"`. Verdicts invert allow→deny for
   `xcodebuild test` with project/workspace/scheme/destination/sdk/arch/result-bundle/derived-data
   flags, `dotnet test <solution>`, `gradle test -p .`, `npm`/`pnpm`/`yarn test --ci`, and
-  `cargo test --release`. Genuine selectors (`-only-testing:`, `--filter`, `-k`, `-t`, `-run`, a
-  real positional) still classify scoped and are allowed, at DV and everywhere else.
+  `cargo test --release`. The gradle task token is found **order-independently** (mirroring the
+  xcodebuild action scan), so the flags-before-task spelling `gradle -p . test` denies identically
+  rather than slipping through on the project-dir positional — and the same scan removes a
+  pre-existing false deny: `gradle -p . assembleAndroidTest` (a flags-first build-only task) no
+  longer reads as a test run at banned stages. Genuine selectors (`-only-testing:`, `--filter`,
+  `-k`, `-t`, `-run`, a real positional) still classify scoped and are allowed, at DV and
+  everywhere else.
 - **`-only-testing:` selector spelling.** The explicit selector list spelled the Apple selector with
   two leading dashes; the real flag takes one, so that limb never matched a real invocation and
   scoped Apple runs classified correctly only via the positional fallback.
@@ -39,7 +44,7 @@ caller had narrowed the run.
 
 - **Narrowest-run default in the developer contract**, with its cost attached: verify with the
   narrowest run that proves the change — build-only for a compile check, a selector for behaviour.
-- **Fixtures on both surfaces**, 24 → 37 self-test assertions and 58 → 78 bats cases, including a
+- **Fixtures on both surfaces**, 24 → 40 self-test assertions and 58 → 80 bats cases, including a
   finalization-stage deny case kept as a doc-parity lock rather than a bug catch.
 
 ### Known limits (accepted, documented)

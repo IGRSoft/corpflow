@@ -25,10 +25,10 @@
 # test evaluating false as ordinary control flow, and `set -e` would abort
 # mid-classification instead of falling through, turning a fail-open
 # backstop fail-*closed*. `set -f` is load-bearing, not merely
-# defense-in-depth: the xcodebuild action scan word-splits an unquoted command
-# fragment on purpose (`for _tok in $_rest`), and without `set -f` a `*` or
-# `?` in an argument would glob against the working directory before that loop
-# ever saw the token.
+# defense-in-depth: the xcodebuild action scan and the gradle task scan
+# word-split an unquoted command fragment on purpose (`for _tok in $_rest`),
+# and without `set -f` a `*` or `?` in an argument would glob against the
+# working directory before those loops ever saw the token.
 #
 # --self-test: fixture-driven, no live process, covers the fail-open ladder.
 set -u
@@ -276,7 +276,7 @@ EOF
 # real latency on a single tool call, not a crash, but not "depth 1" either.
 MAX_RECURSE_DEPTH=2
 classify_segment() {
-  local _seg _depth _head_full _head _rest _launcher _inner _mod _padded _subcmd _rest_for_selection _rest_effective _second _task _tok _found
+  local _seg _depth _head_full _head _rest _launcher _inner _mod _padded _subcmd _rest_for_selection _rest_effective _second _task _tok _found _skipv
 
   _seg="$1"
   _depth="${2:-0}"
@@ -407,8 +407,25 @@ classify_segment() {
           # `compileDebugUnitTestKotlin` is a compile step. None of the
           # three execute a test; denying them breaks the same build-only
           # promise the subcommand check exists to protect.
-          _task="$(printf '%s' "$_rest" | sed -E 's/^[[:space:]]+//')"
-          _task="${_task%% *}"
+          #
+          # The task token is FOUND, not read from first position: gradle
+          # accepts options before task names (`gradle -p . test`), so a
+          # first-token read sees `-p` there, mistakes the project dir for a
+          # surviving positional, and lets the full run through as scoped.
+          # `-p`/`--project-dir` values are skipped so a directory named
+          # `test-utils` is never mistaken for the task; an unlisted flag's
+          # value can still be — the allow direction, since the extra
+          # surviving token classifies scoped.
+          _task=""
+          _skipv=0
+          for _tok in $_rest; do
+            if [ "$_skipv" -eq 1 ]; then _skipv=0; continue; fi
+            case "$_tok" in
+              -p|--project-dir) _skipv=1 ;;
+              -*) : ;;
+              *) _task="$_tok"; break ;;
+            esac
+          done
           case "$_task" in
             install*|assemble*|compile*) printf 'not_test'; return ;;
           esac
@@ -416,7 +433,16 @@ classify_segment() {
             *[Tt]est*) : ;;              # task name mentions test (case-insensitive-ish)
             *) printf 'not_test'; return ;;
           esac
-          _rest_effective="$(printf '%s' "$_rest" | sed -E 's/^[[:space:]]*[^ ]*//')"
+          # Drop the one task token; flags in any position and any further
+          # task go on to selection analysis.
+          _rest_effective=""
+          _found=0
+          for _tok in $_rest; do
+            if [ "$_found" -eq 0 ] && [ -n "$_task" ] && [ "$_tok" = "$_task" ]; then
+              _found=1; continue
+            fi
+            _rest_effective="$_rest_effective $_tok"
+          done
           ;;
         xcodebuild)
           # xcodebuild conventionally puts its ACTION after the options
@@ -1090,6 +1116,22 @@ EOF
   _o13=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"swift test"}}' "$_ctx12")
   printf '%s' "$_o13" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (FN must have no test-execution authority)"; _fail=1; }
+
+  # Gradle's task token is found order-independently: flags before the task
+  # must classify the same as task-first, in both fail directions.
+  while IFS= read -r _c; do
+    [ -n "$_c" ] || continue
+    _o17=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
+    printf '%s' "$_o17" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+      || { echo "test-execution-gate: self-test FAIL (flags-before-task gradle must deny: $_c)"; _fail=1; }
+  done <<'EOF'
+gradle -p . test
+./gradlew -p app testDebugUnitTest
+EOF
+  _o18=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"gradle -p . test --tests com.foo.Bar"}}' "$_ctx11")
+  [ -z "$_o18" ] || { echo "test-execution-gate: self-test FAIL (flags-before-task + selector must allow)"; _fail=1; }
+  _o19=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"gradle -p . assembleAndroidTest"}}' "$_ctx13")
+  [ -z "$_o19" ] || { echo "test-execution-gate: self-test FAIL (flags-first assembleAndroidTest is build-only)"; _fail=1; }
 
   # Exit code always 0, even on a deny.
   set +e
