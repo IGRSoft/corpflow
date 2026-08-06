@@ -2,6 +2,56 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.6] - 2026-08-05
+
+The test-execution gate advertised "DV may not run the full suite" but did not enforce it for any
+runner whose mandatory flags are non-selecting. A full `xcodebuild test` with `-project`, `-scheme`
+and `-destination` sailed through, because the classifier saw surviving arguments and concluded the
+caller had narrowed the run.
+
+### Fixed
+
+- **Full-suite runs carrying only non-selecting flags now deny at DV.** The classifier strips each
+  runner's mandatory-but-non-selecting flags before the "did an argument survive?" test. The strip
+  is **quote-aware**, which is what the reported incident actually needed:
+  `-destination "platform=iOS Simulator,name=iPhone 16 Pro"`. Verdicts invert allow→deny for
+  `xcodebuild test` with project/workspace/scheme/destination/sdk/arch/result-bundle/derived-data
+  flags, `dotnet test <solution>`, `gradle test -p .`, `npm`/`pnpm`/`yarn test --ci`, and
+  `cargo test --release`. Genuine selectors (`-only-testing:`, `--filter`, `-k`, `-t`, `-run`, a
+  real positional) still classify scoped and are allowed, at DV and everywhere else.
+- **`-only-testing:` selector spelling.** The explicit selector list spelled the Apple selector with
+  two leading dashes; the real flag takes one, so that limb never matched a real invocation and
+  scoped Apple runs classified correctly only via the positional fallback.
+- **Two pre-existing false denies removed.** `-c` is not a selector for `go test` (compile-only) or
+  `rspec` (`--colour`), joining the existing `bats -c` (`--count`) build-only carve-out.
+- **The DV authority-matrix note documented the bug as the contract.** It claimed the deny was
+  "mechanical for the bare-runner form only" and that any trailing flag classified scoped. Rewritten
+  to describe what the gate now does, with its known limits stated plainly rather than buried.
+- **The finalization stage was instructed to do what it is forbidden — and unable — to do.** Its
+  duty list ("Run final builds and tests"), its completion checklist ("All tests passing in final
+  build") and the finalization row of the shared pipeline stage table all contradicted the
+  prohibition the same agent carries. FN holds no test-execution authority, no build/test Bash
+  grant and no `Skill` tool, so even a build-only rewrite would have been unreachable. It now
+  **verifies QA's recorded evidence** from `testing-N.md` frontmatter, mirroring the stakeholder
+  stage. The `requests_test_evidence` escape path is unchanged.
+
+### Added
+
+- **Narrowest-run default in the developer contract**, with its cost attached: verify with the
+  narrowest run that proves the change — build-only for a compile check, a selector for behaviour.
+- **Fixtures on both surfaces**, 24 → 37 self-test assertions and 58 → 78 bats cases, including a
+  finalization-stage deny case kept as a doc-parity lock rather than a bug catch.
+
+### Known limits (accepted, documented)
+
+- Whole-tree positionals (`go test ./...`, `pytest tests/`) still classify scoped. Flipping the
+  positional limb's polarity has a different fail direction and is tracked separately.
+- `npm|pnpm|yarn test -- -c <spec>` denies although genuinely scoped (one shared arm). Moving `-c`
+  into the valueless arm would strip the flag and leave its value surviving as a positional, so any
+  full run with a valueless flag before a positional would classify scoped and be allowed —
+  reopening the hole this release closes. These package managers hide the underlying runner, so the
+  ambiguity is irreducible. `npm test -- <spec>` is unaffected.
+
 ## [4.0.5] - 2026-08-05
 
 Test-suite stringency hardening. The suite went from 45 files / 501 tests to **53 / 680**, every
