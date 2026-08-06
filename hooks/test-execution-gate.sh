@@ -24,8 +24,11 @@
 # Deliberately no `set -e`: several branches rely on a compound `[ ]`/case
 # test evaluating false as ordinary control flow, and `set -e` would abort
 # mid-classification instead of falling through, turning a fail-open
-# backstop fail-*closed*. `set -f` is added as defense-in-depth (every
-# glob-able expansion is already quoted or inside a `case` pattern).
+# backstop fail-*closed*. `set -f` is load-bearing, not merely
+# defense-in-depth: the xcodebuild action scan word-splits an unquoted command
+# fragment on purpose (`for _tok in $_rest`), and without `set -f` a `*` or
+# `?` in an argument would glob against the working directory before that loop
+# ever saw the token.
 #
 # --self-test: fixture-driven, no live process, covers the fail-open ladder.
 set -u
@@ -92,6 +95,145 @@ strip_assignments() {
     esac
   done
   printf '%s' "$_s"
+}
+
+# ---------------------------------------------------------------------------
+# tokenize_quoted <string> -> fills the global array TOKENIZED_ARGV with the
+# string's words, splitting on UNQUOTED whitespace only, so a quoted
+# multi-word value ("platform=iOS Simulator,name=iPhone 16 Pro" — the normal
+# shape of a simulator destination) is ONE token. Surrounding quotes are
+# removed; the value itself is never interpreted.
+#
+# Returns 1 on an unterminated quote, which the caller MUST treat as "strip
+# nothing" — a half-parsed argument list could drop the very token that makes
+# a run scoped. No `eval`, no `xargs`, no sentinel character: this parses an
+# untrusted command string inside a security control, so it may not execute
+# it, and it may not assume any byte is absent from the input.
+#
+# Not handled, deliberately: backslash-escaped whitespace (`-destination
+# platform=iOS\ Simulator`) still splits, leaving a fragment that survives as
+# a positional and classifies scoped — the allow direction.
+# ---------------------------------------------------------------------------
+tokenize_quoted() {
+  local _s="$1" _i=0 _n=${#1} _ch _cur="" _open=0 _q=""
+  TOKENIZED_ARGV=()
+  while [ "$_i" -lt "$_n" ]; do
+    _ch="${_s:$_i:1}"
+    _i=$((_i + 1))
+    if [ -n "$_q" ]; then
+      if [ "$_ch" = "$_q" ]; then _q=""; else _cur="$_cur$_ch"; fi
+      continue
+    fi
+    case "$_ch" in
+      \'|\") _q="$_ch"; _open=1 ;;
+      # $'\t' is a literal, expanded by the parser. A `$(printf '\t')` here
+      # forks a subshell PER CHARACTER of every command this hook inspects,
+      # in a file whose header promises a zero-fork fast path.
+      ' '|$'\t')
+        [ "$_open" -eq 1 ] && { TOKENIZED_ARGV[${#TOKENIZED_ARGV[@]}]="$_cur"; _cur=""; _open=0; }
+        ;;
+      *) _cur="$_cur$_ch"; _open=1 ;;
+    esac
+  done
+  [ -z "$_q" ] || { TOKENIZED_ARGV=(); return 1; }
+  [ "$_open" -eq 1 ] && TOKENIZED_ARGV[${#TOKENIZED_ARGV[@]}]="$_cur"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# strip_nonselecting_flags <head> <rest> -> echoes <rest> with the flags that
+# the named runner carries on EVERY invocation regardless of scope removed, so
+# the positional limb's "an argument survived" genuinely means "the caller
+# narrowed the run" rather than "this runner needs flags to start at all".
+#
+# Fail direction is load-bearing: an unlisted future flag survives, classifies
+# scoped, and degrades to today's allow — never to a false deny. Every arm here
+# must preserve that, which is why the value-consuming arms refuse to eat a
+# token beginning with `-`: `-scheme -only-testing:X` (flag missing its value)
+# must leave the selector standing rather than swallow it into the flag.
+#
+# Token-walked rather than sed-driven: a `s/(^| )-flag [^ ]+/ /g` pass cannot
+# express the "not if the next token is a flag" guard, cannot keep a quoted
+# multi-word value together, and consuming the delimiting space makes an
+# adjacent second switch unmatchable on the same `g` scan.
+# ---------------------------------------------------------------------------
+strip_nonselecting_flags() {
+  local _h="$1" _in="$2" _out="" _tok _skip=0
+  # Unbalanced quoting -> strip nothing, which classifies scoped and allows.
+  tokenize_quoted "$_in" || { printf '%s' "$_in"; return; }
+  for _tok in ${TOKENIZED_ARGV[@]+"${TOKENIZED_ARGV[@]}"}; do
+    if [ "$_skip" -eq 1 ]; then
+      _skip=0
+      case "$_tok" in
+        -*) : ;;
+        *) continue ;;
+      esac
+    fi
+    case "$_h" in
+      xcodebuild)
+        # -only-testing: is xcodebuild's only true selector; the rest is
+        # routine. -testPlan is deliberately NOT a selector — a plan is whole,
+        # and a project's default plan usually IS the full suite.
+        case "$_tok" in
+          -project|-workspace|-scheme|-destination|-resultBundlePath|-derivedDataPath|-sdk|-arch|-toolchain|-xcconfig|-configuration|-testPlan|-parallel-testing-enabled|-maximum-concurrent-test-simulator-destinations)
+            _skip=1; continue ;;
+          -quiet|-verbose|-parallelizeTargets|-showBuildTimingSummary|-allowProvisioningUpdates)
+            continue ;;
+        esac
+        ;;
+      dotnet)
+        # The solution/project positional names WHAT to build, not which tests
+        # to run. Guarded against a flag spelled `--x.sln` by the `-*` arm.
+        case "$_tok" in
+          -*) : ;;
+          *.sln|*.csproj|*.fsproj) continue ;;
+        esac
+        ;;
+      gradle|gradlew)
+        case "$_tok" in
+          -p|--project-dir) _skip=1; continue ;;
+          -P*) continue ;;   # -Pkey=value: a build property, never a selector
+        esac
+        ;;
+      npm|pnpm|yarn)
+        # `--` is the script/args separator, not an argument.
+        case "$_tok" in
+          --|--ci|--run|--silent|--watch|--watch=*) continue ;;
+        esac
+        ;;
+      rspec)
+        # RSpec's `-c` is --colour, VALUELESS — not the `-c <value>` config
+        # flag it is on swift/pytest/jest. Listed here, ahead of the shared
+        # arm below, so it is dropped rather than consuming the spec file that
+        # follows it and turning a scoped run into a full one.
+        case "$_tok" in
+          -c|--color|--colour|--no-color|--no-colour) continue ;;
+        esac
+        ;;
+    esac
+    # Runner-independent: a build configuration is not a test selection. `-c`
+    # and `--config(uration)` were a sed at the call site until this round;
+    # folded in so they get the same quote-awareness and the same `-`-guard as
+    # every other value-consuming flag, since the sed form split a quoted
+    # value and left a fragment behind.
+    #
+    # `-c` takes a value on swift/pytest/jest/vitest/gradle/dotnet but is
+    # VALUELESS on bats (--count), go (compile-only) and rspec (--colour).
+    # Each of those three is handled BEFORE this arm — the first two return
+    # build_only above, rspec drops it in the per-runner case — because a
+    # value-consuming arm applied to a valueless flag eats the token after it
+    # and turns a scoped run, or a compile, into a full-suite deny. Any flag
+    # added here needs the same per-runner check.
+    case "$_tok" in
+      -c|--config|--configuration) _skip=1; continue ;;
+      --release) continue ;;
+    esac
+    # An empty token (a literal "" on the command line) is still an argument;
+    # a marker keeps it from vanishing into a full-run verdict.
+    [ -n "$_tok" ] || { _out="$_out ''"; continue; }
+    _out="$_out $_tok"
+  done
+  printf '%s' "$_out"
 }
 
 # ---------------------------------------------------------------------------
@@ -350,13 +492,24 @@ classify_segment() {
       *' -c '*|*' --count '*) printf 'build_only'; return ;;
     esac
   fi
+  # `go test -c` COMPILES a test binary and runs nothing, so it is build-only
+  # work — permitted at every stage, unconditionally. Go's `-c` is VALUELESS,
+  # unlike the `-c <value>` of swift/pytest/jest/vitest/gradle/dotnet, so
+  # without this carve-out the shared value-consuming strip eats the following
+  # token (or runs off the end of the line), empties the argument list and
+  # classifies a compile as a full suite.
+  if [ "$_head" = "go" ]; then
+    case "$_padded" in
+      *' -c '*) printf 'build_only'; return ;;
+    esac
+  fi
 
   # Selection-argument predicate, shared with agents/developer.md D2 and
   # agents/qa-engineer.md Q1's own scoped/full test-run counters: a command
   # carrying >=1 test-selection flag (or, below, a trailing positional
   # test-target argument) classifies scoped_test_run, otherwise full_test_run.
   case "$_seg" in
-    *" -f "*|*"--filter"*|*" -k "*|*"--only-testing:"*|*" -run "*|*"--testcase"*|*"::"*|*"-gtest_filter"*|*" -R "*|*" -g "*|*" -t "*|*"--tests "*)
+    *" -f "*|*"--filter"*|*" -k "*|*"-only-testing:"*|*" -run "*|*"--testcase"*|*"::"*|*"-gtest_filter"*|*" -R "*|*" -g "*|*" -t "*|*"--tests "*)
       printf 'scoped_test_run'; return ;;
   esac
   # A bare runner with a trailing positional path/file argument also counts
@@ -367,10 +520,13 @@ classify_segment() {
   # full — a deliberate policy limit, not a gap specific to this hook.
   #
   # `-c <value>` / `--config(uration) <value>` is a CONFIGURATION flag for
-  # swift/pytest, not a selector — strip it first, or `swift test -c
-  # release` misreads as scoped and slips past the DV full-suite deny on the
-  # strength of one ordinary flag.
-  _rest_for_selection="$(printf '%s' "$_rest_effective" | sed -E 's/(^| )-c ([^ ]+)/ /g; s/(^| )--config(uration)? ([^ ]+)/ /g')"
+  # swift/pytest, not a selector — strip it, or `swift test -c release`
+  # misreads as scoped and slips past the DV full-suite deny on the strength
+  # of one ordinary flag. It is joined there by the per-runner table:
+  # xcodebuild/gradle/dotnet REQUIRE non-selecting flags to run at all, so
+  # without it every executable invocation of them carries an argument and the
+  # positional limb below reads it as scoping.
+  _rest_for_selection="$(strip_nonselecting_flags "$_head" "$_rest_effective")"
   if [ -n "$(printf '%s' "$_rest_for_selection" | sed -E 's/^[[:space:]]+//')" ]; then
     printf 'scoped_test_run'; return
   fi
@@ -805,6 +961,135 @@ if [ "$SELF_TEST" -eq 1 ]; then
   _o10b=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"swift test -c release"}}' "$_ctx10b")
   printf '%s' "$_o10b" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (swift test -c release must deny DV-full)"; _fail=1; }
+
+  # Non-selecting flags no longer read as scoping: every runner below REQUIRES
+  # flags to run at all, so before the per-runner strip each of these was a
+  # full suite that classified scoped and sailed past the DV deny.
+  _ctx11="$_tmp/nonselecting-dv/.context"; mkdir -p "$_ctx11"
+  printf '{"stages":{"DV":{"status":"in_progress"}}}' > "$_ctx11/state.json"
+  while IFS= read -r _c; do
+    [ -n "$_c" ] || continue
+    _o11=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
+    printf '%s' "$_o11" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+      || { echo "test-execution-gate: self-test FAIL (DV-full deny expected: $_c)"; _fail=1; }
+  done <<'EOF'
+xcodebuild test -project a.xcodeproj -scheme overlay -destination generic/platform=iOS
+gradle test -p .
+dotnet test MySolution.sln
+npm test -- --ci
+cargo test --release
+EOF
+
+  # The allow direction of the same change — an over-deny would block
+  # legitimate scoped work mid-run, which is the worse failure.
+  while IFS= read -r _c; do
+    [ -n "$_c" ] || continue
+    _o12=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
+    [ -z "$_o12" ] || { echo "test-execution-gate: self-test FAIL (DV allow expected: $_c)"; _fail=1; }
+  done <<'EOF'
+xcodebuild test -project a.xcodeproj -scheme s -only-testing:UnitTests/LogTests
+xcodebuild build -project a.xcodeproj -scheme s
+cargo test --release foo
+go test ./...
+EOF
+
+  # QA keeps sole full-suite authority — the strip changes classification, not
+  # who may run a full suite.
+  _ctx11b="$_tmp/nonselecting-qa/.context"; mkdir -p "$_ctx11b"
+  printf '{"stages":{"QA":{"status":"in_progress"}}}' > "$_ctx11b/state.json"
+  _o11b=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"xcodebuild test -project a.xcodeproj -scheme s -destination d"}}' "$_ctx11b")
+  [ -z "$_o11b" ] || { echo "test-execution-gate: self-test FAIL (QA multi-flag xcodebuild allow)"; _fail=1; }
+
+  # A quoted multi-word value is ONE token. A simulator destination normally
+  # contains spaces, so without this the strip missed the exact shape of the
+  # incident that motivated it while the space-free forms denied.
+  while IFS= read -r _c; do
+    [ -n "$_c" ] || continue
+    _o11d=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
+    printf '%s' "$_o11d" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+      || { echo "test-execution-gate: self-test FAIL (quoted value escaped the strip: $_c)"; _fail=1; }
+  done <<'EOF'
+xcodebuild test -project a.xcodeproj -scheme overlay -destination "platform=iOS Simulator,name=iPhone 16 Pro"
+xcodebuild test -project a.xcodeproj -scheme overlay -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+dotnet test "My Solution.sln"
+EOF
+
+  # Same quoted value, plus a real selector -> still allowed.
+  # The payload is built through a variable, never inlined: an unbalanced quote
+  # inside `"$( ... )"` flips the outer parser's quoting state, brace expansion
+  # then splits the jq filter, and the fixture silently passes on an empty
+  # payload. That is how the unterminated-quote case below was first written.
+  _c='xcodebuild test -project a -scheme overlay -destination "platform=iOS Simulator,name=iPhone 16 Pro" -only-testing:UnitTests/LogTests'
+  _p11e=$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')
+  _o11e=$(run_gate "$_p11e" "$_ctx11")
+  [ -z "$_o11e" ] || { echo "test-execution-gate: self-test FAIL (quoted value + selector must allow)"; _fail=1; }
+
+  # Unbalanced quoting strips nothing rather than half the argument list — the
+  # ambiguous parse degrades to allow, never to a deny.
+  _c='xcodebuild test -project a -scheme overlay -destination "platform=iOS Simulator'
+  _p11f=$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')
+  [ -n "$_p11f" ] || { echo "test-execution-gate: self-test FAIL (unterminated-quote payload did not build)"; _fail=1; }
+  _o11f=$(run_gate "$_p11f" "$_ctx11")
+  [ -z "$_o11f" ] || { echo "test-execution-gate: self-test FAIL (unterminated quote must allow)"; _fail=1; }
+
+  # Fail-open guard: a value-consuming flag whose value is missing must not
+  # swallow the token that follows it. The surviving token must NOT be in the
+  # explicit selector list — that limb decides on $_seg before the strip ever
+  # runs, so a `-only-testing:` case here passes with the guard deleted and
+  # proves nothing. Verified to flip to a deny when the guard is removed.
+  _o11c=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"xcodebuild test -project a -scheme -MyScheme"}}' "$_ctx11")
+  [ -z "$_o11c" ] || { echo "test-execution-gate: self-test FAIL (valueless flag ate the next token)"; _fail=1; }
+
+  # The guard at the unit level, independent of which limb classifies first.
+  _o11g="$(strip_nonselecting_flags xcodebuild " -scheme -only-testing:UnitTests/LogTests")"
+  case "$_o11g" in
+    *-only-testing:UnitTests/LogTests*) : ;;
+    *) echo "test-execution-gate: self-test FAIL (strip ate a selector after a valueless flag)"; _fail=1 ;;
+  esac
+
+  # `-c` is value-taking on some runners and valueless on others. The
+  # valueless ones must not consume the token after them: `go test -c` only
+  # COMPILES, and rspec's `-c` is --colour, so both were denied as full runs.
+  while IFS= read -r _c; do
+    [ -n "$_c" ] || continue
+    _o14=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
+    [ -z "$_o14" ] || { echo "test-execution-gate: self-test FAIL (valueless -c must not deny: $_c)"; _fail=1; }
+  done <<'EOF'
+go test -c
+go test -c ./pkg
+rspec -c spec/models/user_spec.rb
+EOF
+
+  # `go test -c` is build-only, so it is allowed at a BANNED stage too, not
+  # merely at DV — the promise that compiling stays permitted everywhere.
+  _ctx13="$_tmp/go-compile/.context"; mkdir -p "$_ctx13"
+  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx13/state.json"
+  _o15=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"go test -c ./pkg"}}' "$_ctx13")
+  [ -z "$_o15" ] || { echo "test-execution-gate: self-test FAIL (go test -c is build-only everywhere)"; _fail=1; }
+
+  # The value-taking `-c` runners are unaffected: the value is still consumed,
+  # so these stay full runs.
+  while IFS= read -r _c; do
+    [ -n "$_c" ] || continue
+    _o16=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
+    printf '%s' "$_o16" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+      || { echo "test-execution-gate: self-test FAIL (value-taking -c must still deny: $_c)"; _fail=1; }
+  done <<'EOF'
+swift test -c release
+dotnet test -c Release
+go test
+rspec
+EOF
+
+  # FN has no test-execution authority. This passes the day it is written —
+  # the stage limb already denies every stage but DV/QA. It is a parity lock
+  # against a future edit to that limb quietly dropping the row, not a bug
+  # catch, so do not delete it as a test that never fails.
+  _ctx12="$_tmp/fn/.context"; mkdir -p "$_ctx12"
+  printf '{"stages":{"FN":{"status":"in_progress"}}}' > "$_ctx12/state.json"
+  _o13=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"swift test"}}' "$_ctx12")
+  printf '%s' "$_o13" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+    || { echo "test-execution-gate: self-test FAIL (FN must have no test-execution authority)"; _fail=1; }
 
   # Exit code always 0, even on a deny.
   set +e
