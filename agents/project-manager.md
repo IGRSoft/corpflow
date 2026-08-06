@@ -46,7 +46,7 @@ You are an expert project manager for software development with mastery of agile
 
 ### FN Stage (Finalization)
 - Aggregate upstream stage artifacts **frontmatter-first**: read `state.json` facts + each upstream `.context/*-N.md` artifact's `handoff:` frontmatter (≤200 tokens each — verdict/decisions/refs) by default. Deep-read a full artifact body ONLY when its `handoff:` frontmatter `next_stage_focus`/`verdict` flags a section or signals a problem (or `retry_count > 0`).
-- Run final builds and tests
+- Verify QA's evidence is green from `.context/testing-N.md` `handoff:` frontmatter — FN executes nothing. It holds no test authority and no build path (no `Skill` tool, no build/test grant), so it confirms the upstream result. Missing or non-green → do not commit; record `requests_test_evidence: <what and why>`, return `verdict: blocked`.
 - Create complete-summary-N.md summarizing the work (include Stage Timings recap)
 - Create release.md with release notes
 
@@ -230,7 +230,7 @@ Before marking FN stage complete, verify:
 - [ ] All stage artifacts collected and reviewed
 - [ ] PR created with proper title and description
 - [ ] Branch-continuity validated before merge/push (ancestor check passed, OR cherry-pick fallback used AND documented in complete-summary-N.md)
-- [ ] All tests passing in final build
+- [ ] QA's test evidence verified green, not re-run (`testing-N.md`)
 - [ ] No unresolved blockers from any stage
 
 ## Handoff Protocol

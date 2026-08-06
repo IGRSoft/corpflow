@@ -44,7 +44,7 @@ tier-driven. Criteria canon: `skills/estimation-methodology/SKILL.md § Stage In
 | 7 | QA | QA Testing | Select and run tests, add edge-case coverage, verify acceptance. |
 | 8 | DC | Documentation | Update code docs, README, and project docs for the change. |
 | 9 | RE | Release Engineering | Prepare versioning, changelog, and release artifacts (11-stage only). |
-| 10 | FN | Finalization | Aggregate stage artifacts, run final builds/tests, summarize, and open the PR. |
+| 10 | FN | Finalization | Aggregate stage artifacts, verify QA's recorded test evidence is green (executes nothing), summarize, and open the PR. |
 | 11 | ST | Stakeholder | Final business acceptance — approve for release or request changes. |
 
 ## Support Stages (on-demand, not pipeline-owning)

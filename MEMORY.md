@@ -4,7 +4,23 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.5** (Test-suite stringency hardening: 45 `.bats` / 501 `@test` → **53 / 680**,
+- Plugin version: **4.0.6** (Test-execution gate closes the flag-carrying full-suite hole at DV: the
+  classifier now strips each runner's mandatory non-selecting flags — quote-aware, so
+  `-destination "platform=iOS Simulator,name=iPhone 16 Pro"` no longer reads as a narrowed run —
+  before deciding whether an argument survived. `xcodebuild`/`dotnet`/`gradle`/`npm`,`pnpm`,`yarn`/
+  `cargo --release` full runs invert allow→deny at DV; genuine selectors still allow. The `-c`
+  generalisation additionally fixed two PRE-EXISTING false denies (`go test -c`, `rspec -c`), and
+  the `--only-testing:` double-dash spelling defect — a selector limb that never matched a real
+  invocation — is corrected; the gradle task token is found order-independently, so
+  `gradle -p . test` denies like `gradle test -p .` (and flags-first build-only tasks such as
+  `gradle -p . assembleAndroidTest` stop false-denying). Fixtures 24→40 self-test, 58→80 bats.
+  Prose reconciled in the same
+  patch: the authority matrix's DV row documented the bug as the contract, and the finalization
+  stage's own duty list, checklist and shared stage-table row instructed it to run tests it is
+  forbidden and unable to run — FN now verifies QA's recorded evidence instead. Known limits stated
+  rather than buried: whole-tree positionals (`go test ./...`) still read as scoped, and
+  `npm|pnpm|yarn test -- -c <spec>` denies though genuinely scoped — accepted because the
+  alternative reopens the hole. Previous release 4.0.5 — test-suite stringency hardening: 45 `.bats` / 501 `@test` → **53 / 680**,
   every claim re-derived by mutation rather than ratified. Six production defects fixed, each landing
   in one commit with the pinned "KNOWN BUG" test flipped to assert correct behaviour. One is a
   **downstream security disclosure**: `scan-secrets.sh` recovered each rule's regex with a greedy
@@ -90,6 +106,14 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-08-05: v4.0.6 — test-execution gate: runner-aware, quote-aware strip of non-selecting flags
+  closes the flag-carrying full-suite hole at DV (`xcodebuild`/`dotnet`/`gradle`/`npm`/`pnpm`/`yarn`/
+  `cargo --release` invert allow→deny; genuine selectors unaffected). `--only-testing:` spelling
+  defect fixed; `go test -c` / `rspec -c` / flags-first gradle false denies removed. Fixtures
+  24→40 / 58→80. Prose
+  reconciled: DV authority-matrix note no longer documents the bug as the contract, and FN's duty
+  list/checklist/stage-table row now verify QA's recorded evidence instead of running tests FN is
+  forbidden and unable to run.
 - 2026-08-05: v4.0.5 — test-suite stringency hardening: 45 `.bats` / 501 `@test` → 53 / 680, bats
   `skip` directives 1 → 0, and every fix pinned by a mutation that reds only its own file (9 of 9,
   zero coupling). Six production defects: the `scan-secrets.sh` greedy field split that blinded
@@ -209,7 +233,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-07-30: v3.41.1 — test-execution authority enforcement via stage-scoped policy matrix; DV auto-promotion capped at module-scope; SR/RE tool-grant narrowing (bare Bash → scoped allow-lists); new `PreToolUse` hook `hooks/test-execution-gate.sh` with fail-open guards; 27 new hook test scenarios + 6 parity tests; 8 sections restructured for size compliance. 394 bats green. ~25 files.
 - 2026-07-30: v3.41.0 — branch naming PL-stage entry point + shared library; FN `branch-name` subcommand removed entirely; vocabulary extended to `feature`/`feat` (backward compatible); rank-4 issue resolver tightened; shell-injection hardening (input gate + validation at 3 consumption hops); symlink ACE + CDPATH + audit-row-loss fixes. 340 bats green. ~20 files.
 - 2026-07-29: v3.40.0 — suite fully green (281/0); new cross-plugin-refs contract test caught 2 dangling delegations; web/android capture scripts; android `and-*` agent rename propagated; `deps --upgrade` silent-audit fixed. ~12 files.
-- 2026-07-29: v3.39.0 — platform-agnostic orchestration: 36 XcodeBuildMCP grants removed (DV/DR/QA delegate to `/<plugin>:build-test`), Apple pre-warm deleted, Swift-Testing-for-all-platforms mandate and 4-platform schema gap fixed, Python comment-density and Android UI-detection bugs fixed. ~44 files.
 ## Token Baselines
 
 Authoritative per-surface baselines: `skills/cost-optimization/references/token-baselines.md`. This file no longer mirrors them.

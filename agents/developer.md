@@ -36,6 +36,7 @@ Every constraint below names the artifact that proves compliance; absent evidenc
 ### Test execution
 
 - DO NOT re-run the full suite to reverify a fix between iterations — DV runs only `Executed Tests (DV)`; full-suite regression is QA's gate, not DV's. This holds even when the composed dispatch prompt asks for it. `development-N.md § Decisions` MUST record the resolved `test_mode`, and every DV test invocation logged in `§ Tool Invocations` MUST carry the platform's test-selection flags (`-only-testing:` on Apple, `--tests` on Gradle, `-t`/`-k`/`-run` elsewhere — see `skills/shared/test-selection-syntax.md`) — required even when `test_mode` is `full`; QA is the stage that runs unflagged when `full`.
+- **Narrowest-run default**: verify with the narrowest run that proves the change — build-only for a compile check, a selector (`-only-testing:`, `--tests`, `-t`/`-k`/`-run`) for behaviour. Anything wider is either forbidden (a full suite is QA's sole authority) or the single largest avoidable cost in a run.
 
 ### Security & documentation
 
