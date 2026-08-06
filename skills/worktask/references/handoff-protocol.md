@@ -566,8 +566,12 @@ Only `stages.<CODE>.worktree` maps from a stage artifact — the DV handoff fron
 
 #### Additive-field writers — facts.branch
 
-`facts.branch` is also an orchestrator-loop writer, not a schema-mapped stage return: the
-orchestrator parses the final `branch=<name>` stdout line of `branch-name.sh`
+`facts.branch` has **two** writers: the orchestrator at `commands/worktask.md § Step 3c`, and
+`refine-branch-target.sh` at § Step A.4b (at most once per run, pre-commit, ledger-only, no git
+mutation). No stage agent ever writes it.
+
+The orchestrator's write is an orchestrator-loop write, not a schema-mapped stage return: it
+parses the final `branch=<name>` stdout line of `branch-name.sh`
 (`commands/worktask.md § Step 3c`) and stamps it directly — `branch-name.sh` itself never
 writes state.json (single write chokepoint, `#atomic-write`). When that line is empty or
 non-conventional and the script's `target_branch=<name>` line is not, the **target** is what
@@ -853,9 +857,9 @@ OPTIONAL (additive, version:1; DV primarily). Records WHICH worktree the stage r
 
 OPTIONAL (additive, version:1). The worktask's **planned** working-branch name — the
 host-session branch as `branch-name.sh` left it at the start of PL, whether it renamed the
-branch or found it already conventional. Written exactly once per run, before any commit
-exists, and never rewritten by a later stage (the once-only rule —
-`skills/shared/git-conventions.md § Branch Naming`). **This is the field FN uses as the
+branch or found it already conventional. Written at PL start and rewritten at most once, at
+`commands/worktask.md § Step A.4b`, before any commit exists — never rewritten by a **stage**
+(the once-only rule — `skills/shared/git-conventions.md § Once-only rule`). **This is the field FN uses as the
 pull-request head.** Reading the ledger instead of shelling `git rev-parse` at FN time is
 what makes an external mid-run rename unable to silently retarget the PR: the PR opens
 against the name the worktask committed to, and divergence surfaces as a mismatch rather
@@ -864,12 +868,16 @@ disambiguation note below. Kept through FN; dropped at archival.
 
 ##### Field notes — branch, divergence from the local branch name
 
-Under a host workspace (a linked git worktree — Conductor and friends), `facts.branch`
-deliberately does **not** match `git rev-parse --abbrev-ref HEAD`: `branch-name.sh` keeps
-the host's local name and returns the derived `target_branch=` for the PR head instead, so
-the host's branch↔workspace mapping survives (`workspace-modes.md § Host mapping — handled,
-not just noted`). The same divergence appears on the upstream-tracked and target-exists
-arms. No reader may "repair" it by re-deriving from the local branch — the ledger value is
+`facts.branch` may legitimately differ from `git rev-parse --abbrev-ref HEAD` on the
+`upstream_tracked` and `target_exists` arms, and inside a linked worktree when
+`BRANCH_NAME_WORKTREE_RENAME=0` is set — there `branch-name.sh` keeps the host's local name
+and returns the derived `target_branch=` for the PR head instead, so the host's
+branch↔workspace mapping survives (`workspace-modes.md § Host mapping — updated, not
+preserved`). On the **default** worktree path the branch is renamed and the two agree.
+
+Divergence is now **observed, not merely tolerated**: `fn-preflight.sh branch-divergence`
+classes it `expected` or `third_party` and surfaces only `third_party` at the FN gate. Its
+comparison base is the `to` of the last `branch_renamed / ok` row, not this field. No reader may "repair" it by re-deriving from the local branch — the ledger value is
 the planned name and the PR head is what it plans.
 
 ##### Field notes — branch, empty value
@@ -889,9 +897,9 @@ Two fields, disjoint definitions, neither derived from the other:
 | | `facts.branch` | `stages.DV.worktree.branch` |
 |---|---|---|
 | Meaning | **planned** host-session branch name | **observed** branch of the worktree DV ran in |
-| Writer | orchestrator, from `branch-name.sh` stdout, at PL start | `state-patch.sh`, from DV handoff `worktree_branch` |
+| Writer | orchestrator, from `branch-name.sh` stdout, at PL start; then `refine-branch-target.sh` at Step A.4b | `state-patch.sh`, from DV handoff `worktree_branch` |
 | Written when | before any commit exists | after DV completes |
-| Rewritten | never (once-only rule) | per DV re-dispatch |
+| Rewritten | at most once more, pre-commit (§ Step A.4b); never by a stage | per DV re-dispatch |
 | FN uses for | the PR **head** | worktree re-entry context only |
 
 ##### Disambiguation — topology note

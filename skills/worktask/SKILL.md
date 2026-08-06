@@ -266,7 +266,11 @@ Before executing any worktask stage, the orchestrator MUST validate:
 9. **Hook installation check** (first stage only): Verify `state-merge.sh` SubagentStop hook is operational. Check: (a) `.claude/hooks/state-merge.sh` exists and is executable, OR (b) the plugin's `plugin.json` registers the SubagentStop hook entry. If neither is true, emit a warning: `"⚠ state-merge.sh hook not installed — run hook-install.sh"`. Do NOT block — the orchestrator's Step 6.5 provides Layer 3 coverage. See `references/initialization-patterns.md#hook-installation`.
 ### Validation check 10
 
-10. **Branch naming** (first stage only, after the state.json seed and before `TaskCreate` PL0): run `bash skills/worktask/scripts/branch-name.sh --goal "<task description>"` — the ONLY point in the pipeline a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). **Unconditional**: the script's "already conventional" arm is a no-op, so running it always is free and is the only correct way to decide — never skip it because the current branch looks fine, and never judge conventionality by eye (the sole authority is `branch_is_conventional()`, queryable as `--check <name>`). A branch created outside the pipeline is covered by exactly this rule. Every outcome exits 0 and the step self-disables under `/megatask`/`--emergency` routing.
+10. **Branch naming** (first stage only, after the state.json seed and before `TaskCreate` PL0): run `bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"` — the ONLY point in the pipeline a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). **Unconditional**: the script's "already conventional" arm is a no-op, so running it always is free and is the only correct way to decide — never skip it because the current branch looks fine, and never judge conventionality by eye (the sole authority is `branch_is_conventional()`, queryable as `--check <name>`). A branch created outside the pipeline is covered by exactly this rule. Every outcome exits 0 and the step self-disables under `/megatask`/`--emergency` routing.
+
+### Validation check 10 — pass a title, preview freely
+
+**Pass a title, never the raw task description**: the goal text becomes a 48-character slug and the overflow is dropped silently, so a multi-sentence description yields a name that ends mid-phrase (`commands/worktask.md § Step 3c — the input is a title`). Preview it first with `BRANCH_NAME_PRINT=1`, which renames nothing and writes no audit row; the query modes `--check`/`--print-types`/`--print-target` are free for the same reason. The *planned* name on the ledger may later be refined once, without any git mutation — `commands/worktask.md § Step A.4b`.
 
 ### Validation check 10 — stamping and post-check
 
@@ -274,7 +278,7 @@ Capture **both** stdout key=value lines — `target_branch=<name>` (the name the
 
 ### Validation check 10 — which name, and the host rule
 
-**When `branch=` is empty or fails `--check` but `target_branch=` is non-empty, stamp the target** — the local name may be blocked from changing (upstream tracked, target exists, host workspace) while the PR head is still ours to name. Then run the non-blocking post-check (`commands/worktask.md § Step 3c — post-check`): a stamped name failing `--check` emits one `branch_convention_check` warning row naming the actual and derived target, and never blocks planning. Invoking `/worktask` authorizes the rename against a host's no-rename session rule — never revert it, never re-ask (`references/workspace-modes.md § Host session authorization`).
+**When `branch=` is empty or fails `--check` but `target_branch=` is non-empty, stamp the target** — the local name may be blocked from changing (upstream tracked, target exists) while the PR head is still ours to name. Then run the non-blocking post-check (`commands/worktask.md § Step 3c — post-check`): a stamped name failing `--check` emits one `branch_convention_check` warning row naming the actual and derived target, and never blocks planning. Invoking `/worktask` authorizes the rename against a host's no-rename session rule — never revert it, never re-ask (`references/workspace-modes.md § Host session authorization`).
 
 ### On validation failure
 

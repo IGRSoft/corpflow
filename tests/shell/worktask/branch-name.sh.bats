@@ -54,7 +54,10 @@ mk_branch_repo() {
   first=$(git rev-parse --abbrev-ref HEAD)
   run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
-  assert_line --index 0 --partial "already conventional"
+  # Since R6 the second run is refused by the LEDGER guard (already_named), which sits
+  # above already_conventional — the no-op the case is about is unchanged, its reason is
+  # now the stronger one that also holds after a third-party rename (AD-12).
+  assert_line --index 0 --partial "already named this run"
   run git rev-parse --abbrev-ref HEAD
   assert_output "$first"
 }
@@ -193,7 +196,9 @@ mk_branch_repo() {
   cd "$WD"
   mk_branch_repo "wt-abc123" \
     "OV-164 Product list images are blinking before rendering on the catalog screen"
-  run env BRANCH_NAME_PRINT=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  # --separate-stderr: this goal truncates, and the dry run reports that on stderr. The
+  # assertion here is about the STDOUT contract (bare target, directly substitutable).
+  run --separate-stderr env BRANCH_NAME_PRINT=1 bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_output "bugfix/ov-164-product-list-images-are-blinking-before"
 }
@@ -577,10 +582,27 @@ stamp_from_output() {
   printf '%s' "$stamp"
 }
 
-@test "TB-1: host workspace — local name kept, conventional target emitted, HEAD untouched" {
+# R6 INVERTED these two. They previously asserted the defer behaviour; the local name is
+# now renamed by default and the deferring assertions moved to the opt-out (AC-10/2).
+@test "TB-1: host workspace — renamed by default, both names agree" {
   mk_worktree_repo
   cd "$WD/wt"
   run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "renamed inside a linked worktree"
+  assert_line "target_branch=feature/ov-166-show-all-layers-instead-of-zero-at-full"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "feature/ov-166-show-all-layers-instead-of-zero-at-full"
+  run jq -r 'select(.action=="branch_renamed") | .result' .context/logs/audit.jsonl
+  assert_output "ok"
+  run jq -r 'select(.action=="branch_renamed") | .metadata.in_worktree' .context/logs/audit.jsonl
+  assert_output "true"
+}
+
+@test "TB-1b: host workspace — the opt-out still keeps the local name and skips" {
+  mk_worktree_repo
+  cd "$WD/wt"
+  run env BRANCH_NAME_WORKTREE_RENAME=0 bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_line --index 0 --partial "host workspace"
   assert_line "target_branch=feature/ov-166-show-all-layers-instead-of-zero-at-full"
@@ -597,10 +619,11 @@ stamp_from_output() {
   cd "$WD/wt"
   local out
   out=$(bash "$PLUGIN_ROOT/$SCRIPT")
-  # 1. the host's branch↔workspace mapping is intact
+  # 1. the local branch now carries the conventional name itself
   run git rev-parse --abbrev-ref HEAD
-  assert_output "moab-v1"
-  # 2. + 3. what the orchestrator stamps, and therefore what FN pushes as the head
+  assert_output "feature/ov-166-show-all-layers-instead-of-zero-at-full"
+  # 2. + 3. what the orchestrator stamps, and therefore what FN pushes as the head — the
+  # same string, which is the point of R6: no divergence left to reconcile.
   run stamp_from_output "$out"
   assert_output "feature/ov-166-show-all-layers-instead-of-zero-at-full"
 }
@@ -631,16 +654,35 @@ stamp_from_output() {
   assert_output "bugfix/fix-pr-composition-and-branch-naming"
 }
 
+# INVERTED by R6. The detector is unchanged — only what it gates. Asserted through the
+# OPT-OUT arm, because that is the arm whose output still proves detection distinctly: on
+# the default arm a subdirectory of a plain repo would also rename, so a rename alone would
+# no longer distinguish "detected" from "not detected" (see TB-3b for the plain-repo half).
 @test "TB-3c: a subdirectory INSIDE a host workspace is still detected" {
   mk_worktree_repo
   mkdir -p "$WD/wt/src/deep"
   cd "$WD/wt/src/deep"
-  run bash "$PLUGIN_ROOT/$SCRIPT" --state "$WD/wt/.context/state.json" --context "$WD/wt/.context"
+  run env BRANCH_NAME_WORKTREE_RENAME=0 bash "$PLUGIN_ROOT/$SCRIPT" \
+    --state "$WD/wt/.context/state.json" --context "$WD/wt/.context"
   assert_success
   assert_line --index 0 --partial "host workspace"
   assert_line "target_branch=feature/ov-166-show-all-layers-instead-of-zero-at-full"
   run git rev-parse --abbrev-ref HEAD
   assert_output "moab-v1"
+}
+
+# The default-arm half of the same detection claim: from a subdirectory the worktree is
+# still detected, so the disclosure fires and the rename happens.
+@test "TB-3d: a subdirectory INSIDE a host workspace renames and discloses by default" {
+  mk_worktree_repo
+  mkdir -p "$WD/wt/src/deep"
+  cd "$WD/wt/src/deep"
+  run bash "$PLUGIN_ROOT/$SCRIPT" \
+    --state "$WD/wt/.context/state.json" --context "$WD/wt/.context"
+  assert_success
+  assert_line --index 0 --partial "renamed inside a linked worktree"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "feature/ov-166-show-all-layers-instead-of-zero-at-full"
 }
 
 @test "TB-4: upstream_tracked keeps the branch AND emits the derived target" {
@@ -698,8 +740,12 @@ stamp_from_output() {
   assert_line "target_branch="
   assert_line --index "$((${#lines[@]} - 1))" "branch=feature/already-named-thing"
 
-  # integration branch — never a PR head under any name
+  # integration branch — never a PR head under any name.
+  # The audit log is reset with the repo: the first half already wrote a branch_renamed
+  # row, and since R6 that row is what already_named keys on, so leaving it would have the
+  # once-guard answer this half instead of the arm under test.
   rm -rf "$WD/.git"
+  : > .context/logs/audit.jsonl
   git init -q -b master "$WD"
   git -C "$WD" -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m work
   jq '.facts.goal = "Add a new login flow" | .metadata.base_ref = "master"' \
@@ -744,6 +790,437 @@ stamp_from_output() {
   assert_success
   assert_output "bugfix/fix-pr-composition-and-branch-naming"
   refute_output --partial "target_branch="
+}
+
+# ---------------------------------------------------------------------------
+# slug_truncated= and --print-target (AC-5, 7 assertions + query-mode coverage).
+# ---------------------------------------------------------------------------
+
+# 71-char kebab body against a 48-char budget.
+TRUNCATING_GOAL="Product list images are blinking before rendering on the catalog screen"
+
+@test "AC-5/1: rename mode with a truncating goal emits exactly one slug_truncated=1 line" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "$TRUNCATING_GOAL"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 1 "slug_truncated=1"
+  assert_equal "$(printf '%s\n' "${lines[@]}" | grep -c '^slug_truncated=1$')" 1
+}
+
+@test "AC-5/2: rename mode with a non-truncating goal emits no slug_truncated line" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "Add a new login flow"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  refute_output --partial "slug_truncated"
+  # The pre-existing index-1 contract for a non-truncating goal is what the conditional
+  # emission exists to preserve.
+  assert_line --index 1 "target_branch=feature/add-a-new-login-flow"
+}
+
+@test "AC-5/3: branch= is the final stdout line on every guard-ladder arm" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "$TRUNCATING_GOAL"
+  # rename ok (truncating)
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index "$((${#lines[@]} - 1))" --partial "branch=bugfix/"
+  # already conventional
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index "$((${#lines[@]} - 1))" --partial "branch=bugfix/"
+  # batch routing
+  run env MILESTONE_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index "$((${#lines[@]} - 1))" --partial "branch="
+}
+
+@test "AC-5/4: target_branch= is emitted immediately before branch= when truncating" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "$TRUNCATING_GOAL"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  local last=$((${#lines[@]} - 1))
+  assert_line --index "$last" --partial "branch=bugfix/"
+  assert_line --index "$((last - 1))" --partial "target_branch=bugfix/"
+  assert_line --index "$((last - 2))" "slug_truncated=1"
+}
+
+@test "AC-5/5: dry run puts the bare target on stdout and the signal on stderr only" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "$TRUNCATING_GOAL"
+  run --separate-stderr env BRANCH_NAME_PRINT=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output "bugfix/product-list-images-are-blinking-before"
+  refute_output --partial "="
+  [[ "$stderr" == *"slug_truncated=1"* ]]
+}
+
+@test "AC-5/6: dry run writes no audit row even when the goal truncates" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "$TRUNCATING_GOAL"
+  run env BRANCH_NAME_PRINT=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ ! -s .context/logs/audit.jsonl ]
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "wt-abc123"
+}
+
+@test "AC-5/7: exit code is 0 on every rename-mode arm, truncating or not" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "$TRUNCATING_GOAL"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run env MILESTONE_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run env INCIDENT_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  git checkout -q --detach HEAD
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+}
+
+@test "PT-1: --print-target prints the bare target for the given goal, exit 0" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --print-target --goal "Add a new login flow"
+  assert_success
+  assert_output "feature/add-a-new-login-flow"
+}
+
+# The reason the dry run cannot serve: BRANCH_NAME_PRINT is evaluated AFTER the guard
+# ladder, so on an already-conventional branch it returns on the no-op arm and prints
+# no target at all. The query mode must still answer.
+@test "PT-2: --print-target answers where the dry run short-circuits" {
+  cd "$WD"
+  mk_branch_repo "feature/already-named-thing" "Add a new login flow"
+  run env BRANCH_NAME_PRINT=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  refute_output --partial "feature/add-a-new-login-flow"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --print-target --goal "Add a new login flow"
+  assert_success
+  assert_output "feature/add-a-new-login-flow"
+}
+
+@test "PT-3: --print-target runs no git command, needs no repo, and writes nothing" {
+  cd "$WD"
+  mkdir -p nogit/.context/logs
+  cd nogit
+  local nobin tool p
+  nobin="$WD/nogitbin"
+  mkdir -p "$nobin"
+  for tool in grep sed tr cut date mkdir bash sh env printf true false cat awk readlink dirname jq; do
+    p=$(command -v "$tool" 2> /dev/null) || continue
+    ln -sf "$p" "$nobin/$tool"
+  done
+  # No `git` on PATH at all: any git invocation would fail loudly rather than silently.
+  run env PATH="$nobin" bash "$PLUGIN_ROOT/$SCRIPT" --print-target --goal "Add a new login flow" \
+    --context .context --state .context/state.json
+  assert_success
+  assert_output "feature/add-a-new-login-flow"
+  [ ! -e .context/logs/audit.jsonl ]
+}
+
+@test "PT-4: --print-target emits the truncation signal on stderr, target on stdout" {
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --print-target --goal "$TRUNCATING_GOAL"
+  assert_success
+  assert_output "bugfix/product-list-images-are-blinking-before"
+  [[ "$stderr" == *"slug_truncated=1"* ]]
+}
+
+@test "PT-5: --print-target is silent and exits 1 when the goal resolves to nothing" {
+  cd "$WD"
+  mkdir -p empty/.context
+  cd empty
+  printf '{"version":1,"worktask_id":"","run_index":0,"facts":{}}\n' > .context/state.json
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --print-target --goal "" \
+    --state .context/state.json --context .context
+  assert_failure 1
+  assert_output ""
+}
+
+@test "PT-6: --print-target composes with --goal in either argument order" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --goal "Add a new login flow" --print-target
+  assert_success
+  assert_output "feature/add-a-new-login-flow"
+}
+
+@test "PT-7: --print-target with branch-lib.sh unreachable exits 2" {
+  cd "$WD"
+  mkdir -p lonely
+  cp "$PLUGIN_ROOT/$SCRIPT" lonely/branch-name.sh
+  run --separate-stderr bash lonely/branch-name.sh --print-target --goal "Add a new login flow"
+  assert_failure 2
+  [[ "$stderr" == *"branch-lib.sh"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# AC-10 (R6) — the linked-worktree arm renames, with an opt-out.
+#
+# FIXTURE RULE (AD-7 applied to R6): the worktree fixture MUST start on a NON-conventional
+# branch and MUST assert the real `git` branch name. A conventional starting branch makes
+# the renaming and deferring arms coincidentally agree — both no-op — and proves nothing.
+# Cases 1 and 2 are the SAME fixture differing only in the env var.
+# ---------------------------------------------------------------------------
+
+R6_TARGET="feature/add-a-new-login-flow"
+
+# `moab-v1` is non-conventional on purpose: it is the shape a host actually assigns.
+mk_r6_worktree() {
+  local branch="${1:-moab-v1}" goal="${2:-Add a new login flow}"
+  mkdir -p "$WD/main"
+  git init -q -b master "$WD/main"
+  git -C "$WD/main" -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m work
+  git -C "$WD/main" worktree add -b "$branch" "$WD/wt" > /dev/null 2>&1
+  mkdir -p "$WD/wt/.context/logs"
+  jq --arg g "$goal" '.facts.goal = $g' "$WD/.context/state.json" > "$WD/wt/.context/state.json"
+}
+
+@test "AC-10/1: linked worktree, defaults — the local branch is renamed" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  # The real git state, not stdout alone.
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "$R6_TARGET"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --check "$R6_TARGET"
+  assert_success
+}
+
+@test "AC-10/1b: both names agree and branch= is final and non-empty" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index "$((${#lines[@]} - 1))" "branch=$R6_TARGET"
+  assert_line "target_branch=$R6_TARGET"
+  run jq -r 'select(.action=="branch_renamed") | .result' .context/logs/audit.jsonl
+  assert_output "ok"
+  run jq -r 'select(.action=="branch_renamed") | .metadata.in_worktree' .context/logs/audit.jsonl
+  assert_output "true"
+  run jq -r 'select(.action=="branch_renamed") | .metadata.from' .context/logs/audit.jsonl
+  assert_output "moab-v1"
+}
+
+# Same fixture as AC-10/1, differing ONLY in the env var, so the delta is attributable.
+@test "AC-10/2: BRANCH_NAME_WORKTREE_RENAME=0 preserves the defer behaviour verbatim" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  local before
+  before=$(git rev-parse --abbrev-ref HEAD)
+  run env BRANCH_NAME_WORKTREE_RENAME=0 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "host workspace"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "$before"
+  assert_output "moab-v1"
+  run jq -r 'select(.action=="branch_renamed") | .result' .context/logs/audit.jsonl
+  assert_output "skipped"
+  run jq -r 'select(.action=="branch_renamed") | .metadata.reason' .context/logs/audit.jsonl
+  assert_output "host_workspace_worktree"
+}
+
+@test "AC-10/2b: the opt-out arm emits target_branch= but an empty branch=" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run env BRANCH_NAME_WORKTREE_RENAME=0 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line "target_branch=$R6_TARGET"
+  assert_line --index "$((${#lines[@]} - 1))" "branch="
+}
+
+@test "AC-10/2c: only the literal 0 opts out" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run env BRANCH_NAME_WORKTREE_RENAME=false bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "$R6_TARGET"
+}
+
+# AD-12: a name-based once-guard would authorize a SECOND rename here, because the
+# third-party name is non-conventional again.
+@test "AC-10/3: once-only survives a third-party rename between runs" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "$R6_TARGET"
+
+  # Simulate the host renaming the branch mid-run, as Conductor did live.
+  git branch -m which-stages-ran-tests
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "already named this run"
+  # Byte-identical to the third-party name: no second rename.
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "which-stages-ran-tests"
+
+  run bash -c "jq -rs -R '[split(\"\n\")[]|fromjson?
+    |select(.action==\"branch_renamed\" and .result==\"ok\")]|length' .context/logs/audit.jsonl"
+  assert_output "1"
+  run bash -c "jq -rs -R '[split(\"\n\")[]|fromjson?
+    |select(.action==\"branch_renamed\")]|last|.metadata.reason' .context/logs/audit.jsonl"
+  assert_output "already_named"
+  run bash -c "jq -rs -R '[split(\"\n\")[]|fromjson?
+    |select(.metadata.reason==\"already_named\")]|last|.metadata.branch' .context/logs/audit.jsonl"
+  assert_output "which-stages-ran-tests"
+}
+
+# A well-formed NON-object line parses cleanly through `fromjson?` and then dies on
+# `.metadata` — aborting the scan, which for a once-only guard means failing OPEN.
+# `objects` closes it. Same probe DR used against the R4 scans in the r1 cycle.
+@test "AC-10/3d: a well-formed non-object audit line does not make already_named fail open" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "$R6_TARGET"
+
+  # Prepend a bare number and a JSON array AHEAD of the branch_renamed row.
+  { printf '123\n[1,2]\n'; cat .context/logs/audit.jsonl; } > a \
+    && mv a .context/logs/audit.jsonl
+  git branch -m which-stages-ran-tests
+
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "already named this run"
+  # The guard held: no second rename.
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "which-stages-ran-tests"
+  run bash -c "jq -rs -R '[split(\"\n\")[]|fromjson?|objects
+    |select(.action==\"branch_renamed\" and .result==\"ok\")]|length' .context/logs/audit.jsonl"
+  assert_output "1"
+}
+
+@test "AC-10/3b: already_named outranks already_conventional and records first_run_ts" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  # Still conventional — so a run now must be refused by already_named, not by the churn guard.
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "already named this run"
+  refute_output --partial "already conventional"
+  run bash -c "jq -rs -R '[split(\"\n\")[]|fromjson?
+    |select(.metadata.reason==\"already_named\")]|last|.metadata.first_run_ts' .context/logs/audit.jsonl"
+  assert_output --regexp '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
+}
+
+@test "AC-10/3c: a bumped run_index gets its own naming decision" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  git branch -m host-renamed-again
+  jq '.run_index = 1' .context/state.json > s && mv s .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  refute_output --partial "already named"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "$R6_TARGET"
+}
+
+# The R6-specific hazard: a linked worktree SHARES refs/heads with the main checkout, so a
+# collision is more likely here than in a plain checkout — the fall-through must pass
+# through the target_exists guard.
+@test "AC-10/5: target_exists still precedes the rename inside a worktree" {
+  mk_r6_worktree
+  git -C "$WD/main" branch "$R6_TARGET"
+  cd "$WD/wt"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "already exists"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "moab-v1"
+  run jq -r 'select(.action=="branch_renamed") | .metadata.reason' .context/logs/audit.jsonl
+  assert_output "target_exists"
+  # The disclosure names a rename, so it must not appear on an arm that renamed nothing.
+  refute_output --partial "renamed inside a linked worktree"
+}
+
+@test "AC-10/6: higher guards still win inside a worktree" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  git remote add origin https://example.invalid/r.git
+  git update-ref refs/remotes/origin/moab-v1 HEAD
+  git branch --set-upstream-to=origin/moab-v1 moab-v1 > /dev/null
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "upstream already tracked"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "moab-v1"
+}
+
+@test "AC-10/6b: batch and incident routing self-disable regardless of the opt-out" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run env MILESTONE_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "skipped (milestone_mode_env)"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "moab-v1"
+
+  run env INCIDENT_MODE=1 BRANCH_NAME_WORKTREE_RENAME=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "skipped (incident_mode_env)"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "moab-v1"
+}
+
+@test "AC-10/6c: BRANCH_NAME_PRINT is evaluated above the worktree arm — a dry run never mutates" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run env BRANCH_NAME_PRINT=1 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output "$R6_TARGET"
+  run git rev-parse --abbrev-ref HEAD
+  assert_output "moab-v1"
+  [ ! -s .context/logs/audit.jsonl ]
+}
+
+@test "AC-10/7: the disclosure line names the consequence and the opt-out (BINDING)" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 --partial "renamed inside a linked worktree"
+  assert_line --index 0 --partial "re-sync"
+  assert_line --index 0 --partial "BRANCH_NAME_WORKTREE_RENAME=0"
+  assert_line --index 0 --partial "moab-v1"
+  assert_line --index 0 --partial "$R6_TARGET"
+}
+
+@test "AC-10/7b: a plain checkout keeps its terse rename line, no disclosure" {
+  cd "$WD"
+  mk_branch_repo "wt-abc123" "Add a new login flow"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index 0 "branch-name: wt-abc123 -> $R6_TARGET"
+  refute_output --partial "linked worktree"
+  run jq -r 'select(.action=="branch_renamed") | .metadata.in_worktree // "absent"' .context/logs/audit.jsonl
+  assert_output "absent"
+}
+
+@test "AC-10/4: branch= is final and non-empty on the worktree rename arm" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index "$((${#lines[@]} - 1))" "branch=$R6_TARGET"
+}
+
+@test "AC-10/4b: branch= is final and empty on the opt-out arm" {
+  mk_r6_worktree
+  cd "$WD/wt"
+  run env BRANCH_NAME_WORKTREE_RENAME=0 bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line --index "$((${#lines[@]} - 1))" "branch="
 }
 
 @test "SR-2/SR-4: a symlinked script still resolves the real sibling branch-lib.sh" {

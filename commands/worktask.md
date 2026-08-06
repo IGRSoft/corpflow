@@ -150,11 +150,33 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 ### Step 3c — Name the branch once (PL start)
 
 3c. **Name the branch — UNCONDITIONAL**: after the state.json seed and before `TaskCreate`
-   for PL0, run `bash skills/worktask/scripts/branch-name.sh --goal "<task description>"`.
+   for PL0, run `bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"`.
    This is the ONLY place a worktask branch is ever renamed — the once-only rule per
-   `skills/shared/git-conventions.md § Branch Naming`. Every outcome exits 0 (a naming problem
-   must never stop planning) and the step self-disables **inside the script** under `/megatask`
-   or `--emergency` routing.
+   `skills/shared/git-conventions.md § Branch Naming`. The *planned* name on the ledger may
+   additionally be refined once, later and without any git mutation — § Step A.4b. Every
+   outcome exits 0 (a naming problem must never stop planning) and the step self-disables
+   **inside the script** under `/megatask` or `--emergency` routing.
+
+#### Step 3c — the input is a title, not the task description
+
+   **Derive the title from the request; do not pass the request verbatim.** A title is an
+   imperative phrase of at most 60 characters naming the thing changed and the change.
+
+   The goal text is slugified into a **48-character** slug and anything past that budget is
+   dropped **silently**, so a multi-sentence description yields a name that ends mid-phrase
+   and describes nothing:
+
+   - good: `Replace in-house ZIP with upstream ZipArchive`
+   - bad: `Replace the in-house ZIP implementation in Sources/Archive/ with the upstream
+     ZipArchive package, keeping the existing public API and updating the tests`
+
+#### Step 3c — preview freely before the single rename-mode run
+
+   `BRANCH_NAME_PRINT=1 bash skills/worktask/scripts/branch-name.sh --goal "<title>"` previews
+   the derived name: it renames nothing and writes **no audit row**. Previewing before the one
+   rename-mode run is expected practice, not an exception — it is how a poor title is caught
+   while it is still free to change. A truncated slug is reported on stderr; stdout stays the
+   bare name.
 
 #### Step 3c — why it always runs
 
@@ -185,9 +207,19 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
    conventional branch and a ticket-referencing PR are part of what the pipeline was asked
    to deliver. **Never revert this step's rename, and never suspend the pipeline to re-ask.**
    Rationale and scope: `skills/worktask/references/workspace-modes.md § Host session
-   authorization`. Inside a linked worktree the script does not rename at all — it keeps the
-   host's local name and hands back a `target_branch=` for the PR head instead, so there is
-   nothing to revert there either.
+   authorization`.
+
+#### Step 3c — host-session authorization inside a linked worktree
+
+   Inside a linked worktree the naming step **renames the local branch**, like any other
+   checkout, so `branch=` and `target_branch=` agree. The host's branch↔workspace mapping is
+   updated by that rename — deliberately: a host-assigned placeholder is not a name worth
+   preserving, and a host may rename the branch again mid-run without telling the pipeline.
+   Set `BRANCH_NAME_WORKTREE_RENAME=0` to restore the previous defer-to-host behaviour, in
+   which the local name is kept and only `target_branch=` is derived.
+
+   **The "never revert this step's rename" rule therefore applies inside worktrees too.** It
+   was previously moot there — nothing was renamed — and is not any more.
 
 #### Step 3c — validate before stamping
 
@@ -202,9 +234,12 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 #### Step 3c — which of the two names gets stamped
 
    ```bash
-   out=$(bash skills/worktask/scripts/branch-name.sh --goal "<task description>")
+   # A concise imperative TITLE (≤60 chars), never the raw task description — the slug
+   # budget is 48 characters and the overflow is dropped silently.
+   out=$(bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>")
    local_branch=$(printf '%s\n' "$out" | sed -n 's/^branch=//p' | tail -n 1)
    target=$(printf '%s\n' "$out" | sed -n 's/^target_branch=//p' | tail -n 1)
+   truncated=$(printf '%s\n' "$out" | sed -n 's/^slug_truncated=//p' | tail -n 1)
 
    # target_branch wins whenever the local name is unusable as a PR head — that is the
    # whole point of the second line. Falling back to the local name here is what shipped
@@ -215,6 +250,8 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
    fi
    ```
 
+#### Step 3c — an empty stamp is an honest outcome
+
    `branch-name.sh` already emits both lines empty rather than emit a name that fails the
    predicate, so an empty `stamp` after this is the honest "no planned name" outcome (FN
    pushes plainly) — not a value to patch up by hand.
@@ -222,8 +259,10 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 #### Step 3c — post-check (non-blocking)
 
    After stamping, assert the stamped value against the predicate — not by eye. Reuse the
-   `$target` already captured above; do **not** re-invoke the script to re-derive it (a
-   second rename-mode run writes a second audit row):
+   `$target` already captured above. Do not re-invoke the script in **rename mode** to
+   re-derive the target (that writes a second audit row). Preview freely with
+   `BRANCH_NAME_PRINT=1`, and query freely with `--check` / `--print-target`, which write
+   none:
 
    ```bash
    stamped=$(jq -r '.facts.branch // ""' .context/state.json)
@@ -234,6 +273,33 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
        >> .context/logs/audit.jsonl
    fi
    ```
+
+#### Step 3c — post-check, the truncation row
+
+   The `slug_truncated=1` line is present ONLY when the budget dropped content. On seeing it,
+   append one row naming the input length and the surviving slug — the evidence a human reads
+   at the plan gate, and the incumbent-quality signal § Step A.4b reads before spending its
+   one refinement window:
+
+   ```bash
+   if [ "$truncated" = "1" ]; then
+     wid=$(jq -r '.worktask_id // "unknown"' .context/state.json)
+     ri=$(jq -r '.run_index // 0' .context/state.json)
+     jq -cn --arg ts "$(date -u +%FT%TZ)" --arg s "PL$ri" --arg t "$target" \
+       --arg len "${#title}" --arg slug "${target#*/}" --arg dk "$wid:$ri:branch_slug_truncated" \
+       '{ts:$ts, actor:"orchestrator", action:"branch_slug_truncated", subject:$s,
+         result:"warn", task_id:"PL0",
+         metadata:{input_len:$len, slug:$slug, target:$t,
+                   origin_stage:"PL", dedupe_key:$dk}}' \
+       >> .context/logs/audit.jsonl
+   fi
+   ```
+
+#### Step 3c — truncation row notes
+
+   `slug` is the post-`<type>/` remainder; when a ticket segment is present it is part of that
+   value. `$title` is the title passed to `--goal` above. Non-blocking like every other row
+   here — a truncated name is reported, never repaired by a second rename.
 
 #### Step 3c — post-check invariants
 
@@ -350,6 +416,52 @@ chosen answer marked `(auto-decided by Fable — see facts.decisions[] / audit)`
 approves the decisions together with the plan. On `bypass`, the audit rows plus the merged
 `facts.decisions[]` entries are the durable record.
 
+### Step A.4b — Refine the branch target (runs after Step A.4, before Step A.5)
+
+The name stamped at Step 3c was derived from a title written before the plan existed. Now that
+the approved plan carries its own `title:`, re-derive the **planned remote target** from it —
+at most once per run, and only while no commit exists to disagree with it. This step
+**performs no git mutation**: it rewrites `facts.branch` on the ledger and nothing else. The
+local branch is untouched and the once-only *rename* rule is unaffected
+(`skills/shared/git-conventions.md § Once-only rule`).
+
+#### Step A.4b snippet — invoke the helper, non-blocking
+
+Placed here so the Step A.5 gate summary carries the final name before anything is published
+or pushed.
+
+    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
+    [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+    HELPER="$PLUGIN_ROOT/skills/worktask/scripts/refine-branch-target.sh"
+    ref_out=""; if [ -f "$HELPER" ]; then ref_out=$(bash "$HELPER") || true; fi
+    ledger_branch=$(printf '%s\n' "$ref_out" | sed -n 's/^ledger_branch=//p' | tail -n 1)
+
+#### Step A.4b invariants
+
+- The trailing `|| true` is mandatory — the helper is non-blocking by contract, exactly like
+  the Step A publish helper. A helper failure MUST NEVER fail the worktask.
+- The helper is **self-guarding**: it scans `audit.jsonl` for a prior successful
+  `branch_target_refined` row at this run index, so a duplicate invocation after a resume is a
+  `noop`, never a second refinement.
+
+#### Step A.4b invariants — the audit row
+
+- Exactly one audit row per invocation **whenever `jq` is available**. `jq` is what serialises
+  the row, so the `jq_unavailable` arm — and only that arm — writes none, announcing itself on
+  stdout instead. This matches `branch-lib.sh audit_fn`, which no-ops without `jq` for every
+  caller.
+- The row is `branch_target_refined`, `ok` or `noop` with a reason from its closed set. A `noop`
+  is a normal outcome, not a failure: the helper declines whenever a commit exists, an upstream
+  is configured, the plan carries no `title:`, the candidate is unusable or unchanged, or the
+  candidate would truncate while the incumbent name has no recorded truncation.
+
+#### Step A.4b invariants — the returned value
+
+- `ledger_branch` is the value on the ledger **after** this step, refined or not. Use it in the
+  Step A.5 summary rather than re-reading `state.json`.
+- FN's re-validation of `facts.branch` against `^[A-Za-z0-9._/-]+$` is unchanged and still runs
+  — the refined value passes through the identical check because FN reads the ledger.
+
 ### Step A.5 — Plan Gate Check (runs after Step A.4, before Step A publish)
 
 Read `PL0.metadata.plan_gate` via `TaskGet` (default `"checkpoint"` when absent). Resolve the run
@@ -378,6 +490,30 @@ The step-2 summary MUST show both decisions explicitly, each with its one-line r
 - **AR** — included or excluded, and whether that deviates from the tier default (flag the
   deviation; a tier-default AR still states its reason for being kept).
 - **TL** — included or excluded on the split-work test, naming the workstreams when included.
+
+##### Branch name in the gate summary
+
+The step-2 summary MUST also show `Branch (PR head): <ledger_branch>` (the value Step A.4b
+returned), so the user sees the name the PR will carry before anything is published.
+
+An empty `ledger_branch=` means **unknown**, not absent: the helper's `jq_unavailable` arm cannot
+read the ledger and prints it empty even when a good name is stamped. So on an empty value, read
+`facts.branch` directly and print `Branch (PR head): — (none planned)` only if that read is also
+empty. One extra read, only on the degraded path.
+
+##### Branch name in the gate summary — conditional additions
+
+- `⚠ name truncated at 48 chars (<input_len> chars of input)` when a `branch_slug_truncated`
+  row exists for `PL<N>` — the Step 3c row above.
+- `(refined from <old> via plan title)` when the Step A.4b row is `result: "ok"`.
+- `⚠ renamed inside a linked worktree — your host's workspace↔branch mapping may need to
+  re-sync; set BRANCH_NAME_WORKTREE_RENAME=0 to keep the host's name` when the Step 3c
+  `branch_renamed / ok` row carries `in_worktree: "true"`. The rename already happened at
+  Step 3c (Phase 1, before this gate), so this line reports it rather than asking — it is
+  reversible with `git branch -m <original>`.
+
+This is the last point at which a name is free to change: a user who dislikes it says so here,
+and the plan revision path re-derives nothing (§ Plan-revision invariants row 5).
 
 #### Plan gate approval / rejection audit rows
 
@@ -408,6 +544,7 @@ the old index, and splits the published-issue record. Re-dispatch product-manage
 | 2 | Patch `facts.*` additively — `facts.decisions[]` survives | Run the state.json reset |
 | 3 | `TaskUpdate` the existing stage tasks | `TaskCreate` a second stage chain |
 | 4 | Leave the published GitHub issue as-is | Re-publish or re-anchor the issue |
+| 5 | Leave the refined `facts.branch` as-is | Re-run Step A.4b or re-refine — a revision is not a new naming window |
 
 PM's own arm of this contract: `agents/product-manager.md § Revision of the run in flight`.
 

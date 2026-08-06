@@ -220,11 +220,17 @@ Blocking the local rename never blocks the target.
 | Upstream already tracked | no-op — a rename orphans the remote ref | derived |
 | On the integration branch | refuses | empty — never a PR head |
 | Target name already exists | no-op | derived |
-| Host workspace (linked worktree) | no rename — the host's name is kept | derived |
+| Host workspace (linked worktree) | renamed (default) — `BRANCH_NAME_WORKTREE_RENAME=0` keeps the host's name | derived |
 | Detached HEAD / not a repo | skipped | empty |
 
-The host-workspace arm keeps a host's branch↔workspace mapping intact while the PR still
-gets a conventional head — `workspace-modes.md § Host mapping — handled, not just noted`.
+### Guard ladder — the linked-worktree arm
+
+Inside a linked worktree the branch is renamed like any other checkout, so the local name and
+the PR head agree. The host's branch↔workspace mapping is **updated** rather than preserved —
+deliberately: a host-assigned placeholder is not a name worth preserving, and a host may rename
+the branch again mid-run without telling the pipeline. `BRANCH_NAME_WORKTREE_RENAME=0` restores
+the previous defer-to-host behaviour. See `workspace-modes.md § Host mapping — updated, not
+preserved`.
 
 ### Once-only rule
 
@@ -232,6 +238,12 @@ The branch is named exactly once, at the start of the planning stage
 (`skills/worktask/scripts/branch-name.sh`), before any commit exists, and never renamed
 again. `facts.branch` on the run ledger records the planned name; finalization reads it
 from there rather than re-deriving it from a live `git` query.
+
+The **rename** happens exactly once, at the start of planning, and is never repeated. The
+**planned name** on the ledger (`facts.branch`) may additionally be refined **at most once
+per run**, after planning completes and before the plan is published, from the approved
+plan's own `title:` — a ledger-only write with **no git mutation**
+(`commands/worktask.md § Step A.4b`).
 
 ### Goal text becomes a public, durable branch name
 

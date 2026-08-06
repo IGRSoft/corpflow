@@ -13,17 +13,36 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 | PL0 only, `in_progress` | no `subagent_stopped` for PL0 | PL0 crashed mid-stage. Re-delegate PL0 (idempotent) |
 | PL0 `completed`, no stage tasks | — | PL0 did not create stages. Re-run PL0 |
 
+### Branch-rename detection (run once on re-entry)
+
+Before acting on the ledger, a resumed orchestrator runs
+`bash skills/worktask/scripts/fn-preflight.sh branch-divergence` once. Read-only, exit 0
+always, never blocks. A `third_party` class means something outside the pipeline renamed the
+local branch while the run was interrupted — surface it before continuing; `expected` needs no
+action. The check compares against the `to` of the last `branch_renamed / ok` row, so an R4
+refinement of `facts.branch` never registers as an external rename.
+
+### Branch-target refinement row
+
+| TaskList Shape | Audit Tail | Action |
+|----------------|------------|--------|
+| PL0 `completed`, stage tasks `pending` | No `branch_target_refined` row for `PL<run_index>` | The one-shot refinement of the planned branch name has not run. Run `commands/worktask.md § Step A.4b` once, then continue to the plan-gate row below. The helper is self-guarding (it scans the audit log for a prior successful row), so a duplicate invocation is a `noop`, never a second refinement — and it performs no git mutation, so running it on resume cannot disturb the working tree. A resumed orchestrator reads `facts.branch` from the ledger and MUST NOT re-run `branch-name.sh` in rename mode; re-derivation is what would silently discard a refined value. |
+
 ### Plan-gate row
 
 | TaskList Shape | Audit Tail | Action |
 |----------------|------------|--------|
-| PL0 `completed`, stage tasks `pending`, no stage `in_progress` | No `approval_received` audit line for PL<run_index> | Branch on `PL<run_index>.metadata.plan_gate`. If `"bypass"` (`--auto=[plan]` / `--emergency`, or stamped by `/megatask`): stages not yet dispatched — re-enter the stage loop and delegate the first unblocked stage; do NOT stop. If `"checkpoint"` (default): parked at the post-plan human checkpoint — STOP and prompt for approval; proceed only once an `approval_received` line with `subject:"PL<run_index>"` is logged. |
+| PL0 `completed`, stage tasks `pending`, no stage `in_progress` | No `approval_received` audit line for PL<run_index> | Before branching on `plan_gate`, run Step A.4b if no `branch_target_refined` row exists for `PL<run_index>` (row above) — the gate summary must carry the final name. Then branch on `PL<run_index>.metadata.plan_gate`. If `"bypass"` (`--auto=[plan]` / `--emergency`, or stamped by `/megatask`): stages not yet dispatched — re-enter the stage loop and delegate the first unblocked stage; do NOT stop. If `"checkpoint"` (default): parked at the post-plan human checkpoint — STOP and prompt for approval; proceed only once an `approval_received` line with `subject:"PL<run_index>"` is logged. |
 
 ### Plan-revision row
 
 | TaskList Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | PL0 `in_progress`, stage tasks present | `plan_revision_dispatched` for `PL<run_index>` with no later `approval_received` | Plan revision in flight (gate rejection). NOT the fresh-run path — a plain PL0 re-delegate would allocate `planning-<N+1>`, reset `facts.*`, and `TaskCreate` a duplicate chain. If the Step 0 pre-check shows the PM agent still live, leave/reattach per the live-agent rows; only if it is gone, re-dispatch PM **with `plan_revision: true`** and the original rejection feedback — if the feedback is no longer in context (compaction), ask the user to restate it rather than dispatching without it (`commands/worktask.md § Plan-revision re-dispatch` — frozen `run_index`/`plan_file`, no state.json reset, `TaskUpdate` only). On PM's return, re-enter the plan gate at Step A.5. |
+
+#### Plan-revision row — the branch target is not re-refined
+
+A revision leaves the refined `facts.branch` as-is and never re-refines: the once-per-run-index window is already spent (`commands/worktask.md § Plan-revision invariants` row 5). Do NOT re-run Step A.4b here, even when the revision changed the plan title — the gate summary showed the name before approval, which is where a user who dislikes it says so.
 
 ### Auto-decision row
 
