@@ -287,10 +287,50 @@ Rows describe a stage's authority *when that stage runs*. AR and TL are optional
 
 | Stage | Build-only | Reachable how | Scoped exec | Full exec | Note |
 |---|---|---|---|---|---|
-| DV | allowed | own Bash | **required** | **forbidden** | full-suite deny is mechanical for the bare-runner form only (`hooks/test-execution-gate.sh`) — a trailing flag or argument (`swift test --parallel`, `pytest -v`) classifies scoped and is allowed; only a bare runner with nothing after it (`swift test`) is caught |
+| DV | allowed | own Bash | **required** | **forbidden** | full-suite deny is mechanical (`hooks/test-execution-gate.sh`) and covers both the bare runner (`swift test`) and flag-carrying invocations whose flags are all non-selecting; only a genuine selector classifies scoped. Coverage and known limits: § DV full-suite deny below |
 | QA | allowed | own Bash | allowed | **allowed — sole holder** | |
 | AR | allowed | delegation only (no Bash grant) | forbidden | forbidden | |
 | DR | allowed | `/<plugin>:build-test --no-test` | forbidden | forbidden | compile-check carve-out preserved verbatim (`agents/technical-lead.md`) |
+
+#### DV full-suite deny — coverage and known limits
+
+Fail direction is fail-open by construction: a future unstripped flag degrades to an allow, never
+to a false deny. Two known limits are recorded below rather than left to be rediscovered.
+
+##### What the deny covers
+
+A bare runner, and any invocation whose arguments are *all* non-selecting. The classifier strips
+each runner's mandatory-but-non-selecting flags before asking "did an argument survive?", so a full
+run no longer escapes by carrying configuration: `xcodebuild test` with `-project` / `-workspace` /
+`-scheme` / `-destination` / `-sdk` / `-arch` / result-bundle and derived-data paths — **including
+quoted multi-word values** such as `-destination "platform=iOS Simulator,name=iPhone 16 Pro"`,
+which was the reported incident's actual shape — plus `dotnet test <solution|project>`,
+`gradle test -p .`, `npm`/`pnpm`/`yarn test` with `--ci`/`--watch`/`--silent`/the bare `--`
+separator, and `cargo test --release`.
+
+##### What still classifies scoped
+
+A genuine selector: `-only-testing:`, `--filter`, `-k`, `-t`, `-run`, or a real positional
+(`cargo test --release foo`). See `skills/shared/test-selection-syntax.md`.
+
+Build-only carve-outs: `-c` is not a selector for `bats` (`--count`), `go test` (compile-only) or
+`rspec` (`--colour`). The latter two removed pre-existing false denies.
+
+##### Known limit — whole-tree positionals
+
+`go test ./...` and `pytest tests/` are allowed at DV even though they are full runs. Deliberate
+policy limit, not an oversight: flipping the positional limb's polarity is a different change with
+a different fail direction, tracked separately.
+
+##### Known limit — the package-manager `-c` residual
+
+`npm test -- -c <spec>` is genuinely scoped and denies anyway, as do `pnpm` and `yarn` (one shared
+arm, `hooks/test-execution-gate.sh:198`). Accepted rather than traded away: moving `-c` into the
+package-manager valueless arm would strip the flag and leave its value surviving as a positional,
+so *every* full run carrying a valueless flag before a positional would classify scoped and be
+allowed — reopening the exact hole this deny exists to close. These package managers hide the
+underlying runner, so the ambiguity is irreducible. The common form `npm test -- <spec>` is
+unaffected, and the human-only `COMPANY_WORKFLOW_TEST_GATE=off` relief valve remains for the rest.
 
 ### Authority matrix — SR, RE, IR
 
