@@ -1,0 +1,43 @@
+# tests/selection/matrix.tsv - L2 of the change->test dependency matrix.
+# Format: glob<TAB>targets<TAB>rule-id<TAB>rationale. Exactly 4 fields, none empty.
+# Globs are bash 3.2 `case` patterns: `*` crosses `/`, `**` is a synonym for `*`,
+# alternation is `|`, braces are FORBIDDEN (case does not expand them).
+# Targets are comma-separated paths under tests/shell/ without the .bats suffix,
+# or the sole literal NONE (reviewed: ALWAYS set only) or FULL.
+# Rows are a UNION - every matching row contributes. The rationale column is
+# mandatory: dropping coverage must cost a reviewed diff, never a silent omission.
+
+# --- L2 headline: the repo-wide doc checkers --------------------------------
+agents/*.md	skills/cross-plugin-refs,skills/test-authority-matrix,worktask/section-lint,worktask/desc-lint	R01	section-lint and desc-lint both run repo-wide over agents/, commands/ and skills/; cross-plugin-refs and test-authority-matrix scan every agent doc. Six checkers, not the four you would guess.
+commands/*.md	skills/cross-plugin-refs,skills/test-authority-matrix,worktask/section-lint,worktask/desc-lint	R02	Same four repo-wide checkers as R01; command docs are inside their scan roots.
+skills/*.md	skills/cross-plugin-refs,skills/test-authority-matrix,worktask/section-lint,worktask/desc-lint	R03	Same four repo-wide checkers. `*` crosses `/`, so this covers SKILL.md and references/**.md at any depth.
+
+# --- per-agent specialisations, derived from hooks that hardcode an agent ----
+agents/developer.md	hooks/dv-screenshot-gate,hooks/comment-density-gate,hooks/test-execution-gate,hooks/audit-subagent	R04	All four hooks hardcode company-workflow:developer; M6 re-derives this edge from the hook sources so it cannot rot.
+agents/qa-engineer.md	hooks/dv-screenshot-gate,hooks/test-execution-gate	R05	Named in dv-screenshot-gate.sh as an agent_type and in test-execution-gate.sh where QA's full-run authority is decided.
+agents/technical-lead.md	hooks/comment-density-gate	R06	dv-comment-density-gate.sh names technical-lead as a reviewing role in its exemption reasoning.
+agents/product-manager.md|agents/project-manager.md|agents/stakeholder.md	hooks/agent-stop	R07	These three are the only agents whose frontmatter wires the Stop hook to hooks/agent-stop.sh.
+agents/designer.md|agents/ethics-reviewer.md|agents/incident-responder.md|agents/prompt-engineer.md|agents/release-engineer.md|agents/security-reviewer.md|agents/software-architector.md|agents/team-lead.md|agents/technical-writer.md	NONE	R08	Reviewed: no hook hardcodes these names and no parity source reads them, so R01's four repo-wide checkers plus ALWAYS are the correct and complete answer.
+
+# --- per-command specialisations --------------------------------------------
+commands/megatask.md	hooks/megatask-monitor,skills/build-orchestrator,skills/init-worktree	R09	The megatask command doc is the contract these three drive; none of them spells its path, so L1 cannot see the edge.
+commands/worktask.md	worktask/branch-name.sh,worktask/refine-branch-target	R10	Branch naming and refinement are specified in the worktask command doc rather than in the scripts themselves.
+commands/improve-yourself.md	skills/build-context-set,skills/detect-user-changes,skills/map-and-filter	R11	The self-improvement pipeline stages are sequenced by this command doc, not by any path either script names.
+
+# --- shared docs: only where a doc governs an executable contract -----------
+skills/shared/testing-strategy.md	skills/test-authority-matrix,hooks/test-execution-gate	R12	The authority matrix and the execution gate both implement the stage test authority this doc defines.
+skills/shared/git-conventions.md	worktask/branch-lib,worktask/branch-name.sh,worktask/refine-branch-target	R13	Branch and commit naming rules here are the specification these three scripts encode.
+skills/shared/stage-contracts.md|skills/shared/stage-codes.md	worktask/artifact-map-parity,worktask/cache-lint,worktask/state-patch,hooks/state-merge,hooks/anchor-preflight	R14	Stage codes and artifact names are the shared vocabulary of the ledger, the artifact map and both preflight hooks.
+skills/shared/task-system.md	worktask/state-patch,hooks/state-merge	R15	Task status vocabulary and ledger transitions are what state-patch writes and state-merge reconciles.
+skills/shared/compatible-plugins.md	skills/cross-plugin-refs	R16	The cross-plugin reference checker validates invocation ids against this registry.
+skills/shared/code-documentation.md|skills/shared/constitutional-base.md|skills/shared/figma-capture.md|skills/shared/five-whys.md|skills/shared/model-selection.md|skills/shared/pandoc-ingestion.md|skills/shared/platform-detection.md|skills/shared/plugin-root-resolution.md|skills/shared/test-selection-syntax.md|skills/shared/three-stage-planning.md|skills/shared/worktask-invocation.md|skills/shared/worktask-stage-context.md	NONE	R17	Reviewed: these twelve are high-fanout prose with no executable contract behind them, so R03 plus ALWAYS is correct. Enumerated one by one so the silence is reviewed rather than accidental; M5 asserts the enumeration stays complete.
+
+# --- fixtures, manifests, examples ------------------------------------------
+tests/fixtures/worktask/*	worktask/artifact-map-parity,worktask/attach-visual-evidence,worktask/attachments-preseed,worktask/attachments-preseed-test,worktask/branch-lib,worktask/branch-name.sh,worktask/cache-lint,worktask/desc-lint,worktask/detect-ui-change,worktask/fn-preflight,worktask/gh-issue-dedup,worktask/handoff-harness,worktask/hook-install,worktask/pr-body-lint,worktask/publish-pl-issue,worktask/refine-branch-target,worktask/section-lint,worktask/state-patch	R18	tests/fixtures/README.md partitions fixtures by owning track; the worktask fixtures are the shared read surface for every worktask/*.bats.
+tests/fixtures/skills/*	skills/agent-coordination__audit-dedup,skills/build-context-set,skills/build-orchestrator,skills/changelog-from-git,skills/cross-plugin-refs,skills/detect-user-changes,skills/init-worktree,skills/map-and-filter,skills/milestone-helpers,skills/post-compact-recovery,skills/scan-secrets,skills/test-authority-matrix,skills/validate-export	R21	Same partition, skills track. Split out of R18 because a target column is static and the three fixture groups have disjoint consumers.
+tests/fixtures/hooks/*	hooks/agent-stop,hooks/anchor-preflight,hooks/audit-subagent,hooks/audit-tooluse,hooks/comment-density-gate,hooks/comment-standard-context,hooks/dv-screenshot-gate,hooks/megatask-monitor,hooks/precompact-checkpoint,hooks/state-merge,hooks/test-execution-gate	R22	Same partition, hooks track: stdin payload fixtures are shared across every hook test.
+tests/fixtures/README.md	NONE	R23	Reviewed: the fixture index is prose about write-access partitioning; no test parses it, so ALWAYS is the correct answer.
+.claude-plugin/plugin.json	hooks/agent-stop,hooks/anchor-preflight,hooks/audit-subagent,hooks/audit-tooluse,hooks/comment-density-gate,hooks/comment-standard-context,hooks/dv-screenshot-gate,hooks/megatask-monitor,hooks/precompact-checkpoint,hooks/state-merge,hooks/test-execution-gate	R19	Several hook tests assert their own event and matcher wiring against the manifest; only four of the eleven spell its path, so L1 sees a minority of the real edges.
+examples/canvas-fixture/*	benchmark/canvas-e2e-guards	R20	The canvas end-to-end guard drives this fixture tree directly.
+# STALE-OK: .context/ is gitignored worktask scratch, so no tracked path can ever match this glob; the row exists so the silence is reviewed rather than an F3 on every worktask run.
+.context/*	NONE	R24	Reviewed: worktask run artifacts are scratch state written by the pipeline; no test reads them, so ALWAYS is the correct answer.

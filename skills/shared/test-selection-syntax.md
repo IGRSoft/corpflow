@@ -251,15 +251,29 @@ platform handler will need.
 
 #### Grammar — systems, backend, ai runners
 
-All rows below are documented, not wired.
+All rows below are documented, not wired, **except Bash (bats)**.
 
-| Runner | Selection syntax |
-|--------|------------------|
-| Python (pytest) | nodeid `<file>::<Class>::<test>`, or `-k '<expr>'` |
-| Go | `-run '^<TestFunc>$'` scoped to a package path |
-| Rust | `cargo test <substring>` (matches the test path) |
-| C / C++ | `ctest -R '<regex>'`; GoogleTest `--gtest_filter='<Suite>.<Test>'` |
-| Bash (bats) | `<file>` positional + `-f '<name regex>'` |
+| Runner | Selection syntax | Handler status |
+|--------|------------------|----------------|
+| Python (pytest) | nodeid `<file>::<Class>::<test>`, or `-k '<expr>'` | Documented, not wired |
+| Go | `-run '^<TestFunc>$'` scoped to a package path | Documented, not wired |
+| Rust | `cargo test <substring>` (matches the test path) | Documented, not wired |
+| C / C++ | `ctest -R '<regex>'`; GoogleTest `--gtest_filter='<Suite>.<Test>'` | Documented, not wired |
+| Bash (bats) | `<file>` positional + `-f '<name regex>'` | **Wired** [^bats] |
+
+#### Bash (bats) — reference implementation
+
+[^bats]: The company-workflow repository itself is the reference implementation
+— see this section.
+
+A change→test dependency matrix resolves changed paths to `.bats` files and
+`./run-tests.sh --changed` runs only those. `test_mode: full` maps to the bare
+runner and `scoped` to `--changed`; the L3 ALWAYS floor is the `@test-required`
+equivalent; `metadata.always_required_tests` maps to `--only`; and an empty
+computed changed set is fail-closed to the full suite, which is the
+auto-promotion safety net above expressed as a verdict. Selection is opt-in and
+its only permitted error is over-selection — see `tests/README.md § Test
+Selection` and `tests/selection/matrix.tsv`.
 
 #### Handler status semantics
 

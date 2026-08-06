@@ -55,7 +55,7 @@ the q3 documented proxy because kcov is impractical on this platform.
 | Source file | Test methods | Coverage approach |
 |-------------|---------|-------------------|
 | `skills/estimation-methodology/scripts/estimate-calc.py` | **21** | In-process importlib + CLI argparse smoke; band boundaries (10/11/15/17/18/20/25 + clamp-low), ai_cost arithmetic (sonnet 0.36 / haiku 0.0375), hours (M/senior 24-30 base, 27.6-34.5 buffered, sp 4-5), CLI JSON shape, `--self-test`, no-args rc=1, unknown-model rejection |
-| `skills/appstore-screenshots/scripts/layout-calc.py` | **17** | In-process importlib + CLI argparse smoke; Layout A proportional geometry (iPhone 6.9), screenshot centering (19.5:9), Layout D > A, full-bleed passthrough (tvOS), mac 16:10 landscape, unknown layout/device rejection, `--self-test`, `--list-devices` |
+| `skills/appstore-screenshots/scripts/layout-calc.py` | **16** | In-process importlib + CLI argparse smoke; Layout A proportional geometry (iPhone 6.9), screenshot centering (19.5:9), Layout D > A, full-bleed passthrough (tvOS), mac 16:10 landscape, unknown layout/device rejection, `--self-test`, `--list-devices` |
 
 The scripts are UNCHANGED (skill runtime contract). In-process testing asserts
 true contracts (unknown-model → sonnet fallback, unknown-layout → ValueError)
@@ -99,16 +99,16 @@ scenario `@test`s (happy / edge / failure-exit) asserting its documented contrac
   each with its own file); **46/46** total deterministic targets covered (44 shell + 2
   Python). **Zero exemptions.**
 
-#### Measured, not derived (this file's third correction this worktask)
+#### Measured, not derived (this file's fifth correction this worktask)
 
-**787** `@test` assertions across **54** `.bats` files — the 44 script-dedicated files plus
-10 meta / repo-invariant files. **Min 3 / avg ~15 / max 90** per file; the ≥3 rule has no
+**811** `@test` assertions across **55** `.bats` files — the 44 script-dedicated files plus
+11 meta / repo-invariant files (Phase 4 of this worktask added `tests/shell/meta/test-selection.bats`,
+17 `@test`, to the meta set). **Min 3 / avg ~15 / max 90** per file; the ≥3 rule has no
 exceptions. Measured directly (`grep -c '^@test'` across `tests/shell/**`), not derived by
-arithmetic on a prior claim — this file drifted twice already this worktask (`680`→`683`,
-then a stale self-contradictory `683`/`53`; the `4.0.7` `### Fixed` entry documents repairing
-both), and this figure is a third, independently-remeasured pass after DV's parallel final
-cycle landed 4 more assertions closing the `fromjson?` non-object gap:
-`branch-name.sh.bats` 89→90, `fn-preflight.bats` 51→52, `refine-branch-target.bats` 29→31.
+arithmetic on a prior claim — this file drifted repeatedly across the worktask (`680`→`683`,
+then a stale self-contradictory `683`/`53`, then `787`/`54` before the selection-matrix work
+landed its own test file; the `4.0.7` `### Fixed` entry documents the earlier repairs), and
+811/55 is re-derived directly from the tree, not incremented from any prior claim.
 
 R6 landed in `branch-name.sh.bats` (worktree rename, opt-out, ledger-based once-guard,
 disclosure) and `fn-preflight.bats` (the new `branch-divergence` subcommand). DV's final
@@ -217,12 +217,13 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 
 ### Meta / repo-invariant tests (no single source script — not part of the 44)
 
-These 10 files guard cross-cutting contracts, so they have no row in the tables above and are
-excluded from the 44/44 denominator. They are counted in the 54 `.bats` / 787 `@test` totals.
+These 11 files guard cross-cutting contracts, so they have no row in the tables above and are
+excluded from the 44/44 denominator. They are counted in the 55 `.bats` / 811 `@test` totals.
 
 | Test file | Contract guarded |
 |-----------|------------------|
 | `tests/shell/meta/coverage-proxy.bats` | Every shell script has a dedicated `.bats` with ≥3 `@test`; exemption list stays empty and cannot outlive its script |
+| `tests/shell/meta/test-selection.bats` | The change→test dependency matrix — L1 resolver, `matrix.tsv` grammar (L2), the ALWAYS floor (L3), and the F1-F7 fail-closed triggers |
 | `tests/shell/lib/test-helper.bats` | The frozen `test_helper.bash` API — child-only env mutation, stream splitting, stub/mock behaviour |
 | `tests/shell/skills/test-authority-matrix.bats` | Stage test-execution authority table |
 | `tests/shell/skills/cross-plugin-refs.bats` | Every cross-plugin command/agent reference resolves |
@@ -264,3 +265,21 @@ make coverage
 Paste the per-file numbers into the tables above after each `make coverage` run.
 The per-package gate (jq ≥85% for Swift; kcov threshold assertion for bash)
 is enforced automatically; this table is the audit trail and exemption registry.
+
+## Why there is no `make coverage-changed`
+
+`./run-tests.sh --changed` runs a subset of the suite (see *Test Selection* in
+`tests/README.md`). There is deliberately **no** scoped coverage target, and
+`--changed --coverage` is a hard **exit 64** rather than a silent no-op.
+
+kcov's denominator is `KCOV_INCLUDE := skills,hooks,.claude/hooks` — the **source**
+set. It does not shrink when fewer tests run. So a scoped coverage run reduces the
+numerator only, and the bash branch has no percentage gate that would catch the
+drop: it would simply report a lower number that looks like a regression in the
+code rather than in the measurement. The Swift branch does gate at ≥85%, so the
+same subset would fail it for a reason unrelated to the change under test.
+
+Coverage is therefore a **full-suite QA activity**, not a dev-loop one. If you
+want coverage, run `make coverage`; if you want speed, run `make test-changed`.
+Refusing the combination is the recorded decision — the alternative is a number
+that is quietly wrong in the direction that looks like a real failure.

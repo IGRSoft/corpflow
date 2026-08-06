@@ -172,6 +172,50 @@ teardown() {
   assert_success
 }
 
+@test "14a: DV + ./run-tests.sh --changed -> allow (bare still denies, per 14)" {
+  # The arm used to ignore arguments, so the one feature built for DV was denied
+  # to DV. Bare stays full_test_run (test 14) — only the argument form moves.
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh --changed')"
+  assert_success
+  [ -z "$output" ] || fail "DV was denied its own scoped selection: $output"
+}
+
+@test "14b: --changed classifies scoped_test_run, not merely not_test" {
+  # An allowed run at DV writes no audit row, so "allow" alone cannot tell a
+  # correct scoped classification from the arm falling through to not_test.
+  # DR denies scoped and records the class, which makes the difference visible.
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh --changed')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  run jq -e '.metadata.class == "scoped_test_run"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "14c: --base <ref> also classifies scoped, and the ref is not read as a command" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh --base master --changed')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  run jq -e '.metadata.class == "scoped_test_run"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "14e: --print-selection is build_only — allowed even where scoped is denied" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh --changed --print-selection')"
+  assert_success
+  [ -z "$output" ] || fail "--print-selection runs nothing and must never deny: $output"
+}
+
+@test "14d: QA + ./run-tests.sh --changed -> still allowed (QA is not narrowed)" {
+  state_with QA
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh --changed')"
+  assert_success
+  [ -z "$output" ]
+}
+
 @test "15: non-test Bash (git status) under a banned stage -> allow, no audit row (fast-path guard)" {
   state_with DR
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'git status')"

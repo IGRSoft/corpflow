@@ -37,13 +37,15 @@ KCOV_EXCLUDE := $(PLUGIN_ROOT)/tests
 # All bats files under tests/shell/**.
 SHELL_TESTS  := $(shell find $(PLUGIN_ROOT)/tests/shell -type f -name '*.bats' 2>/dev/null | sort)
 
-.PHONY: all test bootstrap coverage test-ios benchmark benchmark-live benchmark-analyze report clean help
+.PHONY: all test test-changed test-select bootstrap coverage test-ios benchmark benchmark-live benchmark-analyze report clean help
 .DEFAULT_GOAL := help
 
 help:
 	@echo "company-workflow test suite — targets:"
 	@echo "  make bootstrap       resolve bats/swift/kcov (idempotent)"
 	@echo "  make test            full deterministic suite (offline)"
+	@echo "  make test-changed    only the tests the change matrix selects (BASE=<ref>)"
+	@echo "  make test-select     print the selection plan, run nothing"
 	@echo "  make coverage        suite under kcov + swift coverage, gate >=$(COV_MIN)%"
 	@echo "  make test-ios        TicTacToeKit on iOS Simulator (SKIPs w/o runtime)"
 	@echo "  make benchmark       deterministic dual-path TTT benchmark (offline)"
@@ -82,6 +84,17 @@ ifeq ($(COVERAGE),1)
 else
 	@COVERAGE=0 "$(PLUGIN_ROOT)/run-tests.sh"
 endif
+
+# ---------------------------------------------------------------------------
+# test-changed / test-select: scoped runs off the change→test matrix. Additive —
+# SHELL_TESTS and the coverage recipe are deliberately untouched, and there is no
+# coverage-changed target (rationale in tests/COVERAGE.md).
+# ---------------------------------------------------------------------------
+test-changed:
+	@COVERAGE=0 "$(PLUGIN_ROOT)/run-tests.sh" --changed $(if $(BASE),--base $(BASE),)
+
+test-select:
+	@COVERAGE=0 "$(PLUGIN_ROOT)/run-tests.sh" --changed --print-selection $(if $(BASE),--base $(BASE),)
 
 # ---------------------------------------------------------------------------
 # coverage: kcov (bash) UNCHANGED + swift test --enable-code-coverage per

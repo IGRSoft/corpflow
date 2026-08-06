@@ -78,7 +78,7 @@ CLI smoke tests:
 | Script | Tests | Coverage approach |
 |--------|-------|-------------------|
 | `skills/estimation-methodology/scripts/estimate-calc.py` | **21** in-process behaviors | importlib + CLI argparse smoke |
-| `skills/appstore-screenshots/scripts/layout-calc.py` | **17** in-process behaviors | importlib + CLI argparse smoke |
+| `skills/appstore-screenshots/scripts/layout-calc.py` | **16** in-process behaviors | importlib + CLI argparse smoke |
 
 In-process testing asserts true contracts (unknown-model → sonnet fallback,
 unknown-layout → ValueError) rather than approximating via subprocess; each
@@ -105,31 +105,31 @@ bodies are exercised structurally, not unit-covered — see
 
 kcov **cannot run on macOS bash 3.2** (mis-parses `BASH_VERSINFO` guards; >2 min/file). Per the locked q3 resolution, coverage is validated via the **q3 assertion-density proxy**: every shell script has a dedicated test file with ≥3 real scenarios (happy / edge / failure-exit), asserting its documented contracts.
 
-- **45/45** total deterministic targets covered — 43 shell (11 hooks incl. `.claude/hooks/state-merge.sh`
-  + 32 skill scripts) + 2 Python. Zero exemptions are on file.
-- **53 bats files** = the 43 script-dedicated files above + 10 meta / repo-invariant files that guard
-  contracts rather than a single script (`meta/coverage-proxy`, `lib/test-helper`,
+- **46/46** total deterministic targets covered — 44 shell (11 hooks incl. `.claude/hooks/state-merge.sh`
+  + 33 skill scripts) + 2 Python. Zero exemptions are on file.
+- **55 bats files** = the 43 script-dedicated files above + 12 meta / repo-invariant files that guard
+  contracts rather than a single script (`meta/{coverage-proxy,test-selection}`, `lib/test-helper`,
   `skills/{test-authority-matrix,cross-plugin-refs,plugin-root-refs}`,
   `worktask/{artifact-map-parity,manifest-parity,gh-issue-dedup}`,
   `benchmark/{run-benchmark,canvas-e2e-guards}`).
-- **680 `@test`** assertions across those 53 files.
-- **Min 3 / avg ~13 / max 58** scenarios per file. The ≥3 rule now has **no exceptions** — the one
+- **811 `@test`** assertions across those 55 files.
+- **Min 3 / avg ~15 / max 90** scenarios per file. The ≥3 rule now has **no exceptions** — the one
   standing exception (`comment-hooks-self-test.bats`, 2 self-delegating tests) was deleted, and
   `meta/coverage-proxy.bats` enforces the rule as an executable gate with an empty exemption list.
 
 **Do not increment these numbers — re-derive them.** They were hand-tracked for several releases and
 drifted badly (this document claimed 36/36 targets, 46 files and 466 tests while `COVERAGE.md`
-simultaneously claimed 34/34, against an actual 53/680). The commands below are the contract; they
+simultaneously claimed 34/34; the 53/680 figures they were corrected to had themselves drifted by well over a hundred tests by the time selection landed). The commands below are the contract; they
 exclude the vendored bats trees, which contain their own `.bats` suites:
 
 ```bash
-# 53 — test files
+# 55 — test files
 find tests -name '*.bats' -not -path '*/vendor/*' | wc -l
 
-# 680 — test cases (every declaration is column-0 `^@test `)
+# 811 — test cases (every declaration is column-0 `^@test `)
 grep -rh --include='*.bats' '^@test ' tests --exclude-dir=vendor | wc -l
 
-# independent cross-check of the same 680
+# independent cross-check of the same 811
 find tests -name '*.bats' -not -path '*/vendor/*' -exec grep -c '^@test ' {} + \
   | awk -F: '{s+=$NF} END {print s}'
 ```
@@ -137,11 +137,11 @@ find tests -name '*.bats' -not -path '*/vendor/*' -exec grep -c '^@test ' {} + \
 Provenance, so the figures are not over-claimed: QA measured **677** across two consecutive full runs
 with byte-identical TAP streams. The final **3** were added afterwards by the documentation pass
 itself (`worktask/manifest-parity.bats`, 3 → 6, covering frontmatter-wired hooks), so 680 is the
-re-derived tree total and the *determinism* evidence covers the 677 subset.
+re-derived tree total for that release; the current figure is 811 and is re-derived, never incremented.
 
 High-logic-density targets (14+ scenarios):
-- `test-execution-gate` (58), `branch-name.sh` (57), `branch-lib` (44), `fn-preflight` (41)
-- `state-patch` (25), `test-helper` (23), `pr-body-lint` (19)
+- `branch-name.sh` (90), `test-execution-gate` (85), `branch-lib` (54), `fn-preflight` (52)
+- `refine-branch-target` (31), `state-patch` (25), `test-helper` (23), `pr-body-lint` (19)
 - `attach-visual-evidence`, `milestone-helpers` (18 each), `scan-secrets` (17)
 - `publish-pl-issue`, `handoff-harness` (14 each)
 
@@ -151,8 +151,8 @@ High-logic-density targets (14+ scenarios):
 
 - `benchmark/ttt-template` — 48 Swift Testing tests (engine, AI, models, router, view-model); the iOS slice runs via `make test-ios` (xcodebuild, iPhone simulator; SKIPs cleanly without a runtime)
 
-**Total deterministic suite:** 680 bats tests + 37 Python skill-script tests + 202 Python harness
-tests + 48 Swift ttt-template tests = **967 test methods** green (`./run-tests.sh` rc 0).
+**Total deterministic suite:** 811 bats tests + 37 Python skill-script tests + 202 Python harness
+tests + 48 Swift ttt-template tests = **1098 test methods** green (`./run-tests.sh` rc 0).
 
 See `tests/COVERAGE.md` for per-file details and proxy exemption policy.
 
@@ -221,6 +221,42 @@ bats tests/shell/hooks/agent-stop.bats --filter "happy path"
 # Verbose (show all assertions)
 bats tests/shell/hooks/agent-stop.bats --verbose
 ```
+
+## Test Selection
+
+`./run-tests.sh --changed` runs only the `.bats` your change can affect. It is
+**opt-in**: a bare `./run-tests.sh` is the same full suite it has always been.
+
+```bash
+make test-changed              # scoped run against the default base
+make test-changed BASE=master  # pick the diff base
+make test-select               # print the plan, run nothing
+```
+
+Selection is a union of three layers, and its only permitted error is
+over-selection:
+
+| Layer | Source | What it catches |
+|---|---|---|
+| L1 | computed live — every repo path a `.bats` names literally, plus the `X.sh` → `X.bats` convention resolver | 13 scripts have more than one consumer; convention alone returns one of them |
+| L2 | `tests/selection/matrix.tsv` | dependencies that are a *pattern*, not a path — the glob lives inside the script the test invokes |
+| L3 | a constant in `tests/lib/select_lib.bash` | the ALWAYS floor: `lib/test-helper`, `meta/coverage-proxy`, `skills/plugin-root-refs`, `worktask/manifest-parity` (47 of 811 tests) |
+
+**Fail-closed.** An unrecognised path, an unresolvable base, an empty changed
+set, a delete under `tests/`, `hooks/`, `.claude/hooks/` or a skill `scripts/`
+directory, a change to the runner or the selector itself, and an unparseable
+matrix all yield a `FULL` verdict and run everything. `--print-selection` shows
+the trigger id (`F1`–`F7`).
+
+Editing `tests/selection/matrix.tsv` requires a rationale on every row —
+`tests/shell/meta/test-selection.bats` refuses a row without one, refuses a glob
+that matches no tracked path, and refuses a `.bats` that no layer can reach.
+
+**DV is capped.** A selection over 50% of the file count emits `WIDE`; if
+`.context/state.json` shows the DV stage in progress the run exits **65** and
+hands off to QA. Everyone else sees `WIDE` as informational.
+
+Set `COMPANY_WORKFLOW_TEST_SELECT=0` to disable selection entirely.
 
 ## Environment & Dependencies
 

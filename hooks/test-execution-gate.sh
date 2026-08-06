@@ -344,9 +344,21 @@ classify_segment() {
     esac
   fi
 
-  # REPO_FULL named full-runners: no selection surface by construction.
+  # run-tests.sh DOES have a selection surface: --changed drives the change→test
+  # matrix (tests/selection/matrix.tsv), so arguments decide the class. Bare stays
+  # full_test_run. Padded-segment matching, anchored on _head_full, mirrors the
+  # build-test arm below — an unanchored match would fire on `cat run-tests.sh`.
+  # The >50% widening cap is NOT enforced here: only run-tests.sh knows the
+  # selection size, and this hook must stay a cheap PreToolUse classifier.
+  _rt_padded=" $_seg "
   case "$_head_full" in
-    */run-tests.sh|run-tests.sh) printf 'full_test_run'; return ;;
+    */run-tests.sh|run-tests.sh)
+      case "$_rt_padded" in
+        *' --print-selection '*) printf 'build_only'; return ;;
+        *' --changed '*|*' --base '*|*' --only '*) printf 'scoped_test_run'; return ;;
+        *) printf 'full_test_run'; return ;;
+      esac
+      ;;
   esac
   case "$_seg" in
     make\ test|make\ coverage|make\ test-ios) printf 'full_test_run'; return ;;
@@ -874,6 +886,18 @@ if [ "$SELF_TEST" -eq 1 ]; then
   _o2=$(run_gate "$_p2" "$_ctx2")
   printf '%s' "$_o2" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (DV full deny)"; _fail=1; }
+
+  # DV + run-tests.sh --changed -> allow (scoped selection is DV's own authority)
+  _p2b='{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh --changed"}}'
+  _o2b=$(run_gate "$_p2b" "$_ctx2")
+  printf '%s' "$_o2b" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+    && { echo "test-execution-gate: self-test FAIL (DV --changed must not deny)"; _fail=1; }
+
+  # DV + run-tests.sh --print-selection -> allow (build_only: runs nothing)
+  _p2c='{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh --changed --print-selection"}}'
+  _o2c=$(run_gate "$_p2c" "$_ctx2")
+  printf '%s' "$_o2c" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+    && { echo "test-execution-gate: self-test FAIL (DV --print-selection must not deny)"; _fail=1; }
 
   # QA + full run-tests.sh -> allow
   _ctx3="$_tmp/qa/.context"; mkdir -p "$_ctx3"
