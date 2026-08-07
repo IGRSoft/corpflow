@@ -511,7 +511,7 @@ Recommendation: disclose in privacy settings and allow opt-out.
 ## Integration
 
 This command is used:
-- As the DR (Developer Review) gate in the worktask, invoked by the technical-lead (`Skill("dev-code-review")`).
+- As the DR (Developer Review) gate in the worktask, where the technical-lead reads and follows this file (`agents/technical-lead.md § DR Stage Owner`). This is a command, not a skill — there is no `skills/dev-code-review/` to invoke.
 - In DV/QA stages via `--depth deep` for a technical-quality deep dive.
 - Before merging PRs.
 - For periodic codebase health checks.

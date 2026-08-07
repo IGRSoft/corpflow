@@ -8,8 +8,8 @@
 # mandatory: dropping coverage must cost a reviewed diff, never a silent omission.
 
 # --- L2 headline: the repo-wide doc checkers --------------------------------
-agents/*.md	skills/cross-plugin-refs,skills/test-authority-matrix,worktask/section-lint,worktask/desc-lint	R01	section-lint and desc-lint both run repo-wide over agents/, commands/ and skills/; cross-plugin-refs and test-authority-matrix scan every agent doc. Six checkers, not the four you would guess.
-commands/*.md	skills/cross-plugin-refs,skills/test-authority-matrix,worktask/section-lint,worktask/desc-lint	R02	Same four repo-wide checkers as R01; command docs are inside their scan roots.
+agents/*.md	skills/cross-plugin-refs,skills/test-authority-matrix,worktask/section-lint,worktask/desc-lint,skills/skill-refs	R01	section-lint and desc-lint both run repo-wide over agents/, commands/ and skills/; cross-plugin-refs, test-authority-matrix and skill-refs scan every agent doc. skill-refs reads each agent's tools: line against the Skill calls and plugin paths in its body.
+commands/*.md	skills/cross-plugin-refs,skills/test-authority-matrix,worktask/section-lint,worktask/desc-lint,skills/skill-refs	R02	Same five repo-wide checkers as R01; command docs are inside their scan roots, and skill-refs resolves the Skill targets they name.
 skills/*.md	skills/cross-plugin-refs,skills/test-authority-matrix,worktask/section-lint,worktask/desc-lint	R03	Same four repo-wide checkers. `*` crosses `/`, so this covers SKILL.md and references/**.md at any depth.
 
 # --- per-agent specialisations, derived from hooks that hardcode an agent ----
