@@ -78,6 +78,25 @@ comment_style_for() {
 }
 
 # ---------------------------------------------------------------------------
+# rename_source_of <root> <file>: echoes the pre-move path when <file> is the
+# destination of a detected rename, or nothing. Feeding both paths to `git diff`
+# is the only way to make rename detection fire under a pathspec.
+#
+# Emits nothing for a path containing whitespace: the caller word-splits this
+# value, and a wrong pathspec would silently measure the file as wholly new —
+# the very failure this exists to prevent. Unsplit, such a file falls back to
+# being measured as an addition, which is the pre-existing behaviour.
+# ---------------------------------------------------------------------------
+rename_source_of() {
+  _rs_root="$1"
+  _rs_file="$2"
+  git -C "$_rs_root" diff HEAD -M --name-status --diff-filter=R 2>/dev/null |
+    awk -F'\t' -v dest="$_rs_file" '
+      $3 == dest && $2 !~ /[ \t]/ { print $2; exit }
+    '
+}
+
+# ---------------------------------------------------------------------------
 # density_of <file>: echoes the integer comment percentage, or nothing when the
 # file has no countable body. Line-based on purpose — it must agree with the
 # ratio a human gets from grep, not with a Swift parser.
@@ -102,8 +121,16 @@ added_density_of() {
   #
   # An untracked file has no diff, so its whole body is "added" — correct: a
   # new file is entirely the author's.
+  #
+  # A moved file needs BOTH of its paths in the pathspec. -M alone does not
+  # help here: a pathspec naming only the destination filters the deletion side
+  # out before rename detection runs, so the move still reads as a whole-file
+  # addition and the file's inherited comments all count as newly written — a
+  # pure `git mv` of a comment-dense file could breach the ceiling on its own.
+  _pair=$(rename_source_of "$_root" "$_file")
   if git -C "$_root" ls-files --error-unmatch "$_file" >/dev/null 2>&1; then
-    git -C "$_root" diff HEAD -- "$_file" 2>/dev/null | awk -v style="$_style" '
+    # shellcheck disable=SC2086 # $_pair is a git-emitted path, deliberately split
+    git -C "$_root" diff HEAD -M -- $_pair "$_file" 2>/dev/null | awk -v style="$_style" '
       BEGIN { pat = (style == "hash") ? "^#" : "^(//|/\\*|\\*/|\\*)" }
       /^\+\+\+/ { next }
       /^\+/ {
@@ -151,7 +178,7 @@ run_gate() {
   # Changed + untracked source files, NUL-safe against paths with spaces.
   _files=$(
     {
-      git -C "$_root" diff --name-only --diff-filter=ACMR HEAD 2>/dev/null || true
+      git -C "$_root" diff --name-only --diff-filter=ACMR -M HEAD 2>/dev/null || true
       git -C "$_root" ls-files --others --exclude-standard 2>/dev/null || true
     } | sort -u
   )
