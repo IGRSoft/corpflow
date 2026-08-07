@@ -173,7 +173,7 @@ Each proposal block that modifies a file's frontmatter MUST instruct prompt-engi
 scripts/append-labels.sh --worktask-id=<id> --run-index=<n> --changes=<tsv>
 ```
 
-Appends to `evals/failure-labels.jsonl` (repo root, **committed**). Idempotent on a content hash of `(path, added, removed, summary)` — re-running never duplicates rows. `scripts/label-stats.sh` aggregates per target and category.
+Appends to `evals/failure-labels.jsonl` (repo root, **committed**). Idempotent on a content hash of `(worktask_id, run_index, path, added, removed, summary)` — re-running the same worktask never duplicates rows, while the same edit recurring in a later worktask appends as a new label (recurrence is the frequency signal `label-stats.sh` aggregates). `scripts/label-stats.sh` aggregates per target and category.
 
 #### Step 5b — privacy and opt-out
 

@@ -20,7 +20,7 @@ One row per kept, classified change:
 ```
 
 - `category` — one of the six in `skills/self-improvement/SKILL.md § Step 3`
-- `label_id` — content hash of `(path, added, removed, summary)`; keys idempotency
+- `label_id` — content hash of `(worktask_id, run_index, path, added, removed, summary)`; keys same-run idempotency, so a recurrence in a later worktask still counts
 - **No diff bodies are ever stored** — counts and a redacted one-line summary only
 - Opt out with `SELF_IMPROVE_LABELS=0`
 

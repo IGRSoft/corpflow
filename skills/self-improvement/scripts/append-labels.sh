@@ -74,8 +74,10 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
-# Content hash of one observation. Keys idempotency; deliberately NOT a hash of
-# the diff body, which is never stored (size + the edits may be private).
+# Content hash of one observation, scoped to its worktask run: the same edit
+# recurring in a later worktask is a new label — recurrence is the frequency
+# signal label-stats aggregates. Deliberately NOT a hash of the diff body,
+# which is never stored (size + the edits may be private).
 sha256_stdin() {
   if command -v shasum >/dev/null 2>&1; then
     shasum -a 256
@@ -85,7 +87,7 @@ sha256_stdin() {
 }
 
 label_id() {
-  printf '%s\x1f%s\x1f%s\x1f%s' "$1" "$2" "$3" "$4" \
+  printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s' "$1" "$2" "$3" "$4" "$5" "$6" \
     | sha256_stdin | cut -d' ' -f1 | cut -c1-16
 }
 
@@ -99,7 +101,7 @@ append_rows() {
 
   while IFS=$'\t' read -r path target category confidence added removed summary; do
     [ -n "${path:-}" ] || continue
-    lid=$(label_id "$path" "${added:-0}" "${removed:-0}" "${summary:-}")
+    lid=$(label_id "$worktask_id" "$run_index" "$path" "${added:-0}" "${removed:-0}" "${summary:-}")
     # Idempotent: re-running the skill on the same worktask must not duplicate rows.
     if grep -q "\"label_id\":\"$lid\"" "$dataset" 2>/dev/null; then
       continue
@@ -145,9 +147,14 @@ self_test() {
     | append_rows "$ds" "wt-1" "0" "ST" 2>/dev/null
   [ "$(wc -l < "$ds" | tr -d ' ')" = "2" ] || { printf >&2 'FAIL: second row not appended\n'; rc=1; }
 
+  # The same observation in a DIFFERENT worktask is a recurrence, not a duplicate.
+  printf 'agents/developer.md\tagents/developer.md\tcompleteness\thigh\t4\t1\tadded Sendable constraint\n' \
+    | append_rows "$ds" "wt-2" "0" "ST" 2>/dev/null
+  [ "$(wc -l < "$ds" | tr -d ' ')" = "3" ] || { printf >&2 'FAIL: cross-worktask recurrence deduped\n'; rc=1; }
+
   # Opt-out is honoured by the caller-visible env gate.
-  ( SELF_IMPROVE_LABELS=0 "$0" --worktask-id=wt-2 --dataset="$ds" </dev/null ) >/dev/null 2>&1
-  [ "$(wc -l < "$ds" | tr -d ' ')" = "2" ] || { printf >&2 'FAIL: opt-out wrote rows\n'; rc=1; }
+  ( SELF_IMPROVE_LABELS=0 "$0" --worktask-id=wt-3 --dataset="$ds" </dev/null ) >/dev/null 2>&1
+  [ "$(wc -l < "$ds" | tr -d ' ')" = "3" ] || { printf >&2 'FAIL: opt-out wrote rows\n'; rc=1; }
 
   [ "$rc" -eq 0 ] && printf >&2 'append-labels: self-test OK\n'
   return "$rc"

@@ -4,7 +4,8 @@
 #   Requires --worktask-id=<id>; missing -> exit 1 (usage).
 #   Reads TSV (path\ttarget\tcategory\tconfidence\tadded\tremoved\tsummary)
 #     from --changes=<file> or stdin; appends one JSONL row per new observation.
-#   Idempotent on a content hash of (path, added, removed, summary).
+#   Idempotent on a content hash of (worktask_id, run_index, path, added,
+#     removed, summary) — same run never duplicates; a later worktask appends.
 #   SELF_IMPROVE_LABELS=0 -> no-op, exit 0, dataset untouched.
 #   Never writes diff bodies — counts + summary only.
 #   --self-test -> exit 0.
@@ -45,6 +46,12 @@ setup() {
   printf '%s\n' "$ROW" | bash "$SCRIPT" --worktask-id=wt-1 --dataset="$DS"
   printf '%s\n' $'skills/worktask/SKILL.md\tskills/worktask/SKILL.md\tstructure\tmedium\t2\t0\treordered' \
     | bash "$SCRIPT" --worktask-id=wt-1 --dataset="$DS"
+  [ "$(wc -l < "$DS" | tr -d ' ')" -eq 2 ]
+}
+
+@test "the same observation in a different worktask appends" {
+  printf '%s\n' "$ROW" | bash "$SCRIPT" --worktask-id=wt-1 --dataset="$DS"
+  printf '%s\n' "$ROW" | bash "$SCRIPT" --worktask-id=wt-2 --dataset="$DS"
   [ "$(wc -l < "$DS" | tr -d ' ')" -eq 2 ]
 }
 
