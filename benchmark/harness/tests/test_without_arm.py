@@ -144,15 +144,35 @@ class PairedDispatch(unittest.TestCase):
         self.assertEqual(rc_skip, 0)  # skip count is 1 => 0.5 <= 0.6
 
     def test_breach_after_without_keeps_it_on_disk_rc4(self):
-        fake = SequencedFakeDispatcher([single_object_usage(cost=0.9)])
-        rc = self._dispatch(fake, budget_usd=1.0, without_arm="real", est_cost=0.4)
+        # Per-arm budget 1.0. WITHOUT runs both stages cheaply; WITH's first stage
+        # costs 0.9, so its own reserve gates its second.
+        fake = SequencedFakeDispatcher([
+            single_object_usage(cost=0.3), single_object_usage(cost=0.3),
+            single_object_usage(cost=0.9),
+        ])
+        rc = self._dispatch(fake, budget_usd=2.0, stages=["PL", "AR"],
+                            without_arm="real", est_cost=0.4)
         self.assertEqual(rc, 4)
-        self.assertEqual(len(fake.calls), 1)  # WITHOUT dispatched, WITH gated out
+        self.assertEqual(len(fake.calls), 3)  # WITHOUT x2, WITH x1 then gated
         rec = load_json(self.sb.record_path)
         self.assertTrue(rec["live_partial"])
-        self.assertEqual(rec["paths"]["without"]["cost_usd"], 0.9)
+        self.assertEqual(rec["paths"]["without"]["stage_count"], 2)
+        self.assertEqual(rec["paths"]["without"]["cost_usd"], 0.6)
         self.assertEqual(rec["paths"]["with"]["pass_fail"], "fail")
-        self.assertEqual(rec["paths"]["with"]["stage_count"], 0)
+        self.assertEqual(rec["paths"]["with"]["stage_count"], 1)
+
+    def test_arm_budgets_are_independent(self):
+        # A shared purse would let WITHOUT's 0.9 gate WITH out entirely; halves of
+        # a 2.0 budget leave each arm its own 1.0 and both arms complete.
+        fake = SequencedFakeDispatcher([
+            single_object_usage(cost=0.9), single_object_usage(cost=0.9),
+        ])
+        rc = self._dispatch(fake, budget_usd=2.0, without_arm="real", est_cost=0.4)
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(fake.calls), 2)
+        rec = load_json(self.sb.record_path)
+        self.assertEqual(rec["paths"]["with"]["stage_count"], 1)
+        self.assertEqual(rec["paths"]["without"]["stage_count"], 1)
 
     def test_degraded_without_capture_marks_partial_rc4(self):
         fake = SequencedFakeDispatcher(["not json at all", single_object_usage()])

@@ -58,7 +58,7 @@ CAPTURE_STREAM_JSON = "stream-json"
 
 # Bumped by hand whenever the graded task text changes; a workload change makes
 # token and quality figures incomparable just as surely as a model repin does.
-PROMPT_CONTRACT = "scripted-cli-v1"
+PROMPT_CONTRACT = "scripted-cli-v2"
 HARNESS_GENERATION = "python-1"
 
 
@@ -392,7 +392,7 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
             captures_dir: Optional[str] = None,
             persist_partial: Optional[Callable[["ArmResult"], None]] = None,
             now_fn: Optional[Callable[[], float]] = None) -> ArmResult:
-    """Dispatch one arm's ordered stage sequence under the shared running-tally gate.
+    """Dispatch one arm's ordered stage sequence under its own running-tally gate.
 
     Both arms call this with identical ``prompts_by_stage``; only ``arm.bind_agent``
     and ``arm.cwd`` differ. Gate (b) aborts before a breaching dispatch; A3 persists
@@ -400,7 +400,8 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
     """
     result = ArmResult(name=arm.name)
     for stage in stages:
-        estimate = budget_mod.estimate_stage_cost(estimate_calc_path, runner=estimate_runner)
+        estimate = budget_mod.estimate_stage_cost(estimate_calc_path, stage=stage,
+                                                  runner=estimate_runner)
         if not tally.can_afford(estimate):
             result.partial = True
             break
@@ -454,8 +455,10 @@ def _arm_verdict(app: Optional[baseline_mod.AppMeasure], partial: bool) -> tuple
 
     Fail-closed on two counts: an unmeasured or degraded arm is never green, and
     where the held-out oracle ran it — not the arm's self-written suite — decides
-    the verdict. Full conformance is required to pass; a partial score is a fail
-    that still carries its rate for comparison.
+    the verdict. The verdict reads the `specified` tier alone, which is the contract
+    the arm was actually handed; the `implied` tier is a quality signal reported
+    beside it, not something to fail an arm over. Full conformance is required to
+    pass; a partial score is a fail that still carries its rate for comparison.
     """
     if app is None:
         return "fail", 0, 0, None, None
@@ -463,10 +466,18 @@ def _arm_verdict(app: Optional[baseline_mod.AppMeasure], partial: bool) -> tuple
     verdict = "fail"
     if not partial:
         if app.oracle is not None:
-            verdict = "pass" if app.oracle.get("pass_rate") == 1.0 else "fail"
+            verdict = "pass" if _oracle_conforms(app.oracle) else "fail"
         else:
             verdict = app.pass_fail
     return verdict, app.loc_produced, app.test_count, app.app_path, app.oracle
+
+
+def _oracle_conforms(oracle: dict) -> bool:
+    """True when the arm cleared every case it was told about."""
+    specified = (oracle.get("tiers") or {}).get("specified")
+    if specified is not None:
+        return specified.get("pass_rate") == 1.0
+    return oracle.get("pass_rate") == 1.0
 
 
 def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: float,
@@ -618,11 +629,11 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
         warn(str(e))
         return 3
 
-    # 2. Pre-flight budget gate. The WITHOUT arm adds len(stages) dispatches when real.
-    preflight_stage_count = len(stages) * (2 if real_arm else 1)
+    # 2. Pre-flight budget gate. The WITHOUT arm runs the same stage list when real.
+    arms = 2 if real_arm else 1
     try:
         budget_mod.assert_preflight_within_budget(
-            budget, preflight_stage_count, estimate_calc, runner=estimate_runner)
+            budget, stages, estimate_calc, arms=arms, runner=estimate_runner)
     except budget_mod.BudgetExceeded as e:
         warn(str(e))
         return 2
@@ -634,7 +645,10 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     state_json_text = read_state_json_text(workdir_path)
     prompts_by_stage = assemble_prompts(prompts, stages, state_json_text, run_id,
                                         ".context/planning-0.md")
-    shared_tally = budget_mod.RunningTally(budget)
+    # An equal share per arm, not one shared purse: the arm dispatched first would
+    # otherwise spend the run and leave the second truncated, and a comparison
+    # between a complete arm and a starved one measures the budget, not the agent.
+    per_arm_budget = budget / arms
 
     without_result: Optional[ArmResult] = None
 
@@ -649,7 +663,8 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
 
     if real_arm:
         without_result = run_arm(
-            without_spec, prompts_by_stage, without_dispatcher, shared_tally, estimate_calc,
+            without_spec, prompts_by_stage, without_dispatcher,
+            budget_mod.RunningTally(per_arm_budget), estimate_calc,
             stages, estimate_runner=estimate_runner, capture_mode=capture_mode,
             settings_path=settings_path, captures_dir=captures_dir, now_fn=now_fn)
         # Flush right after the WITHOUT arm so a later WITH breach still keeps it.
@@ -659,7 +674,8 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
         _flush(with_res, partial=True)
 
     with_result = run_arm(
-        with_spec, prompts_by_stage, with_dispatcher, shared_tally, estimate_calc, stages,
+        with_spec, prompts_by_stage, with_dispatcher,
+        budget_mod.RunningTally(per_arm_budget), estimate_calc, stages,
         estimate_runner=estimate_runner, capture_mode=capture_mode, settings_path=settings_path,
         captures_dir=captures_dir, persist_partial=_persist_partial, now_fn=now_fn)
 
