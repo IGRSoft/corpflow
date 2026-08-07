@@ -30,8 +30,9 @@ def resolve_arm_mode(explicit: Optional[str], stages_subset: Optional[list]) -> 
 class AppMeasure:
     loc_produced: int
     test_count: int
-    pass_fail: str
+    pass_fail: str          # the arm's OWN suite — self-graded, never the quality verdict
     app_path: str
+    oracle: Optional[dict] = None
 
 
 def measure_app(app_dir: str, plugin_root: str, exclude_dirs: Optional[set] = None) -> Optional[AppMeasure]:

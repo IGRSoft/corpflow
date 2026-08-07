@@ -32,22 +32,45 @@ _STAGES = ["PL", "AR", "TL"]
 class BudgetModule(unittest.TestCase):
     def test_assert_preflight_throws_over_budget(self):
         with self.assertRaises(budget.BudgetExceeded):
-            budget.assert_preflight_within_budget(0.5, 3, "/x", runner=fake_estimate_runner(1.0))
+            budget.assert_preflight_within_budget(0.5, _STAGES, "/x",
+                                                  runner=fake_estimate_runner(1.0))
 
     def test_assert_preflight_allows_within_budget(self):
-        proj = budget.assert_preflight_within_budget(10.0, 3, "/x", runner=fake_estimate_runner(1.0))
+        proj = budget.assert_preflight_within_budget(10.0, _STAGES, "/x",
+                                                     runner=fake_estimate_runner(1.0))
         self.assertEqual(proj, 3.0)
+
+    def test_preflight_projects_every_arm(self):
+        proj = budget.preflight_projection(_STAGES, "/x", arms=2,
+                                           runner=fake_estimate_runner(1.0))
+        self.assertEqual(proj, 6.0)
 
     def test_can_afford_logic(self):
         t = budget.RunningTally(3.0)
-        t.add(2.0)
+        t.add(0.5)
         self.assertTrue(t.can_afford(1.0))
-        self.assertFalse(t.can_afford(1.5))
+        self.assertFalse(t.can_afford(2.6))
+
+    def test_reserve_grows_to_the_heaviest_observed_stage(self):
+        # A stage that beat its projection re-sizes every later reservation, so the
+        # gate stops trusting an estimate the run has already disproved.
+        t = budget.RunningTally(3.0)
+        t.add(2.0)
+        self.assertEqual(t.reserve(0.1), 2.0)
+        self.assertFalse(t.can_afford(0.1))  # 2.0 spent + 2.0 reserved > 3.0
 
     def test_nil_cost_adds_nothing(self):
         t = budget.RunningTally(3.0)
         t.add(None)
         self.assertEqual(t.spent_usd, 0.0)
+        self.assertEqual(t.max_stage_usd, 0.0)
+
+    def test_dv_is_projected_heavier_than_a_flat_stage(self):
+        # A flat per-stage figure is what let a $30 cap admit a run that needed $45.
+        self.assertGreater(budget.expected_tokens("DV"),
+                           4 * budget.expected_tokens("DC"))
+        self.assertEqual(budget.expected_tokens("nonesuch"),
+                         budget.PER_STAGE_EXPECTED_TOKENS)
 
 
 class DispatchBudgetGates(unittest.TestCase):

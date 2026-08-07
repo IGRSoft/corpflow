@@ -61,16 +61,37 @@ _as of 2026-07-22T12:38:04Z_
 
 ## quality-delta
 
+**Held-out oracle** — the arm's binary scored against goldens captured from
+`ttt-template`. This is the only quality signal here the arm did not author.
+
+| metric | WITH | WITHOUT |
+|---|---|---|
+| oracle cases passed | not measured | not measured |
+| pass_fail | pass | pass |
+
+`pass_fail` reads the specified tier alone — an arm is not failed for behaviour
+nobody described to it. The implied tier is the discriminating signal.
+
+**Self-graded** — the arm wrote both the implementation and these tests, so
+a high count is not evidence of correctness.
+
+| metric | WITH | WITHOUT |
+|---|---|---|
+| test_count (self-written) | 67 | 67 |
+| coverage % | 0.0% | 0.0% |
+
+**Descriptive only** — size, not quality. More lines for the same feature is
+not a better result.
+
 | metric | WITH | WITHOUT |
 |---|---|---|
 | loc_produced | 2213 | 1751 |
-| test_count | 67 | 67 |
-| pass_fail | pass | pass |
 | tokens per LOC | 107.7858 | 91.8555 |
-| coverage % | 0.0% | 0.0% |
 
 ## validity-caveats
 
+- unstamped record: no era block, so comparability against other records cannot be verified — re-run to stamp harness, prompt contract, and model pins.
+- cross-era vs previous run live-20260721T190044Z-9bd7a47: era-unstamped — token, cost, and quality figures are NOT comparable across this boundary.
 - n=1: single-run comparison; treat deltas as directional, not statistically robust.
 
 ## improvement-candidates

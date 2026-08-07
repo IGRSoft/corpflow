@@ -4,16 +4,28 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.9** — opt-in change→test selection: a three-layer dependency matrix
-  (L1 derived-live path rules, L2 `tests/selection/matrix.tsv` glob table, L3 an ALWAYS floor)
-  behind `./run-tests.sh --changed`, so an edit to one agent, command, skill, hook, or script
-  runs only the dependent `.bats`. Fail-closed on seven triggers (F1-F7) — unknown path, tooling
-  edit, or absent base all widen to the full suite. DV selections over 50% of the tree exit 65
-  and hand the run to QA rather than letting DV run the suite it lacks authority for. The
-  execution gate is argument-aware. Default behaviour is unchanged: bare `./run-tests.sh` is
-  still a full run. Full narrative: `CHANGELOG.md § [4.0.9]`.
+- Plugin version: **4.0.10** — eval-audit release (#279): the benchmark's quality signal
+  becomes held-out — both arms' prompts embed a scripted CLI contract and each arm's binary is
+  scored against 30 goldens captured from `ttt-template` (24 `specified` decide `pass_fail`,
+  6 `implied` discriminate), replacing the self-graded `swift test` that never once failed.
+  Records stamp comparability `era`s (harness/prompt-contract/model pins, auto-caveated);
+  paired runs get per-arm budgets + per-stage projections; live records are retained
+  unbounded and tracked. Self-improvement Step 5b persists classified user edits to the
+  committed `evals/failure-labels.jsonl`; skill eval sets become binary code-checked
+  assertions; `skill-refs.bats` pins Skill grants/targets/paths repo-wide (fixing three
+  live-run defects: `developer` + `stakeholder` missing the `Skill` grant, `technical-lead`
+  invoking a command as a skill). Full narrative: `CHANGELOG.md § [4.0.10]`.
 
 ### Previous release narratives
+
+- Plugin version (previous): **4.0.9** — opt-in change→test selection: a three-layer dependency
+  matrix (L1 derived-live path rules, L2 `tests/selection/matrix.tsv` glob table, L3 an ALWAYS
+  floor) behind `./run-tests.sh --changed`, so an edit to one agent, command, skill, hook, or
+  script runs only the dependent `.bats`. Fail-closed on seven triggers (F1-F7) — unknown path,
+  tooling edit, or absent base all widen to the full suite. DV selections over 50% of the tree
+  exit 65 and hand the run to QA rather than letting DV run the suite it lacks authority for.
+  The execution gate is argument-aware. Default behaviour is unchanged: bare `./run-tests.sh`
+  is still a full run. Full narrative: `CHANGELOG.md § [4.0.9]`.
 
 - Plugin version (previous): **4.0.8** — `state-patch.sh` idempotency guard now compares the whole
   patch (artifact and handoff edge, not just status and verdict), so a review-remediation loop that
@@ -131,6 +143,22 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 | 2.1.51→2.1.76 | cc-features-2.1.51-76.md | v3.1.0/v3.2.0 |
 
 ## Release History (last 12, newest first)
+
+- 2026-08-07: v4.0.10 — eval audit (#279): held-out oracle grades each arm's binary against 30
+  goldens captured from `ttt-template` through a scripted CLI contract both prompts embed
+  verbatim (SSOT-linted); tiered `specified`/`implied` so the metric discriminates — the
+  self-graded `swift test` it replaces never once returned `fail`. Records stamp `era` blocks
+  (harness, prompt contract, per-stage model pins) and `bench-analyze` auto-caveats cross-era
+  comparisons. Paired runs: per-arm budget shares + calibrated per-stage projections (flat
+  figure halved real cost; shared purse starved the second arm — both defects evidenced in
+  `results/KNOWN-BAD-RECORDS.md`). Live records retained unbounded and tracked. Step 5b writes
+  classified user edits to committed `evals/failure-labels.jsonl` (idempotent per run,
+  opt-out, no diff bodies); request-plan evals become binary code-checked assertions with an
+  engine + lint in `tests/python/test_skill_evals.py`; `skill-refs.bats` pins Skill
+  grants/targets/path citations repo-wide after three live-run defects (ungranted
+  `dv-screenshot-capture` and `self-improvement` orders, a command invoked as a skill).
+  `results/AGENT-GRANT-ENFORCEMENT.md`: tool sets bind headless, `Bash(cmd:*)` scoping and
+  `maxTurns` did not — probe specified, no speculative fix shipped.
 
 - 2026-08-06: v4.0.9 — change→test dependency matrix, opt-in behind `./run-tests.sh --changed`
   (plus `--base <ref>`, `--print-selection`, and `COMPANY_WORKFLOW_TEST_SELECT=0` to disable).
@@ -285,17 +313,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
   self-tests exit 0; shellcheck at pre-existing baseline on all edited scripts. 59 files. Known
   follow-up: pre-existing `state-patch.sh` idempotence bug (stale handoff edge survives a stage
   re-run after rejection) deferred out of scope, FN to file as its own GitHub issue.
-- 2026-07-31: v3.41.2 — comment-density and comment-standard-reminder hooks extended to cover
-  `sh`/`bash` (allow-list + `comment_style_for` hash-arm routing); density gate gains a
-  vendored-path exclusion (`vendor/`, `node_modules/`, `Pods/`, `third_party/`) applying to every
-  gated language, called out as its own behavior change; bloated/lean shell self-test fixture pair
-  + vendor-exclusion control-arm case; new `tests/shell/hooks/comment-hooks-self-test.bats` wraps
-  both hooks' self-tests into the suite for the first time; `code-documentation.md` gains a shell
-  BEFORE→AFTER gallery entry and an `### Other grammars` fence. 2 self-test suites green (9 density
-  cases), vendored `hooks/` bats module 106/106, shellcheck at the one-item SC2016 baseline. 4 files.
-- 2026-07-30: v3.41.1 — test-execution authority enforcement via stage-scoped policy matrix; DV auto-promotion capped at module-scope; SR/RE tool-grant narrowing (bare Bash → scoped allow-lists); new `PreToolUse` hook `hooks/test-execution-gate.sh` with fail-open guards; 27 new hook test scenarios + 6 parity tests; 8 sections restructured for size compliance. 394 bats green. ~25 files.
-- 2026-07-30: v3.41.0 — branch naming PL-stage entry point + shared library; FN `branch-name` subcommand removed entirely; vocabulary extended to `feature`/`feat` (backward compatible); rank-4 issue resolver tightened; shell-injection hardening (input gate + validation at 3 consumption hops); symlink ACE + CDPATH + audit-row-loss fixes. 340 bats green. ~20 files.
-
 ## Token Baselines
 
 Authoritative per-surface baselines: `skills/cost-optimization/references/token-baselines.md`. This file no longer mirrors them.

@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Optional, Protocol
 
+from benchmarkkit import oracle
 from benchmarkkit.genlib import Subprocess, Timer
 from benchmarkkit.metrics import (
     BenchmarkRecord,
@@ -54,6 +55,25 @@ STAGE_TABLE = {
 
 CAPTURE_JSON = "json"
 CAPTURE_STREAM_JSON = "stream-json"
+
+# Bumped by hand whenever the graded task text changes; a workload change makes
+# token and quality figures incomparable just as surely as a model repin does.
+PROMPT_CONTRACT = "scripted-cli-v2"
+HARNESS_GENERATION = "python-1"
+
+
+def build_era() -> dict:
+    """Stamp what this run's numbers are comparable against.
+
+    Model pins are the axis that silently invalidated the stored baselines at
+    v3.37.1, so they travel with every record rather than living only in a README.
+    """
+    return {
+        "harness": HARNESS_GENERATION,
+        "prompt_contract": PROMPT_CONTRACT,
+        "model_pins": {stage: model for stage, (_agent, model, _effort) in STAGE_TABLE.items()},
+    }
+
 
 # Headless has no interactive prompt, so safety rides on the deny-list settings file,
 # not the mode. Mirrored verbatim in baseline.py (parity asserted by test, no import).
@@ -372,7 +392,7 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
             captures_dir: Optional[str] = None,
             persist_partial: Optional[Callable[["ArmResult"], None]] = None,
             now_fn: Optional[Callable[[], float]] = None) -> ArmResult:
-    """Dispatch one arm's ordered stage sequence under the shared running-tally gate.
+    """Dispatch one arm's ordered stage sequence under its own running-tally gate.
 
     Both arms call this with identical ``prompts_by_stage``; only ``arm.bind_agent``
     and ``arm.cwd`` differ. Gate (b) aborts before a breaching dispatch; A3 persists
@@ -380,7 +400,8 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
     """
     result = ArmResult(name=arm.name)
     for stage in stages:
-        estimate = budget_mod.estimate_stage_cost(estimate_calc_path, runner=estimate_runner)
+        estimate = budget_mod.estimate_stage_cost(estimate_calc_path, stage=stage,
+                                                  runner=estimate_runner)
         if not tally.can_afford(estimate):
             result.partial = True
             break
@@ -429,13 +450,44 @@ def _stage_attributions(usages: list, arm: Optional[str]) -> list:
     ]
 
 
+def _arm_verdict(app: Optional[baseline_mod.AppMeasure], partial: bool) -> tuple:
+    """Collapse one arm's measurement into ``(pass_fail, loc, tests, app_path, oracle)``.
+
+    Fail-closed on two counts: an unmeasured or degraded arm is never green, and
+    where the held-out oracle ran it — not the arm's self-written suite — decides
+    the verdict. The verdict reads the `specified` tier alone, which is the contract
+    the arm was actually handed; the `implied` tier is a quality signal reported
+    beside it, not something to fail an arm over. Full conformance is required to
+    pass; a partial score is a fail that still carries its rate for comparison.
+    """
+    if app is None:
+        return "fail", 0, 0, None, None
+
+    verdict = "fail"
+    if not partial:
+        if app.oracle is not None:
+            verdict = "pass" if _oracle_conforms(app.oracle) else "fail"
+        else:
+            verdict = app.pass_fail
+    return verdict, app.loc_produced, app.test_count, app.app_path, app.oracle
+
+
+def _oracle_conforms(oracle: dict) -> bool:
+    """True when the arm cleared every case it was told about."""
+    specified = (oracle.get("tiers") or {}).get("specified")
+    if specified is not None:
+        return specified.get("pass_rate") == 1.0
+    return oracle.get("pass_rate") == 1.0
+
+
 def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: float,
                       usages: list, stages_dispatched: int, live_partial: bool,
                       with_app: Optional[baseline_mod.AppMeasure] = None,
                       without_app: Optional[baseline_mod.AppMeasure] = None,
                       without_usages: Optional[list] = None,
                       without_dispatched: int = 0,
-                      without_partial: bool = False) -> BenchmarkRecord:
+                      without_partial: bool = False,
+                      with_partial: Optional[bool] = None) -> BenchmarkRecord:
     """Build the record. Skip mode (``without_usages=None``) reproduces the WITH-only
     byte shape exactly; paired mode aggregates the WITHOUT arm's own 10-stage tokens
     and tags every stage row with its arm (both additive/emit-only)."""
@@ -446,21 +498,18 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
 
     in_total, out_total, tok_total, cost_total, cr_total, cc_total, with_wall = _arm_tokens(usages)
 
-    with_pass = "fail" if live_partial else "pass"
-    with_loc = with_test = 0
-    with_app_path = None
-    if with_app is not None:
-        with_pass = with_app.pass_fail
-        with_loc = with_app.loc_produced
-        with_test = with_app.test_count
-        with_app_path = with_app.app_path
+    # Verdicts read per-arm degradation: record-level live_partial ORs both arms,
+    # and judging one arm by it would fail a complete arm for the other's breach.
+    if with_partial is None:
+        with_partial = live_partial
+    with_pass, with_loc, with_test, with_app_path, with_oracle = _arm_verdict(with_app, with_partial)
 
     with_p = PathMetrics(
         tokens=Tokens(input=in_total, output=out_total, total=tok_total,
                       cache_read=cr_total, cache_creation=cc_total),
         cost_usd=cost_total, wall_clock_s=with_wall, loc_produced=with_loc, test_count=with_test,
         coverage_pct=with_coverage, estimate_complexity_score=0, stage_count=stages_dispatched,
-        pass_fail=with_pass, app_path=with_app_path)
+        pass_fail=with_pass, app_path=with_app_path, oracle=with_oracle)
 
     if not paired:
         without_p = PathMetrics(
@@ -470,29 +519,24 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
         return make_record(run_id=run_id, timestamp_utc=timestamp_utc, mode="live",
                            git_sha=git_sha, budget_usd=budget, with_pm=with_p,
                            without_pm=without_p, live_partial=live_partial,
-                           stages=_stage_attributions(usages, arm=None))
+                           stages=_stage_attributions(usages, arm=None), era=build_era())
 
     (o_in, o_out, o_tok, o_cost, o_cr, o_cc, o_wall) = _arm_tokens(without_usages)
-    without_pass = "fail" if without_partial else "pass"
-    without_loc = without_test = 0
-    without_app_path = None
-    if without_app is not None:
-        without_pass = without_app.pass_fail
-        without_loc = without_app.loc_produced
-        without_test = without_app.test_count
-        without_app_path = without_app.app_path
+    (without_pass, without_loc, without_test,
+     without_app_path, without_oracle) = _arm_verdict(without_app, without_partial)
 
     without_p = PathMetrics(
         tokens=Tokens(input=o_in, output=o_out, total=o_tok, cache_read=o_cr, cache_creation=o_cc),
         cost_usd=o_cost, wall_clock_s=o_wall, loc_produced=without_loc, test_count=without_test,
         coverage_pct=None, estimate_complexity_score=0, stage_count=without_dispatched,
-        pass_fail=without_pass, app_path=without_app_path)
+        pass_fail=without_pass, app_path=without_app_path, oracle=without_oracle)
 
     stages_all = (_stage_attributions(usages, arm="with")
                   + _stage_attributions(without_usages, arm="without"))
     return make_record(run_id=run_id, timestamp_utc=timestamp_utc, mode="live",
                        git_sha=git_sha, budget_usd=budget, with_pm=with_p,
-                       without_pm=without_p, live_partial=live_partial, stages=stages_all)
+                       without_pm=without_p, live_partial=live_partial, stages=stages_all,
+                       era=build_era())
 
 
 def now_iso() -> str:
@@ -506,16 +550,33 @@ def git_sha7(repo_root: str) -> str:
 
 
 def _measure_arm(arm_cwd: str, plugin_root: str, dispatched: int,
-                 warn: Callable[[str], None]) -> Optional[baseline_mod.AppMeasure]:
+                 warn: Callable[[str], None],
+                 grader: Optional[Callable] = None) -> Optional[baseline_mod.AppMeasure]:
+    """Measure one arm, then grade it against the held-out oracle.
+
+    Runs after dispatch, so oracle build time never lands in ``wall_clock_s``.
+    """
+    def unmeasured() -> baseline_mod.AppMeasure:
+        return baseline_mod.AppMeasure(loc_produced=0, test_count=0, pass_fail="fail",
+                                       app_path=baseline_mod.genlib.relative_path(arm_cwd, plugin_root))
+
     try:
         app = baseline_mod.measure_app(arm_cwd, plugin_root)
         if app is None and dispatched > 0:
-            app = baseline_mod.AppMeasure(loc_produced=0, test_count=0, pass_fail="fail",
-                                          app_path=baseline_mod.genlib.relative_path(arm_cwd, plugin_root))
-        return app
+            app = unmeasured()
     except Exception as exc:  # noqa: BLE001 — measurement never loses the record write
         warn(f"app metrics fill failed for {arm_cwd}: {exc}")
+        app = unmeasured() if dispatched > 0 else None
+
+    if app is None:
         return None
+
+    grade = grader if grader is not None else oracle.grade
+    try:
+        app.oracle = grade(arm_cwd, warn=warn).to_dict()
+    except Exception as exc:  # noqa: BLE001 — an ungradeable arm stays unscored, not unrecorded
+        warn(f"oracle grading failed for {arm_cwd}: {exc}")
+    return app
 
 
 def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
@@ -573,11 +634,11 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
         warn(str(e))
         return 3
 
-    # 2. Pre-flight budget gate. The WITHOUT arm adds len(stages) dispatches when real.
-    preflight_stage_count = len(stages) * (2 if real_arm else 1)
+    # 2. Pre-flight budget gate. The WITHOUT arm runs the same stage list when real.
+    arms = 2 if real_arm else 1
     try:
         budget_mod.assert_preflight_within_budget(
-            budget, preflight_stage_count, estimate_calc, runner=estimate_runner)
+            budget, stages, estimate_calc, arms=arms, runner=estimate_runner)
     except budget_mod.BudgetExceeded as e:
         warn(str(e))
         return 2
@@ -589,7 +650,10 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     state_json_text = read_state_json_text(workdir_path)
     prompts_by_stage = assemble_prompts(prompts, stages, state_json_text, run_id,
                                         ".context/planning-0.md")
-    shared_tally = budget_mod.RunningTally(budget)
+    # An equal share per arm, not one shared purse: the arm dispatched first would
+    # otherwise spend the run and leave the second truncated, and a comparison
+    # between a complete arm and a starved one measures the budget, not the agent.
+    per_arm_budget = budget / arms
 
     without_result: Optional[ArmResult] = None
 
@@ -604,7 +668,8 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
 
     if real_arm:
         without_result = run_arm(
-            without_spec, prompts_by_stage, without_dispatcher, shared_tally, estimate_calc,
+            without_spec, prompts_by_stage, without_dispatcher,
+            budget_mod.RunningTally(per_arm_budget), estimate_calc,
             stages, estimate_runner=estimate_runner, capture_mode=capture_mode,
             settings_path=settings_path, captures_dir=captures_dir, now_fn=now_fn)
         # Flush right after the WITHOUT arm so a later WITH breach still keeps it.
@@ -614,7 +679,8 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
         _flush(with_res, partial=True)
 
     with_result = run_arm(
-        with_spec, prompts_by_stage, with_dispatcher, shared_tally, estimate_calc, stages,
+        with_spec, prompts_by_stage, with_dispatcher,
+        budget_mod.RunningTally(per_arm_budget), estimate_calc, stages,
         estimate_runner=estimate_runner, capture_mode=capture_mode, settings_path=settings_path,
         captures_dir=captures_dir, persist_partial=_persist_partial, now_fn=now_fn)
 
@@ -631,11 +697,11 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
             run_id, timestamp_utc, git_sha, budget, with_result.usages, with_result.dispatched,
             live_partial=final_partial, with_app=with_app, without_app=without_app,
             without_usages=without_result.usages, without_dispatched=without_result.dispatched,
-            without_partial=without_result.partial)
+            without_partial=without_result.partial, with_partial=with_result.partial)
     else:
         record = build_live_record(
             run_id, timestamp_utc, git_sha, budget, with_result.usages, with_result.dispatched,
-            live_partial=final_partial)
+            live_partial=final_partial, with_partial=with_result.partial)
     write_record(record, record_path)
 
     if final_partial:

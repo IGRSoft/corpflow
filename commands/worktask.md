@@ -705,7 +705,7 @@ During the orchestrator execution loop, when executing a DV stage task:
 
 1. Check if the worktask's PL0 task has `metadata.embedded_commands`
 2. If present, the DV stage agent prompt MUST include: "Execute embedded command(s) via the Skill tool: `<command>` with args: `<args>`"
-3. The DV agent invokes `Skill("<command>", args: "<args>")` before or as part of its implementation work
+3. The DV agent invokes `Skill({skill: "<command>", args: "<args>"})` before or as part of its implementation work
 
 ### Examples
 

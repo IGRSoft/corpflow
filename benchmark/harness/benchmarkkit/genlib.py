@@ -204,18 +204,23 @@ def relative_path(path: str, base: str) -> str:
 
 def build_path_metrics(app_dir: str, plugin_root_dir: str, stage_count: int,
                        estimate_complexity_score: int, cost_usd: Optional[float],
-                       wall_clock_s: float) -> PathMetrics:
-    test_count, pass_fail = run_app_tests(app_dir)
+                       wall_clock_s: float, oracle_result: Optional[dict] = None) -> PathMetrics:
+    test_count, self_graded = run_app_tests(app_dir)
     loc = count_loc(app_dir)
+    # The held-out oracle outranks the arm's own suite wherever it ran.
+    pass_fail = self_graded
+    if oracle_result is not None:
+        pass_fail = "pass" if oracle_result.get("pass_rate") == 1.0 else "fail"
     return PathMetrics(
         tokens=Tokens(input=None, output=None, total=None),
         cost_usd=cost_usd,
         wall_clock_s=round(wall_clock_s * 10000) / 10000,
         loc_produced=loc,
         test_count=test_count,
-        coverage_pct=0.0,
+        coverage_pct=None,  # nothing here measures coverage; a real 0.0 would claim it did
         estimate_complexity_score=estimate_complexity_score,
         stage_count=stage_count,
         pass_fail=pass_fail,
         app_path=relative_path(app_dir, plugin_root_dir),
+        oracle=oracle_result,
     )

@@ -6,13 +6,30 @@ color: magenta
 effort: high
 maxTurns: 80
 isolation: worktree
-version: 0.8.0
-tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), Task(system-developer:system-developer), Task(system-developer:c-developer), Task(system-developer:cpp-developer), Task(system-developer:python-developer), Task(system-developer:bash-developer), Task(system-developer:sys-code-fixer), Task(system-developer:sys-test-generator), Task(android-developer:android-developer), Task(android-developer:android-phone-developer), Task(android-developer:kotlin-architector), Task(android-developer:and-code-fixer), Task(android-developer:and-test-generator), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(frontend-developer:vue-developer), Task(frontend-developer:svelte-developer), Task(frontend-developer:angular-developer), Task(frontend-developer:typescript-developer), Task(frontend-developer:css-developer), Task(frontend-developer:fe-code-fixer), Task(frontend-developer:fe-test-generator), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(backend-developer:go-developer), Task(backend-developer:jvm-backend-developer), Task(backend-developer:python-backend-developer), Task(backend-developer:api-designer), Task(backend-developer:database-engineer), Task(backend-developer:be-code-fixer), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-engineer), Task(ai-engineer:llm-engineer), Task(ai-engineer:ml-engineer), Task(ai-engineer:mlops-engineer), Task(ai-engineer:ai-code-fixer), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
+version: 0.8.1
+# tools: Skill is REQUIRED — `## Visual evidence` mandates
+# `Skill({skill:"company-workflow:dv-screenshot-capture"})` before DV completes, and
+# the capture checklist has no alternative path. Without the grant the model never
+# sees the tool and hand-rolls the adapter chain the skill already ships.
+tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, Skill, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), Task(system-developer:system-developer), Task(system-developer:c-developer), Task(system-developer:cpp-developer), Task(system-developer:python-developer), Task(system-developer:bash-developer), Task(system-developer:sys-code-fixer), Task(system-developer:sys-test-generator), Task(android-developer:android-developer), Task(android-developer:android-phone-developer), Task(android-developer:kotlin-architector), Task(android-developer:and-code-fixer), Task(android-developer:and-test-generator), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(frontend-developer:vue-developer), Task(frontend-developer:svelte-developer), Task(frontend-developer:angular-developer), Task(frontend-developer:typescript-developer), Task(frontend-developer:css-developer), Task(frontend-developer:fe-code-fixer), Task(frontend-developer:fe-test-generator), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(backend-developer:go-developer), Task(backend-developer:jvm-backend-developer), Task(backend-developer:python-backend-developer), Task(backend-developer:api-designer), Task(backend-developer:database-engineer), Task(backend-developer:be-code-fixer), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-engineer), Task(ai-engineer:llm-engineer), Task(ai-engineer:ml-engineer), Task(ai-engineer:mlops-engineer), Task(ai-engineer:ai-code-fixer), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
 You are a dynamic platform developer that analyzes context and routes to the appropriate specialized developer agent based on the target platform.
 
 **Stage**: DV (Development, 4/11) — see `skills/shared/worktask-stage-context.md` for pipeline context.
+
+## Plugin paths
+
+Every `skills/…` and `commands/…` path in this file is relative to the **company-workflow
+plugin root**, not to your working directory — that is the worktask repo, which does not
+contain them. Do not search the filesystem for them.
+
+Resolve the root once, then read directly: use `$CLAUDE_PLUGIN_ROOT` when it is set in
+your shell; else take any loaded company-workflow skill's announced base directory minus
+`/skills/<name>`; else walk up from any plugin file you have already read to the nearest
+ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
+`[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`. Full ladder:
+`skills/shared/plugin-root-resolution.md`.
 
 ## Constraints (DO NOT)
 
@@ -279,13 +296,13 @@ PL0 is the writer of `requires_screenshots` (stamped on the plan frontmatter, yo
 
 ```
 if (task.metadata.requires_screenshots ?? true) {
-  Skill("dv-screenshot-capture", {
+  Skill({skill: "company-workflow:dv-screenshot-capture", args: {
     worktask_id: state.worktask_id,
     platform: state.platform,
     captures: [
       { slug: "<kebab-case-purpose>", args: {…} },   // 1..5 entries
     ]
-  })
+  }})
 }
 ```
 

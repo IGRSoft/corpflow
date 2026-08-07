@@ -11,6 +11,7 @@ import tempfile
 import unittest
 
 from benchmarklive import baseline
+from benchmarklive import dispatch as dispatch_mod
 from benchmarklive.dispatch import dispatch
 
 import sys as _sys
@@ -67,6 +68,40 @@ class AppMeasure(unittest.TestCase):
         m = baseline.measure_app(app_dir, self.tmp, exclude_dirs={"without"})
         self.assertIsNotNone(m)
         self.assertEqual(m.loc_produced, 2)  # Main.swift(1) + Package.swift(1, itself *.swift)
+
+
+class MeasureArmFailsClosed(unittest.TestCase):
+    """A dispatched arm whose measurement blows up must still grade as fail, never
+    inherit a green default."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="am-closed-")
+        self.warnings = []
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _measure_with_raising_probe(self, dispatched):
+        original = dispatch_mod.baseline_mod.measure_app
+
+        def boom(*_args, **_kwargs):
+            raise OSError("simulated measurement failure")
+
+        dispatch_mod.baseline_mod.measure_app = boom
+        try:
+            return dispatch_mod._measure_arm(self.tmp, self.tmp, dispatched, self.warnings.append)
+        finally:
+            dispatch_mod.baseline_mod.measure_app = original
+
+    def test_measurement_exception_records_fail(self):
+        m = self._measure_with_raising_probe(dispatched=1)
+        self.assertIsNotNone(m)
+        self.assertEqual(m.pass_fail, "fail")
+        self.assertEqual(m.loc_produced, 0)
+        self.assertTrue(self.warnings)  # the failure is surfaced, not swallowed silently
+
+    def test_nothing_dispatched_stays_unmeasured(self):
+        self.assertIsNone(self._measure_with_raising_probe(dispatched=0))
 
 
 class DispatchFillsAppMetrics(unittest.TestCase):

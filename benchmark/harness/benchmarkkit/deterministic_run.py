@@ -11,7 +11,7 @@ import os
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from . import generators, rotation
+from . import generators, oracle, rotation
 from .metrics import BenchmarkRecord, make_record, write_record
 
 
@@ -31,12 +31,16 @@ def iso(ts: str) -> str:
 def run(workdir: str, run_id: str, timestamp: str, git_sha: str, record_path: str,
         history: str, runs_dir: str, template_dir: str, plugin_root: str,
         estimate_calc_path: str,
-        estimate_runner: Optional[Callable[[list], str]] = None) -> Result:
+        estimate_runner: Optional[Callable[[list], str]] = None,
+        oracle_grader: Optional[Callable] = None) -> Result:
+    grader = oracle.grade if oracle_grader is None else oracle_grader
     with_pm = generators.generate_with_plugin(
         workdir=workdir, template_dir=template_dir, plugin_root=plugin_root,
-        estimate_calc_path=estimate_calc_path, estimate_runner=estimate_runner)
+        estimate_calc_path=estimate_calc_path, estimate_runner=estimate_runner,
+        oracle_grader=grader)
     without_pm = generators.generate_without_plugin(
-        workdir=workdir, template_dir=template_dir, plugin_root=plugin_root)
+        workdir=workdir, template_dir=template_dir, plugin_root=plugin_root,
+        oracle_grader=grader)
 
     record = make_record(
         run_id=run_id, timestamp_utc=iso(timestamp), mode="deterministic",

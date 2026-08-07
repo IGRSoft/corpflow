@@ -2,6 +2,82 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.10] - 2026-08-07
+
+Eval-audit release (#279). The benchmark's only quality signal was the arm's own
+`swift test` — self-graded, and across every stored live record it never once
+returned `fail`. Nothing measured whether generated output was actually correct,
+user corrections to delivered work were discarded with each run's gitignored
+`.context/`, and skill eval sets carried prose expectations no grader could
+check. This release makes each of those signals held-out, durable, or binary.
+
+### Added
+
+- **Held-out oracle** (`benchmarkkit/oracle.py`, `benchmark/oracle/cases.json`).
+  Both arms' prompts embed a scripted CLI contract (`_cli-contract.txt` is the
+  SSOT; a lint pins both prompts to it verbatim). After measurement the harness
+  release-builds each arm's `tictactoe` and scores it against 30 cases whose
+  goldens are captured from `ttt-template`, never hand-written. Cases are tiered:
+  `specified` (24, restates the contract — the floor `pass_fail` reads) and
+  `implied` (6, derivable but unstated — the discriminating signal, reported
+  beside the verdict). A mutant that sweeps `specified` while failing `implied`
+  is built and asserted in `test_oracle.py`.
+- **Comparability eras.** Every record now stamps `era` (harness generation,
+  prompt-contract version, per-stage model pins); `bench-analyze` compares
+  against the previous live record automatically and caveats each differing
+  dimension — the v3.37.1 silent-repin failure mode, closed.
+- **Committed failure-label dataset** (self-improvement Step 5b,
+  `evals/failure-labels.jsonl`). Classified user edits persist as append-only
+  JSONL labels via `append-labels.sh` (idempotent per worktask run, opt-out
+  `SELF_IMPROVE_LABELS=0`, no diff bodies); `label-stats.sh` aggregates per
+  target/category. Runs regardless of proposal approval.
+- **Binary skill eval sets.** `skills/request-plan/evals/evals.json` replaces
+  prose expectations with code-checked assertions (`contains_all`/`contains_none`/
+  `regex_all`/`regex_any`); `tests/python/test_skill_evals.py` is the assertion
+  engine plus a lint keeping every eval set gradeable. Interpretive criteria are
+  parked in `deferred`, not graded badly.
+- **Skill-reference contract** (`tests/shell/skills/skill-refs.bats`). Four
+  repo-wide predicates: every ordered `Skill(` call has the `Skill` tool grant,
+  every Skill target names a real skill, every `skills/<name>/…` citation
+  resolves, and every agent citing plugin paths carries a `## Plugin paths`
+  resolution block. Each predicate is falsified against a synthetic tree.
+- **Findings docs**: `results/AGENT-GRANT-ENFORCEMENT.md` (tool *sets* bind in
+  headless dispatch; `Bash(cmd:*)` scoping and `maxTurns` did not — probe
+  specified before any fix), `results/KNOWN-BAD-RECORDS.md` (stored records
+  excluded from comparisons instead of edited), `results/VARIANCE-STUDY.md`
+  (the n=3 procedure; the only step that spends money).
+
+### Changed
+
+- **Per-arm budgets and per-stage projections** (`benchmarklive/budget.py`).
+  Paired runs split `--budget` into equal per-arm tallies (a shared purse let
+  the first arm starve the second — the defect that invalidated the first
+  paired A/B), projections use calibrated `STAGE_EXPECTED_TOKENS` (DV ≈ 10× a
+  light stage; the flat figure admitted budgets that could not finish), and the
+  running tally reserves the heavier of the projection and the heaviest
+  observed stage.
+- **Fail-closed verdicts.** An unmeasured or degraded arm is never green;
+  where the oracle ran, it — not the arm's self-written suite — decides
+  `pass_fail`. `coverage_pct` is `null` when unmeasured, never a fabricated 0.0.
+- **Live retention is unbounded** (`rotation.RETENTION`): live records and
+  their `results/runs/live/` detail files are kept and tracked in git —
+  deterministic records stay latest-3 and gitignored.
+- **Agents**: every agent carries the `## Plugin paths` resolution block;
+  `developer` and `stakeholder` gain the `Skill` grant their bodies order
+  (`dv-screenshot-capture`, `self-improvement` — both silently never ran);
+  `Skill` invocations use the real `Skill({skill: "company-workflow:…"})`
+  syntax; `technical-lead`'s DR gate reads `commands/dev-code-review.md` as a
+  command instead of invoking it as a nonexistent skill.
+
+### Fixed
+
+- Each arm's verdict reads its own degradation flag; a WITHOUT-only breach no
+  longer fails a complete, oracle-conforming WITH arm (pinned by
+  `PairedVerdictSymmetry`).
+- Label dedup hashes `(worktask_id, run_index, path, added, removed, summary)`,
+  so a correction recurring in a later worktask counts as the recurrence it is
+  instead of being dropped.
+
 ## [4.0.9] - 2026-08-06
 
 Every test run was the whole suite. Editing one agent doc, one hook, or one script ran all
