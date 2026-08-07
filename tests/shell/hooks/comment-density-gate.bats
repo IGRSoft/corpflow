@@ -239,3 +239,65 @@ mk_lean_swift() {
   assert_success
   assert_output --partial 'self-test OK'
 }
+
+# ---------------------------------------------------------------------------
+# T11 — a pure `git mv` authors no line, so it cannot breach the ceiling.
+#
+# Regression: rename detection needs BOTH paths in the pathspec. A pathspec
+# naming only the destination drops the deletion side before -M runs, so the
+# move read as a whole-file addition and the file's inherited comments all
+# counted as newly written. Observed on a real worktask, where relocating one
+# 46-line 67%-comment file blocked every writer agent for the rest of the run.
+# ---------------------------------------------------------------------------
+@test "T11: relocating a comment-dense file is not judged as authored lines" {
+  mk_bloated_swift Bloated.swift
+  git -C "$REPO" -c user.name=t -c user.email=t@t add Bloated.swift
+  GIT_AUTHOR_DATE='2020-01-01T00:00:00Z' GIT_COMMITTER_DATE='2020-01-01T00:00:00Z' \
+    git -C "$REPO" -c user.name=t -c user.email=t@t -c commit.gpgsign=false \
+    commit -q -m 'inherit the bloat'
+
+  mkdir -p "$REPO/Moved"
+  git -C "$REPO" mv Bloated.swift Moved/Bloated.swift
+
+  run_script_env --env "CLAUDE_PROJECT_DIR=$REPO" --cwd "$REPO" \
+    --stdin-string "$WRITER" "$HOOK"
+
+  assert_success
+  assert_output ''
+}
+
+# ---------------------------------------------------------------------------
+# T12 — the pairing must not blind the gate. A move that also ADDS prose is
+# still judged, on the added lines alone.
+#
+# The pre-move body is deliberately large: it keeps similarity above git's
+# rename threshold so this exercises the paired-pathspec arm. Sized smaller,
+# git stops calling it a rename and the assertion passes for the wrong reason.
+# ---------------------------------------------------------------------------
+@test "T12: a relocated file that gains comment lines is still judged on them" {
+  printf 'struct Base%s { let v: Int }\n' $(seq 1 200) > "$REPO/Big.swift"
+  git -C "$REPO" -c user.name=t -c user.email=t@t add Big.swift
+  GIT_AUTHOR_DATE='2020-01-01T00:00:00Z' GIT_COMMITTER_DATE='2020-01-01T00:00:00Z' \
+    git -C "$REPO" -c user.name=t -c user.email=t@t -c commit.gpgsign=false \
+    commit -q -m 'inherit the big file'
+
+  mkdir -p "$REPO/Moved"
+  git -C "$REPO" mv Big.swift Moved/Big.swift
+  # 45 added lines, 44 of them comment: 97%, past both the floor and the ceiling.
+  {
+    printf '/// Essay line %s narrating history the standard bans.\n' $(seq 1 44)
+    echo 'struct Tail { let v: Int }'
+  } >> "$REPO/Moved/Big.swift"
+
+  # Guard the guard: if git stops seeing a rename here the test is vacuous.
+  assert_equal "$(git -C "$REPO" diff HEAD -M --name-status --diff-filter=R | wc -l | tr -d ' ')" '1'
+
+  run_script_env --env "CLAUDE_PROJECT_DIR=$REPO" --cwd "$REPO" \
+    --stdin-string "$WRITER" "$HOOK"
+
+  assert_success
+  assert_equal "$(jq -r '.decision' <<< "$output")" 'block'
+  assert_equal "$(jq -r '.reason | test("Moved/Big\\.swift")' <<< "$output")" 'true'
+  # 44 of 45 added — the inherited 200 lines are correctly not counted.
+  assert_equal "$(jq -r '.reason | test("97% of 45 added")' <<< "$output")" 'true'
+}
