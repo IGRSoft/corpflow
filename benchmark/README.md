@@ -340,14 +340,14 @@ benchmark/
       bench-report              # frozen-argv entrypoint (links benchmarkkit only)
       bench-analyze              # frozen-argv entrypoint (links benchmarkkit only)
       bench-live                # frozen-argv entrypoint (only live-world linker)
-    tests/                      # 205 test methods (schema/rotation/generators/report/
+    tests/                      # 249 test methods (schema/rotation/generators/report/
                                 #   history back-compat/import-isolation + live-gate/
                                 #   budget/credentials/prompt-assembly/SSOT/coverage/
                                 #   app-measure/without-arm/analysis)
       __init__.py               # makes tests/ a package (importlib discovery)
       _helpers.py               # test fakes: Tripwire/RecordingFake/ThrowAtStage/Sequenced
       fixtures/history.json     # vendored real history (byte-compat oracle)
-      test_*.py                 # 27 test modules
+      test_*.py                 # 28 test modules
   oracle/
     cases.json                  # 30 scripted CLI cases (24 specified / 6 implied)
                                 # + goldens captured from ttt-template
@@ -362,9 +362,11 @@ benchmark/
                                 # without.txt — WITHOUT-arm prompt, sent verbatim
                                 # (no preamble, no --agent)
   results/
-    history.json                # Rolling latest-3 per mode (tracked in git)
+    history.json                # Rolling history: deterministic latest-3,
+                                # live unbounded (tracked in git)
     analysis.md                 # bench-analyze output (evidence-backed markdown)
-    runs/{deterministic,live}/  # Per-run detail records (rotated, latest-3)
+    runs/{deterministic,live}/  # Per-run detail records: deterministic rotated
+                                # latest-3 (gitignored), live kept + tracked
   workdirs/<run_id>/{with,without}/   # Generated apps per run (gitignored)
 ```
 
@@ -458,15 +460,15 @@ committed to `benchmark/results/samples/analysis-paired-sample.md` demonstrating
 - `benchmark/ttt-template` — 48 Swift Testing fixture tests (engine/AI/
   leaderboard/settings/router/view-model), also run on iOS Simulator via
   `make test-ios` (SKIPs cleanly on hosts without an iOS runtime)
-- `benchmark/harness` — 205 Python harness self-tests (27 modules), zero real
+- `benchmark/harness` — 249 Python harness self-tests (28 modules), zero real
   LLM calls (all dispatchers injected with fakes/tripwires), incl. schema
   byte-compat (vendored real history.json), rotation, generators (real `swift test`
   on generated apps), deterministic/live pipelines, budget/credential gates,
   prompt assembly, stage attribution, app measurement, the paired ±agent arms,
   per-call token accounting, arm symmetry, and offline analysis
 
-**Total:** 48 Swift TTT artifact tests + 205 Python harness tests + 37 Python
-skill-script tests = 290 tests green.
+**Total:** 48 Swift TTT artifact tests + 249 Python harness tests + 52 Python
+skill-script and skill-eval tests = 349 tests green.
 
 **Reference:** `tests/COVERAGE.md` for the Swift/Python coverage story (Python
 opportunistic via coverage.py; Swift jq ≥85% line gate with `Sources/TicTacToeKit/Views/`
@@ -486,7 +488,7 @@ excluded from the denominator).
 
 **Implementation references:**
 - `benchmark/harness/benchmarkkit/metrics.py` — BenchmarkRecord schema (ordered JSON)
-- `benchmark/harness/benchmarkkit/rotation.py` — per-mode latest-3 atomic rotation
+- `benchmark/harness/benchmarkkit/rotation.py` — per-mode atomic rotation (deterministic 3, live unbounded)
 - `benchmark/harness/benchmarklive/preamble.py` — cache-prefix assembly ([1]-[5])
 - `benchmark/harness/benchmarklive/dispatch.py` — headless `claude -p` dispatcher + STAGE_TABLE
 - `benchmark/harness/benchmarklive/capture.py` — dual-mode stream-json/json capture parser
