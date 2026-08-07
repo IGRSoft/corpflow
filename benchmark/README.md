@@ -67,11 +67,15 @@ make report        # -> benchmark/results/result.html
 4. **Computes deltas**: WITH-vs-WITHOUT `comparison` block (`with`/`without`/
    `delta` per metric; live adds `tokens_total` + `cost_usd`).
 
-5. **Stores rolling history**: latest 3 per mode in
-   `benchmark/results/history.json`, newest last, atomic tmp→fsync→rename; the
-   other mode's bucket stays byte-identical. Existing (pre-Swift) records still
-   decode — back-compat is pinned by `HistoryBackCompatTests` against a vendored
-   copy of the real file.
+5. **Stores history**: `benchmark/results/history.json`, newest last, atomic
+   tmp→fsync→rename; the other mode's bucket stays byte-identical. Retention is
+   per mode (`rotation.RETENTION`): **deterministic keeps 3** (free to reproduce),
+   **live keeps everything** — a live record costs real spend and is the only
+   evidence of the run that produced it, so rotating it away would destroy the
+   samples a variance envelope needs. Live per-run detail files under
+   `results/runs/live/` are tracked in git for the same reason; deterministic ones
+   stay ignored. Existing records still decode — back-compat is pinned by
+   `HistoryBackCompatTests` against a vendored copy of the real file.
 
 ## Wall-clock semantics (Swift migration boundary)
 
@@ -175,15 +179,69 @@ the full **10-stage prompt sequence** (PL→AR→TL→DV→DR→SR→QA→DC→F
   byte-for-byte — WITHOUT tokens/cost `null`, `wall_clock_s: 0.0`, `stage_count: 1`,
   `pass_fail: "pass"`, `app_path: null`
 
-## Baseline cut-over (v3.37.1)
+## Comparability eras
 
-`STAGE_TABLE` was repinned from the prior Opus/Sonnet generation to
-`claude-opus-5` / `claude-sonnet-5` in plugin **v3.37.1**. Runs from that version
-onward are **not comparable** to the stored baselines in `results/history.json`,
-`results/analysis.md`, and `results/token-findings-*.md`, which were measured on
-the previous pins. Compare like-for-like or re-baseline before drawing a
-regression conclusion across that boundary. `DC` still dispatches
-`claude-haiku-4-5`, which is unchanged.
+Every record carries an `era` block naming what its numbers can be compared
+against — harness generation, prompt-contract version, and the per-stage model
+pins read straight from `STAGE_TABLE`:
+
+```json
+"era": {"harness": "python-1", "prompt_contract": "scripted-cli-v1",
+        "model_pins": {"PL": "claude-opus-5", "DC": "claude-haiku-4-5", …}}
+```
+
+`bench-analyze` compares the analyzed record's era against the previous live
+record **automatically** and emits a `## validity-caveats` entry naming each
+differing dimension — no `--reference` flag required. A record with no `era`
+block is itself caveated as unverifiable. Bump `PROMPT_CONTRACT` in
+`benchmarklive/dispatch.py` whenever the graded task text changes; a workload
+change invalidates comparisons just as surely as a model repin.
+
+**Known era boundaries:**
+
+- **v3.37.1** — `STAGE_TABLE` repinned from the prior Opus/Sonnet generation to
+  `claude-opus-5` / `claude-sonnet-5`. Runs from that version on are **not
+  comparable** to the stored baselines in `results/history.json`,
+  `results/analysis.md`, or `results/token-findings-*.md`. `DC` still dispatches
+  `claude-haiku-4-5`, unchanged.
+- **Python → Swift → Python harness** — see the wall-clock note above.
+- **`scripted-cli-v1`** — the graded CLI contract was added to `dv.txt` and
+  `without.txt`, changing the workload for both arms.
+
+All three predate era stamping, so records from before it must be compared
+by hand against this list.
+
+## Held-out oracle (quality metric)
+
+Each arm writes its own implementation **and** its own tests, so `swift test`
+inside an arm grades nothing an evaluator controls — across every live record
+ever stored it has never once returned `fail` for either arm. The oracle
+supplies the signal the arm cannot author.
+
+After measurement (outside the arm's Timer, so it never inflates
+`wall_clock_s`), the harness release-builds the arm's `tictactoe` product and
+drives it through the **scripted CLI contract** — `tictactoe --moves 0,4,1`
+prints a board plus a `result:` line, exit 0/1/2. Each of the 20 cases in
+`benchmark/oracle/cases.json` is compared on stdout and exit code:
+
+```json
+"oracle": {"built": true, "cases_total": 20, "cases_passed": 17, "pass_rate": 0.85}
+```
+
+- **Goldens are generated, never hand-written** — `oracle.capture_goldens` runs
+  each case against `ttt-template`, the reference implementation. A test
+  regenerates them and fails on any drift.
+- **Behaviour, not API shape** — an arm may name its types anything; only the
+  CLI contract is graded. stderr wording is deliberately not pinned.
+- **Fairness** — `live/prompts/_cli-contract.txt` is the SSOT for the contract
+  text, and both `dv.txt` (WITH) and `without.txt` (WITHOUT) must embed it
+  verbatim; a lint test fails on drift.
+- **`pass_fail` follows the oracle** wherever it ran: full conformance passes,
+  anything less fails. Records written before the oracle existed keep their
+  self-graded verdict and omit the `oracle` key entirely.
+
+Adding the contract to the prompts changed the workload — runs from that point
+are not comparable to earlier stored records.
 
 ## Coverage manifest (live, per stage)
 
@@ -236,18 +294,23 @@ benchmark/
       bench-report              # frozen-argv entrypoint (links benchmarkkit only)
       bench-analyze              # frozen-argv entrypoint (links benchmarkkit only)
       bench-live                # frozen-argv entrypoint (only live-world linker)
-    tests/                      # 131 test methods (schema/rotation/generators/report/
+    tests/                      # 205 test methods (schema/rotation/generators/report/
                                 #   history back-compat/import-isolation + live-gate/
                                 #   budget/credentials/prompt-assembly/SSOT/coverage/
                                 #   app-measure/without-arm/analysis)
       __init__.py               # makes tests/ a package (importlib discovery)
       _helpers.py               # test fakes: Tripwire/RecordingFake/ThrowAtStage/Sequenced
       fixtures/history.json     # vendored real history (byte-compat oracle)
-      test_*.py                 # 19 test modules
+      test_*.py                 # 27 test modules
+  oracle/
+    cases.json                  # 20 scripted CLI cases + goldens captured from
+                                # ttt-template (regenerated, never hand-written)
   ttt-template/                 # Canonical SwiftUI TTT fixture (SwiftPM package
                                 # "TicTacToe": TicTacToeKit + tictactoe exe,
                                 # 48 Swift Testing tests; macOS 15+ / iOS 18+)
-  live/prompts/                 # pl.txt … st.txt — section [5] task bodies only
+  live/prompts/                 # _cli-contract.txt — SSOT for the graded CLI contract,
+                                # embedded verbatim by dv.txt and without.txt;
+                                # pl.txt … st.txt — section [5] task bodies only
                                 # ([1]-[4] prepended by Preamble at dispatch);
                                 # without.txt — WITHOUT-arm prompt, sent verbatim
                                 # (no preamble, no --agent)
@@ -261,8 +324,8 @@ benchmark/
 ## Metric Schema (on-disk, key-for-key)
 
 Top-level: `run_id, timestamp_utc, mode, git_sha, budget_usd, paths, comparison
-[, live_partial][, stages]` — `live_partial` only when true, `stages` only when
-non-empty. `paths.with` / `paths.without`:
+[, live_partial][, stages][, era]` — `live_partial` only when true, `stages` only
+when non-empty, `era` only when stamped. `paths.with` / `paths.without`:
 
 ```json
 {
@@ -279,6 +342,12 @@ non-empty. `paths.with` / `paths.without`:
   "app_path": "benchmark/workdirs/<run_id>/with"
 }
 ```
+
+`pass_fail` is **fail-closed**: an arm is `"pass"` only when app measurement
+succeeded on a non-degraded run. An arm that dispatched but produced nothing
+measurable records `"fail"` with `app_path: null` — it is never green by default.
+`coverage_pct` is `null` when unmeasured; a literal `0.0` means measured-zero.
+Records predating this rule are listed in `results/KNOWN-BAD-RECORDS.md`.
 
 All 5 token keys are ALWAYS emitted (value or null); cache figures are additive
 siblings, never summed into `total`. `comparison.<metric>` =
@@ -342,15 +411,15 @@ committed to `benchmark/results/samples/analysis-paired-sample.md` demonstrating
 - `benchmark/ttt-template` — 48 Swift Testing fixture tests (engine/AI/
   leaderboard/settings/router/view-model), also run on iOS Simulator via
   `make test-ios` (SKIPs cleanly on hosts without an iOS runtime)
-- `benchmark/harness` — 156 Python harness self-tests (19 modules), zero real
+- `benchmark/harness` — 205 Python harness self-tests (27 modules), zero real
   LLM calls (all dispatchers injected with fakes/tripwires), incl. schema
   byte-compat (vendored real history.json), rotation, generators (real `swift test`
   on generated apps), deterministic/live pipelines, budget/credential gates,
   prompt assembly, stage attribution, app measurement, the paired ±agent arms,
   per-call token accounting, arm symmetry, and offline analysis
 
-**Total:** 48 Swift TTT artifact tests + 131 Python harness tests + 37 Python
-skill-script tests = 216 tests green.
+**Total:** 48 Swift TTT artifact tests + 205 Python harness tests + 37 Python
+skill-script tests = 290 tests green.
 
 **Reference:** `tests/COVERAGE.md` for the Swift/Python coverage story (Python
 opportunistic via coverage.py; Swift jq ≥85% line gate with `Sources/TicTacToeKit/Views/`
@@ -358,7 +427,7 @@ excluded from the denominator).
 
 ## Known Issues
 
-**P1: Temp directory leaks in live mode** — The harness does not clean up temporary workdirs under `$TMPDIR` when a live run completes. Directories matching `ttt_test_with_*`, `ttt_test_without_*`, and `bats-run-*` accumulate and may consume significant disk space over repeated `make benchmark-live` runs. Workaround: manually clean with `rm -rf $TMPDIR/ttt_test_* $TMPDIR/bats-run-*` after benchmark runs. A fix is pending that will atomically clean all artifacts on normal exit (issue tracked in harness/Sources/BenchmarkLive/Budget.swift).
+**P1: Temp directory leaks in live mode** — The harness does not clean up temporary workdirs under `$TMPDIR` when a live run completes. Directories matching `ttt_test_with_*`, `ttt_test_without_*`, and `bats-run-*` accumulate and may consume significant disk space over repeated `make benchmark-live` runs. Workaround: manually clean with `rm -rf $TMPDIR/ttt_test_* $TMPDIR/bats-run-*` after benchmark runs. A fix is pending that will atomically clean all artifacts on normal exit (`harness/benchmarklive/budget.py`).
 
 ## References
 
@@ -366,10 +435,11 @@ excluded from the denominator).
 - `benchmark/results/token-findings-1.md` — foundational findings (cache_read dominance, ~74%)
 - `benchmark/results/token-findings-2.md` — live A/B measurement (n=1, honesty rule)
 - `benchmark/results/runs/live/` — raw per-stage live records (token attribution + coverage manifests)
+- `benchmark/results/KNOWN-BAD-RECORDS.md` — stored records that must be excluded from comparisons
 
 **Implementation references:**
-- `benchmark/harness/Sources/BenchmarkKit/Metrics.swift` — BenchmarkRecord schema (ordered JSON)
-- `benchmark/harness/Sources/BenchmarkKit/Rotation.swift` — per-mode latest-3 atomic rotation
-- `benchmark/harness/Sources/BenchmarkLive/Preamble.swift` — cache-prefix assembly ([1]-[5])
-- `benchmark/harness/Sources/BenchmarkLive/Dispatch.swift` — headless `claude -p` dispatcher + STAGE_TABLE
-- `benchmark/harness/Sources/BenchmarkLive/Coverage.swift` — dual-mode stream-json/json capture parser
+- `benchmark/harness/benchmarkkit/metrics.py` — BenchmarkRecord schema (ordered JSON)
+- `benchmark/harness/benchmarkkit/rotation.py` — per-mode latest-3 atomic rotation
+- `benchmark/harness/benchmarklive/preamble.py` — cache-prefix assembly ([1]-[5])
+- `benchmark/harness/benchmarklive/dispatch.py` — headless `claude -p` dispatcher + STAGE_TABLE
+- `benchmark/harness/benchmarklive/capture.py` — dual-mode stream-json/json capture parser

@@ -38,6 +38,20 @@ def _latest_live_from_history(history_path):
     return live[-1]  # newest last (rolling history convention)
 
 
+def _previous_live_from_history(history_path, current):
+    """The live record before ``current``, so era drift is flagged without --reference."""
+    try:
+        history = _load_json(history_path)
+    except (OSError, ValueError):
+        return None
+    live = (history or {}).get("live") if isinstance(history, dict) else None
+    if not isinstance(live, list) or len(live) < 2:
+        return None
+    run_id = (current or {}).get("run_id")
+    earlier = [r for r in live if r.get("run_id") != run_id]
+    return earlier[-1] if earlier else None
+
+
 def _latest_live_from_runs_dir(benchmark_dir):
     runs_dir = os.path.join(benchmark_dir, "results", "runs", "live")
     try:
@@ -94,7 +108,8 @@ def main(argv):
             sys.exit(0)
 
         reference = _load_json(reference_path) if reference_path else None
-        result = analysis.analyze(record, reference=reference)
+        previous = _previous_live_from_history(history_path, record)
+        result = analysis.analyze(record, reference=reference, previous=previous)
         markdown = analysis.render_markdown(result)
 
         out_dir = os.path.dirname(out_path)

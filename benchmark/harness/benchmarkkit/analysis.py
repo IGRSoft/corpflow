@@ -169,7 +169,17 @@ def _arm_quality(pm: dict) -> dict:
         "pass_fail": pm.get("pass_fail"),
         "tokens_per_loc": tpl,
         "coverage_pct": _num(pm.get("coverage_pct")),
+        "oracle": pm.get("oracle"),
     }
+
+
+def _oracle_cell(oracle: Optional[dict]) -> str:
+    if not oracle:
+        return "not measured"
+    if not oracle.get("built"):
+        return "did not build"
+    return (f"{_fmt(oracle.get('cases_passed'))}/{_fmt(oracle.get('cases_total'))} "
+            f"({_pct((oracle.get('pass_rate') or 0) * 100)})")
 
 
 def _outliers(stages: list, with_pm: dict, without_pm: dict) -> list:
@@ -255,8 +265,41 @@ def _is_cross_era(pm: dict) -> bool:
             and tokens.get("cache_read") is None and tokens.get("cache_creation") is None)
 
 
-def _caveats(record: dict, with_pm: dict, without_pm: dict, reference: Optional[dict]) -> list:
+def era_differences(era_a: Optional[dict], era_b: Optional[dict]) -> list:
+    """Name the dimensions on which two runs are not comparable.
+
+    An unstamped record can differ on any axis without saying so, which is how the
+    v3.37.1 model repin silently invalidated the stored baselines.
+    """
+    if era_a is None or era_b is None:
+        return ["era-unstamped"]
+    diffs = []
+    for key in ("harness", "prompt_contract"):
+        if era_a.get(key) != era_b.get(key):
+            diffs.append(f"{key}: {era_a.get(key)!r} vs {era_b.get(key)!r}")
+    pins_a = era_a.get("model_pins") or {}
+    pins_b = era_b.get("model_pins") or {}
+    repinned = sorted(s for s in set(pins_a) | set(pins_b) if pins_a.get(s) != pins_b.get(s))
+    if repinned:
+        diffs.append("model_pins: " + ", ".join(
+            f"{s} {pins_a.get(s)!r}→{pins_b.get(s)!r}" for s in repinned))
+    return diffs
+
+
+def _caveats(record: dict, with_pm: dict, without_pm: dict, reference: Optional[dict],
+             previous: Optional[dict] = None) -> list:
     caveats = []
+    if record.get("era") is None:
+        caveats.append(
+            "unstamped record: no era block, so comparability against other records "
+            "cannot be verified — re-run to stamp harness, prompt contract, and model pins.")
+    if previous is not None:
+        diffs = era_differences(previous.get("era"), record.get("era"))
+        if diffs:
+            caveats.append(
+                f"cross-era vs previous run {previous.get('run_id')}: "
+                + "; ".join(diffs)
+                + " — token, cost, and quality figures are NOT comparable across this boundary.")
     if record.get("live_partial"):
         caveats.append(
             "live_partial: this run degraded or breached budget mid-flight; "
@@ -284,7 +327,8 @@ def _caveats(record: dict, with_pm: dict, without_pm: dict, reference: Optional[
 
 
 def analyze(record: dict, reference: Optional[dict] = None,
-            workdirs_root: Optional[str] = None) -> dict:
+            workdirs_root: Optional[str] = None,
+            previous: Optional[dict] = None) -> dict:
     """Pure derivation over one parsed BenchmarkRecord dict. Never fabricates a
     value absent from the record — every None/omission flows through as None.
     ``workdirs_root`` opts into the per-arm generated-project scan (U2)."""
@@ -304,7 +348,7 @@ def analyze(record: dict, reference: Optional[dict] = None,
         "cache_top": _cache_top(stages),
         "quality": {"with": _arm_quality(with_pm), "without": _arm_quality(without_pm)},
         "outliers": _outliers(stages, with_pm, without_pm),
-        "caveats": _caveats(record, with_pm, without_pm, reference),
+        "caveats": _caveats(record, with_pm, without_pm, reference, previous),
         "generated": generated_projects(record, workdirs_root),
     }
 
@@ -386,17 +430,35 @@ def render_markdown(analysis: dict) -> str:
     qw, qo = analysis["quality"]["with"], analysis["quality"]["without"]
     lines += [
         "", "## quality-delta", "",
+        "**Held-out oracle** — the arm's binary scored against goldens captured from",
+        "`ttt-template`. This is the only quality signal here the arm did not author.",
+        "",
         "| metric | WITH | WITHOUT |",
         "|---|---|---|",
-        f"| loc_produced | {_fmt(qw['loc_produced'])} | {_fmt(qo['loc_produced'])} |",
-        f"| test_count | {_fmt(qw['test_count'])} | {_fmt(qo['test_count'])} |",
+        f"| oracle cases passed | {_oracle_cell(qw.get('oracle'))} | {_oracle_cell(qo.get('oracle'))} |",
         f"| pass_fail | {qw['pass_fail'] or '—'} | {qo['pass_fail'] or '—'} |",
-        f"| tokens per LOC | {_fmt(qw['tokens_per_loc'])} | {_fmt(qo['tokens_per_loc'])} |",
+        "",
+        "**Self-graded** — the arm wrote both the implementation and these tests, so",
+        "a high count is not evidence of correctness.",
+        "",
+        "| metric | WITH | WITHOUT |",
+        "|---|---|---|",
+        f"| test_count (self-written) | {_fmt(qw['test_count'])} | {_fmt(qo['test_count'])} |",
     ]
     # Coverage row only when at least one arm measured it; an all-absent (live) record omits
     # the row entirely so "not measured" never reads as a real 0.0%.
     if qw.get("coverage_pct") is not None or qo.get("coverage_pct") is not None:
         lines.append(f"| coverage % | {_pct(qw.get('coverage_pct'))} | {_pct(qo.get('coverage_pct'))} |")
+    lines += [
+        "",
+        "**Descriptive only** — size, not quality. More lines for the same feature is",
+        "not a better result.",
+        "",
+        "| metric | WITH | WITHOUT |",
+        "|---|---|---|",
+        f"| loc_produced | {_fmt(qw['loc_produced'])} | {_fmt(qo['loc_produced'])} |",
+        f"| tokens per LOC | {_fmt(qw['tokens_per_loc'])} | {_fmt(qo['tokens_per_loc'])} |",
+    ]
 
     lines += ["", "## validity-caveats", ""]
     if analysis["caveats"]:

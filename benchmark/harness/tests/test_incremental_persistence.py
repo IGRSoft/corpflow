@@ -65,7 +65,14 @@ class IncrementalPersistence(unittest.TestCase):
         rec = load_json(self.sb.record_path)
         self.assertNotIn("live_partial", rec)  # omit-when-false
         self.assertEqual(len(rec["stages"]), 3)
-        self.assertEqual(rec["paths"]["with"]["pass_fail"], "pass")
+
+    def test_clean_run_without_generated_app_is_not_green(self):
+        rc = self._dispatch(RecordingFakeDispatcher(single_object_usage()))
+        self.assertEqual(rc, 0)
+        with_arm = load_json(self.sb.record_path)["paths"]["with"]
+        self.assertEqual(with_arm["pass_fail"], "fail")
+        self.assertEqual(with_arm["loc_produced"], 0)
+        self.assertEqual(with_arm["test_count"], 0)
 
 
 if __name__ == "__main__":

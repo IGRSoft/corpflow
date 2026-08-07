@@ -25,7 +25,7 @@ def _paired_live_record(stages=None):
                        with_pm, without_pm, stages=stages).to_dict()
 
 
-def _placeholder_without_record():
+def _placeholder_without_paired_live_record():
     with_tokens = Tokens(input=1000, output=500, total=1500, cache_read=0, cache_creation=0)
     with_pm = PathMetrics(with_tokens, 0.20, 10.0, 400, 10, 0.0, 15, 1, "pass",
                           "benchmark/workdirs/x/with")
@@ -54,7 +54,7 @@ class Totals(unittest.TestCase):
         self.assertAlmostEqual(cost["premium_pct"], 0.10 / 0.10 * 100.0)
 
     def test_placeholder_without_no_premium_and_caveat(self):
-        rec = _placeholder_without_record()
+        rec = _placeholder_without_paired_live_record()
         result = analysis.analyze(rec)
         self.assertIsNone(result["totals"]["tokens_total"]["premium_pct"])
         self.assertIsNone(result["totals"]["cost_usd"]["premium_pct"])
@@ -278,3 +278,56 @@ class FixtureRecord(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EraComparability(unittest.TestCase):
+    """Cross-era drift must surface without anyone remembering to pass --reference."""
+
+    def _era(self, harness="python-1", contract="scripted-cli-v1", dv="claude-opus-5"):
+        return {"harness": harness, "prompt_contract": contract,
+                "model_pins": {"DV": dv, "QA": "claude-sonnet-5"}}
+
+    def test_identical_eras_have_no_differences(self):
+        self.assertEqual(analysis.era_differences(self._era(), self._era()), [])
+
+    def test_model_repin_is_named_per_stage(self):
+        diffs = analysis.era_differences(self._era(), self._era(dv="claude-opus-6"))
+        self.assertEqual(len(diffs), 1)
+        self.assertIn("DV", diffs[0])
+        self.assertIn("claude-opus-6", diffs[0])
+
+    def test_prompt_contract_change_is_flagged(self):
+        diffs = analysis.era_differences(self._era(), self._era(contract="scripted-cli-v2"))
+        self.assertTrue(any("prompt_contract" in d for d in diffs))
+
+    def test_missing_era_is_its_own_difference(self):
+        self.assertEqual(analysis.era_differences(None, self._era()), ["era-unstamped"])
+
+    def test_unstamped_record_is_caveated(self):
+        record = json.loads(json.dumps(_paired_live_record()))
+        record.pop("era", None)
+        caveats = analysis.analyze(record)["caveats"]
+        self.assertTrue(any("unstamped record" in c for c in caveats))
+
+    def test_cross_era_previous_run_is_caveated_without_reference(self):
+        current = json.loads(json.dumps(_paired_live_record()))
+        current["era"] = self._era()
+        previous = json.loads(json.dumps(_paired_live_record()))
+        previous["run_id"] = "live-earlier"
+        previous["era"] = self._era(dv="claude-opus-4")
+
+        caveats = analysis.analyze(current, previous=previous)["caveats"]
+        cross = [c for c in caveats if "cross-era vs previous run" in c]
+        self.assertEqual(len(cross), 1, caveats)
+        self.assertIn("live-earlier", cross[0])
+        self.assertIn("NOT comparable", cross[0])
+
+    def test_same_era_previous_run_is_not_caveated(self):
+        current = json.loads(json.dumps(_paired_live_record()))
+        current["era"] = self._era()
+        previous = json.loads(json.dumps(_paired_live_record()))
+        previous["run_id"] = "live-earlier"
+        previous["era"] = self._era()
+
+        caveats = analysis.analyze(current, previous=previous)["caveats"]
+        self.assertEqual([c for c in caveats if "cross-era vs previous run" in c], [])

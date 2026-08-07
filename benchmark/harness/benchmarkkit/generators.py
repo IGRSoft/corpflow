@@ -64,9 +64,15 @@ def run_estimate(estimate_calc_path: str,
     return score, cost
 
 
+def _grade(app_dir: str, grader: Optional[Callable]) -> Optional[dict]:
+    """Score the generated app; ``None`` grader leaves the record's oracle absent."""
+    return None if grader is None else grader(app_dir).to_dict()
+
+
 def generate_with_plugin(workdir: str, template_dir: str, plugin_root: str,
                          estimate_calc_path: str,
-                         estimate_runner: Optional[Callable[[list], str]] = None) -> PathMetrics:
+                         estimate_runner: Optional[Callable[[list], str]] = None,
+                         oracle_grader: Optional[Callable] = None) -> PathMetrics:
     app_dir = os.path.join(workdir, "with")
     timer = Timer()
     timer.start()
@@ -77,10 +83,12 @@ def generate_with_plugin(workdir: str, template_dir: str, plugin_root: str,
     return genlib.build_path_metrics(
         app_dir=app_dir, plugin_root_dir=plugin_root, stage_count=stage_count,
         estimate_complexity_score=score, cost_usd=None, wall_clock_s=elapsed,
+        oracle_result=_grade(app_dir, oracle_grader),
     )
 
 
-def generate_without_plugin(workdir: str, template_dir: str, plugin_root: str) -> PathMetrics:
+def generate_without_plugin(workdir: str, template_dir: str, plugin_root: str,
+                            oracle_grader: Optional[Callable] = None) -> PathMetrics:
     app_dir = os.path.join(workdir, "without")
     timer = Timer()
     timer.start()
@@ -89,4 +97,5 @@ def generate_without_plugin(workdir: str, template_dir: str, plugin_root: str) -
     return genlib.build_path_metrics(
         app_dir=app_dir, plugin_root_dir=plugin_root, stage_count=stage_count,
         estimate_complexity_score=0, cost_usd=None, wall_clock_s=elapsed,
+        oracle_result=_grade(app_dir, oracle_grader),
     )

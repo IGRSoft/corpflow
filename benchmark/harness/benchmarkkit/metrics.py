@@ -163,9 +163,12 @@ class PathMetrics:
     stage_count: int
     pass_fail: str          # "pass" | "fail"
     app_path: Optional[str] = None  # D4: repo-relative; null for live/no-app
+    # Held-out conformance score; omitted (not null) when the oracle did not run,
+    # so records written before it existed round-trip byte-identically.
+    oracle: Optional[dict] = None
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "tokens": self.tokens.to_dict(),
             "cost_usd": self.cost_usd,
             "wall_clock_s": self.wall_clock_s,
@@ -177,6 +180,9 @@ class PathMetrics:
             "pass_fail": self.pass_fail,
             "app_path": self.app_path,
         }
+        if self.oracle is not None:
+            d["oracle"] = self.oracle
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "PathMetrics":
@@ -191,6 +197,7 @@ class PathMetrics:
             stage_count=_num_or(d, "stage_count", 0),
             pass_fail=d.get("pass_fail") or "",
             app_path=d.get("app_path"),
+            oracle=d.get("oracle"),
         )
 
 
@@ -226,6 +233,9 @@ class BenchmarkRecord:
     comparison: list       # ordered [(key, MetricDelta), ...]
     live_partial: bool = False
     stages: list = field(default_factory=list)
+    # What the numbers are comparable against. Omitted (not null) when absent, so
+    # records written before era stamping round-trip byte-identically.
+    era: Optional[dict] = None
 
     def to_dict(self) -> dict:
         d = {
@@ -241,6 +251,8 @@ class BenchmarkRecord:
             d["live_partial"] = True
         if self.stages:
             d["stages"] = [s.to_dict() for s in self.stages]
+        if self.era is not None:
+            d["era"] = self.era
         return d
 
     @classmethod
@@ -260,6 +272,7 @@ class BenchmarkRecord:
             comparison=comparison,
             live_partial=bool(d.get("live_partial") or False),
             stages=stages,
+            era=d.get("era"),
         )
 
     @property
@@ -310,6 +323,7 @@ def make_record(
     without_pm: PathMetrics,
     live_partial: bool = False,
     stages: Optional[list] = None,
+    era: Optional[dict] = None,
 ) -> BenchmarkRecord:
     return BenchmarkRecord(
         run_id=run_id,
@@ -321,6 +335,7 @@ def make_record(
         comparison=build_comparison(with_pm, without_pm, mode),
         live_partial=live_partial,
         stages=stages or [],
+        era=era,
     )
 
 

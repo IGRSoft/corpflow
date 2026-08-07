@@ -1,0 +1,247 @@
+{
+  "protocol": "tictactoe --moves <comma-separated cell indices>",
+  "generated_from": "benchmark/ttt-template (reference implementation)",
+  "note": "stdout and exit code are graded; stderr wording is deliberately not pinned.",
+  "cases": [
+    {
+      "id": "empty-board",
+      "description": "no moves: renders an empty indexed board, game in progress",
+      "args": [
+        "--moves",
+        ""
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " 0 | 1 | 2 \n---+---+---\n 3 | 4 | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      }
+    },
+    {
+      "id": "single-move-in-progress",
+      "description": "one move leaves the game in progress",
+      "args": [
+        "--moves",
+        "4"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " 0 | 1 | 2 \n---+---+---\n 3 | X | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      }
+    },
+    {
+      "id": "x-wins-top-row",
+      "description": "X completes the top row",
+      "args": [
+        "--moves",
+        "0,3,1,4,2"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | X | X \n---+---+---\n O | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n"
+      }
+    },
+    {
+      "id": "x-wins-middle-row",
+      "description": "X completes the middle row",
+      "args": [
+        "--moves",
+        "3,0,4,1,5"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " O | O | 2 \n---+---+---\n X | X | X \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n"
+      }
+    },
+    {
+      "id": "x-wins-bottom-row",
+      "description": "X completes the bottom row",
+      "args": [
+        "--moves",
+        "6,0,7,1,8"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " O | O | 2 \n---+---+---\n 3 | 4 | 5 \n---+---+---\n X | X | X \nresult: X_wins\n"
+      }
+    },
+    {
+      "id": "x-wins-left-column",
+      "description": "X completes the left column",
+      "args": [
+        "--moves",
+        "0,1,3,4,6"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | O | 2 \n---+---+---\n X | O | 5 \n---+---+---\n X | 7 | 8 \nresult: X_wins\n"
+      }
+    },
+    {
+      "id": "x-wins-middle-column",
+      "description": "X completes the middle column",
+      "args": [
+        "--moves",
+        "1,0,4,2,7"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " O | X | O \n---+---+---\n 3 | X | 5 \n---+---+---\n 6 | X | 8 \nresult: X_wins\n"
+      }
+    },
+    {
+      "id": "x-wins-right-column",
+      "description": "X completes the right column",
+      "args": [
+        "--moves",
+        "2,0,5,1,8"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " O | O | X \n---+---+---\n 3 | 4 | X \n---+---+---\n 6 | 7 | X \nresult: X_wins\n"
+      }
+    },
+    {
+      "id": "x-wins-main-diagonal",
+      "description": "X completes the top-left/bottom-right diagonal",
+      "args": [
+        "--moves",
+        "0,1,4,2,8"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | O | O \n---+---+---\n 3 | X | 5 \n---+---+---\n 6 | 7 | X \nresult: X_wins\n"
+      }
+    },
+    {
+      "id": "x-wins-anti-diagonal",
+      "description": "X completes the top-right/bottom-left diagonal",
+      "args": [
+        "--moves",
+        "2,0,4,1,6"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " O | O | X \n---+---+---\n 3 | X | 5 \n---+---+---\n X | 7 | 8 \nresult: X_wins\n"
+      }
+    },
+    {
+      "id": "o-wins-middle-column",
+      "description": "O completes the middle column",
+      "args": [
+        "--moves",
+        "0,1,3,4,8,7"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | O | 2 \n---+---+---\n X | O | 5 \n---+---+---\n 6 | O | X \nresult: O_wins\n"
+      }
+    },
+    {
+      "id": "o-wins-main-diagonal",
+      "description": "O completes the main diagonal",
+      "args": [
+        "--moves",
+        "1,0,2,4,7,8"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " O | X | X \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | X | O \nresult: O_wins\n"
+      }
+    },
+    {
+      "id": "draw-full-board",
+      "description": "a full board with no line is a draw",
+      "args": [
+        "--moves",
+        "0,1,2,4,3,5,7,6,8"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | O | X \n---+---+---\n X | O | O \n---+---+---\n O | X | X \nresult: draw\n"
+      }
+    },
+    {
+      "id": "moves-after-win-ignored",
+      "description": "play stops at the terminal state; later moves are dropped",
+      "args": [
+        "--moves",
+        "0,3,1,4,2,5,6"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | X | X \n---+---+---\n O | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n"
+      }
+    },
+    {
+      "id": "whitespace-tolerated",
+      "description": "spaces around move tokens are accepted",
+      "args": [
+        "--moves",
+        "0, 4, 1"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | X | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      }
+    },
+    {
+      "id": "reject-occupied-cell",
+      "description": "replaying an occupied cell is rejected",
+      "args": [
+        "--moves",
+        "0,0"
+      ],
+      "expect": {
+        "exit_code": 1,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "reject-out-of-range-high",
+      "description": "a cell index above 8 is rejected",
+      "args": [
+        "--moves",
+        "0,9"
+      ],
+      "expect": {
+        "exit_code": 1,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "reject-out-of-range-negative",
+      "description": "a negative cell index is rejected",
+      "args": [
+        "--moves",
+        "0,-1"
+      ],
+      "expect": {
+        "exit_code": 1,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "reject-malformed-token",
+      "description": "non-numeric move tokens are malformed argv",
+      "args": [
+        "--moves",
+        "a,b"
+      ],
+      "expect": {
+        "exit_code": 2,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "reject-float-token",
+      "description": "fractional move tokens are malformed argv",
+      "args": [
+        "--moves",
+        "0,1.5"
+      ],
+      "expect": {
+        "exit_code": 2,
+        "stdout": ""
+      }
+    }
+  ]
+}

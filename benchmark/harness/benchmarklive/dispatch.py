@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Optional, Protocol
 
+from benchmarkkit import oracle
 from benchmarkkit.genlib import Subprocess, Timer
 from benchmarkkit.metrics import (
     BenchmarkRecord,
@@ -54,6 +55,25 @@ STAGE_TABLE = {
 
 CAPTURE_JSON = "json"
 CAPTURE_STREAM_JSON = "stream-json"
+
+# Bumped by hand whenever the graded task text changes; a workload change makes
+# token and quality figures incomparable just as surely as a model repin does.
+PROMPT_CONTRACT = "scripted-cli-v1"
+HARNESS_GENERATION = "python-1"
+
+
+def build_era() -> dict:
+    """Stamp what this run's numbers are comparable against.
+
+    Model pins are the axis that silently invalidated the stored baselines at
+    v3.37.1, so they travel with every record rather than living only in a README.
+    """
+    return {
+        "harness": HARNESS_GENERATION,
+        "prompt_contract": PROMPT_CONTRACT,
+        "model_pins": {stage: model for stage, (_agent, model, _effort) in STAGE_TABLE.items()},
+    }
+
 
 # Headless has no interactive prompt, so safety rides on the deny-list settings file,
 # not the mode. Mirrored verbatim in baseline.py (parity asserted by test, no import).
@@ -429,6 +449,26 @@ def _stage_attributions(usages: list, arm: Optional[str]) -> list:
     ]
 
 
+def _arm_verdict(app: Optional[baseline_mod.AppMeasure], partial: bool) -> tuple:
+    """Collapse one arm's measurement into ``(pass_fail, loc, tests, app_path, oracle)``.
+
+    Fail-closed on two counts: an unmeasured or degraded arm is never green, and
+    where the held-out oracle ran it — not the arm's self-written suite — decides
+    the verdict. Full conformance is required to pass; a partial score is a fail
+    that still carries its rate for comparison.
+    """
+    if app is None:
+        return "fail", 0, 0, None, None
+
+    verdict = "fail"
+    if not partial:
+        if app.oracle is not None:
+            verdict = "pass" if app.oracle.get("pass_rate") == 1.0 else "fail"
+        else:
+            verdict = app.pass_fail
+    return verdict, app.loc_produced, app.test_count, app.app_path, app.oracle
+
+
 def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: float,
                       usages: list, stages_dispatched: int, live_partial: bool,
                       with_app: Optional[baseline_mod.AppMeasure] = None,
@@ -446,21 +486,14 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
 
     in_total, out_total, tok_total, cost_total, cr_total, cc_total, with_wall = _arm_tokens(usages)
 
-    with_pass = "fail" if live_partial else "pass"
-    with_loc = with_test = 0
-    with_app_path = None
-    if with_app is not None:
-        with_pass = with_app.pass_fail
-        with_loc = with_app.loc_produced
-        with_test = with_app.test_count
-        with_app_path = with_app.app_path
+    with_pass, with_loc, with_test, with_app_path, with_oracle = _arm_verdict(with_app, live_partial)
 
     with_p = PathMetrics(
         tokens=Tokens(input=in_total, output=out_total, total=tok_total,
                       cache_read=cr_total, cache_creation=cc_total),
         cost_usd=cost_total, wall_clock_s=with_wall, loc_produced=with_loc, test_count=with_test,
         coverage_pct=with_coverage, estimate_complexity_score=0, stage_count=stages_dispatched,
-        pass_fail=with_pass, app_path=with_app_path)
+        pass_fail=with_pass, app_path=with_app_path, oracle=with_oracle)
 
     if not paired:
         without_p = PathMetrics(
@@ -470,29 +503,24 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
         return make_record(run_id=run_id, timestamp_utc=timestamp_utc, mode="live",
                            git_sha=git_sha, budget_usd=budget, with_pm=with_p,
                            without_pm=without_p, live_partial=live_partial,
-                           stages=_stage_attributions(usages, arm=None))
+                           stages=_stage_attributions(usages, arm=None), era=build_era())
 
     (o_in, o_out, o_tok, o_cost, o_cr, o_cc, o_wall) = _arm_tokens(without_usages)
-    without_pass = "fail" if without_partial else "pass"
-    without_loc = without_test = 0
-    without_app_path = None
-    if without_app is not None:
-        without_pass = without_app.pass_fail
-        without_loc = without_app.loc_produced
-        without_test = without_app.test_count
-        without_app_path = without_app.app_path
+    (without_pass, without_loc, without_test,
+     without_app_path, without_oracle) = _arm_verdict(without_app, without_partial)
 
     without_p = PathMetrics(
         tokens=Tokens(input=o_in, output=o_out, total=o_tok, cache_read=o_cr, cache_creation=o_cc),
         cost_usd=o_cost, wall_clock_s=o_wall, loc_produced=without_loc, test_count=without_test,
         coverage_pct=None, estimate_complexity_score=0, stage_count=without_dispatched,
-        pass_fail=without_pass, app_path=without_app_path)
+        pass_fail=without_pass, app_path=without_app_path, oracle=without_oracle)
 
     stages_all = (_stage_attributions(usages, arm="with")
                   + _stage_attributions(without_usages, arm="without"))
     return make_record(run_id=run_id, timestamp_utc=timestamp_utc, mode="live",
                        git_sha=git_sha, budget_usd=budget, with_pm=with_p,
-                       without_pm=without_p, live_partial=live_partial, stages=stages_all)
+                       without_pm=without_p, live_partial=live_partial, stages=stages_all,
+                       era=build_era())
 
 
 def now_iso() -> str:
@@ -506,16 +534,33 @@ def git_sha7(repo_root: str) -> str:
 
 
 def _measure_arm(arm_cwd: str, plugin_root: str, dispatched: int,
-                 warn: Callable[[str], None]) -> Optional[baseline_mod.AppMeasure]:
+                 warn: Callable[[str], None],
+                 grader: Optional[Callable] = None) -> Optional[baseline_mod.AppMeasure]:
+    """Measure one arm, then grade it against the held-out oracle.
+
+    Runs after dispatch, so oracle build time never lands in ``wall_clock_s``.
+    """
+    def unmeasured() -> baseline_mod.AppMeasure:
+        return baseline_mod.AppMeasure(loc_produced=0, test_count=0, pass_fail="fail",
+                                       app_path=baseline_mod.genlib.relative_path(arm_cwd, plugin_root))
+
     try:
         app = baseline_mod.measure_app(arm_cwd, plugin_root)
         if app is None and dispatched > 0:
-            app = baseline_mod.AppMeasure(loc_produced=0, test_count=0, pass_fail="fail",
-                                          app_path=baseline_mod.genlib.relative_path(arm_cwd, plugin_root))
-        return app
+            app = unmeasured()
     except Exception as exc:  # noqa: BLE001 — measurement never loses the record write
         warn(f"app metrics fill failed for {arm_cwd}: {exc}")
+        app = unmeasured() if dispatched > 0 else None
+
+    if app is None:
         return None
+
+    grade = grader if grader is not None else oracle.grade
+    try:
+        app.oracle = grade(arm_cwd, warn=warn).to_dict()
+    except Exception as exc:  # noqa: BLE001 — an ungradeable arm stays unscored, not unrecorded
+        warn(f"oracle grading failed for {arm_cwd}: {exc}")
+    return app
 
 
 def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,

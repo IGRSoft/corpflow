@@ -1,8 +1,9 @@
-"""Per-mode latest-3 atomic history rotation.
+"""Per-mode atomic history rotation.
 
-history.json shape: ``{"deterministic": [r...], "live": [r...]}`` — newest LAST, max 3
-per mode. Adding a 4th record of a mode drops that mode's oldest; the other mode's
-bucket is carried through as the raw parsed dict, so its bytes are preserved exactly.
+history.json shape: ``{"deterministic": [r...], "live": [r...]}`` — newest LAST,
+retained per ``RETENTION`` (deterministic 3, live unbounded). Dropping a record only
+happens in a bounded bucket; the other mode's bucket is carried through as the raw
+parsed dict, so its bytes are preserved exactly.
 Records rotate as plain dicts (never re-encoded through the schema) — that is what
 keeps the untouched bucket byte-identical.
 """
@@ -59,13 +60,27 @@ def _timestamp(record: dict) -> str:
     return record.get("timestamp_utc") or ""
 
 
-def rotate(history_path: str, record: dict, max_per_mode: int = 3) -> dict:
+# Deterministic records are free to reproduce, so three is plenty. A live record
+# costs real money and is the only evidence of the run that produced it, so it is
+# kept indefinitely — a variance envelope needs the samples rotation would destroy.
+RETENTION = {"deterministic": 3, "live": -1}
+UNBOUNDED = -1
+
+
+def retention_for(mode: str) -> int:
+    return RETENTION.get(mode, 3)
+
+
+def rotate(history_path: str, record: dict, max_per_mode: Optional[int] = None) -> dict:
     """Append ``record`` to its mode bucket, keep newest ``max_per_mode``, atomic-write.
 
-    The record's ``mode`` selects the bucket; the other mode bucket is left
-    byte-identical (carried through as the raw parsed dict).
+    ``max_per_mode`` defaults to the per-mode policy in ``RETENTION``; a negative
+    value keeps everything. The record's ``mode`` selects the bucket; the other
+    mode bucket is left byte-identical (carried through as the raw parsed dict).
     """
     mode = record.get("mode") or "deterministic"
+    if max_per_mode is None:
+        max_per_mode = retention_for(mode)
     buckets = _read_or_init(history_path)
     lst = buckets.setdefault(mode, [])
     lst.append(record)
@@ -76,13 +91,16 @@ def rotate(history_path: str, record: dict, max_per_mode: int = 3) -> dict:
     return buckets
 
 
-def rotate_detail(runs_dir: str, run_id: str, record: dict, max_per_mode: int = 3) -> str:
-    """Write ``runs_dir/<mode>/<run_id>.json`` and prune that mode's dir to newest 3.
+def rotate_detail(runs_dir: str, run_id: str, record: dict,
+                  max_per_mode: Optional[int] = None) -> str:
+    """Write ``runs_dir/<mode>/<run_id>.json`` and prune that mode's dir per ``RETENTION``.
 
     Pruning sorts by embedded ``timestamp_utc`` (mtime fallback sorts after real ISO
     timestamps). The other mode's dir is untouched.
     """
     mode = record.get("mode") or "deterministic"
+    if max_per_mode is None:
+        max_per_mode = retention_for(mode)
     mode_dir = os.path.join(runs_dir, mode)
     os.makedirs(mode_dir, exist_ok=True)
     detail_path = os.path.join(mode_dir, f"{run_id}.json")
@@ -103,7 +121,7 @@ def rotate_detail(runs_dir: str, run_id: str, record: dict, max_per_mode: int = 
             ts = f"~{os.path.getmtime(p)}"  # mtime fallback sorts after real ISO ts
         entries.append((ts, p))
     entries.sort(key=lambda e: e[0])
-    if len(entries) > max_per_mode:
+    if max_per_mode >= 0 and len(entries) > max_per_mode:
         for _, p in entries[: len(entries) - max_per_mode]:
             try:
                 os.remove(p)

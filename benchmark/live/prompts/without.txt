@@ -22,13 +22,35 @@ Requirements:
   - Views: SwiftUI views for each of the four screens, with accessibility
     labels and animated transitions on the game board.
   - An executable target under Sources/tictactoe: a SwiftUI app by default,
-    plus a --cli text-mode game loop for headless play.
+    plus a --cli text-mode game loop for headless play, plus the scripted
+    mode below.
 - Tests: a Swift Testing suite (@Test / #expect) under Tests/ covering the
   engine, models, router, and view model. swift test must pass in a headless
   environment (no display, no audio device) — never rely on hardware
   audio/graphics being present.
 - Constraints: Swift 6, SwiftPM, and Apple SDKs only — no third-party
   dependencies, no network access.
+
+SCRIPTED CLI CONTRACT — implement exactly; conformance is graded:
+`tictactoe --moves 0,4,1` plays those cell indices in order as alternating
+turns starting with X, stopping early once the game is won or drawn. It then
+prints the board followed by a `result:` line, e.g. for no moves at all:
+
+ 0 | 1 | 2
+---+---+---
+ 3 | 4 | 5
+---+---+---
+ 6 | 7 | 8
+result: in_progress
+
+- a played cell shows `X` or `O`; an unplayed cell shows its own index digit
+- every board row has one leading and one trailing space, as shown
+- the last line is `result: ` plus one of `in_progress`, `X_wins`, `O_wins`,
+  or `draw`
+- exit 0 when the sequence played; 1 when a move is invalid (occupied cell or
+  outside 0..8); 2 when --moves is not a comma-separated integer list
+- diagnostics for exit 1 and 2 go to stderr; their wording is not graded
+- whitespace around move tokens is accepted (`0, 4, 1` is valid)
 
 Write the complete, real source and test files now, in this working
 directory, and make sure the package builds and its test suite passes.

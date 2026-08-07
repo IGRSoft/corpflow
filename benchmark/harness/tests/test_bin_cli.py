@@ -170,8 +170,24 @@ class TestBenchAnalyze(CLITestCase):
         self.assertEqual(0, proc.returncode, proc.stderr)
         with open(out, encoding="utf-8") as f:
             markdown = f.read()
-        self.assertIn("live-20200101T000000Z-abc1234", markdown)
-        self.assertNotIn("live-older", markdown)
+        # The newest record is the SUBJECT; the older one may only be named as the
+        # era-comparability baseline in the caveats.
+        self.assertIn("# Benchmark Analysis — live-20200101T000000Z-abc1234", markdown)
+        body, _, caveats = markdown.partition("## validity-caveats")
+        self.assertNotIn("live-older", body)
+
+    def test_previous_history_record_is_era_compared_without_a_reference_flag(self):
+        older = dict(LIVE_RECORD, run_id="live-older", timestamp_utc="2019-01-01T00:00:00Z")
+        history = self.write_json(
+            "benchmark/results/history.json", {"live": [older, LIVE_RECORD]})
+        out = os.path.join(self.tmp, "analysis.md")
+
+        proc = run_cli("bench-analyze", ["--history", history, "--out", out], self.tmp)
+
+        self.assertEqual(0, proc.returncode, proc.stderr)
+        with open(out, encoding="utf-8") as f:
+            caveats = f.read().partition("## validity-caveats")[2]
+        self.assertIn("cross-era vs previous run live-older", caveats)
 
     def test_empty_history_reports_no_records_instead_of_writing_a_stub(self):
         # PREMISE CORRECTION: the plan called for "empty history -> error". The

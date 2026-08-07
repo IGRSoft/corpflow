@@ -36,6 +36,24 @@ class RotationTests(unittest.TestCase):
         self.assertEqual(det[0]["timestamp_utc"], "2026-07-05T18:01:00Z")
         self.assertEqual(det[-1]["timestamp_utc"], "2026-07-05T18:03:00Z")
 
+    def test_live_records_are_never_rotated_away(self):
+        """A live record costs real money and is the only evidence of its run."""
+        for i in range(6):
+            rotation.rotate(self.history, _rec("live", f"2026-07-05T18:0{i}:00Z"))
+        with open(self.history) as f:
+            live = json.load(f)["live"]
+        self.assertEqual(len(live), 6)
+        self.assertEqual(live[0]["timestamp_utc"], "2026-07-05T18:00:00Z")
+        self.assertEqual(live[-1]["timestamp_utc"], "2026-07-05T18:05:00Z")
+
+    def test_unbounded_detail_prune_keeps_every_file(self):
+        """Unbounded retention must keep files, not delete the whole directory."""
+        runs = os.path.join(self.td, "runs")
+        for i in range(5):
+            rotation.rotate_detail(runs, f"live-{i}",
+                                   _rec("live", f"2026-07-05T18:0{i}:00Z", f"live-{i}"))
+        self.assertEqual(len(os.listdir(os.path.join(runs, "live"))), 5)
+
     def test_other_mode_byte_identical(self):
         rotation.rotate(self.history, _rec("live", "2026-07-01T00:00:00Z"))
         with open(self.history) as f:

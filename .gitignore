@@ -10,9 +10,10 @@ __pycache__
 
 # benchmark: per-run generated apps + scratch (gitignored per AC-9; history.json is TRACKED)
 benchmark/workdirs/
-# per-run detail files are rotated (dir kept for tracking but content ignored)
-benchmark/results/runs/
-# keep the directory entries tracked; gitignore only the content
+# Deterministic detail records are free to reproduce, so they stay untracked.
+# Live records are NOT ignored: each costs real spend and is the only evidence of
+# the run that produced it — every findings doc cites them as its data source.
+benchmark/results/runs/deterministic/
 !benchmark/results/runs/.gitkeep
 
 # kcov coverage output
