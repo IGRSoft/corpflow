@@ -14,7 +14,7 @@ import unittest
 from benchmarkkit import oracle
 from benchmarkkit.genlib import Subprocess
 from benchmarklive.baseline import AppMeasure
-from benchmarklive.dispatch import _arm_verdict
+from benchmarklive.dispatch import _arm_verdict, build_live_record
 
 
 @contextlib.contextmanager
@@ -309,6 +309,39 @@ class ArmVerdict(unittest.TestCase):
     def test_records_without_an_oracle_keep_the_self_graded_verdict(self):
         app = self._measure("pass", None)
         self.assertEqual(_arm_verdict(app, partial=False)[0], "pass")
+
+
+class PairedVerdictSymmetry(unittest.TestCase):
+    """Each arm is judged by its own degradation, never by the other arm's."""
+
+    def _app(self):
+        return AppMeasure(loc_produced=10, test_count=5, pass_fail="pass", app_path="x",
+                          oracle={"built": True, "cases_total": 2, "cases_passed": 2,
+                                  "pass_rate": 1.0})
+
+    def _record(self, with_partial, without_partial):
+        return build_live_record(
+            "r", "t", "s", 1.0, [], 10, live_partial=with_partial or without_partial,
+            with_app=self._app(), without_app=self._app(), without_usages=[],
+            without_dispatched=10, without_partial=without_partial,
+            with_partial=with_partial).to_dict()
+
+    def test_without_breach_leaves_a_complete_with_arm_green(self):
+        rec = self._record(with_partial=False, without_partial=True)
+        self.assertEqual(rec["paths"]["with"]["pass_fail"], "pass")
+        self.assertEqual(rec["paths"]["without"]["pass_fail"], "fail")
+
+    def test_with_breach_leaves_a_complete_without_arm_green(self):
+        rec = self._record(with_partial=True, without_partial=False)
+        self.assertEqual(rec["paths"]["with"]["pass_fail"], "fail")
+        self.assertEqual(rec["paths"]["without"]["pass_fail"], "pass")
+
+    def test_omitted_with_partial_falls_back_to_the_record_flag(self):
+        rec = build_live_record(
+            "r", "t", "s", 1.0, [], 10, live_partial=True,
+            with_app=self._app(), without_app=self._app(), without_usages=[],
+            without_dispatched=10).to_dict()
+        self.assertEqual(rec["paths"]["with"]["pass_fail"], "fail")
 
 
 if __name__ == "__main__":

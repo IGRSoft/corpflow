@@ -486,7 +486,8 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
                       without_app: Optional[baseline_mod.AppMeasure] = None,
                       without_usages: Optional[list] = None,
                       without_dispatched: int = 0,
-                      without_partial: bool = False) -> BenchmarkRecord:
+                      without_partial: bool = False,
+                      with_partial: Optional[bool] = None) -> BenchmarkRecord:
     """Build the record. Skip mode (``without_usages=None``) reproduces the WITH-only
     byte shape exactly; paired mode aggregates the WITHOUT arm's own 10-stage tokens
     and tags every stage row with its arm (both additive/emit-only)."""
@@ -497,7 +498,11 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
 
     in_total, out_total, tok_total, cost_total, cr_total, cc_total, with_wall = _arm_tokens(usages)
 
-    with_pass, with_loc, with_test, with_app_path, with_oracle = _arm_verdict(with_app, live_partial)
+    # Verdicts read per-arm degradation: record-level live_partial ORs both arms,
+    # and judging one arm by it would fail a complete arm for the other's breach.
+    if with_partial is None:
+        with_partial = live_partial
+    with_pass, with_loc, with_test, with_app_path, with_oracle = _arm_verdict(with_app, with_partial)
 
     with_p = PathMetrics(
         tokens=Tokens(input=in_total, output=out_total, total=tok_total,
@@ -692,11 +697,11 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
             run_id, timestamp_utc, git_sha, budget, with_result.usages, with_result.dispatched,
             live_partial=final_partial, with_app=with_app, without_app=without_app,
             without_usages=without_result.usages, without_dispatched=without_result.dispatched,
-            without_partial=without_result.partial)
+            without_partial=without_result.partial, with_partial=with_result.partial)
     else:
         record = build_live_record(
             run_id, timestamp_utc, git_sha, budget, with_result.usages, with_result.dispatched,
-            live_partial=final_partial)
+            live_partial=final_partial, with_partial=with_result.partial)
     write_record(record, record_path)
 
     if final_partial:
