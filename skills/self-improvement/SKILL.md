@@ -155,6 +155,30 @@ Full table in `references/target-mapping.md` (spec; the happy path no longer req
 
 Each proposal block that modifies a file's frontmatter MUST instruct prompt-engineer to bump `version: x.y.z` (semver minor for additions, patch for wording tweaks).
 
+### Step 5b — Append to the committed label dataset
+
+**Goal:** retain each classified edit as a durable failure label. `learnings.md` is per-worktask under the gitignored `.context/`, so labels are otherwise discarded at the end of the run. A user correcting delivered output is domain-expert ground truth — what `evals/failure-taxonomy.md` and any future evaluator get built from.
+
+**Runs regardless of approval.** Only the *proposal* is gated on approval; a rejected proposal is still evidence the output needed changing.
+
+#### Step 5b — invocation
+
+**Input:** one TSV row per KEPT change, joining Step 3 (category, confidence) to Step 4 (target) on `path`:
+
+```
+<path>\t<target>\t<category>\t<confidence>\t<added>\t<removed>\t<summary>
+```
+
+```
+scripts/append-labels.sh --worktask-id=<id> --run-index=<n> --changes=<tsv>
+```
+
+Appends to `evals/failure-labels.jsonl` (repo root, **committed**). Idempotent on a content hash of `(path, added, removed, summary)` — re-running never duplicates rows. `scripts/label-stats.sh` aggregates per target and category.
+
+#### Step 5b — privacy and opt-out
+
+Rows carry counts and the one-line summary only, never diff bodies; redact the summary as you would `learnings.md`. `SELF_IMPROVE_LABELS=0` makes the step a no-op. Because the dataset is committed, tell the user it is being recorded the first time this runs in a repo.
+
 ## Output Contract
 
 Artifacts produced by this skill:
@@ -164,6 +188,7 @@ Artifacts produced by this skill:
 | `.context/learnings.md` | Only if in-scope changes detected | User-approvable proposals |
 | `.context/logs/self-improve-<YYYYMMDD-HHMMSS>.log` | Always | Run log: context set, decisions, discards |
 | `.context/logs/self-improve-<YYYYMMDD-HHMMSS>.diff` | Only if changes detected | Full unified diff for audit |
+| `evals/failure-labels.jsonl` | Only if in-scope changes detected | Committed, append-only label dataset (Step 5b) |
 
 Filename grammar follows `skills/logging-conventions/SKILL.md`.
 
@@ -184,7 +209,9 @@ See `agents/prompt-engineer.md § Self-Improvement Patch Application` for the ap
 - DO NOT react to low-confidence items — park them in Deferred.
 - DO NOT edit the target file directly; this skill only proposes.
 - DO NOT commit `.context/learnings.md` to the repository (lives under `.context/`, already gitignored per project policy).
-- DO NOT include secrets/tokens from diffs in `learnings.md`; redact before writing.
+- DO NOT include secrets/tokens from diffs in `learnings.md` or in a label `summary`; redact before writing.
+- DO NOT write diff bodies into `evals/failure-labels.jsonl` — counts and a redacted one-line summary only.
+- DO NOT skip Step 5b because the user rejected the proposals; the observation stands on its own.
 
 ## Test Scenarios (for skill-creator validation)
 
