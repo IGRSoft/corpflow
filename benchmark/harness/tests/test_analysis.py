@@ -265,6 +265,39 @@ class CoverageAbsentVsZero(unittest.TestCase):
         self.assertIn("| coverage % | 85.0% | — |", md)
 
 
+class OracleTierRows(unittest.TestCase):
+    """The tiers must render apart — a single blended rate hides the discriminator."""
+
+    def _record(self, with_oracle, without_oracle):
+        wt = Tokens(input=1000, output=500, total=1500)
+        with_pm = PathMetrics(wt, 0.20, 10.0, 400, 10, None, 15, 10, "pass",
+                              "benchmark/workdirs/x/with", oracle=with_oracle)
+        without_pm = PathMetrics(Tokens(input=400, output=200, total=600), 0.10, 5.0, 300, 8,
+                                 None, 0, 10, "pass", "benchmark/workdirs/x/without",
+                                 oracle=without_oracle)
+        return make_record("r", "t", "live", "s", None, with_pm, without_pm).to_dict()
+
+    def _oracle(self, specified, implied):
+        return {"built": True, "cases_total": 30, "cases_passed": specified + implied,
+                "pass_rate": round((specified + implied) / 30, 4),
+                "tiers": {"specified": {"total": 24, "passed": specified,
+                                        "pass_rate": round(specified / 24, 4)},
+                          "implied": {"total": 6, "passed": implied,
+                                      "pass_rate": round(implied / 6, 4)}}}
+
+    def test_tier_rows_render_when_the_record_carries_them(self):
+        md = analysis.render_markdown(analysis.analyze(
+            self._record(self._oracle(24, 6), self._oracle(24, 3))))
+        self.assertIn("| ├ specified (contract restated) | 24/24 (100.0%) | 24/24 (100.0%) |", md)
+        self.assertIn("| └ implied (derived from the rules) | 6/6 (100.0%) | 3/6 (50.0%) |", md)
+
+    def test_untiered_oracle_omits_the_breakdown(self):
+        blob = {"built": True, "cases_total": 20, "cases_passed": 20, "pass_rate": 1.0}
+        md = analysis.render_markdown(analysis.analyze(self._record(blob, blob)))
+        self.assertIn("| oracle cases passed | 20/20 (100.0%) | 20/20 (100.0%) |", md)
+        self.assertNotIn("specified (contract restated)", md)
+
+
 class FixtureRecord(unittest.TestCase):
     def test_vendored_live_fixture_analyzes_without_error_cross_era_caveat(self):
         with open(_FIXTURE, encoding="utf-8") as f:

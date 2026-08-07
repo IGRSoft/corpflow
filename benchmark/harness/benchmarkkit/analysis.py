@@ -173,13 +173,21 @@ def _arm_quality(pm: dict) -> dict:
     }
 
 
-def _oracle_cell(oracle: Optional[dict]) -> str:
+def _oracle_cell(oracle: Optional[dict], tier: Optional[str] = None) -> str:
     if not oracle:
         return "not measured"
     if not oracle.get("built"):
         return "did not build"
-    return (f"{_fmt(oracle.get('cases_passed'))}/{_fmt(oracle.get('cases_total'))} "
-            f"({_pct((oracle.get('pass_rate') or 0) * 100)})")
+    score = oracle if tier is None else (oracle.get("tiers") or {}).get(tier)
+    if score is None:
+        return "not measured"
+    passed = score.get("cases_passed", score.get("passed"))
+    total = score.get("cases_total", score.get("total"))
+    return f"{_fmt(passed)}/{_fmt(total)} ({_pct((score.get('pass_rate') or 0) * 100)})"
+
+
+def _has_tier(*oracles) -> bool:
+    return any((o or {}).get("tiers") for o in oracles)
 
 
 def _outliers(stages: list, with_pm: dict, without_pm: dict) -> list:
@@ -436,7 +444,21 @@ def render_markdown(analysis: dict) -> str:
         "| metric | WITH | WITHOUT |",
         "|---|---|---|",
         f"| oracle cases passed | {_oracle_cell(qw.get('oracle'))} | {_oracle_cell(qo.get('oracle'))} |",
+    ]
+    # The tiers answer different questions, so they get their own rows: `specified`
+    # is a floor every arm should clear, `implied` is where arms come apart.
+    if _has_tier(qw.get("oracle"), qo.get("oracle")):
+        lines += [
+            f"| ├ specified (contract restated) | {_oracle_cell(qw.get('oracle'), 'specified')} "
+            f"| {_oracle_cell(qo.get('oracle'), 'specified')} |",
+            f"| └ implied (derived from the rules) | {_oracle_cell(qw.get('oracle'), 'implied')} "
+            f"| {_oracle_cell(qo.get('oracle'), 'implied')} |",
+        ]
+    lines += [
         f"| pass_fail | {qw['pass_fail'] or '—'} | {qo['pass_fail'] or '—'} |",
+        "",
+        "`pass_fail` reads the specified tier alone — an arm is not failed for behaviour",
+        "nobody described to it. The implied tier is the discriminating signal.",
         "",
         "**Self-graded** — the arm wrote both the implementation and these tests, so",
         "a high count is not evidence of correctness.",

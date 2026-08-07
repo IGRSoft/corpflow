@@ -62,9 +62,12 @@ class FakeRunner:
         return Subprocess(exit_code, stdout, "")
 
 
-def _case(case_id, moves, exit_code, stdout):
-    return {"id": case_id, "description": case_id, "args": ["--moves", moves],
+def _case(case_id, moves, exit_code, stdout, tier=None):
+    case = {"id": case_id, "description": case_id, "args": ["--moves", moves],
             "expect": {"exit_code": exit_code, "stdout": stdout}}
+    if tier is not None:
+        case["tier"] = tier
+    return case
 
 
 class Scoring(unittest.TestCase):
@@ -125,6 +128,45 @@ class Scoring(unittest.TestCase):
         self.assertEqual(runner.calls, [])
 
 
+class Tiers(unittest.TestCase):
+    def setUp(self):
+        self.cases = [_case("s1", "0", 0, "a\n", tier="specified"),
+                      _case("s2", "1", 0, "b\n", tier="specified"),
+                      _case("i1", "9", 1, "", tier="implied")]
+
+    def _grade(self, runner, tmp):
+        os.makedirs(tmp, exist_ok=True)
+        open(os.path.join(tmp, "Package.swift"), "w").close()
+        bin_dir = os.path.join(tmp, "bin")
+        os.makedirs(bin_dir, exist_ok=True)
+        open(os.path.join(bin_dir, "tictactoe"), "w").close()
+        runner.bin_dir = bin_dir
+        return oracle.grade(tmp, cases=self.cases, runner=runner)
+
+    def test_tiers_are_scored_separately(self):
+        # Conforms to everything it was told; misses the case it had to derive.
+        runner = FakeRunner(results={"0": (0, "a\n"), "1": (0, "b\n"), "9": (0, "")})
+        with _tmpdir() as tmp:
+            r = self._grade(runner, tmp)
+        self.assertEqual(r.tier_rate("specified"), 1.0)
+        self.assertEqual(r.tier_rate("implied"), 0.0)
+        self.assertEqual(r.to_dict()["tiers"]["implied"], {"total": 1, "passed": 0,
+                                                           "pass_rate": 0.0})
+
+    def test_non_building_arm_scores_zero_in_every_tier(self):
+        with _tmpdir() as tmp:
+            r = self._grade(FakeRunner(builds=False), tmp)
+        self.assertEqual(r.tier_rate("specified"), 0.0)
+        self.assertEqual(r.tier_rate("implied"), 0.0)
+
+    def test_untiered_cases_emit_no_breakdown(self):
+        self.cases = [_case("a", "0", 0, "a\n")]
+        runner = FakeRunner(results={"0": (0, "a\n")})
+        with _tmpdir() as tmp:
+            r = self._grade(runner, tmp)
+        self.assertNotIn("tiers", r.to_dict())
+
+
 class CasesFile(unittest.TestCase):
     def test_covers_every_terminal_state_and_exit_code(self):
         cases = oracle.load_cases(_CASES)
@@ -137,6 +179,14 @@ class CasesFile(unittest.TestCase):
         self.assertEqual(results, {"in_progress", "X_wins", "O_wins", "draw"})
         self.assertEqual({c["expect"]["exit_code"] for c in cases}, {0, 1, 2})
 
+    def test_every_case_is_tiered_and_both_tiers_are_populated(self):
+        # An untiered case would silently vanish from the breakdown the verdict reads.
+        cases = oracle.load_cases(_CASES)
+        tiers = [c.get("tier") for c in cases]
+        self.assertNotIn(None, tiers)
+        self.assertGreaterEqual(tiers.count("specified"), 20)
+        self.assertGreaterEqual(tiers.count("implied"), 5)
+
 
 @unittest.skipUnless(_swift_toolchain_usable(), "working swift toolchain required (measurement instrument)")
 class AgainstReferenceImplementation(unittest.TestCase):
@@ -144,6 +194,53 @@ class AgainstReferenceImplementation(unittest.TestCase):
         r = oracle.grade(_TEMPLATE, cases=oracle.load_cases(_CASES))
         self.assertTrue(r.built)
         self.assertEqual(r.cases_passed, r.cases_total, [f.to_dict() for f in r.failures])
+
+    def test_implied_tier_separates_a_plausible_wrong_implementation(self):
+        """The point of the implied tier: catch what full contract conformance misses.
+
+        The mutant validates every listed move before honouring the early stop —
+        a reading no line of the contract rules out. It clears the specified tier
+        outright, so a set graded only on enumerated behaviour would call it
+        perfect.
+        """
+        anchor = """    var state = board.state()
+    for m in moves {
+        if state != .inProgress {
+            break
+        }
+        state = try board.play(m)
+    }"""
+        mutation = """    var state = board.state()
+    for m in moves {
+        if m < 0 || m >= Board.size {
+            throw InvalidMove.outOfRange(m)
+        }
+        if try board.cell(m) != nil {
+            throw InvalidMove.occupied(m)
+        }
+        if state != .inProgress {
+            break
+        }
+        state = try board.play(m)
+    }"""
+        tmp = tempfile.mkdtemp(prefix="oracle-mutant-")
+        try:
+            app = os.path.join(tmp, "app")
+            shutil.copytree(_TEMPLATE, app, ignore=shutil.ignore_patterns(".build"))
+            main = os.path.join(app, "Sources", "tictactoe", "main.swift")
+            with open(main, encoding="utf-8") as f:
+                src = f.read()
+            self.assertEqual(src.count(anchor), 1, "template drifted; re-derive the mutation")
+            with open(main, "w", encoding="utf-8") as f:
+                f.write(src.replace(anchor, mutation))
+            r = oracle.grade(app, cases=oracle.load_cases(_CASES))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+        self.assertTrue(r.built)
+        self.assertEqual(r.tier_rate("specified"), 1.0,
+                         [f.to_dict() for f in r.failures])
+        self.assertLess(r.tier_rate("implied"), 1.0)
 
     def test_committed_goldens_match_regenerated_ones(self):
         cases = oracle.load_cases(_CASES)
@@ -167,6 +264,26 @@ class ArmVerdict(unittest.TestCase):
     def _oracle(self, passed, total=20, built=True):
         return {"built": built, "cases_total": total, "cases_passed": passed,
                 "pass_rate": round(passed / total, 4)}
+
+    def _tiered(self, specified, implied, spec_total=24, imp_total=6):
+        total, passed = spec_total + imp_total, specified + implied
+        block = self._oracle(passed=passed, total=total)
+        block["tiers"] = {
+            "specified": {"total": spec_total, "passed": specified,
+                          "pass_rate": round(specified / spec_total, 4)},
+            "implied": {"total": imp_total, "passed": implied,
+                        "pass_rate": round(implied / imp_total, 4)},
+        }
+        return block
+
+    def test_a_missed_implied_case_does_not_fail_the_arm(self):
+        # The arm was never told this behaviour; it is measured, not enforced.
+        app = self._measure("pass", self._tiered(specified=24, implied=3))
+        self.assertEqual(_arm_verdict(app, partial=False)[0], "pass")
+
+    def test_a_missed_specified_case_fails_the_arm(self):
+        app = self._measure("pass", self._tiered(specified=23, implied=6))
+        self.assertEqual(_arm_verdict(app, partial=False)[0], "fail")
 
     def test_oracle_overrides_a_passing_self_graded_suite(self):
         app = self._measure("pass", self._oracle(passed=17))

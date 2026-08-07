@@ -26,14 +26,25 @@ Three paired runs (each dispatches both arms across all 10 stages):
 
 ```bash
 for i in 1 2 3; do
-  ./benchmark/run-benchmark.sh --live --budget 30.00
+  ./benchmark/run-benchmark.sh --live --budget 50.00
 done
 ```
 
-Recent full paired runs attributed **$25.51** (`results/analysis.md`), so budget
-roughly **$30 per run, ~$90 total**, and set the per-run `--budget` as a hard
-stop rather than an estimate. The running-tally gate aborts *before* a breaching
-stage and still writes a partial record, so a cap cannot silently overspend.
+**Sizing.** The one complete arm on record (`live-20260807T114444Z-a0cdb43`,
+WITHOUT, 10 stages) attributed **$19.73**, so a paired run needs roughly **$40**
+and three runs **~$120**. The pre-flight now projects $39.38 for a paired run and
+will decline anything under that, which is the point: the earlier flat per-stage
+projection accepted $30 for a run that could not finish, and the run duly
+truncated at 4/10 WITH stages.
+
+**`--budget` is not a hard stop.** It bounds what dispatch will start; a stage
+already in flight has no ceiling, so realized spend can exceed the cap by one
+stage. The run above spent $34.32 against a $30 cap. Budget the study against the
+projection with headroom, and record realized spend from the records rather than
+assuming the cap held.
+
+Each arm runs under half the budget, so neither can starve the other — the
+failure that made that first run an invalid A/B.
 
 If a run returns rc=4, read the partial record from `results/runs/live/` — do not
 read granularity from the shell exit, which `run-benchmark.sh` collapses to 1.
@@ -41,7 +52,9 @@ read granularity from the shell exit, which `run-benchmark.sh` collapses to 1.
 ## What to compute
 
 For each of `cache_read`, `out`, paid slice (`fresh_in + cache_creation`),
-`cost_usd`, and the new `oracle.pass_rate`, across the three runs per arm:
+`cost_usd`, and `oracle.tiers.implied.pass_rate`, across the three runs per arm.
+Use the implied tier, not the overall rate: the specified tier is a floor both
+arms are expected to clear, so its variance is uninformative by design.
 
 | statistic | why |
 |---|---|

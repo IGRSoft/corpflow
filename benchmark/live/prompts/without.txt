@@ -49,7 +49,8 @@ result: in_progress
   or `draw`
 - exit 0 when the sequence played; 1 when a move is invalid (occupied cell or
   outside 0..8); 2 when --moves is not a comma-separated integer list
-- diagnostics for exit 1 and 2 go to stderr; their wording is not graded
+- diagnostics for exit 1 and 2 go to stderr; their wording is not graded, and
+  stdout stays empty on both — the board prints only on exit 0
 - whitespace around move tokens is accepted (`0, 4, 1` is valid)
 
 Write the complete, real source and test files now, in this working

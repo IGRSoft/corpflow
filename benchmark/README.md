@@ -135,10 +135,25 @@ shell. The key VALUE and any CLI-login identity (email/org) are never logged,
 echoed, or persisted — presence is the only thing probed. Missing both →
 frozen stderr message, rc=3, no dispatch, no record.
 
-**Budget enforcement** (HARD CAP):
+**Budget enforcement** — `--budget` bounds what dispatch will START, not what a
+run realizes. Both gates decide *before* a stage; a dispatch already in flight
+has no cost ceiling, so realized spend can exceed the cap by one stage. Treat
+`--budget` as a ceiling on commitments with a one-stage tolerance, and read the
+realized figure off the record.
+
 - Pre-flight projection via the real `estimate-calc.py` — rc=2, dispatches
-  NOTHING when the projection exceeds `--budget`
-- Running-tally gate before EACH stage — aborts BEFORE the breaching stage
+  NOTHING when the projection exceeds `--budget`. Projected per stage from
+  `budget.STAGE_EXPECTED_TOKENS`: DV runs an order of magnitude heavier than
+  the rest, so one flat figure across the pipeline halves the projection and
+  admits budgets that cannot finish. A full paired run projects **~$39**
+- Running-tally gate before EACH stage — aborts BEFORE the breaching stage,
+  reserving the larger of the next stage's projection and the heaviest stage
+  that arm has actually run. Once a stage beats its projection the gate
+  reserves the observed figure instead, so only a stage heavier than every
+  predecessor can still overshoot
+- **Per-arm shares**: a paired run splits `--budget` in half and gives each arm
+  its own tally. One shared purse let the arm dispatched first spend the run
+  and leave the second truncated, which compares an agent against a budget
 - Partial record (`live_partial=true`, `pass_fail="fail"`, partial
   `stage_count`) is **written to disk BEFORE rc=4 returns** — read rc=4
   granularity from `results/runs/live/*.json`, not from the shell exit
@@ -165,8 +180,8 @@ the full **10-stage prompt sequence** (PL→AR→TL→DV→DR→SR→QA→DC→F
 - **Dispatch order**: the WITHOUT arm is dispatched **FIRST** (all 10 stages), followed by the WITH arm;
   the WITHOUT record is flushed to disk immediately — a later WITH-stage budget breach still leaves a
   real WITH-vs-WITHOUT comparison point on disk
-- **Budget**: counts as 10 extra dispatches in the pre-flight projection (`2 * len(stages)`)
-  when `real`; the running-tally gate applies to each dispatch exactly like any WITH stage
+- **Budget**: the pre-flight projects the stage list once per arm when `real`; each arm
+  then runs under its own running-tally gate holding half of `--budget`
 - **Measurement**: wall-clock and `loc_produced`/`test_count`/`pass_fail`/`stage_count`/tokens are
   measured **per arm** from each arm's own generated app and run record, stored in separate
   `paths.with` and `paths.without` objects in the metric schema
@@ -186,7 +201,7 @@ against — harness generation, prompt-contract version, and the per-stage model
 pins read straight from `STAGE_TABLE`:
 
 ```json
-"era": {"harness": "python-1", "prompt_contract": "scripted-cli-v1",
+"era": {"harness": "python-1", "prompt_contract": "scripted-cli-v2",
         "model_pins": {"PL": "claude-opus-5", "DC": "claude-haiku-4-5", …}}
 ```
 
@@ -207,8 +222,13 @@ change invalidates comparisons just as surely as a model repin.
 - **Python → Swift → Python harness** — see the wall-clock note above.
 - **`scripted-cli-v1`** — the graded CLI contract was added to `dv.txt` and
   `without.txt`, changing the workload for both arms.
+- **`scripted-cli-v2`** — the contract now states that stdout stays empty on
+  exit 1 and 2. The five reject cases had been grading that silently, so a
+  reasonable arm that printed the board before erroring lost them without ever
+  being told. Stamped as an era because it is a prompt change, though it only
+  narrows what was already being graded.
 
-All three predate era stamping, so records from before it must be compared
+The first three predate era stamping, so records from before it must be compared
 by hand against this list.
 
 ## Held-out oracle (quality metric)
@@ -221,24 +241,50 @@ supplies the signal the arm cannot author.
 After measurement (outside the arm's Timer, so it never inflates
 `wall_clock_s`), the harness release-builds the arm's `tictactoe` product and
 drives it through the **scripted CLI contract** — `tictactoe --moves 0,4,1`
-prints a board plus a `result:` line, exit 0/1/2. Each of the 20 cases in
+prints a board plus a `result:` line, exit 0/1/2. Each of the 30 cases in
 `benchmark/oracle/cases.json` is compared on stdout and exit code:
 
 ```json
-"oracle": {"built": true, "cases_total": 20, "cases_passed": 17, "pass_rate": 0.85}
+"oracle": {"built": true, "cases_total": 30, "cases_passed": 27, "pass_rate": 0.9,
+           "tiers": {"implied":   {"total": 6,  "passed": 3,  "pass_rate": 0.5},
+                     "specified": {"total": 24, "passed": 24, "pass_rate": 1.0}}}
 ```
+
+### Two tiers, two questions
+
+The contract is fully written out in the prompt, so restating it in cases asks
+only whether the arm can follow a precise spec — which it can. On the first
+paired live run both arms swept every case, and the metric separated nothing.
+Cases are therefore tiered:
+
+- **`specified`** (24) — behaviour the prompt enumerates. A failure is
+  non-conformance with the contract the arm was handed. This is a floor, not a
+  discriminator, and **`pass_fail` reads this tier alone** — an arm is never
+  failed for behaviour nobody described to it.
+- **`implied`** (6) — behaviour the contract's rules determine without spelling
+  out, e.g. that a move listed after the game already ended is never played and
+  so is never rejected, or that `--moves` is parsed whole before play so a bad
+  token outranks an early stop. Deriving these is the engineering judgement the
+  benchmark is trying to detect, so this is the discriminating tier — reported
+  beside the verdict, never folded into it.
+
+Two deliberately-wrong reference variants (validating moves before honouring the
+early stop; parsing tokens lazily while playing) both score `specified` 24/24 —
+the untiered set would have called them perfect — and land at `implied` 0.50 and
+0.83. `test_oracle.py` builds the first of them and asserts that separation.
 
 - **Goldens are generated, never hand-written** — `oracle.capture_goldens` runs
   each case against `ttt-template`, the reference implementation. A test
-  regenerates them and fails on any drift.
+  regenerates them and fails on any drift. This is what keeps the `implied` tier
+  honest: the goldens record what the reference *does*, not what anyone assumed.
 - **Behaviour, not API shape** — an arm may name its types anything; only the
   CLI contract is graded. stderr wording is deliberately not pinned.
 - **Fairness** — `live/prompts/_cli-contract.txt` is the SSOT for the contract
   text, and both `dv.txt` (WITH) and `without.txt` (WITHOUT) must embed it
   verbatim; a lint test fails on drift.
-- **`pass_fail` follows the oracle** wherever it ran: full conformance passes,
-  anything less fails. Records written before the oracle existed keep their
-  self-graded verdict and omit the `oracle` key entirely.
+- **`pass_fail` follows the oracle** wherever it ran. Records written before the
+  oracle existed keep their self-graded verdict and omit the `oracle` key; those
+  written against an untiered case set fall back to the overall rate.
 
 Adding the contract to the prompts changed the workload — runs from that point
 are not comparable to earlier stored records.
@@ -303,8 +349,9 @@ benchmark/
       fixtures/history.json     # vendored real history (byte-compat oracle)
       test_*.py                 # 27 test modules
   oracle/
-    cases.json                  # 20 scripted CLI cases + goldens captured from
-                                # ttt-template (regenerated, never hand-written)
+    cases.json                  # 30 scripted CLI cases (24 specified / 6 implied)
+                                # + goldens captured from ttt-template
+                                # (regenerated, never hand-written)
   ttt-template/                 # Canonical SwiftUI TTT fixture (SwiftPM package
                                 # "TicTacToe": TicTacToeKit + tictactoe exe,
                                 # 48 Swift Testing tests; macOS 15+ / iOS 18+)

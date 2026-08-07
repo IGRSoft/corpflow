@@ -13,7 +13,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " 0 | 1 | 2 \n---+---+---\n 3 | 4 | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "single-move-in-progress",
@@ -25,7 +26,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " 0 | 1 | 2 \n---+---+---\n 3 | X | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "x-wins-top-row",
@@ -37,7 +39,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " X | X | X \n---+---+---\n O | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "x-wins-middle-row",
@@ -49,7 +52,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " O | O | 2 \n---+---+---\n X | X | X \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "x-wins-bottom-row",
@@ -61,7 +65,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " O | O | 2 \n---+---+---\n 3 | 4 | 5 \n---+---+---\n X | X | X \nresult: X_wins\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "x-wins-left-column",
@@ -73,7 +78,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " X | O | 2 \n---+---+---\n X | O | 5 \n---+---+---\n X | 7 | 8 \nresult: X_wins\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "x-wins-middle-column",
@@ -85,7 +91,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " O | X | O \n---+---+---\n 3 | X | 5 \n---+---+---\n 6 | X | 8 \nresult: X_wins\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "x-wins-right-column",
@@ -97,7 +104,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " O | O | X \n---+---+---\n 3 | 4 | X \n---+---+---\n 6 | 7 | X \nresult: X_wins\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "x-wins-main-diagonal",
@@ -109,7 +117,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " X | O | O \n---+---+---\n 3 | X | 5 \n---+---+---\n 6 | 7 | X \nresult: X_wins\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "x-wins-anti-diagonal",
@@ -121,7 +130,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " O | O | X \n---+---+---\n 3 | X | 5 \n---+---+---\n X | 7 | 8 \nresult: X_wins\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "o-wins-middle-column",
@@ -133,7 +143,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " X | O | 2 \n---+---+---\n X | O | 5 \n---+---+---\n 6 | O | X \nresult: O_wins\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "o-wins-main-diagonal",
@@ -145,7 +156,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " O | X | X \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | X | O \nresult: O_wins\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "draw-full-board",
@@ -157,7 +169,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " X | O | X \n---+---+---\n X | O | O \n---+---+---\n O | X | X \nresult: draw\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "moves-after-win-ignored",
@@ -169,7 +182,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " X | X | X \n---+---+---\n O | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "whitespace-tolerated",
@@ -181,7 +195,8 @@
       "expect": {
         "exit_code": 0,
         "stdout": " X | X | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "reject-occupied-cell",
@@ -193,7 +208,8 @@
       "expect": {
         "exit_code": 1,
         "stdout": ""
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "reject-out-of-range-high",
@@ -205,7 +221,8 @@
       "expect": {
         "exit_code": 1,
         "stdout": ""
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "reject-out-of-range-negative",
@@ -217,7 +234,8 @@
       "expect": {
         "exit_code": 1,
         "stdout": ""
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "reject-malformed-token",
@@ -229,7 +247,8 @@
       "expect": {
         "exit_code": 2,
         "stdout": ""
-      }
+      },
+      "tier": "specified"
     },
     {
       "id": "reject-float-token",
@@ -241,7 +260,142 @@
       "expect": {
         "exit_code": 2,
         "stdout": ""
-      }
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "x-wins-on-final-cell",
+      "description": "X completes a line with the last cell: a full board is not automatically a draw",
+      "args": [
+        "--moves",
+        "2,0,4,3,1,7,5,8,6"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " O | X | X \n---+---+---\n O | X | X \n---+---+---\n X | O | O \nresult: X_wins\n"
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "o-wins-top-row",
+      "description": "O completes the top row",
+      "args": [
+        "--moves",
+        "4,0,3,1,6,2"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " O | O | O \n---+---+---\n X | X | 5 \n---+---+---\n X | 7 | 8 \nresult: O_wins\n"
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "o-wins-anti-diagonal",
+      "description": "O completes the top-right/bottom-left diagonal",
+      "args": [
+        "--moves",
+        "0,2,1,4,3,6"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | X | O \n---+---+---\n X | O | 5 \n---+---+---\n O | 7 | 8 \nresult: O_wins\n"
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "reject-out-of-range-first-move",
+      "description": "the very first move can be out of range",
+      "args": [
+        "--moves",
+        "9"
+      ],
+      "expect": {
+        "exit_code": 1,
+        "stdout": ""
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "after-win-occupied-move-ignored",
+      "description": "a move onto an occupied cell after the win is never played, so never rejected",
+      "args": [
+        "--moves",
+        "0,3,1,4,2,0"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | X | X \n---+---+---\n O | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n"
+      },
+      "tier": "implied"
+    },
+    {
+      "id": "after-win-out-of-range-move-ignored",
+      "description": "an out-of-range move after the win is never played, so never rejected",
+      "args": [
+        "--moves",
+        "0,3,1,4,2,99"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | X | X \n---+---+---\n O | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n"
+      },
+      "tier": "implied"
+    },
+    {
+      "id": "after-draw-extra-move-ignored",
+      "description": "a move after the draw is never played, so never rejected",
+      "args": [
+        "--moves",
+        "0,1,2,4,3,5,7,6,8,0"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | O | X \n---+---+---\n X | O | O \n---+---+---\n O | X | X \nresult: draw\n"
+      },
+      "tier": "implied"
+    },
+    {
+      "id": "malformed-token-outranks-early-stop",
+      "description": "--moves is parsed whole before play, so a bad token loses to no early stop",
+      "args": [
+        "--moves",
+        "0,3,1,4,2,abc"
+      ],
+      "expect": {
+        "exit_code": 2,
+        "stdout": ""
+      },
+      "tier": "implied"
+    },
+    {
+      "id": "invalid-move-outranks-later-win",
+      "description": "play halts on the invalid move; the win it would have reached never happens",
+      "args": [
+        "--moves",
+        "0,3,1,4,0,2"
+      ],
+      "expect": {
+        "exit_code": 1,
+        "stdout": ""
+      },
+      "tier": "implied"
+    },
+    {
+      "id": "whitespace-padded-tokens",
+      "description": "whitespace on either side of every token is accepted",
+      "args": [
+        "--moves",
+        " 0 , 4 , 1 "
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | X | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      },
+      "tier": "implied"
     }
-  ]
+  ],
+  "tiers": {
+    "specified": "behaviour the shared stage prompt enumerates; a failure is non-conformance with the contract the arm was handed",
+    "implied": "behaviour the contract's own rules determine but do not spell out; a failure is a gap in reasoning from the spec, not non-conformance"
+  }
 }

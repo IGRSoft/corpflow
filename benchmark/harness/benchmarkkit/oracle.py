@@ -9,6 +9,13 @@ implementation — a signal the arm cannot author.
 Grades behaviour only: an arm may name its types anything as long as
 `tictactoe --moves …` conforms. Pure, offline, stdlib-only, `benchmarkkit`-local
 so `bench-deterministic` can link it without reaching the live world (AC-8).
+
+Cases carry a tier, and the two answer different questions. `specified` cases
+restate what the prompt enumerates, so every arm should clear them and the verdict
+hangs on them alone. `implied` cases follow from the contract's rules without being
+listed — a competent arm derives them, which is what makes them the tier that
+actually separates arms. Scoring them is not a conformance claim, so they are
+reported next to the verdict rather than folded into it.
 """
 
 from __future__ import annotations
@@ -44,11 +51,25 @@ class CaseFailure:
 
 
 @dataclass
+class TierScore:
+    total: int
+    passed: int
+
+    @property
+    def pass_rate(self) -> float:
+        return 0.0 if self.total == 0 else round(self.passed / self.total, 4)
+
+    def to_dict(self) -> dict:
+        return {"total": self.total, "passed": self.passed, "pass_rate": self.pass_rate}
+
+
+@dataclass
 class OracleResult:
     built: bool
     cases_total: int
     cases_passed: int
     failures: list = field(default_factory=list)
+    tiers: dict = field(default_factory=dict)
 
     @property
     def pass_rate(self) -> float:
@@ -56,18 +77,39 @@ class OracleResult:
             return 0.0
         return round(self.cases_passed / self.cases_total, 4)
 
+    def tier_rate(self, tier: str) -> Optional[float]:
+        score = self.tiers.get(tier)
+        return None if score is None else score.pass_rate
+
     def to_dict(self) -> dict:
-        return {
+        out = {
             "built": self.built,
             "cases_total": self.cases_total,
             "cases_passed": self.cases_passed,
             "pass_rate": self.pass_rate,
         }
+        # Omitted rather than empty when the case file carries no tiers, so a
+        # record written against an untiered set keeps its previous shape.
+        if self.tiers:
+            out["tiers"] = {name: score.to_dict() for name, score in sorted(self.tiers.items())}
+        return out
 
 
 def load_cases(path: Optional[str] = None) -> list:
     with open(path or _DEFAULT_CASES, encoding="utf-8") as f:
         return json.load(f)["cases"]
+
+
+def tier_scores(cases: list, failed_ids: set) -> dict:
+    """Split ``cases`` into per-tier ``TierScore``s; untiered cases count nowhere."""
+    tallies: dict = {}
+    for case in cases:
+        tier = case.get("tier")
+        if tier is None:
+            continue
+        total, passed = tallies.get(tier, (0, 0))
+        tallies[tier] = (total + 1, passed + (case["id"] not in failed_ids))
+    return {name: TierScore(total=t, passed=p) for name, (t, p) in tallies.items()}
 
 
 def build_arm(app_dir: str, runner=Subprocess) -> tuple:
@@ -133,10 +175,12 @@ def grade(app_dir: str, cases: Optional[list] = None, runner=Subprocess,
         if not built:
             if warn is not None:
                 warn(f"oracle: {app_dir} did not build a `tictactoe` product")
-            return OracleResult(built=False, cases_total=len(cases), cases_passed=0)
+            return OracleResult(built=False, cases_total=len(cases), cases_passed=0,
+                                tiers=tier_scores(cases, {c["id"] for c in cases}))
         passed, failures = run_cases(binary, cases, runner=runner)
         return OracleResult(built=True, cases_total=len(cases), cases_passed=passed,
-                            failures=failures)
+                            failures=failures,
+                            tiers=tier_scores(cases, {f.case_id for f in failures}))
     finally:
         shutil.rmtree(os.path.join(app_dir, ".build"), ignore_errors=True)
 
@@ -150,10 +194,13 @@ def capture_goldens(binary: str, cases: list, runner=Subprocess) -> list:
     captured = []
     for case in cases:
         observed = runner.run(_argv(binary, case), timeout=CASE_TIMEOUT_S)
-        captured.append({
+        out = {
             "id": case["id"],
             "description": case["description"],
             "args": list(case["args"]),
             "expect": {"exit_code": observed.exit_code, "stdout": observed.stdout},
-        })
+        }
+        if case.get("tier") is not None:
+            out["tier"] = case["tier"]
+        captured.append(out)
     return captured
