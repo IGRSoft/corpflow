@@ -835,7 +835,23 @@ is not a legal edge; add a row before writing one.
 | `<invoker>→ET` | the ethics gate fired; `<invoker>` is whichever stage triggered it | ET |
 
 The writer passes its predecessor to `state-patch.sh --stage <CODE> --prev <PREV>`; the script
-composes the key mechanically and does not itself know the when-clauses.
+composes the key mechanically and does not itself know the when-clauses. `USER` is accepted as a
+predecessor **only** — it owns no artifact and is never a valid `--stage`.
+
+#### #layer-1-fallback
+
+Every stage agent's State Patch section points here. Three outcomes, in order.
+
+1. **Exit 3** — `--prev` given, `--via` absent, no artifact resolved: the self-patch signature.
+   The stage claims an artifact that is not on disk. Write it and re-run. If you cannot, use
+   item 2 — `--allow-missing-artifact` only silences the error and patches **nothing**.
+2. **The tool cannot run at all** — not granted, denied, or not found. Do **NOT** skip silently.
+   Patch `.context/state.json` with `Edit`: write both the `stages.<CODE>` completion entry and
+   the `handoffs["<PREV>→<CODE>"]` edge, then record the failure under
+   `metadata.pl_tooling_gaps`. The SubagentStop hook is **not** a substitute — it builds its
+   args without `--prev`, so it repairs the stage entry and drops the edge.
+3. **`jq` or `.context/state.json` genuinely absent** — skipping is correct here, and only here
+   (F1 fallback).
 
 #### Field notes — progress
 
@@ -1101,6 +1117,17 @@ handoff carriers.
 ### Run-index resolution
 
 The same N is shared across all stages within a worktask run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. See `agents/product-manager.md § Plan File & Run Index Naming` for the full resolver and propagation algorithm.
+
+### Alias basenames (resolution-only)
+
+`state-patch.sh` accepts a second, search-only basename for three stages — DR `review`, QA
+`qa`, FN `finalization` — living in a sibling function so `#stage-artifact-map` above stays the
+single canonical name per stage. Aliases are accepted, never written: the canonical name is
+always what gets emitted, and a canonical match outranks an alias match at the same run index.
+Resolution order: primary@run_index → primary highest-N → alias@run_index → alias highest-N.
+`AR` has no alias — `analyzing` is deliberately excluded (a prior naming generation used it; an
+alias would let a stale file answer for the current one). `USER` is a valid `--prev` value only
+— no artifact, never a `--stage` or basename (edge table above: `USER→PL`, `USER→IR`).
 
 ---
 

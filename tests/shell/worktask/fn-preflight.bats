@@ -760,3 +760,85 @@ div_row() {
   run div_row 'metadata.renamed_to'
   assert_output "feature/add-a-new-login-flow"
 }
+
+# ---------------------------------------------------------------------------
+# issue-close-required (REQ-9). GitHub honours a `Closes #N` trailer only on a
+# merge into the DEFAULT branch, so any other integration branch silently leaves
+# the issue open. Standalone, read-only, exit 0 always.
+# ---------------------------------------------------------------------------
+
+# A repo whose origin/HEAD points at <default>, with an issue-bearing state.json.
+_mk_repo_with_default() {
+  local default="$1"
+  cd "$WD"
+  git init -q -b "$default" .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m base
+  git update-ref "refs/remotes/origin/$default" HEAD
+  git symbolic-ref refs/remotes/origin/HEAD "refs/remotes/origin/$default"
+}
+
+@test "issue-close-required: a non-default integration branch requires an explicit close" {
+  _mk_repo_with_default main
+  jq '.metadata.base_ref="develop"' .context/state.json > s && mv s .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" issue-close-required
+  assert_success
+  assert_output --partial "issue-close-required: yes"
+  assert_output --partial "gh issue close 221"
+  run jq -se 'map(select(.action=="issue_close_required"))[-1] | [.result, .metadata.base]' \
+    .context/logs/audit.jsonl
+  assert_output --partial '"required"'
+  assert_output --partial '"develop"'
+}
+
+@test "issue-close-required: the repository default branch is a silent no-op" {
+  _mk_repo_with_default main
+  jq '.metadata.base_ref="main"' .context/state.json > s && mv s .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" issue-close-required
+  assert_success
+  assert_output --partial "issue-close-required: no"
+  refute_output --partial "gh issue close"
+  run jq -se 'map(select(.action=="issue_close_required"))[-1] | .result' \
+    .context/logs/audit.jsonl
+  assert_output --partial '"not_required"'
+}
+
+@test "issue-close-required: an origin/ prefix on either side is not a false positive" {
+  _mk_repo_with_default main
+  jq '.metadata.base_ref="origin/main"' .context/state.json > s && mv s .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" issue-close-required
+  assert_success
+  assert_output --partial "issue-close-required: no"
+}
+
+@test "issue-close-required: an unresolved integration branch degrades non-blocking" {
+  cd "$WD"
+  git init -q .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m base
+  # No base_ref in state.json and no origin/HEAD to fall back on.
+  jq 'del(.metadata.base_ref)' .context/state.json > s && mv s .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" issue-close-required
+  assert_success
+  assert_output --partial "unresolved"
+  refute_output --partial "gh issue close"
+}
+
+@test "issue-close-required: a required close with no resolvable issue says so and still exits 0" {
+  _mk_repo_with_default main
+  jq '.metadata.base_ref="develop" | del(.metadata.github_issue_url)' \
+    .context/state.json > s && mv s .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" issue-close-required
+  assert_success
+  assert_output --partial "close it manually"
+  run jq -se 'map(select(.action=="issue_close_required"))[-1] | .result' \
+    .context/logs/audit.jsonl
+  assert_output --partial '"issue_unresolved"'
+}
+
+@test "issue-close-required: it is NOT part of 'all' (cannot perturb the pre-PR battery)" {
+  _mk_repo_with_default main
+  jq '.metadata.base_ref="develop"' .context/state.json > s && mv s .context/state.json
+  mk_attachments
+  mk_body
+  run bash "$PLUGIN_ROOT/$SCRIPT" --body "$WD/body.md" all
+  refute_output --partial "issue-close-required"
+}

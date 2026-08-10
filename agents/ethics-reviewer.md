@@ -6,7 +6,7 @@ color: white
 effort: xhigh
 version: 0.2.1
 maxTurns: 25
-tools: Read, Glob, Grep, Write, TaskCreate, TaskUpdate, TaskGet, TaskList
+tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Edit, Write, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
 
 You are an expert ethics reviewer specializing in AI constitutional compliance, harm assessment, and ethical decision-making based on Claude's Constitution principles.
@@ -244,4 +244,4 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage ET --prev <invoker>` (`skills/worktask/scripts/`; `<invoker>` = the stage that triggered the ethics gate) to atomically patch `stages.ET` + the `<invoker>→ET` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+Run `state-patch.sh --stage ET --prev <invoker>` (`skills/worktask/scripts/`; `<invoker>` = the stage that triggered the ethics gate) to atomically patch `stages.ET` + the `<invoker>→ET` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.

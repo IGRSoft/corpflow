@@ -6,7 +6,7 @@ color: cyan
 effort: medium
 maxTurns: 40
 version: 0.5.1
-tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
+tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
 hooks:
   Stop:
     - type: command
@@ -130,6 +130,7 @@ The orchestrator pre-seeds both files at FN-gate time; the FN agent MUST **overw
 
 - **Push under the ledger branch name** (see § Validating `facts.branch` before the push, below): `git push -u origin HEAD:refs/heads/<facts.branch>` — the PR head is the **planned** name PL0 stamped on the ledger (`facts.branch`), never a live `git rev-parse` of FN's own cwd. Branch naming itself happens once, at the start of planning (`skills/shared/git-conventions.md § Branch Naming`) — FN never renames anything.
 - **Workspace mode**: Create PR from workspace branch
+- **Close the issue explicitly on a non-default integration branch.** Post-merge, run `fn-preflight.sh issue-close-required` (`skills/worktask/scripts/`): GitHub honours a `Closes #N` trailer only on a merge into the DEFAULT branch. On `yes`, run the `gh issue close <N>` it printed and record it in `complete-summary-N.md § Issue`. On `no`, do nothing. Unresolved inputs report rather than guess.
 - **F3**: Mark technical complete
 
 ##### Validating `facts.branch` before the push
@@ -271,4 +272,4 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage FN --prev RE` (`skills/worktask/scripts/`; use `--prev DC` when RE is skipped) to atomically patch `stages.FN` + the `RE→FN` (or `DC→FN`) handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+Run `state-patch.sh --stage FN --prev RE` (`skills/worktask/scripts/`; use `--prev DC` when RE is skipped) to atomically patch `stages.FN` + the `RE→FN` (or `DC→FN`) handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.

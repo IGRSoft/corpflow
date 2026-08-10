@@ -2,6 +2,74 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.11] - 2026-08-10
+
+Fail-loud worktask tooling (#431 retrospective, 9 approved self-improvement proposals). The
+defect class: a tool that reports success while doing nothing. `state-patch.sh`'s existing
+exit-0-on-unresolved behaviour is correct for most callers (a hook probing for a stage that
+never ran), but for the 13 stage agents patching their *own just-written* artifact it meant a
+missed ledger patch returned success — the same silent-skip shape recurred three separate times
+in this repo's own history before this worktask.
+
+### Added
+
+- **Fail-loud self-patch assertion (REQ-2).** `state-patch.sh` now exits **3** when the artifact
+  does not resolve, `--prev` is present, and `--via` is absent — the documented signature of an
+  agent patching its own predecessor edge (`handoff-protocol.md:846`). Every other combination —
+  a hook, `--via`, or a never-run stage — keeps the exact exit-0 no-op byte for byte;
+  `state-patch.bats:51` is unmodified. `--allow-missing-artifact` silences the assertion for a
+  caller that legitimately wants no edge, but writes **nothing** — documented as such at all four
+  citing sites after a review-round finding that the first pass had it write a synthesized entry.
+- **Resolution-only alias basenames (REQ-1).** `DR: review`, `QA: qa`, `FN: finalization` resolve
+  in a new sibling function, never inside the canonical 13-entry map, so the existing parity
+  guard keeps reading exactly 13 primaries. `AR: analyzing` is deliberately not added — a prior
+  artifact-naming generation used it, and re-accepting it would let a stale file answer for the
+  current one.
+- **`USER` as a valid `--prev` predecessor (REQ-3).** Matches the already-canonical `USER→PL` /
+  `USER→IR` edges; `USER` still owns no artifact and is never a valid `--stage`.
+- **`dv-tree-preflight.sh`, new D0.0a gate (REQ-7).** Asserts the resolved git root **equals**
+  the assigned workspace before DV's first edit. Worktree isolation alone doesn't catch this —
+  a stale worktree is perfectly isolated, which is how a correctly-specified edit once landed on
+  the wrong tree.
+- **Screenshot-manifest schema at the writing stage (REQ-8).** `attach-visual-evidence.sh
+  --validate-manifest` is a new read-only mode; `dv-screenshot-gate.sh` ANDs its verdict into the
+  pass condition and now blocks a table-free manifest sitting beside real capture files (the
+  parser reports the fact, the gate applies the policy — only the gate can see the directory).
+  A genuine table-free skip-rationale manifest with no captures beside it still passes.
+- **Explicit issue-close check on non-default integration branches (REQ-9).**
+  `fn-preflight.sh issue-close-required` compares the merge target against the repo's default
+  branch and prints the exact `gh issue close <N>` command when they differ, so a non-default
+  integration branch can no longer leave the tracking issue silently open. FN's procedure gained
+  the acting step that runs it and executes the printed command.
+
+### Changed
+
+- **Tool grants for 10 of 13 stage agents, not the plan's 6 (REQ-5).** `software-architector`,
+  `technical-writer`, `team-lead`, `stakeholder`, `ethics-reviewer` held no `Bash` grant at all;
+  `product-manager`, `technical-lead`, `security-reviewer`, `release-engineer`, `project-manager`
+  held narrow allowlists with no `bash`. All 10 gain the scoped
+  `Bash(bash skills/worktask/scripts/state-patch.sh:*)` token. This grant is **empirically
+  unverified** against the permission matcher under enforcement — the probe session that ran it
+  enforced no denials at all — so it is not the fix by itself.
+- **Mandatory documented Edit-direct fallback for all 13 agents (REQ-6), the load-bearing half.**
+  `$CLAUDE_PLUGIN_ROOT` was confirmed empty in the model's Bash tool environment (exit 127 on a
+  probe), so no grant string keyed on it — and the cache-install path is version-keyed, so no
+  stable literal exists either way. Every agent's State Patch section now states an ordered
+  ladder: run the script; on exit 3, write the artifact and re-run; if the tool cannot run at
+  all, patch `.context/state.json` directly with `Edit` — both the `stages.<CODE>` entry and the
+  `handoffs["<PREV>→<CODE>"]` edge — and record the occurrence under `metadata.pl_tooling_gaps`.
+  The SubagentStop hook is explicitly not a substitute: it never passes `--prev`, so it repairs
+  the stage entry but drops the handoff edge.
+
+### Fixed
+
+- `attach-visual-evidence.sh` table separator detection now accepts alignment rows (`:---`),
+  removing a false schema block on a valid model-authored table.
+- `fn-preflight.sh`'s unresolved-issue line no longer promises a `gh issue close` command in the
+  same breath as reporting it cannot be printed.
+- `state-patch.sh`'s basename resolver requires the filename stem to equal the basename exactly,
+  so e.g. `qa-notes-3.md` can no longer answer for the new `qa` alias.
+
 ## [4.0.10] - 2026-08-07
 
 Eval-audit release (#279). The benchmark's only quality signal was the arm's own

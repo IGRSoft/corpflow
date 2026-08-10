@@ -12,7 +12,7 @@ version: 0.10.1
 # (commands/worktask.md:99-102 forbid Bash pre-approval), so the PM is the only
 # actor that can fetch the bytes while the URL is still valid. See `skills/shared/figma-capture.md § Capture Workflow`.
 # Bash(mkdir:*) is granted so PL0 can create `.context/designs/` before persisting Figma frames — `curl -o` cannot create parent directories, and `mkdir -p` is benign (creates directories only; documented minimal expansion per the security rule).
-tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), Bash(mkdir:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(company-workflow:designer), Task(company-workflow:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
+tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), Bash(mkdir:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(company-workflow:designer), Task(company-workflow:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
 hooks:
   Stop:
     - type: command
@@ -682,7 +682,11 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage PL --prev USER` (`skills/worktask/scripts/`) to atomically patch `stages.PL` + the `USER→PL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Put the one-line goal (verb + object, ≤120 chars) in that summary — downstream stages read it as the worktask goal alongside `planning-N.md#requirements`. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+Run `state-patch.sh --stage PL --prev USER` (`skills/worktask/scripts/`) to atomically patch `stages.PL` + the `USER→PL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Put the one-line goal (verb + object, ≤120 chars) in that summary — downstream stages read it as the worktask goal alongside `planning-N.md#requirements`. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+
+Task-management tooling is already in this agent's grant list (`TaskCreate`, `TaskUpdate`,
+`TaskGet`, `TaskList`), so stage-task creation needs no fallback — the ladder above exists for
+the patch script alone.
 
 #### State Patch — `facts.goal` is part of the contract
 

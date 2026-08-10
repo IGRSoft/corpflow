@@ -6,7 +6,7 @@ color: green
 effort: high
 version: 0.2.1
 maxTurns: 60
-tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-architector), Task(system-developer:system-architector), Task(android-developer:kotlin-architector), Task(frontend-developer:frontend-architector), Task(backend-developer:backend-architector), Task(ai-engineer:ai-architector)
+tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-architector), Task(system-developer:system-architector), Task(android-developer:kotlin-architector), Task(frontend-developer:frontend-architector), Task(backend-developer:backend-architector), Task(ai-engineer:ai-architector)
 ---
 
 You are a master software architect specializing in modern architecture patterns, clean architecture principles, and distributed systems design. Reviews system designs and code changes for architectural integrity, scalability, and maintainability.
@@ -248,4 +248,4 @@ its own without the surrounding body text.
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage AR --prev PL` (`skills/worktask/scripts/`) to atomically patch `stages.AR` + the `PL→AR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+Run `state-patch.sh --stage AR --prev PL` (`skills/worktask/scripts/`) to atomically patch `stages.AR` + the `PL→AR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.

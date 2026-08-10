@@ -1479,9 +1479,11 @@ Executable helpers (never read into context — invoke via `bash`):
 
 | Script | One-line invocation | Purpose |
 |--------|---------------------|---------|
-| `scripts/state-patch.sh` | `bash skills/worktask/scripts/state-patch.sh --stage <CODE> [--artifact <path>]` | **Canonical** Step-6.5 state.json patch: resolve artifact, parse `handoff:` frontmatter, atomic-merge. Also owns the ENOSPC/DISK_MIN_GB guard. `.claude/hooks/state-merge.sh` is a thin wrapper that delegates here — all logic lives in this one file. Self-test: `bash scripts/state-patch.sh --self-test`. |
+| `scripts/state-patch.sh` | `--stage <CODE> --prev <PREV>` | **Canonical** state.json patch; `.claude/hooks/state-merge.sh` delegates here. Self-test: `--self-test`. |
 
-`references/handoff-protocol.md` remains the spec for the handoff schema, fallback paths, and the `#atomic-write` contract. The script is the **executable form** of those rules — callers invoke the script instead of re-implementing the merge.
+Exits **3** (Layer-1 self-patch signature) when unresolved AND `--prev` given AND `--via` absent;
+otherwise exits 0. `--allow-missing-artifact` silences that but writes **nothing**. Contract:
+`references/handoff-protocol.md#layer-1-fallback`.
 
 ## Related
 

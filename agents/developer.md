@@ -168,6 +168,10 @@ Write one `audit.jsonl` line `action: "plugin_unavailable"` with
 
   DV ALWAYS runs in an isolated worktree. Confirm via `git rev-parse --git-dir` (linked worktrees resolve under `.git/worktrees/<name>`) or `git worktree list`. If NOT isolated: either **create one** (`EnterWorktree`, honoring `task.metadata.base_ref`/`worktree.baseRef`, then re-run D0 inside it), or — if one genuinely cannot be created (bare/read-only repo) — **flag and return** a `worktree_isolation_missing` audit row + `verdict: blocked` naming the reason, never writing to the shared checkout. Record the resolution in `development-N.md § Approach` and set the `worktree:` field in the DV handoff frontmatter.
 
+##### D0.0a — the resolved tree must BE the assigned tree
+
+  Run `bash skills/worktask/scripts/dv-tree-preflight.sh --assigned <workspace>` before the first edit. Exit 1 = resolved tree ≠ assigned tree: stop, do not edit, log `workspace_path_mismatch`, return `verdict: blocked` quoting both paths it printed. Isolation is not this assertion — a stale worktree is perfectly isolated, which is how a correct edit spec once landed on the wrong tree. Warnings are advisory.
+
 #### D0.1 — Requirements & environment
 
   Analyze requirements, set up development environment, read test specs from `<plan_file>`
@@ -601,7 +605,7 @@ handoff:
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage DV --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `TL` when TL ran, `AR` when AR ran without TL, `PL` when neither did, and `IR` on the emergency pipeline (`IR→DV→DR→QA→RE→FN`, which has no PL/AR/TL stage at all) — pick it from the `stages` keys actually present in `.context/state.json`, never from this list unconditionally. This atomically patches `stages.DV` + the corresponding `TL→DV` / `AR→DV` / `PL→DV` / `IR→DV` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+Run `state-patch.sh --stage DV --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `TL` when TL ran, `AR` when AR ran without TL, `PL` when neither did, and `IR` on the emergency pipeline (`IR→DV→DR→QA→RE→FN`, which has no PL/AR/TL stage at all) — pick it from the `stages` keys actually present in `.context/state.json`, never from this list unconditionally. This atomically patches `stages.DV` + the corresponding `TL→DV` / `AR→DV` / `PL→DV` / `IR→DV` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 ### Files Read Registry (token optimization)
 

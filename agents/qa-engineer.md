@@ -241,4 +241,4 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage QA --prev DR` (`skills/worktask/scripts/`; use `--prev SR` when SR ran) to atomically patch `stages.QA` + the `DR→QA` (or `SR→QA`) handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+Run `state-patch.sh --stage QA --prev DR` (`skills/worktask/scripts/`; use `--prev SR` when SR ran) to atomically patch `stages.QA` + the `DR→QA` (or `SR→QA`) handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.

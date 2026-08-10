@@ -6,7 +6,7 @@ color: cyan
 effort: medium
 version: 0.3.1
 maxTurns: 30
-tools: Read, Glob, Grep, Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(company-workflow:technical-lead)
+tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(company-workflow:technical-lead)
 ---
 
 You are an expert engineering team lead combining people management skills with technical awareness, responsible for team productivity, coordination, individual growth, and high-performing team culture.
@@ -284,4 +284,4 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage TL --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `AR` when AR ran and `PL` when AR was excluded, to atomically patch `stages.TL` + the corresponding `AR→TL` / `PL→TL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+Run `state-patch.sh --stage TL --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `AR` when AR ran and `PL` when AR was excluded, to atomically patch `stages.TL` + the corresponding `AR→TL` / `PL→TL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.

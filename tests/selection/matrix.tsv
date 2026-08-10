@@ -13,7 +13,7 @@ commands/*.md	skills/cross-plugin-refs,skills/test-authority-matrix,worktask/sec
 skills/*.md	skills/cross-plugin-refs,skills/test-authority-matrix,worktask/section-lint,worktask/desc-lint	R03	Same four repo-wide checkers. `*` crosses `/`, so this covers SKILL.md and references/**.md at any depth.
 
 # --- per-agent specialisations, derived from hooks that hardcode an agent ----
-agents/developer.md	hooks/dv-screenshot-gate,hooks/comment-density-gate,hooks/test-execution-gate,hooks/audit-subagent	R04	All four hooks hardcode company-workflow:developer; M6 re-derives this edge from the hook sources so it cannot rot.
+agents/developer.md	hooks/dv-screenshot-gate,hooks/comment-density-gate,hooks/test-execution-gate,hooks/audit-subagent,worktask/dv-tree-preflight	R04	All four hooks hardcode company-workflow:developer; M6 re-derives this edge from the hook sources so it cannot rot. dv-tree-preflight is added by hand: the script exists to serve developer.md D0.0, and that gate is specified in the agent doc rather than in the script.
 agents/qa-engineer.md	hooks/dv-screenshot-gate,hooks/test-execution-gate	R05	Named in dv-screenshot-gate.sh as an agent_type and in test-execution-gate.sh where QA's full-run authority is decided.
 agents/technical-lead.md	hooks/comment-density-gate	R06	dv-comment-density-gate.sh names technical-lead as a reviewing role in its exemption reasoning.
 agents/product-manager.md|agents/project-manager.md|agents/stakeholder.md	hooks/agent-stop	R07	These three are the only agents whose frontmatter wires the Stop hook to hooks/agent-stop.sh.

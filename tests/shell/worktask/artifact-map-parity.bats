@@ -1,12 +1,16 @@
 #!/usr/bin/env bats
 # Parity guard for the stage->artifact-basename mapping, which is duplicated
-# across SIX sources of truth with no single owner.
+# across the SEVEN sources of truth listed below, with no single owner.
 #
 # This exists because the duplication has already drifted once: cada9e4 (v3.8.0)
 # normalized four sibling artifact basenames and missed AR's, leaving `analyzing`
 # stranded until 3.42.0. A half-applied rename across these six is invisible to
 # every other test in the suite -- state-merge.sh's map in particular is only
 # reachable when state-patch.sh is absent, so nothing exercises it organically.
+#
+# state-patch.sh additionally accepts resolution-only ALIAS basenames. They live in
+# a sibling function so the extractor below keeps seeing exactly one canonical name
+# per stage; the alias tests assert that separation rather than relaxing it.
 #
 # Sources:
 #   1. skills/worktask/scripts/cache-lint.sh   canonical_basename_for_stage()
@@ -61,6 +65,32 @@ EOF
   run map_from_case "$PLUGIN_ROOT/skills/worktask/scripts/state-patch.sh" basename_for_stage
   assert_success
   [ "$output" = "$(expected_map)" ]
+}
+
+@test "parity: state-patch.sh primary map holds exactly the 13 canonical stages" {
+  # The alias tier must never leak into the primary map: a 14th arm here would mean
+  # some stage now has two canonical names, which is the drift this file guards.
+  run map_from_case "$PLUGIN_ROOT/skills/worktask/scripts/state-patch.sh" basename_for_stage
+  assert_success
+  [ "$(printf '%s\n' "$output" | wc -l | tr -d ' ')" = "13" ]
+  [ "$(printf '%s\n' "$output" | cut -d= -f1 | sort -u | tr '\n' ' ')" = "$(printf '%s\n' $STAGES | sort -u | tr '\n' ' ')" ]
+}
+
+@test "parity: state-patch.sh aliases are disjoint from every canonical basename" {
+  # An alias colliding with another stage's canonical name would let --stage X resolve
+  # stage Y's artifact and silently patch the wrong ledger entry.
+  run map_from_case "$PLUGIN_ROOT/skills/worktask/scripts/state-patch.sh" alias_basenames_for_stage
+  assert_success
+  local canonical alias_name stage rc=0
+  canonical="$(expected_map | cut -d= -f2 | sort)"
+  while IFS='=' read -r stage alias_name; do
+    [ -n "$alias_name" ] || continue
+    if printf '%s\n' "$canonical" | grep -qx "$alias_name"; then
+      echo "alias '$alias_name' (stage=$stage) collides with a canonical basename"
+      rc=1
+    fi
+  done <<< "$output"
+  [ "$rc" -eq 0 ]
 }
 
 @test "parity: state-merge.sh _basename_for_stage matches the canonical map" {

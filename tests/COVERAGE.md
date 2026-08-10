@@ -94,21 +94,21 @@ without completing. Per the LOCKED plan's open-question q3, where no coverage to
 use the **assertion-density proxy**: every shell script has a dedicated test file with ≥3 real
 scenario `@test`s (happy / edge / failure-exit) asserting its documented contracts.
 
-- **44/44** shell scripts + hooks have a dedicated `.bats` file (path-keyed where basenames
+- **45/45** shell scripts + hooks have a dedicated `.bats` file (path-keyed where basenames
   collide — `attachments-preseed.sh`/`attachments-preseed-test.sh` are two distinct scripts,
-  each with its own file); **46/46** total deterministic targets covered (44 shell + 2
+  each with its own file); **47/47** total deterministic targets covered (45 shell + 2
   Python). **Zero exemptions.**
 
 #### Measured, not derived (this file's fifth correction this worktask)
 
-**811** `@test` assertions across **55** `.bats` files — the 44 script-dedicated files plus
-11 meta / repo-invariant files (Phase 4 of this worktask added `tests/shell/meta/test-selection.bats`,
+**879** `@test` assertions across **59** `.bats` files — the 45 script-dedicated files plus
+14 meta / repo-invariant files (Phase 4 of this worktask added `tests/shell/meta/test-selection.bats`,
 17 `@test`, to the meta set). **Min 3 / avg ~15 / max 90** per file; the ≥3 rule has no
 exceptions. Measured directly (`grep -c '^@test'` across `tests/shell/**`), not derived by
 arithmetic on a prior claim — this file drifted repeatedly across the worktask (`680`→`683`,
 then a stale self-contradictory `683`/`53`, then `787`/`54` before the selection-matrix work
 landed its own test file; the `4.0.7` `### Fixed` entry documents the earlier repairs), and
-811/55 is re-derived directly from the tree, not incremented from any prior claim.
+879/59 is re-derived directly from the tree, not incremented from any prior claim.
 
 R6 landed in `branch-name.sh.bats` (worktree rename, opt-out, ledger-based once-guard,
 disclosure) and `fn-preflight.bats` (the new `branch-divergence` subcommand). DV's final
@@ -116,10 +116,10 @@ cycle then hardened the `fromjson?` audit-scan guard in `branch-name.sh`, `fn-pr
 and `refine-branch-target.sh` against well-formed non-object audit lines, adding cases to
 those three files plus their test helpers.
 
-Highest-density targets: `branch-name.sh` 90, `test-execution-gate` 80, `branch-lib` 54,
-`fn-preflight` 52, `refine-branch-target` 31, `state-patch` 25, `test-helper` 23,
-`pr-body-lint` 19, `attach-visual-evidence`/`milestone-helpers` 18, `scan-secrets` 17,
-`publish-pl-issue`/`handoff-harness` 14.
+Highest-density targets: `branch-name.sh` 90, `test-execution-gate` 85, `fn-preflight` 58,
+`branch-lib` 54, `state-patch` 36, `refine-branch-target` 31, `attach-visual-evidence` 25,
+`test-helper` 23, `pr-body-lint` 19, `milestone-helpers` 18, `scan-secrets` 17,
+`test-selection` 17.
 
 #### Regeneration and enforcement
 
@@ -190,7 +190,8 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/branch-name.sh` | `tests/shell/worktask/branch-name.sh.bats` | — | — | — |
 | `skills/worktask/scripts/branch-lib.sh` | `tests/shell/worktask/branch-lib.bats` | — | — | — |
 | `skills/worktask/scripts/refine-branch-target.sh` | `tests/shell/worktask/refine-branch-target.bats` | — | — | — |
-| `skills/worktask/scripts/fn-preflight.sh` | `tests/shell/worktask/fn-preflight.bats` (incl. `branch-divergence`) | — | — | — |
+| `skills/worktask/scripts/fn-preflight.sh` | `tests/shell/worktask/fn-preflight.bats` (incl. `branch-divergence`, `issue-close-required`) | — | — | — |
+| `skills/worktask/scripts/dv-tree-preflight.sh` | `tests/shell/worktask/dv-tree-preflight.bats` | — | — | — |
 
 ### Shell scripts — other-skill (DV0b, kcov)
 
@@ -215,10 +216,10 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/estimation-methodology/scripts/estimate-calc.py` | `tests/python/test_estimate_calc.py` | 21 |
 | `skills/appstore-screenshots/scripts/layout-calc.py` | `tests/python/test_layout_calc.py` | 16 |
 
-### Meta / repo-invariant tests (no single source script — not part of the 44)
+### Meta / repo-invariant tests (no single source script — not part of the 45)
 
-These 11 files guard cross-cutting contracts, so they have no row in the tables above and are
-excluded from the 44/44 denominator. They are counted in the 55 `.bats` / 811 `@test` totals.
+These 14 files guard cross-cutting contracts, so they have no row in the tables above and are
+excluded from the 45/45 denominator. They are counted in the 59 `.bats` / 879 `@test` totals.
 
 | Test file | Contract guarded |
 |-----------|------------------|

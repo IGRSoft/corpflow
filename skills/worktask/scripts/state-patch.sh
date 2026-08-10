@@ -15,12 +15,15 @@
 #                           Required unless --artifact is given with parseable frontmatter.
 # @arg --artifact <path>    Explicit artifact path.  When omitted, resolved from
 #                           --stage + run_index from state.json.
-# @arg --prev <CODE>        Previous stage code.  When present, ALSO writes
+# @arg --prev <CODE>        Previous stage code, or USER for the documented USER→PL /
+#                           USER→IR origin edges.  When present, ALSO writes
 #                           handoffs["<PREV>→<CODE>"] = "<summary> ref:<artifact basename>"
 #                           from the parsed frontmatter summary (the ledger edge the 13
 #                           stage agents used to hand-roll in inline jq).  ABSENT = today's
 #                           behavior exactly (stages patch only, byte-stable); hook callers
 #                           never pass it, so the SubagentStop path is untouched.
+#                           USER is predecessor-only: it never resolves an artifact and is
+#                           NOT a valid --stage.
 # @arg --state <path>       state.json path (default: .context/state.json).
 # @arg --log <path>         Append log to this file (default: .context/logs/state-merge.log).
 # @arg --disk-check [root]  Run the ENOSPC guard before writing.  Optional filesystem-root
@@ -31,12 +34,22 @@
 #                           layer that fired.  Omit for agent self-patch (Layer 1);
 #                           F3 stamps "f3" via its own patch.  Absence encodes Layer 1
 #                           / pre-upgrade (additive, version:1 unchanged).
+# @arg --allow-missing-artifact
+#                           Suppress the exit-3 assertion and restore the exit-0 no-op for a
+#                           caller that knows the artifact is absent.  It does NOT patch:
+#                           with no artifact there is no frontmatter to build a patch from,
+#                           so NEITHER the stage entry NOR the handoff edge is written.
+#                           To record a stage whose artifact does not exist, write
+#                           state.json directly (handoff-protocol.md#layer-1-fallback).
 # @arg --self-test          Run the built-in self-test and exit.
 # @arg -h | --help          Show this header.
 #
 # @exitcode 0   Patch applied (or already idempotent; or artifact absent / state absent).
 # @exitcode 1   Internal error (jq merge failed; use --log to inspect).
 # @exitcode 2   DISK_MIN_GB hard-halt triggered (caller must remediate before retrying).
+# @exitcode 3   Artifact unresolved on the agent self-patch path (--prev given, --via absent).
+#               An agent patching the artifact it just wrote and finding nothing on disk is a
+#               real failure; every other unresolved case keeps the exit-0 no-op contract.
 #
 # Env vars honoured:
 #   DISK_MIN_GB         (default 5)   — hard halt threshold in GiB
@@ -70,7 +83,9 @@ _LOCK_HELD=""
 
 # ---------- Usage ----------
 usage() {
-  sed -n 's/^# \{0,1\}//p' "$0" | head -50
+  # Stop at the first non-comment line rather than a hardcoded count: the header block ends
+  # where the code begins, and a line count silently truncates help text whenever it grows.
+  awk '/^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"
   exit 2
 }
 
@@ -101,6 +116,29 @@ basename_for_stage() {
   esac
 }
 
+# Stage code → newline-separated fallback basenames, accepted when resolving and NEVER
+# emitted. Deliberately a sibling of basename_for_stage() rather than extra arms inside it:
+# the seven-way parity guard slices that function's body and must keep seeing exactly one
+# canonical name per stage.
+alias_basenames_for_stage() {
+  case "$1" in
+    DR) printf 'review' ;;
+    QA) printf 'qa' ;;
+    FN) printf 'finalization' ;;
+    *) printf '' ;;
+  esac
+}
+
+# Every basename a stage's artifact may be found under, primary first.
+searched_basenames_for_stage() {
+  local primary alias_list
+  primary=$(basename_for_stage "$1")
+  [[ -n "$primary" ]] && printf '%s\n' "$primary"
+  alias_list=$(alias_basenames_for_stage "$1")
+  [[ -n "$alias_list" ]] && printf '%s\n' "$alias_list"
+  return 0
+}
+
 # Resolve on-disk artifact for a stage BASENAME.
 # Resolution order (per handoff-protocol.md#stage-artifact-map):
 #   1. Exact .context/<base>-<RUN_INDEX>.md when RUN_INDEX is known.
@@ -124,7 +162,11 @@ resolve_artifact() {
   #    on the -N suffix. Artifact basenames are controlled (no special chars).
   local newest=""
   # shellcheck disable=SC2012  # ls needed for numeric-sort pipeline on controlled names
+  #    The stem must be EXACTLY <base>: the glob alone accepts any trailing -<digits>, so
+  #    `qa-notes-3.md` would answer for basename `qa`. Harmless while every basename was a
+  #    long canonical word; the short aliases make it reachable.
   newest=$(ls -1 "${ctx}/${base}-"*.md 2> /dev/null \
+    | grep -E "/${base}-[0-9]+\.md$" \
     | sed -E 's/.*-([0-9]+)\.md$/\1 &/' \
     | grep -E '^[0-9]+ ' \
     | sort -k1,1 -n \
@@ -136,6 +178,22 @@ resolve_artifact() {
   fi
 
   # 3. No match.
+  printf ''
+}
+
+# Resolve a stage's artifact across its primary basename and then its aliases, each
+# through the full run_index → highest-N ladder. Canonical always wins: an alias is only
+# reached once the primary has failed both tiers.
+resolve_artifact_for_stage() {
+  local stage="$1" ctx="${2:-.context}" base found
+  while IFS= read -r base; do
+    [[ -z "$base" ]] && continue
+    found=$(resolve_artifact "$base" "$ctx")
+    if [[ -n "$found" ]]; then
+      printf '%s' "$found"
+      return 0
+    fi
+  done <<< "$(searched_basenames_for_stage "$stage")"
   printf ''
 }
 
@@ -191,6 +249,13 @@ parse_frontmatter() {
   [[ -z "$PARSED_VERDICT" ]] && PARSED_VERDICT="ok"
   [[ -z "$PARSED_SUMMARY" ]] && PARSED_SUMMARY="(auto)"
   return 0
+}
+
+# Predecessor codes are a SUPERSET of stage codes: USER is the documented origin of the
+# USER→PL and USER→IR edges but owns no artifact, so it must never reach basename_for_stage().
+is_valid_prev() {
+  [[ "$1" == "USER" ]] && return 0
+  [[ -n "$(basename_for_stage "$1")" ]]
 }
 
 # ENOSPC guard.  Returns 0 (ok/warn), exits 2 (halt).
@@ -589,6 +654,106 @@ EOART
     exit 1
   fi
 
+  # ---- T11: alias basename resolves; canonical still wins when both exist ----
+  make_state
+  rm -f .context/testing-*.md .context/qa-*.md
+  cat > .context/qa-0.md << 'EOART'
+---
+handoff:
+  stage: QA
+  verdict: go
+  summary: "alias-named artifact"
+  refs: { dev: development-0.md#files-changed }
+---
+EOART
+  bash "$SELF" --stage QA \
+    || {
+      printf 'T11: state-patch returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '.stages.QA.status == "completed" and (.stages.QA.artifact | endswith("qa-0.md"))' \
+    .context/state.json > /dev/null; then
+    printf 'T11: alias basename resolves: ok\n'
+  else
+    printf 'T11: alias basename resolution: FAIL\n' >&2
+    exit 1
+  fi
+  make_state
+  cat > .context/testing-0.md << 'EOART'
+---
+handoff:
+  stage: QA
+  verdict: go
+  summary: "canonical artifact"
+  refs: { dev: development-0.md#files-changed }
+---
+EOART
+  bash "$SELF" --stage QA
+  if jq -e '(.stages.QA.artifact | endswith("testing-0.md"))' .context/state.json > /dev/null; then
+    printf 'T11: canonical preferred over alias: ok\n'
+  else
+    printf 'T11: canonical must outrank alias: FAIL\n' >&2
+    exit 1
+  fi
+  rm -f .context/qa-0.md
+
+  # ---- T12: self-patch (--prev, no --via) with no artifact ⇒ exit 3, state unchanged ----
+  make_state
+  rm -f .context/retrospective-*.md
+  cp .context/state.json .context/state.json.snap3
+  set +e
+  st12_out=$(bash "$SELF" --stage ST --prev FN 2>&1)
+  st12_rc=$?
+  set -e
+  if [[ "$st12_rc" -eq 3 ]] && printf '%s' "$st12_out" | grep -q 'retrospective-N.md'; then
+    printf 'T12: unresolved self-patch exits 3 naming the basenames: ok\n'
+  else
+    printf 'T12: unresolved self-patch must exit 3 (got %s): FAIL\n' "$st12_rc" >&2
+    exit 1
+  fi
+  if diff -q .context/state.json .context/state.json.snap3 > /dev/null; then
+    printf 'T12: exit 3 leaves state untouched: ok\n'
+  else
+    printf 'T12: exit 3 must not alter state: FAIL\n' >&2
+    exit 1
+  fi
+  # The hook path (--via) keeps the exit-0 no-op contract even with --prev present.
+  set +e
+  bash "$SELF" --stage ST --prev FN --via hook > /dev/null 2>&1
+  st12b_rc=$?
+  set -e
+  if [[ "$st12b_rc" -eq 0 ]]; then
+    printf 'T12: --via keeps the unresolved no-op at exit 0: ok\n'
+  else
+    printf 'T12: --via must not fail loudly (got %s): FAIL\n' "$st12b_rc" >&2
+    exit 1
+  fi
+
+  # ---- T13: --prev USER writes the origin edge ----
+  make_state
+  cat > .context/planning-0.md << 'EOART'
+---
+handoff:
+  stage: PL
+  verdict: ok
+  summary: "origin edge from the user"
+  refs: { plan: planning-0.md#requirements }
+---
+EOART
+  bash "$SELF" --stage PL --prev USER --artifact .context/planning-0.md \
+    || {
+      printf 'T13: state-patch returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '(.handoffs["USER→PL"] // "") | test("origin edge from the user")' \
+    .context/state.json > /dev/null; then
+    printf 'T13: --prev USER writes the USER→PL edge: ok\n'
+  else
+    printf 'T13: --prev USER edge: FAIL\n' >&2
+    jq '.handoffs' .context/state.json >&2
+    exit 1
+  fi
+
   printf 'self-test: ALL PASS\n'
   exit 0
 }
@@ -601,6 +766,7 @@ STATE_PATH=".context/state.json"
 LOG_FILE=".context/logs/state-merge.log"
 DISK_CHECK_ROOT=""
 VIA_ARG=""
+ALLOW_MISSING_ARTIFACT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -644,6 +810,10 @@ while [[ $# -gt 0 ]]; do
       VIA_ARG="${1:-}"
       shift
       ;;
+    --allow-missing-artifact)
+      ALLOW_MISSING_ARTIFACT="1"
+      shift
+      ;;
     --self-test) run_self_test ;;
     -h | --help) usage ;;
     *)
@@ -662,9 +832,9 @@ if [[ -n "$VIA_ARG" && "$VIA_ARG" != "hook" && "$VIA_ARG" != "step6_5" ]]; then
   usage
 fi
 
-# Validate --prev (must be a known stage code). Unknown ⇒ caller bug — surface it.
-if [[ -n "$PREV_ARG" && -z "$(basename_for_stage "$PREV_ARG")" ]]; then
-  printf >&2 'invalid --prev value: %s (expected a stage code: PL AR TL DV DR SR QA DC RE FN ST IR ET)\n' "$PREV_ARG"
+# Validate --prev (must be a known stage code or USER). Unknown ⇒ caller bug — surface it.
+if [[ -n "$PREV_ARG" ]] && ! is_valid_prev "$PREV_ARG"; then
+  printf >&2 'invalid --prev value: %s (expected a stage code: PL AR TL DV DR SR QA DC RE FN ST IR ET — or USER)\n' "$PREV_ARG"
   usage
 fi
 
@@ -680,12 +850,26 @@ if [[ -z "$ART" && -n "$STAGE_ARG" ]]; then
     RUN_INDEX=$(jq -r '.run_index // empty' "$STATE_PATH" 2> /dev/null || printf '')
   fi
 
-  _local_base=$(basename_for_stage "$STAGE_ARG")
-  ART=$(resolve_artifact "$_local_base")
+  ART=$(resolve_artifact_for_stage "$STAGE_ARG")
 fi
 
 if [[ -z "$ART" || ! -f "$ART" ]]; then
   log_msg WARN "no artifact resolved (stage=${STAGE_ARG:-} artifact=${ARTIFACT_ARG:-}) — no-op"
+  # `--prev` present with `--via` absent is the documented signature of a Layer-1 agent
+  # self-patch (handoff-protocol.md:837,846), i.e. a stage patching the artifact it just
+  # wrote. Finding nothing there is a real failure, so it is the one unresolved case that
+  # must not exit 0. Hook and Step-6.5 callers pass --via and keep the no-op contract.
+  if [[ -n "$PREV_ARG" && -z "$VIA_ARG" && -z "$ALLOW_MISSING_ARTIFACT" ]]; then
+    _searched=""
+    if [[ -n "$STAGE_ARG" ]]; then
+      _searched=$(searched_basenames_for_stage "$STAGE_ARG" | sed 's/$/-N.md/' | tr '\n' ' ')
+    fi
+    [[ -n "$ARTIFACT_ARG" ]] && _searched="${_searched}${ARTIFACT_ARG} "
+    printf >&2 'ERROR: self-patch for stage %s found no artifact.\n  searched (in .context/): %s\n  Write the artifact, then re-run. If you cannot, write state.json directly (handoff-protocol.md#layer-1-fallback);\n  --allow-missing-artifact only silences this error and still patches NOTHING.\n' \
+      "${STAGE_ARG:-<unset>}" "${_searched:-<none>}"
+    log_msg ERROR "self-patch unresolved (stage=${STAGE_ARG:-} prev=${PREV_ARG}) — exit 3"
+    exit 3
+  fi
   exit 0
 fi
 
