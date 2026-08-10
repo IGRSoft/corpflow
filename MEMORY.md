@@ -4,19 +4,37 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.10** — eval-audit release (#279): the benchmark's quality signal
-  becomes held-out — both arms' prompts embed a scripted CLI contract and each arm's binary is
-  scored against 30 goldens captured from `ttt-template` (24 `specified` decide `pass_fail`,
-  6 `implied` discriminate), replacing the self-graded `swift test` that never once failed.
-  Records stamp comparability `era`s (harness/prompt-contract/model pins, auto-caveated);
+- Plugin version: **4.0.11** — fail-loud worktask tooling (issue #431 retrospective, 9 proposals):
+  `state-patch.sh` exits **3** instead of a silent no-op when a stage agent's own artifact does
+  not resolve and it is patching its own predecessor edge (the documented Layer-1 self-patch
+  signature — `--prev` present, `--via` absent); every other caller's exit-0 no-op is unchanged
+  byte for byte, and the 13 stage agents needed zero edits to get the fix. New resolution-only
+  aliases (`DR: review`, `QA: qa`, `FN: finalization`) live in a sibling function, never the
+  canonical 13-entry map. `USER` is now a valid `--prev`-only predecessor. 10 of 13 agents (not
+  the plan's 6) gain the narrow `Bash(bash skills/worktask/scripts/state-patch.sh:*)` grant plus
+  a MANDATORY documented Edit-direct fallback — `$CLAUDE_PLUGIN_ROOT` is empirically empty in the
+  model's Bash environment, so no grant alone can be trusted. DV gains a pre-edit tree-identity
+  check (`dv-tree-preflight.sh`, D0.0a) — isolation alone doesn't catch a stale-but-isolated
+  worktree. `attach-visual-evidence.sh --validate-manifest` gates a table-free manifest sitting
+  beside real screenshot captures (previously a silent pass). `fn-preflight.sh
+  issue-close-required` names the explicit `gh issue close` command when a non-default
+  integration branch closed the GitHub issue prematurely. `--allow-missing-artifact` is inert by
+  design — it silences the exit-3 assertion but patches nothing; documented as such everywhere it
+  is cited. Full narrative: `CHANGELOG.md § [4.0.11]`.
+
+### Previous release narratives
+
+- Plugin version (previous): **4.0.10** — eval-audit release (#279): the benchmark's quality
+  signal becomes held-out — both arms' prompts embed a scripted CLI contract and each arm's
+  binary is scored against 30 goldens captured from `ttt-template` (24 `specified` decide
+  `pass_fail`, 6 `implied` discriminate), replacing the self-graded `swift test` that never once
+  failed. Records stamp comparability `era`s (harness/prompt-contract/model pins, auto-caveated);
   paired runs get per-arm budgets + per-stage projections; live records are retained
   unbounded and tracked. Self-improvement Step 5b persists classified user edits to the
   committed `evals/failure-labels.jsonl`; skill eval sets become binary code-checked
   assertions; `skill-refs.bats` pins Skill grants/targets/paths repo-wide (fixing three
   live-run defects: `developer` + `stakeholder` missing the `Skill` grant, `technical-lead`
   invoking a command as a skill). Full narrative: `CHANGELOG.md § [4.0.10]`.
-
-### Previous release narratives
 
 - Plugin version (previous): **4.0.9** — opt-in change→test selection: a three-layer dependency
   matrix (L1 derived-live path rules, L2 `tests/selection/matrix.tsv` glob table, L3 an ALWAYS
@@ -143,6 +161,21 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 | 2.1.51→2.1.76 | cc-features-2.1.51-76.md | v3.1.0/v3.2.0 |
 
 ## Release History (last 12, newest first)
+
+- 2026-08-10: v4.0.11 — fail-loud worktask tooling (#431 retrospective, 9 proposals):
+  `state-patch.sh` exits 3 (was silent exit 0) when a stage agent's self-patch artifact doesn't
+  resolve (`--prev` present, `--via` absent); zero of the 13 stage-agent call sites changed.
+  Resolution-only aliases (`review`/`qa`/`finalization`) in a new sibling function, never the
+  canonical map; `USER` valid as `--prev` only. 10 of 13 agents (plan said 6) gain the narrow
+  `Bash(bash …state-patch.sh:*)` grant plus a mandatory documented Edit-direct fallback —
+  `$CLAUDE_PLUGIN_ROOT` confirmed empty in the model's Bash env, so no grant can be trusted alone.
+  New `dv-tree-preflight.sh` at DV's D0.0a asserts the resolved tree equals the assigned one — a
+  stale worktree is perfectly isolated, which is how a correct edit once landed on the wrong tree.
+  `attach-visual-evidence.sh --validate-manifest` blocks a table-free manifest sitting beside real
+  captures. `fn-preflight.sh issue-close-required` prints the explicit close command when a
+  non-default integration branch left the GitHub issue open. `--allow-missing-artifact` documented
+  as inert (suppresses the assertion, patches nothing) after a round-2 review finding. 879 `@test`
+  across 59 `.bats` (was 877), +249 Python, ALL GREEN.
 
 - 2026-08-07: v4.0.10 — eval audit (#279): held-out oracle grades each arm's binary against 30
   goldens captured from `ttt-template` through a scripted CLI contract both prompts embed
@@ -288,31 +321,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
   failure path — track freed, dependents stay blocked). New Signal 2b precondition + resume-table row. Docs + `marketplace.json` version parity
   only; files include `commands/{worktask,megatask}.md`, `skills/megatask/SKILL.md`,
   `.claude-plugin/marketplace.json`.
-- 2026-07-31: v3.42.0 — TL0 removed from every tier default (four table copies + README),
-  included only when PL0 splits work across ≥2 developers; AR0 stays a tier default PL0 may
-  override either direction, against one canonical Stage Inclusion Criteria block
-  (`skills/estimation-methodology/SKILL.md`) with pointer footnotes elsewhere. New
-  `metadata.added_stages` (symmetric with `skipped_stages`, `{stage, reason}`). `DVHandoff` gains
-  optional `architecture: {ref, applied}`, gate-required when AR ran; `refs.decisions` conditional
-  on AR; precedence `refs.decisions` then `architecture.ref` cited identically in 5 places.
-  `handoff-harness.sh` gains `--state`/`--strict` plus the AR-ref check, ships **warn-only** (exit
-  0 by default; `--strict` or `COMPANY_WORKFLOW_AR_REF_STRICT=1` opts into blocking; legacy invocation
-  byte-identical). Edge registry created (did not exist at HEAD) covering all 20 handoff edges
-  incl. `AR→DV`/`PL→DV`/`PL→TL`/`USER→IR`/`IR→DV`/`QA→RE`/`<invoker>→ET`. Per-workstream
-  `development-N-<stream>.md` under TL fan-out. **BREAKING, folded in from a second DV round:**
-  AR's own artifact renamed `analyzing-N.md`→`architecture-N.md` across every reference pattern,
-  map and grammar (finishes the `cada9e4`/v3.8.0 normalization that left AR behind); no back-compat
-  — `.context/` is gitignored so the affected population is bounded to an in-flight worktask
-  spanning the bump, migrated via `mv` (not `git mv`, which fails — gitignored path). New
-  `tests/shell/worktask/artifact-map-parity.bats` (8 tests) asserts all seven stage→basename
-  sources of truth agree — nothing compared them before, which is how the v3.8.0 drift went
-  unnoticed for 34 minors. 13 provenance comments citing a past run's real `analyzing-0.md`
-  deliberately left byte-identical (own follow-up to delete under `company-workflow:code-comment-standard`,
-  not a rename miss); `publish-pl-issue.sh`'s leak filter keeps both tokens permanently
-  (`PERMANENT-SUPERSET`). Suite: 438 bats (0 fail, up from 394) + 48 Swift + 37/175 Python; all 4
-  self-tests exit 0; shellcheck at pre-existing baseline on all edited scripts. 59 files. Known
-  follow-up: pre-existing `state-patch.sh` idempotence bug (stale handoff edge survives a stage
-  re-run after rejection) deferred out of scope, FN to file as its own GitHub issue.
 ## Token Baselines
 
 Authoritative per-surface baselines: `skills/cost-optimization/references/token-baselines.md`. This file no longer mirrors them.
