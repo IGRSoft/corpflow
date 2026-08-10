@@ -105,6 +105,9 @@ setup() {
   assert_output --partial "T8: --prev writes handoffs"
   assert_output --partial "T9: facts.decisions clamped"
   assert_output --partial "T9: dispatched_agents clamped"
+  assert_output --partial "T11: alias basename resolves"
+  assert_output --partial "T12: unresolved self-patch exits 3"
+  assert_output --partial "T13: --prev USER writes"
   assert_output --partial "ALL PASS"
 }
 
@@ -135,6 +138,104 @@ setup() {
 @test "prev: invalid --prev value exits 2 via usage" {
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --prev ZZ
+  assert_failure 2
+  assert_output --partial "invalid --prev value"
+}
+
+# ---------------------------------------------------------------------------
+# Fail-loud resolution: alias basenames (REQ-1), unresolved self-patch (REQ-2),
+# and USER as a predecessor-only code (REQ-3).
+# ---------------------------------------------------------------------------
+
+@test "alias: a documented alias basename resolves when the canonical name is absent" {
+  cd "$WD"
+  sed 's/stage: DV/stage: QA/' .context/development-0.md > .context/qa-0.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage QA
+  assert_success
+  run jq -r '.stages.QA.artifact' .context/state.json
+  assert_output --partial "qa-0.md"
+}
+
+@test "alias: the canonical basename still outranks an alias when both exist" {
+  cd "$WD"
+  sed 's/stage: DV/stage: QA/' .context/development-0.md > .context/qa-0.md
+  sed 's/stage: DV/stage: QA/' .context/development-0.md > .context/testing-0.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage QA
+  assert_success
+  run jq -r '.stages.QA.artifact' .context/state.json
+  assert_output --partial "testing-0.md"
+}
+
+@test "alias: a basename that is not canonical or aliased stays unresolved" {
+  cd "$WD"
+  # 'quality' is neither QA's canonical basename nor one of its aliases.
+  sed 's/stage: DV/stage: QA/' .context/development-0.md > .context/quality-0.md
+  cp .context/state.json snap
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage QA
+  assert_success
+  run diff -q .context/state.json snap
+  assert_success
+}
+
+@test "fail-loud: self-patch with an unresolved artifact exits 3 naming stage and basenames" {
+  cd "$WD"
+  cp .context/state.json snap
+  # ST has no artifact in the fixture workdir; --prev without --via is the self-patch signature.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage ST --prev FN
+  assert_failure 3
+  assert_output --partial "ST"
+  assert_output --partial "retrospective-N.md"
+  run diff -q .context/state.json snap
+  assert_success
+}
+
+@test "fail-loud: --via (hook / step6_5) keeps the unresolved no-op at exit 0" {
+  cd "$WD"
+  cp .context/state.json snap
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage ST --prev FN --via hook
+  assert_success
+  run diff -q .context/state.json snap
+  assert_success
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage ST --prev FN --via step6_5
+  assert_success
+}
+
+@test "fail-loud: --allow-missing-artifact restores the exit-0 no-op for the self-patch path" {
+  cd "$WD"
+  cp .context/state.json snap
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage ST --prev FN --allow-missing-artifact
+  assert_success
+  run diff -q .context/state.json snap
+  assert_success
+}
+
+@test "user: --prev USER writes the USER→PL origin edge" {
+  cd "$WD"
+  sed 's/stage: DV/stage: PL/' .context/development-0.md > .context/planning-0.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage PL --prev USER --artifact .context/planning-0.md
+  assert_success
+  run jq -r '.handoffs["USER→PL"]' .context/state.json
+  assert_output --partial "ref:planning-0.md"
+}
+
+@test "user: --prev USER writes the USER→IR origin edge (emergency pipeline)" {
+  cd "$WD"
+  sed 's/stage: DV/stage: IR/' .context/development-0.md > .context/incident-0.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage IR --prev USER --artifact .context/incident-0.md
+  assert_success
+  run jq -r '.handoffs["USER→IR"]' .context/state.json
+  assert_output --partial "ref:incident-0.md"
+}
+
+@test "user: USER is predecessor-only — --stage USER resolves nothing and never patches" {
+  cd "$WD"
+  cp .context/state.json snap
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage USER
+  assert_success
+  run diff -q .context/state.json snap
+  assert_success
+  # A genuinely invalid predecessor is still a caller bug.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --prev NOPE
   assert_failure 2
   assert_output --partial "invalid --prev value"
 }
