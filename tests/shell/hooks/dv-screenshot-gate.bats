@@ -59,6 +59,99 @@ setup() {
   [ ! -f "$WD/.context/logs/audit.jsonl" ]
 }
 
+# --- manifest schema (REQ-8) --------------------------------------------------
+# Presence alone used to pass the gate, so a manifest whose rows did not match the
+# canonical 9-column table reached the consuming stage, which silently dropped the
+# evidence. The schema verdict is delegated to attach-visual-evidence.sh so the
+# grammar keeps exactly one parser.
+
+_canonical_row() {
+  printf '| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |\n'
+  printf '|---|------|------|-------|----------|---------|---------|----------|------------|\n'
+  printf '| 01 | home | dv-01-home.png | 1234 | apple | sim | Home screen | 2026-01-01T00:00:00Z | - |\n'
+}
+
+@test "schema: a manifest whose rows miss the canonical schema blocks with a schema reason" {
+  printf '%s' '{"version":1,"worktask_id":"wt-bad","metadata":{}}' > "$WD/.context/state.json"
+  mkdir -p "$WD/.context/images/wt-bad"
+  {
+    printf '# screenshots\n\n'
+    printf '| # | Path | Caption |\n|---|------|---------|\n'
+    printf '| 1 | shot.png | too few columns |\n'
+  } > "$WD/.context/images/wt-bad/screenshots.md"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+  assert_success   # blocks via stdout JSON, exit stays 0
+  echo "$output" | jq -e '
+    .decision == "block"
+    and (.reason | test("screenshot_manifest_schema"))
+    and (.hookSpecificOutput.additionalContext | test("canonical 9-column"))
+  '
+  run jq -e '.action == "screenshot_gate_block"
+             and .metadata.block_kind == "screenshot_manifest_schema"' \
+    "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "schema: a canonical manifest passes the gate" {
+  printf '%s' '{"version":1,"worktask_id":"wt-good","metadata":{}}' > "$WD/.context/state.json"
+  mkdir -p "$WD/.context/images/wt-good"
+  _canonical_row > "$WD/.context/images/wt-good/screenshots.md"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+  assert_success
+  [ -z "$output" ]
+  run jq -e '.action == "screenshot_gate_pass"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "schema: a table-free manifest with NO captures beside it passes (genuine skip rationale)" {
+  printf '%s' '{"version":1,"worktask_id":"wt-skip","metadata":{}}' > "$WD/.context/state.json"
+  mkdir -p "$WD/.context/images/wt-skip"
+  printf '# screenshots\n\nNo captures: headless CI, rationale recorded in development-0.md.\n' \
+    > "$WD/.context/images/wt-skip/screenshots.md"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+  assert_success
+  [ -z "$output" ]
+  run jq -e '.action == "screenshot_gate_pass"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "schema: AC-4 — a table-free manifest sitting beside real captures BLOCKS" {
+  # The silent evidence drop REQ-8 exists to remove: the PNGs were captured, the manifest
+  # references none of them, and every downstream stage sees "a manifest is present".
+  printf '%s' '{"version":1,"worktask_id":"wt-drop","metadata":{}}' > "$WD/.context/state.json"
+  mkdir -p "$WD/.context/images/wt-drop"
+  printf '# screenshots\n\nHeadless CI, no captures.\n' \
+    > "$WD/.context/images/wt-drop/screenshots.md"
+  printf '\x89PNG\r\n\x1a\n' > "$WD/.context/images/wt-drop/dv-01-home.png"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+  assert_success   # blocks via stdout JSON, exit stays 0
+  echo "$output" | jq -e '.decision == "block" and (.reason | test("screenshot_manifest_schema"))'
+  echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("image file")'
+  run jq -e '.metadata.block_kind == "screenshot_manifest_schema"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "schema: requires_screenshots=false never blocks even with captures and no rows" {
+  printf '%s' '{"version":1,"worktask_id":"wt-noui3","metadata":{"requires_screenshots":false}}' \
+    > "$WD/.context/state.json"
+  mkdir -p "$WD/.context/images/wt-noui3"
+  printf '# screenshots\n\nnone\n' > "$WD/.context/images/wt-noui3/screenshots.md"
+  printf '\x89PNG\r\n\x1a\n' > "$WD/.context/images/wt-noui3/dv-01-home.png"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "schema: requires_screenshots=false skips the schema check entirely" {
+  printf '%s' '{"version":1,"worktask_id":"wt-noui2","metadata":{"requires_screenshots":false}}' \
+    > "$WD/.context/state.json"
+  mkdir -p "$WD/.context/images/wt-noui2"
+  printf '| 1 | broken |\n' > "$WD/.context/images/wt-noui2/screenshots.md"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+  assert_success
+  [ -z "$output" ]
+}
+
 @test "contract: --self-test passes (smoke, NON-counting)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success

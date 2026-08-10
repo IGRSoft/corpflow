@@ -2,7 +2,10 @@
 # attach-visual-evidence.sh — embed DV screenshot captures into the PR body and
 # the GitHub issue, on a UI-change run (metadata.requires_screenshots=true).
 #
-# Three modes (analyzing-0.md ad4, change-map #4):
+# Publishing modes (analyzing-0.md ad4, change-map #4), plus a read-only
+# --validate-manifest <path> documented with the others below. The publishing modes'
+# exit-0 contract is load-bearing — their stdout is spliced into the PR body — so the
+# schema check is a SEPARATE mode with its own exit codes and never alters theirs:
 #   --emit pr     Print a ready-to-insert "## Visual evidence" markdown block to
 #                 stdout. The PR-body composer (FN agent / FN PR flow /
 #                 conductor-attachments skeleton) inserts it between ## Test plan
@@ -29,6 +32,12 @@
 #                    ("when the PR closes"). <pr-ref> optional; defaults to current
 #                    branch's PR. Defers under milestone mode (parent milestone issue
 #                    is canonical); audits no_related_issues when PR closes nothing.
+#   --validate-manifest <path>
+#                 Read-only schema assertion over the canonical 9-column capture
+#                 table. Writes nothing, posts nothing, loads no state. exit 0 valid,
+#                 1 schema violation (diagnostic on stdout), 2 manifest not found,
+#                 3 no capture rows at all (caller decides whether that is legitimate).
+#                 Called by hooks/dv-screenshot-gate.sh so the grammar has one owner.
 #
 # Image hosting (REQ-5, ad7): reuse publish-pl-issue.sh's host-tier degradation
 # by sourcing it under PUBLISH_LIB_ONLY=1 — select_host_tier / host_one_asset /
@@ -138,6 +147,70 @@ parse_manifest() {
       printf "99\t%s\t%s\toversize\n", p, "oversize (link-only)"
     }
   ' "$mf"
+}
+
+# ---------- mode: --validate-manifest (read-only) ---------------------------
+# Schema assertion for hooks/dv-screenshot-gate.sh, living HERE so the 9-column
+# grammar has exactly one implementation. A second copy in the gate would recreate
+# the duplicated-map drift the artifact-map parity guard exists to police.
+#
+# Canonical row: | # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |
+# with a mandatory two-digit index. A manifest carrying NO capture rows is reported as
+# exit 3 rather than judged here: whether that is a skip rationale or dropped evidence
+# depends on what sits beside the file, which the caller sees and this parser does not.
+#
+#   exit 0  structurally valid, at least one canonical capture row
+#   exit 1  schema violation (diagnostic on stdout)
+#   exit 2  manifest missing or unreadable
+#   exit 3  well-formed but carries no capture rows — legitimate only when no captures
+#           exist beside it, which the caller (not this parser) is the one that knows
+validate_manifest() {
+  local mf="$1" bad rows
+  if [ -z "$mf" ] || [ ! -f "$mf" ]; then
+    printf 'manifest not found: %s\n' "${mf:-<unset>}"
+    return 2
+  fi
+
+  # Candidate rows are pipe-tables minus the header and the --- separator. Each
+  # violation is reported with its line number so the writer can fix the row, not
+  # re-author the file.
+  bad=$(LC_ALL=C awk -F'|' '
+    /^[[:space:]]*\|/ {
+      for (i=1;i<=NF;i++){ gsub(/^[[:space:]]+|[[:space:]]+$/,"",$i) }
+      if ($2 == "#" || tolower($2) == "no." ) next          # header
+      if ($2 ~ /^:?-+:?$/ || $3 ~ /^:?-+:?$/) next          # separator, incl. alignment rows
+      if ($2 == "" && $3 == "") next                        # blank filler
+      if (NF - 2 != 9) {
+        printf "line %d: %d columns, expected 9\n", NR, NF - 2
+        next
+      }
+      if ($2 !~ /^[0-9][0-9]$/) {
+        printf "line %d: index \"%s\" is not a two-digit ordinal\n", NR, $2
+        next
+      }
+      if ($4 == "") { printf "line %d: empty Path column\n", NR }
+    }
+  ' "$mf")
+
+  if [ -n "$bad" ]; then
+    printf 'manifest schema violation(s) in %s:\n%s\n' "$mf" "$bad"
+    return 1
+  fi
+
+  rows=$(parse_manifest "$mf" | grep -c . || true)
+  if [ "$rows" -eq 0 ]; then
+    if grep -qE '^[[:space:]]*\|[[:space:]]*[0-9]' "$mf"; then
+      printf 'manifest schema violation in %s: table rows present but none matches the canonical schema\n' "$mf"
+      return 1
+    fi
+    # No capture rows at all. Whether that is a legitimate skip-rationale manifest or a
+    # silently dropped capture depends on what sits NEXT to the file, which is the caller's
+    # knowledge, not the parser's — so report the fact and let the gate apply the policy.
+    printf 'manifest %s carries no canonical capture rows\n' "$mf"
+    return 3
+  fi
+
+  return 0
 }
 
 # ---------- block builder ---------------------------------------------------
@@ -889,8 +962,16 @@ if [ "${1:-}" = "--self-test" ]; then
   exit 0
 fi
 
+# Read-only schema check. Handled here, before the tier library and state load, so the
+# gate can call it in a tree with no state.json and so nothing about the publishing
+# modes' exit-0 contract is reachable from this path.
+if [ "${1:-}" = "--validate-manifest" ]; then
+  validate_manifest "${2:-}"
+  exit $?
+fi
+
 usage() {
-  echo "usage: $0 {--emit pr | --post issue | --post completion [<pr-ref>] | --self-test}" >&2
+  echo "usage: $0 {--emit pr | --post issue | --post completion [<pr-ref>] | --validate-manifest <path> | --self-test}" >&2
 }
 
 # Argv is validated BEFORE the library/state load so a caller error reports the

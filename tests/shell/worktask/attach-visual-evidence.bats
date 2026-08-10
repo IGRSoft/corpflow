@@ -303,3 +303,75 @@ _degraded_row() {
   run _degraded_row
   assert_output ""
 }
+
+# --- --validate-manifest (REQ-8) ---------------------------------------------
+# Read-only schema mode added so hooks/dv-screenshot-gate.sh can reject a malformed
+# manifest at the stage that WRITES it. The publishing modes' exit-0 contract is
+# separately re-asserted below: their stdout is spliced into the PR body.
+
+@test "validate: a canonical manifest exits 0 with no diagnostic" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/screenshots.md"
+  assert_success
+  assert_output ""
+}
+
+@test "validate: a row with the wrong column count exits 1 naming the line" {
+  cat > "$WD/bad.md" <<'EOS'
+| # | path | caption |
+|---|------|---------|
+| 01 | dv-01-test.png | too few columns |
+EOS
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/bad.md"
+  assert_failure 1
+  assert_output --partial "columns, expected 9"
+  assert_output --partial "line 3"
+}
+
+@test "validate: a non-two-digit index exits 1" {
+  cat > "$WD/bad2.md" <<'EOS'
+| # | slug | path | bytes | tool | adapter | caption | ts | ref |
+|---|------|------|-------|------|---------|---------|----|----|
+| 1 | test | dv-01-test.png | 100 | apple | sim | Login | 2026-01-01 | DV |
+EOS
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/bad2.md"
+  assert_failure 1
+  assert_output --partial "two-digit ordinal"
+}
+
+@test "validate: a missing manifest exits 2, distinct from a schema violation" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/nope.md"
+  assert_failure 2
+  assert_output --partial "manifest not found"
+}
+
+@test "validate: the mode writes nothing — the manifest is byte-identical afterwards" {
+  cp "$WD/screenshots.md" "$WD/snap.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/screenshots.md"
+  assert_success
+  run diff -q "$WD/screenshots.md" "$WD/snap.md"
+  assert_success
+}
+
+@test "contract: --emit pr keeps its exit-0 contract for a manifest the validator rejects" {
+  # The PR-body composer splices this stdout; a schema failure must NOT become a
+  # non-zero exit here. Enforcement lives in the gate, never in the composer.
+  cat > "$WD/bad3.md" <<'EOS'
+| # | path |
+|---|------|
+| 1 | dv-01-test.png |
+EOS
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/bad3.md"
+  assert_failure 1
+
+  run env STATE_FILE="$WD/state-true.json" WORKSPACE_ROOT="$WD" \
+    MANIFEST_FILE="$WD/bad3.md" ASSET_HOST_MODE=none \
+    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+}
+
+@test "validate: a table-free manifest exits 3 — no rows, policy left to the caller" {
+  printf '# screenshots\n\nNo captures.\n' > "$WD/norows.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/norows.md"
+  assert_failure 3
+  assert_output --partial "no canonical capture rows"
+}
