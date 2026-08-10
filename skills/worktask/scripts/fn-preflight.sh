@@ -23,10 +23,16 @@
 #                    planned REMOTE name and legitimately differs on several arms. Classes
 #                    the result `third_party` or `expected`; only `third_party` is surfaced
 #                    at the FN gate. Read-only, exit 0 always, never blocks.
+#     issue-close-required
+#                    is the integration branch something other than the repository
+#                    default? If so the `Closes #N` merge trailer will never fire, so
+#                    print the explicit `gh issue close` command FN must run post-merge.
+#                    Read-only, exit 0 always; unresolved inputs report, never guess.
 #     all            attachments → pr-body → validate-pr → continuity.
 #
-#   `branch-divergence` is deliberately NOT in `all`: it is a separate subcommand so it is
-#   independently testable and cannot perturb `continuity`'s existing rows.
+#   `branch-divergence` and `issue-close-required` are deliberately NOT in `all`: each is a
+#   separate subcommand so it is independently testable and cannot perturb `continuity`'s
+#   existing rows. `issue-close-required` additionally runs POST-merge, not pre-`pr create`.
 #
 #   `pr-body` runs BEFORE `validate-pr` because it rewrites the body in place: the
 #   body whose `Closes #<n>` line is validated must be the byte-identical body that
@@ -433,6 +439,60 @@ cmd_branch_divergence() {
   return 0
 }
 
+# ---------- issue-close-required ----------
+# GitHub only honours a `Closes #N` trailer when the PR merges into the DEFAULT branch.
+# Merging into any other integration branch leaves the issue open with no signal at all,
+# so FN has to close it explicitly. Read-only: it prints the command, never runs it.
+#
+# Unresolved base_ref or issue ⇒ report and return 0. A finalization gate that blocks on
+# its own inability to introspect is worse than the open issue it is guarding against.
+cmd_issue_close_required() {
+  local base default_branch issue
+
+  if ! command -v jq > /dev/null 2>&1; then
+    printf 'issue-close-required: jq unavailable — check skipped\n'
+    return 0
+  fi
+
+  base=$(resolve_base_ref)
+  base="${base#origin/}"
+  if [[ -z "$base" ]]; then
+    audit_fn issue_close_required base_ref_unresolved "$(meta_json reason unresolved)"
+    printf 'issue-close-required: integration branch unresolved — reporting, not guessing; verify the issue manually\n'
+    return 0
+  fi
+
+  default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null || printf '')
+  default_branch="${default_branch#origin/}"
+  if [[ -z "$default_branch" ]]; then
+    audit_fn issue_close_required default_branch_unresolved "$(meta_json base "$base")"
+    printf 'issue-close-required: repository default branch unresolved — reporting, not guessing; verify the issue manually\n'
+    return 0
+  fi
+
+  if [[ "$base" == "$default_branch" ]]; then
+    audit_fn issue_close_required not_required \
+      "$(meta_json base "$base" default_branch "$default_branch")"
+    printf 'issue-close-required: no (integration branch %s IS the repository default — the merge trailer fires)\n' "$base"
+    return 0
+  fi
+
+  issue=$(resolve_issue)
+  if [[ -z "$issue" ]]; then
+    audit_fn issue_close_required issue_unresolved \
+      "$(meta_json base "$base" default_branch "$default_branch")"
+    printf 'issue-close-required: yes, but no issue number resolved (integration branch %s is not the default %s).\nNo command can be printed — find the issue and close it manually.\n' \
+      "$base" "$default_branch"
+    return 0
+  fi
+
+  audit_fn issue_close_required required \
+    "$(meta_json base "$base" default_branch "$default_branch" issue "$issue")"
+  printf 'issue-close-required: yes — %s is not the repository default (%s), so the merge trailer will NOT fire.\nRun after the merge:\n  gh issue close %s --comment "Merged into %s."\n' \
+    "$base" "$default_branch" "$issue" "$base"
+  return 0
+}
+
 # ---------- Argument parsing ----------
 COMMAND=""
 while [[ $# -gt 0 ]]; do
@@ -453,7 +513,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h | --help) usage ;;
-    attachments | resolve-issue | validate-pr | pr-body | continuity | branch-divergence | all)
+    attachments | resolve-issue | validate-pr | pr-body | continuity | branch-divergence | issue-close-required | all)
       COMMAND="$1"
       shift
       ;;
@@ -476,6 +536,7 @@ case "$COMMAND" in
   pr-body) cmd_pr_body ;;
   continuity) cmd_continuity ;;
   branch-divergence) cmd_branch_divergence ;;
+  issue-close-required) cmd_issue_close_required ;;
   all)
     cmd_attachments && cmd_pr_body && cmd_validate_pr && cmd_continuity
     ;;
