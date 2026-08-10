@@ -99,6 +99,46 @@ missing_paths_block() {
     return 0 )
 }
 
+# --- state-patch executability ------------------------------------------------
+# The same defect class as the ungranted Skill calls above, found the same way: ten
+# agents were told to run `state-patch.sh` while holding no `bash` grant, so every
+# one of them silently skipped its ledger patch. An agent satisfies this predicate
+# by holding a grant that can execute the tool OR by documenting the Edit-direct
+# fallback it *can* execute -- an instruction it cannot carry out either way is the
+# violation.
+
+_orders_state_patch() {
+  grep -qE '^Run `state-patch\.sh' "$1" 2>/dev/null
+}
+
+_grants_state_patch() {
+  local tools
+  tools="$(awk '/^tools:/{print; exit}' "$1")"
+  printf '%s' "$tools" | grep -qE '(^|[ ,:])Bash([ ,]|$)' && return 0
+  printf '%s' "$tools" | grep -qF 'Bash(bash skills/worktask/scripts/state-patch.sh:'
+}
+
+_documents_state_patch_fallback() {
+  # The fallback is only real if the agent can also execute IT.
+  grep -qF 'patch `.context/state.json` yourself with `Edit`' "$1" 2>/dev/null \
+    && awk '/^tools:/{print; exit}' "$1" | grep -qE '(^|[ ,:])Edit([ ,]|$)'
+}
+
+# unexecutable_state_patch_orders <plugin-root>
+# One line per agent ordered to run the patch tool with neither a usable grant nor
+# an executable documented alternative.
+unexecutable_state_patch_orders() {
+  local root="$1" f
+  ( cd "$root" || return 1
+    for f in $(git ls-files -- 'agents/*.md'); do
+      _orders_state_patch "$f" || continue
+      _grants_state_patch "$f" && continue
+      _documents_state_patch_fallback "$f" && continue
+      printf '%s\n' "$f"
+    done
+    return 0 )
+}
+
 # A plugin tree that satisfies every predicate; prints its root.
 mk_skill_layout() {
   local root
@@ -202,4 +242,29 @@ mk_skill_layout() {
 @test "contract: every agent citing plugin paths carries the resolution block" {
   run missing_paths_block "$PLUGIN_ROOT"
   assert_output ""
+}
+
+@test "contract: no agent in this repo is ordered to run state-patch.sh it cannot execute" {
+  # Guard the collector before asserting emptiness: 13 agents order this tool, so a
+  # zero-sized candidate set means the matcher regressed, not that the repo is clean.
+  local ordering
+  ordering="$(cd "$PLUGIN_ROOT" && for f in $(git ls-files -- 'agents/*.md'); do
+    grep -qE '^Run `state-patch\.sh' "$f" && printf '%s\n' "$f"; done || true)"
+  [ "$(printf '%s\n' "$ordering" | grep -c .)" -ge 13 ]
+  run unexecutable_state_patch_orders "$PLUGIN_ROOT"
+  assert_output ""
+}
+
+@test "resolver: an agent ordered to patch state with neither grant nor fallback is named" {
+  local root
+  root="$(mk_tmpworkdir)"
+  mk_git_fixture --dir "$root" \
+    --file 'agents/blocked.md:---\ntools: Read, Write\n---\n\nRun `state-patch.sh --stage AR --prev PL` (`skills/worktask/scripts/`).\n' \
+    --file 'agents/granted.md:---\ntools: Read, Bash(bash skills/worktask/scripts/state-patch.sh:*)\n---\n\nRun `state-patch.sh --stage DC --prev QA` (`skills/worktask/scripts/`).\n' \
+    --file 'agents/fallback.md:---\ntools: Read, Edit\n---\n\nRun `state-patch.sh --stage ST --prev FN`; if it cannot run, patch `.context/state.json` yourself with `Edit`.\n' \
+    >/dev/null
+  run unexecutable_state_patch_orders "$root"
+  assert_output --partial "agents/blocked.md"
+  refute_output --partial "agents/granted.md"
+  refute_output --partial "agents/fallback.md"
 }

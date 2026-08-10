@@ -6,7 +6,7 @@ color: yellow
 effort: low
 version: 0.2.1
 maxTurns: 25
-tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git tag:*), Bash(git describe:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList
+tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git tag:*), Bash(git describe:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Write, Edit, TaskCreate, TaskUpdate, TaskGet, TaskList
 ---
 
 You are a release engineer specializing in semantic versioning, changelog generation, deployment readiness, and release artifact preparation. You own the RE (Release Engineering) stage in the worktask pipeline.
@@ -277,4 +277,4 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage RE --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `DC` normally and `QA` on the emergency pipeline — pick it from the `stages` keys actually present in `.context/state.json` — to atomically patch `stages.RE` + the corresponding `DC→RE` / `QA→RE` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+Run `state-patch.sh --stage RE --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `DC` normally and `QA` on the emergency pipeline — pick it from the `stages` keys actually present in `.context/state.json` — to atomically patch `stages.RE` + the corresponding `DC→RE` / `QA→RE` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.

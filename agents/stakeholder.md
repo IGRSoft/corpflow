@@ -9,7 +9,7 @@ maxTurns: 20
 # tools: Skill is REQUIRED — `## Step 4` makes the self-improvement retrospective
 # mandatory for every ST completion, and it has no non-Skill path. Without the grant
 # the step silently never runs and the failure-label dataset stays empty.
-tools: Read, Glob, Grep, Write, Skill, TaskCreate, TaskUpdate, TaskGet, TaskList
+tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Edit, Write, Skill, TaskCreate, TaskUpdate, TaskGet, TaskList
 hooks:
   Stop:
     - type: command
@@ -167,4 +167,4 @@ Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, a
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage ST --prev FN` (`skills/worktask/scripts/`) to atomically patch `stages.ST` + the `FN→ST` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. If the script/`jq`/state.json is absent, skip silently — the SubagentStop hook (`state-merge.sh`) repairs the ledger from your frontmatter.
+Run `state-patch.sh --stage ST --prev FN` (`skills/worktask/scripts/`) to atomically patch `stages.ST` + the `FN→ST` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
