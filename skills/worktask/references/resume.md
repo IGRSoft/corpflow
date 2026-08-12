@@ -81,6 +81,19 @@ A revision leaves the refined `facts.branch` as-is and never re-refines: the onc
 | `agent_id` absent from `claude agents --json --all` (or `state: done`) for an `in_progress` stage | — | Agent gone. Re-delegate from the first incomplete stage |
 | **Several** `agent_id`s absent at once, all vanishing at the same timestamp, session run under `--max-budget-usd` | no per-stage failure rows | **Budget halt, not stage failure.** Reaching the cap denies new spawns *and* halts running background subagents, so healthy in-flight stages die together with no error of their own. Raise the budget, then re-dispatch — and do **not** increment `metadata.retry_count`: those 3 retries are reserved for genuine stage failures, and spending them on an external stop escalates a run that never actually failed |
 
+### Mid-stage yield
+
+| TaskList Shape | Audit Tail | Action |
+|----------------|------------|--------|
+| Stage returned (not live, not errored) but the artifact is absent, or present with no `handoff.verdict` | `stage_returned_incomplete` | Reattach via `SendMessage`; never re-delegate |
+
+The agent ended its turn with budget remaining and no finished handoff. As far as the runtime is
+concerned that is an ordinary return, which is why 6.5a's errored-return arm never fires.
+
+Reattach via `SendMessage` to finish the same work. Do **not** re-delegate — a fresh dispatch
+redoes work against a tree the yielded agent already edited — and do **not** increment
+`retry_count`: nothing failed. Detector: `skills/worktask/SKILL.md § Step 6.5a2`.
+
 ## Resume Procedure
 
 0. `claude agents --json --all | jq '.[] | {agent_id, state, waitingFor}'` — match rows against `.context/state.json.facts.dispatched_agents[]` (`--all` also surfaces completed and just-dispatched sessions) and branch directly:

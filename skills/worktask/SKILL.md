@@ -711,6 +711,29 @@ while (tasks.some(t => t.status !== "completed")) {
       full.description = full.description + "\n\n" + enforce;
 ```
 
+##### Step 4.8 — why a second banner
+
+Isolation and assignment are two claims, and the banner above only makes the first. A stale
+worktree of a *different* clone is perfectly isolated — it satisfies 4.8, satisfies D0.0, and
+still cannot receive a single edit. Inject the second claim on the same surface, for the same
+reason Step 4.8a gives: prose loses to the dispatch surface. `dv-tree-preflight.sh` was written
+and tested for exactly this scenario and sat dormant because nothing invoked it.
+
+##### Step 4.8 — assigned-tree banner
+
+```typescript
+      // …continued: step 4.8 body
+      const assigned = state.metadata?.workspace_path ?? full.metadata.workspace_path;
+      const assertTree =
+        `ASSIGNED TREE REQUIRED: before your first Edit/Write run ` +
+        `\`bash skills/worktask/scripts/dv-tree-preflight.sh --assigned "$WORKSPACE_ROOT"\` ` +
+        `(WORKSPACE_ROOT = ${assigned ?? "the banner value below"}). ` +
+        `Exit 1 is BLOCKING: do not edit, log workspace_path_mismatch, return verdict:blocked ` +
+        `quoting both paths it printed. Warnings are advisory. Isolation (above) is a different ` +
+        `claim — a stale worktree passes it and is still the wrong tree.`;
+      full.description = full.description + "\n\n" + assertTree;
+```
+
 ##### Step 4.8 — worktree audit
 
 ```typescript
@@ -1113,6 +1136,63 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
         });
         routeToRetryMatrix(code, cls);  // never falls through to completion
         continue;
+      }
+
+```
+
+##### Step 6.5a2 — why a mid-stage yield needs its own arm
+
+An agent that yields mid-sentence with budget remaining has **not** errored, so 6.5a does not
+fire — and control falls straight through to Layer 3, whose fallback hard-codes
+`status:"completed", verdict:"ok"` over a stage that never finished. The ledger is then corrupt
+in the one direction nothing downstream re-checks.
+
+This arm keys on the *evidence* (artifact absent, or present with no `handoff.verdict`), never on
+the shape of the return message, so a normally-completed stage is untouched and still takes the
+Layer-2 path.
+
+##### Step 6.5a2 — incomplete return (mid-stage yield)
+
+```typescript
+      // 6.5a2. Incomplete return: the stage yielded without finishing its handoff.
+      //        Precondition — the agent is NOT live (Step 6.5's liveness rule already
+      //        forbids running this block while agent_id is live in `claude agents --json`).
+      const incArtifact = stageArtifactPath(code, full.metadata.run_index ?? 0);
+      const incHandoff = fs.existsSync(incArtifact) ? parseFrontmatter(incArtifact) : null;
+      const selfPatched = post.stages?.[code]?.status === "completed"
+                          && Boolean(post.stages[code].verdict);
+      const incomplete = !selfPatched && !incHandoff?.verdict;
+```
+
+##### Step 6.5a2 — mark, audit, resume
+
+```typescript
+      // …continued: step 6.5a2 body
+      if (incomplete) {
+        atomicMergeStateJson({ stages: { [code]: { status: "in_progress" } } });
+        appendAudit({
+          actor: "orchestrator",
+          action: "stage_returned_incomplete",
+          subject: code,
+          result: "blocked",
+          metadata: {
+            artifact: incArtifact,
+            artifact_present: fs.existsSync(incArtifact),
+            reason: fs.existsSync(incArtifact) ? "handoff_verdict_missing" : "artifact_absent",
+          },
+        });
+```
+
+##### Step 6.5a2 — resume, never re-delegate
+
+The agent holds the half-done work; a fresh dispatch would redo it against a tree it already
+edited. Same branch as a parked agent in `references/resume.md § State → Action Table`.
+
+```typescript
+        // …continued: step 6.5a2 body
+        SendMessage({ to: dispatchEntry(state, task.id).agent_id ?? subagentType,
+                      message: `Stage ${code} returned without a completed handoff. Finish the work, write ${incArtifact} with a handoff verdict, and return. Do not restart from scratch.` });
+        continue;   // never falls through to the completion patch
       }
 
 ```

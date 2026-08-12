@@ -6,21 +6,35 @@ All three were produced by the `cli_fallback` adapter using `silicon` (Dracula t
 
 ## Manifest
 
-| # | Slug | Path | Bytes | Platform | Adapter | Caption |
-|---|------|------|-------|----------|---------|---------|
-| 01 | skill-scaffold | dv-01-skill-scaffold.png | 188676 | all | cli_fallback (silicon) | Head of the new `SKILL.md` — frontmatter + intro + trigger conditions |
-| 02 | developer-prompt-delta | dv-02-developer-prompt-delta.png | 166538 | all | cli_fallback (silicon) | `agents/developer.md` diff — DV completion-gate insertion (AR § 6.1 verbatim) |
-| 03 | files-changed | dv-03-files-changed.png | 155017 | all | cli_fallback (silicon) | `git status --short` of the workspace at DV completion |
+This table is the **canonical 9-column shape** — what `attach-visual-evidence.sh
+--validate-manifest` asserts, and the file its failure diagnostic points a DV agent at.
+
+| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |
+|---|------|------|-------|----------|---------|---------|----------|------------|
+| 01 | skill-scaffold | dv-01-skill-scaffold.png | 188676 | all | cli_fallback (silicon) | Head of the new `SKILL.md` — frontmatter + intro + trigger conditions | 2026-06-28T17:16:04Z | — |
+| 02 | developer-prompt-delta | dv-02-developer-prompt-delta.png | 166538 | all | cli_fallback (silicon) | `agents/developer.md` diff — DV completion-gate insertion (AR § 6.1 verbatim) | 2026-06-28T17:16:04Z | — |
+| 03 | files-changed | dv-03-files-changed.png | 155017 | all | cli_fallback (silicon) | `git status --short` of the workspace at DV completion | 2026-06-28T17:16:04Z | — |
+
+### Column notes
+
+Copy the column set and the two-digit `#` exactly: a one-digit index or a dropped trailing column
+parses as zero capture rows, and the run then ships with its evidence silently missing.
+
+`Captured` is an ISO-8601 UTC timestamp; `Design Ref` is the `figma-registry.md` row `ID` this
+capture maps to, or `—` when there is no registry or no unique match (plugin meta-work has
+neither). Full template and column semantics: `../../SKILL.md § Manifest`.
 
 ## AC coverage (from planning-0.md)
 
-| AC | Demonstrated by | Verdict |
-|----|----------------|---------|
-| AC-1 skill present | dv-01 | pass |
-| AC-2 ≥1 screenshot artifact | dv-01..03 | pass |
-| AC-4 QA-readable artifact | dv-01..03 (PNG, universally readable) | pass |
-| AC-5 DR-citable artifact | dv-01..03 + this manifest | pass |
-| AC-6 deterministic platform routing | adapter column above | pass |
+A list, not a second table, deliberately: `--validate-manifest` reads *every* pipe table in the
+file it is pointed at, so a companion table here would be judged against the capture-row grammar
+and reported as a schema violation.
+
+- AC-1 skill present — dv-01 — pass
+- AC-2 ≥1 screenshot artifact — dv-01..03 — pass
+- AC-4 QA-readable artifact — dv-01..03 (PNG, universally readable) — pass
+- AC-5 DR-citable artifact — dv-01..03 + the manifest above — pass
+- AC-6 deterministic platform routing — Adapter column above — pass
 
 ## Reproducing
 

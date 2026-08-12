@@ -37,6 +37,28 @@ is a SIBLING repo on a different branch and MUST NOT be edited.
 Rule: all `Edit`/`Write` calls MUST target paths under `git rev-parse --show-toplevel`
 of the current session, NOT paths under the canonical plugin source.
 
+### Sibling-worktree hazard
+
+The rule above defends against a sibling **clone** and is silent about a sibling **worktree** —
+and that gap is not academic. When the harness pins the session to a stale linked worktree of a
+*different* clone, `git rev-parse --show-toplevel` answers with that worktree. The agent then
+obeys the rule perfectly, writes every edit under the resolved root, and lands the entire stage in
+a tree nobody is watching: `git diff` in the real workspace shows nothing, and the stage reports
+success.
+
+#### Why every existing check passes on the wrong tree
+
+| Check | Why it passes |
+|---|---|
+| D0 workspace-root self-check | `--show-toplevel` returns the stale tree, so the recorded root and the prompt paths agree |
+| D0.0 worktree isolation | a stale worktree **is** a linked worktree — genuinely isolated |
+| the rule above | edits do target the resolved toplevel |
+
+The missing predicate is *assignment*: the resolved root must equal the root the stage was
+**dispatched against** (`task.metadata.workspace_path`). That is what
+`skills/worktask/scripts/dv-tree-preflight.sh` asserts and nothing else does.
+**Isolation ≠ assignment.**
+
 ### Orchestrator enforcement
 
 1. Before every `Task()` delegation, resolve `WORKSPACE_ROOT = $(git rev-parse --show-toplevel)`.
@@ -174,7 +196,15 @@ Base-ref, background, and lifecycle rules for the DV stage worktree, extracted f
 
 ### Worktree Mode (DV)
 
-All DV operations use worktree path prefix — isolation is always active. Use `EnterWorktree`/`ExitWorktree` tools to programmatically enter/leave worktree contexts. `EnterWorktree` accepts a `path` parameter to target a specific worktree directory when multiple exist; it can also **switch between Claude-managed worktrees mid-session** (re-target without `ExitWorktree` first). Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. Stale worktrees are auto-cleaned (including those with untracked files); fresh worktree per delegation (no reuse of prior-session worktrees). For large repos, `worktree.sparsePaths` reduces checkout size. See `skills/megatask/SKILL.md`.
+All DV operations use worktree path prefix — isolation is always active. Use `EnterWorktree`/`ExitWorktree` tools to programmatically enter/leave worktree contexts. `EnterWorktree` accepts a `path` parameter to target a specific worktree directory when multiple exist; it can also **switch between Claude-managed worktrees mid-session** (re-target without `ExitWorktree` first). Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. For large repos, `worktree.sparsePaths` reduces checkout size. See `skills/megatask/SKILL.md`.
+
+##### Do not rely on auto-cleanup
+
+This document previously stated that stale worktrees are auto-cleaned and that each delegation
+gets a fresh one with no reuse of prior-session worktrees. A run disproved it: a DV stage was
+pinned to a prior session's worktree, of a different clone, and wrote nothing for a full stage
+cycle. Treat a fresh worktree as the *intent* and assert it — run `dv-tree-preflight.sh
+--assigned` (D0.0a) rather than assuming the lifecycle held.
 
 ##### Base-ref resolution
 
