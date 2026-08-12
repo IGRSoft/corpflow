@@ -2,6 +2,76 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.12] - 2026-08-12
+
+Activating guards that were already written. A full `/worktask` run (OV-184, shipped as PR #436)
+burned a whole DV cycle: the agent pinned itself to a stale worktree of a *different* clone and
+could write nothing. The agent's logic was not at fault. `/worktask` never stamped
+`metadata.workspace_path` — only `/megatask` did (`commands/megatask.md`) — and that single
+omission silently disabled three guards that already existed and were already tested:
+
+| Guard | Why it no-opped |
+|---|---|
+| orchestrator workspace-root cross-check | `_task_root="${_task_root:-$_orch_root}"` compared a value to itself |
+| `dv-tree-preflight.sh` `resolve_assigned()` | returned empty → warn + exit 0, by design |
+| `agents/developer.md` path-prefix check | gated on "when `task.metadata.workspace_path` is set" |
+
+`dv-tree-preflight.sh` would have caught this exact failure — its header names the scenario
+verbatim — but nothing invoked it: a prose reference with an unfilled `<workspace>` placeholder,
+no hook, no orchestrator injection.
+
+### Added
+
+- **`metadata.workspace_path` stamped on every run.** Seeded into `state.json` at
+  `commands/worktask.md` Step 3a (`git rev-parse --show-toplevel`, else `pwd`) and onto the PL0
+  task at Step 4, beside `isolation`. Documented in the ledger schema
+  (`handoff-protocol.md § metadata.workspace_path`) and in `task-system.md`.
+- **`dv-tree-preflight.sh` invoked from the DV dispatch surface.** A new Step 4.8 assigned-tree
+  banner instructs DV to run it before its first edit and treat exit 1 as blocking — following
+  the precedent Step 4.8a states outright: *prose loses to the dispatch surface*.
+- **Step 6.5a2 — incomplete-return arm.** An agent that yields mid-sentence with budget remaining
+  has not errored, so 6.5a does not fire and control fell through to F3, which hard-codes
+  `status:"completed", verdict:"ok"` over a stage that never finished. The arm keys on the
+  evidence (artifact absent, or present with no `handoff.verdict`) rather than on message shape,
+  marks the stage `in_progress`, emits `stage_returned_incomplete`, and resumes the agent via
+  `SendMessage` instead of re-delegating. A normally-completed stage still takes the Layer-2 path.
+- **`--emit pr` idempotency.** `attach-visual-evidence.sh --emit pr` caches its emission at
+  `.context/logs/visual-evidence-pr-<worktask_id>-<run_index>.md` and replays it on any later run
+  for the same run index; `--force` re-hosts. Running it twice previously uploaded two full asset
+  sets and orphaned the first on GitHub. `fn-preflight.sh` treats the new `reused` audit result
+  exactly like `ok`, so a replay cannot retire the "## Visual evidence" heading requirement.
+- **`agents/developer.md` § The voluntary yield** — never end a turn to announce what you are
+  about to do next; an intent sentence is not a handoff. Plus a sixth Artifact-Complete Gate box.
+- **`agents/developer.md` § Manifest row shape** — DV is told the manifest is written *by the
+  skill* and so never sees a column name. Adds the canonical 9-column row and the two-digit-index
+  rule, and says why a malformed row is worse than a missing one.
+
+### Changed
+
+- **The cross-check no longer defaults to itself.** An unset `workspace_path` is now a loud stop
+  with a named audit row, not a silent pass.
+- **`dv-screenshot-capture/references/examples/README.md` corrected to the canonical 9 columns.**
+  It was a **7**-column table (no `Captured`, no `Design Ref`) that would fail
+  `--validate-manifest` — and it is the file `attach-visual-evidence.sh`'s failure diagnostic
+  sends a stuck DV agent to. Its AC-coverage table became a list, since the validator judges
+  *every* pipe table in the file it is pointed at.
+- **`workspace-modes.md`** gains the sibling-**worktree** hazard beside the existing
+  sibling-*clone* hazard, with the table of why D0, D0.0, and the stated Edit/Write rule all pass
+  on the wrong tree. Its claim that stale worktrees are auto-cleaned with no reuse of
+  prior-session worktrees is corrected — this run disproved it.
+- **`agents/developer.md` D0/D0.0** name the failure geometry: once the harness pins a worktree,
+  `git rev-parse --show-toplevel` returns *that* tree, so D0 is self-consistent and cannot detect
+  the problem; and a stale worktree passes D0.0 because it genuinely is isolated.
+  **Isolation ≠ assignment.** D0.0a's `<workspace>` placeholder is replaced with the concrete
+  resolution order.
+- **`agents/product-manager.md`** no longer frames `workspace_path` as a megatask-mode detector.
+- **`references/resume.md`** classifies the yielded agent, which sat between its live-mid-work
+  and agent-gone rows.
+- **`pr-body-lint.sh` usage errors print to stderr.** `usage()` sent the help header to stdout
+  while the one-line diagnostic went to stderr, so under this plugin's own `; true` / piped
+  convention a caller saw help text and read it as "ran, nothing to report". An explicit
+  `-h`/`--help` still writes to stdout.
+
 ## [4.0.11] - 2026-08-10
 
 Fail-loud worktask tooling (#431 retrospective, 9 approved self-improvement proposals). The

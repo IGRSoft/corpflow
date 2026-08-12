@@ -4,7 +4,23 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.11** — fail-loud worktask tooling (issue #431 retrospective, 9 proposals):
+- Plugin version: **4.0.12** — activating guards that were already written. `/worktask` never
+  stamped `metadata.workspace_path` (only `/megatask` did), and that single omission silently
+  disabled three assigned-tree guards at once: the orchestrator cross-check defaulted
+  `_task_root` to `_orch_root` and compared a value to itself; `dv-tree-preflight.sh`
+  `resolve_assigned()` returned empty and warned-not-blocked by design; `developer.md`'s
+  path-prefix check was gated on "when set". `dv-tree-preflight.sh` — written, tested, and
+  invoked **nowhere** — is now injected by the Step 4.8 DV dispatch banner, the surface that
+  makes worktree isolation hold. New Step 6.5a2 arm stops a mid-stage yield (not an errored
+  return, so 6.5a never fired) from falling through to F3's hard-coded `completed/ok`. The
+  `dv-screenshot-capture` examples README, which the attach failure diagnostic points DV at,
+  was a **7**-column manifest against the enforced 9. `attach-visual-evidence.sh --emit pr` is
+  now idempotent (cache + `--force`); `pr-body-lint.sh` usage errors no longer print help to
+  stdout where a piped caller reads them as benign. Full narrative: `CHANGELOG.md § [4.0.12]`.
+
+### Previous release narratives
+
+- Plugin version (previous): **4.0.11** — fail-loud worktask tooling (issue #431 retrospective, 9 proposals):
   `state-patch.sh` exits **3** instead of a silent no-op when a stage agent's own artifact does
   not resolve and it is patching its own predecessor edge (the documented Layer-1 self-patch
   signature — `--prev` present, `--via` absent); every other caller's exit-0 no-op is unchanged
@@ -22,9 +38,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
   design — it silences the exit-3 assertion but patches nothing; documented as such everywhere it
   is cited. Full narrative: `CHANGELOG.md § [4.0.11]`.
 
-### Previous release narratives
-
-- Plugin version (previous): **4.0.10** — eval-audit release (#279): the benchmark's quality
+- Plugin version (older): **4.0.10** — eval-audit release (#279): the benchmark's quality
   signal becomes held-out — both arms' prompts embed a scripted CLI contract and each arm's
   binary is scored against 30 goldens captured from `ttt-template` (24 `specified` decide
   `pass_fail`, 6 `implied` discriminate), replacing the self-graded `swift test` that never once
@@ -161,6 +175,28 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 | 2.1.51→2.1.76 | cc-features-2.1.51-76.md | v3.1.0/v3.2.0 |
 
 ## Release History (last 12, newest first)
+
+- 2026-08-12: v4.0.12 — activating guards that were already written (OV-184 run, PR #436). Root
+  cause: `/worktask` never stamped `metadata.workspace_path` — only `/megatask` did — and that
+  one omission silently disabled **three** assigned-tree guards at once (orchestrator cross-check
+  defaulted `_task_root` to `_orch_root` and compared a value to itself; `dv-tree-preflight.sh`
+  `resolve_assigned()` returned empty and warns-not-blocks by design; `developer.md`'s path-prefix
+  check is gated on "when set"). Now seeded in `state.json` and stamped on the PL0 task, with an
+  unset value a **loud** failure. `dv-tree-preflight.sh` — written, tested (`dv-tree-preflight.bats`),
+  invoked **nowhere** — is injected by the Step 4.8 DV dispatch banner, the same surface that
+  makes worktree isolation hold; `workspace-modes.md` gains the sibling-**worktree** hazard beside
+  the sibling-clone one, and its "stale worktrees are auto-cleaned, no reuse" claim is corrected —
+  this run disproved it. New **Step 6.5a2**: a mid-stage yield is not an errored return, so 6.5a
+  never fires and F3 stamped `completed/ok` over an unfinished stage; the arm keys on artifact /
+  `handoff.verdict` absence (never message shape), marks `in_progress`, audits
+  `stage_returned_incomplete`, and resumes via `SendMessage` instead of re-delegating.
+  `dv-screenshot-capture/references/examples/README.md` was a **7**-column manifest against the
+  enforced 9 — and it is the file `attach-visual-evidence.sh:363` sends a failing DV to; fixed and
+  now passes `--validate-manifest`. `--emit pr` is idempotent (emission cache + `--force`; a second
+  run previously re-hosted every asset and orphaned the first set), with `fn-preflight.sh` treating
+  the new `reused` row like `ok` so the heading obligation survives. `pr-body-lint.sh` usage errors
+  route help to stderr — on stdout, under the house `; true`/pipe convention, they read as benign.
+  882 `@test` across 59 `.bats` (was 879), +3 embedded script self-tests, ALL GREEN.
 
 - 2026-08-10: v4.0.11 — fail-loud worktask tooling (#431 retrospective, 9 proposals):
   `state-patch.sh` exits 3 (was silent exit 0) when a stage agent's self-patch artifact doesn't
@@ -307,20 +343,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
   alternation in `publish-pl-issue.sh` (kept in lockstep with `compatible-plugins.md`). Vendor
   identity deliberately untouched: author `IGRSoft`, `support@igrsoft.com`, `github.com/IGRSoft`
   URLs, `com.igrsoft.*` bundle IDs, and the marketplace name itself. BREAKING — no alias.
-- 2026-07-31: v3.43.0 — `--auto` becomes an array flag (`--auto=[plan, decision, finalization]`;
-  legacy `--auto-plan`/`--auto-finalization` kept as deprecated aliases, union-composed). New
-  `PL0.metadata.decision_gate` (`"user"`/`"auto"`) + orchestrator Step A.4: on `"auto"`, PL0's
-  `open_questions[]` are decided by a PM decision delegate on `model: "fable"` (step-5f `opus`
-  fallback), applied to the plan's existing anchors in one batch pass, then merged by the
-  orchestrator into `state.json facts.decisions[]` as `(auto-decided)` entries (no new plan
-  anchor — `## decisions` stays AR's), audited `auto_decision_dispatched`→`auto_decision_resolved`
-  (rationale per question in that row). BINDING escalation guard: irreversible/scope/security/spend
-  questions always stop for the user, even under `plan_gate: "bypass"`. `/megatask` stamps
-  `decision_gate: "auto"` per issue and PARKS an escalate-class issue instead of stalling the
-  batch (settled `failed` + `execution.reason: "parked_escalation"`, riding the monitor's normal
-  failure path — track freed, dependents stay blocked). New Signal 2b precondition + resume-table row. Docs + `marketplace.json` version parity
-  only; files include `commands/{worktask,megatask}.md`, `skills/megatask/SKILL.md`,
-  `.claude-plugin/marketplace.json`.
 ## Token Baselines
 
 Authoritative per-surface baselines: `skills/cost-optimization/references/token-baselines.md`. This file no longer mirrors them.
