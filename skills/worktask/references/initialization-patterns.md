@@ -38,6 +38,9 @@ its resolution order are canonical in `handoff-protocol.md § plan_file shape bo
 
 ```bash
 # …continued: atomic write of the seeded state.json (same shell session; uses $N)
+# See § Seeded workspace_path.
+WORKSPACE_PATH=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+
 # Atomic write: temp + fsync + rename
 tmp=".context/.state.json.$$.${RANDOM}.tmp"
 cat > "$tmp" <<EOF
@@ -47,6 +50,7 @@ cat > "$tmp" <<EOF
   "plan_file": ".context/planning-${N}.md",
   "platform": "${PLATFORM:-all}",
   "run_index": ${N},
+  "metadata": { "workspace_path": "${WORKSPACE_PATH}" },
   "stages": { "PL": { "status": "in_progress" } },
   "facts": {
     "goal": "${GOAL}",
@@ -72,6 +76,27 @@ patch: nothing in the patch path actually writes the field, so a run where PL co
 any other route left it unset — and `publish-pl-issue.sh` then published a kebab-slug issue
 title with an empty Summary (issue #375). PM still refines it; the seed only guarantees it
 is never absent. On a `/megatask` per-issue run the issue title is the goal.
+
+### Seeded workspace_path
+
+`metadata.workspace_path` is the absolute root of the tree the worktask owns. It is seeded
+here, unconditionally, on every run — a `/megatask` per-issue run overwrites it with the
+per-issue worktree path, but no run may leave it unset.
+
+#### Readers that silently no-op without it
+
+Three guards read it and every one *passes silently* when it is empty, so an unstamped ledger
+disables all three at once rather than failing loudly:
+
+| Reader | Behaviour when `workspace_path` is unset |
+|---|---|
+| `commands/worktask.md § Workspace-root cross-check` | compares the orchestrator root against itself → always equal |
+| `skills/worktask/scripts/dv-tree-preflight.sh` `resolve_assigned()` | resolves empty → warn, exit 0 (never blocks) |
+| `agents/developer.md § Worktree cwd discipline` path-prefix check | gated on "when set" → never runs |
+
+That is not hypothetical: a DV stage once pinned itself to a stale worktree of a *different*
+clone, wrote nothing, and passed all three checks. Isolation is not assignment — see
+`workspace-modes.md § Sibling-worktree hazard`.
 
 ### Post-seed notes
 

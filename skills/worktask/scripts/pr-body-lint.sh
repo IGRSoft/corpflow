@@ -86,8 +86,16 @@ else
   exit 3
 fi
 
+# $1="err" routes the header to stderr. Callers run this script under the house
+# `; true` / piped convention, where a usage ERROR printing help on stdout reads as
+# ordinary output and the exit-2 diagnostic on stderr is never reconciled with it.
+# An explicit -h/--help keeps stdout so it stays pipeable.
 usage() {
-  awk 'NR>1{ if (!/^#/) exit; sub(/^# ?/,""); print }' "$0"
+  if [ "${1:-}" = "err" ]; then
+    awk 'NR>1{ if (!/^#/) exit; sub(/^# ?/,""); print }' "$0" >&2
+  else
+    awk 'NR>1{ if (!/^#/) exit; sub(/^# ?/,""); print }' "$0"
+  fi
   exit 2
 }
 
@@ -281,6 +289,32 @@ x
   _expect p5-attribution        P5   "$CLEAN"'Co-Authored-By: Claude <noreply@anthropic.com>
 '
 
+  # Usage error: nothing on stdout. A piped caller treats stdout as the run's output,
+  # so help text there reads as "ran, nothing to report" over an exit-2 argument error.
+  local u_out u_rc
+  set +e
+  u_out=$(bash "${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]:-$0}")" --not-a-flag 2> "$td/uerr.txt")
+  u_rc=$?
+  set -e
+  if [ "$u_rc" -eq 2 ] && [ -z "$u_out" ] && grep -q 'unknown argument' "$td/uerr.txt"; then
+    printf 'pr-body-lint: self-test usage-error-stderr-only PASS\n'
+  else
+    printf 'pr-body-lint: self-test usage-error-stderr-only FAIL (rc=%s stdout=%s)\n' "$u_rc" "$(printf '%s' "$u_out" | head -1)" >&2
+    rc=1
+  fi
+
+  # -h/--help keeps stdout: an explicit help request is output, not a diagnostic.
+  set +e
+  u_out=$(bash "${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]:-$0}")" --help 2> /dev/null)
+  u_rc=$?
+  set -e
+  if [ "$u_rc" -eq 2 ] && [ -n "$u_out" ]; then
+    printf 'pr-body-lint: self-test help-on-stdout PASS\n'
+  else
+    printf 'pr-body-lint: self-test help-on-stdout FAIL (rc=%s)\n' "$u_rc" >&2
+    rc=1
+  fi
+
   if [ "$rc" -eq 0 ]; then
     printf 'pr-body-lint self-test: ALL PASS\n'
   else
@@ -299,7 +333,7 @@ while [ $# -gt 0 ]; do
     --strict) STRICT=1; shift ;;
     --self-test) MODE="self-test"; shift ;;
     -h | --help) usage ;;
-    *) printf >&2 'unknown argument: %s\n' "$1"; usage ;;
+    *) printf >&2 'unknown argument: %s\n' "$1"; usage err ;;
   esac
 done
 

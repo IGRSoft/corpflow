@@ -612,6 +612,34 @@ holding `state.json`.
 This paragraph is the canonical statement; every other writer and reader site
 points here rather than restating the rule.
 
+#### metadata
+
+```yaml
+# …continued: WorktaskStateLedger.properties
+  metadata:
+    type: object
+    description: "Mirror of the dispatch fields shell helpers need — they cannot read Task-System metadata."
+    properties:
+      workspace_path: { type: string, description: "REQUIRED from the seed onward — see field note below" }
+      base_ref: { type: string }
+      requires_screenshots: { type: boolean }
+      test_mode: { type: string }
+    additionalProperties: true
+```
+
+#### metadata.workspace_path
+
+The absolute root of the tree this worktask is **assigned** to, seeded by
+`commands/worktask.md` Step 3a on every run (`git rev-parse --show-toplevel`, else
+`pwd`) and overwritten per-issue under `/megatask`. `dv-tree-preflight.sh`
+`resolve_assigned()` reads it as rank 2 (after `--assigned`, before
+`$WORKSPACE_ROOT`).
+
+Its absence is a defect, not a mode: every reader of this field warns-and-proceeds
+when it is empty, so an unstamped ledger silently disables the whole assigned-tree
+guard set at once. Rationale and the failure that motivated it:
+`initialization-patterns.md § Seeded workspace_path`.
+
 #### metadata.base_ref
 
 The integration branch, mirrored by PL0 from `task.metadata.base_ref` so shell

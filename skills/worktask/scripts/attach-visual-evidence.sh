@@ -6,11 +6,14 @@
 # --validate-manifest <path> documented with the others below. The publishing modes'
 # exit-0 contract is load-bearing — their stdout is spliced into the PR body — so the
 # schema check is a SEPARATE mode with its own exit codes and never alters theirs:
-#   --emit pr     Print a ready-to-insert "## Visual evidence" markdown block to
+#   --emit pr [--force]
+#                 Print a ready-to-insert "## Visual evidence" markdown block to
 #                 stdout. The PR-body composer (FN agent / FN PR flow /
 #                 conductor-attachments skeleton) inserts it between ## Test plan
 #                 and ## Notes. Empty stdout ⇒ insert nothing (flag false / no
 #                 captures). Callers invoke UNCONDITIONALLY; gating lives here.
+#                 Idempotent: a second run replays the first run's hosted URLs from
+#                 the emission cache instead of re-uploading. --force re-hosts.
 #   --post issue  Post ONE marker-deduped `gh issue comment` carrying the same
 #                 block. Run by the orchestrator at stage-loop exit (post-FN /
 #                 post-push). Non-blocking: operational failures → audit row +
@@ -53,7 +56,13 @@
 # ASSET_HOST_MODE=none for material that must not leave the org. See
 # publish-pl-issue.sh header § AC1 Privacy posture for full rationale.
 #
-# Idempotency:
+# Idempotency (all three publishing modes):
+#   --emit pr:    cached at .context/logs/visual-evidence-pr-<worktask_id>-<run_index>.md,
+#                 written on a successful emission and replayed verbatim on any later
+#                 run. The --post modes dedupe on a marker they can read back off the
+#                 issue; --emit has no such remote to consult, so the cache IS the
+#                 marker. Without it a second run re-hosts every asset and orphans the
+#                 first set on GitHub. --force bypasses (re-hosts and rewrites cache).
 #   --post issue: marked with <!-- visual-evidence:<worktask_id>:<run_index> -->
 #   --post completion: marked with <!-- completion-summary:<worktask_id>:<run_index>:<issue_n> -->
 # Exact-match grep (no regex breakout); retry never double-posts.
@@ -365,9 +374,35 @@ manifest_diagnosis() {
 }
 
 # ---------- mode: --emit pr -------------------------------------------------
+# Path of the emission cache for this worktask run.
+emit_pr_cache_path() {
+  printf '%s/visual-evidence-pr-%s-%s.md' "$LOG_DIR" "$WORKTASK_ID" "$RUN_INDEX"
+}
+
+# True when this run already emitted successfully: an `ok` audit row carrying this
+# run's dedupe key AND a cache file to replay. Both halves are required — a pruned
+# cache must re-host rather than emit nothing, which would drop evidence silently.
+emit_pr_already_emitted() {
+  local dk="$1" cache="$2"
+  [ -s "$cache" ] || return 1
+  [ -f "$AUDIT_FILE" ] || return 1
+  grep -F "\"dedupe_key\":\"$dk\"" "$AUDIT_FILE" 2>/dev/null \
+    | grep -qF '"action":"visual_evidence_pr_emitted","result":"ok"'
+}
+
 emit_pr() {
   local req; req=$(state_requires_screenshots)
   local dk="$WORKTASK_ID:$RUN_INDEX:visual_evidence:pr"
+  local cache; cache=$(emit_pr_cache_path)
+
+  if [ "${FORCE:-0}" != "1" ] && emit_pr_already_emitted "$dk" "$cache"; then
+    cat "$cache"
+    audit_av "visual_evidence_pr_emitted" "reused" \
+      "$(jq -cn --arg w "$WORKTASK_ID" --argjson r "$RUN_INDEX" --arg dk "$dk" --arg c "$cache" \
+         '{worktask_id:$w, run_index:$r, host_tier:"cache", reason:"already_emitted", cache:$c, dedupe_key:$dk}')"
+    return 0
+  fi
+
   if [ "$req" = "false" ]; then
     audit_av "visual_evidence_pr_emitted" "skipped" \
       "$(jq -cn --arg w "$WORKTASK_ID" --argjson r "$RUN_INDEX" --arg dk "$dk" \
@@ -381,6 +416,7 @@ emit_pr() {
              build_block "$mf" "## Visual evidence"); then
     _tier=$(cat "$_tier_tmp" 2>/dev/null || printf 'none'); rm -f "$_tier_tmp"
     printf '%s' "$block"
+    mkdir -p "$LOG_DIR" 2>/dev/null && printf '%s' "$block" > "$cache" 2>/dev/null || true
     local caps; caps=$(printf '%s' "$block" | grep -c '^!\[' || true)
     audit_av "visual_evidence_pr_emitted" "ok" \
       "$(jq -cn --arg w "$WORKTASK_ID" --argjson r "$RUN_INDEX" --argjson c "${caps:-0}" \
@@ -952,6 +988,32 @@ MD
   fi
   rm -rf "$d12"
 
+  # ---- f13: --emit pr twice reuses the first emission; --force re-hosts
+  local d13; d13=$(_mk_sandbox); _manifest_with_captures "$d13"
+  local e13a e13b e13c
+  e13a=$(STATE_FILE="$d13/.context/state.json" WORKSPACE_ROOT="$d13" \
+         ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
+         bash "$self" --emit pr 2>/dev/null)
+  e13b=$(STATE_FILE="$d13/.context/state.json" WORKSPACE_ROOT="$d13" \
+         ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
+         bash "$self" --emit pr 2>/dev/null)
+  e13c=$(STATE_FILE="$d13/.context/state.json" WORKSPACE_ROOT="$d13" \
+         ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
+         bash "$self" --emit pr --force 2>/dev/null)
+  local f13_ok=1
+  [ -n "$e13a" ] || f13_ok=0
+  [ "$e13a" = "$e13b" ] || f13_ok=0                                  # same URLs replayed
+  [ "$e13a" = "$e13c" ] || f13_ok=0                                  # --force still emits
+  [ -s "$d13/.context/logs/visual-evidence-pr-wid-test-0.md" ] || f13_ok=0
+  grep -q '"result":"reused"' "$d13/.context/logs/audit.jsonl" 2>/dev/null || f13_ok=0
+  [ "$(grep -c '"result":"reused"' "$d13/.context/logs/audit.jsonl" 2>/dev/null)" = "1" ] || f13_ok=0
+  if [ "$f13_ok" = "1" ]; then
+    _ok "f13-emit-pr-idempotent"
+  else
+    _fail "f13-emit-pr-idempotent" "$(grep visual_evidence_pr_emitted "$d13/.context/logs/audit.jsonl" 2>/dev/null | tr '\n' '~')"
+  fi
+  rm -rf "$d13"
+
   echo "attach-visual-evidence: self-test summary — pass=$pass fail=$fail"
   [ "$fail" -eq 0 ]
 }
@@ -971,15 +1033,21 @@ if [ "${1:-}" = "--validate-manifest" ]; then
 fi
 
 usage() {
-  echo "usage: $0 {--emit pr | --post issue | --post completion [<pr-ref>] | --validate-manifest <path> | --self-test}" >&2
+  echo "usage: $0 {--emit pr [--force] | --post issue | --post completion [<pr-ref>] | --validate-manifest <path> | --self-test}" >&2
 }
 
 # Argv is validated BEFORE the library/state load so a caller error reports the
 # caller error — a missing state.json must not mask a bad or absent mode.
 MODE="${1:-}"; TARGET="${2:-}"
+FORCE=0
 case "$MODE" in
   --emit)
-    [ "$TARGET" = "pr" ] || { echo "usage: $0 --emit pr" >&2; exit 1; } ;;
+    [ "$TARGET" = "pr" ] || { echo "usage: $0 --emit pr [--force]" >&2; exit 1; }
+    case "${3:-}" in
+      --force) FORCE=1 ;;
+      "") ;;
+      *) echo "usage: $0 --emit pr [--force]" >&2; exit 1 ;;
+    esac ;;
   --post)
     case "$TARGET" in
       issue|completion) ;;

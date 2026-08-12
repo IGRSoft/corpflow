@@ -405,7 +405,12 @@ PostToolUse anchor-lint (when configured per `handoff-protocol.md § Anchor Pre-
 
 #### Workspace Mode
 
-Detect via `task.metadata.workspace_path`. Read issue from `workspace.json`, write artifacts to workspace `.context/`. For megatask per-issue mode, read issue from `.context/milestone.json`. See `skills/megatask/SKILL.md § Orchestrator Pattern`.
+`task.metadata.workspace_path` is **not** a mode detector — `/worktask` stamps it on every run
+(step 3a/4), so its presence says nothing about which mode you are in. Detect workspace mode from
+`workspace.json` / `.context/milestone.json` presence instead, and treat `workspace_path` as what
+it is: the assigned tree, to be propagated verbatim onto every stage task you create. Read the
+issue from `workspace.json`, write artifacts to workspace `.context/`. For megatask per-issue mode,
+read the issue from `.context/milestone.json`. See `skills/megatask/SKILL.md § Orchestrator Pattern`.
 
 ### Dynamic Worktask Sizing (PL0 Stage)
 

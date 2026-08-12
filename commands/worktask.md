@@ -116,7 +116,16 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 
 #### Step 3a snippets — init procedure
 
-   The re-run-aware next-free-planning-index resolver (N=0 on a fresh `.context/`, nullglob-safe) and the atomic `state.json` seed write are canonical in `skills/worktask/references/initialization-patterns.md`. Compute N, then atomic-write the seed (`{version:1, worktask_id, plan_file: .context/planning-${N}.md, platform, run_index:N, stages.PL.status:in_progress, facts.goal seeded from the task description plus the otherwise-empty facts incl. dispatched_agents:[], handoffs:{}}`) per `handoff-protocol.md#atomic-write`.
+   The re-run-aware next-free-planning-index resolver (N=0 on a fresh `.context/`, nullglob-safe) and the atomic `state.json` seed write are canonical in `skills/worktask/references/initialization-patterns.md`. Compute N, then atomic-write the seed (`{version:1, worktask_id, plan_file: .context/planning-${N}.md, platform, run_index:N, metadata.workspace_path, stages.PL.status:in_progress, facts.goal seeded from the task description plus the otherwise-empty facts incl. dispatched_agents:[], handoffs:{}}`) per `handoff-protocol.md#atomic-write`.
+
+#### Step 3a — seed `metadata.workspace_path` (UNCONDITIONAL)
+
+   Resolve it as `git rev-parse --show-toplevel`, falling back to `pwd` outside a git tree, and
+   write it into the seed. This is not a megatask-only field: `dv-tree-preflight.sh` reads
+   `.metadata.workspace_path` as its assigned-tree source, the cross-check below reads it, and
+   `agents/developer.md`'s path-prefix check is gated on it being set. Each of those degrades to
+   a **silent pass** when the field is absent, so omitting it disables all three at once. Rationale
+   and the failure it let through: `initialization-patterns.md § Seeded workspace_path`.
 
 #### Step 3a — seed `facts.goal`
 
@@ -317,7 +326,11 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 
 ### Step 4 — TaskCreate PL0
 
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "company-workflow:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", plan_gate: "checkpoint", decision_gate: "user", fn_gate: "checkpoint", isolation: "worktree" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`company-workflow:`, `apple-developer:`, etc.).
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "company-workflow:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", plan_gate: "checkpoint", decision_gate: "user", fn_gate: "checkpoint", isolation: "worktree", workspace_path: "<resolved root>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`company-workflow:`, `apple-developer:`, etc.).
+
+#### Step 4 — workspace_path stamping
+
+`workspace_path` carries the same value seeded into `state.json` at step 3a (`git rev-parse --show-toplevel`, else `pwd`) and is stamped on **every** run beside `isolation`, not only under `/megatask`. PM propagates it to every stage task it creates. It is what tells a stage agent which tree it was *assigned*, which is a different claim from the tree it happens to have resolved — see `skills/worktask/references/workspace-modes.md § Sibling-worktree hazard`.
 
 #### Step 4 — fn_gate stamping
 
@@ -615,13 +628,27 @@ Execute the orchestrator execution loop from `skills/worktask/SKILL.md § Orches
 # Workspace-root cross-check (runs in orchestrator turn, not in subagent)
 _orch_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 _task_root=$(jq -r '.metadata.workspace_path // empty' .context/state.json)
-_task_root="${_task_root:-$_orch_root}"
+# Unset is a DEFECT, not a mode — see § Unset workspace_path below.
+if [ -z "$_task_root" ]; then
+  echo "⚠ state.json has no .metadata.workspace_path — the assigned-tree guards are ALL inert. Re-seed per Step 3a." >&2
+  # Write audit row `workspace_path_unstamped` and STOP — do not call Task()
+  exit 1
+fi
 if [ "$_orch_root" != "$_task_root" ]; then
   echo "⚠ cwd mismatch: orchestrator is at $_orch_root but task.metadata.workspace_path is $_task_root. Aborting delegation until resolved." >&2
   # Write audit row and STOP — do not call Task()
   exit 1
 fi
 ```
+
+##### Unset workspace_path is a defect
+
+This step previously defaulted `_task_root="${_task_root:-$_orch_root}"` — comparing a value to
+itself, so the cross-check passed unconditionally and an unstamped ledger read as clean. Step 3a
+now stamps the field on every run; its absence means the seed did not run, which leaves this
+check, `dv-tree-preflight.sh`, and `agents/developer.md`'s path-prefix check all inert at once.
+
+##### Banner injection
 
 The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line of every stage prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to target. See `skills/worktask/references/workspace-modes.md § Conductor Workspace Topology` for the failure mode this guard prevents.
 

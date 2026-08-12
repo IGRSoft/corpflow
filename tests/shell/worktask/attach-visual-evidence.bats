@@ -58,6 +58,30 @@ EOS
   assert_output --partial "Manifest:"
 }
 
+# A second --emit for the same run previously re-hosted every asset, orphaning the
+# first set on GitHub. The --post modes dedupe against a marker they can read back
+# off the issue; --emit has no remote to consult, so the emission cache is the marker.
+@test "idempotency: a second --emit pr replays the first emission, --force re-hosts" {
+  _emit() {
+    env STATE_FILE="$WD/state-true.json" WORKSPACE_ROOT="$WD" \
+      MANIFEST_FILE="$WD/screenshots.md" \
+      ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="https://mock.gist/raw" \
+      GIST_VERIFY_FORCE=pass \
+      bash "$PLUGIN_ROOT/$SCRIPT" --emit pr "$@"
+  }
+  first=$(_emit)
+  second=$(_emit)
+  forced=$(_emit --force)
+
+  [ -n "$first" ]
+  [ "$first" = "$second" ]
+  [ "$first" = "$forced" ]
+  [ -s "$WD/.context/logs/visual-evidence-pr-t-0.md" ]
+  # Exactly one replay row: the first run emitted, the third was forced.
+  run grep -c '"result":"reused"' "$WD/.context/logs/audit.jsonl"
+  assert_output "1"
+}
+
 @test "gist verify: the reachability probe rejecting degrades the embed (real fail arm)" {
   # Carried from DV3. Reaching gist_raw_url_reachable's REJECT arm needs
   # GIST_RAW_URL_BASE="" — publish-pl-issue.sh:808 synthesises and returns early

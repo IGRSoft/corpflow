@@ -42,6 +42,23 @@ EOF
   assert_failure 2
 }
 
+# A usage error printing help on stdout reads as ordinary output to a caller running
+# this under the house `; true` / pipe convention — the exit-2 diagnostic on stderr
+# never gets reconciled with it.
+@test "contract: a usage ERROR writes nothing to stdout" {
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --bogus
+  assert_failure 2
+  [ -z "$output" ]
+  [[ "$stderr" == *"unknown argument: --bogus"* ]]
+  [[ "$stderr" == *"pr-body-lint.sh"* ]]
+}
+
+@test "contract: an explicit --help still writes to stdout" {
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --help
+  assert_failure 2
+  [[ "$output" == *"pr-body-lint.sh"* ]]
+}
+
 @test "failure: --body missing exits 2 (usage)" {
   run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_failure 2

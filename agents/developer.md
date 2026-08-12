@@ -164,13 +164,37 @@ Write one `audit.jsonl` line `action: "plugin_unavailable"` with
   2. Verify every absolute path in the stage prompt shares the `WORKSPACE_ROOT` prefix. Any path outside → do NOT edit; log a `workspace_path_mismatch` audit row and return `verdict: blocked` naming the mismatched paths.
   See `workspace-modes.md § Conductor Workspace Topology` for rationale/failure mode.
 
+  **D0 cannot detect a wrong tree.** Once the harness has pinned you to a worktree,
+  `git rev-parse --show-toplevel` answers with *that* tree — so step 1 records the wrong root and
+  step 2 finds every path consistent with it. D0 is self-consistent by construction. Only D0.0a,
+  which compares the resolved root against the root you were *assigned*, can see the difference.
+
 #### D0.0 — Worktree isolation pre-condition (mandatory before any Edit/Write)
 
   DV ALWAYS runs in an isolated worktree. Confirm via `git rev-parse --git-dir` (linked worktrees resolve under `.git/worktrees/<name>`) or `git worktree list`. If NOT isolated: either **create one** (`EnterWorktree`, honoring `task.metadata.base_ref`/`worktree.baseRef`, then re-run D0 inside it), or — if one genuinely cannot be created (bare/read-only repo) — **flag and return** a `worktree_isolation_missing` audit row + `verdict: blocked` naming the reason, never writing to the shared checkout. Record the resolution in `development-N.md § Approach` and set the `worktree:` field in the DV handoff frontmatter.
 
+  This gate proves **isolation**, not **assignment** — a stale worktree left over from an earlier
+  session genuinely *is* isolated, so it passes D0.0 cleanly while being the wrong tree entirely.
+  D0.0a below is the only check that separates the two.
+
 ##### D0.0a — the resolved tree must BE the assigned tree
 
-  Run `bash skills/worktask/scripts/dv-tree-preflight.sh --assigned <workspace>` before the first edit. Exit 1 = resolved tree ≠ assigned tree: stop, do not edit, log `workspace_path_mismatch`, return `verdict: blocked` quoting both paths it printed. Isolation is not this assertion — a stale worktree is perfectly isolated, which is how a correct edit spec once landed on the wrong tree. Warnings are advisory.
+  Resolve the assigned workspace, in this order: `task.metadata.workspace_path`, else the
+  `WORKSPACE_ROOT=` line the orchestrator injects as the first line of your prompt banner
+  (`commands/worktask.md § Workspace-root cross-check`). Then, **before the first edit**:
+
+  ```bash
+  bash skills/worktask/scripts/dv-tree-preflight.sh --assigned "$WORKSPACE_ROOT"
+  ```
+
+  Exit 1 = resolved tree ≠ assigned tree: stop, do not edit, log `workspace_path_mismatch`, return `verdict: blocked` quoting both paths it printed. Warnings are advisory.
+
+###### D0.0a — an exit 0 is not always a confirmation
+
+  Isolation is not this assertion: a stale worktree is perfectly isolated, which is how a correct
+  edit spec once landed on the wrong tree. If neither source above resolves, the script warns and
+  exits 0 by design — a pre-flight that false-blocks DV is worse than the failure it guards. Say
+  so in `development-N.md § Approach`; an unverified tree is not a verified one.
 
 #### D0.1 — Requirements & environment
 
@@ -311,6 +335,30 @@ if (task.metadata.requires_screenshots ?? true) {
 ```
 
 The skill returns one `{path, bytes, ok, error}` per requested capture and rewrites `.context/images/<worktask_id>/screenshots.md`.
+
+### Manifest row shape (you may have to author it)
+
+The skill normally writes the manifest, but you own the outcome — if it is absent, malformed, or
+you are patching a row by hand, this is the grammar, and it is machine-asserted by
+`attach-visual-evidence.sh --validate-manifest`:
+
+```markdown
+| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |
+|---|------|------|-------|----------|---------|---------|----------|------------|
+| 01 | header | dv-01-header.png | 78683 | apple | apple_sim | after | 2026-06-28T17:16:04Z | design-002 |
+```
+
+Nine columns, every one present. The `#` index is **two digits** — `01`, never `1`; the parser
+skips any row whose first column is not `NN`. `Captured` is ISO-8601 UTC; `Design Ref` is a
+`figma-registry.md` `ID` or `—`.
+
+#### Why a malformed row is worse than a missing one
+
+Both failures are silent in the same direction: the capture files sit on disk, the screenshots
+gate passes on their presence, the attach step parses zero rows, and the PR ships with no
+evidence and no complaint. Worked example:
+`skills/dv-screenshot-capture/references/examples/README.md` — the file the attach failure
+diagnostic sends you to.
 
 ### Adapter routing
 
@@ -505,7 +553,7 @@ Before marking DV stage complete, verify:
 
 ### Artifact-Complete Gate (MANDATORY before final return)
 
-A DV invocation is **not** complete until the work is finished AND the artifact reflects it. Returning mid-run with a progress update — instead of a completed artifact/summary — forces the orchestrator to resume the agent and breaks the handoff contract. Before producing your final response, confirm all five:
+A DV invocation is **not** complete until the work is finished AND the artifact reflects it. Returning mid-run with a progress update — instead of a completed artifact/summary — forces the orchestrator to resume the agent and breaks the handoff contract. Before producing your final response, confirm all six (five below, plus § the sixth box):
 
 #### Artifact-Complete Gate — the five boxes
 
@@ -514,6 +562,30 @@ A DV invocation is **not** complete until the work is finished AND the artifact 
 - [ ] **Test gate confirmed differentially** — `Executed Tests (DV)` show a real pass for tests Added/Modified this run plus `always_required_tests`; "tests ran" or "build started" is not a pass
 - [ ] **Final response is the completed handoff, never a progress narration** — if any box above is unchecked, keep working; only return once the artifact is written.
 - [ ] **Every `handoff.files_touched` path landed on disk** — each passes `test -e`; empty/zero `files_touched` = nothing written → `verdict: blocked` (`class: hard_constraint`, `reason: write_denied`). NEVER emit code as chat text instead of writing the file.
+
+#### Artifact-Complete Gate — the sixth box
+
+- [ ] **You did not end the turn to announce what you would do next** — § The voluntary yield
+
+#### The voluntary yield — never end a turn to announce intent
+
+The gate's five boxes were written against *budget exhaustion*: you run out of room and stop. The
+more common failure is voluntary and costs nothing to avoid — you end the turn with budget
+remaining to state what you are about to do:
+
+> *"Now the BLE constant, the event enum case, and the host mount gate."*
+
+**An intent sentence is not a handoff.** Do the three things, then return.
+
+If you genuinely cannot continue, that is a `## Blockers` entry and a `verdict: blocked` — a
+named stop, not a trailing sentence.
+
+##### Why the orchestrator cannot clean this up for you
+
+A mid-turn yield is not an errored return, so the errored-return arm does not fire. Before
+`skills/worktask/SKILL.md § Step 6.5a2` existed, control fell through to a fallback that stamped
+`status: completed, verdict: ok` over a stage that had not finished — and only a human noticing
+kept the ledger honest.
 
 ### Budget-Aware Checkpointing (multi-batch runs)
 

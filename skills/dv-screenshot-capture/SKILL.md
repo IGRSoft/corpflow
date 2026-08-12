@@ -372,7 +372,7 @@ The orchestrator posts captures to the GitHub issue at stage-loop exit via `atta
 
 | Consumer | Stage | Action |
 |----------|-------|--------|
-| **FN** | FN | `attach-visual-evidence.sh --emit pr` → insert block into PR body between ## Test plan and ## Notes |
+| **FN** | FN | `attach-visual-evidence.sh --emit pr` → insert block into PR body between ## Test plan and ## Notes. Re-running it replays the first emission's hosted URLs from `.context/logs/visual-evidence-pr-<worktask_id>-<run_index>.md` instead of uploading a second asset set (which would orphan the first on GitHub); `--force` re-hosts |
 | **Orchestrator** | Post-loop exit | `attach-visual-evidence.sh --post issue` → marker-deduped `gh issue comment` on the PL-published issue (visual-evidence block only) |
 | **Orchestrator** | Post-merge (PR closes) | `attach-visual-evidence.sh --post completion` → one marker-deduped comment per related issue resolved by PR closes (work-summary + visual-evidence block when captures exist; summary-only otherwise). Resolves related issues via PR-body keywords (`Closes`/`Fixes`/`Resolves #N`) ∪ `gh pr view --json closingIssuesReferences`, deduped to integers |
 

@@ -306,7 +306,10 @@ cmd_pr_body() {
       audit_fn pr_body_gate blocked "$(meta_json reason missing_visual_evidence_row)"
       return 1
     fi
-    if [[ "$vres" == "ok" ]] &&
+    # "reused" is an idempotent replay of an earlier "ok" — same block on stdout, so
+    # it carries the same obligation. ve_row_result returns the LAST row, so omitting
+    # it would let a second --emit run silently retire the heading requirement.
+    if [[ "$vres" == "ok" || "$vres" == "reused" ]] &&
       ! grep -E -i -q '^#{1,6}[[:space:]]+Visual evidence[[:space:]]*$' "$BODY_FILE"; then
       printf >&2 'BLOCKED: %s reported result=ok but the body has no "## Visual evidence" section\n' \
         "$VE_ACTION"
