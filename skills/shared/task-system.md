@@ -64,10 +64,18 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 | `priority` | high, medium, low |
 | `milestone_number` | GitHub milestone (megatask mode) |
 | `issue_number` | GitHub issue being worked |
-| `workspace_path` | Workspace directory (megatask mode) or worktree path |
+| `workspace_path` | Absolute root of the tree this task is **assigned** to — see § workspace_path below |
 | `track` | Parallel track number 1–5 |
 | `isolation` | Always `"worktree"` on file-writing tasks (DV and megatask per-issue AR/DR/QA). PL0 stamps this unconditionally; developer.md § D0.0, technical-lead.md DR check, SKILL.md 4.8, and workspace-modes.md all treat it as always `"worktree"`. |
 | `worktree_branch` | Branch name in worktree (convenience field). ≠ `facts.branch` (the planned host-session branch, named once at PL start and refinable at most once more pre-commit) — see `skills/worktask/references/handoff-protocol.md § branch` for the disambiguation |
+
+#### workspace_path
+
+Stamped on **every** run — `/worktask` steps 3a/4 as well as `/megatask` — and mirrored into
+`state.json .metadata.workspace_path`. Under `/megatask` it is the per-issue worktree; otherwise
+it is `git rev-parse --show-toplevel` at init. Never leave it unset: three assigned-tree guards
+read it and each degrades to a silent pass when it is absent. See
+`skills/worktask/references/initialization-patterns.md § Seeded workspace_path`.
 
 ### Dispatch metadata (optional)
 
@@ -87,7 +95,7 @@ These fields map to `claude agents run` CLI flags per `skills/agent-coordination
 
 #### Dispatch writer rules
 
-PL0's writer rules for these fields live in `agents/product-manager.md § Optional dispatch metadata`. The `workspace_path` field (already documented above) doubles as the `--cwd` source for headless dispatchers.
+PL0's writer rules for these fields live in `agents/product-manager.md § Optional dispatch metadata`. The `workspace_path` field (already documented above — always stamped, not dispatch-optional) doubles as the `--cwd` source for headless dispatchers.
 
 ### JSON Schema
 
@@ -166,6 +174,10 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
     "isolation": {
       "enum": ["worktree"],
       "description": "Always 'worktree' on file-writing tasks. PL0 stamps unconditionally; no other value is valid."
+    },
+    "workspace_path": {
+      "type": "string",
+      "description": "Absolute root of the assigned tree. Stamped on EVERY run (not megatask-only) and mirrored to state.json .metadata.workspace_path. Isolation is not assignment: a stale worktree satisfies 'isolation' and still fails this. Absent ⇒ three guards silently no-op."
     },
     "priority": {
       "enum": ["high", "medium", "low"]
