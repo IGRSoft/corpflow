@@ -18,7 +18,24 @@ When the orchestrator receives results from ANY external plugin command (apple-d
 
 Defines the handoff protocol between corpflow worktask stages and external plugin agents.
 
+> **The normative contract is `${CLAUDE_SKILL_DIR}/references/plugin-contract.md`.** It is the single
+> source for what an integrating plugin must satisfy and what corpflow guarantees in return. This
+> skill is corpflow's own delegation playbook; where the two disagree, the contract wins.
+
 For plugin-specific protocol tables and error handling, see `${CLAUDE_SKILL_DIR}/references/plugin-protocols.md`
+
+## Dispatch Injection (BINDING)
+
+The plugin-facing seam is **one file per plugin**: `CORPFLOW.md` at that plugin's repository root,
+copied from `${CLAUDE_SKILL_DIR}/templates/CORPFLOW.md`. Nothing else in a sibling names corpflow, so
+every delegation to an external plugin agent MUST open its prompt with:
+
+```
+Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.
+```
+
+Omit it and the target has no way to learn the stage contract — it carries no corpflow instructions
+of its own. This is the one thing corpflow owes every compatible plugin.
 
 ## Frontmatter Schema (BINDING for cross-plugin agents)
 

@@ -518,6 +518,18 @@ Specialization tables in `skills/shared/platform-detection.md` (the full Apple /
 (e.g. `frontend-developer:react-developer`, `backend-developer:go-developer`) as the Task
 `subagent_type`. Do not maintain a second copy of the platform→agent map here.
 
+### Dispatch Injection (BINDING)
+
+Every `Task(<plugin>:<agent>)` prompt MUST open with:
+
+```
+Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.
+```
+
+A sibling plugin's only corpflow-facing file is that root `CORPFLOW.md`; its agents carry no corpflow
+preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`). Omit the line and the
+specialist returns an artifact with no `handoff:` frontmatter, leaving the recovery net nothing to merge.
+
 ### Context Passing
 
 When delegating, include: task description, detected platform markers, DV stage context (task ID, compressed summaries from `.context/<plan_file>` and, when AR ran, `.context/architecture-N.md`, test strategy), acceptance criteria, platform constraints, and architectural decisions. Also pass the code-documentation rule (`skill: corpflow:code-comment-standard`) so specialists apply it: non-obvious WHY/contract only, `///` 1–3 lines, no essays/provenance/AC-IDs/`#Preview` comments, density ≤40% of added lines (gated by `dv-comment-density-gate.sh`). Rationale, threshold derivations and QA runbooks go in `.context/development-N.md` — never in source, including when answering a DR finding. Request implementation code, a summary for `.context/development-N.md`, and any blockers using the `## Blockers` schema (see § Artifact Schema — `id`, `kind ∈ {missing_input | design_flaw | hard_constraint | ambiguous_requirements}`, `description`, `escalate_to`).

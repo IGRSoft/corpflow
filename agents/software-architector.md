@@ -210,6 +210,19 @@ When the validated complexity score is in the **Low** band (0–10 per `skills/e
 
 Artifact ≤250 lines; no full-file listings — pass anchors, not pasted bodies. Final return ≤250 tok.
 
+## Dispatch Injection (BINDING)
+
+Consulting a platform architect (`Task(<plugin>:<architect>)`) opens its prompt with:
+
+```
+Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.
+```
+
+That root file is a sibling plugin's only corpflow-facing surface; its architect carries no corpflow
+preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`). Without the line it will not
+know AR is a **consultation** — write `.context/<platform>-architecture.md`, return ≤500 tokens, and
+leave the stage with this agent.
+
 ## Cross-Plugin Invocation Context
 
 When invoked from a dev plugin's commands (`review-code`, `analyze-tech-debt`, `fix-refactor`, `fix-modernize`, and any plugin extras), apply architecture review with that platform's awareness. The command's prompt supplies the platform context — use it to inform decisions rather than assuming a platform.

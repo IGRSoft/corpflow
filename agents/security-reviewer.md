@@ -105,6 +105,17 @@ Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver:
 
 ### Invocation
 
+**Dispatch injection (BINDING).** Every `Task(<plugin>:<security-auditor>)` prompt opens with:
+
+```
+Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.
+```
+
+A sibling plugin's only corpflow-facing file is that root `CORPFLOW.md`, and its auditor carries no
+corpflow preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`). Omit the line and
+the auditor returns findings without the `handoff:` frontmatter that carries `severity_counts{}` —
+so the SR gate has nothing to evaluate.
+
 | Invocation | SR Stage Behavior |
 |------------|-------------------|
 | `/worktask --secure` / `--full` | SR stage mandatory |

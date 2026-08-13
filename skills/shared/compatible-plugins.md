@@ -120,5 +120,5 @@ rule is binding for anything added from here.
 
 ## Adding or replacing a dev plugin
 
-See `skills/cross-plugin-handoff/references/plugin-onboarding.md` — compatibility contract plus
+See `skills/cross-plugin-handoff/references/plugin-contract.md` — the normative contract plus
 the ordered touchpoint checklist.

@@ -215,6 +215,10 @@ Rules`; plugin availability in `skills/shared/compatible-plugins.md`.
 
 ### Delegation rules
 
+0. **Dispatch injection (BINDING)** — open every `Task(<plugin>:<test-generator>)` prompt with
+   `Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.`
+   A sibling plugin's only corpflow-facing file is that root `CORPFLOW.md`; its agents carry no
+   corpflow preamble, so without this line the generator returns tests with no `handoff:` frontmatter.
 1. QA retains test strategy ownership — the generator generates tests, QA validates quality and completeness
 2. Execute and measure through the platform's `/<plugin>:build-test` and its coverage tooling
 3. Test generators run on the haiku model — cost-efficient for batch test generation
