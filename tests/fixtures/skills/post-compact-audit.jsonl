@@ -1,4 +1,4 @@
-{"ts":"2026-06-29T10:00:00Z","actor":"hook:audit-subagent","action":"subagent_stopped","subject":"company-workflow:product-manager","result":"ok","metadata":{"background_task_ids":["taskOLD"],"dedupe_key":"sess:pm:stop"}}
+{"ts":"2026-06-29T10:00:00Z","actor":"hook:audit-subagent","action":"subagent_stopped","subject":"corpflow:product-manager","result":"ok","metadata":{"background_task_ids":["taskOLD"],"dedupe_key":"sess:pm:stop"}}
 {"ts":"2026-06-29T10:00:01Z","actor":"hook:audit-tooluse","action":"tool_invoked","subject":"Edit","result":"ok","metadata":{"kind":"tool","dedupe_key":"sess:tool"}}
 {"ts":"2026-06-29T10:00:02Z","actor":"hook:audit-subagent","action":"subagent_stopped","subject":"apple-developer:ios-developer","result":"error","metadata":{"background_task_ids":["taskNEW"],"dedupe_key":"sess:ios:stop"}}
 {"ts":"2026-06-29T10:00:02Z","actor":"apple-developer:hook:audit-subagent","action":"subagent_stopped","subject":"apple-developer:ios-developer","result":"error","metadata":{"advisory":true,"dedupe_key":"sess:ios:stop"}}

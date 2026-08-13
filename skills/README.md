@@ -1,6 +1,6 @@
 # Skills Index
 
-All available skills for the company-workflow worktask plugin.
+All available skills for the corpflow worktask plugin.
 
 ## Skills
 
@@ -19,7 +19,7 @@ All available skills for the company-workflow worktask plugin.
 | Skill | Description | Effort |
 |-------|-------------|--------|
 | [cost-optimization](cost-optimization/SKILL.md) | Cost tracking and optimization strategies for AI agent worktasks | medium |
-| [cross-plugin-handoff](cross-plugin-handoff/SKILL.md) | Protocol for handoffs between company-workflow worktask and external plugins | medium |
+| [cross-plugin-handoff](cross-plugin-handoff/SKILL.md) | Protocol for handoffs between corpflow worktask and external plugins | medium |
 | [csv-export-templates](csv-export-templates/SKILL.md) | 13-category CSV export structure for Google Sheets import | low |
 | [estimation-methodology](estimation-methodology/SKILL.md) | Complexity scoring (0-50 scale) and T-shirt sizing for project estimation | low |
 | [gh-issue-dedup](gh-issue-dedup/SKILL.md) | One GitHub issue per `.context/` across worktask runs — follow-up runs comment on the existing issue instead of opening a duplicate | low |
@@ -55,7 +55,7 @@ All available skills for the company-workflow worktask plugin.
 
 ## Shared Utilities
 
-Files in `shared/` are referenced by skills/agents, not loaded directly — **except `milestone-helpers/`**, which ships its own `SKILL.md` (`company-workflow:milestone-helpers`).
+Files in `shared/` are referenced by skills/agents, not loaded directly — **except `milestone-helpers/`**, which ships its own `SKILL.md` (`corpflow:milestone-helpers`).
 
 | File | Purpose |
 |------|---------|

@@ -15,7 +15,7 @@ related:
 # App Store Info Command
 
 > **Apple-only.** This command targets the Apple App Store listing format and has no
-> equivalent on other platforms. The rest of the company-workflow plugin is platform-neutral.
+> equivalent on other platforms. The rest of the corpflow plugin is platform-neutral.
 
 Scaffold the `AppStore/` publishing folder and generate all required App Store listing fields in English and Ukrainian, sourced from the project README. If no README exists, it is generated from source code before proceeding.
 

@@ -119,7 +119,7 @@ After the execution loop exits (all tasks completed, including ST), the orchestr
 5. **Delegate to prompt-engineer** with one `Agent` call carrying the full list of checked proposals:
    ```typescript
    Task({
-     subagent_type: "company-workflow:prompt-engineer",
+     subagent_type: "corpflow:prompt-engineer",
      model: "opus",
      prompt: `Apply self-improvement learnings from .context/learnings.md.
               Apply ONLY checked items (- [x]). Follow the Apply Protocol in your agent definition.

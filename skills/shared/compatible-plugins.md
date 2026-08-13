@@ -97,7 +97,7 @@ A wider core-parity pass is optional, not required.
 
 ## Support (non-dev) plugins
 
-`company-workflow`, `debugging-toolkit`, `security-scanning`, `skill-creator`, `conductor`, `claude-in-chrome`.
+`corpflow`, `debugging-toolkit`, `security-scanning`, `skill-creator`, `conductor`, `claude-in-chrome`.
 
 The plugin-prefix regex in `skills/worktask/scripts/publish-pl-issue.sh` MUST equal this list
 united with the Plugin column of § Registry. Changing either without the other lets internal

@@ -53,7 +53,7 @@ class PermissionMode(unittest.TestCase):
     def test_bound_and_bare_argv_identical_except_agent(self):
         bound = build_arm_stage_argv("PL", bind_agent=True)
         bare = build_arm_stage_argv("PL", bind_agent=False)
-        self.assertEqual([a for a in bound if a not in ("--agent", "company-workflow:product-manager")], bare)
+        self.assertEqual([a for a in bound if a not in ("--agent", "corpflow:product-manager")], bare)
 
 
 class SettingsThreading(unittest.TestCase):

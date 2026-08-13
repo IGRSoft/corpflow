@@ -69,7 +69,7 @@ checked_siblings() {
 mk_plugin_layout() {
   local root self
   root="$(mk_tmpworkdir)"
-  self="$root/company-workflow"
+  self="$root/corpflow"
   mk_git_fixture --dir "$self" \
     --file 'agents/developer.md:Build via /apple-developer:build-test.\nGrant: Task(system-developer:python-developer)\n' \
     --file 'commands/worktask.md:Routes to Task(apple-developer:ios-developer).\n' >/dev/null
@@ -86,9 +86,9 @@ mk_plugin_layout() {
 @test "resolver: a fully populated sibling layout yields no unresolved refs" {
   local root
   root="$(mk_plugin_layout)"
-  run unresolved_refs "$root/company-workflow" "$root" command
+  run unresolved_refs "$root/corpflow" "$root" command
   assert_output ""
-  run unresolved_refs "$root/company-workflow" "$root" agent
+  run unresolved_refs "$root/corpflow" "$root" agent
   assert_output ""
 }
 
@@ -96,7 +96,7 @@ mk_plugin_layout() {
   local root
   root="$(mk_plugin_layout)"
   rm -f "$root/apple-developer/commands/build-test.md"
-  run unresolved_refs "$root/company-workflow" "$root" command
+  run unresolved_refs "$root/corpflow" "$root" command
   assert_output --partial "apple-developer:build-test"
 }
 
@@ -104,7 +104,7 @@ mk_plugin_layout() {
   local root
   root="$(mk_plugin_layout)"
   rm -f "$root/system-developer/agents/python-developer.md"
-  run unresolved_refs "$root/company-workflow" "$root" agent
+  run unresolved_refs "$root/corpflow" "$root" agent
   assert_output --partial "system-developer:python-developer"
 }
 
@@ -112,10 +112,10 @@ mk_plugin_layout() {
   # `/apple-developer:ios-developer` names an agent, not a command — legal.
   local root
   root="$(mk_plugin_layout)"
-  mk_git_fixture --dir "$root/company-workflow" \
+  mk_git_fixture --dir "$root/corpflow" \
     --file 'agents/router.md:Delegates to /apple-developer:ios-developer.\n' >/dev/null
   rm -f "$root/apple-developer/commands/build-test.md"
-  run unresolved_refs "$root/company-workflow" "$root" command
+  run unresolved_refs "$root/corpflow" "$root" command
   refute_output --partial "apple-developer:ios-developer"
 }
 
@@ -149,8 +149,8 @@ mk_plugin_layout() {
   # comment that happened to mention the name.
   local script="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue.sh"
   local alts n p
-  alts="$(grep -n '(company-workflow|' "$script")"
-  n="$(printf '%s\n' "$alts" | grep -c '(company-workflow|')"
+  alts="$(grep -n '(corpflow|' "$script")"
+  n="$(printf '%s\n' "$alts" | grep -c '(corpflow|')"
   # L348 (line-drop predicate) and L394 (token predicate); both must survive.
   [ "$n" -ge 2 ]
   local line

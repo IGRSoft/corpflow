@@ -1,10 +1,28 @@
-# company-workflow Plugin Memory
+# corpflow Plugin Memory
 
 Repository-tracked memory note (lean rolling format). The authoritative cross-conversation memory lives at `~/.claude/projects/<slug>/memory/MEMORY.md`; full per-release narratives live in git history (`git log --grep="<version>"`) and in the CC band files indexed below. Release tooling reads the `Plugin version:` line — keep its exact format. Hard cap ~5KB: when Release History exceeds 12 rows, delete the oldest.
 
 ## Version Tracking
 
-- Plugin version: **4.0.12** — activating guards that were already written. `/worktask` never
+- Plugin version: **4.0.13** — plugin renamed `company-workflow` → `corpflow`. Every
+  `company-workflow:<agent|skill>` invocation id, the `marketplace.json` plugin entry, the
+  `plugin.json` `Stop` matcher and notification title, and the install key (now
+  `corpflow@igrsoft`, cache path `cache/igrsoft/corpflow/` — only the plugin segment) move to the
+  new prefix. The seven `COMPANY_WORKFLOW_*` env vars become `CORPFLOW_*` — hard cut, no fallback
+  read — plus `COMPANY_WORKFLOW_DIR` → `CORPFLOW_DIR` in four siblings' `scripts/validate.sh`.
+  New versus the v4.0.0 rename: the **repo slug** moves too, because GitHub had already renamed
+  it — the `README` clone URL, the cache glob in `plugin-root-resolution.md`, and the
+  `publish-pl-issue.sh` owner/repo fixtures all said `IGRSoft/company-workflow`. Four runtime
+  string matches carried the real risk and moved with it: `dv-screenshot-gate.sh`'s exact
+  `!= "corpflow:developer"` guard, `build-context-set.sh`'s awk `$1 == "corpflow"`, the `Stop`
+  matcher, and the 4 copies of the leak-regex alternation in `publish-pl-issue.sh` (lockstep with
+  `compatible-plugins.md`). A fifth that a lowercase pass alone would miss: the deliberately
+  mixed-case `Corpflow:Developer` example in `agent-coordination/SKILL.md`. Sibling prose drops
+  the doubled noun — "inside a company-workflow workflow" → "inside corpflow". Vendor identity
+  deliberately untouched: author `IGRSoft`, `support@igrsoft.com`, `github.com/IGRSoft` URLs,
+  `com.igrsoft.*` bundle IDs, and the marketplace name itself. BREAKING — no alias, despite the
+  PATCH version number (user-owned scheme, as at 4.0.3). Previous release 4.0.12 — activating
+  guards that were already written. `/worktask` never
   stamped `metadata.workspace_path` (only `/megatask` did), and that single omission silently
   disabled three assigned-tree guards at once: the orchestrator cross-check defaulted
   `_task_root` to `_orch_root` and compared a value to itself; `dv-tree-preflight.sh`
@@ -175,6 +193,17 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 | 2.1.51→2.1.76 | cc-features-2.1.51-76.md | v3.1.0/v3.2.0 |
 
 ## Release History (last 12, newest first)
+
+- 2026-08-13: v4.0.13 — plugin renamed `company-workflow` → `corpflow`, the second rename of the
+  same identity (v4.0.0 moved `igrsoft` → `company-workflow`) and run against that entry as its
+  template. Same three-role split: plugin identity moves (invocation ids, marketplace entry,
+  `Stop` matcher, install key, cache path), vendor identity does not (`IGRSoft`,
+  `support@igrsoft.com`, the marketplace name). The new third role is the **repo slug** —
+  `github.com/IGRSoft/corpflow` had already been renamed upstream, leaving a `README` clone URL
+  that no longer resolved. Seven `COMPANY_WORKFLOW_*` env vars → `CORPFLOW_*`, hard cut; an
+  eighth, `COMPANY_WORKFLOW_DIR`, lives in four siblings' `scripts/validate.sh`. All six sibling
+  plugins updated in the same pass, with the redundant "company-workflow workflow" collapsing to
+  plain "corpflow". BREAKING — `company-workflow:*` ids no longer resolve, no back-compat alias.
 
 - 2026-08-12: v4.0.12 — activating guards that were already written (OV-184 run, PR #436). Root
   cause: `/worktask` never stamped `metadata.workspace_path` — only `/megatask` did — and that

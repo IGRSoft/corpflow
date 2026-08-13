@@ -2,6 +2,83 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.13] - 2026-08-13
+
+The same rename, a second time. v4.0.0 moved `igrsoft` → `company-workflow` because the plugin id
+was the last artifact carrying the vendor name; this release moves `company-workflow` → `corpflow`
+because the repository has since become `IGRSoft/corpflow` and the plugin id was, again, the last
+thing to catch up. The v4.0.0 entry below is the template this pass followed — the same three-role
+split, the same runtime-literal traps, the same sibling ordering.
+
+The word's three roles, and separating them is again the whole substance. **Plugin identity**
+moves: every `company-workflow:<agent|skill>` invocation id, the `marketplace.json` plugin entry,
+`plugin.json`'s `Stop` matcher and its notification title, the `Task(company-workflow:…)`
+frontmatter grants, and the install key (`corpflow@igrsoft`). **Vendor identity** does not: the
+author block (`IGRSoft`, `support@igrsoft.com`), the `github.com/IGRSoft/…` owner segment, the
+`com.igrsoft.*` bundle IDs in `/appstore-iap`, and the marketplace name — still `igrsoft`, so the
+cache path becomes `~/.claude/plugins/cache/igrsoft/corpflow/<version>/` with only the second
+segment changed, exactly as last time.
+
+The **third** role is new, and is what made this pass different from v4.0.0: the **repo slug**.
+GitHub had already been renamed, so `README.md`'s `git clone https://github.com/igrsoft/company-workflow.git`
+was a published command that no longer resolved, and the cache-discovery glob in
+`skills/shared/plugin-root-resolution.md` pointed at a directory that will never exist again.
+
+Five sites matched the literal string at runtime and would have failed silently rather than
+loudly — the first four are the same four v4.0.0 called out, which is itself the argument for
+writing them down:
+
+- `hooks/dv-screenshot-gate.sh` guards on exact equality (`!= "corpflow:developer"`). Left stale,
+  the DV screenshot gate would no-op on every run with no error.
+- `skills/self-improvement/scripts/build-context-set.sh` maps agent refs to file paths via an awk
+  field compare (`$1 == "corpflow"`).
+- `.claude-plugin/plugin.json`'s `Stop` matcher must track the plugin name or the PL/FN
+  approval-gate push notification stops firing.
+- `skills/worktask/scripts/publish-pl-issue.sh` carries four identical copies of the plugin-prefix
+  leak regex that strips internal agent ids out of published GitHub issues; they stay byte-for-byte
+  in lockstep with the list in `skills/shared/compatible-plugins.md`.
+- **New this time:** `skills/agent-coordination/SKILL.md` documents that `subagent_type` matching is
+  case- and separator-insensitive, using the literal example `Task({ subagent_type: "Company_Workflow:Developer" })`.
+  A lowercase-only pass rewrites the rest of that line and leaves the example standing — the one
+  illustration on the page would have become the only stale id in the repo. The residual sweep is
+  now case- and separator-insensitive (`grep -niE "company[-_ ]?workflow"`) so this class cannot
+  survive again.
+
+### Changed
+
+- **Redundant phrasing collapsed.** `company-workflow workflow` doubled the noun; under the new
+  name it would have read `corpflow workflow`. The trailing noun is dropped instead — "this agent
+  is inside a company-workflow workflow" becomes "this agent is inside corpflow" — across ~78 sites
+  in the six sibling plugins' agent intake blocks. The separated form
+  `company-workflow 11-stage workflow system` becomes `corpflow 11-stage pipeline`, reusing the word
+  the README already uses for the stage chain.
+
+### Breaking
+
+Recorded as breaking despite the PATCH version number, which is user-owned (the same call as at
+4.0.3). Anyone reading semver alone will not be warned by the number.
+
+- **`company-workflow:*` agent and skill ids no longer resolve.** There is no back-compat alias.
+  The six sibling plugins (`apple-developer`, `system-developer`, `android-developer`,
+  `frontend-developer`, `backend-developer`, `ai-engineer`) are updated in the same pass; merge
+  this release first, since their docs reference `corpflow:` ids.
+- **`COMPANY_WORKFLOW_*` environment variables renamed to `CORPFLOW_*` with no fallback read** —
+  `TEST_GATE`, `TEST_SELECT`, `AR_REF_STRICT`, `PR_BODY_STRICT`, and
+  `COMMENT_DENSITY_{MAX,WARN,MIN_LINES}`. An eighth, `COMPANY_WORKFLOW_DIR` → `CORPFLOW_DIR`, lives
+  in `scripts/validate.sh` in four of the siblings. Update shell profiles and CI jobs.
+- **Stale installs must be reinstalled.** `~/.claude/plugins/cache/` and the
+  `known_marketplaces.json` / `installed_plugins.json` indexes still key on the old plugin name
+  until then.
+- **`audit.jsonl` is not comparable across the boundary** — the `subject` field changes prefix, so
+  pre- and post-rename audit trails cannot be diffed directly.
+
+### Not changed
+
+Pre-4.0.13 `CHANGELOG.md` entries and `benchmark/results/**` keep their original text. A changelog
+row records what shipped under the name in force at the time; rewriting it would make the history
+lie. `benchmark/results/result.html` still reads "igrsoft benchmark" for the same reason and
+regenerates from `report.py` on the next `make report`.
+
 ## [4.0.12] - 2026-08-12
 
 Activating guards that were already written. A full `/worktask` run (OV-184, shipped as PR #436)

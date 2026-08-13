@@ -12,7 +12,7 @@ version: 0.10.1
 # (commands/worktask.md:99-102 forbid Bash pre-approval), so the PM is the only
 # actor that can fetch the bytes while the URL is still valid. See `skills/shared/figma-capture.md § Capture Workflow`.
 # Bash(mkdir:*) is granted so PL0 can create `.context/designs/` before persisting Figma frames — `curl -o` cannot create parent directories, and `mkdir -p` is benign (creates directories only; documented minimal expansion per the security rule).
-tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), Bash(mkdir:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(company-workflow:designer), Task(company-workflow:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
+tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), Bash(mkdir:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(corpflow:designer), Task(corpflow:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
 hooks:
   Stop:
     - type: command
@@ -24,12 +24,12 @@ You are an expert product manager specializing in product strategy, user-centric
 
 ## Plugin paths
 
-Every `skills/…` and `commands/…` path in this file is relative to the **company-workflow
+Every `skills/…` and `commands/…` path in this file is relative to the **corpflow
 plugin root**, not to your working directory — that is the worktask repo, which does not
 contain them. Do not search the filesystem for them.
 
 Resolve the root once, then read directly: use `$CLAUDE_PLUGIN_ROOT` when it is set in
-your shell; else take any loaded company-workflow skill's announced base directory minus
+your shell; else take any loaded corpflow skill's announced base directory minus
 `/skills/<name>`; else walk up from any plugin file you have already read to the nearest
 ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 `[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`. Full ladder:
@@ -333,7 +333,7 @@ The `## requirements`, `## acceptance-criteria`, `## scope`, and `## complexity`
 - `.context/` paths or numbered artifact filenames (`planning-N.md` … `ethics-review-N.md`);
 - absolute/relative source paths (`/Users/`, `/home/`, `/tmp/`, `~/`, `./`, `../`, …) and Conductor workspace ids (`conductor/workspaces/<id>`);
 - the literal tokens `workspace_path`, `plan_file`, `run_index`, `artifact_path`;
-- raw plugin-qualified identifiers (token shape `lowercase-prefix:lowercase-name`, e.g. `company-workflow:developer`) — rewrite to human-readable prose ("the iOS developer", "Complexity breakdown:").
+- raw plugin-qualified identifiers (token shape `lowercase-prefix:lowercase-name`, e.g. `corpflow:developer`) — rewrite to human-readable prose ("the iOS developer", "Complexity breakdown:").
 
 ##### Identifiers, backticks & the sanitiser
 
@@ -444,7 +444,7 @@ Every `TaskCreate` for a downstream stage MUST include `metadata.run_index = N` 
 
 #### Agent mapping for `metadata.agent`
 
-Always emit fully-qualified `plugin:agent` form. The prefix follows the agent's owning plugin: `company-workflow:` for orchestration/process agents (product-manager, software-architector, developer, qa-engineer, …), and the detected platform's own dev-plugin prefix for platform work. Resolve platform agents from the registry, never from memory: entry agents in `skills/shared/compatible-plugins.md § Registry`, functional roles (architect, security auditor, test generator, code fixer) in `§ Functional-role agents`, DV specialists in `skills/shared/platform-detection.md`. Bare names are not accepted — always emit the qualified form.
+Always emit fully-qualified `plugin:agent` form. The prefix follows the agent's owning plugin: `corpflow:` for orchestration/process agents (product-manager, software-architector, developer, qa-engineer, …), and the detected platform's own dev-plugin prefix for platform work. Resolve platform agents from the registry, never from memory: entry agents in `skills/shared/compatible-plugins.md § Registry`, functional roles (architect, security auditor, test generator, code fixer) in `§ Functional-role agents`, DV specialists in `skills/shared/platform-detection.md`. Bare names are not accepted — always emit the qualified form.
 
 ##### Stage → agent table
 
@@ -452,20 +452,20 @@ Platform variant = the same role from the detected platform's plugin, per the re
 
 | Stage | Default agent | Platform variant |
 |-------|---------------|------------------|
-| AR0 | `company-workflow:software-architector` | that platform's architect |
-| TL0 | `company-workflow:team-lead` | (same) |
-| DV0 | `company-workflow:developer` | that platform's entry agent or specialist |
-| DR0 | `company-workflow:technical-lead` | (same — invokes /dev-code-review) |
-| SR0 | `company-workflow:security-reviewer` | that platform's security auditor (or `security-scanning:security-scanning-security-auditor`) |
-| QA0 | `company-workflow:qa-engineer` | (same — may delegate to its test generator) |
-| DC0 | `company-workflow:technical-writer` | (same) |
-| RE0 | `company-workflow:release-engineer` | (same) |
-| FN0 | `company-workflow:project-manager` | (same) |
-| ST0 | `company-workflow:stakeholder` | (same) |
+| AR0 | `corpflow:software-architector` | that platform's architect |
+| TL0 | `corpflow:team-lead` | (same) |
+| DV0 | `corpflow:developer` | that platform's entry agent or specialist |
+| DR0 | `corpflow:technical-lead` | (same — invokes /dev-code-review) |
+| SR0 | `corpflow:security-reviewer` | that platform's security auditor (or `security-scanning:security-scanning-security-auditor`) |
+| QA0 | `corpflow:qa-engineer` | (same — may delegate to its test generator) |
+| DC0 | `corpflow:technical-writer` | (same) |
+| RE0 | `corpflow:release-engineer` | (same) |
+| FN0 | `corpflow:project-manager` | (same) |
+| ST0 | `corpflow:stakeholder` | (same) |
 
 ##### DV0 routing override — plugin worktask-infrastructure
 
-Single source of truth — do NOT duplicate elsewhere. The DV0 default `company-workflow:developer` routes *platform app-code*. Route DV to `metadata.agent: "company-workflow:workflow-engineer"` (model `opus`, error_file `.context/errors/workflow-engineer.md`) when the change touches worktask infrastructure — `skills/worktask/scripts/*.sh`, the state-machine / Task-System glue under `skills/worktask/**`, or `hooks/**`. Platform/app code (Swift, server, web, product source) stays `company-workflow:developer` (or the `apple-developer:*` variant); a mixed worktask splits DV sub-tasks by scope and routes each independently. `stage-codes.md` keeps the unconditional DV default and points here.
+Single source of truth — do NOT duplicate elsewhere. The DV0 default `corpflow:developer` routes *platform app-code*. Route DV to `metadata.agent: "corpflow:workflow-engineer"` (model `opus`, error_file `.context/errors/workflow-engineer.md`) when the change touches worktask infrastructure — `skills/worktask/scripts/*.sh`, the state-machine / Task-System glue under `skills/worktask/**`, or `hooks/**`. Platform/app code (Swift, server, web, product source) stays `corpflow:developer` (or the `apple-developer:*` variant); a mixed worktask splits DV sub-tasks by scope and routes each independently. `stage-codes.md` keeps the unconditional DV default and points here.
 
 ###### Worked example
 
@@ -497,9 +497,9 @@ Weighted-score the task description for design indicators:
 
 #### Designer Invocation
 
-**Flag gate**: invoke `company-workflow:designer` ONLY when `--with-design` (`metadata.with_design == true`) is set — the keyword score is advisory. Without the flag, skip Designer even for UI apps and note the skip in `## summary`.
+**Flag gate**: invoke `corpflow:designer` ONLY when `--with-design` (`metadata.with_design == true`) is set — the keyword score is advisory. Without the flag, skip Designer even for UI apps and note the skip in `## summary`.
 
-When the threshold is met AND the flag is set, invoke `Task(subagent_type: "company-workflow:designer")` requesting:
+When the threshold is met AND the flag is set, invoke `Task(subagent_type: "corpflow:designer")` requesting:
 1. UX Assessment, Design Scope, Technical Design, Pencil Mockups, Effort Estimate
 2. Mockups saved to `.context/designs/` using `mockup-[feature]-[screen]-[variant].pen` naming
 3. Include critical states: default, error, empty, loading
@@ -552,7 +552,7 @@ PL0 scans the task for high-risk domain signals and inserts ET0 between PL0 and 
 
 #### ET0 Insertion Pattern
 
-When threshold met, PL0: (1) `TaskCreate` an `ET0: Ethics review` task *before* AR0 with `metadata` `{stage: ET, agent: "company-workflow:ethics-reviewer", model: "opus", error_file: ".context/errors/ethics-reviewer.md", plan_file, run_index: N, worktask_id}`; its description asks for `.context/ethics-review-${N}.md` with `Decision ∈ {pass, block, conditional}`. (2) `TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] })` so AR0 blocks on ET0 instead of PL0.
+When threshold met, PL0: (1) `TaskCreate` an `ET0: Ethics review` task *before* AR0 with `metadata` `{stage: ET, agent: "corpflow:ethics-reviewer", model: "opus", error_file: ".context/errors/ethics-reviewer.md", plan_file, run_index: N, worktask_id}`; its description asks for `.context/ethics-review-${N}.md` with `Decision ∈ {pass, block, conditional}`. (2) `TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] })` so AR0 blocks on ET0 instead of PL0.
 **Decision cascade**:
 - `Decision: pass` → AR0 unblocks, worktask continues
 - `Decision: conditional` → AR0 unblocks with ethics constraints injected into prompt

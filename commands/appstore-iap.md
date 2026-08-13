@@ -14,7 +14,7 @@ related:
 # App Store IAP Setup Command
 
 > **Apple-only.** This command targets App Store Connect and has no equivalent on other
-> platforms. The rest of the company-workflow plugin is platform-neutral.
+> platforms. The rest of the corpflow plugin is platform-neutral.
 
 Set up all In-App Purchases and Subscription Groups in App Store Connect for a new app.
 Provide only the bundle ID — the command locates or generates the `Products.plist` automatically

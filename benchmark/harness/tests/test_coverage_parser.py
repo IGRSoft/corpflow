@@ -28,13 +28,13 @@ class CaptureParser(unittest.TestCase):
 
     def test_stream_json_manifest_and_usage(self):
         s = stream_json(tool_uses=[
-            ("Task", {"subagent_type": "company-workflow:developer"}),
-            ("Skill", {"skill": "company-workflow:test-plan"}),
+            ("Task", {"subagent_type": "corpflow:developer"}),
+            ("Skill", {"skill": "corpflow:test-plan"}),
             ("SlashCommand", {"command": "/worktask"}),
         ], result_usage=True, cost=0.05)
         p = capture.parse(s)
-        self.assertEqual(p.coverage.agents, ["company-workflow:developer"])
-        self.assertEqual(p.coverage.skills, ["company-workflow:test-plan"])
+        self.assertEqual(p.coverage.agents, ["corpflow:developer"])
+        self.assertEqual(p.coverage.skills, ["corpflow:test-plan"])
         self.assertEqual(p.coverage.commands, ["/worktask"])
         self.assertEqual(p.coverage.tool_calls, 3)
         self.assertEqual(p.cost_usd, 0.05)

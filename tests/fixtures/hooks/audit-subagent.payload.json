@@ -1,1 +1,1 @@
-{"agent_type":"company-workflow:developer","agent_id":"agt_dv","session_id":"sess_fix","duration_ms":12345,"parent_agent_id":"agt_parent","effort":{"level":"high"},"background_tasks":[{"id":"bg1"},{"id":"bg2"}],"session_crons":[{"id":"cr1"}]}
+{"agent_type":"corpflow:developer","agent_id":"agt_dv","session_id":"sess_fix","duration_ms":12345,"parent_agent_id":"agt_parent","effort":{"level":"high"},"background_tasks":[{"id":"bg1"},{"id":"bg2"}],"session_crons":[{"id":"cr1"}]}

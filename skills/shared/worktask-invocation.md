@@ -1,6 +1,6 @@
 ---
 name: worktask-invocation
-description: How a worktask is launched (the /worktask command or Skill({skill:"company-workflow:worktask"})), the BLOCKING first-action rule, PL0 dynamic stage sizing, and the PL/FN gate execution model. Use when launching a worktask or resolving worktask semantics.
+description: How a worktask is launched (the /worktask command or Skill({skill:"corpflow:worktask"})), the BLOCKING first-action rule, PL0 dynamic stage sizing, and the PL/FN gate execution model. Use when launching a worktask or resolving worktask semantics.
 ---
 
 # Worktask Invocation
@@ -10,14 +10,14 @@ Single source of truth for how a worktask is launched and its invocation rule.
 ## BLOCKING
 
 > When a user asks to run a worktask — via the `/worktask` command (or `/worktask --emergency` for the
-> incident pipeline) or by invoking `Skill({skill:"company-workflow:worktask"})` — the VERY FIRST action MUST
+> incident pipeline) or by invoking `Skill({skill:"corpflow:worktask"})` — the VERY FIRST action MUST
 > be to launch the worktask pipeline via that canonical entry point. No file reads, no codebase
 > exploration, and no agent delegation before that launch. Handling the request as a freeform
 > instruction inline is a violation.
 
 ### Entry point and gates
 
-`/worktask` (or `Skill({skill:"company-workflow:worktask"})`) is the canonical entry point. There are two human
+`/worktask` (or `Skill({skill:"corpflow:worktask"})`) is the canonical entry point. There are two human
 checkpoints. After PL0 it STOPs at the PL gate and presents the plan for approval, unless `--auto=[plan]`
 or `--emergency` is set (both stamp `plan_gate: "bypass"`). Then, immediately before the
 FN delegation, it STOPs at the FN gate and presents a pre-FN summary for finalization approval, unless
@@ -35,7 +35,7 @@ stop for a human). `--auto` takes any subset as an array: `--auto=[plan, decisio
 ## Invocation
 
 Launch via `/worktask "<task>"` (add `--secure` / `--full` for the 11-stage pipeline, `--emergency`
-for the incident pipeline) or `Skill({skill:"company-workflow:worktask"})`. There are no size-specific message
+for the incident pipeline) or `Skill({skill:"corpflow:worktask"})`. There are no size-specific message
 prefixes — PL0 dynamic sizing selects which of the 9 stages actually run, dropping stages for low
 complexity. See `../worktask/SKILL.md § Dynamic Worktask Sizing`.
 

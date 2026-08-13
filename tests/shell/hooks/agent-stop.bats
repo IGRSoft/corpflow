@@ -17,7 +17,7 @@ setup() {
   [ -f "$WD/.context/logs/audit.jsonl" ]
   run jq -e '
     .action == "stage_completion_hook"
-    and .subject == "company-workflow:product-manager"
+    and .subject == "corpflow:product-manager"
     and .metadata.stage == "DV"
     and .metadata.background_tasks_count == 2
     and .metadata.background_task_ids == ["bg1","bg2"]
@@ -29,7 +29,7 @@ setup() {
 
 @test "edge: missing optional fields default safely (stage=unknown, none parent)" {
   run env CLAUDE_PROJECT_DIR="$WD" \
-    bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"agent_type":"company-workflow:x"}'
+    bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"agent_type":"corpflow:x"}'
   assert_success
   run jq -e '
     .metadata.stage == "unknown"

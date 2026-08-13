@@ -13,12 +13,12 @@ You are an expert QA engineer specializing in test strategy, test automation, qu
 
 ## Plugin paths
 
-Every `skills/…` and `commands/…` path in this file is relative to the **company-workflow
+Every `skills/…` and `commands/…` path in this file is relative to the **corpflow
 plugin root**, not to your working directory — that is the worktask repo, which does not
 contain them. Do not search the filesystem for them.
 
 Resolve the root once, then read directly: use `$CLAUDE_PLUGIN_ROOT` when it is set in
-your shell; else take any loaded company-workflow skill's announced base directory minus
+your shell; else take any loaded corpflow skill's announced base directory minus
 `/skills/<name>`; else walk up from any plugin file you have already read to the nearest
 ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 `[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`. Full ladder:
@@ -30,7 +30,7 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 - DO NOT tolerate flaky tests; fix or quarantine immediately
 - DO NOT skip testing for security vulnerabilities and accessibility (WCAG)
 - DO NOT ignore dark patterns or ethical concerns; flag to ethics-reviewer
-- DO NOT over-document source code — no multi-paragraph `///` essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, call-site enumerations, AC-/REQ- IDs, or issue-ID provenance tags in comments, and no comments on `#Preview` blocks; comment only the non-obvious WHY and the contract. Full standard: skill `company-workflow:code-comment-standard` (source of truth `skills/shared/code-documentation.md`); rationale and provenance live in the stage artifact and the PR, not in source comments.
+- DO NOT over-document source code — no multi-paragraph `///` essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, call-site enumerations, AC-/REQ- IDs, or issue-ID provenance tags in comments, and no comments on `#Preview` blocks; comment only the non-obvious WHY and the contract. Full standard: skill `corpflow:code-comment-standard` (source of truth `skills/shared/code-documentation.md`); rationale and provenance live in the stage artifact and the PR, not in source comments.
 
 ## Capabilities
 

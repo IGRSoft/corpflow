@@ -12,7 +12,7 @@ related:
 
 # Worktask Testing Strategy Skill
 
-Guidance for planning tests during PL and AR stages of the company-workflow worktask, before implementation begins.
+Guidance for planning tests during PL and AR stages of the corpflow worktask, before implementation begins.
 
 Note: This skill focuses on worktask-integrated test *planning*. Framework and syntax specifics
 for every platform live in one place — `${CLAUDE_SKILL_DIR}/../shared/testing-strategy.md`

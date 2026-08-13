@@ -36,7 +36,7 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 | Field | Purpose |
 |-------|---------|
 | `stage` | Stage code unnumbered (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET). The enum is the full vocabulary, not the per-run set — AR and TL tasks exist only when PL0 included them |
-| `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (e.g., `company-workflow:software-architector`, `apple-developer:ios-developer`). Bare names are not accepted |
+| `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (e.g., `corpflow:software-architector`, `apple-developer:ios-developer`). Bare names are not accepted |
 | `model` | Model alias for this stage (fable, opus, sonnet, haiku). Always pass explicitly to `Task()` — do not rely on frontmatter inheritance. Under a managed `availableModels`/`enforceAvailableModels` allowlist a valid alias may silently resolve to a different model — see `skills/worktask/SKILL.md § Pre-Stage Validation` step 6 |
 
 ### Run & context fields
@@ -213,7 +213,7 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
 #### error_file derivation
 
 Orchestrator populates if absent:
-- `agent: "company-workflow:developer"` → `error_file: ".context/errors/developer.md"` (last segment)
+- `agent: "corpflow:developer"` → `error_file: ".context/errors/developer.md"` (last segment)
 - `agent: "apple-developer:ios-developer"` → `error_file: ".context/errors/ios-developer.md"` (last segment)
 - Basename collision across plugins → join with `-`: `.context/errors/apple-developer-ios-developer.md`
 

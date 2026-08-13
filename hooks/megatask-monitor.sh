@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# megatask-monitor.sh — SubagentStop/Stop hook (company-workflow worktask plugin).
+# megatask-monitor.sh — SubagentStop/Stop hook (corpflow worktask plugin).
 #
 # Drives the megatask completion loop. On every subagent/turn stop it RECONCILES
 # every active megatask group: for each per-issue worktask that has finished, it

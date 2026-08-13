@@ -1,14 +1,14 @@
 ---
 name: plugin-root-resolution
-description: Canonical, provider-agnostic rule for resolving the company-workflow plugin root. Use when a skill, agent, command, or script must locate bundled helpers (hooks/, skills/*/scripts/) and CLAUDE_PLUGIN_ROOT may be unavailable.
+description: Canonical, provider-agnostic rule for resolving the corpflow plugin root. Use when a skill, agent, command, or script must locate bundled helpers (hooks/, skills/*/scripts/) and CLAUDE_PLUGIN_ROOT may be unavailable.
 ---
 
 # Plugin-Root Resolution (provider-agnostic)
 
 **Definition**: the plugin root is the directory containing `.claude-plugin/plugin.json`
-for the company-workflow plugin. Known layouts:
+for the corpflow plugin. Known layouts:
 
-- Claude Code cache: `~/.claude/plugins/cache/igrsoft/company-workflow/<version>/` — **version-keyed;
+- Claude Code cache: `~/.claude/plugins/cache/igrsoft/corpflow/<version>/` — **version-keyed;
   never hardcode** a versioned path.
 - Plain git clone: the repository root.
 - Any other harness: wherever it installed the plugin directory.
@@ -38,7 +38,7 @@ Resolve the plugin root by trying, in order:
    wins (tests rely on this override contract).
 2. **Skill base directory, minus `/skills/<name>`** — every agent-skills harness
    (Claude Code included) announces "Base directory for this skill: `<path>`" when a
-   skill loads. For any company-workflow skill that path is `<plugin-root>/skills/<name>`, so the
+   skill loads. For any corpflow skill that path is `<plugin-root>/skills/<name>`, so the
    plugin root is two directory levels up.
 
 ### Rungs 3–4 and validation
@@ -47,7 +47,7 @@ Resolve the plugin root by trying, in order:
    absolute path: walk up to the nearest ancestor directory containing
    `.claude-plugin/plugin.json`.
 4. **Claude Code cache last resort** (CC installs only):
-   `ls -d ~/.claude/plugins/cache/igrsoft/company-workflow/*/ 2>/dev/null | sort -V | tail -1`
+   `ls -d ~/.claude/plugins/cache/igrsoft/corpflow/*/ 2>/dev/null | sort -V | tail -1`
    — may be stale if an older version is pinned, so validate before trusting.
 
 **Always validate** a candidate: `[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`.

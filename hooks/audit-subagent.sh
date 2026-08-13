@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SubagentStop → audit.jsonl writer (company-workflow worktask plugin).
+# SubagentStop → audit.jsonl writer (corpflow worktask plugin).
 # Replaces prose-instructed `subagent_stopped` row emission. Pairs with
 # cost-log.sh; both fire on SubagentStop, both target .context/logs/.
 #
@@ -11,7 +11,7 @@ SELF_TEST=0
 
 read_stdin() {
   if [ "$SELF_TEST" -eq 1 ]; then
-    printf '%s' '{"agent_type":"company-workflow:developer","agent_id":"agt_test","session_id":"sess_test","duration_ms":12345,"parent_agent_id":"agt_parent","background_tasks":[{"id":"bg1"},{"id":"bg2"}],"session_crons":[{"id":"cr1"}]}'
+    printf '%s' '{"agent_type":"corpflow:developer","agent_id":"agt_test","session_id":"sess_test","duration_ms":12345,"parent_agent_id":"agt_parent","background_tasks":[{"id":"bg1"},{"id":"bg2"}],"session_crons":[{"id":"cr1"}]}'
   else
     cat
   fi
@@ -52,7 +52,7 @@ ROW=$(printf '%s' "$PAYLOAD" | jq -c \
 if [ "$SELF_TEST" -eq 1 ]; then
   printf '%s\n' "$ROW" | jq -e '
     .metadata.dedupe_key == "sess_test:agt_test:stop"
-    and .subject == "company-workflow:developer"
+    and .subject == "corpflow:developer"
     and .metadata.parent_agent_id == "agt_parent"
     and .metadata.background_tasks_count == 2
     and .metadata.background_task_ids == ["bg1","bg2"]

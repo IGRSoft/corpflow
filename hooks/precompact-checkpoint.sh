@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreCompact → state checkpoint (company-workflow worktask plugin).
+# PreCompact → state checkpoint (corpflow worktask plugin).
 # Copies .context/state.json to .context/state.checkpoint-<ts>.json before
 # auto-compaction so long worktask runs survive context summarization.
 # Pairs with the existing PostCompact recovery prose in

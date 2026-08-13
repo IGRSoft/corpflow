@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # DV comment-density gate — blocks a code-writing agent's SubagentStop when a
-# changed source file is more comment than the standard allows (company-workflow
+# changed source file is more comment than the standard allows (corpflow
 # worktask plugin).
 #
 # Closes the failure class where `skills/code-comment-standard` is stated but
@@ -12,8 +12,8 @@
 # in .claude-plugin/plugin.json — no matcher; the hook self-filters).
 #
 # Agent filter — deliberately NOT the sibling's exact-match on
-# "company-workflow:developer". A Conductor worktree waiver dispatches
-# apple-developer:ios-developer directly, bypassing company-workflow:developer entirely;
+# "corpflow:developer". A Conductor worktree waiver dispatches
+# apple-developer:ios-developer directly, bypassing corpflow:developer entirely;
 # an exact-match gate catches none of that. This matches any code-writing agent
 # (*developer*, *code-fixer*, *test-generator*) and stays silent for reviewers
 # (technical-lead, qa-engineer, security-reviewer) so a reviewer is never
@@ -26,7 +26,7 @@
 #     already over the ceiling, so it would block an agent for inheriting bloat.
 #     Files under MIN_ADDED_LINES are skipped — small edits are not the failure
 #     mode, bulk-authored files are.
-#   - Over COMPANY_WORKFLOW_COMMENT_DENSITY_MAX (default 40) -> emit
+#   - Over CORPFLOW_COMMENT_DENSITY_MAX (default 40) -> emit
 #     {"decision":"block", ..., "hookSpecificOutput":{...,"additionalContext":
 #     "<remediation>"}} + comment_density_block row.
 #     Under -> pass + comment_density_pass row (warns in the row over ..._WARN,
@@ -39,9 +39,9 @@ set -eu
 # Measured against a real offending branch: added-line density ran 26-67% per
 # file, and 40 catches every genuine offender while clearing the two files whose
 # documentation was proportionate.
-DENSITY_MAX="${COMPANY_WORKFLOW_COMMENT_DENSITY_MAX:-40}"
-DENSITY_WARN="${COMPANY_WORKFLOW_COMMENT_DENSITY_WARN:-30}"
-MIN_ADDED_LINES="${COMPANY_WORKFLOW_COMMENT_DENSITY_MIN_LINES:-40}"
+DENSITY_MAX="${CORPFLOW_COMMENT_DENSITY_MAX:-40}"
+DENSITY_WARN="${CORPFLOW_COMMENT_DENSITY_WARN:-30}"
+MIN_ADDED_LINES="${CORPFLOW_COMMENT_DENSITY_MIN_LINES:-40}"
 
 SELF_TEST=0
 [ "${1:-}" = "--self-test" ] && SELF_TEST=1
@@ -234,7 +234,7 @@ EOF
     return 0
   fi
 
-  _remedy="Comment-density gate: these changed files are over ${DENSITY_MAX}% comments — ${_offenders}. The company-workflow standard (skill: company-workflow:code-comment-standard) requires comment-to-code density well below 1:1; a file that is ~half prose is over-documented. Remove: multi-paragraph /// essays, defect/ticket history, before/after narration, AC-/REQ- IDs and issue tags as provenance, caller enumeration, QA runbooks and tuning instructions, prose restating the signature, and any justification written to answer a review finding. Keep: a one-line /// summary where the name is not self-evident, ONE terse WHY per non-obvious literal, and one-line invariants that prevent a regression. Rationale, threshold derivations and deviation justifications belong in .context/development-N.md and the PR — not in source. Re-run and return once every changed file is under the ceiling."
+  _remedy="Comment-density gate: these changed files are over ${DENSITY_MAX}% comments — ${_offenders}. The corpflow standard (skill: corpflow:code-comment-standard) requires comment-to-code density well below 1:1; a file that is ~half prose is over-documented. Remove: multi-paragraph /// essays, defect/ticket history, before/after narration, AC-/REQ- IDs and issue tags as provenance, caller enumeration, QA runbooks and tuning instructions, prose restating the signature, and any justification written to answer a review finding. Keep: a one-line /// summary where the name is not self-evident, ONE terse WHY per non-obvious literal, and one-line invariants that prevent a regression. Rationale, threshold derivations and deviation justifications belong in .context/development-N.md and the PR — not in source. Re-run and return once every changed file is under the ceiling."
 
   jq -cn --arg ts "$_ts" --arg agent "$_agent" --arg off "$_offenders" \
     --argjson worst "$_worst" --argjson checked "$_checked" --argjson max "$DENSITY_MAX" '
@@ -300,7 +300,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   #    is never blocked for the writer's bloat).
   printf '/// essay %s\n' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 >"$_tmp/Bloated.swift"
   printf 'struct B%s { let v: Int }\n' 1 2 3 4 5 >>"$_tmp/Bloated.swift"
-  _out=$(run_gate '{"agent_type":"company-workflow:technical-lead"}' "$_tmp/.context" "$_tmp")
+  _out=$(run_gate '{"agent_type":"corpflow:technical-lead"}' "$_tmp/.context" "$_tmp")
   [ -z "$_out" ] || { echo "dv-comment-density-gate: self-test FAIL (reviewer agent was blocked)"; _fail=1; }
 
   # 4. Small edit under the floor -> must stay silent even at high density.

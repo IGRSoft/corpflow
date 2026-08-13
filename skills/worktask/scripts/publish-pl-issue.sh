@@ -338,14 +338,14 @@ sanitise_body() {
       if (line ~ /(planning|architecture|coordinating|coordination|developing|development|reviewing|review|qa|testing|documenting|documentation|releasing|release|finalizing|finalization|stakeholding|retrospective|incident|ethics-review)-[0-9]+\.md/) next  # L7,L8
       if (probe ~ /(^|[[:space:]])(\.\/|\.\.\/)[A-Za-z0-9_.\/-]+/) next   # L9
       # L10: drop whole line when a plugin-qualified identifier is the leading
-      # non-bullet token (e.g. "* Routed to company-workflow:developer ...",
-      # "Breakdown using company-workflow:estimation-methodology:"). Strict prefix
+      # non-bullet token (e.g. "* Routed to corpflow:developer ...",
+      # "Breakdown using corpflow:estimation-methodology:"). Strict prefix
       # allow-list keeps this from false-positive on http:// / git:// / etc.
       # The prefix list MUST mirror skills/shared/compatible-plugins.md
       # (Registry plugins + Support plugins) and stay identical at every
       # occurrence in this file. A missing prefix leaks the agent identifiers
       # of that plugin into the published issue.
-      if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next
+      if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(corpflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next
 
       # ---- Pass 2 token-strip (with allow-list) -------------------------
       # Track fenced code block state (A1).
@@ -387,11 +387,11 @@ sanitise_body() {
           i = i + RLENGTH
           continue
         }
-        # A6: plugin-qualified identifier token (company-workflow:foo, apple-developer:bar,
+        # A6: plugin-qualified identifier token (corpflow:foo, apple-developer:bar,
         # etc.). Narrow known-prefix allow-list to avoid false positives on
         # http:, git:, file:, etc. Backtick spans already passed through above.
         # Prefix list MUST mirror skills/shared/compatible-plugins.md and L275.
-        if (match(rest, /^(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/)) {
+        if (match(rest, /^(corpflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/)) {
           i = i + RLENGTH
           continue
         }
@@ -486,8 +486,8 @@ first_sentence() {
 
 # ---------- asset host-and-rewrite (Figma image embed) ----------------------
 # Parse "owner/repo" from a git remote URL. Handles both forms:
-#   git@github.com:IGRSoft/company-workflow.git
-#   https://github.com/IGRSoft/company-workflow.git   (and without .git)
+#   git@github.com:IGRSoft/corpflow.git
+#   https://github.com/IGRSoft/corpflow.git   (and without .git)
 # Echoes "owner/repo" on success; empty on no match.
 parse_owner_repo() {
   local url="$1" path
@@ -1052,7 +1052,7 @@ label_color() {
 
 label_description() {
   case "$1" in
-    worktask)             printf 'company-workflow worktask run' ;;
+    worktask)             printf 'corpflow worktask run' ;;
     planning-approved)    printf 'PL stage plan approved by human' ;;
     complexity:*)         printf 'PL complexity tier' ;;
     ticket:*)             printf 'External tracker reference' ;;
@@ -1672,7 +1672,7 @@ MOCK
     # Fixture 02b: plugin-qualified identifier tokens must not appear in
     # sanitised body (Pass-2 A6 rule), outside code spans.
     local leak_in leak_out
-    leak_in=$'Breakdown using company-workflow:estimation-methodology:\n* Routed to company-workflow:developer (apple-developer:ios-developer).\nDelegated to apple-developer:test-generator for regression coverage.\nNarrative referencing company-workflow:product-manager directly.\nKeep `company-workflow:code-fixer` inside backticks intact.\n'
+    leak_in=$'Breakdown using corpflow:estimation-methodology:\n* Routed to corpflow:developer (apple-developer:ios-developer).\nDelegated to apple-developer:test-generator for regression coverage.\nNarrative referencing corpflow:product-manager directly.\nKeep `corpflow:code-fixer` inside backticks intact.\n'
     leak_out=$(printf '%s' "$leak_in" | sanitise_body)
     local f02b_ok=1
     # The three leading-token lines should be entirely dropped by L10.
@@ -1681,14 +1681,14 @@ MOCK
     if printf '%s' "$leak_out" | grep -qF 'Delegated to'; then f02b_ok=0; fi
     # The mid-sentence reference should have the identifier stripped by A6
     # (narrative remains, token gone).
-    if printf '%s' "$leak_out" | grep -qE '(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]' | grep -v '`'; then
+    if printf '%s' "$leak_out" | grep -qE '(corpflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]' | grep -v '`'; then
       # Allow backticked occurrences only (one is intentionally kept).
-      if printf '%s' "$leak_out" | grep -vE '^[^`]*`[^`]*`[^`]*$' | grep -qE '(company-workflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]'; then
+      if printf '%s' "$leak_out" | grep -vE '^[^`]*`[^`]*`[^`]*$' | grep -qE '(corpflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z]'; then
         f02b_ok=0
       fi
     fi
     # Backtick passthrough preserves the token.
-    if ! printf '%s' "$leak_out" | grep -qF '`company-workflow:code-fixer`'; then f02b_ok=0; fi
+    if ! printf '%s' "$leak_out" | grep -qF '`corpflow:code-fixer`'; then f02b_ok=0; fi
     if [ "$f02b_ok" = "1" ]; then
       echo "publish-pl-issue: self-test 02b-identifier-leak-strip PASS"
       pass=$((pass + 1))
@@ -1728,7 +1728,7 @@ MOCK
     ASSET_DESIGNS_DIR="$t10_dir/.context/designs"
     ASSET_IMAGES_DIR="$t10_dir/.context/images"
     ASSET_HOST_MODE="raw"
-    ASSET_OWNER_REPO="IGRSoft/company-workflow"
+    ASSET_OWNER_REPO="IGRSoft/corpflow"
     ASSET_REF="feature/figma-screenshot-markdown"
     DRY_RUN=1
     WORKTASK_ID="fixture-10"
@@ -1743,8 +1743,8 @@ MOCK
     local f10a_ok=1
     # AC-1/AC-7: two ![alt](url) lines, each using the basename as alt text, in
     # document order, with the Figma URL preserved above.
-    printf '%s\n' "$f10_embed" | grep -qF '![figma-scan-25-default-255-2264.png](https://raw.githubusercontent.com/IGRSoft/company-workflow/feature/figma-screenshot-markdown/.worktask-assets/fixture-10/figma-scan-25-default-255-2264.png)' || f10a_ok=0
-    printf '%s\n' "$f10_embed" | grep -qF '![figma-analyzing-default-255-2267.png](https://raw.githubusercontent.com/IGRSoft/company-workflow/feature/figma-screenshot-markdown/.worktask-assets/fixture-10/figma-analyzing-default-255-2267.png)' || f10a_ok=0
+    printf '%s\n' "$f10_embed" | grep -qF '![figma-scan-25-default-255-2264.png](https://raw.githubusercontent.com/IGRSoft/corpflow/feature/figma-screenshot-markdown/.worktask-assets/fixture-10/figma-scan-25-default-255-2264.png)' || f10a_ok=0
+    printf '%s\n' "$f10_embed" | grep -qF '![figma-analyzing-default-255-2267.png](https://raw.githubusercontent.com/IGRSoft/corpflow/feature/figma-screenshot-markdown/.worktask-assets/fixture-10/figma-analyzing-default-255-2267.png)' || f10a_ok=0
     printf '%s\n' "$f10_embed" | grep -qF 'https://www.figma.com/design/FOO/FaceScan?node-id=255-2263' || f10a_ok=0
     # AC-7 ordering: scan-25 image line precedes analyzing image line.
     local _l25 _lan
@@ -2228,14 +2228,14 @@ MOCK
 
   # ---- parse_owner_repo: both remote URL forms ----
   local _por
-  _por=$(parse_owner_repo "git@github.com:IGRSoft/company-workflow.git")
-  if [ "$_por" = "IGRSoft/company-workflow" ]; then
+  _por=$(parse_owner_repo "git@github.com:IGRSoft/corpflow.git")
+  if [ "$_por" = "IGRSoft/corpflow" ]; then
     echo "publish-pl-issue: self-test parse_owner_repo(ssh) PASS"; pass=$((pass + 1))
   else
     echo "publish-pl-issue: self-test parse_owner_repo(ssh) FAIL (got '$_por')"; fail=$((fail + 1))
   fi
-  _por=$(parse_owner_repo "https://github.com/IGRSoft/company-workflow.git")
-  if [ "$_por" = "IGRSoft/company-workflow" ]; then
+  _por=$(parse_owner_repo "https://github.com/IGRSoft/corpflow.git")
+  if [ "$_por" = "IGRSoft/corpflow" ]; then
     echo "publish-pl-issue: self-test parse_owner_repo(https) PASS"; pass=$((pass + 1))
   else
     echo "publish-pl-issue: self-test parse_owner_repo(https) FAIL (got '$_por')"; fail=$((fail + 1))
