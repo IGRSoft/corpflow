@@ -60,6 +60,11 @@ fail() { printf '\033[1;31m[benchmark]\033[0m %s\n' "$*" >&2; exit 1; }
 command -v swift   >/dev/null 2>&1 || fail "swift toolchain not found (required)"
 command -v python3 >/dev/null 2>&1 || fail "python3 not found (required — Python harness)"
 
+# Dispatched stages inherit this. Unset, agents fall back to scanning the filesystem
+# for the plugin root (`find / -maxdepth 10 …`), which production never does — the
+# scans distort both the behaviour under test and the per-stage cost measured for it.
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+
 RUN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
 GIT_SHA="$(git -C "$PLUGIN_ROOT" rev-parse --short=7 HEAD 2>/dev/null || echo "nogit")"
 RUN_ID="${MODE}-${RUN_TS}-${GIT_SHA}"
@@ -95,11 +100,16 @@ if [ "$LIVE" = "1" ]; then
   rc=$?
   set -e
   # The shell exit stays cosmetic (D6): the adapter already wrote the record
-  # (incl. rc=4 partials) to $RECORD_PATH — read granularity from disk.
-  [ "$rc" -eq 0 ] || fail "live dispatch returned rc=$rc (record, if any, at $RECORD_PATH)"
-  # Rotate the completed live record into per-mode latest-3 history + runs
-  # detail (the deterministic arm does this inside bench-deterministic).
+  # (incl. rc=4 partials) to $RECORD_PATH — read granularity from disk. Deferred
+  # rather than fatal here so a partial run still reaches the report step below.
+  if [ "$rc" -ne 0 ]; then
+    DEFERRED_FAIL="live dispatch returned rc=$rc (record, if any, at $RECORD_PATH)"
+  fi
+  # Rotate the COMPLETED live record into per-mode latest-3 history + runs detail
+  # (the deterministic arm does this inside bench-deterministic). Partials stay out
+  # of history: a truncated arm would otherwise sit beside full runs as a peer.
   # rotate() appends same-run_id entries, so a script rerun must skip ingest.
+  if [ "$rc" -eq 0 ]; then
   PYTHONPATH="$BENCH_DIR/harness${PYTHONPATH:+:$PYTHONPATH}" python3 -c '
 import json, sys
 from benchmarkkit import rotation
@@ -117,7 +127,8 @@ if rid and rid in existing:
 rotation.rotate(history_path, record)
 rotation.rotate_detail(runs_dir, rid, record)
 ' "$RECORD_PATH" "$HISTORY" "$RUNS_DIR" || fail "live history rotation failed"
-  note "live record rotated into history."
+    note "live record rotated into history."
+  fi
 else
   # ---------------------------------------------------------------------------
   # DETERMINISTIC path — build both real apps + write the comparison record.
@@ -133,5 +144,17 @@ else
     --runs-dir "$RUNS_DIR" \
     || fail "deterministic benchmark failed"
 fi
+
+# Both modes rotate into $HISTORY, which result.html renders. Regenerating here is
+# what keeps the report from silently describing an older run than the one just made.
+# A report failure must not fail the run — the record is already durable on disk.
+if python3 "$HARNESS_BIN/bench-report" --history "$HISTORY" \
+     --out "$BENCH_DIR/results/result.html" --plugin-root "$PLUGIN_ROOT"; then
+  note "result.html regenerated for $RUN_ID."
+else
+  note "WARNING: result.html regeneration failed; $RECORD_PATH is still on disk."
+fi
+
+[ -n "${DEFERRED_FAIL:-}" ] && fail "$DEFERRED_FAIL"
 
 note "done ($MODE)."

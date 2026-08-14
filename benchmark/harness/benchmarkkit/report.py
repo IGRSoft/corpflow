@@ -30,6 +30,11 @@ METRIC_ROWS = [
     ("tokens.cache_read", "cache read", True),
     ("tokens.cache_creation", "cache creation", True),
     ("pass_fail", "pass/fail", False),
+    # The held-out quality signal; `implied` is the tier meant to separate the arms.
+    ("oracle.cases_passed", "oracle cases passed", True),
+    ("oracle.cases_total", "oracle cases total", True),
+    ("oracle.tiers.specified.passed", "oracle specified passed", True),
+    ("oracle.tiers.implied.passed", "oracle implied passed", True),
 ]
 
 
@@ -40,11 +45,12 @@ def _escape(s: str) -> str:
 def _get(path_metrics: Optional[dict], accessor: str):
     if path_metrics is None:
         return None
-    if "." in accessor:
-        a, b = accessor.split(".", 1)
-        inner = path_metrics.get(a)
-        return inner.get(b) if isinstance(inner, dict) else None
-    return path_metrics.get(accessor)
+    cursor = path_metrics
+    for part in accessor.split("."):
+        if not isinstance(cursor, dict):
+            return None
+        cursor = cursor.get(part)
+    return cursor
 
 
 def _group_int(i: int) -> str:

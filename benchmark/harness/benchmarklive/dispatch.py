@@ -58,7 +58,7 @@ CAPTURE_STREAM_JSON = "stream-json"
 
 # Bumped by hand whenever the graded task text changes; a workload change makes
 # token and quality figures incomparable just as surely as a model repin does.
-PROMPT_CONTRACT = "scripted-cli-v2"
+PROMPT_CONTRACT = "scripted-cli-v3"
 HARNESS_GENERATION = "python-1"
 
 
@@ -183,9 +183,13 @@ class SubprocessDispatcher:
         r = Subprocess.run(argv, cwd=self.workdir, input=prompt_text, timeout=self.timeout)
         if r.exit_code != 0:
             snippet = r.stderr.strip()[:400]
+            # Under --output-format json the CLI reports API failures on stdout, not
+            # stderr; without this the diagnostic is recoverable only from CLI transcripts.
+            out_snippet = r.stdout.strip()[:400]
             raise DispatchFailure(
                 f"claude -p failed (rc={r.exit_code}) for argv {argv[:6]}…"
                 + (f" stderr: {snippet}" if snippet else "")
+                + (f" stdout: {out_snippet}" if out_snippet else "")
             )
         return r.stdout
 
@@ -666,12 +670,20 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
             live_partial=partial, without_usages=wo_usages,
             without_dispatched=wo_dispatched, without_partial=wo_partial), record_path)
 
+    def _persist_without(wo_res: ArmResult) -> None:
+        # OI-2 for the WITHOUT arm: a budget breach returns an ArmResult, but a throw
+        # mid-arm returns nothing, so completed stages only survive if flushed here.
+        nonlocal without_result
+        without_result = wo_res
+        _flush(ArmResult(name="with"), partial=True)
+
     if real_arm:
         without_result = run_arm(
             without_spec, prompts_by_stage, without_dispatcher,
             budget_mod.RunningTally(per_arm_budget), estimate_calc,
             stages, estimate_runner=estimate_runner, capture_mode=capture_mode,
-            settings_path=settings_path, captures_dir=captures_dir, now_fn=now_fn)
+            settings_path=settings_path, captures_dir=captures_dir,
+            persist_partial=_persist_without, now_fn=now_fn)
         # Flush right after the WITHOUT arm so a later WITH breach still keeps it.
         _flush(ArmResult(name="with"), partial=True)
 

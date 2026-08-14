@@ -52,6 +52,33 @@ The record is retained as the evidence for both fixes. Its per-stage cost
 figures are real and are what `budget.STAGE_EXPECTED_TOKENS` is calibrated from;
 nothing comparing the two arms should be read from it.
 
+## `live-20260814T083428Z-cce3984` — not a valid A/B
+
+**In:** `results/runs/live/` only (partial records never enter `history.json`)
+
+| field | value |
+|---|---|
+| `paths.with.stage_count` | 10 |
+| `paths.without.stage_count` | 4 (of 10) |
+| `paths.with.cost_usd` | 20.8251 |
+| `paths.without.cost_usd` | 21.4842 |
+| `budget_usd` | 70.00 ($35.00/arm) |
+
+The mirror image of the a0cdb43 entry above, and not a shared-purse failure —
+budgets were already per-arm. The WITHOUT arm's DV cost $18.16, and the reserve
+rule holds back the heaviest stage observed so far before every later stage, so
+`21.48 spent + 18.16 reserved > 35.00` gated DR out with six cheap stages
+(~$5 total in the WITH arm) still to run. One expensive DV locks out the tail.
+
+Both arms scored the oracle 30/30 including `implied` 6/6. As above, that is a
+statement about the case set, not a tie between the arms.
+
+Its per-stage figures are real. Nothing comparing the two arms should be read
+from it — use `live-20260814T102001Z-cce3984`, the complete run at the same sha.
+
+**Sizing:** DV has ranged $7.54–$18.16 across five observed arm-runs, so a
+per-arm share must clear `spend_through_DV + DV_cost`. $50/arm is the floor.
+
 ## Reading `without_arm="skip"` placeholders
 
 A WITHOUT arm run in `skip` mode is a byte-stable placeholder, not a measurement:
