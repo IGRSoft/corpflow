@@ -37,6 +37,14 @@ make report        # -> benchmark/results/result.html
 ./benchmark/run-benchmark.sh --live --budget 2.50
 ./benchmark/run-benchmark.sh --live --stages PL,AR,DV   # targeted stage subset
 ./benchmark/run-benchmark.sh --live --without-arm skip  # force-skip the WITHOUT baseline
+
+# One arm at a time (live), then join the two records offline
+./benchmark/run-benchmark.sh --live --arm with --budget 50.00
+./benchmark/run-benchmark.sh --live --arm without --budget 50.00
+./benchmark/harness/bin/bench-pair \
+  --a benchmark/results/runs/live-arm/<with-run>.json \
+  --b benchmark/results/runs/live-arm/<without-run>.json \
+  --out benchmark/results/runs/live/joined.json
 ```
 
 ## What It Does
@@ -151,9 +159,11 @@ realized figure off the record.
   that arm has actually run. Once a stage beats its projection the gate
   reserves the observed figure instead, so only a stage heavier than every
   predecessor can still overshoot
-- **Per-arm shares**: a paired run splits `--budget` in half and gives each arm
-  its own tally. One shared purse let the arm dispatched first spend the run
-  and leave the second truncated, which compares an agent against a budget
+- **Per-arm shares**: `--budget` is divided by the number of arms actually
+  dispatched, each with its own tally — halved on a paired run, and given
+  **whole** to a single `--arm` run (see below). One shared purse let the arm
+  dispatched first spend the run and leave the second truncated, which compares
+  an agent against a budget
 - Partial record (`live_partial=true`, `pass_fail="fail"`, partial
   `stage_count`) is **written to disk BEFORE rc=4 returns** — read rc=4
   granularity from `results/runs/live/*.json`, not from the shell exit
@@ -192,7 +202,159 @@ the full **10-stage prompt sequence** (PL→AR→TL→DV→DR→SR→QA→DC→F
   WITH-vs-WITHOUT token comparison in the analysis output
 - **`without_arm="skip"` (mechanism default)**: reproduces the deterministic WITHOUT placeholder
   byte-for-byte — WITHOUT tokens/cost `null`, `wall_clock_s: 0.0`, `stage_count: 1`,
-  `pass_fail: "pass"`, `app_path: null`
+  `pass_fail: "pass"`, `app_path: null`. Its WITH block is now measured **and**
+  oracle-graded like any dispatched arm, so it carries a real `app_path` and an
+  `oracle` key where it previously carried neither
+- **Running one arm on its own**: `--arm with|without` — see *Single-arm runs and
+  joining* below. Both arms in one dispatch (`--arm both`) remains the default
+
+## Single-arm runs and joining (`--arm`, `bench-pair`)
+
+A paired run welds both arms into one dispatch, so one arm's bad luck destroys the
+other arm's completed work — a budget breach in the second arm has thrown away a
+finished first arm three times in one day. `--arm` decouples them: each arm can be
+run, recorded and re-run on its own, and two arm records are welded back into the
+ordinary paired shape afterwards by `bench-pair`.
+
+```bash
+./benchmark/run-benchmark.sh --live --arm both      # paired (the default, and the recommendation)
+./benchmark/run-benchmark.sh --live --arm with      # WITH arm alone
+./benchmark/run-benchmark.sh --live --arm without   # WITHOUT arm alone
+make benchmark-live ARM=with BUDGET=50.00
+./benchmark/harness/bin/bench-live --arm without …  # same flag on the executable
+```
+
+`--arm` requires `--live` (exit 64 otherwise) and accepts only `with`, `without` or
+`both`. Left unset it defers to the existing `--without-arm` policy, which is what
+keeps the legacy default byte-stable. Contradictory combinations (`--arm both` with
+`--without-arm skip`, or `--arm with` with any explicit `--without-arm`) are a usage
+error, refused with **exit 64 before the credential probe and before any dispatch**.
+
+**`both` stays the default and stays the recommended mode.** A paired run is the
+stronger single measurement because both arms share the same service conditions —
+splitting spends that variance control deliberately, and the gate below is the
+mitigation, not a replacement. The reason to run a single arm anyway is cost of
+failure: a breach or a degraded arm now costs **one** arm's spend instead of two, so
+accumulating n over several sessions is cheaper and survives interruption.
+
+### Budget: a single arm gets the WHOLE budget
+
+`--budget` is divided by the number of arms **actually dispatched**, not by a
+paired/not-paired flag. So:
+
+| Invocation | Per-arm share |
+|---|---|
+| `--arm both --budget 100` | $50 WITH + $50 WITHOUT |
+| `--arm with --budget 50` | $50 WITH |
+| `--arm with --budget 100` | $100 WITH — twice the paired share |
+
+`--arm with --budget 50` and a paired `--budget 100` therefore buy the **same per-arm
+spend**. This trips people up: do not halve the budget yourself when running one arm.
+The pre-flight projection follows the same rule and projects one arm's stage sequence.
+Sizing floor from observed runs: **$50 per arm** (see `results/KNOWN-BAD-RECORDS.md`).
+
+A single-arm record's `live_partial` reflects that one arm only — an arm that was never
+dispatched can never raise it. Measurement and oracle grading run for the dispatched
+arm unconditionally, so a WITH-only run now carries its own oracle grade.
+
+### Where arm records go — and why they are not in history
+
+An arm record is written to **`benchmark/results/runs/live-arm/`** under an
+arm-suffixed run id (`live-<ts>-<sha>-with`, plus a `-2`, `-3` … uniquifier so two
+runs of the same arm in the same second on the same commit cannot collide). It stays
+**out of `history.json` entirely**.
+
+That is deliberate, not an oversight. `history.json` is what `make report` renders into
+`result.html`, and a half-comparison sitting beside full runs is precisely the
+misreading this whole feature exists to prevent. Two guards enforce it: the runner
+skips rotation for a single-arm run, and the rotation step itself exits 3 (fail-closed)
+on any record carrying an `arm` key, so pointing `--record` at an arm record by hand
+still cannot get it into history. `bench-analyze` likewise filters arm records out of
+both the history path and its newest-file fallback, so an arm record can never be
+selected as "the latest live record".
+
+A **joined** record carries no `arm` and rotates through exactly the pre-existing path.
+
+### `bench-pair` — joining two arm records
+
+```bash
+./benchmark/harness/bin/bench-pair --a <arm.json> --b <arm.json> --out <record.json>
+make benchmark-pair A=<arm.json> B=<arm.json> OUT=<record.json>
+```
+
+Pure analysis: no dispatch, no credential, no spend, `benchmarkkit`-only (it cannot
+import the live world — the same isolation boundary `bench-analyze` sits behind), so it
+is safe to run anywhere, including offline. The output is a record in the **existing
+paired shape** — its `comparison` block is built by the same `build_comparison()` a
+paired invocation uses — so every downstream consumer (report, analyzer, rotation)
+works unchanged. The join is order-insensitive: `--a` and `--b` are keyed by each
+record's own `arm`, never by position.
+
+**Exit codes: 0 joined · 64 usage · 65 comparability refusal.** 64 covers bad argv, an
+unreadable or malformed input, a paired record passed as an input, an arm record whose
+`paths` block does not carry exactly its own arm, and two records of the same arm. 65
+means the two runs are not comparable. The split matters: a wrapper must be able to
+tell "I called it wrong" from "these two runs cannot be compared".
+
+> **`make benchmark-pair` cannot show you 64 or 65.** GNU make collapses any recipe
+> failure into its own **exit 2**. Anything that branches on 64 vs 65 must invoke
+> `harness/bin/bench-pair` directly.
+
+### The comparability gate — it refuses, it does not warn
+
+Nothing joins two runs unless they are comparable. The gate evaluates **every** axis and
+reports **all** refusals at once (fixing one and rediscovering the next on the retry is
+worse than useless), writes **no output file** on refusal, and names the axis and both
+values so the message is actionable without opening either record.
+
+| Axis | Refuses when | Policy |
+|---|---|---|
+| era | the two `era` blocks are not fully equal; either is absent, empty or not a block | **refuse** |
+| commit sha | `git_sha` differs; **or** either side is absent, empty or the `"nogit"` fallback | **refuse** |
+| oracle case-set digest | `paths.<arm>.oracle.cases_digest` differs, or is absent on **either** side | **refuse** |
+| time gap | never | **warn only** — reports the observed gap, no threshold |
+
+Two refusals that surprise people, both intentional: **absent is not a pass.** An
+unstamped era or a missing digest means the record cannot vouch for what it was compared
+against, so it is refused on the same footing as a mismatch. Likewise two records that
+both read `"nogit"` are not two runs at the same commit — they are two runs whose commit
+is unknown, and they are refused rather than treated as equal.
+
+Era comparison here is full dict equality, **stricter** than the analyzer's advisory
+three-key `era_differences()` caveat: a future era key the analyzer does not inspect
+would otherwise pass the gate and then be silently arbitrated away by the join. The two
+policies live in two functions on purpose; the analyzer's caveat behaviour is unchanged.
+
+The time gap is the single warn-only axis, and it is reported **without** a threshold.
+At n=1 there is no variance envelope from which any number of hours could be derived, so
+no number is invented — the observed gap is reported and also stored in the joined
+record's `joined_from.observed_gap_s`, so a later reader can judge it without re-running
+the join.
+
+The governing principle, worth stating plainly: **a permissive gate is worse than no
+gate, because it launders incomparability as a comparison.** Hence refusal everywhere an
+honest answer exists, and an unthresholded report where one does not.
+
+### Ingesting a joined record (manual, today)
+
+`bench-pair` writes **only** `--out`. Nothing ingests a joined record automatically yet,
+so reading a joined run from `history.json` or `result.html` is a deliberate manual step.
+On success `bench-pair` prints the exact rotation command with resolved absolute paths:
+
+```
+[pair] wrote <out> (live-<ts>-<sha>-joined-<8 hex>)
+[pair] not in history.json — ingest it deliberately with:
+  PYTHONPATH="…/benchmark/harness" python3 -c "…rotation snippet…" \
+    "<out>" "…/benchmark/results/history.json" "…/benchmark/results/runs"
+```
+
+Run that command to rotate the joined record into history exactly as a natively-paired
+record rotates. A dedicated `bench-rotate` tool is a planned follow-up and **does not
+exist** — do not reach for it.
+
+The joined run id is `live-<later timestamp>-<sha>-joined-<8 hex>`, the tag being a hash
+of both source run ids. It is order-insensitive, and it exists so two joins that happen
+to share a later-timestamp and a sha cannot collide during ingest.
 
 ## Comparability eras
 
@@ -332,22 +494,24 @@ benchmark/
   run-benchmark.sh              # Orchestrator (deterministic default, --live opt-in)
   harness/                      # Python package "benchmark harness" (stdlib-only)
     benchmarkkit/               #   deterministic world: metrics/rotation/genlib/
-                                #   generators/deterministic_run/report/analysis (7 modules)
+                                #   generators/deterministic_run/report/analysis/
+                                #   oracle/pairing (comparability gate + join)
     benchmarklive/              #   live world: preamble/dispatch/credentials/
                                 #   budget/capture/baseline (6 modules, depends on benchmarkkit)
     bin/
       bench-deterministic       # frozen-argv entrypoint (links benchmarkkit only, AC-8)
       bench-report              # frozen-argv entrypoint (links benchmarkkit only)
       bench-analyze              # frozen-argv entrypoint (links benchmarkkit only)
+      bench-pair                # join two arm records (benchmarkkit only; 0/64/65)
       bench-live                # frozen-argv entrypoint (only live-world linker)
-    tests/                      # 249 test methods (schema/rotation/generators/report/
+    tests/                      # 344 test methods (schema/rotation/generators/report/
                                 #   history back-compat/import-isolation + live-gate/
                                 #   budget/credentials/prompt-assembly/SSOT/coverage/
                                 #   app-measure/without-arm/analysis)
       __init__.py               # makes tests/ a package (importlib discovery)
       _helpers.py               # test fakes: Tripwire/RecordingFake/ThrowAtStage/Sequenced
       fixtures/history.json     # vendored real history (byte-compat oracle)
-      test_*.py                 # 28 test modules
+      test_*.py                 # 30 test modules
   oracle/
     cases.json                  # 30 scripted CLI cases (24 specified / 6 implied)
                                 # + goldens captured from ttt-template
@@ -367,14 +531,19 @@ benchmark/
     analysis.md                 # bench-analyze output (evidence-backed markdown)
     runs/{deterministic,live}/  # Per-run detail records: deterministic rotated
                                 # latest-3 (gitignored), live kept + tracked
+    runs/live-arm/              # Single-arm records (--arm with|without): half a
+                                # comparison, NEVER rotated into history.json;
+                                # join two of them with bin/bench-pair
   workdirs/<run_id>/{with,without}/   # Generated apps per run (gitignored)
 ```
 
 ## Metric Schema (on-disk, key-for-key)
 
-Top-level: `run_id, timestamp_utc, mode, git_sha, budget_usd, paths, comparison
-[, live_partial][, stages][, era]` — `live_partial` only when true, `stages` only
-when non-empty, `era` only when stamped. `paths.with` / `paths.without`:
+Top-level: `run_id, timestamp_utc, mode, git_sha, budget_usd, paths[, comparison]
+[, arm][, live_partial][, stages][, era][, joined_from]` — `comparison` only when
+non-empty, `live_partial` only when true, `stages` only when non-empty, `era` only when
+stamped, and the two arm-split keys only on the records they describe.
+`paths.with` / `paths.without`:
 
 ```json
 {
@@ -402,6 +571,34 @@ All 5 token keys are ALWAYS emitted (value or null); cache figures are additive
 siblings, never summed into `total`. `comparison.<metric>` =
 `{"with": …, "without": …, "delta": …}` (`delta` null when either side null).
 A present `tokens` block MUST carry all 5 keys; a partial block is rejected. `app_path` stays optional.
+
+### Telling the three record kinds apart
+
+| Record | Root key to look at |
+|---|---|
+| **arm** (half a comparison) | `arm: "with"` or `"without"`; exactly one `paths` entry; **no** `comparison` block |
+| **joined** (two arm runs welded) | `joined_from` present, `arm` absent |
+| **natively paired** (one dispatch) | neither `arm` nor `joined_from` |
+
+An arm record populates only its own arm and **omits** the opposite key entirely — it is
+never null-filled and never carries the `skip`-mode placeholder, which keeps its
+documented meaning of "not run" and must never be read as "this arm ran elsewhere".
+`joined_from` records where a joined record came from:
+
+```json
+"joined_from": {
+  "with":    {"run_id": "live-…-with",    "timestamp_utc": "…"},
+  "without": {"run_id": "live-…-without", "timestamp_utc": "…"},
+  "observed_gap_s": 12345
+}
+```
+
+Every newly written record additionally carries `paths.<arm>.oracle.cases_digest`
+(`sha256:<64 hex>`) — the identity of the case set the arm was graded against, and the
+gate's third refusal axis. Stored records predating it simply omit it, which is why the
+join refuses a pair where either side lacks one. The digest is computed over the case
+set with cosmetic keys (`description`) excluded, so rewording a case description cannot
+manufacture a refusal.
 
 ## bench-analyze (evidence-backed markdown)
 
@@ -460,15 +657,15 @@ committed to `benchmark/results/samples/analysis-paired-sample.md` demonstrating
 - `benchmark/ttt-template` — 48 Swift Testing fixture tests (engine/AI/
   leaderboard/settings/router/view-model), also run on iOS Simulator via
   `make test-ios` (SKIPs cleanly on hosts without an iOS runtime)
-- `benchmark/harness` — 249 Python harness self-tests (28 modules), zero real
+- `benchmark/harness` — 344 Python harness self-tests (30 modules), zero real
   LLM calls (all dispatchers injected with fakes/tripwires), incl. schema
   byte-compat (vendored real history.json), rotation, generators (real `swift test`
   on generated apps), deterministic/live pipelines, budget/credential gates,
   prompt assembly, stage attribution, app measurement, the paired ±agent arms,
   per-call token accounting, arm symmetry, and offline analysis
 
-**Total:** 48 Swift TTT artifact tests + 249 Python harness tests + 52 Python
-skill-script and skill-eval tests = 349 tests green.
+**Total:** 48 Swift TTT artifact tests + 344 Python harness tests + 52 Python
+skill-script and skill-eval tests = 444 tests green.
 
 **Reference:** `tests/COVERAGE.md` for the Swift/Python coverage story (Python
 opportunistic via coverage.py; Swift jq ≥85% line gate with `Sources/TicTacToeKit/Views/`
