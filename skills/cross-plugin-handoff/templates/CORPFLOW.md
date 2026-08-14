@@ -31,6 +31,8 @@ Eleven stages, PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST. PL0 sizes t
 small tasks, so **never assume a stage ran** — read `state.json` rather than inferring. The emergency
 pipeline is six stages (IR→DV→QA→DC→FN→ST) and skips both approval gates.
 
+### Stages owned by <PLUGIN>
+
 <PLUGIN> owns these stages when dispatched:
 
 | Stage | <PLUGIN> agent | Handoff data |
@@ -148,7 +150,7 @@ ignored.
 
 Copy the block for the active stage.
 
-**DV**
+### DV
 ```yaml
 handoff:
   from: "<plugin>:<dv-agent>"
@@ -166,7 +168,7 @@ handoff:
     ui_visual_check: <true|false>
 ```
 
-**AR (consultation)**
+### AR (consultation)
 ```yaml
 handoff:
   from: "<plugin>:<architect-agent>"
@@ -181,7 +183,9 @@ handoff:
     constraints: []
 ```
 
-**DV-support** — no `state.json` patch, parent DV agent owns the artifact:
+### DV-support
+
+No `state.json` patch, parent DV agent owns the artifact:
 ```yaml
 handoff:
   from: "<plugin>:<support-agent>"
@@ -196,7 +200,7 @@ handoff:
     findings: []
 ```
 
-**IR (emergency)**
+### IR (emergency)
 ```yaml
 handoff:
   from: "<plugin>:<agent>"
@@ -218,6 +222,8 @@ architect for a design pass, a reviewer for a DR gate. Those commands name the *
 so this table stays the only place an id appears. Resolve a role here before dispatching; if this
 file is absent, the plugin is standalone and those phases are skipped rather than failed.
 
+### Role table
+
 | Role named in a command | Agent id |
 |---|---|
 | the orchestrator's product manager | `corpflow:product-manager` |
@@ -231,6 +237,8 @@ file is absent, the plugin is standalone and those phases are skipped rather tha
 | the orchestrator's worktask engineer | `corpflow:workflow-engineer` |
 | the orchestrator's platform router | `corpflow:developer` |
 | the orchestrator's meta-prompt engineer | `corpflow:prompt-engineer` |
+
+### Standards are referenced by id
 
 Shared **standards** are referenced by id directly (`corpflow:code-comment-standard`,
 `corpflow:security-review-process`, `corpflow:claude-constitution`,

@@ -11,6 +11,8 @@ An integrating plugin exposes **exactly one** corpflow-facing file: `CORPFLOW.md
 root. Copy `../templates/CORPFLOW.md`, fill in the plugin-specific rows, and commit it. That file is
 the whole contract surface.
 
+### Why one file
+
 Nothing else in the plugin names corpflow. Not the agents, not the commands, not the skills, not the
 hooks. This is not a style preference — it is what makes the plugin *independent*:
 
@@ -80,11 +82,18 @@ The architect agent is consulted, not handed ownership: it writes
 The contract is bidirectional. A plugin that satisfies § A can rely on all of the following, and
 should file a bug against corpflow rather than working around any of them.
 
+### Guarantees
+
 | Guarantee | Detail |
 |---|---|
 | **Dispatch-time injection** | Every corpflow agent that delegates to a plugin agent injects `Read <plugin-root>/CORPFLOW.md and follow it` into the delegation prompt. The plugin never has to make its agents remember. |
 | **`.context/` ownership** | corpflow creates and owns `.context/`. The plugin writes its stage artifact and its own `errors/<agent>.md`, and nothing else. |
 | **`state.json` is orchestrator-owned** | The plugin patches only via `state-patch.sh` when its path is supplied, and never hand-rolls a `jq` merge. If the patch fails the plugin proceeds — corpflow's `SubagentStop` hook repairs from the artifact frontmatter. |
+
+### Guarantees — recovery and independence
+
+| Guarantee | Detail |
+|---|---|
 | **Frontmatter is the safety net** | Emitting `handoff:` frontmatter is unconditional and is what makes the three-layer recovery (agent → orchestrator fallback → hook) work. Artifact *filenames* are a backward-compat convenience; frontmatter is the contract. |
 | **Standalone operation** | corpflow never requires the plugin to depend on it at runtime. With no `.context/` present, the plugin behaves exactly as it does with corpflow uninstalled. |
 
@@ -92,16 +101,28 @@ should file a bug against corpflow rather than working around any of them.
 
 Every file below changes in the same commit. Ordered so later edits can reference earlier ones.
 
+### Registry and routing
+
 | # | File | What changes |
 |---|------|--------------|
 | 1 | `skills/shared/compatible-plugins.md` | Registry row, functional-role row, handoff-defaults row |
 | 2 | `skills/shared/platform-detection.md` | Marker rows in § Detection Rules; a per-platform specialization section; precedence notes if markers overlap an existing platform |
 | 3 | `agents/developer.md` | `tools:` `Task(...)` grants; `--platform` enum (Priority Order, Detection Logging, Routing Audit); common-rows table; UI/non-UI defaults sentence; agent `description` |
+
+### Stage agents and handoff protocol
+
+| # | File | What changes |
+|---|------|--------------|
 | 4 | `agents/software-architector.md` | `tools:` architect grant; per-platform architect table |
 | 5 | `agents/security-reviewer.md` | `tools:` auditor grant; platform→auditor table and checklist |
 | 6 | `agents/qa-engineer.md` | `tools:` test-generator grant; platform→generator table |
 | 7 | `skills/cross-plugin-handoff/references/plugin-protocols.md` | Per-plugin stage→agent handoff table |
 | 8 | `skills/worktask/scripts/publish-pl-issue.sh` | Plugin-prefix regex (both occurrences) **and** the leak-check greps — all four must stay byte-identical to each other and to the list in `compatible-plugins.md` |
+
+### Commands, scripts and release
+
+| # | File | What changes |
+|---|------|--------------|
 | 9 | `commands/pm-milestone.md` | Implementation / Test / Review agent-assignment tables; `--platform` flag docs |
 | 10 | `commands/dev-code-review.md` | `--platform` enum |
 | 11 | `skills/agent-coordination/SKILL.md` | Sub-Task Delegation model table; AR-collaboration note |
