@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with Task System integration, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.0.12 · Requires Claude Code 2.1.220+**
+**Plugin 4.0.13 · Requires Claude Code 2.1.220+**
 
 ## Features
 
@@ -63,10 +63,10 @@ Add to your Claude Code configuration:
 
 ```bash
 # Clone the repository
-git clone https://github.com/igrsoft/company-workflow.git
+git clone https://github.com/igrsoft/corpflow.git
 
 # Or add as a plugin
-claude plugins add /path/to/company-workflow
+claude plugins add /path/to/corpflow
 ```
 
 ## Quick Start
@@ -79,7 +79,7 @@ Run the worktask command:
 /worktask "[task description]"   # The worktask pipeline — PL0 dynamic sizing picks stages
 ```
 
-`/worktask` is the single-issue entry point. PL0 sizes the pipeline by complexity (dropping AR/TL/DC for small tasks). Use `--auto=[plan]` to skip the plan-approval stop; `--auto=[finalization]` to skip the finalization-approval stop (auto commit/push/PR); `--auto=[decision]` to let a Fable-model delegate answer PL0's open questions; combine as `--auto=[plan, decision, finalization]` for a fully unattended run (escalation-class questions still stop). Use `--emergency` for the incident pipeline (skips both gates). You can also launch via `Skill({skill:"company-workflow:worktask"})`. For **multi-issue batches**, use **`/megatask N`** (a milestone) or **`/megatask --issues 12,15,18`** (an array) — it orders by a dependency/blocker DAG and runs each issue unattended.
+`/worktask` is the single-issue entry point. PL0 sizes the pipeline by complexity (dropping AR/TL/DC for small tasks). Use `--auto=[plan]` to skip the plan-approval stop; `--auto=[finalization]` to skip the finalization-approval stop (auto commit/push/PR); `--auto=[decision]` to let a Fable-model delegate answer PL0's open questions; combine as `--auto=[plan, decision, finalization]` for a fully unattended run (escalation-class questions still stop). Use `--emergency` for the incident pipeline (skips both gates). You can also launch via `Skill({skill:"corpflow:worktask"})`. For **multi-issue batches**, use **`/megatask N`** (a milestone) or **`/megatask --issues 12,15,18`** (an array) — it orders by a dependency/blocker DAG and runs each issue unattended.
 
 `/worktask` sets up the worktask context, Task System integration, and stage management.
 
@@ -183,7 +183,7 @@ TaskCreate({
   subject: "PL0: Planning",
   description: "Define requirements, assess complexity, create stage tasks",
   activeForm: "Planning...",
-  metadata: { stage: "PL", agent: "company-workflow:product-manager", worktask_id: "dark-mode", priority: "medium" }
+  metadata: { stage: "PL", agent: "corpflow:product-manager", worktask_id: "dark-mode", priority: "medium" }
 });
 
 // Start PL0
@@ -361,7 +361,7 @@ Every other command in this plugin is platform-neutral and routes through
 - `worktask` — Complete staged worktask system (dynamic sizing, init, stage management)
 - `worktask-testing-strategy` — Test-strategy planning for PL/AR stages
 
-Each name above is the invocable id — prefix with `company-workflow:` (e.g. `Skill({skill:"company-workflow:worktask"})`). See [skills/README.md](skills/README.md) for the full index with effort levels and shared (non-loadable) utilities.
+Each name above is the invocable id — prefix with `corpflow:` (e.g. `Skill({skill:"corpflow:worktask"})`). See [skills/README.md](skills/README.md) for the full index with effort levels and shared (non-loadable) utilities.
 
 ### Hooks
 

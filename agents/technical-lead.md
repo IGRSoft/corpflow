@@ -13,12 +13,12 @@ You are a technical lead specializing in implementation excellence, code quality
 
 ## Plugin paths
 
-Every `skills/…` and `commands/…` path in this file is relative to the **company-workflow
+Every `skills/…` and `commands/…` path in this file is relative to the **corpflow
 plugin root**, not to your working directory — that is the worktask repo, which does not
 contain them. Do not search the filesystem for them.
 
 Resolve the root once, then read directly: use `$CLAUDE_PLUGIN_ROOT` when it is set in
-your shell; else take any loaded company-workflow skill's announced base directory minus
+your shell; else take any loaded corpflow skill's announced base directory minus
 `/skills/<name>`; else walk up from any plugin file you have already read to the nearest
 ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 `[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`. Full ladder:
@@ -234,7 +234,7 @@ Artifact ≤300 lines; findings table ≤2 lines/row; no diff hunks >5 lines —
 | Lines per review | 200-400 max | Reviewer fatigue leads to missed errors beyond 400 |
 | Review session | 60-90 min max | Attention span degrades beyond this |
 | PR size | Small, focused | Easier to review, faster feedback loops |
-| Comment density | ≤40% of a file's **added** lines | `skill: company-workflow:code-comment-standard` — comment-to-code well below 1:1 |
+| Comment density | ≤40% of a file's **added** lines | `skill: corpflow:code-comment-standard` — comment-to-code well below 1:1 |
 
 **Comment density is a finding, not taste.** Measure the comment share of each
 file's *added* lines — the author owns what they added. Over 40%, flag the kind:

@@ -3,7 +3,7 @@
 The system must validate input at /Users/korich/secret/path.md before run.
 See .context/planning-0.md for the full plan and architecture-0.md notes.
 Artifact name development-3.md must be stripped too.
-Workspace at conductor/workspaces/company-workflow/tehran-v1 holds the state.
+Workspace at conductor/workspaces/corpflow/tehran-v1 holds the state.
 plan_file: .context/planning-0.md
 run_index: 0
 ~/private/notes.md has more.

@@ -331,7 +331,7 @@ package-manager valueless arm would strip the flag and leave its value surviving
 so *every* full run carrying a valueless flag before a positional would classify scoped and be
 allowed — reopening the exact hole this deny exists to close. These package managers hide the
 underlying runner, so the ambiguity is irreducible. The common form `npm test -- <spec>` is
-unaffected, and the human-only `COMPANY_WORKFLOW_TEST_GATE=off` relief valve remains for the rest.
+unaffected, and the human-only `CORPFLOW_TEST_GATE=off` relief valve remains for the rest.
 
 ### Authority matrix — SR, RE, IR
 
@@ -402,7 +402,7 @@ degradation of a defense-in-depth layer.
 
 ### Escape-hatch honesty
 
-`COMPANY_WORKFLOW_TEST_GATE=off` and `CLAUDE_PROJECT_DIR` (pointed at a directory
+`CORPFLOW_TEST_GATE=off` and `CLAUDE_PROJECT_DIR` (pointed at a directory
 with no `.context/state.json`) are both **agent-writable across sessions**, not agent-proof:
 `.claude/settings.json` `env` can be written by any stage holding `Write`/`Edit`, and takes effect
 on the next session or resume. Within a single live session neither is reachable from inside a

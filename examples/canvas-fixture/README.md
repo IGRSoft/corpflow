@@ -1,8 +1,8 @@
 # canvas-fixture — apple-canvas end-to-end smoke fixture
 
 Minimal SwiftUI sample project used as the P6 integration test for the
-`company-workflow:dv-screenshot-capture` `apple-canvas` adapter and the
-`company-workflow:preview-ensurer` skill.
+`corpflow:dv-screenshot-capture` `apple-canvas` adapter and the
+`corpflow:preview-ensurer` skill.
 
 ## Layout
 

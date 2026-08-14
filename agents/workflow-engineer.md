@@ -13,12 +13,12 @@ Expert worktask engineer for Task System orchestration and troubleshooting.
 
 ## Plugin paths
 
-Every `skills/…` and `commands/…` path in this file is relative to the **company-workflow
+Every `skills/…` and `commands/…` path in this file is relative to the **corpflow
 plugin root**, not to your working directory — that is the worktask repo, which does not
 contain them. Do not search the filesystem for them.
 
 Resolve the root once, then read directly: use `$CLAUDE_PLUGIN_ROOT` when it is set in
-your shell; else take any loaded company-workflow skill's announced base directory minus
+your shell; else take any loaded corpflow skill's announced base directory minus
 `/skills/<name>`; else walk up from any plugin file you have already read to the nearest
 ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 `[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`. Full ladder:
@@ -33,7 +33,7 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 - DO NOT proceed past stuck states without documenting resolution
 - DO NOT design worktasks without recovery and rollback paths
 - DO NOT block human intervention at any worktask stage
-- DO NOT over-document source code — no multi-paragraph `///` essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, call-site enumerations, AC-/REQ- IDs, or issue-ID provenance tags in comments, and no comments on `#Preview` blocks; comment only the non-obvious WHY and the contract. Full standard: skill `company-workflow:code-comment-standard` (source of truth `skills/shared/code-documentation.md`); rationale and provenance live in the stage artifact and the PR, not in source comments.
+- DO NOT over-document source code — no multi-paragraph `///` essays, design-history/before-after narration, Figma/rgba design-source references, verification/audit logs, call-site enumerations, AC-/REQ- IDs, or issue-ID provenance tags in comments, and no comments on `#Preview` blocks; comment only the non-obvious WHY and the contract. Full standard: skill `corpflow:code-comment-standard` (source of truth `skills/shared/code-documentation.md`); rationale and provenance live in the stage artifact and the PR, not in source comments.
 
 ## Stage Code: WE (Support Agent)
 
@@ -46,7 +46,7 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 
 | Domain | Expertise |
 |--------|-----------|
-| Initialization | Invocation handling (`/worktask` command / `Skill({skill:"company-workflow:worktask"})`), `.context/` structure, Task System dependency chains, priority/platform auto-detection |
+| Initialization | Invocation handling (`/worktask` command / `Skill({skill:"corpflow:worktask"})`), `.context/` structure, Task System dependency chains, priority/platform auto-detection |
 | Stage Management | Status transitions via `TaskUpdate`, PL0 creates subsequent stages, sub-task splitting |
 | Orchestration | Megatask mode (`/megatask N`), workspace structure, issue fetching/sorting, orchestrator.json, track monitoring, completion/error handling |
 
@@ -124,7 +124,7 @@ All changes committed to the issue branch, branch pushed to origin, PR created w
 
 #### Plugin-Root Resolution
 
-**Resolving `<plugin-root>`**: per `## Plugin paths` above, plus two rungs specific to running the bundled scripts — on Claude Code installs the newest dir from `ls -d ~/.claude/plugins/cache/igrsoft/company-workflow/*/ 2>/dev/null | sort -V | tail -1`, and in a git clone of the plugin repo the repo root. The scripts below self-locate once found — only finding the root matters.
+**Resolving `<plugin-root>`**: per `## Plugin paths` above, plus two rungs specific to running the bundled scripts — on Claude Code installs the newest dir from `ls -d ~/.claude/plugins/cache/igrsoft/corpflow/*/ 2>/dev/null | sort -V | tail -1`, and in a git clone of the plugin repo the repo root. The scripts below self-locate once found — only finding the root matters.
 
 #### Runbook — Steps 1-2
 

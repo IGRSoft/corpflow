@@ -4,7 +4,7 @@ description: Initialize a new worktask task with proper folder structure and Tas
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]]'
 version: 0.4.0
 model: opus
-allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(company-workflow:product-manager)
+allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(corpflow:product-manager)
 ---
 
 > **EXECUTION MODEL (BINDING)** — two gates, two human checkpoints, plus an optional decision delegate.
@@ -326,7 +326,7 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 
 ### Step 4 — TaskCreate PL0
 
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "company-workflow:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", plan_gate: "checkpoint", decision_gate: "user", fn_gate: "checkpoint", isolation: "worktree", workspace_path: "<resolved root>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`company-workflow:`, `apple-developer:`, etc.).
+4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "corpflow:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", plan_gate: "checkpoint", decision_gate: "user", fn_gate: "checkpoint", isolation: "worktree", workspace_path: "<resolved root>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`corpflow:`, `apple-developer:`, etc.).
 
 #### Step 4 — workspace_path stamping
 
@@ -347,7 +347,7 @@ Also stamp `decision_gate`: default `decision_gate: "user"` (PL open questions s
 ### Steps 5–6 — Dispatch the PL agent
 
 5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
-6. **Delegate to PL agent**: `Task({ subagent_type: "company-workflow:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative. Glob+increment applies to a **new run** only: a plan-gate revision re-dispatches PM with `plan_revision: true` and reuses the frozen index (§ Plan-revision re-dispatch).
+6. **Delegate to PL agent**: `Task({ subagent_type: "corpflow:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative. Glob+increment applies to a **new run** only: a plan-gate revision re-dispatches PM with `plan_revision: true` and reuses the frozen index (§ Plan-revision re-dispatch).
 #### Step 6 — record dropped stages
 
    - **Record dropped and added stages**: when PL0's dynamic sizing omits any of the full 9-stage pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PM stamps the PL0 task's `metadata.skipped_stages` (`{stage, reason}` list) so `state.json` self-documents the drops; when PL0 includes a stage beyond the tier default (AR0 forced at a low tier, TL0 at any tier), it stamps the symmetric `metadata.added_stages` with the identical `{stage, reason}` shape. See `agents/product-manager.md § Dynamic Worktask Sizing (PL0 Stage)`.
@@ -373,7 +373,7 @@ When `decision_gate == "auto"` and `open_questions[]` is non-empty:
 
 1. Append an `auto_decision_dispatched` audit row (`subject:"PL<N>"`, `metadata.questions: <count>`).
 2. Re-dispatch the PM as a decision delegate on the **Fable model**:
-   `Task({ subagent_type: "company-workflow:product-manager", model: "fable", prompt: <decision prompt> })`.
+   `Task({ subagent_type: "corpflow:product-manager", model: "fable", prompt: <decision prompt> })`.
    The prompt carries the open-question list verbatim (each with its recommended default) and the
    plan file path; its duties are § Auto-decision recording contract below. **Model fallback**:
    apply loop step 5f exactly — if `facts.capabilities.fable_dispatch == "credit_blocked"`,
@@ -672,7 +672,7 @@ Runs only when `.context/state.json` has a `stages.AR` entry (AR is optional —
 
 ```bash
 STRICT_FLAG=""
-[ "${COMPANY_WORKFLOW_AR_REF_STRICT:-0}" = "1" ] && STRICT_FLAG="--strict"
+[ "${CORPFLOW_AR_REF_STRICT:-0}" = "1" ] && STRICT_FLAG="--strict"
 # shellcheck disable=SC2086
 skills/worktask/scripts/handoff-harness.sh --validate-frontmatter ".context/development-${N}.md" \
   --state .context/state.json $STRICT_FLAG
@@ -688,7 +688,7 @@ skills/worktask/scripts/handoff-harness.sh --validate-frontmatter ".context/deve
 
 A warning is **not** a `missing_input` block and never stops the transition.
 
-**Early opt-in — `COMPANY_WORKFLOW_AR_REF_STRICT=1`.** Set the env var and the orchestrator passes `--strict`; violations become `fail:` lines with exit 1 and block the DR dispatch until DV fixes the reference. Use it to shake out dangling references before the next minor, which flips `--strict` to the default. The inverse guard (an architecture reference with no `stages.AR` entry) warns in both modes and never fails.
+**Early opt-in — `CORPFLOW_AR_REF_STRICT=1`.** Set the env var and the orchestrator passes `--strict`; violations become `fail:` lines with exit 1 and block the DR dispatch until DV fixes the reference. Use it to shake out dangling references before the next minor, which flips `--strict` to the default. The inverse guard (an architecture reference with no `stages.AR` entry) warns in both modes and never fails.
 
 ## Phase 3: Post-Worktask Self-Improvement
 
@@ -698,7 +698,7 @@ After the execution loop exits (ST completed), run the Post-Worktask Self-Improv
 
 1. Check whether `.context/learnings.md` exists. If absent → worktask done, terminate.
 2. If present → display its contents and **STOP**. Wait for the user to check the boxes of proposals they approve (`- [ ]` → `- [x]`). Orchestrator MUST NOT auto-check or assume.
-3. User replies with approval ("apply checked", "go", or similar). Orchestrator then re-reads `learnings.md`, parses the checked items, and delegates to `company-workflow:prompt-engineer` for application (see `agents/prompt-engineer.md § Self-Improvement Patch Application`).
+3. User replies with approval ("apply checked", "go", or similar). Orchestrator then re-reads `learnings.md`, parses the checked items, and delegates to `corpflow:prompt-engineer` for application (see `agents/prompt-engineer.md § Self-Improvement Patch Application`).
 4. Each applied proposal becomes its own commit with a `version:` bump on the target frontmatter (rollback-safe via `git revert <sha>`).
 
 ### Phase 3 key invariants

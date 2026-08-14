@@ -256,7 +256,7 @@ that matches no tracked path, and refuses a `.bats` that no layer can reach.
 `.context/state.json` shows the DV stage in progress the run exits **65** and
 hands off to QA. Everyone else sees `WIDE` as informational.
 
-Set `COMPANY_WORKFLOW_TEST_SELECT=0` to disable selection entirely.
+Set `CORPFLOW_TEST_SELECT=0` to disable selection entirely.
 
 ## Environment & Dependencies
 

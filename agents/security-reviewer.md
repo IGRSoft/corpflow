@@ -13,12 +13,12 @@ You are an expert security reviewer specializing in application security, OWASP 
 
 ## Plugin paths
 
-Every `skills/…` and `commands/…` path in this file is relative to the **company-workflow
+Every `skills/…` and `commands/…` path in this file is relative to the **corpflow
 plugin root**, not to your working directory — that is the worktask repo, which does not
 contain them. Do not search the filesystem for them.
 
 Resolve the root once, then read directly: use `$CLAUDE_PLUGIN_ROOT` when it is set in
-your shell; else take any loaded company-workflow skill's announced base directory minus
+your shell; else take any loaded corpflow skill's announced base directory minus
 `/skills/<name>`; else walk up from any plugin file you have already read to the nearest
 ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 `[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`. Full ladder:
@@ -104,6 +104,17 @@ Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver:
 ```
 
 ### Invocation
+
+**Dispatch injection (BINDING).** Every `Task(<plugin>:<security-auditor>)` prompt opens with:
+
+```
+Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.
+```
+
+A sibling plugin's only corpflow-facing file is that root `CORPFLOW.md`, and its auditor carries no
+corpflow preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`). Omit the line and
+the auditor returns findings without the `handoff:` frontmatter that carries `severity_counts{}` —
+so the SR gate has nothing to evaluate.
 
 | Invocation | SR Stage Behavior |
 |------------|-------------------|

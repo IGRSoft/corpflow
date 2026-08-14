@@ -401,7 +401,7 @@ Architectural implications → opus
 The Task tool `model` parameter allows per-invocation overrides:
 
 ```
-Task({ subagent_type: "company-workflow:developer", model: "opus" })
+Task({ subagent_type: "corpflow:developer", model: "opus" })
 ```
 
 > **Parameterized permission syntax**: permission rules accept a `Tool(param:value)` form with `*` wildcard support — e.g. `Agent(model:opus)` permits only opus-model spawns, `Agent(model:*)` permits any model override. Use this to constrain which dispatch overrides auto mode may take without hand-listing every agent. `Agent(type)` deny rules and `Agent(x,y)` allowed-types restrictions are enforced for **named** subagent spawns too.
@@ -420,7 +420,7 @@ Task({ subagent_type: "company-workflow:developer", model: "opus" })
 
 > Subagents discover project + user + plugin skills natively. Orchestrators do not need to inline-load skill instructions before delegation — the child can resolve `Skill("name")` from any source the parent could. This holds at every nesting depth: a Level-3 child resolves skills the same way a Level-1 child does.
 
-> `subagent_type` matching is case- and separator-insensitive. `Task({ subagent_type: "Company_Workflow:Developer" })` resolves to the same agent as `company-workflow:developer`. Bare-name → `company-workflow:` prefix convention still applies for resolution priority, but typos in case/separator no longer fail-stop the call.
+> `subagent_type` matching is case- and separator-insensitive. `Task({ subagent_type: "Corpflow:Developer" })` resolves to the same agent as `corpflow:developer`. Bare-name → `corpflow:` prefix convention still applies for resolution priority, but typos in case/separator no longer fail-stop the call.
 
 #### Dispatch flags & /agents UI
 
@@ -434,7 +434,7 @@ Claude Code keys installed agents by the YAML frontmatter `name`, so two plugins
 
 #### Naming mitigation & authoring audit
 
-For new agents, prefer **plugin-scoped names** (`<plugin>-<role>`, e.g. `company-workflow-developer`) when the role is generic. For the 16 existing company-workflow agents, the orchestrator disambiguates today via `company-workflow:<name>` prefixes (every `subagent_type` is fully qualified, e.g. `apple-developer:ios-developer`), so no rename is forced — renaming would cascade into every `Task(subagent_type=…)` reference (high blast radius).
+For new agents, prefer **plugin-scoped names** (`<plugin>-<role>`, e.g. `corpflow-developer`) when the role is generic. For the 16 existing corpflow agents, the orchestrator disambiguates today via `corpflow:<name>` prefixes (every `subagent_type` is fully qualified, e.g. `apple-developer:ios-developer`), so no rename is forced — renaming would cascade into every `Task(subagent_type=…)` reference (high blast radius).
 
 When authoring new agents via `/create-agent` / `/optimize-agent`, audit the `name:` field against known marketplace stems (`apple-developer:`, `security-scanning:`, `debugging-toolkit:`) before merging. `/optimize-agent § Frontmatter Audit` flags this as P1.
 
@@ -722,13 +722,13 @@ For complex bugs with multiple potential causes:
 
 See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, PostToolUse format-on-save safety, MCP-tool-typed hooks, `duration_ms` in PostToolUse payload, and PostToolUse output replacement via `updatedToolOutput`), agent teams comparison, MCP elicitation patterns, and team communication protocols (message types, anti-patterns, deadlock resolution).
 
-## Native Dynamic Workflows vs company-workflow Staged Worktask
+## Native Dynamic Workflows vs corpflow Staged Worktask
 
-Claude Code ships a native `/workflows` command and Workflow tool for **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. This is complementary to (not a replacement for) the company-workflow 11-stage worktask system:
+Claude Code ships a native `/workflows` command and Workflow tool for **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. This is complementary to (not a replacement for) the corpflow 11-stage worktask system:
 
 ### Comparison
 
-| Dimension | Native dynamic workflows (`/workflows`) | company-workflow staged worktask |
+| Dimension | Native dynamic workflows (`/workflows`) | corpflow staged worktask |
 |---|---|---|
 | **Scale** | Tens–hundreds of parallel agents | 11 governed sequential/parallel stages |
 | **Governance** | Ad-hoc, minimal overhead | Stage contracts, artifact audit trail, DR/SR/QA quality gates |
@@ -739,11 +739,11 @@ Claude Code ships a native `/workflows` command and Workflow tool for **dynamic 
 ### When to reach for each
 
 - Reach for native dynamic workflows when you need quick parallelism without governance overhead (e.g., batch linting, parallel research, one-off data transforms).
-- Reach for the company-workflow worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks have two human checkpoints — the PL gate (plan approval after PL0) and the FN gate (finalization approval, which STOPs before commit/push/PR by default); both are bypassed by `--emergency`, the PL gate also by `--auto=[plan]` and the FN gate also by `--auto=[finalization]`; `--auto=[decision]` additionally delegates PL open questions to a Fable-model decision pass without bypassing any gate. A batch orchestrator (`/megatask`) stamps `plan_gate`/`fn_gate: "bypass"` directly on each per-issue PL0.
+- Reach for the corpflow worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks have two human checkpoints — the PL gate (plan approval after PL0) and the FN gate (finalization approval, which STOPs before commit/push/PR by default); both are bypassed by `--emergency`, the PL gate also by `--auto=[plan]` and the FN gate also by `--auto=[finalization]`; `--auto=[decision]` additionally delegates PL open questions to a Fable-model decision pass without bypassing any gate. A batch orchestrator (`/megatask`) stamps `plan_gate`/`fn_gate: "bypass"` directly on each per-issue PL0.
 
 ### Composition & workflow sizing
 
-They can compose: a DV agent inside a company-workflow worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
+They can compose: a DV agent inside a corpflow worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
 
 #### Workflow size guideline
 

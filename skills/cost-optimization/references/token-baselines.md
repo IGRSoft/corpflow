@@ -144,7 +144,7 @@ These automatic improvements compound across multi-stage worktasks — no agent 
 | Improvement | Version | Impact |
 |-------------|---------|--------|
 | `cache_creation_input_tokens` nested-breakdown fix | 2.1.152 | Nested API calls now correctly attribute cache_creation tokens to sub-call layer; was previously double-counted in parent layer |
-| Dynamic workflows background orchestration | 2.1.154 | Native `/workflows` Workflow tool spawns lightweight background agents (tens–hundreds); no worktask state overhead — complementary to company-workflow staged pipeline |
+| Dynamic workflows background orchestration | 2.1.154 | Native `/workflows` Workflow tool spawns lightweight background agents (tens–hundreds); no worktask state overhead — complementary to corpflow staged pipeline |
 | Lean system prompt default on the top Opus | 2.1.154 | The top Opus uses a shorter system prompt by default (Haiku/Sonnet unchanged); reduces input token cost per request |
 
 ### v2.1.172–2.1.173

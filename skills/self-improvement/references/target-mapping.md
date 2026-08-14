@@ -17,7 +17,7 @@ Every classified diff hunk must be mapped to exactly one owning file (the "targe
 
 | # | Pattern of changed file | Target | Notes |
 |---|--------------------------|--------|-------|
-| 5 | `.context/development-*.md` | `metadata.agent` of the DV task (resolve from `TaskList`) | Platform-aware: could be `company-workflow:developer`, `apple-developer:ios-developer`, etc. |
+| 5 | `.context/development-*.md` | `metadata.agent` of the DV task (resolve from `TaskList`) | Platform-aware: could be `corpflow:developer`, `apple-developer:ios-developer`, etc. |
 | 6 | `.context/developer-review-*.md` | `agents/technical-lead.md` | |
 | 7 | `.context/security-review-*.md` | `agents/security-reviewer.md` | |
 | 8 | `.context/testing-*.md` | `agents/qa-engineer.md` | |
@@ -83,7 +83,7 @@ When a stage was delegated to a cross-plugin agent (e.g., `apple-developer:ios-d
 
 ```
 For each task where status == "completed":
-  add metadata.agent  (normalize `company-workflow:<name>` → agents/<name>.md path)
+  add metadata.agent  (normalize `corpflow:<name>` → agents/<name>.md path)
   add metadata.embedded_commands (comma-split → commands/<name>.md paths)
 ```
 
@@ -93,7 +93,7 @@ Each stage artifact may include a trailer like:
 ```
 ---
 metadata:
-  agent: company-workflow:developer
+  agent: corpflow:developer
   embedded_commands: apple-developer:fix-refactor
 ---
 ```
@@ -104,7 +104,7 @@ Parse this block (if present) and add to the set.
 
 If the project policy uses `Agent:` / `Stage:` git trailers, scan `git log <agent_sha>..HEAD --format=%B` for trailer lines:
 ```
-Agent: company-workflow:developer
+Agent: corpflow:developer
 Stage: DV
 ```
 

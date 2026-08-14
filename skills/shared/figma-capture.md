@@ -152,7 +152,7 @@ The first row is the container **Overview** (State column = `overview`); rows 00
 ## Capture Metadata
 
 - Captured at: <ISO-8601 timestamp>
-- Captured by: company-workflow:product-manager (PL0)
+- Captured by: corpflow:product-manager (PL0)
 - Figma file version: <from get_metadata if available, else `unknown`>
 ```
 

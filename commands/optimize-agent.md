@@ -242,7 +242,7 @@ Run on every agent regardless of focus area; treat findings here as blocking on 
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `name` | Globally unique, and **must not contain `:`** — CC rejects the agent file outright, since `:` is reserved for plugin namespacing and only ever appears at the call site (`company-workflow:developer`), never in the file. Collision risk when generic (`developer`, `qa-engineer`, `incident-responder`, etc.) — CC keys installed agents by frontmatter `name`, so two plugins shipping the same name silently overwrite each other. Flag HIGH if company-workflow agent shares name with a known marketplace plugin (cross-check `apple-developer:`, `security-scanning:`, `debugging-toolkit:` agent stems). For new agents, prefer the hyphenated `<plugin>-<role>` form. Source: ai-research PR #554. | P0 (`:` present) / P1 (collision) |
+| `name` | Globally unique, and **must not contain `:`** — CC rejects the agent file outright, since `:` is reserved for plugin namespacing and only ever appears at the call site (`corpflow:developer`), never in the file. Collision risk when generic (`developer`, `qa-engineer`, `incident-responder`, etc.) — CC keys installed agents by frontmatter `name`, so two plugins shipping the same name silently overwrite each other. Flag HIGH if corpflow agent shares name with a known marketplace plugin (cross-check `apple-developer:`, `security-scanning:`, `debugging-toolkit:` agent stems). For new agents, prefer the hyphenated `<plugin>-<role>` form. Source: ai-research PR #554. | P0 (`:` present) / P1 (collision) |
 
 #### Frontmatter audit — boolean & skill-execution forms
 

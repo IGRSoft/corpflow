@@ -1,1 +1,1 @@
-{"agent_type":"company-workflow:qa-engineer","agent_id":"agt_qa","session_id":"sess_fix","parent_agent_id":"agt_parent"}
+{"agent_type":"corpflow:qa-engineer","agent_id":"agt_qa","session_id":"sess_fix","parent_agent_id":"agt_parent"}

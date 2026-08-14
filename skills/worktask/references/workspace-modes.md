@@ -31,7 +31,7 @@ if (isolation === 'worktree') {
 
 When CC spawns a worktask session inside a Conductor-managed workspace clone
 (e.g. `/Users/<user>/conductor/workspaces/<plugin>/<workspace-id>/`), the
-canonical plugin source directory (e.g. `/Users/<user>/Projects/company-workflow/`)
+canonical plugin source directory (e.g. `/Users/<user>/Projects/corpflow/`)
 is a SIBLING repo on a different branch and MUST NOT be edited.
 
 Rule: all `Edit`/`Write` calls MUST target paths under `git rev-parse --show-toplevel`

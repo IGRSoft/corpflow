@@ -32,7 +32,7 @@ run_hook() {  # run_hook <payload-json>
 }
 
 sentinels() {
-  find "$SENTINEL_DIR" -maxdepth 1 -type f -name 'company-workflow-comment-standard-*' \
+  find "$SENTINEL_DIR" -maxdepth 1 -type f -name 'corpflow-comment-standard-*' \
     | sed "s|^$SENTINEL_DIR/||" | sort
 }
 
@@ -47,7 +47,7 @@ sentinels() {
   assert_equal "$(jq 'has("decision")' <<< "$output")" 'false'
   assert_equal "$(jq 'has("permissionDecision")' <<< "$output")" 'false'
   assert_equal "$(jq -r '.hookSpecificOutput.additionalContext | test("code-comment-standard")' <<< "$output")" 'true'
-  assert_equal "$(sentinels)" 'company-workflow-comment-standard-agentA'
+  assert_equal "$(sentinels)" 'corpflow-comment-standard-agentA'
 }
 
 # ---------------------------------------------------------------------------
@@ -72,8 +72,8 @@ sentinels() {
   assert_success
   assert_equal "$(jq -r '.hookSpecificOutput.hookEventName' <<< "$output")" 'PostToolUse'
 
-  assert_equal "$(sentinels)" 'company-workflow-comment-standard-agentA
-company-workflow-comment-standard-agentB'
+  assert_equal "$(sentinels)" 'corpflow-comment-standard-agentA
+corpflow-comment-standard-agentB'
 }
 
 # ---------------------------------------------------------------------------
@@ -109,7 +109,7 @@ company-workflow-comment-standard-agentB'
 
   [ ! -e "$WD/escaped" ]
   [ ! -e "$WD/escaped.jsonl" ]
-  assert_equal "$(sentinels)" 'company-workflow-comment-standard-escaped'
+  assert_equal "$(sentinels)" 'corpflow-comment-standard-escaped'
 }
 
 @test "T7: separator and metacharacters are stripped out of the sentinel name" {
@@ -117,17 +117,17 @@ company-workflow-comment-standard-agentB'
   # charset filter has to.
   run_hook "$(payload '..%2f..%2fpwned.jsonl')"
   assert_success
-  assert_equal "$(sentinels)" 'company-workflow-comment-standard-2f2fpwned'
+  assert_equal "$(sentinels)" 'corpflow-comment-standard-2f2fpwned'
 
   # Every file under TMPDIR is a sentinel; nothing else was created anywhere.
-  run find "$SENTINEL_DIR" -mindepth 1 -not -name 'company-workflow-comment-standard-*'
+  run find "$SENTINEL_DIR" -mindepth 1 -not -name 'corpflow-comment-standard-*'
   assert_output ''
 }
 
 @test "T8: a dots-only transcript falls back to a sanitised session_id" {
   run_hook "$(payload '....jsonl' /tmp/Foo.swift '../../etc/evil')"
   assert_success
-  assert_equal "$(sentinels)" 'company-workflow-comment-standard-etcevil'
+  assert_equal "$(sentinels)" 'corpflow-comment-standard-etcevil'
   [ ! -e "$WD/etc" ]
 }
 

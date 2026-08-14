@@ -163,12 +163,12 @@ _selected_files() {
     hb="$(sel_resolve_bats "$base" "$PLUGIN_ROOT/tests/shell")"
     [ -n "$hb" ] || continue
     hb="${hb#$PLUGIN_ROOT/}"
-    for a in $(grep -o 'company-workflow:[a-z-]*' "$f" | sed 's/.*://' | LC_ALL=C sort -u); do
+    for a in $(grep -o 'corpflow:[a-z-]*' "$f" | sed 's/.*://' | LC_ALL=C sort -u); do
       [ -f "$PLUGIN_ROOT/agents/$a.md" ] || continue
       sel="$(_selected_files "agents/$a.md")"
       case "$sel" in
         *"$hb"*) ;;
-        *) fail "$base hardcodes company-workflow:$a but agents/$a.md does not select $hb" ;;
+        *) fail "$base hardcodes corpflow:$a but agents/$a.md does not select $hb" ;;
       esac
     done
   done
@@ -411,11 +411,11 @@ STUB
   : > "$wd/bats-args"
 }
 
-@test "M16: COMPANY_WORKFLOW_TEST_SELECT=0 skips selection and runs the full suite" {
+@test "M16: CORPFLOW_TEST_SELECT=0 skips selection and runs the full suite" {
   local wd; wd="$(mk_tmpworkdir)"
   _mk_runner_sandbox "$wd"
 
-  COMPANY_WORKFLOW_TEST_SELECT=0 RUN_TESTS_SELECTOR="$wd/selector-stub.sh" \
+  CORPFLOW_TEST_SELECT=0 RUN_TESTS_SELECTOR="$wd/selector-stub.sh" \
     run bash "$wd/run-tests.sh" --changed
   assert_output --partial "selection disabled, running the full suite"
   [ ! -f "$wd/selector-invoked" ] || fail "the selector ran although selection is disabled"
@@ -423,7 +423,7 @@ STUB
   refute_output --partial "DESELECTED:"
 }
 
-@test "M17: --print-selection under COMPANY_WORKFLOW_TEST_SELECT=0 prints and runs nothing" {
+@test "M17: --print-selection under CORPFLOW_TEST_SELECT=0 prints and runs nothing" {
   # The execution gate classifies --print-selection as build_only, which is
   # allowed at stages where a full run is denied. That grant is only sound while
   # this invocation runs nothing unconditionally — a fall-through here converts a
@@ -431,10 +431,10 @@ STUB
   local wd; wd="$(mk_tmpworkdir)"
   _mk_runner_sandbox "$wd"
 
-  COMPANY_WORKFLOW_TEST_SELECT=0 RUN_TESTS_SELECTOR="$wd/selector-stub.sh" \
+  CORPFLOW_TEST_SELECT=0 RUN_TESTS_SELECTOR="$wd/selector-stub.sh" \
     run bash "$wd/run-tests.sh" --changed --print-selection
   assert_success
-  assert_output --partial "VERDICT	FULL	DISABLED	COMPANY_WORKFLOW_TEST_SELECT=0"
+  assert_output --partial "VERDICT	FULL	DISABLED	CORPFLOW_TEST_SELECT=0"
   [ ! -f "$wd/selector-invoked" ] || fail "the selector ran although selection is disabled"
   if grep -q '\.bats' "$wd/bats-args"; then
     fail "--print-selection started the suite: $(cat "$wd/bats-args")"

@@ -19,7 +19,7 @@
 #   --base <ref>  diff base for --changed (default origin/master → master → HEAD~1).
 #   --print-selection  emit the selection plan and run nothing.
 #
-# COMPANY_WORKFLOW_TEST_SELECT=0 hard-disables selection; a bare invocation is
+# CORPFLOW_TEST_SELECT=0 hard-disables selection; a bare invocation is
 # byte-for-byte the same full suite it has always been.
 set -euo pipefail
 
@@ -38,7 +38,7 @@ skipped_phases=()
 SELECT_CHANGED=0
 PRINT_SELECTION=0
 SELECT_BASE=""
-TEST_SELECT="${COMPANY_WORKFLOW_TEST_SELECT:-1}"
+TEST_SELECT="${CORPFLOW_TEST_SELECT:-1}"
 # Test seam: lets a guard drive the cap and fallback paths without a real
 # selection. Not part of the documented flag surface.
 SELECTOR="${RUN_TESTS_SELECTOR:-$PLUGIN_ROOT/tests/bin/select-tests.sh}"
@@ -123,10 +123,10 @@ if [ "$SELECT_CHANGED" -eq 1 ] && [ "$TEST_SELECT" = "0" ]; then
   # --print-selection must still run nothing when selection is disabled; falling
   # through here would turn a "show me the plan" request into a full suite run.
   if [ "$PRINT_SELECTION" -eq 1 ]; then
-    printf 'VERDICT\tFULL\tDISABLED\tCOMPANY_WORKFLOW_TEST_SELECT=0\n'
+    printf 'VERDICT\tFULL\tDISABLED\tCORPFLOW_TEST_SELECT=0\n'
     exit 0
   fi
-  warn "COMPANY_WORKFLOW_TEST_SELECT=0 — selection disabled, running the full suite"
+  warn "CORPFLOW_TEST_SELECT=0 — selection disabled, running the full suite"
   SELECT_CHANGED=0
 fi
 

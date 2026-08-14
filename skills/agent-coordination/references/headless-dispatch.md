@@ -2,13 +2,13 @@
 
 External orchestrators (CI runners, batch schedulers, the user's own shell) that want to invoke a worktask stage outside the in-process `Task()` path need a stable contract from `task.metadata` to `claude agents run` CLI flags. This reference is that contract.
 
-> Today the company-workflow orchestrator dispatches every stage in-process via `Task({ subagent_type, model, prompt })` (see `skills/worktask/SKILL.md` line ~497). The CLI flags listed below are honoured **only** by `claude agents run …` invocations. PL0 populates the fields anyway so any downstream dispatcher — in-process or CLI — reads from the same source of truth.
+> Today the corpflow orchestrator dispatches every stage in-process via `Task({ subagent_type, model, prompt })` (see `skills/worktask/SKILL.md` line ~497). The CLI flags listed below are honoured **only** by `claude agents run …` invocations. PL0 populates the fields anyway so any downstream dispatcher — in-process or CLI — reads from the same source of truth.
 
 ## Translation Table
 
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
-| `agent` | `--agent <name>` | string | N/A (in-process uses `Task({subagent_type})`) | overrides the session's `settings.json` `agent` default; e.g. force `company-workflow:developer` for a one-shot run |
+| `agent` | `--agent <name>` | string | N/A (in-process uses `Task({subagent_type})`) | overrides the session's `settings.json` `agent` default; e.g. force `corpflow:developer` for a one-shot run |
 | `--all` (listing flag, not a `metadata` key) | `claude agents --all` | bool | N/A (listing only) | includes **completed** sessions in `claude agents [--json]` output; pair with `state` to tell `done` apart from `running`/`blocked` |
 
 ### Translation table — model & effort
@@ -45,18 +45,18 @@ The minimum recommended flag set per stage when dispatching from a headless runn
 
 | Stage | Canonical headless one-liner |
 |---|---|
-| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-5 --effort xhigh --permission-mode bypassPermissions -- company-workflow:developer < dv-prompt.txt` |
-| **DR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-5 --effort xhigh --permission-mode acceptEdits -- company-workflow:technical-lead < dr-prompt.txt` |
-| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-5 --effort xhigh --permission-mode default -- company-workflow:security-reviewer < sr-prompt.txt` |
-| **QA** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-5 --effort high --permission-mode acceptEdits -- company-workflow:qa-engineer < qa-prompt.txt` |
+| **DV** | `claude agents run --cwd "$WORKTREE" --model claude-opus-5 --effort xhigh --permission-mode bypassPermissions -- corpflow:developer < dv-prompt.txt` |
+| **DR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-5 --effort xhigh --permission-mode acceptEdits -- corpflow:technical-lead < dr-prompt.txt` |
+| **SR** | `claude agents run --cwd "$WORKTREE" --model claude-opus-5 --effort xhigh --permission-mode default -- corpflow:security-reviewer < sr-prompt.txt` |
+| **QA** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-5 --effort high --permission-mode acceptEdits -- corpflow:qa-engineer < qa-prompt.txt` |
 
 ### FN / RE / ST one-liners
 
 | Stage | Canonical headless one-liner |
 |---|---|
-| **FN** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-5 --effort medium --permission-mode default -- company-workflow:project-manager < fn-prompt.txt` |
-| **RE** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-5 --effort medium --permission-mode default -- company-workflow:release-engineer < re-prompt.txt` |
-| **ST** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-5 --effort low --permission-mode acceptEdits -- company-workflow:stakeholder < st-prompt.txt` |
+| **FN** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-5 --effort medium --permission-mode default -- corpflow:project-manager < fn-prompt.txt` |
+| **RE** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-5 --effort medium --permission-mode default -- corpflow:release-engineer < re-prompt.txt` |
+| **ST** | `claude agents run --cwd "$WORKTREE" --model claude-sonnet-5 --effort low --permission-mode acceptEdits -- corpflow:stakeholder < st-prompt.txt` |
 
 ### Model & effort defaults
 
@@ -106,7 +106,7 @@ claude agents --json | jq -r --arg track "$TRACK_ID" '
 Three usage patterns:
 
 - **Resume pre-check** — before respawning a subagent during worktask resume, query live sessions; if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` still appears, prefer `SendMessage` reattach over re-delegation. Eliminates the "blind respawn of an already-working subagent" token-waste class. See `skills/worktask/SKILL.md § Resume Procedure` step 0.
-- **Parallel track health** — for megatask runs, periodic `claude agents --json | jq '[.[] | select(.tag=="company-workflow-track")] | length'` should equal the orchestrator-derived `parallel_tracks`. Less = stalled track.
+- **Parallel track health** — for megatask runs, periodic `claude agents --json | jq '[.[] | select(.tag=="corpflow-track")] | length'` should equal the orchestrator-derived `parallel_tracks`. Less = stalled track.
 - **Status-line integration** — drives tmux / shell-status-bar widgets showing the active worktask stage without polluting `.context/`.
 
 ### Schema-drift caveat

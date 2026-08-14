@@ -106,9 +106,9 @@ teardown() {
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
 }
 
-@test "7: COMPANY_WORKFLOW_TEST_GATE=off -> allow even for a banned stage" {
+@test "7: CORPFLOW_TEST_GATE=off -> allow even for a banned stage" {
   state_with DR
-  run env CLAUDE_PROJECT_DIR="$WD" COMPANY_WORKFLOW_TEST_GATE=off bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
+  run env CLAUDE_PROJECT_DIR="$WD" CORPFLOW_TEST_GATE=off bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
   assert_success
   [ -z "$output" ]
 }
@@ -154,7 +154,7 @@ teardown() {
 
 @test "13: Task carrying the literal ban text -> allow + test_delegation_observed, NEVER a deny (AR-2 deadlock guard)" {
   state_with DR
-  local payload='{"tool_name":"Task","tool_input":{"subagent_type":"company-workflow:developer","prompt":"DO NOT execute tests: bats, pytest, cargo test are forbidden outside DV/QA"}}'
+  local payload='{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"DO NOT execute tests: bats, pytest, cargo test are forbidden outside DV/QA"}}'
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
   assert_success
   [ -z "$output" ]
@@ -251,7 +251,7 @@ teardown() {
 
 @test "P1-1: Task dispatch with NO .context/ at all -> zero filesystem side effects, no observe row" {
   rm -rf "$WD/.context"   # simulate a third-party repo with no worktask in flight
-  local payload='{"tool_name":"Task","tool_input":{"subagent_type":"company-workflow:developer","prompt":"go ahead and make the change to the algorithm"}}'
+  local payload='{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"go ahead and make the change to the algorithm"}}'
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
   assert_success
   [ -z "$output" ]
@@ -260,7 +260,7 @@ teardown() {
 
 @test "P1-1: word-boundary token match — 'algorithm' does not trip the observe row (bare substring 'go' inside it)" {
   state_with DR
-  local payload='{"tool_name":"Task","tool_input":{"subagent_type":"company-workflow:developer","prompt":"refine the sorting algorithm and category logic"}}'
+  local payload='{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"refine the sorting algorithm and category logic"}}'
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
   assert_success
   [ -z "$output" ]
@@ -371,13 +371,13 @@ teardown() {
   [ -z "$output" ]
 }
 
-@test "RK4 structural item 1: COMPANY_WORKFLOW_TEST_GATE=off writes ONE test_gate_disabled row, not one per call" {
+@test "RK4 structural item 1: CORPFLOW_TEST_GATE=off writes ONE test_gate_disabled row, not one per call" {
   state_with DR
-  run env CLAUDE_PROJECT_DIR="$WD" COMPANY_WORKFLOW_TEST_GATE=off bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'bats foo.bats')"
+  run env CLAUDE_PROJECT_DIR="$WD" CORPFLOW_TEST_GATE=off bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'bats foo.bats')"
   assert_success
-  run env CLAUDE_PROJECT_DIR="$WD" COMPANY_WORKFLOW_TEST_GATE=off bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'pytest tests/')"
+  run env CLAUDE_PROJECT_DIR="$WD" CORPFLOW_TEST_GATE=off bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'pytest tests/')"
   assert_success
-  run jq -e '.action == "test_gate_disabled" and .metadata.vector == "COMPANY_WORKFLOW_TEST_GATE"' \
+  run jq -e '.action == "test_gate_disabled" and .metadata.vector == "CORPFLOW_TEST_GATE"' \
     "$WD/.context/logs/audit.jsonl"
   assert_success
   local row_count
@@ -595,9 +595,9 @@ teardown() {
   done
 }
 
-@test "SR2-L2: COMPANY_WORKFLOW_TEST_GATE=off with NO .context/ at all creates nothing (no test_gate_disabled pollution)" {
+@test "SR2-L2: CORPFLOW_TEST_GATE=off with NO .context/ at all creates nothing (no test_gate_disabled pollution)" {
   rm -rf "$WD/.context"
-  run env CLAUDE_PROJECT_DIR="$WD" COMPANY_WORKFLOW_TEST_GATE=off bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'bats foo.bats')"
+  run env CLAUDE_PROJECT_DIR="$WD" CORPFLOW_TEST_GATE=off bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'bats foo.bats')"
   assert_success
   [ -z "$output" ]
   [ ! -d "$WD/.context" ]

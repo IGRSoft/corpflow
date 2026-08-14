@@ -1,4 +1,4 @@
-# Makefile — company-workflow plugin test suite + dual-path TTT benchmark (Python harness)
+# Makefile — corpflow plugin test suite + dual-path TTT benchmark (Python harness)
 #
 # Targets:
 #   make bootstrap       vendored-bats present-check; swift toolchain check;
@@ -41,7 +41,7 @@ SHELL_TESTS  := $(shell find $(PLUGIN_ROOT)/tests/shell -type f -name '*.bats' 2
 .DEFAULT_GOAL := help
 
 help:
-	@echo "company-workflow test suite — targets:"
+	@echo "corpflow test suite — targets:"
 	@echo "  make bootstrap       resolve bats/swift/kcov (idempotent)"
 	@echo "  make test            full deterministic suite (offline)"
 	@echo "  make test-changed    only the tests the change matrix selects (BASE=<ref>)"

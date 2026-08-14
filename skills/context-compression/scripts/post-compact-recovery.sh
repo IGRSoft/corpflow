@@ -233,8 +233,8 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
 
   echo "--- self-test 4: advisory entry ignored; canonical entry wins ---"
   {
-    write_stop "company-workflow:technical-lead" "taskABC" "ok"
-    write_advisory_stop "company-workflow:technical-lead"
+    write_stop "corpflow:technical-lead" "taskABC" "ok"
+    write_advisory_stop "corpflow:technical-lead"
   } > "$FIXTURE"
   OUT4=$(derive_recovery "$FIXTURE" 20)
   AGENT4=$(printf '%s' "$OUT4" | jq -r '.recovery.interrupted_stage.agent')
@@ -251,7 +251,7 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
 
   echo "--- self-test 5: most recent subagent_stopped wins ---"
   {
-    write_stop "company-workflow:product-manager" "taskOLD" "ok"
+    write_stop "corpflow:product-manager" "taskOLD" "ok"
     write_tool
     write_stop "system-developer:bash-developer" "taskNEW" "ok"
   } > "$FIXTURE"
@@ -270,8 +270,8 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
 
   echo "--- self-test 6: audit_tail_count reflects non-advisory lines only ---"
   {
-    write_stop "company-workflow:developer" "taskX" "ok"
-    write_advisory_stop "company-workflow:developer"
+    write_stop "corpflow:developer" "taskX" "ok"
+    write_advisory_stop "corpflow:developer"
     write_tool
   } > "$FIXTURE"
   OUT6=$(derive_recovery "$FIXTURE" 20)

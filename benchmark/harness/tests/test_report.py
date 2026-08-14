@@ -75,7 +75,7 @@ class ReportTests(unittest.TestCase):
     def test_nested_background_rollup_row(self):
         from benchmarkkit.metrics import StageAttribution, StageCoverage
         rec = _live_record_with_cache()
-        cov = StageCoverage(agents=["company-workflow:developer"], skills=[], commands=[],
+        cov = StageCoverage(agents=["corpflow:developer"], skills=[], commands=[],
                             tool_calls=12, nested_background=3)
         rec["stages"] = [StageAttribution("DV", 100, 0, 0, 50, 0.1, coverage=cov).to_dict()]
         html = report.render_html({"live": [rec]})

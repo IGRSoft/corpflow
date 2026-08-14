@@ -144,8 +144,8 @@ mk_skill_layout() {
   local root
   root="$(mk_tmpworkdir)"
   mk_git_fixture --dir "$root" \
-    --file 'agents/developer.md:---\ntools: Read, Skill, Bash\n---\n\n## Plugin paths\n\nPaths are plugin-root-relative.\n\n## Body\n\nRun `Skill({skill: "company-workflow:capture"})`; canon in `skills/capture/SKILL.md`.\n' \
-    --file 'agents/router.md:---\ntools: Read\n---\n\n| Entry | `Skill({skill:"company-workflow:capture"})` |\n' \
+    --file 'agents/developer.md:---\ntools: Read, Skill, Bash\n---\n\n## Plugin paths\n\nPaths are plugin-root-relative.\n\n## Body\n\nRun `Skill({skill: "corpflow:capture"})`; canon in `skills/capture/SKILL.md`.\n' \
+    --file 'agents/router.md:---\ntools: Read\n---\n\n| Entry | `Skill({skill:"corpflow:capture"})` |\n' \
     --file 'skills/capture/SKILL.md:x\n' >/dev/null
   printf '%s\n' "$root"
 }
@@ -165,7 +165,7 @@ mk_skill_layout() {
   local root
   root="$(mk_skill_layout)"
   # Drop the grant, leaving the body's instruction in place.
-  printf -- '---\ntools: Read, Bash\n---\n\n## Plugin paths\n\nx\n\n`Skill({skill: "company-workflow:capture"})`\n' \
+  printf -- '---\ntools: Read, Bash\n---\n\n## Plugin paths\n\nx\n\n`Skill({skill: "corpflow:capture"})`\n' \
     > "$root/agents/developer.md"
   run ungranted_skill_calls "$root"
   assert_output --partial "agents/developer.md"

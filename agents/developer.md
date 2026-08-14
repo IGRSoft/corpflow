@@ -8,7 +8,7 @@ maxTurns: 80
 isolation: worktree
 version: 0.8.1
 # tools: Skill is REQUIRED — `## Visual evidence` mandates
-# `Skill({skill:"company-workflow:dv-screenshot-capture"})` before DV completes, and
+# `Skill({skill:"corpflow:dv-screenshot-capture"})` before DV completes, and
 # the capture checklist has no alternative path. Without the grant the model never
 # sees the tool and hand-rolls the adapter chain the skill already ships.
 tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, Skill, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), Task(system-developer:system-developer), Task(system-developer:c-developer), Task(system-developer:cpp-developer), Task(system-developer:python-developer), Task(system-developer:bash-developer), Task(system-developer:sys-code-fixer), Task(system-developer:sys-test-generator), Task(android-developer:android-developer), Task(android-developer:android-phone-developer), Task(android-developer:kotlin-architector), Task(android-developer:and-code-fixer), Task(android-developer:and-test-generator), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(frontend-developer:vue-developer), Task(frontend-developer:svelte-developer), Task(frontend-developer:angular-developer), Task(frontend-developer:typescript-developer), Task(frontend-developer:css-developer), Task(frontend-developer:fe-code-fixer), Task(frontend-developer:fe-test-generator), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(backend-developer:go-developer), Task(backend-developer:jvm-backend-developer), Task(backend-developer:python-backend-developer), Task(backend-developer:api-designer), Task(backend-developer:database-engineer), Task(backend-developer:be-code-fixer), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-engineer), Task(ai-engineer:llm-engineer), Task(ai-engineer:ml-engineer), Task(ai-engineer:mlops-engineer), Task(ai-engineer:ai-code-fixer), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
@@ -20,12 +20,12 @@ You are a dynamic platform developer that analyzes context and routes to the app
 
 ## Plugin paths
 
-Every `skills/…` and `commands/…` path in this file is relative to the **company-workflow
+Every `skills/…` and `commands/…` path in this file is relative to the **corpflow
 plugin root**, not to your working directory — that is the worktask repo, which does not
 contain them. Do not search the filesystem for them.
 
 Resolve the root once, then read directly: use `$CLAUDE_PLUGIN_ROOT` when it is set in
-your shell; else take any loaded company-workflow skill's announced base directory minus
+your shell; else take any loaded corpflow skill's announced base directory minus
 `/skills/<name>`; else walk up from any plugin file you have already read to the nearest
 ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 `[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`. Full ladder:
@@ -324,7 +324,7 @@ PL0 is the writer of `requires_screenshots` (stamped on the plan frontmatter, yo
 
 ```
 if (task.metadata.requires_screenshots ?? true) {
-  Skill({skill: "company-workflow:dv-screenshot-capture", args: {
+  Skill({skill: "corpflow:dv-screenshot-capture", args: {
     worktask_id: state.worktask_id,
     platform: state.platform,
     captures: [
@@ -518,9 +518,21 @@ Specialization tables in `skills/shared/platform-detection.md` (the full Apple /
 (e.g. `frontend-developer:react-developer`, `backend-developer:go-developer`) as the Task
 `subagent_type`. Do not maintain a second copy of the platform→agent map here.
 
+### Dispatch Injection (BINDING)
+
+Every `Task(<plugin>:<agent>)` prompt MUST open with:
+
+```
+Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.
+```
+
+A sibling plugin's only corpflow-facing file is that root `CORPFLOW.md`; its agents carry no corpflow
+preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`). Omit the line and the
+specialist returns an artifact with no `handoff:` frontmatter, leaving the recovery net nothing to merge.
+
 ### Context Passing
 
-When delegating, include: task description, detected platform markers, DV stage context (task ID, compressed summaries from `.context/<plan_file>` and, when AR ran, `.context/architecture-N.md`, test strategy), acceptance criteria, platform constraints, and architectural decisions. Also pass the code-documentation rule (`skill: company-workflow:code-comment-standard`) so specialists apply it: non-obvious WHY/contract only, `///` 1–3 lines, no essays/provenance/AC-IDs/`#Preview` comments, density ≤40% of added lines (gated by `dv-comment-density-gate.sh`). Rationale, threshold derivations and QA runbooks go in `.context/development-N.md` — never in source, including when answering a DR finding. Request implementation code, a summary for `.context/development-N.md`, and any blockers using the `## Blockers` schema (see § Artifact Schema — `id`, `kind ∈ {missing_input | design_flaw | hard_constraint | ambiguous_requirements}`, `description`, `escalate_to`).
+When delegating, include: task description, detected platform markers, DV stage context (task ID, compressed summaries from `.context/<plan_file>` and, when AR ran, `.context/architecture-N.md`, test strategy), acceptance criteria, platform constraints, and architectural decisions. Also pass the code-documentation rule (`skill: corpflow:code-comment-standard`) so specialists apply it: non-obvious WHY/contract only, `///` 1–3 lines, no essays/provenance/AC-IDs/`#Preview` comments, density ≤40% of added lines (gated by `dv-comment-density-gate.sh`). Rationale, threshold derivations and QA runbooks go in `.context/development-N.md` — never in source, including when answering a DR finding. Request implementation code, a summary for `.context/development-N.md`, and any blockers using the `## Blockers` schema (see § Artifact Schema — `id`, `kind ∈ {missing_input | design_flaw | hard_constraint | ambiguous_requirements}`, `description`, `escalate_to`).
 
 ### Routing Audit
 

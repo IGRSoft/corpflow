@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test-Execution Authority gate — PreToolUse hook (company-workflow worktask plugin).
+# Test-Execution Authority gate — PreToolUse hook (corpflow worktask plugin).
 #
 # Enforces skills/shared/testing-strategy.md § Test-Execution Authority: only
 # DV (scoped) and QA (scoped + full) may execute tests; every other stage is
@@ -17,7 +17,7 @@
 # (hookSpecificOutput.permissionDecision, matching dv-screenshot-gate.sh), so
 # a malformed emission fails OPEN by design: this is a backstop, not a
 # sandbox — tool-grant narrowing and the orchestrator's dispatch-time ban
-# banner are the primary controls. Escape hatch: COMPANY_WORKFLOW_TEST_GATE=off
+# banner are the primary controls. Escape hatch: CORPFLOW_TEST_GATE=off
 # (process env only — a command-string prefix cannot reach it, since this
 # hook's env comes from the CC parent process, not the command string).
 #
@@ -624,14 +624,14 @@ run_gate() {
   # untouched on every other call and only the (rare, human-initiated) hatch
   # path pays the one-time cost of an audit row. Gated on a resolvable
   # .context/state.json existing at all — otherwise a shell-profile-wide
-  # COMPANY_WORKFLOW_TEST_GATE=off would materialize .context/logs/ in every unrelated
+  # CORPFLOW_TEST_GATE=off would materialize .context/logs/ in every unrelated
   # directory the user opens, the same no-side-effects-without-a-live-context
   # invariant the Task branch already enforces.
-  if [ "${COMPANY_WORKFLOW_TEST_GATE:-}" = "off" ] && [ -f "$_ctx/state.json" ]; then
+  if [ "${CORPFLOW_TEST_GATE:-}" = "off" ] && [ -f "$_ctx/state.json" ]; then
     _sentinel="$_ctx/logs/.gate-off-noted"
     if [ ! -f "$_sentinel" ]; then
       mkdir -p "$_ctx/logs" 2>/dev/null && : > "$_sentinel" 2>/dev/null
-      write_audit_row "$_ctx" "test_gate_disabled" '{"vector":"COMPANY_WORKFLOW_TEST_GATE"}'
+      write_audit_row "$_ctx" "test_gate_disabled" '{"vector":"CORPFLOW_TEST_GATE"}'
     fi
     return 0
   fi
@@ -782,11 +782,11 @@ run_gate() {
 
   # Banned stage (or DV-full): DENY. The relief text is actionable BY AN
   # AGENT: requests_test_evidence / blocked-escalation are self-serviceable
-  # from inside a stage's own artifact. COMPANY_WORKFLOW_TEST_GATE=off is NOT
+  # from inside a stage's own artifact. CORPFLOW_TEST_GATE=off is NOT
   # agent-serviceable — the hook reads process env, not the command string,
   # so a retry with a command-string prefix denies identically — so the text
   # frames it explicitly as a human ask, not a retry an agent can perform.
-  _reason="Stage '$_stage' has no test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). DV may run scoped tests only; QA is the sole full-suite authority. To proceed: (1) record requests_test_evidence: <what and why> in this stage's artifact so QA executes it, or (2) return verdict: blocked with error_escalated_to: \"DV\" if it blocks this stage's completion. A human operator may disable this gate for a debugging session by restarting with COMPANY_WORKFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
+  _reason="Stage '$_stage' has no test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). DV may run scoped tests only; QA is the sole full-suite authority. To proceed: (1) record requests_test_evidence: <what and why> in this stage's artifact so QA executes it, or (2) return verdict: blocked with error_escalated_to: \"DV\" if it blocks this stage's completion. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
   _deny=$(jq -cn --arg reason "$_reason" '
     {hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}
   ') || return 0
@@ -916,7 +916,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   # (a prose-matching deny here would refuse to dispatch this very policy)
   _ctx5="$_tmp/task/.context"; mkdir -p "$_ctx5"
   printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx5/state.json"
-  _p5='{"tool_name":"Task","tool_input":{"subagent_type":"company-workflow:developer","prompt":"Never run bats or pytest outside DV/QA"}}'
+  _p5='{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"Never run bats or pytest outside DV/QA"}}'
   _o5=$(run_gate "$_p5" "$_ctx5")
   [ -z "$_o5" ] || { echo "test-execution-gate: self-test FAIL (Task must never deny)"; _fail=1; }
   tail -n 1 "$_ctx5/logs/audit.jsonl" 2>/dev/null | jq -e '.action == "test_delegation_observed"' >/dev/null 2>&1 \
@@ -925,7 +925,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   # Regression: Task dispatch with NO .context/ at all -> zero side effects
   # (no worktask in flight means nothing should be created or logged).
   _ctx5b="$_tmp/task-no-ctx/.context"   # deliberately NOT created
-  _o5b=$(run_gate '{"tool_name":"Task","tool_input":{"subagent_type":"company-workflow:developer","prompt":"go ahead and make the change"}}' "$_ctx5b")
+  _o5b=$(run_gate '{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"go ahead and make the change"}}' "$_ctx5b")
   [ -z "$_o5b" ] || { echo "test-execution-gate: self-test FAIL (Task no-ctx must be silent)"; _fail=1; }
   [ ! -d "$_ctx5b" ] || { echo "test-execution-gate: self-test FAIL (Task no-ctx created .context/)"; _fail=1; }
 
@@ -945,10 +945,10 @@ if [ "$SELF_TEST" -eq 1 ]; then
   tail -n 1 "$_ctx6b/logs/audit.jsonl" | jq -e '.metadata.command_head == "pytest" and (.metadata.command_head | test("sk-test-xyz|API_KEY") | not)' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (secret leaked into command_head)"; _fail=1; }
 
-  # COMPANY_WORKFLOW_TEST_GATE=off -> allow even for a banned stage
+  # CORPFLOW_TEST_GATE=off -> allow even for a banned stage
   _ctx7="$_tmp/off/.context"; mkdir -p "$_ctx7"
   printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx7/state.json"
-  _o7=$(COMPANY_WORKFLOW_TEST_GATE=off run_gate '{"tool_name":"Bash","tool_input":{"command":"bats foo.bats"}}' "$_ctx7")
+  _o7=$(CORPFLOW_TEST_GATE=off run_gate '{"tool_name":"Bash","tool_input":{"command":"bats foo.bats"}}' "$_ctx7")
   [ -z "$_o7" ] || { echo "test-execution-gate: self-test FAIL (escape hatch)"; _fail=1; }
 
   # DR + build-test --no-test -> allow (build-only stays permitted everywhere)

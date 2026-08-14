@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Asserted contracts for skills/worktask/scripts/pr-body-lint.sh:
 #   - exit 0 on a clean body, and on findings while warn-only (the default)
-#   - exit 1 on findings under --strict / COMPANY_WORKFLOW_PR_BODY_STRICT=1
+#   - exit 1 on findings under --strict / CORPFLOW_PR_BODY_STRICT=1
 #   - exit 2 on usage errors (unknown flag, --body missing or nonexistent)
 #   - P1 fires on a BACKTICK-WRAPPED local path — the shape that defeated the
 #     sanitiser's own anchors and reached a published PR
@@ -135,9 +135,9 @@ EOF
   assert_output --partial "BLOCKED"
 }
 
-@test "edge: COMPANY_WORKFLOW_PR_BODY_STRICT=1 is equivalent to --strict" {
+@test "edge: CORPFLOW_PR_BODY_STRICT=1 is equivalent to --strict" {
   printf 'Manifest: `.context/images/x/screenshots.md`\n' >> "$CLEAN"
-  run env COMPANY_WORKFLOW_PR_BODY_STRICT=1 bash "$PLUGIN_ROOT/$SCRIPT" --body "$CLEAN"
+  run env CORPFLOW_PR_BODY_STRICT=1 bash "$PLUGIN_ROOT/$SCRIPT" --body "$CLEAN"
   assert_failure 1
 }
 

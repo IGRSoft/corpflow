@@ -15,7 +15,7 @@ setup() {
   assert_success
   run jq -e '
     .action == "subagent_stopped"
-    and .subject == "company-workflow:developer"
+    and .subject == "corpflow:developer"
     and .metadata.duration_ms == 12345
     and .metadata.parent_agent_id == "agt_parent"
     and (.metadata.dedupe_key == "sess_fix:agt_dv:stop")
@@ -25,7 +25,7 @@ setup() {
 
 @test "edge: non-numeric duration_ms coerces to 0; absent ids fall back" {
   run env CLAUDE_PROJECT_DIR="$WD" \
-    bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"agent_type":"company-workflow:y","duration_ms":"oops"}'
+    bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"agent_type":"corpflow:y","duration_ms":"oops"}'
   assert_success
   run jq -e '
     .metadata.duration_ms == 0

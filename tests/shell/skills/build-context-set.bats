@@ -3,7 +3,7 @@
 # Contracts (from source):
 #   Reads agent names from (a) TASK_LIST_JSON, (b) CONTEXT_DIR/*.md `agent:`
 #   trailers, (c) `git log $BASELINE_SHA..HEAD` `Agent:` trailers.
-#   Normalizes company-workflow:<name> to agents/<name>.md (also probing the
+#   Normalizes corpflow:<name> to agents/<name>.md (also probing the
 #   commands/ and skills/ spellings). CROSS_PLUGIN:* refs are dropped.
 #   Only emits paths that EXIST on disk, relative to the CWD; output is sorted
 #   and deduplicated. No --self-test flag; the tests drive it via env vars.
@@ -32,10 +32,10 @@ setup() {
 @test "source 1: only completed-task agents are emitted, sorted and deduped" {
   cat > "$WD/tasks.json" <<'JSON'
 [
-  {"status":"completed","metadata":{"agent":"company-workflow:developer"}},
-  {"status":"in_progress","metadata":{"agent":"company-workflow:qa-engineer"}},
-  {"status":"completed","metadata":{"agent":"company-workflow:product-manager"}},
-  {"status":"completed","metadata":{"agent":"company-workflow:developer"}}
+  {"status":"completed","metadata":{"agent":"corpflow:developer"}},
+  {"status":"in_progress","metadata":{"agent":"corpflow:qa-engineer"}},
+  {"status":"completed","metadata":{"agent":"corpflow:product-manager"}},
+  {"status":"completed","metadata":{"agent":"corpflow:developer"}}
 ]
 JSON
   run_script_env --cwd "$WD" \
@@ -50,7 +50,7 @@ agents/product-manager.md"
   cat > "$WD/tasks.json" <<'JSON'
 [
   {"status":"completed","metadata":{"agent":"apple-developer:ios-developer"}},
-  {"status":"completed","metadata":{"agent":"company-workflow:developer"}}
+  {"status":"completed","metadata":{"agent":"corpflow:developer"}}
 ]
 JSON
   run_script_env --cwd "$WD" \
@@ -63,8 +63,8 @@ JSON
 @test "source 1: names with no file on disk are dropped" {
   cat > "$WD/tasks.json" <<'JSON'
 [
-  {"status":"completed","metadata":{"agent":"company-workflow:nonexistent-ghost-agent"}},
-  {"status":"completed","metadata":{"agent":"company-workflow:developer"}}
+  {"status":"completed","metadata":{"agent":"corpflow:nonexistent-ghost-agent"}},
+  {"status":"completed","metadata":{"agent":"corpflow:developer"}}
 ]
 JSON
   run_script_env --cwd "$WD" \
@@ -79,7 +79,7 @@ JSON
   : > "$WD/commands/worktask.md"
   cat > "$WD/tasks.json" <<'JSON'
 [
-  {"status":"completed","metadata":{"agent":"company-workflow:developer","embedded_commands":"company-workflow:worktask"}}
+  {"status":"completed","metadata":{"agent":"corpflow:developer","embedded_commands":"corpflow:worktask"}}
 ]
 JSON
   run_script_env --cwd "$WD" \
@@ -98,7 +98,7 @@ commands/worktask.md"
   mkdir -p "$WD/ctx"
   cat > "$WD/ctx/planning-0.md" <<'MD'
 ---
-agent: company-workflow:product-manager
+agent: corpflow:product-manager
 ---
 # Planning
 MD
@@ -115,7 +115,7 @@ MD
   : > "$WD/agents/software-architector.md"
   cat > "$WD/ctx/architecture-0.md" <<'MD'
 metadata:
-    agent: company-workflow:software-architector
+    agent: corpflow:software-architector
 MD
   run_script_env --cwd "$WD" \
     --env "TASK_LIST_JSON=" --env "CONTEXT_DIR=$WD/ctx" -- "$SCRIPT"
@@ -125,7 +125,7 @@ MD
 
 @test "source 2: a trailer value with no leading space resolves on every sed" {
   mkdir -p "$WD/ctx"
-  printf 'agent:company-workflow:qa-engineer\n' > "$WD/ctx/development-0.md"
+  printf 'agent:corpflow:qa-engineer\n' > "$WD/ctx/development-0.md"
   run_script_env --cwd "$WD" \
     --env "TASK_LIST_JSON=" --env "CONTEXT_DIR=$WD/ctx" -- "$SCRIPT"
   assert_success
@@ -138,9 +138,9 @@ MD
   local repo base
   repo="$(mk_git_fixture \
     --file 'agents/qa-engineer.md:x\n' \
-    --commit "$(printf 'chore: before baseline\n\nAgent:company-workflow:qa-engineer')" \
+    --commit "$(printf 'chore: before baseline\n\nAgent:corpflow:qa-engineer')" \
     --file 'agents/developer.md:x\n' \
-    --commit "$(printf 'feat: after baseline\n\nAgent:company-workflow:developer')")"
+    --commit "$(printf 'feat: after baseline\n\nAgent:corpflow:developer')")"
   base="$(git -C "$repo" rev-parse HEAD~1)"
   run_script_env --cwd "$repo" \
     --env "TASK_LIST_JSON=" --env "CONTEXT_DIR=$repo/.ctx_none" \
@@ -156,7 +156,7 @@ MD
     --file 'agents/developer.md:x\n' \
     --commit 'chore: base' \
     --file 'note.txt:x\n' \
-    --commit "$(printf 'feat: work\n\nAgent: company-workflow:developer')")"
+    --commit "$(printf 'feat: work\n\nAgent: corpflow:developer')")"
   base="$(git -C "$repo" rev-parse HEAD~1)"
   run_script_env --cwd "$repo" \
     --env "TASK_LIST_JSON=" --env "CONTEXT_DIR=$repo/.ctx_none" \

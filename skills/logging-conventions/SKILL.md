@@ -6,7 +6,7 @@ effort: low
 
 # Logging Conventions
 
-Runtime log capture routing for the company-workflow worktask. Pairs with `task-folder-organization`.
+Runtime log capture routing for the corpflow worktask. Pairs with `task-folder-organization`.
 
 ## The Split
 

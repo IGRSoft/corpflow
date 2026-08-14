@@ -10,7 +10,7 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 HOOK="hooks/dv-comment-density-gate.sh"
 WRITER='{"agent_type":"apple-developer:ios-developer","agent_id":"agt_t","session_id":"s"}'
-REVIEWER='{"agent_type":"company-workflow:technical-lead","agent_id":"agt_t","session_id":"s"}'
+REVIEWER='{"agent_type":"corpflow:technical-lead","agent_id":"agt_t","session_id":"s"}'
 
 setup() {
   REPO="$(mk_git_fixture --branch main --file 'README.md:seed\n' --commit 'init')"
@@ -152,12 +152,12 @@ mk_lean_swift() {
 # ---------------------------------------------------------------------------
 # T6 — the ceiling is configurable, and the row reports the ceiling in force.
 # ---------------------------------------------------------------------------
-@test "T6: COMPANY_WORKFLOW_COMMENT_DENSITY_MAX raises and lowers the ceiling" {
+@test "T6: CORPFLOW_COMMENT_DENSITY_MAX raises and lowers the ceiling" {
   mk_bloated_swift Bloated.swift            # 62%
 
   # Raised above the measurement: the same file now passes.
   run_script_env --env "CLAUDE_PROJECT_DIR=$REPO" --cwd "$REPO" \
-    --env COMPANY_WORKFLOW_COMMENT_DENSITY_MAX=70 \
+    --env CORPFLOW_COMMENT_DENSITY_MAX=70 \
     --stdin-string "$WRITER" "$HOOK"
   assert_success
   assert_output ''
@@ -170,7 +170,7 @@ mk_lean_swift() {
   rm -f "$REPO/Bloated.swift"
   mk_lean_swift Lean.swift
   run_script_env --env "CLAUDE_PROJECT_DIR=$REPO" --cwd "$REPO" \
-    --env COMPANY_WORKFLOW_COMMENT_DENSITY_MAX=5 \
+    --env CORPFLOW_COMMENT_DENSITY_MAX=5 \
     --stdin-string "$WRITER" "$HOOK"
   assert_success
   assert_equal "$(jq -r '.decision' <<< "$output")" 'block'

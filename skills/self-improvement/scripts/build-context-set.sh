@@ -57,7 +57,7 @@ if [ -d "$CONTEXT_DIR" ]; then
   # Parse YAML-ish metadata blocks (`agent: <value>` lines)
   # POSIX classes, not `\s`: BSD/macOS sed and grep read `\s` as a literal `s`,
   # which leaves the extracted value with its leading space. `awk -F:` then sees
-  # " company-workflow" and the ref is discarded as cross-plugin.
+  # " corpflow" and the ref is discarded as cross-plugin.
   grep -rhE '^[[:space:]]*agent:[[:space:]]*' "$CONTEXT_DIR" 2>/dev/null \
     | sed -E 's/^[[:space:]]*agent:[[:space:]]*//; s/[[:space:]]+$//; s/^["'\'']//; s/["'\'']$//' \
     >> "$raw" || true
@@ -79,14 +79,14 @@ fi
 
 # Normalize qualified names → file paths.
 # Rules:
-#   company-workflow:<name>              → agents/<name>.md
+#   corpflow:<name>              → agents/<name>.md
 #   apple-developer:<name>      → (cross-plugin) — kept as raw ref; mapper drops if non-local
 #   <name>:<sub> as command     → commands/<name>.md  (best-effort)
 #
 # The normalizer only emits LOCAL paths that exist in this repo.
 normalize() {
   awk -F: '
-    $1 == "company-workflow" && NF == 2 {
+    $1 == "corpflow" && NF == 2 {
       print "agents/" $2 ".md"
       # also try as command
       print "commands/" $2 ".md"

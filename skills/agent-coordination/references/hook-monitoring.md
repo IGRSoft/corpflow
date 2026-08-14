@@ -6,7 +6,7 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 | Hook Event | Fires When | Matcher | Payload Fields |
 |------------|------------|---------|----------------|
-| `SubagentStart` | Stage agent spawned | Agent type name (e.g., `company-workflow:developer`) | `agent_id`, `agent_type` |
+| `SubagentStart` | Stage agent spawned | Agent type name (e.g., `corpflow:developer`) | `agent_id`, `agent_type` |
 | `SubagentStop` | Stage agent completes | Agent type name | `agent_id`, `agent_type` |
 | `PermissionDenied` | Auto-mode classifier denies a tool call | — | Tool name, denial reason |
 | `StopFailure` | API error causes turn end | — | Error details |
@@ -18,7 +18,7 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 #### Workspace trust is a precondition for agent-frontmatter hooks
 
-> Hooks declared in an **agent file's own frontmatter** run only when that agent file's folder has accepted workspace trust. In an untrusted plugin folder they are **silently skipped** — no error, no audit row, the stage simply completes without its gate. Three company-workflow agents declare frontmatter hooks and are affected: `agents/product-manager.md`, `agents/project-manager.md`, `agents/stakeholder.md`.
+> Hooks declared in an **agent file's own frontmatter** run only when that agent file's folder has accepted workspace trust. In an untrusted plugin folder they are **silently skipped** — no error, no audit row, the stage simply completes without its gate. Three corpflow agents declare frontmatter hooks and are affected: `agents/product-manager.md`, `agents/project-manager.md`, `agents/stakeholder.md`.
 >
 > Consequence for gate reasoning: absence of a hook-emitted audit row is **not** evidence the hook passed — it is equally consistent with the hook never having run. When a stage's completion depends on a frontmatter hook, confirm trust was granted for the plugin folder rather than inferring success from a clean run. Hooks installed via `plugin.json` (the `hooks` block) and the repo's own `hooks/` scripts are unaffected.
 
@@ -148,7 +148,7 @@ Add to project `settings.json` for worktask-wide monitoring:
   "hooks": {
     "SubagentStart": [
       {
-        "matcher": "company-workflow:.*",
+        "matcher": "corpflow:.*",
         "hooks": [
           { "type": "command", "command": "./tools/log-stage-start.sh" }
         ]
@@ -190,7 +190,7 @@ Hooks support an `if` field using permission rule syntax to avoid unnecessary pr
   "hooks": {
     "SubagentStop": [
       {
-        "if": "agent_type matches 'company-workflow:.*'",
+        "if": "agent_type matches 'corpflow:.*'",
         "hooks": [
           { "type": "command", "command": "./tools/log-stage-complete.sh" }
         ]
@@ -270,7 +270,7 @@ Hooks can invoke MCP tools directly via `type: "mcp_tool"` (alongside `command` 
 
 #### Matcher semantics
 
-Hook matchers with hyphenated identifiers **exact-match** rather than substring-matching, so the Stop matcher is written with explicit wildcards (`.*company-workflow:product-manager.*|.*company-workflow:project-manager.*`, per the `mcp__server__.*` guidance) to keep firing regardless of how the runtime qualifies the agent name. Comma-separated matchers (`"Bash,PowerShell"`) do not fire — always use regex alternation (`Bash|PowerShell`), never commas.
+Hook matchers with hyphenated identifiers **exact-match** rather than substring-matching, so the Stop matcher is written with explicit wildcards (`.*corpflow:product-manager.*|.*corpflow:project-manager.*`, per the `mcp__server__.*` guidance) to keep firing regardless of how the runtime qualifies the agent name. Comma-separated matchers (`"Bash,PowerShell"`) do not fire — always use regex alternation (`Bash|PowerShell`), never commas.
 
 #### Stop → PushNotification hook
 
@@ -363,7 +363,7 @@ Use cases: stop teammate when its issue is complete, when megatask budget is exh
 
 ## Agent Teams vs Subagents
 
-### Comparison for company-workflow Worktasks
+### Comparison for corpflow Worktasks
 
 | Aspect | Subagents (Task tool) | Agent Teams (`Agent(name: …)`) |
 |--------|----------------------|------------------------|
