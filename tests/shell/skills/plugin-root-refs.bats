@@ -196,10 +196,20 @@ composed_token_check() {
 }
 
 @test "contract: scripts reading the env var are the 4 known env-first fallbacks" {
+  # The benchmark runner is excluded because it sets the variable for dispatched
+  # stages rather than resolving from it; the test below pins that role.
   run bash -c 'cd "$PLUGIN_ROOT" && git ls-files -z -- "*.sh" \
-    | xargs -0 grep -l "CLAUDE_PLUGIN_ROOT" 2>/dev/null | LC_ALL=C sort; true'
+    | xargs -0 grep -l "CLAUDE_PLUGIN_ROOT" 2>/dev/null \
+    | grep -v "^benchmark/run-benchmark.sh$" | LC_ALL=C sort; true'
   assert_output ".claude/hooks/state-merge.sh
 hooks/anchor-preflight.sh
 skills/dv-screenshot-capture/scripts/apple-canvas.sh
 skills/worktask/scripts/hook-install.sh"
+}
+
+@test "contract: the benchmark runner exports the env var instead of resolving from it" {
+  # Unset, dispatched stages scan the filesystem for the plugin root, which distorts
+  # both the behaviour under test and its measured cost.
+  run bash -c 'cd "$PLUGIN_ROOT" && grep -c "^export CLAUDE_PLUGIN_ROOT=" benchmark/run-benchmark.sh'
+  assert_output "1"
 }
