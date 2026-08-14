@@ -12,12 +12,13 @@ import tempfile
 import unittest
 
 from benchmarklive import baseline
-from benchmarklive.dispatch import dispatch
+from benchmarklive.dispatch import DispatchFailure, dispatch
 
 import sys as _sys
 _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # _helpers under any runner
 from _helpers import (
     SequencedFakeDispatcher,
+    ThrowAtStageDispatcher,
     fake_estimate_runner,
     load_json,
     make_live_sandbox,
@@ -160,6 +161,17 @@ class PairedDispatch(unittest.TestCase):
         self.assertEqual(rec["paths"]["without"]["cost_usd"], 0.6)
         self.assertEqual(rec["paths"]["with"]["pass_fail"], "fail")
         self.assertEqual(rec["paths"]["with"]["stage_count"], 1)
+
+    def test_throw_mid_without_arm_keeps_completed_stages(self):
+        # A breach returns an ArmResult, but a throw does not; without incremental
+        # persistence the WITHOUT arm's finished stages leave no record at all.
+        with self.assertRaises(DispatchFailure):
+            self._dispatch(ThrowAtStageDispatcher(throw_at=3), stages=["PL", "AR", "TL"],
+                           without_arm="real")
+        rec = load_json(self.sb.record_path)
+        self.assertTrue(rec["live_partial"])
+        self.assertEqual(rec["paths"]["without"]["stage_count"], 2)
+        self.assertEqual([s["stage"] for s in rec["stages"]], ["PL", "AR"])
 
     def test_arm_budgets_are_independent(self):
         # A shared purse would let WITHOUT's 0.9 gate WITH out entirely; halves of
