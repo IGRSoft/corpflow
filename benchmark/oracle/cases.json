@@ -392,6 +392,71 @@
         "stdout": " X | X | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
       },
       "tier": "implied"
+    },
+    {
+      "id": "malformed-outranks-invalid-move",
+      "description": "the whole list is parsed before play, so a bad token outranks an earlier occupied cell",
+      "args": [
+        "--moves",
+        "0,0,abc"
+      ],
+      "expect": {
+        "exit_code": 2,
+        "stdout": ""
+      },
+      "tier": "implied"
+    },
+    {
+      "id": "tab-padded-tokens",
+      "description": "a tab around a token is whitespace and is accepted",
+      "args": [
+        "--moves",
+        "0,\t4"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      },
+      "tier": "implied"
+    },
+    {
+      "id": "empty-token-between-commas",
+      "description": "an empty token contributes no move rather than failing the parse",
+      "args": [
+        "--moves",
+        "0,,4"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      },
+      "tier": "implied"
+    },
+    {
+      "id": "trailing-comma-accepted",
+      "description": "a trailing comma leaves an empty final token, which is ignored",
+      "args": [
+        "--moves",
+        "0,4,"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      },
+      "tier": "implied"
+    },
+    {
+      "id": "newline-is-not-token-whitespace",
+      "description": "only spaces and tabs pad a token, so a newline leaves it unparseable",
+      "args": [
+        "--moves",
+        "0,\n4"
+      ],
+      "expect": {
+        "exit_code": 2,
+        "stdout": ""
+      },
+      "tier": "implied"
     }
   ],
   "tiers": {

@@ -51,7 +51,13 @@ result: in_progress
   outside 0..8); 2 when --moves is not a comma-separated integer list
 - diagnostics for exit 1 and 2 go to stderr; their wording is not graded, and
   stdout stays empty on both — the board prints only on exit 0
-- whitespace around move tokens is accepted (`0, 4, 1` is valid)
+- whitespace around move tokens is accepted (`0, 4, 1` is valid); whitespace
+  here means spaces and tabs only, so a newline inside a token leaves it
+  unparseable and exits 2
+- the whole list is parsed before any move is played, so a malformed token
+  exits 2 even when an earlier token is an invalid move
+- an empty token contributes no move rather than failing the parse, so `0,,4`
+  and a trailing comma are both valid
 
 Write the complete, real source and test files now, in this working
 directory, and make sure the package builds and its test suite passes.
