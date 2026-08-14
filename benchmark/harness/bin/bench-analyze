@@ -25,6 +25,15 @@ def _load_json(path):
         return json.load(f)
 
 
+def _is_complete_run(record):
+    """False for a single-arm record: it is half a comparison, not the latest run.
+
+    Arm records are meant to stay out of the history and out of results/runs/live, so
+    this is a second line of defence against a hand-copied one being picked up.
+    """
+    return isinstance(record, dict) and not record.get("arm")
+
+
 def _latest_live_from_history(history_path):
     try:
         history = _load_json(history_path)
@@ -35,7 +44,8 @@ def _latest_live_from_history(history_path):
     live = history.get("live")
     if not isinstance(live, list) or not live:
         return None
-    return live[-1]  # newest last (rolling history convention)
+    complete = [r for r in live if _is_complete_run(r)]
+    return complete[-1] if complete else None  # newest last (rolling history convention)
 
 
 def _previous_live_from_history(history_path, current):
@@ -61,10 +71,14 @@ def _latest_live_from_runs_dir(benchmark_dir):
     if not names:
         return None
     names.sort(key=lambda n: os.path.getmtime(os.path.join(runs_dir, n)))
-    try:
-        return _load_json(os.path.join(runs_dir, names[-1]))
-    except (OSError, ValueError):
-        return None
+    for name in reversed(names):
+        try:
+            record = _load_json(os.path.join(runs_dir, name))
+        except (OSError, ValueError):
+            continue
+        if _is_complete_run(record):
+            return record
+    return None
 
 
 def main(argv):

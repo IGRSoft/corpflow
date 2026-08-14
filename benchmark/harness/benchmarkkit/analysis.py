@@ -294,6 +294,47 @@ def era_differences(era_a: Optional[dict], era_b: Optional[dict]) -> list:
     return diffs
 
 
+def single_arm(record: dict) -> Optional[str]:
+    """The arm a single-arm record carries, or None for a paired record."""
+    arm = record.get("arm")
+    return arm if arm in ("with", "without") else None
+
+
+def oracle_cases_digests(record: dict) -> dict:
+    """Per-arm oracle case-set digest keyed by arm name; None where unstamped.
+
+    Read-only: the digest identifies the case set an arm was graded against, and it
+    lives beside that arm's oracle payload rather than in the record-level era block,
+    which is singular and would have to be arbitrated when two arms are joined.
+    """
+    paths = record.get("paths") or {}
+    out = {}
+    for arm, pm in paths.items():
+        oracle_payload = (pm or {}).get("oracle") or {}
+        out[arm] = oracle_payload.get("cases_digest")
+    return out
+
+
+def observed_gap_s(record_a: dict, record_b: dict) -> Optional[int]:
+    """Whole seconds between two records' timestamps, or None if either is unparseable.
+
+    Reported, never thresholded: at n=1 there is no variance envelope to derive a
+    threshold from, so the reader judges.
+    """
+    from datetime import datetime
+
+    stamps = []
+    for record in (record_a, record_b):
+        raw = (record or {}).get("timestamp_utc")
+        if not isinstance(raw, str):
+            return None
+        try:
+            stamps.append(datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ"))
+        except ValueError:
+            return None
+    return int(abs((stamps[0] - stamps[1]).total_seconds()))
+
+
 def _caveats(record: dict, with_pm: dict, without_pm: dict, reference: Optional[dict],
              previous: Optional[dict] = None) -> list:
     caveats = []
@@ -312,6 +353,13 @@ def _caveats(record: dict, with_pm: dict, without_pm: dict, reference: Optional[
         caveats.append(
             "live_partial: this run degraded or breached budget mid-flight; "
             "treat metrics as incomplete.")
+    arm = single_arm(record)
+    if arm is not None:
+        opposite = "without" if arm == "with" else "with"
+        caveats.append(
+            f"single-arm record: only the {arm.upper()} arm ran, so the {opposite.upper()} "
+            "arm is absent rather than zero and no premium/delta figure exists — join it "
+            "against a comparable opposite-arm run with `bench-pair` before comparing.")
     if _is_placeholder_without(without_pm):
         caveats.append(
             "WITHOUT arm is the mechanism-default placeholder (never dispatched); "
