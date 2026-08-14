@@ -211,6 +211,32 @@ handoff:
     hotfix_constraints: []
 ```
 
+## Orchestrator agent roles
+
+Some of this plugin's own commands run a multi-stage flow that borrows orchestrator agents — an
+architect for a design pass, a reviewer for a DR gate. Those commands name the **role**, not the id,
+so this table stays the only place an id appears. Resolve a role here before dispatching; if this
+file is absent, the plugin is standalone and those phases are skipped rather than failed.
+
+| Role named in a command | Agent id |
+|---|---|
+| the orchestrator's product manager | `corpflow:product-manager` |
+| the orchestrator's architect | `corpflow:software-architector` |
+| the orchestrator's DR reviewer | `corpflow:technical-lead` |
+| the orchestrator's QA engineer | `corpflow:qa-engineer` |
+| the orchestrator's technical writer | `corpflow:technical-writer` |
+| the orchestrator's security reviewer | `corpflow:security-reviewer` |
+| the orchestrator's ethics reviewer | `corpflow:ethics-reviewer` |
+| the orchestrator's project manager | `corpflow:project-manager` |
+| the orchestrator's worktask engineer | `corpflow:workflow-engineer` |
+| the orchestrator's platform router | `corpflow:developer` |
+| the orchestrator's meta-prompt engineer | `corpflow:prompt-engineer` |
+
+Shared **standards** are referenced by id directly (`corpflow:code-comment-standard`,
+`corpflow:security-review-process`, `corpflow:claude-constitution`,
+`corpflow:logging-conventions`). They are shared vocabulary rather than orchestration: copying them
+into each plugin would let the wording drift, and a drifting standard is worse than a named one.
+
 ## Keeping the seam single
 
 When a corpflow contract changes, this file changes and nothing else in <PLUGIN> does. That property
