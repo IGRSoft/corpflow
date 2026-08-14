@@ -39,10 +39,22 @@ class ImportIsolation(unittest.TestCase):
                 )
 
     def test_deterministic_entrypoints_never_import_benchmarklive(self):
-        for entry in ("bench-deterministic", "bench-report"):
+        for entry in ("bench-deterministic", "bench-report", "bench-pair"):
             p = os.path.join(_HARNESS, "bin", entry)
             if os.path.exists(p):  # entrypoints land in Phase 5
                 self.assertIsNone(_LIVE_IMPORT.search(_reads(p)), f"{entry} imports benchmarklive")
+
+    def test_join_is_pure_analysis_and_never_reaches_dispatch(self):
+        # R11/AC-9: the join is analysis, so it sits behind the same boundary as the
+        # analyzer and the reporter — importing it must not pull in the live world.
+        for m in [k for k in list(sys.modules) if k.startswith("benchmarklive")]:
+            del sys.modules[m]
+        importlib.import_module("benchmarkkit.pairing")
+        self.assertNotIn("benchmarklive", sys.modules)
+        for path in (os.path.join(_HARNESS, "benchmarkkit", "pairing.py"),
+                     os.path.join(_HARNESS, "bin", "bench-pair")):
+            self.assertIsNone(_LIVE_IMPORT.search(_reads(path)),
+                              f"{os.path.basename(path)} imports benchmarklive")
 
     def test_bench_live_is_the_only_live_importer(self):
         p = os.path.join(_HARNESS, "bin", "bench-live")

@@ -1,9 +1,15 @@
 """Metrics schema parity (port of MetricsSchemaTests): top-level fields, tokens
 shim (in/out/total, 5 keys always), deterministic null / live populated,
 comparison shape, D1/D2 deltas, round-trips.
+
+Also carries AC-7, the anchor regression for the arm-record work: every record
+already on disk must survive parse→re-serialise byte-for-byte. It is the only
+check that proves a schema addition stayed additive, so it guards the whole
+schema surface rather than any one field.
 """
 
 import json
+import os
 import unittest
 
 from benchmarkkit.metrics import (
@@ -17,6 +23,10 @@ from benchmarkkit.metrics import (
     loads,
     make_record,
 )
+
+_BENCHMARK_DIR = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_RESULTS_DIR = os.path.join(_BENCHMARK_DIR, "results")
 
 
 def _det_pm(**over):
@@ -153,6 +163,64 @@ class MetricsSchema(unittest.TestCase):
         d = json.loads(text)
         self.assertTrue(d["live_partial"])
         self.assertEqual(len(d["stages"]), 1)
+
+
+def _stored_records():
+    """Every record on disk, as ``(label, dict)``: the rolling history and every run file."""
+    found = []
+    history_path = os.path.join(_RESULTS_DIR, "history.json")
+    if os.path.exists(history_path):
+        with open(history_path, encoding="utf-8") as f:
+            history = json.load(f)
+        for mode, records in sorted(history.items()):
+            if not isinstance(records, list):
+                continue
+            for i, record in enumerate(records):
+                found.append((f"history.json[{mode}][{i}]", record))
+    runs_root = os.path.join(_RESULTS_DIR, "runs")
+    for root, _dirs, names in os.walk(runs_root):
+        for name in sorted(names):
+            if not name.endswith(".json"):
+                continue
+            path = os.path.join(root, name)
+            with open(path, encoding="utf-8") as f:
+                found.append((os.path.relpath(path, _RESULTS_DIR), json.load(f)))
+    return found
+
+
+class StoredRecordByteStability(unittest.TestCase):
+    def test_every_stored_record_round_trips_byte_identically(self):
+        records = _stored_records()
+        self.assertTrue(records, "no stored records found — AC-7 would pass vacuously")
+        for label, original in records:
+            with self.subTest(record=label):
+                back = BenchmarkRecord.from_dict(original).to_dict()
+                self.assertEqual(json.dumps(back, indent=2),
+                                 json.dumps(original, indent=2))
+
+    def test_run_files_reserialise_to_their_own_bytes(self):
+        runs_root = os.path.join(_RESULTS_DIR, "runs")
+        paths = [os.path.join(root, name)
+                 for root, _dirs, names in os.walk(runs_root)
+                 for name in sorted(names) if name.endswith(".json")]
+        self.assertTrue(paths, "no run files found — AC-7 would pass vacuously")
+        for path in paths:
+            with self.subTest(record=os.path.relpath(path, _RESULTS_DIR)):
+                with open(path, encoding="utf-8") as f:
+                    raw = f.read()
+                self.assertEqual(dumps(loads(raw)), raw)
+
+    def test_no_stored_record_has_an_empty_comparison(self):
+        # Guards the one change to an existing emit path: comparison is omitted when
+        # empty, which is only byte-safe while no stored record carries an empty one.
+        for label, record in _stored_records():
+            with self.subTest(record=label):
+                self.assertTrue(record.get("comparison"))
+
+    def test_no_stored_record_carries_an_arm_discriminator(self):
+        for label, record in _stored_records():
+            with self.subTest(record=label):
+                self.assertIsNone(record.get("arm"))
 
 
 if __name__ == "__main__":
