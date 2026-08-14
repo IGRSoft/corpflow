@@ -20,6 +20,7 @@ reported next to the verdict rather than folded into it.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -27,6 +28,13 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from .genlib import Subprocess
+
+# Cosmetic case keys, excluded from the case-set digest. An exclude-list rather than
+# an include-list: a newly added scoring key is covered by default, and only a
+# deliberate edit here can drop something out of the hash. Rewording a description
+# must not manufacture a comparability refusal — a gate that fires on cosmetics is a
+# gate that gets bypassed.
+DIGEST_EXCLUDED_CASE_KEYS = frozenset({"description"})
 
 # A conforming binary exits 0 (played), 1 (invalid move), or 2 (malformed argv).
 # Anything else is a crash, and a crash is a failed case, never a skipped one.
@@ -63,6 +71,21 @@ class TierScore:
         return {"total": self.total, "passed": self.passed, "pass_rate": self.pass_rate}
 
 
+def oracle_cases_digest(cases: list) -> str:
+    """Identity of the case set a grade was produced against, as ``sha256:<64 hex>``.
+
+    Takes the cases as an argument and never reads the default file, so the digest is
+    always the identity of the set actually applied.
+    """
+    canonical = sorted(
+        ({k: v for k, v in case.items() if k not in DIGEST_EXCLUDED_CASE_KEYS}
+         for case in cases),
+        key=lambda case: case.get("id") or "",
+    )
+    payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 @dataclass
 class OracleResult:
     built: bool
@@ -70,6 +93,7 @@ class OracleResult:
     cases_passed: int
     failures: list = field(default_factory=list)
     tiers: dict = field(default_factory=dict)
+    cases_digest: Optional[str] = None
 
     @property
     def pass_rate(self) -> float:
@@ -92,6 +116,9 @@ class OracleResult:
         # record written against an untiered set keeps its previous shape.
         if self.tiers:
             out["tiers"] = {name: score.to_dict() for name, score in sorted(self.tiers.items())}
+        # Emitted last and only when set, so hand-built results keep their byte shape.
+        if self.cases_digest is not None:
+            out["cases_digest"] = self.cases_digest
         return out
 
 
@@ -170,17 +197,22 @@ def grade(app_dir: str, cases: Optional[list] = None, runner=Subprocess,
     arm's inspectable source behind without its build tree.
     """
     cases = cases if cases is not None else load_cases()
+    # Stamped from the case list before it is known whether the arm built, so a
+    # non-building arm still carries the identity of what it was graded against.
+    digest = oracle_cases_digest(cases)
     try:
         built, binary = build_arm(app_dir, runner=runner)
         if not built:
             if warn is not None:
                 warn(f"oracle: {app_dir} did not build a `tictactoe` product")
             return OracleResult(built=False, cases_total=len(cases), cases_passed=0,
-                                tiers=tier_scores(cases, {c["id"] for c in cases}))
+                                tiers=tier_scores(cases, {c["id"] for c in cases}),
+                                cases_digest=digest)
         passed, failures = run_cases(binary, cases, runner=runner)
         return OracleResult(built=True, cases_total=len(cases), cases_passed=passed,
                             failures=failures,
-                            tiers=tier_scores(cases, {f.case_id for f in failures}))
+                            tiers=tier_scores(cases, {f.case_id for f in failures}),
+                            cases_digest=digest)
     finally:
         shutil.rmtree(os.path.join(app_dir, ".build"), ignore_errors=True)
 
