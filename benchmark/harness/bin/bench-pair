@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""bench-pair — join two single-arm BenchmarkRecords into the existing paired shape.
+
+Pure analysis: no dispatch, no credential, no spend. Imports ONLY benchmarkkit (R11),
+the same isolation boundary bench-analyze and bench-report sit behind.
+
+Argv: bench-pair --a <arm.json> --b <arm.json> --out <record.json>
+Exit codes: 0 joined / 64 usage (bad argv, unreadable input, not an arm record, two
+same-arm inputs, a record too malformed to gate) / 65 comparability refusal (no output
+written). No path exits with anything else. 65 is distinct from
+64 on purpose: a wrapper must be able to tell "I called it wrong" from "these two
+runs are not comparable".
+"""
+
+import json
+import os
+import sys
+
+HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, HARNESS_DIR)
+
+from benchmarkkit import metrics, pairing
+
+EXIT_USAGE = 64
+EXIT_REFUSED = 65
+
+USAGE = "bench-pair --a <arm.json> --b <arm.json> --out <record.json>"
+
+RESULTS_DIR = os.path.join(os.path.dirname(HARNESS_DIR), "results")
+
+# Joining does not ingest. Nothing in the tree feeds a joined record to rotation yet, so
+# the operator is handed the command rather than left to infer it from the module — the
+# same courtesy run-benchmark.sh extends when it declines to rotate an arm record.
+INGEST_SNIPPET = (
+    "import json, sys; from benchmarkkit import rotation; "
+    "r = json.load(open(sys.argv[1])); "
+    "rotation.rotate(sys.argv[2], r); "
+    "rotation.rotate_detail(sys.argv[3], r['run_id'], r)"
+)
+
+
+def die(message, code):
+    sys.stderr.write(message + "\n")
+    sys.exit(code)
+
+
+def _load_record(path, label):
+    try:
+        with open(path, encoding="utf-8") as f:
+            record = json.load(f)
+    except OSError as exc:
+        die(f"bench-pair: cannot read {label} ({path}): {exc}", EXIT_USAGE)
+    except ValueError as exc:
+        die(f"bench-pair: {label} ({path}) is not valid JSON: {exc}", EXIT_USAGE)
+    if not isinstance(record, dict):
+        die(f"bench-pair: {label} ({path}) is not a record object", EXIT_USAGE)
+    return record
+
+
+def main(argv):
+    a_path = b_path = out_path = None
+
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg in ("-h", "--help"):
+            print(USAGE)
+            sys.exit(0)
+        if arg in ("--a", "--b", "--out"):
+            if i + 1 >= len(argv):
+                die(f"bench-pair: {arg} needs a value", EXIT_USAGE)
+            value = argv[i + 1]
+            i += 2
+            if arg == "--a":
+                a_path = value
+            elif arg == "--b":
+                b_path = value
+            else:
+                out_path = value
+        else:
+            die(f"bench-pair: unknown arg '{arg}'", EXIT_USAGE)
+
+    if a_path is None or b_path is None or out_path is None:
+        die(f"bench-pair: --a, --b and --out are required\n{USAGE}", EXIT_USAGE)
+
+    record_a = _load_record(a_path, "--a")
+    record_b = _load_record(b_path, "--b")
+
+    # Shape first, comparability second: passing a paired record or two of the same
+    # arm is a usage fault (64), not a statement about whether the runs are
+    # comparable (65), and the two must not collapse into one exit code.
+    try:
+        pairing.arm_pair(record_a, record_b)
+    except pairing.PairingError as exc:
+        die(f"bench-pair: {exc}", EXIT_USAGE)
+
+    # A record malformed below the shape check (a string `era`, a non-dict oracle block)
+    # would otherwise escape as a traceback with exit 1, which is neither of the two codes
+    # the docstring promises — a wrapper could then read a crash as neither usage nor
+    # refusal. Malformed input is a usage fault, so it maps to 64.
+    try:
+        refusals = pairing.comparability_refusals(record_a, record_b)
+    except (TypeError, AttributeError, ValueError) as exc:
+        die(f"bench-pair: malformed record ({type(exc).__name__}: {exc})", EXIT_USAGE)
+
+    if refusals:
+        # Every axis at once: a reader who fixes one and re-runs would otherwise
+        # discover the next only on the following attempt.
+        sys.stderr.write(
+            "bench-pair: refusing to join — these two runs are not comparable:\n")
+        for refusal in refusals:
+            sys.stderr.write(f"  - {refusal}\n")
+        sys.exit(EXIT_REFUSED)
+
+    try:
+        joined = pairing.join_arm_records(record_a, record_b)
+    except pairing.PairingError as exc:
+        die(f"bench-pair: {exc}", EXIT_USAGE)
+
+    gap = (joined.joined_from or {}).get("observed_gap_s")
+    # Reported, never thresholded — no number is invented here or anywhere downstream.
+    sys.stderr.write(
+        "bench-pair: observed gap between the two runs: "
+        + (f"{gap}s\n" if gap is not None else "unknown (unparseable timestamp)\n"))
+
+    out_dir = os.path.dirname(out_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    metrics.write_record(joined, out_path)
+    print(f"[pair] wrote {out_path} ({joined.run_id})")
+    print("[pair] not in history.json — ingest it deliberately with:")
+    print(f'  PYTHONPATH="{HARNESS_DIR}" python3 -c "{INGEST_SNIPPET}" \\')
+    print(f'    "{out_path}" "{os.path.join(RESULTS_DIR, "history.json")}" '
+          f'"{os.path.join(RESULTS_DIR, "runs")}"')
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

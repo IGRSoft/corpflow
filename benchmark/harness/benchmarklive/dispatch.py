@@ -31,7 +31,9 @@ from benchmarkkit.metrics import (
     StageAttribution,
     StageCoverage,
     Tokens,
+    make_arm_record,
     make_record,
+    skip_placeholder_without,
     write_record,
 )
 
@@ -492,9 +494,12 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
                       without_dispatched: int = 0,
                       without_partial: bool = False,
                       with_partial: Optional[bool] = None) -> BenchmarkRecord:
-    """Build the record. Skip mode (``without_usages=None``) reproduces the WITH-only
-    byte shape exactly; paired mode aggregates the WITHOUT arm's own 10-stage tokens
-    and tags every stage row with its arm (both additive/emit-only)."""
+    """Build the record. Skip mode (``without_usages=None``) keeps the WITHOUT
+    placeholder byte-identical; its WITH block reflects whatever measurement and grading
+    produced, which since AD-5 runs for every dispatched arm — so that block gains a real
+    ``app_path`` and an ``oracle`` key it did not carry before. Paired mode aggregates the
+    WITHOUT arm's own 10-stage tokens and tags every stage row with its arm (both
+    additive/emit-only)."""
     paired = without_usages is not None
     # Live coverage is never measured; None marks it absent so renderers tell it apart
     # from a real 0.0. Skip mode keeps the byte-stable 0.0 placeholder (asserted by test).
@@ -516,10 +521,7 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
         pass_fail=with_pass, app_path=with_app_path, oracle=with_oracle)
 
     if not paired:
-        without_p = PathMetrics(
-            tokens=Tokens(input=None, output=None, total=None),
-            cost_usd=None, wall_clock_s=0.0, loc_produced=0, test_count=0, coverage_pct=0.0,
-            estimate_complexity_score=0, stage_count=1, pass_fail="pass", app_path=None)
+        without_p = skip_placeholder_without()
         return make_record(run_id=run_id, timestamp_utc=timestamp_utc, mode="live",
                            git_sha=git_sha, budget_usd=budget, with_pm=with_p,
                            without_pm=without_p, live_partial=live_partial,
@@ -541,6 +543,28 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
                        git_sha=git_sha, budget_usd=budget, with_pm=with_p,
                        without_pm=without_p, live_partial=live_partial, stages=stages_all,
                        era=build_era())
+
+
+def build_arm_record(run_id: str, timestamp_utc: str, git_sha: str, budget: float,
+                     arm: str, usages: list, stages_dispatched: int, arm_partial: bool,
+                     app: Optional[baseline_mod.AppMeasure] = None) -> BenchmarkRecord:
+    """Build a single-arm record carrying only the arm that ran.
+
+    A sibling of :func:`build_live_record`, which keeps both legacy byte shapes verbatim.
+    ``live_partial`` reflects this arm alone, since no other arm was dispatched.
+    """
+    in_total, out_total, tok_total, cost_total, cr_total, cc_total, wall = _arm_tokens(usages)
+    pass_fail, loc, tests, app_path, oracle_payload = _arm_verdict(app, arm_partial)
+    pm = PathMetrics(
+        tokens=Tokens(input=in_total, output=out_total, total=tok_total,
+                      cache_read=cr_total, cache_creation=cc_total),
+        cost_usd=cost_total, wall_clock_s=wall, loc_produced=loc, test_count=tests,
+        coverage_pct=None, estimate_complexity_score=0, stage_count=stages_dispatched,
+        pass_fail=pass_fail, app_path=app_path, oracle=oracle_payload)
+    return make_arm_record(
+        run_id=run_id, timestamp_utc=timestamp_utc, mode="live", git_sha=git_sha,
+        budget_usd=budget, arm=arm, pm=pm, live_partial=arm_partial,
+        stages=_stage_attributions(usages, arm=arm), era=build_era())
 
 
 def now_iso() -> str:
@@ -592,13 +616,14 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
              stderr: Optional[Callable[[str], None]] = None,
              git_sha_runner: Optional[Callable[[str], str]] = None,
              without_arm: str = baseline_mod.ARM_SKIP,
+             selection: Optional[baseline_mod.ArmSelection] = None,
              now_fn: Optional[Callable[[], float]] = None) -> int:
     """Run the live pipeline end-to-end and write the BenchmarkRecord.
 
-    ``without_arm="real"`` runs the paired arms (WITHOUT arm FIRST so a later WITH
-    breach still leaves a real comparison on disk); ``"skip"`` (default / any
-    ``--stages`` subset) runs the WITH arm alone and reproduces the pre-existing
-    WITH-only record byte-for-byte.
+    ``selection`` drives which arms dispatch and what shape is recorded; when omitted
+    it is derived from ``without_arm`` so every pre-existing caller keeps its exact
+    behaviour. A single-arm selection records only its own arm and gets the whole
+    budget — there is no second arm to reserve half for.
     """
     from . import credentials  # local import keeps credentials optional at import time
 
@@ -614,7 +639,8 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     # deny-list would run fail-open. Refuse BEFORE any dispatch (SR-M1).
     require_settings(settings_path)
     captures_dir = os.path.join(workdir_path, "captures")
-    real_arm = without_arm == baseline_mod.ARM_REAL
+    if selection is None:
+        selection = baseline_mod.resolve_arm_selection(None, without_arm, None)
 
     with_spec = ArmSpec(name="with", bind_agent=True,
                         cwd=os.path.join(workdir_path, "with"),
@@ -638,8 +664,8 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
         warn(str(e))
         return 3
 
-    # 2. Pre-flight budget gate. The WITHOUT arm runs the same stage list when real.
-    arms = 2 if real_arm else 1
+    # 2. Pre-flight budget gate. Every selected arm runs the same stage list.
+    arms = len(selection.dispatch)
     try:
         budget_mod.assert_preflight_within_budget(
             budget, stages, estimate_calc, arms=arms, runner=estimate_runner)
@@ -654,70 +680,66 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     state_json_text = read_state_json_text(workdir_path)
     prompts_by_stage = assemble_prompts(prompts, stages, state_json_text, run_id,
                                         ".context/planning-0.md")
-    # An equal share per arm, not one shared purse: the arm dispatched first would
-    # otherwise spend the run and leave the second truncated, and a comparison
+    # An equal share per selected arm, not one shared purse: the arm dispatched first
+    # would otherwise spend the run and leave the second truncated, and a comparison
     # between a complete arm and a starved one measures the budget, not the agent.
     per_arm_budget = budget / arms
 
-    without_result: Optional[ArmResult] = None
+    specs = {"with": with_spec, "without": without_spec}
+    dispatchers = {"with": with_dispatcher, "without": without_dispatcher}
+    results: dict = {}
+    apps: dict = {}
 
-    def _flush(with_res: ArmResult, partial: bool) -> None:
-        wo_usages = without_result.usages if without_result is not None else None
-        wo_dispatched = without_result.dispatched if without_result is not None else 0
-        wo_partial = without_result.partial if without_result is not None else False
-        write_record(build_live_record(
+    def _compose(partial: bool) -> BenchmarkRecord:
+        if selection.record_shape == baseline_mod.SHAPE_ARM:
+            arm = selection.arm
+            res = results.get(arm) or ArmResult(name=arm)
+            return build_arm_record(run_id, timestamp_utc, git_sha, budget, arm,
+                                    res.usages, res.dispatched, arm_partial=partial,
+                                    app=apps.get(arm))
+        with_res = results.get("with") or ArmResult(name="with")
+        wo_res = results.get("without")
+        return build_live_record(
             run_id, timestamp_utc, git_sha, budget, with_res.usages, with_res.dispatched,
-            live_partial=partial, without_usages=wo_usages,
-            without_dispatched=wo_dispatched, without_partial=wo_partial), record_path)
+            live_partial=partial, with_app=apps.get("with"), without_app=apps.get("without"),
+            without_usages=wo_res.usages if wo_res is not None else None,
+            without_dispatched=wo_res.dispatched if wo_res is not None else 0,
+            without_partial=wo_res.partial if wo_res is not None else False,
+            with_partial=with_res.partial)
 
-    def _persist_without(wo_res: ArmResult) -> None:
-        # OI-2 for the WITHOUT arm: a budget breach returns an ArmResult, but a throw
-        # mid-arm returns nothing, so completed stages only survive if flushed here.
-        nonlocal without_result
-        without_result = wo_res
-        _flush(ArmResult(name="with"), partial=True)
+    def _flush(partial: bool) -> None:
+        write_record(_compose(partial), record_path)
 
-    if real_arm:
-        without_result = run_arm(
-            without_spec, prompts_by_stage, without_dispatcher,
-            budget_mod.RunningTally(per_arm_budget), estimate_calc,
-            stages, estimate_runner=estimate_runner, capture_mode=capture_mode,
+    for name in selection.dispatch:
+        def _persist(res: ArmResult, _name: str = name) -> None:
+            # OI-2: a budget breach returns an ArmResult, but a throw mid-arm returns
+            # nothing, so completed stages only survive if flushed here.
+            results[_name] = res
+            _flush(partial=True)
+
+        results[name] = run_arm(
+            specs[name], prompts_by_stage, dispatchers[name],
+            budget_mod.RunningTally(per_arm_budget), estimate_calc, stages,
+            estimate_runner=estimate_runner, capture_mode=capture_mode,
             settings_path=settings_path, captures_dir=captures_dir,
-            persist_partial=_persist_without, now_fn=now_fn)
-        # Flush right after the WITHOUT arm so a later WITH breach still keeps it.
-        _flush(ArmResult(name="with"), partial=True)
+            persist_partial=_persist, now_fn=now_fn)
+        # Flush as each arm completes so a later arm's breach cannot lose it.
+        _flush(partial=True)
 
-    def _persist_partial(with_res: ArmResult) -> None:
-        _flush(with_res, partial=True)
+    # Every dispatched arm is measured and graded, including a single-arm run: an arm
+    # with no oracle payload carries no quality signal to compare against.
+    for name in selection.dispatch:
+        apps[name] = _measure_arm(specs[name].cwd, plugin_root, results[name].dispatched, warn)
 
-    with_result = run_arm(
-        with_spec, prompts_by_stage, with_dispatcher,
-        budget_mod.RunningTally(per_arm_budget), estimate_calc, stages,
-        estimate_runner=estimate_runner, capture_mode=capture_mode, settings_path=settings_path,
-        captures_dir=captures_dir, persist_partial=_persist_partial, now_fn=now_fn)
+    # Scoped to the arms that actually dispatched, so an arm that never ran cannot
+    # raise the flag on the arm that did.
+    final_partial = any(results[name].partial for name in selection.dispatch)
 
-    with_app = without_app = None
-    if real_arm:
-        with_app = _measure_arm(with_spec.cwd, plugin_root, with_result.dispatched, warn)
-        without_app = _measure_arm(without_spec.cwd, plugin_root,
-                                   without_result.dispatched if without_result else 0, warn)
-
-    final_partial = with_result.partial or (without_result.partial if without_result else False)
-
-    if real_arm:
-        record = build_live_record(
-            run_id, timestamp_utc, git_sha, budget, with_result.usages, with_result.dispatched,
-            live_partial=final_partial, with_app=with_app, without_app=without_app,
-            without_usages=without_result.usages, without_dispatched=without_result.dispatched,
-            without_partial=without_result.partial, with_partial=with_result.partial)
-    else:
-        record = build_live_record(
-            run_id, timestamp_utc, git_sha, budget, with_result.usages, with_result.dispatched,
-            live_partial=final_partial, with_partial=with_result.partial)
-    write_record(record, record_path)
+    write_record(_compose(final_partial), record_path)
 
     if final_partial:
-        warn(f"live run partial: {with_result.dispatched}/{len(stages)} WITH stages; "
-             f"record written to {record_path}")
+        dispatched = sum(results[name].dispatched for name in selection.dispatch)
+        warn(f"live run partial: {dispatched}/{len(stages) * arms} stages across "
+             f"{'+'.join(selection.dispatch)}; record written to {record_path}")
         return 4
     return 0

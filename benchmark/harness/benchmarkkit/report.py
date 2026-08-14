@@ -103,7 +103,12 @@ def _delta(with_v, without_v) -> str:
 
 
 def _app_path(rec: dict, which: str) -> str:
-    pm = (rec.get("paths") or {}).get(which) or {}
+    paths = rec.get("paths") or {}
+    # An arm the record does not carry has no workdir to point at; deriving one from
+    # the run id would render a path that never existed as though it did.
+    if which not in paths:
+        return "—"
+    pm = paths.get(which) or {}
     p = pm.get("app_path")
     if p:
         return p

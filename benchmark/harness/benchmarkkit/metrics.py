@@ -231,11 +231,18 @@ class BenchmarkRecord:
     budget_usd: Optional[float]
     paths: list            # ordered [("with", PathMetrics), ("without", PathMetrics)]
     comparison: list       # ordered [(key, MetricDelta), ...]
+    # Single-arm discriminator: "with" | "without". Absent on paired records, and a
+    # record carrying it populates its own arm's key only — the opposite key is
+    # omitted rather than null-filled, so it can never be read as a dispatched arm.
+    arm: Optional[str] = None
     live_partial: bool = False
     stages: list = field(default_factory=list)
     # What the numbers are comparable against. Omitted (not null) when absent, so
     # records written before era stamping round-trip byte-identically.
     era: Optional[dict] = None
+    # Provenance of a joined record: the two source runs and their observed gap.
+    # Omitted on natively-paired records, so a reader can always tell the two apart.
+    joined_from: Optional[dict] = None
 
     def to_dict(self) -> dict:
         d = {
@@ -245,14 +252,21 @@ class BenchmarkRecord:
             "git_sha": self.git_sha,
             "budget_usd": self.budget_usd,
             "paths": {name: pm.to_dict() for name, pm in self.paths},
-            "comparison": {key: md.to_dict() for key, md in self.comparison},
         }
+        # An arm record has nothing to compare itself against; an empty block would
+        # read downstream as a present-but-zero comparison rather than an absent one.
+        if self.comparison:
+            d["comparison"] = {key: md.to_dict() for key, md in self.comparison}
+        if self.arm is not None:
+            d["arm"] = self.arm
         if self.live_partial:
             d["live_partial"] = True
         if self.stages:
             d["stages"] = [s.to_dict() for s in self.stages]
         if self.era is not None:
             d["era"] = self.era
+        if self.joined_from is not None:
+            d["joined_from"] = self.joined_from
         return d
 
     @classmethod
@@ -270,9 +284,11 @@ class BenchmarkRecord:
             budget_usd=d.get("budget_usd"),
             paths=paths,
             comparison=comparison,
+            arm=d.get("arm"),
             live_partial=bool(d.get("live_partial") or False),
             stages=stages,
             era=d.get("era"),
+            joined_from=d.get("joined_from"),
         )
 
     @property
@@ -337,6 +353,56 @@ def make_record(
         stages=stages or [],
         era=era,
     )
+
+
+ARMS = ("with", "without")
+
+
+def make_arm_record(
+    run_id: str,
+    timestamp_utc: str,
+    mode: str,
+    git_sha: str,
+    budget_usd: Optional[float],
+    arm: str,
+    pm: PathMetrics,
+    live_partial: bool = False,
+    stages: Optional[list] = None,
+    era: Optional[dict] = None,
+) -> BenchmarkRecord:
+    """Build a single-arm record: one ``paths`` entry, no comparison, ``arm`` stamped.
+
+    A sibling of :func:`make_record` rather than a mode of it — the paired byte shape
+    is protected by that function not being reachable from this path at all.
+    """
+    if arm not in ARMS:
+        raise ValueError(f"arm must be one of {ARMS}, got {arm!r}")
+    return BenchmarkRecord(
+        run_id=run_id,
+        timestamp_utc=timestamp_utc,
+        mode=mode,
+        git_sha=git_sha,
+        budget_usd=budget_usd,
+        paths=[(arm, pm)],
+        comparison=[],
+        arm=arm,
+        live_partial=live_partial,
+        stages=stages or [],
+        era=era,
+    )
+
+
+def skip_placeholder_without() -> PathMetrics:
+    """The WITHOUT block a ``--without-arm skip`` run stands in for a never-dispatched arm.
+
+    Reserved for that one meaning. It reads ``pass_fail="pass"`` with a stage count of
+    one, so reusing it to mean "this arm ran elsewhere" would render a fabricated pass
+    beside real numbers — an arm record omits the opposite key instead.
+    """
+    return PathMetrics(
+        tokens=Tokens(input=None, output=None, total=None),
+        cost_usd=None, wall_clock_s=0.0, loc_produced=0, test_count=0, coverage_pct=0.0,
+        estimate_complexity_score=0, stage_count=1, pass_fail="pass", app_path=None)
 
 
 def dumps(record: BenchmarkRecord, indent: int = 2) -> str:

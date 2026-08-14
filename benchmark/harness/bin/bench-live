@@ -4,9 +4,12 @@
 Frozen seam argv (run-benchmark.sh --live):
   bench-live --workdir <run_id> --budget <usd> --record <path>
   [--stages CODE[,CODE...]] [--capture json|stream-json] [--benchmark-dir D] [--prompts-dir D]
-  [--without-arm real|skip]
+  [--without-arm real|skip] [--arm with|without|both]
 --without-arm overrides the default WITHOUT-baseline policy (real on a full run,
 skip on a --stages subset — see benchmarklive.baseline.resolve_arm_mode).
+--arm with|without records a single arm on its own; --arm both is the paired run.
+Left unset it defers to the --without-arm policy, which is what keeps the
+pre-existing default byte-stable.
 Exit codes: 0 ok / 2 pre-flight decline / 3 no credential / 4 running-tally breach
 (partial written first) / 64 bad usage.
 """
@@ -28,7 +31,7 @@ def die(message, code):
 
 def main(argv):
     workdir = record = stages_arg = benchmark_dir_arg = prompts_dir_arg = None
-    without_arm_arg = None
+    without_arm_arg = arm_arg = None
     budget = None
     capture_arg = "stream-json"
 
@@ -39,10 +42,10 @@ def main(argv):
             print("bench-live --workdir <run_id> --budget <usd> --record <path> "
                   "[--stages CODE[,CODE...]] [--capture json|stream-json] "
                   "[--benchmark-dir <dir>] [--prompts-dir <dir>] "
-                  "[--without-arm real|skip]")
+                  "[--without-arm real|skip] [--arm with|without|both]")
             sys.exit(0)
         if a in ("--workdir", "--budget", "--record", "--stages", "--capture",
-                 "--benchmark-dir", "--prompts-dir", "--without-arm"):
+                 "--benchmark-dir", "--prompts-dir", "--without-arm", "--arm"):
             if i + 1 >= len(argv):
                 die(f"bench-live: {a} needs a value", 64)
             value = argv[i + 1]
@@ -64,6 +67,8 @@ def main(argv):
                 benchmark_dir_arg = value
             elif a == "--without-arm":
                 without_arm_arg = value
+            elif a == "--arm":
+                arm_arg = value
             else:
                 prompts_dir_arg = value
         else:
@@ -87,9 +92,12 @@ def main(argv):
     if capture_arg not in (dispatch_mod.CAPTURE_JSON, dispatch_mod.CAPTURE_STREAM_JSON):
         die(f"bench-live: --capture must be json or stream-json, got '{capture_arg}'", 64)
 
-    if without_arm_arg is not None and without_arm_arg not in (baseline_mod.ARM_REAL, baseline_mod.ARM_SKIP):
-        die(f"bench-live: --without-arm must be real or skip, got '{without_arm_arg}'", 64)
-    without_arm = baseline_mod.resolve_arm_mode(without_arm_arg, stages_arg)
+    # Refused here, before the credential probe and any dispatch, so a usage slip
+    # never costs a run.
+    try:
+        selection = baseline_mod.resolve_arm_selection(arm_arg, without_arm_arg, stages_arg)
+    except baseline_mod.ArmSelectionError as exc:
+        die(f"bench-live: {exc}", 64)
 
     if benchmark_dir_arg is not None:
         benchmark_dir = benchmark_dir_arg
@@ -103,7 +111,7 @@ def main(argv):
         rc = dispatch_mod.dispatch(
             workdir=workdir, budget=budget, record_path=record, benchmark_dir=benchmark_dir,
             prompts_dir=prompts_dir_arg, stages=stages, capture_mode=capture_arg,
-            without_arm=without_arm)
+            selection=selection)
     except Exception as exc:  # noqa: BLE001 — top-level CLI guard
         die(f"bench-live: dispatch failed: {exc}", 1)
     sys.exit(rc)

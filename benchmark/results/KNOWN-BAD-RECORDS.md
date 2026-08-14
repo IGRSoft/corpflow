@@ -85,3 +85,29 @@ A WITHOUT arm run in `skip` mode is a byte-stable placeholder, not a measurement
 `stage_count: 1`, null tokens and cost, `app_path: null`, and `pass_fail: "pass"`.
 The `pass` there means "not run" — it has never been a claim about output quality.
 Discriminate on `app_path: null` together with `stage_count == 1`.
+
+**The placeholder itself is unchanged**, but the WITH half of a `skip`-mode record
+changed shape once every dispatched arm began being measured and graded
+unconditionally. Records written before that change have a WITH block with
+`app_path: null`, `loc_produced: 0` and **no** `oracle` key at all; records written
+after it have a real `app_path` and a full `oracle` payload. That is a shape
+difference, not only a value difference, so a reader iterating `paths.with.oracle`
+across stored records must tolerate its absence on the older ones. Nothing about the
+WITHOUT placeholder moved.
+
+## Telling arm, joined and paired records apart
+
+Since the arm split, three record kinds coexist. Discriminate on root keys, never on
+the run id:
+
+| Kind | Root key | How to read it |
+|---|---|---|
+| **arm** | `arm: "with"` / `"without"` | Half a comparison — one `paths` entry, no `comparison` block. Nothing WITH-vs-WITHOUT may be read from it *at all*. Lives in `results/runs/live-arm/` and never enters `history.json`. |
+| **joined** | `joined_from` (and no `arm`) | Two independent arm runs welded together after passing the comparability gate. Reads exactly like a paired record; `joined_from.observed_gap_s` records how far apart the two runs were. |
+| **natively paired** | neither key | One dispatch, both arms, shared service conditions. |
+
+A joined record is not the same evidence as a natively-paired one: its arms did not
+share service conditions, only a commit, an era and a graded case set. The gate
+refuses anything weaker than that, and the observed gap travels in the record so it
+can be weighed rather than assumed away. When both exist for the same question, prefer
+the paired run.

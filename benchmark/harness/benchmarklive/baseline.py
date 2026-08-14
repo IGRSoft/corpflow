@@ -14,6 +14,14 @@ from benchmarkkit import genlib
 ARM_REAL = "real"
 ARM_SKIP = "skip"
 
+ARM_WITH = "with"
+ARM_WITHOUT = "without"
+ARM_BOTH = "both"
+ARM_FLAG_VALUES = (ARM_WITH, ARM_WITHOUT, ARM_BOTH)
+
+SHAPE_PAIRED = "paired"
+SHAPE_ARM = "arm"
+
 # Mirrors dispatch.PERMISSION_MODE verbatim; parity is asserted by test, not imported,
 # so this module keeps its genlib-only boundary.
 PERMISSION_MODE = "bypassPermissions"
@@ -24,6 +32,58 @@ def resolve_arm_mode(explicit: Optional[str], stages_subset: Optional[list]) -> 
     if explicit is not None:
         return explicit
     return ARM_SKIP if stages_subset else ARM_REAL
+
+
+class ArmSelectionError(ValueError):
+    """Contradictory or unknown arm flags. Raised before any dispatch, so a usage
+    slip costs nothing."""
+
+
+@dataclass(frozen=True)
+class ArmSelection:
+    """Which arms to dispatch and what shape to record them in."""
+
+    dispatch: tuple        # arm names in dispatch order
+    record_shape: str      # SHAPE_PAIRED | SHAPE_ARM
+    arm: Optional[str]     # record discriminator; None when paired
+
+
+# WITHOUT dispatches first so a later WITH breach still leaves a real arm on disk.
+_PAIRED_BOTH = ArmSelection(dispatch=(ARM_WITHOUT, ARM_WITH), record_shape=SHAPE_PAIRED, arm=None)
+_PAIRED_SKIP = ArmSelection(dispatch=(ARM_WITH,), record_shape=SHAPE_PAIRED, arm=None)
+
+
+def resolve_arm_selection(arm_flag: Optional[str], without_arm_flag: Optional[str],
+                          stages_subset: Optional[list]) -> ArmSelection:
+    """Resolve ``--arm`` against ``--without-arm`` and the stage subset.
+
+    ``--arm`` unset is distinct from ``--arm both``: only the unset case defers to the
+    legacy subset→skip policy, which is what keeps the pre-existing default byte-stable
+    while still letting an explicit ``both`` contradict an explicit ``skip``.
+    """
+    if arm_flag is not None and arm_flag not in ARM_FLAG_VALUES:
+        raise ArmSelectionError(
+            f"--arm must be one of {', '.join(ARM_FLAG_VALUES)}, got {arm_flag!r}")
+    if without_arm_flag is not None and without_arm_flag not in (ARM_REAL, ARM_SKIP):
+        raise ArmSelectionError(
+            f"--without-arm must be {ARM_REAL} or {ARM_SKIP}, got {without_arm_flag!r}")
+
+    if arm_flag is None:
+        mode = resolve_arm_mode(without_arm_flag, stages_subset)
+        return _PAIRED_BOTH if mode == ARM_REAL else _PAIRED_SKIP
+
+    if arm_flag == ARM_BOTH:
+        if without_arm_flag == ARM_SKIP:
+            raise ArmSelectionError(
+                f"--arm {ARM_BOTH} contradicts --without-arm {ARM_SKIP}: "
+                "one asks for both arms, the other for a placeholder")
+        return _PAIRED_BOTH
+
+    if without_arm_flag is not None:
+        raise ArmSelectionError(
+            f"--arm {arm_flag} contradicts --without-arm {without_arm_flag}: "
+            "a single-arm run has no opposite arm to configure")
+    return ArmSelection(dispatch=(arm_flag,), record_shape=SHAPE_ARM, arm=arm_flag)
 
 
 @dataclass
