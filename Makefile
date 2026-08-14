@@ -10,7 +10,11 @@
 #                        no iOS runtime is installed). Never inside the benchmark Timer.
 #   make benchmark       deterministic dual-path TTT benchmark. No --live, no network.
 #   make benchmark-live  opt-in live A/B (credential-gated, budget-capped). Never CI.
-#                        Honors BUDGET=<usd>, STAGES=PL,AR,..., and WITHOUT_ARM=real|skip.
+#                        Honors BUDGET=<usd>, STAGES=PL,AR,..., WITHOUT_ARM=real|skip
+#                        and ARM=with|without|both (single arm = half a comparison:
+#                        written to results/runs/live-arm/, never rotated into history).
+#   make benchmark-pair  join two single-arm records into one paired record.
+#                        A=<with.json> B=<without.json> OUT=<joined.json>. Offline.
 #   make benchmark-analyze  render benchmark/results/history.json -> analysis.md.
 #   make report          render benchmark/results/history.json -> result.html.
 #   make clean           remove workdirs, coverage intermediates, .build dirs.
@@ -37,7 +41,7 @@ KCOV_EXCLUDE := $(PLUGIN_ROOT)/tests
 # All bats files under tests/shell/**.
 SHELL_TESTS  := $(shell find $(PLUGIN_ROOT)/tests/shell -type f -name '*.bats' 2>/dev/null | sort)
 
-.PHONY: all test test-changed test-select bootstrap coverage test-ios benchmark benchmark-live benchmark-analyze report clean help
+.PHONY: all test test-changed test-select bootstrap coverage test-ios benchmark benchmark-live benchmark-pair benchmark-analyze report clean help
 .DEFAULT_GOAL := help
 
 help:
@@ -49,7 +53,8 @@ help:
 	@echo "  make coverage        suite under kcov + swift coverage, gate >=$(COV_MIN)%"
 	@echo "  make test-ios        TicTacToeKit on iOS Simulator (SKIPs w/o runtime)"
 	@echo "  make benchmark       deterministic dual-path TTT benchmark (offline)"
-	@echo "  make benchmark-live  opt-in live A/B (credential+budget gated; STAGES=, WITHOUT_ARM=)"
+	@echo "  make benchmark-live  opt-in live A/B (credential+budget gated; STAGES=, WITHOUT_ARM=, ARM=)"
+	@echo "  make benchmark-pair  join two single-arm records (A= B= OUT=; offline)"
 	@echo "  make benchmark-analyze  render an evidence-backed A/B analysis report"
 	@echo "  make clean           remove workdirs / coverage / .build dirs"
 
@@ -184,16 +189,38 @@ benchmark:
 
 # ---------------------------------------------------------------------------
 # benchmark-live: opt-in. Credential-gated, budget-capped. Never a dep of any
-# other target. Never CI. Honors BUDGET=, STAGES= (subset probe), and
-# WITHOUT_ARM=real|skip (overrides the default real-on-full/skip-on-subset policy).
+# other target. Never CI. Honors BUDGET=, STAGES= (subset probe),
+# WITHOUT_ARM=real|skip (overrides the default real-on-full/skip-on-subset policy)
+# and ARM=with|without|both. ARM=with|without dispatches a single arm and leaves
+# its record out of history.json — pair it with benchmark-pair before reading it
+# as a comparison.
 # ---------------------------------------------------------------------------
 benchmark-live:
 	@echo "[benchmark-live] OPT-IN live A/B — credential probe + budget cap apply."
 	@live_args="--live --budget $${BUDGET:-50.00}"; \
 	  [ -n "$(STAGES)" ] && live_args="$$live_args --stages $(STAGES)"; \
 	  [ -n "$(WITHOUT_ARM)" ] && live_args="$$live_args --without-arm $(WITHOUT_ARM)"; \
+	  [ -n "$(ARM)" ] && live_args="$$live_args --arm $(ARM)"; \
 	  "$(PLUGIN_ROOT)/benchmark/run-benchmark.sh" $$live_args
 	@$(MAKE) --no-print-directory report
+
+# ---------------------------------------------------------------------------
+# benchmark-pair: join two single-arm records (results/runs/live-arm/) into one
+# paired record. Pure analysis — reads two JSON files and writes a third; no
+# dispatch, no credential, no spend, so unlike benchmark-live it is safe to run
+# anywhere. bench-pair exits 64 on usage and 65 when the two runs are not
+# comparable, writing nothing in either case — those codes are observable only
+# when bench-pair is invoked directly, because make collapses any recipe failure
+# into its own exit 2. Script the executable, not this target, if you branch on
+# 64 vs 65. The joined record lands where OUT points; ingesting it into
+# history.json stays a separate, deliberate step (bench-pair prints the command).
+# ---------------------------------------------------------------------------
+benchmark-pair:
+	@[ -n "$(A)" ] && [ -n "$(B)" ] && [ -n "$(OUT)" ] || { \
+	    echo "[benchmark-pair] usage: make benchmark-pair A=<arm.json> B=<arm.json> OUT=<record.json>" >&2; \
+	    exit 64; }
+	@python3 "$(HARNESS_DIR)/bin/bench-pair" --a "$(A)" --b "$(B)" --out "$(OUT)"
+	@echo "[benchmark-pair] joined -> $(OUT)"
 
 # ---------------------------------------------------------------------------
 # report: render benchmark/results/history.json -> benchmark/results/result.html
