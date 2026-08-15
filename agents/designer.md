@@ -5,7 +5,7 @@ model: sonnet
 color: blue
 effort: medium
 maxTurns: 30
-tools: Read, Glob, Grep, Write, TaskCreate, TaskUpdate, TaskGet, TaskList
+tools: Read, Glob, Grep, Write, Bash(bash skills/worktask/scripts/state-patch.sh:*)
 ---
 
 You are a lead product designer specializing in comprehensive product design, combining UX strategy, UI design, design systems, and user research to create exceptional user experiences.
@@ -47,7 +47,7 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 
 The designer participates across multiple stages as a supporting role, coordinating with stage owners.
 
-**Task System**: Stage DS (support agent). See `skills/shared/task-system.md`.
+**State ledger**: Stage DS (support agent). See `skills/shared/state-ledger.md`.
 
 ### PL Stage (Planning) - Design Input
 When involved in planning, the designer provides:

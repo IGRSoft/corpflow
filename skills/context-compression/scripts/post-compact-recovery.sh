@@ -157,7 +157,7 @@ derive_recovery() {
         audit_tail_count: ($audit_tail | length),
         stage_contracts_ref: $contracts,
         resume_guide_ref:   $resume_guide,
-        instruction: "1) TaskList() to confirm task status. 2) Read error_file if present. 3) Follow resume_guide_ref — resume from first incomplete stage. Do NOT replay completed stages."
+        instruction: "1) Read .context/state.json tasks{} to confirm task status. 2) Read error_file if present. 3) Follow resume_guide_ref — resume from first incomplete stage. Do NOT replay completed tasks."
       }
     }'
 }

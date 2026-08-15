@@ -57,7 +57,7 @@ Balanced structure for most agents:
 - Purpose section
 - Capabilities (organized by category)
 - Worktask integration
-- Task System integration
+- State ledger integration
 - Model Usage Note
 - Constitutional Alignment (reference `skills/shared/constitutional-base.md`)
 - Response approach
@@ -71,7 +71,7 @@ Full structure for complex agents:
 - Detailed capabilities (multiple subsections)
 - Behavioral traits
 - Knowledge base
-- Worktask integration with Task System format
+- Worktask integration with state-ledger format
 - Model Usage Note with rationale
 - Constitutional Alignment with agent-specific focus
 - Response approach (numbered steps)
@@ -145,9 +145,9 @@ When using `--tools`, specify a preset name or a comma-separated tool list:
 |--------|-----------|
 | read-only | Read, Glob, Grep |
 | standard | Read, Glob, Grep, Write, Edit, Bash |
-| full | Read, Glob, Grep, Write, Edit, Bash, TaskUpdate, TaskGet, TaskList |
-| orchestrator | Read, Glob, Grep, Write, Edit, Bash, TaskCreate, TaskUpdate, TaskGet, TaskList |
-| design | Read, Glob, Grep, Write, ToolSearch, TaskGet, TaskList |
+| full | Read, Glob, Grep, Write, Edit, Bash |
+| orchestrator | Read, Glob, Grep, Write, Edit, Bash, Bash(bash skills/worktask/scripts/state-patch.sh:*) |
+| design | Read, Glob, Grep, Write, ToolSearch |
 
 ### Cross-Plugin Delegation
 Add Task delegation syntax to any preset: `--tools full,Task(apple-developer:ios-developer)`
@@ -160,7 +160,7 @@ Add Task delegation syntax to any preset: `--tools full,Task(apple-developer:ios
 name: agent-name
 description: Brief description for routing (1-2 sentences). Use PROACTIVELY for...
 model: haiku|sonnet|opus
-tools: Read, Glob, Grep, Write, Edit, TaskUpdate, TaskGet, TaskList
+tools: Read, Glob, Grep, Write, Edit
 ---
 ```
 
@@ -185,7 +185,7 @@ tools: Read, Glob, Grep, Write, Edit, TaskUpdate, TaskGet, TaskList
 
 ### Worktask Integration
 - Stage codes (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR)
-- Task System integration
+- State ledger integration
 - Handoff protocols
 
 ### Model Usage Note

@@ -21,7 +21,7 @@
 #       required-field matrix. Exits 0 on pass, 1 on fail.
 #
 #       --state adds the AR->DV architecture-reference gate: when the artifact
-#       is a DV handoff and the state ledger has a stages.AR entry, the
+#       is a DV handoff and the state ledger has a tasks.AR<N> entry, the
 #       architecture reference (refs.decisions, then architecture.ref -- the
 #       same precedence stage-contracts.md#tpl-dv and the DR rule declare)
 #       must match ^architecture-[0-9]+\.md(#[a-z-]+)?$ and
@@ -34,7 +34,7 @@
 #       ships warn-only in 3.42.0; --strict becomes the orchestrator default in
 #       a future minor, so treat warnings as work to do now.
 #
-#       The inverse guard (an architecture reference with no stages.AR entry)
+#       The inverse guard (an architecture reference with no tasks.AR<N> entry)
 #       always warns and never fails, in either mode.
 #
 #       Exception: an unreadable --state (file missing, jq unavailable, or
@@ -138,7 +138,7 @@ ar_ref_violation() {
   return 0
 }
 
-# Runtime truth for "did AR run" is the stages.AR entry, never the presence of
+# Runtime truth for "did AR run" is the tasks.AR<N> entry, never the presence of
 # an architecture file — AR is optional and PL0 decides it per run.
 check_ar_ref() {
   local artifact="$1" fmfile="$2"
@@ -161,7 +161,9 @@ check_ar_ref() {
   fi
 
   local ar_present=0
-  if jq -e '.stages.AR' "$STATE_ARG" >/dev/null 2>&1; then
+  # Any AR instance counts: a split or renumbered AR lands as AR1/AR2, and the
+  # gate asks "did AR run", not "did AR0 run".
+  if jq -e '[(.tasks // {}) | keys[] | select(test("^AR[0-9]+$"))] | length > 0' "$STATE_ARG" >/dev/null 2>&1; then
     ar_present=1
   fi
 
@@ -171,7 +173,7 @@ check_ar_ref() {
 
   if [[ "$ar_present" -eq 0 ]]; then
     if [[ -n "$ref" ]] && printf '%s' "$ref" | grep -qE '^architecture-'; then
-      echo "warn: DV references $ref but state has no stages.AR entry" >&2
+      echo "warn: DV references $ref but state has no tasks.AR<N> entry" >&2
     fi
     return 0
   fi
@@ -265,8 +267,8 @@ validate_state() {
   jq empty "$f" 2>/dev/null || { echo "fail: state.json invalid JSON" >&2; return 1; }
   local v
   v=$(jq -r '.version' "$f")
-  [[ "$v" == "1" ]] || { echo "fail: version != 1 (got '$v')" >&2; return 1; }
-  jq -e 'has("worktask_id") and has("plan_file") and has("platform") and has("stages") and has("facts") and has("handoffs")' "$f" >/dev/null \
+  [[ "$v" == "2" ]] || { echo "fail: version != 2 (got '$v')" >&2; return 1; }
+  jq -e 'has("worktask_id") and has("plan_file") and has("platform") and has("tasks") and has("facts") and has("handoffs")' "$f" >/dev/null \
     || { echo "fail: missing required keys" >&2; return 1; }
 
   local tcount
@@ -280,7 +282,7 @@ validate_state() {
   td=$(mktemp -d -t handoff-state-XXXXXX)
   trap "rm -rf '$td'" RETURN
   cp "$f" "$td/orig.json"
-  local patch='{"stages":{"PL":{"status":"completed"}}}'
+  local patch='{"tasks":{"PL0":{"status":"completed"}}}'
   jq --argjson p "$patch" '. * $p' "$td/orig.json" > "$td/m1.json"
   jq --argjson p "$patch" '. * $p' "$td/m1.json" > "$td/m2.json"
   if ! diff -q "$td/m1.json" "$td/m2.json" >/dev/null; then
@@ -298,14 +300,14 @@ make_fixtures() {
 
   cat > "$d/.context/state.json" <<'EOF'
 {
-  "version": 1,
+  "version": 2,
   "worktask_id": "harness-demo",
   "plan_file": ".context/planning-0.md",
   "platform": "all",
-  "stages": {
-    "PL": {"status":"completed","verdict":"ok"},
-    "AR": {"status":"completed","verdict":"ok"},
-    "TL": {"status":"completed","verdict":"ok"}
+  "tasks": {
+    "PL0": {"status":"completed","verdict":"ok"},
+    "AR0": {"status":"completed","verdict":"ok"},
+    "TL0": {"status":"completed","verdict":"ok"}
   },
   "facts": {
     "files_modified": [],
@@ -553,7 +555,7 @@ self_test_ar_gate() {
     return 0
   fi
 
-  jq 'del(.stages.AR)' "$ctx/state.json" > "$ctx/state-no-ar.json"
+  jq 'del(.tasks.AR0)' "$ctx/state.json" > "$ctx/state-no-ar.json"
 
   # The shared preamble every gate fixture needs; only refs differ per case.
   _dv_artifact() {

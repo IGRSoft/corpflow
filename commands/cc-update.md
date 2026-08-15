@@ -253,7 +253,7 @@ How changelog entries are categorized and routed to affected files:
 | Category | Keywords | Affected File Types |
 |----------|----------|---------------------|
 | **Hooks** | hook, PostToolUse, SubagentStart, PreToolUse, PostCompact, Elicitation, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate, conditional if, scheduled task, webhook, trigger delivery, task notification | agents with hook docs, agent-coordination skill, worktask resume reference |
-| **Tools** | new tool, ExitWorktree, EnterWorktree, TaskCreate, worktree, SendMessage, TeamCreate/TeamDelete removed, implicit team, Agent(name:) spawn, team_name ignored | agents with tool in `tools:` frontmatter, task-system + agent-teams skills |
+| **Tools** | new tool, ExitWorktree, EnterWorktree, TaskCreate, worktree, SendMessage, TeamCreate/TeamDelete removed, implicit team, Agent(name:) spawn, team_name ignored | agents with tool in `tools:` frontmatter, state-ledger + agent-teams skills |
 
 ### Categories — Model, Context, Subagents
 
@@ -261,7 +261,7 @@ How changelog entries are categorized and routed to affected files:
 |----------|----------|---------------------|
 | **Model** | model alias, Opus/Sonnet/Haiku version, effort level, availableModels, /fast allowlist, model-deprecation | stage-codes skill, agents with full model IDs, model-selection skill |
 | **Context** | compaction, context window, sparsePaths, worktree, circuit breaker, --fallback-model | context-compression skill, agent-coordination skill |
-| **Subagents** | subagent, background agent, teammate, partial result, resume removed, implicit team, Agent(name:) spawn, pre-launch spawn classification, fg/bg nesting depth | agent-coordination skill, developer/project-manager agents, task-system + agent-teams skills |
+| **Subagents** | subagent, background agent, teammate, partial result, resume removed, implicit team, Agent(name:) spawn, pre-launch spawn classification, fg/bg nesting depth | agent-coordination skill, developer/project-manager agents, state-ledger + agent-teams skills |
 
 ### Categories — MCP, Cost, Frontmatter
 

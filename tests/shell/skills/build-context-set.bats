@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Contract tests for skills/self-improvement/scripts/build-context-set.sh
 # Contracts (from source):
-#   Reads agent names from (a) TASK_LIST_JSON, (b) CONTEXT_DIR/*.md `agent:`
+#   Reads agent names from (a) LEDGER_JSON, (b) CONTEXT_DIR/*.md `agent:`
 #   trailers, (c) `git log $BASELINE_SHA..HEAD` `Agent:` trailers.
 #   Normalizes corpflow:<name> to agents/<name>.md (also probing the
 #   commands/ and skills/ spellings). CROSS_PLUGIN:* refs are dropped.
@@ -27,19 +27,19 @@ setup() {
 # asserts one exact output on every sed/grep dialect. The earlier `\s` spelling
 # was GNU-only and silently dropped the spaced form on BSD/macOS; these tests
 # are what would go red if it came back.
-# --- source 1: TASK_LIST_JSON ------------------------------------------------
+# --- source 1: LEDGER_JSON ------------------------------------------------
 
 @test "source 1: only completed-task agents are emitted, sorted and deduped" {
   cat > "$WD/tasks.json" <<'JSON'
-[
-  {"status":"completed","metadata":{"agent":"corpflow:developer"}},
-  {"status":"in_progress","metadata":{"agent":"corpflow:qa-engineer"}},
-  {"status":"completed","metadata":{"agent":"corpflow:product-manager"}},
-  {"status":"completed","metadata":{"agent":"corpflow:developer"}}
-]
+{"version":2,"tasks":{
+  "DV0":{"status":"completed","metadata":{"agent":"corpflow:developer"}},
+  "QA0":{"status":"in_progress","metadata":{"agent":"corpflow:qa-engineer"}},
+  "PL0":{"status":"completed","metadata":{"agent":"corpflow:product-manager"}},
+  "DV1":{"status":"completed","metadata":{"agent":"corpflow:developer"}}
+}}
 JSON
   run_script_env --cwd "$WD" \
-    --env "TASK_LIST_JSON=$WD/tasks.json" --env "CONTEXT_DIR=$WD/.ctx_none" \
+    --env "LEDGER_JSON=$WD/tasks.json" --env "CONTEXT_DIR=$WD/.ctx_none" \
     -- "$SCRIPT"
   assert_success
   assert_output "agents/developer.md
@@ -48,13 +48,13 @@ agents/product-manager.md"
 
 @test "source 1: cross-plugin refs are dropped, local ones kept" {
   cat > "$WD/tasks.json" <<'JSON'
-[
-  {"status":"completed","metadata":{"agent":"apple-developer:ios-developer"}},
-  {"status":"completed","metadata":{"agent":"corpflow:developer"}}
-]
+{"version":2,"tasks":{
+  "DV0":{"status":"completed","metadata":{"agent":"apple-developer:ios-developer"}},
+  "DV1":{"status":"completed","metadata":{"agent":"corpflow:developer"}}
+}}
 JSON
   run_script_env --cwd "$WD" \
-    --env "TASK_LIST_JSON=$WD/tasks.json" --env "CONTEXT_DIR=$WD/.ctx_none" \
+    --env "LEDGER_JSON=$WD/tasks.json" --env "CONTEXT_DIR=$WD/.ctx_none" \
     -- "$SCRIPT"
   assert_success
   assert_output "agents/developer.md"
@@ -62,13 +62,13 @@ JSON
 
 @test "source 1: names with no file on disk are dropped" {
   cat > "$WD/tasks.json" <<'JSON'
-[
-  {"status":"completed","metadata":{"agent":"corpflow:nonexistent-ghost-agent"}},
-  {"status":"completed","metadata":{"agent":"corpflow:developer"}}
-]
+{"version":2,"tasks":{
+  "DV0":{"status":"completed","metadata":{"agent":"corpflow:nonexistent-ghost-agent"}},
+  "DV1":{"status":"completed","metadata":{"agent":"corpflow:developer"}}
+}}
 JSON
   run_script_env --cwd "$WD" \
-    --env "TASK_LIST_JSON=$WD/tasks.json" --env "CONTEXT_DIR=$WD/.ctx_none" \
+    --env "LEDGER_JSON=$WD/tasks.json" --env "CONTEXT_DIR=$WD/.ctx_none" \
     -- "$SCRIPT"
   assert_success
   assert_output "agents/developer.md"
@@ -78,12 +78,12 @@ JSON
   mkdir -p "$WD/commands"
   : > "$WD/commands/worktask.md"
   cat > "$WD/tasks.json" <<'JSON'
-[
-  {"status":"completed","metadata":{"agent":"corpflow:developer","embedded_commands":"corpflow:worktask"}}
-]
+{"version":2,"tasks":{
+  "DV0":{"status":"completed","metadata":{"agent":"corpflow:developer","embedded_commands":"corpflow:worktask"}}
+}}
 JSON
   run_script_env --cwd "$WD" \
-    --env "TASK_LIST_JSON=$WD/tasks.json" --env "CONTEXT_DIR=$WD/.ctx_none" \
+    --env "LEDGER_JSON=$WD/tasks.json" --env "CONTEXT_DIR=$WD/.ctx_none" \
     -- "$SCRIPT"
   assert_success
   # Each qualified ref probes agents/, commands/ and skills/; only the
@@ -103,7 +103,7 @@ agent: corpflow:product-manager
 # Planning
 MD
   run_script_env --cwd "$WD" \
-    --env "TASK_LIST_JSON=" --env "CONTEXT_DIR=$WD/ctx" -- "$SCRIPT"
+    --env "LEDGER_JSON=" --env "CONTEXT_DIR=$WD/ctx" -- "$SCRIPT"
   assert_success
   assert_output "agents/product-manager.md"
 }
@@ -118,7 +118,7 @@ metadata:
     agent: corpflow:software-architector
 MD
   run_script_env --cwd "$WD" \
-    --env "TASK_LIST_JSON=" --env "CONTEXT_DIR=$WD/ctx" -- "$SCRIPT"
+    --env "LEDGER_JSON=" --env "CONTEXT_DIR=$WD/ctx" -- "$SCRIPT"
   assert_success
   assert_output "agents/software-architector.md"
 }
@@ -127,7 +127,7 @@ MD
   mkdir -p "$WD/ctx"
   printf 'agent:corpflow:qa-engineer\n' > "$WD/ctx/development-0.md"
   run_script_env --cwd "$WD" \
-    --env "TASK_LIST_JSON=" --env "CONTEXT_DIR=$WD/ctx" -- "$SCRIPT"
+    --env "LEDGER_JSON=" --env "CONTEXT_DIR=$WD/ctx" -- "$SCRIPT"
   assert_success
   assert_output "agents/qa-engineer.md"
 }
@@ -143,7 +143,7 @@ MD
     --commit "$(printf 'feat: after baseline\n\nAgent:corpflow:developer')")"
   base="$(git -C "$repo" rev-parse HEAD~1)"
   run_script_env --cwd "$repo" \
-    --env "TASK_LIST_JSON=" --env "CONTEXT_DIR=$repo/.ctx_none" \
+    --env "LEDGER_JSON=" --env "CONTEXT_DIR=$repo/.ctx_none" \
     --env "BASELINE_SHA=$base" -- "$SCRIPT"
   assert_success
   # qa-engineer's trailer is on the baseline commit itself, outside the range.
@@ -159,7 +159,7 @@ MD
     --commit "$(printf 'feat: work\n\nAgent: corpflow:developer')")"
   base="$(git -C "$repo" rev-parse HEAD~1)"
   run_script_env --cwd "$repo" \
-    --env "TASK_LIST_JSON=" --env "CONTEXT_DIR=$repo/.ctx_none" \
+    --env "LEDGER_JSON=" --env "CONTEXT_DIR=$repo/.ctx_none" \
     --env "BASELINE_SHA=$base" -- "$SCRIPT"
   assert_success
   assert_output "agents/developer.md"
@@ -171,7 +171,7 @@ MD
   printf '[]\n' > "$WD/empty.json"
   mkdir -p "$WD/ctx_empty"
   run_script_env --cwd "$WD" \
-    --env "TASK_LIST_JSON=$WD/empty.json" --env "CONTEXT_DIR=$WD/ctx_empty" \
+    --env "LEDGER_JSON=$WD/empty.json" --env "CONTEXT_DIR=$WD/ctx_empty" \
     -- "$SCRIPT"
   assert_success
   assert_output ""

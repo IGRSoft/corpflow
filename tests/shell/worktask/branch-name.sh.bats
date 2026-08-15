@@ -14,7 +14,7 @@ setup() {
   mkdir -p "$WD/.context/logs"
   cat > "$WD/.context/state.json" <<'EOF'
 {"version":1,"worktask_id":"wt-demo","run_index":0,"platform":"systems",
- "plan_file":".context/planning-0.md","stages":{},"facts":{},"handoffs":{},"metadata":{}}
+ "plan_file":".context/planning-0.md","tasks":{},"facts":{},"handoffs":{},"metadata":{}}
 EOF
 }
 

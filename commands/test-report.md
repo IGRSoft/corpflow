@@ -3,7 +3,7 @@ name: test-report
 description: Generate a comprehensive QA summary report with test results, coverage, and quality metrics
 argument-hint: '[--worktask-id ID]'
 model: sonnet
-allowed-tools: Read, Glob, Grep, TaskList
+allowed-tools: Read, Glob, Grep
 related:
   - agents/qa-engineer.md
   - commands/test-plan.md

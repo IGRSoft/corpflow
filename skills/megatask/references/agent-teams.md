@@ -102,4 +102,4 @@ Background completion notifications include `worktreePath` and `worktreeBranch` 
 
 ### Agent-teams reliability
 
-> **Mailbox robustness**: a malformed teammate mailbox message does not crash-loop an agent team. **Parent-checkout isolation**: worktree-isolated subagents do not run shell commands in the parent checkout — and specifically, **git-mutating commands** from an `isolation: 'worktree'` subagent execute against its own worktree, never the main checkout — so a lane teammate's `Bash` stays inside its own worktree.
+> **Mailbox robustness**: a malformed teammate mailbox message does not crash-loop an agent team. **Parent-checkout isolation** (runtime-enforced since CC 2.1.222): worktree-isolated sessions and their subagents cannot run destructive git against the main checkout — isolation covers file edits and `Bash` in every session type — so a lane teammate's writes stay inside its own worktree. This is a runtime guarantee, not a convention the agent must observe.

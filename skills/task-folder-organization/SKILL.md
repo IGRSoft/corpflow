@@ -243,7 +243,7 @@ See references/ for detailed examples of folder structures across worktask varia
 ### DON'T
 
 1. **No .context folder**: Documenting in random locations
-2. **Skipping Task System initialization**: No way to track progress
+2. **Skipping ledger initialization**: No way to track progress
 3. **Creating subfolders**: Keep all .md files in .context/ root (except `designs/`, `images/`, `errors/`, and `logs/`)
 4. **Ignoring errors**: Always append to `.context/errors/<agent>.md` when escalation is needed
 5. **Multiple context folders**: Only one .context/ per project
@@ -254,7 +254,7 @@ See references/ for detailed examples of folder structures across worktask varia
 
 1. **Always create .context/**: Even for small tasks
 2. **Document decisions**: Explain WHY, not just WHAT
-3. **Update Task System**: Keep task status current
+3. **Update the ledger**: Keep task status current
 4. **Flat structure**: All .md files in .context/ (`designs/`, `images/`, `errors/`, and `logs/` are the only subdirectories)
 5. **Log errors**: Append to `.context/errors/<agent>.md` (per-agent) when issues require escalation
 6. **Clean up**: Archive or clear .context/ when starting new tasks

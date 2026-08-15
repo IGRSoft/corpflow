@@ -74,7 +74,7 @@ handoff:
 
 #### error_file derivation
 
-The `error_file` for an apple-developer agent is `.context/errors/ios-developer.md` (last segment of qualified name) per `task-system.md § error_file derivation`. The same rule applies to every other dev plugin: `.context/errors/c-developer.md`, `.context/errors/kotlin-architector.md`, `.context/errors/react-developer.md`, `.context/errors/be-test-generator.md`, `.context/errors/llm-engineer.md`.
+The `error_file` for an apple-developer agent is `.context/errors/ios-developer.md` (last segment of qualified name) per `state-ledger.md § error_file derivation`. The same rule applies to every other dev plugin: `.context/errors/c-developer.md`, `.context/errors/kotlin-architector.md`, `.context/errors/react-developer.md`, `.context/errors/be-test-generator.md`, `.context/errors/llm-engineer.md`.
 
 ##### Basename collisions
 
@@ -189,17 +189,13 @@ Before delegating, prepare context from worktask artifacts:
 
 Transfer task to external plugin agent:
 
-```typescript
-TaskUpdate({
-  taskId: "{id}",
-  status: "in_progress",
-  owner: "apple-developer:ios-developer",  // or specific agent
-  metadata: {
-    // Include worktree context when applicable
-    workspace_path: ".worktrees/milestone-1/42",  // if worktree mode
-    isolation: "worktree"                          // signals worktree mode to external agent
-  }
-});
+```bash
+# workspace_path + isolation signal worktree mode to the external agent.
+state-patch.sh --task-meta "$TASK_ID" --set '{
+  "owner":"apple-developer:ios-developer",
+  "workspace_path":".worktrees/milestone-1/42",
+  "isolation":"worktree"}'
+state-patch.sh --task-status "$TASK_ID" in_progress
 ```
 
 External agents receiving worktree-isolated tasks should:
@@ -249,22 +245,20 @@ The orchestrator loop dispatches `metadata.agent` directly. **Convention**: alwa
 
 ### Direct dispatch example
 
-```typescript
-// PL0 creates a DV stage task routed directly to apple-developer.
-// error_file derives from basename (last ':'-separated segment) → ios-developer.md.
-TaskCreate({
-  subject: "DV0: Implement SwiftUI feature",
-  description: "Implement the onboarding flow using SwiftUI NavigationStack",
-  metadata: {
-    stage: "DV",
-    agent: "apple-developer:ios-developer",  // fully-qualified → dispatched directly
-    model: "opus",
-    error_file: ".context/errors/ios-developer.md",
-    context_files: `${planFile},architecture-${runIndex}.md,.context/errors/ios-developer.md`,
-    plan_file: planFile,  // bare basename, e.g. "planning-0.md" — state.json holds the path shape (handoff-protocol.md § state.json schema)
-    worktask_id: worktaskId
-  }
-});
+```bash
+# PL0 seeds a DV stage task routed directly to apple-developer.
+# error_file derives from basename (last ':'-separated segment) → ios-developer.md.
+# plan_file is the bare basename; state.json holds the path shape
+# (handoff-protocol.md § state.json schema).
+state-patch.sh --task-create DV0 --metadata "$(jq -n \
+  --arg plan "$PLAN_FILE" --argjson ri "$RUN_INDEX" --arg wid "$WORKTASK_ID" \
+  '{stage:"DV",
+    agent:"apple-developer:ios-developer",
+    model:"opus",
+    description:"Implement the onboarding flow using SwiftUI NavigationStack",
+    error_file:".context/errors/ios-developer.md",
+    context_refs:(["\($plan)#requirements","architecture-\($ri).md#decisions"]|tojson),
+    plan_file:$plan, worktask_id:$wid}')"
 ```
 
 ### When to use direct dispatch
@@ -282,7 +276,7 @@ Plugin skills use the frontmatter `name` field for invocation instead of directo
 
 ### /reload-plugins
 
-`/reload-plugins` picks up new skills without requiring a full restart. Use after plugin updates to make new skills available immediately.
+`/reload-plugins` picks up new skills without requiring a full restart. Since CC 2.1.221 a plugin installed via `/plugin` activates immediately when safe, so `/reload-plugins` is the fallback rather than the routine step; `/plugin install` also refreshes a stale marketplace catalog and retries before reporting a plugin not found.
 
 > Skills and commands **changed during a session** now appear in the slash menu without a restart, and a plugin skill carrying a frontmatter `name` keeps its plugin prefix in autocomplete. This eases local plugin development, but it does **not** relax the version-keyed cache rule: the installed-marketplace path still resolves under `~/.claude/plugins/cache/<owner>/<plugin>/<version>/`, so renaming or adding a skill/command/agent still requires a version bump for installed consumers (`skills/shared/plugin-root-resolution.md`). Verify against the cache path before relying on in-session pickup.
 
@@ -326,15 +320,12 @@ KNOWN_ISSUES:
 
 ### qa-engineer Processing
 
-```typescript
-// qa-engineer receives handoff
-// Reads development.md
-// Creates QA stage tasks
-TaskCreate({
-  subject: "Test {feature}",
-  description: "Verify implementation per development handoff...",
-  activeForm: "Testing {feature}"
-});
+```bash
+# qa-engineer receives the handoff.
+# Reads development.md, then seeds the QA stage task.
+state-patch.sh --task-create QA0 --metadata '{
+  "stage":"QA","agent":"corpflow:qa-engineer","model":"sonnet",
+  "description":"Verify implementation per development handoff"}'
 ```
 
 ## Context Compression Guidelines

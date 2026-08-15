@@ -88,7 +88,7 @@ mcp__pencil__get_style_guide({ tags: ["mobile", "clean", "minimal", ...] })
 
 ```typescript
 // Determine workspace-aware path
-const task = TaskGet({ taskId: currentTaskId });
+const task = state.tasks[currentTaskId];
 const workspacePath = task.metadata?.workspace_path;
 const designsPath = workspacePath
   ? `${workspacePath}/.context/designs`

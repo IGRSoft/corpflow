@@ -2,7 +2,7 @@
 name: improve-yourself
 description: Manual entry point for the self-improvement skill. Analyzes user edits since a baseline, classifies diffs, and writes .context/learnings.md with scoped approvable proposals. Complements automatic ST-stage invocation.
 argument-hint: '[--since <ref>] [--target agents|skills|commands|all] [--dry-run] [--no-scope-filter] [--apply]'
-allowed-tools: Read, Glob, Grep, Bash, Write, Edit, Task(corpflow:prompt-engineer), TaskCreate, TaskUpdate, TaskGet, TaskList
+allowed-tools: Read, Glob, Grep, Bash, Write, Edit, Task(corpflow:prompt-engineer)
 model: sonnet
 estimated-cost:
   min-tokens: 3000

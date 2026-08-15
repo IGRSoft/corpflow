@@ -127,7 +127,7 @@ DR0: Developer Review  ← always present after DV
 QA0: QA Testing        ← agents can split: QA0, QA1
 ```
 
-- N increments sequentially per `TaskCreate` call for the same stage code
+- N increments sequentially per seeded task for the same stage code
 - The `stage` metadata field stays unnumbered (`"DV"`, not `"DV0"`)
 - `metadata.agent` specifies which agent executes the task
 - `metadata.model` specifies the model alias; orchestrator MUST pass this to the Agent tool

@@ -17,7 +17,7 @@ setup() {
   mkdir -p "$WD/.context/logs" "$WD/.context/attachments"
   cat > "$WD/.context/state.json" <<'EOF'
 {"version":1,"worktask_id":"wt-demo","run_index":2,"platform":"all",
- "plan_file":".context/planning-2.md","stages":{"FN":{"status":"in_progress"}},
+ "plan_file":".context/planning-2.md","tasks":{"FN0":{"status":"in_progress"}},
  "facts":{},"handoffs":{},"metadata":{"github_issue_url":"https://github.com/o/r/issues/221"}}
 EOF
 }
@@ -313,7 +313,7 @@ EOF
 
 @test "F11: an IR stage (incident pipeline) skips the gate" {
   cd "$WD"
-  jq '.stages.IR = {"status":"completed"}' .context/state.json > s && mv s .context/state.json
+  jq '.tasks.IR0 = {"status":"completed"}' .context/state.json > s && mv s .context/state.json
   printf 'Leak at /Users/korich/secret/run.log and no headings.\n' > body.md
   run bash "$PLUGIN_ROOT/$SCRIPT" pr-body --body body.md
   assert_success

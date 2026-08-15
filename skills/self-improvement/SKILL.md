@@ -34,7 +34,7 @@ Execute the five steps in order. Each step has explicit inputs and outputs. If a
 **Goal:** produce a deduped list of agents/skills/commands that actually participated in this worktask. Proposals will be **filtered** against this list in Step 4.
 
 **Data sources (precedence order):**
-1. `TaskList` → for each task with `status: completed`, read `metadata.agent` + `metadata.embedded_commands`
+1. Read `.context/state.json` `tasks{}` → for each entry with `status: completed`, read `metadata.agent` + `metadata.embedded_commands`
 2. `.context/*.md` artifact metadata sections (look for `metadata.agent`, `Agent:` trailers, authorship blocks written by upstream stages)
 3. Commit trailers on commits in range `<first-stage-commit>..HEAD` (look for `Agent:`, `Stage:` trailers if present)
 
@@ -96,7 +96,7 @@ LOG_OUT=<log_path> bash scripts/map-and-filter.sh \
   [--dv-agent=<resolved-dv-agent-path>]
 ```
 
-Output: TSV rows `<path>\t<rule_num>\t<target>\t<lines_added>\t<lines_removed>` for every KEPT change. Discards are appended to `$LOG_OUT` under `## Out-of-Context Discards`. The `rule_num` column (1–17) provides auditability — matches the row numbers in `references/target-mapping.md`. For rows that need TaskList/stage-gate inputs the script cannot reach (rules 5, 13, 16), pass the resolved DV agent via `--dv-agent`; if omitted, the script defaults to `agents/developer.md`.
+Output: TSV rows `<path>\t<rule_num>\t<target>\t<lines_added>\t<lines_removed>` for every KEPT change. Discards are appended to `$LOG_OUT` under `## Out-of-Context Discards`. The `rule_num` column (1–17) provides auditability — matches the row numbers in `references/target-mapping.md`. For rows that need ledger/stage-gate inputs the script cannot reach (rules 5, 13, 16), pass the resolved DV agent via `--dv-agent`; if omitted, the script defaults to `agents/developer.md`.
 
 #### Mapping Rules (apply first match)
 

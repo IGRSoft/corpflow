@@ -157,7 +157,7 @@ EOF
 
 @test "edge: batch routing self-disables the lint (MILESTONE_MODE)" {
   mkdir -p "$WD/.context"
-  printf '{"version":1,"worktask_id":"w","run_index":0,"metadata":{"milestone":1},"stages":{},"facts":{}}\n' \
+  printf '{"version":1,"worktask_id":"w","run_index":0,"metadata":{"milestone":1},"tasks":{},"facts":{}}\n' \
     > "$WD/.context/state.json"
   printf 'Manifest: `.context/images/x/screenshots.md`\n' >> "$CLEAN"
   run env MILESTONE_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT" \

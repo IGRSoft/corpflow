@@ -6,7 +6,7 @@ version: 0.1.1
 related:
   - ../worktask/scripts/publish-pl-issue.sh
   - ../worktask/SKILL.md
-  - ../shared/task-system.md
+  - ../shared/state-ledger.md
   - ../task-folder-organization/SKILL.md
 ---
 

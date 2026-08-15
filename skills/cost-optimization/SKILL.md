@@ -234,7 +234,7 @@ jq -cn --arg ts "$(date -u +%FT%TZ)" '{
 {
   "ts": "ISO-8601 UTC",
   "agent_type": "e.g., corpflow:developer",
-  "task_id": "Task System ID",
+  "task_id": "ledger key, e.g. DV0",
   "stage": "PL|AR|TL|DV|DR|SR|QA|DC|RE|FN|ST|IR|ET",
   "model": "opus|sonnet|haiku",
   "input_tokens": 0,
@@ -251,8 +251,7 @@ jq -cn --arg ts "$(date -u +%FT%TZ)" '{
 
 `/cost-report` reads all `.context/logs/cost-*.jsonl` files, groups by `stage`,
 and renders the `### By Stage` and `### Cache Performance` tables. The latter
-validates AC-14 (`cache_read_input_tokens` ≥ 60% cross-stage average) and
-counts F1 fallback firings from `.context/logs/fallback-*.log`. See
+validates AC-14 (`cache_read_input_tokens` ≥ 60% cross-stage average). See
 `commands/cost-report.md § Data Source` and `§ Cache Performance`.
 
 ## Prompt Caching (1h TTL) & Handoff Protocol
@@ -307,6 +306,15 @@ Per `handoff-protocol.md#cache-prefix`:
 - Cross-stage average: ≈ 60% — meets AC-14 threshold.
 
 CI lint (`skills/worktask/scripts/cache-lint.sh`) asserts byte-stability of preamble sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`. Drift collapses cache-hit rate.
+
+### Sibling fan-out staggering
+
+CC 2.1.229 staggers same-prefix sibling agents on a fan-out so later siblings read the cached
+prompt prefix instead of each re-paying to write it. This is the runtime complement to
+`cache-lint.sh`: the lint keeps the prefix byte-identical, the stagger makes a simultaneous
+fan-out actually hit it. It matters most where the plugin fans out widest — TL-split DVN tracks
+and `/megatask` tracks. Set `CLAUDE_CODE_WORKFLOW_PREFIX_STAGGER_MS=0` to disable when a run is
+latency-bound rather than token-bound.
 
 ## Budget Tracking
 

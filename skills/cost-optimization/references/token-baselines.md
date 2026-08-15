@@ -194,7 +194,7 @@ These automatic improvements compound across multi-stage worktasks — no agent 
 
 Claude Code billing occurs per calendar month. Optimization strategies:
 
-1. **Track month boundaries** via Task System metadata
+1. **Track month boundaries** via ledger metadata
 2. **Plan large worktasks** to complete within single month
 3. **Defer non-urgent work** if near month end with budget concerns
 4. **Front-load complex stages** early in billing cycle

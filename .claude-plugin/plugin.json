@@ -1,7 +1,7 @@
 {
   "name": "corpflow",
-  "description": "Comprehensive 11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with Task System integration, developer review, security review, release engineering, incident response, and ST-stage self-improvement retrospectives. Includes /megatask — dependency-DAG orchestration of many worktasks across a GitHub milestone or issue array.",
-  "version": "4.0.14",
+  "description": "Comprehensive 11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with a durable state ledger, developer review, security review, release engineering, incident response, and ST-stage self-improvement retrospectives. Includes /megatask — dependency-DAG orchestration of many worktasks across a GitHub milestone or issue array.",
+  "version": "4.0.15",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
@@ -9,7 +9,7 @@
   "keywords": [
     "worktask",
     "task-management",
-    "task-system",
+    "state-ledger",
     "project-management",
     "agile",
     "stages",
@@ -124,7 +124,9 @@
     "cwd-anchored-permission-rules",
     "version-gate-cleanup",
     "test-execution-authority",
-    "pretooluse-hook"
+    "pretooluse-hook",
+    "state-ledger-cutover",
+    "todo-tools-removed"
   ],
   "hooks": {
     "PreToolUse": [
@@ -140,7 +142,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "TaskUpdate|TaskCreate|Write|Edit",
+        "matcher": "Bash|Write|Edit",
         "hooks": [
           {
             "type": "command",

@@ -17,7 +17,7 @@ Every classified diff hunk must be mapped to exactly one owning file (the "targe
 
 | # | Pattern of changed file | Target | Notes |
 |---|--------------------------|--------|-------|
-| 5 | `.context/development-*.md` | `metadata.agent` of the DV task (resolve from `TaskList`) | Platform-aware: could be `corpflow:developer`, `apple-developer:ios-developer`, etc. |
+| 5 | `.context/development-*.md` | `metadata.agent` of the DV task (resolve from the ledger) | Platform-aware: could be `corpflow:developer`, `apple-developer:ios-developer`, etc. |
 | 6 | `.context/developer-review-*.md` | `agents/technical-lead.md` | |
 | 7 | `.context/security-review-*.md` | `agents/security-reviewer.md` | |
 | 8 | `.context/testing-*.md` | `agents/qa-engineer.md` | |
@@ -79,7 +79,7 @@ When a stage was delegated to a cross-plugin agent (e.g., `apple-developer:ios-d
 
 `SKILL.md § Step 1` defines precedence; this section lists the exact query shape.
 
-### From TaskList
+### From the ledger
 
 ```
 For each task where status == "completed":
@@ -115,5 +115,5 @@ All sources produce file paths. Deduplicate. Drop paths that don't exist on disk
 ## Cross References
 
 - `skills/shared/stage-contracts.md` — stage → artifact producer mapping (rows 2–12)
-- `skills/shared/task-system.md § Metadata Fields` — `agent`, `embedded_commands` schema
+- `skills/shared/state-ledger.md § Metadata Fields` — `agent`, `embedded_commands` schema
 - `SKILL.md § Step 1` / `§ Step 4` — invocation of these rules in the pipeline

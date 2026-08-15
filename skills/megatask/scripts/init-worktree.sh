@@ -197,7 +197,6 @@ build_workspace_json() {
       },
       "worktask": {
         "track": $track,
-        "task_prefix": ("t" + ($track | tostring)),
         "complexity_score": null
       },
       "dependency": {
@@ -489,14 +488,12 @@ self_test() {
   st_check "workspace.json: status" "in_progress" "$ws_status"
   st_check "workspace.json: track" "2" "$ws_track"
 
-  local ws_blocked ws_blocks ws_tp
+  local ws_blocked ws_blocks
   ws_blocked=$(jq -c '.dependency.blocked_by' "${wt}/workspace.json" 2> /dev/null || echo "")
   ws_blocks=$(jq -c '.dependency.blocks' "${wt}/workspace.json" 2> /dev/null || echo "")
-  ws_tp=$(jq -r '.worktask.task_prefix' "${wt}/workspace.json" 2> /dev/null || echo "")
 
   st_check "workspace.json: blocked_by" "[41]" "$ws_blocked"
   st_check "workspace.json: blocks" "[60]" "$ws_blocks"
-  st_check "workspace.json: task_prefix" "t2" "$ws_tp"
 
   # Branch must exist in worktree repo.
   local wt_branch

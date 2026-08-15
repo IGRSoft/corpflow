@@ -170,7 +170,7 @@ function initializeWorkspace(
       base_branch: baseBranch.branch,
       worktree_path: worktreePath
     },
-    worktask: { track: null, task_prefix: null },
+    worktask: { track: null },
     execution: { current_stage: null, retry_count: 0 }
   };
 
@@ -251,7 +251,7 @@ function createIssueWorktree(
       base_branch: baseBranch,
       worktree_path: worktreePath
     },
-    worktask: { track: null, task_prefix: null },
+    worktask: { track: null },
     execution: { current_stage: null, retry_count: 0 }
   };
 
@@ -338,7 +338,7 @@ function createSparseWorktree(
     sparse_paths: sparsePaths,
     issue: { number: issue.number, title: issue.title, labels: issue.labels },
     git: { branch_name: branchName, base_branch: baseBranch, worktree_path: worktreePath },
-    worktask: { track: null, task_prefix: null },
+    worktask: { track: null },
     execution: { current_stage: null, retry_count: 0 }
   };
 

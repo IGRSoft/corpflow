@@ -1,33 +1,62 @@
 ---
-name: task-system
-description: Task System tools reference (Create/Update/Get/List) with metadata fields and status values. Use when working with TaskCreate, TaskUpdate, or managing task state.
-version: 0.1.0
+name: state-ledger
+description: State ledger reference — the state.json tasks{} map, its metadata schema, status values, and write operations. Use when creating, reading, or updating worktask stage state.
+version: 1.0.0
 ---
 
-# Task System Reference
+# State Ledger Reference
 
-Single source of truth for Task System integration.
+Single source of truth for worktask stage state.
 
-## Tools
+## The ledger is `state.json`
 
-| Tool | Purpose |
-|------|---------|
-| `TaskCreate` | Create tasks with subject, description, activeForm, metadata |
-| `TaskUpdate` | Update status, owner, blockedBy, delete tasks |
-| `TaskGet` | Retrieve current task state |
-| `TaskList` | View all tasks and statuses |
+`.context/state.json` `tasks{}` is the **only** stage ledger. It is authoritative for stage
+status, dependencies, routing metadata, and results. Full schema:
+`skills/worktask/references/handoff-protocol.md#state-json-schema`.
 
-## Subject Format
+corpflow does **not** use Claude Code's Task System (`TaskCreate` / `TaskUpdate` / `TaskGet` /
+`TaskList`) — not even where those tools are available.
+
+> **Why, so nobody re-adds them**: CC 2.1.233 removed the Todo/task-tracking tools on Opus 4.8,
+> Sonnet 5, Fable 5, Mythos 5, and newer models. Every model this plugin dispatches is on that
+> list, so an orchestrator built on those tools cannot run at all. `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`
+> restores them, but the plugin deliberately does not depend on it — one ledger, one code path.
+> `CLAUDE_CODE_ENABLE_TASKS` is **not** that switch; do not mistake one for the other.
+
+## Ledger Keys
 
 ```
-[STAGE][N]: [Description]
+[STAGE][N]
 ```
 
 N is 0-based, sequential per stage code. First `DV` created → `DV0`, second → `DV1`.
 
-Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implement auth module`
+Examples: `PL0`, `AR0`, `DV0`, `DV1`. The human-readable label lives in `tasks.<ID>.metadata.description`.
 
-**PL is always `PL0` only** (singleton — no splitting). Other stages can split into sub-tasks.
+**PL is always `PL0` only** (singleton — no splitting). Other stages can split into sub-tasks,
+which is exactly what the numbered key exists to express: parallel DVN tracks are distinct keys.
+
+Handoff edges (`handoffs["PL→AR"]`) stay keyed by bare **stage code**, not by ledger id.
+
+## Write Operations
+
+All writes go through `skills/worktask/scripts/state-patch.sh` — never edit `state.json`
+directly. It owns the merge lock, the atomic tmp→fsync→rename, and the disk guard.
+
+| Operation | Command |
+|-----------|---------|
+| Create | `state-patch.sh --task-create <ID> --metadata '<json>'` |
+| Set status | `state-patch.sh --task-status <ID> <status>` |
+| Add dependency | `state-patch.sh --task-block <ID> --on <ID[,ID...]>` |
+| Remove dependency | `state-patch.sh --task-unblock <ID> --off <ID[,ID...]>` |
+| Merge metadata | `state-patch.sh --task-meta <ID> --set '<json>'` |
+| Complete from artifact | `state-patch.sh --stage <CODE> [--task-id <ID>] [--prev <CODE>] [--via <layer>]` |
+| Resolve an id (read-only) | `state-patch.sh --resolve-task-id <CODE>` |
+
+`--task-create` is idempotent (an existing key is left untouched); `--task-block` unions and
+`--task-unblock` subtracts, so re-running a seed or a teardown is safe. `--task-create` is also
+the ONLY op that may introduce a key — status, block, unblock, and meta all refuse an id that
+does not exist yet, so create the task before wiring or annotating it.
 
 ## Metadata Fields
 
@@ -44,15 +73,14 @@ Examples: `PL0: Planning`, `AR0: Architecture`, `DV0: Development`, `DV1: Implem
 | Field | Purpose |
 |-------|---------|
 | `run_index` | Integer ≥ 0; PL0 stamps this on every downstream task (same N as `planning-N.md`). Default 0. Orchestrator uses it to resolve `<stage>-N.md` paths. See `agents/product-manager.md § Stage Artifact Naming`. |
-| `context_refs` | JSON-encoded array of anchor refs (e.g. `["architecture-N.md#decisions","planning-N.md#requirements"]`) the stage agent should grep instead of reading whole files. Preferred over `context_files` (handoff-protocol mode). When present, agent reads `state.json` + only these anchors |
-| `state_file` | Path to the worktask state ledger. Default `.context/state.json`. Read by the stage agent before delegation (per `skills/worktask/references/handoff-protocol.md#state-json-schema`). Absent state.json triggers fallback path F1 (`context_files` mode) |
+| `context_refs` | JSON-encoded array of anchor refs (e.g. `["architecture-N.md#decisions","planning-N.md#requirements"]`) the stage agent should grep instead of reading whole files. The stage agent reads `state.json` + only these anchors |
+| `state_file` | Path to the worktask state ledger. Default `.context/state.json`. Read by the stage agent before delegation (per `skills/worktask/references/handoff-protocol.md#state-json-schema`). The ledger is mandatory — an absent `state.json` is a hard failure, not a degraded mode |
 
 ### Error & retry fields
 
 | Field | Purpose |
 |-------|---------|
-| `context_files` | (F1 fallback.) Comma-separated list of `.context/` artifacts this stage should read in full when `state.json` is absent or `context_refs` is missing. MUST include `error_file` — orchestrator appends automatically on `TaskCreate`/`TaskUpdate` if omitted. Required for AC-16/AC-17 |
-| `error_file` | Path `.context/errors/<agent-basename>.md`. Auto-derived from `agent` if absent. Basename = last `:`-separated segment; collisions joined with `-`. Auto-appended to `context_files` so the stage agent reads its own prior retry narrative |
+| `error_file` | Path `.context/errors/<agent-basename>.md`. Auto-derived from `agent` if absent. Basename = last `:`-separated segment; collisions joined with `-`. The stage agent reads it to see its own prior retry narrative |
 | `retry_count` | Integer 0–3. Incremented on retry; resets on escalation or success |
 | `error_escalated_to` | Stage code the failure escalated to when `retry_count` reached 3 |
 
@@ -116,6 +144,10 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
     "model": {
       "enum": ["opus", "sonnet", "haiku"]
     },
+    "description": {
+      "type": "string",
+      "description": "Human-readable stage label (the retired Task System subject line). Lives here, not top-level: state-patch.sh writes tasks.<ID> fields only through --metadata/--set."
+    },
 ```
 
 #### Schema — run & context properties
@@ -143,11 +175,6 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
 
 ```json
 // …continued: task.metadata JSON Schema "properties" (part 3 of 5)
-    "context_files": {
-      "type": "string",
-      "pattern": "^([a-z0-9/_.-]+\\.(md|json|jsonl|png|jpg|pen)(,[a-z0-9/_.-]+\\.(md|json|jsonl|png|jpg|pen))*)?$",
-      "description": "F1 fallback. Used when state.json is absent."
-    },
     "error_file": {
       "type": "string",
       "pattern": "^\\.context/errors/[a-z0-9-]+\\.md$"
@@ -217,17 +244,15 @@ Orchestrator populates if absent:
 - `agent: "apple-developer:ios-developer"` → `error_file: ".context/errors/ios-developer.md"` (last segment)
 - Basename collision across plugins → join with `-`: `.context/errors/apple-developer-ios-developer.md`
 
-#### context_files ↔ error_file coupling
+#### Context delivery
 
-On every `TaskCreate` and `TaskUpdate`,
-the orchestrator ensures `metadata.error_file` appears in `metadata.context_files`
-(appended if absent, deduped if already present). This guarantees the stage
-agent receives its own error history in its reading scope — on retry, it can
-see what it tried before and why it failed.
+`metadata.context_refs` is the only context-delivery mechanism: the stage agent reads
+`state_file` plus the listed anchors, and nothing else by default. There is no whole-file
+fallback list — the ledger is mandatory, so the degraded "state.json is absent" path it
+existed to serve cannot occur.
 
-#### context_refs vs context_files (handoff-protocol mode)
-
-When `metadata.context_refs` is set, the stage agent reads `state_file` + only the listed anchors; when absent or `state_file` is missing on disk, it falls back to reading every `context_files` path in full. `context_refs` wins when state.json is present; `context_files` is the safety net. F1 (`context_files` mode) rationale and the F1..F4 matrix: `skills/worktask/references/handoff-protocol.md#fallback-paths`.
+On retry the stage agent additionally reads its own `error_file`, so it can see what it
+tried before and why it failed.
 
 #### Orchestrator normalization snippet
 
@@ -236,9 +261,6 @@ When `metadata.context_refs` is set, the stage agent reads `state_file` + only t
 function normalizeMetadata(meta) {
   const basename = meta.agent.split(':').pop();
   meta.error_file ??= `.context/errors/${basename}.md`;
-  const files = new Set((meta.context_files ?? '').split(',').map(s => s.trim()).filter(Boolean));
-  files.add(meta.error_file);
-  meta.context_files = [...files].join(',');
   return meta;
 }
 ```
@@ -272,26 +294,24 @@ These fields live at `state.json:$.metadata` (worktask-scoped, distinct from `ta
 | `pending` | Not started, may be blocked |
 | `in_progress` | Active work |
 | `completed` | Done |
+| `blocked` | Waiting on an unsatisfied `blocked_by` entry |
+| `skipped` | Dropped by dynamic sizing — see below |
 
-## Task Deletion
-
-```typescript
-TaskUpdate({ taskId: "6", status: "deleted" });
-```
-
-Use for dynamic worktask sizing during PL/AR stages.
-
-## Cross-Session Persistence
-
-Set `CLAUDE_CODE_TASK_LIST_ID` for persistence across sessions:
+## Dropping a Stage
 
 ```bash
-CLAUDE_CODE_TASK_LIST_ID="my-project" claude
+state-patch.sh --task-status QA0 skipped
 ```
 
-Storage: `~/.claude/tasks/<list-id>/`
+Use for dynamic worktask sizing during PL/AR stages. The entry stays in the ledger as an
+audit record of what was sized out; `skipped` is terminal and never blocks a dependent.
 
-## Hook Events for Task Monitoring
+## Persistence
+
+The ledger lives at `.context/state.json` in the worktask folder, so it survives session
+end, compaction, and resume with no configuration. Nothing else needs to be set.
+
+## Hook Events for Stage Monitoring
 
 Configure in project `settings.json` or agent frontmatter `hooks` field:
 
@@ -314,7 +334,6 @@ Configure in project `settings.json` or agent frontmatter `hooks` field:
 | `StopFailure` | API error causes turn end | settings.json |
 | `CwdChanged` | Working directory changes | settings.json |
 | `FileChanged` | Monitored file modified | settings.json |
-| `TaskCreated` | TaskCreate tool called | settings.json |
 | `PermissionDenied` | Auto-mode classifier denies tool call | settings.json (all modes) |
 | `WorktreeCreate` | Worktree created | settings.json |
 
@@ -337,7 +356,7 @@ With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, every session has **one implicit 
 | `Agent(name: …)` | Spawn a teammate into the session's implicit team |
 | `SendMessage` | Send messages between teammates |
 
-Task storage: `~/.claude/tasks/` (session-scoped subdirectory; no explicit team name — `team_name` is accepted but ignored in the implicit team model)
+Teammates coordinate through the same `.context/state.json` ledger as every other stage.
 
 ### Custom Auto-Memory Directory
 
@@ -351,4 +370,4 @@ Configure a custom directory for worktask-specific auto-memory:
 
 Allows worktask-specific memory separate from the default `~/.claude/` location.
 
-Teammates share a task list and can self-claim available work. See `../megatask/references/agent-teams.md` for megatask patterns.
+Teammates share the ledger and can self-claim available work. See `../megatask/references/agent-teams.md` for megatask patterns.

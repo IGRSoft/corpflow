@@ -19,8 +19,8 @@
 #                           USER→IR origin edges.  When present, ALSO writes
 #                           handoffs["<PREV>→<CODE>"] = "<summary> ref:<artifact basename>"
 #                           from the parsed frontmatter summary (the ledger edge the 13
-#                           stage agents used to hand-roll in inline jq).  ABSENT = today's
-#                           behavior exactly (stages patch only, byte-stable); hook callers
+#                           stage agents used to hand-roll in inline jq).  ABSENT = ledger
+#                           patch only, byte-stable; hook callers
 #                           never pass it, so the SubagentStop path is untouched.
 #                           USER is predecessor-only: it never resolves an artifact and is
 #                           NOT a valid --stage.
@@ -30,10 +30,12 @@
 #                           value (defaults to "."); a following token that begins with "-"
 #                           is NOT consumed as the root.  When the guard fires (halt), exits 2;
 #                           on warn exits 0.
-# @arg --via <hook|step6_5> Stamp stages.<CODE>.completed_via with the enforcement
+# @arg --via <hook|step6_5> Stamp tasks.<ID>.completed_via with the enforcement
 #                           layer that fired.  Omit for agent self-patch (Layer 1);
-#                           F3 stamps "f3" via its own patch.  Absence encodes Layer 1
-#                           / pre-upgrade (additive, version:1 unchanged).
+#                           F3 stamps "f3" via its own patch.  Absence encodes Layer 1.
+# @arg --task-id <ID>       Explicit ledger key (e.g. DV1).  When omitted the id is resolved
+#                           from the stage code: the open instance of a split stage, else
+#                           the highest existing, else <CODE>0.
 # @arg --allow-missing-artifact
 #                           Suppress the exit-3 assertion and restore the exit-0 no-op for a
 #                           caller that knows the artifact is absent.  It does NOT patch:
@@ -41,11 +43,29 @@
 #                           so NEITHER the stage entry NOR the handoff edge is written.
 #                           To record a stage whose artifact does not exist, write
 #                           state.json directly (handoff-protocol.md#layer-1-fallback).
+#
+#   Ledger ops — direct tasks{} writes.  Each short-circuits the artifact path and exits.
+#   --task-create is the ONLY op that may introduce a key; the rest reject an unknown ID
+#   rather than autovivifying a task nobody seeded.
+#
+# @arg --task-create  <ID> --metadata <json>  Seed tasks.<ID> as pending; no-op if it exists.
+#                                             --metadata is optional (defaults to {}).
+# @arg --task-status  <ID> <status>           pending|in_progress|completed|blocked|skipped.
+# @arg --task-block   <ID> --on  <ID[,ID...]> Union into blocked_by[].
+# @arg --task-unblock <ID> --off <ID[,ID...]> Subtract from blocked_by[].
+# @arg --task-meta    <ID> --set <json>       Merge into tasks.<ID>.metadata.
+#
+# @arg --resolve-task-id <CODE>
+#                           Print the ledger key a bare stage CODE resolves to and exit.
+#                           Read-only: takes no lock and writes nothing.  Sibling scripts
+#                           call this instead of re-implementing the preference ladder.
+#
 # @arg --self-test          Run the built-in self-test and exit.
 # @arg -h | --help          Show this header.
 #
 # @exitcode 0   Patch applied (or already idempotent; or artifact absent / state absent).
-# @exitcode 1   Internal error (jq merge failed; use --log to inspect).
+# @exitcode 1   Internal error (jq merge failed; use --log to inspect), unsupported ledger
+#               version, or a ledger op rejected for an unknown/malformed task id.
 # @exitcode 2   DISK_MIN_GB hard-halt triggered (caller must remediate before retrying).
 # @exitcode 3   Artifact unresolved on the agent self-patch path (--prev given, --via absent).
 #               An agent patching the artifact it just wrote and finding nothing on disk is a
@@ -55,6 +75,7 @@
 #   DISK_MIN_GB         (default 5)   — hard halt threshold in GiB
 #   DISK_WARN_GB        (default 8)   — hygiene warn threshold in GiB
 #   RUN_INDEX           — override run_index (for callers that know it without reading state.json)
+#   CONTEXT_DIR         (default .context) — root for the audit log written on the --via hook path
 #   STATE_LOCK_TIMEOUT_S (default 5)  — max seconds to wait for the merge lock before
 #                                       proceeding UNLOCKED + WARN (never a silent no-op)
 #   STATE_LOCK_STALE_S  (default 60)  — a lock dir older than this (by mtime) is treated
@@ -258,6 +279,49 @@ is_valid_prev() {
   [[ -n "$(basename_for_stage "$1")" ]]
 }
 
+# Ledger keys are numbered ids (DV0, DV1); handoff edges stay bare codes (PL→AR).
+# Frontmatter carries only the code, so pick the instance the caller most plausibly means:
+# the one actually running, else the next one queued, else one that is parked — lowest N
+# within each tier, because a split stage is worked in order.  A `completed` instance is
+# never reused and `skipped` is never resurrected: both were settled deliberately.
+# Falls back to the highest existing instance, then to <CODE>0 for a never-seeded stage.
+# Callers must have already established that $STATE_PATH exists.
+resolve_task_id() {
+  local code="$1" resolved=""
+  if [[ -n "${TASK_ID_ARG:-}" ]]; then
+    printf '%s' "$TASK_ID_ARG"
+    return 0
+  fi
+  if command -v jq > /dev/null 2>&1; then
+    resolved=$(jq -r --arg c "$code" '
+      ( [ (.tasks // {}) | to_entries[]
+          | select(.key | test("^" + $c + "[0-9]+$")) ]
+        | sort_by(.key | ltrimstr($c) | tonumber) ) as $all
+      | ( [ $all[] | select(.value.status == "in_progress") ] | first )
+        // ( [ $all[] | select(.value.status == "pending")  ] | first )
+        // ( [ $all[] | select(.value.status == "blocked")  ] | first )
+        // ( $all | last )
+      | if . == null then "" else .key end' \
+      "$STATE_PATH" 2> /dev/null || printf '')
+  fi
+  printf '%s' "${resolved:-${code}0}"
+}
+
+# require_task_exists <ID> <op> — abort unless tasks.<ID> is already in the ledger.
+# --task-create is the ONLY op allowed to introduce a key.  Every other op assigns through
+# .tasks[$id], which jq would happily autovivify: a typo'd id would land a status-only or
+# blocked_by-only ghost that carries no metadata yet still answers every downstream
+# readiness check — and, for the dependency ops, gates a real stage on a task nobody runs.
+require_task_exists() {
+  local id="$1" op="$2"
+  if [[ ! -f "$STATE_PATH" ]] \
+    || ! jq -e --arg id "$id" '(.tasks // {}) | has($id)' "$STATE_PATH" > /dev/null 2>&1; then
+    printf >&2 'unknown task id: %s (--task-%s needs an existing task; create it first)\n' "$id" "$op"
+    log_msg ERROR "${op} op on unknown tasks.${id}; state.json unchanged"
+    exit 1
+  fi
+}
+
 # ENOSPC guard.  Returns 0 (ok/warn), exits 2 (halt).
 disk_guard() {
   local root="${1:-.}"
@@ -345,35 +409,41 @@ _lock_release() {
 # Release any held lock on process end/failure (added to the existing ERR trap flow).
 trap '_lock_release' EXIT
 
-# Atomic state.json merge (read → merge → temp → fsync → rename), serialized by the
-# mkdir-spinlock so concurrent sibling writers cannot drop a patch.
-#
 # B3 state bounds are enforced HERE (the single write chokepoint, AD-7) rather than
-# scattered across the 13 stage agents: after the `. * $p` merge, the two unbounded
+# scattered across the 13 stage agents: after every mutation the two unbounded
 # arrays are clamped so a long run cannot grow state.json past its ~500-token budget.
 #   facts.decisions          → newest 8 (tail, matches the eviction-order rule).
 #   facts.dispatched_agents  → 6, launched-survive-first (live agents resume needs are
 #                              retained ahead of terminal rows, which are eviction bait).
 # Both clamps fire ONLY when the array already exists AND exceeds its bound, so a normal
-# small state is byte-identical to the pre-bounds merge (idempotency + no-op paths hold).
-atomic_merge() {
-  local state="$1" patch="$2"
+# small state is byte-identical to an unbounded merge (idempotency + no-op paths hold).
+_STATE_BOUNDS_FILTER='
+      (if ((.facts.decisions? // []) | length) > 8
+       then .facts.decisions |= .[-8:] else . end)
+    | (if ((.facts.dispatched_agents? // []) | length) > 6
+       then .facts.dispatched_agents |=
+            (([ .[] | select(.status == "launched") ]
+            + [ .[] | select(.status != "launched") ])[0:6])
+       else . end)'
+
+# Atomic state.json mutation (read → apply → temp → fsync → rename), serialized by the
+# mkdir-spinlock so concurrent sibling writers cannot drop a patch.
+#
+# atomic_apply <state> <jq-filter> [jq-args...]
+#
+# The filter is evaluated against the file contents INSIDE the lock. Read-modify-write ops
+# (blocked_by union/subtraction) MUST come through here rather than precomputing from an
+# unlocked read: a pre-lock read races a sibling writer and silently drops its edges.
+atomic_apply() {
+  local state="$1" filter="$2"
+  shift 2
   local tmp="${state%/*}/.state.json.$$.${RANDOM}.tmp"
 
-  # Acquire the lock around the whole read-merge-rename window (timeout ⇒ unlocked+WARN).
+  # Acquire the lock around the whole read-apply-rename window (timeout ⇒ unlocked+WARN).
   _lock_acquire "$state" || true
 
   local rc=0
-  if jq --argjson p "$patch" '
-      (. * $p)
-      | (if ((.facts.decisions? // []) | length) > 8
-         then .facts.decisions |= .[-8:] else . end)
-      | (if ((.facts.dispatched_agents? // []) | length) > 6
-         then .facts.dispatched_agents |=
-              (([ .[] | select(.status == "launched") ]
-              + [ .[] | select(.status != "launched") ])[0:6])
-         else . end)
-    ' "$state" > "$tmp" 2>> "$LOG_FILE"; then
+  if jq "$@" "( ${filter} ) | ${_STATE_BOUNDS_FILTER}" "$state" > "$tmp" 2>> "$LOG_FILE"; then
     sync "$tmp" 2> /dev/null || sync 2> /dev/null || true
     mv -f "$tmp" "$state"
     rc=0
@@ -384,6 +454,12 @@ atomic_merge() {
 
   _lock_release
   return "$rc"
+}
+
+# Merge a precomputed patch object; both entry points share one lock/rename window.
+atomic_merge() {
+  local state="$1" patch="$2"
+  atomic_apply "$state" '. * $p' --argjson p "$patch"
 }
 
 # ---------- Self-test ----------
@@ -403,7 +479,7 @@ run_self_test() {
   # ---- Fixture helpers ----
   make_state() {
     cat > .context/state.json << 'EOSTATE'
-{"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"stages":{"PL":{"status":"completed","verdict":"ok"}},"facts":{"files_modified":[],"tests_added":[],"decisions":[],"open_questions":[],"verdicts":{"PL":"ok"}},"handoffs":{}}
+{"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"PL0":{"status":"completed","verdict":"ok"}},"facts":{"files_modified":[],"tests_added":[],"decisions":[],"open_questions":[],"verdicts":{"PL":"ok"}},"handoffs":{}}
 EOSTATE
   }
 
@@ -427,7 +503,7 @@ EOART
       printf 'T1: state-patch returned non-zero\n' >&2
       exit 1
     }
-  if jq -e '.stages.DV.status == "completed" and .stages.DV.verdict == "ok"' \
+  if jq -e '.tasks.DV0.status == "completed" and .tasks.DV0.verdict == "ok"' \
     .context/state.json > /dev/null; then
     printf 'T1: explicit artifact → patched: ok\n'
   else
@@ -453,7 +529,7 @@ EOART
       printf 'T3: state-patch returned non-zero\n' >&2
       exit 1
     }
-  if jq -e '.stages.DV.status == "completed" and (.stages.DV.artifact | endswith("development-0.md"))' \
+  if jq -e '.tasks.DV0.status == "completed" and (.tasks.DV0.artifact | endswith("development-0.md"))' \
     .context/state.json > /dev/null; then
     printf 'T3: run_index-resolved artifact: ok\n'
   else
@@ -463,7 +539,7 @@ EOART
 
   # ---- T4: highest-N fallback when run_index absent from state.json ----
   cat > .context/state.json << 'EOSTATE'
-{"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","stages":{"PL":{"status":"completed","verdict":"ok"}},"facts":{"verdicts":{"PL":"ok"}},"handoffs":{}}
+{"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","tasks":{"PL0":{"status":"completed","verdict":"ok"}},"facts":{"verdicts":{"PL":"ok"}},"handoffs":{}}
 EOSTATE
   cat > .context/architecture-1.md << 'EOART'
 ---
@@ -488,18 +564,18 @@ EOART
       printf 'T4: state-patch returned non-zero\n' >&2
       exit 1
     }
-  if jq -e '.stages.AR.verdict == "blocked" and (.stages.AR.artifact | endswith("architecture-1.md"))' \
+  if jq -e '.tasks.AR0.verdict == "blocked" and (.tasks.AR0.artifact | endswith("architecture-1.md"))' \
     .context/state.json > /dev/null; then
     printf 'T4: highest-N wins when run_index absent: ok\n'
   else
     printf 'T4: highest-N resolution: FAIL\n' >&2
-    jq '.stages.AR' .context/state.json >&2
+    jq '.tasks.AR0' .context/state.json >&2
     exit 1
   fi
 
   # ---- T5: absent artifact → no-op, state unchanged ----
   cat > .context/state.json << 'EOSTATE'
-{"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","stages":{"PL":{"status":"completed","verdict":"ok"}},"facts":{"verdicts":{"PL":"ok"}},"handoffs":{}}
+{"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","tasks":{"PL0":{"status":"completed","verdict":"ok"}},"facts":{"verdicts":{"PL":"ok"}},"handoffs":{}}
 EOSTATE
   cp .context/state.json .context/state.json.snap2
   # No QA artifact exists.
@@ -533,7 +609,7 @@ EOART
       printf 'T6: disk-guard degrade: non-zero exit\n' >&2
       exit 1
     }
-  if jq -e '.stages.QA.status == "completed"' .context/state.json > /dev/null; then
+  if jq -e '.tasks.QA0.status == "completed"' .context/state.json > /dev/null; then
     printf 'T6: disk-guard degrade on unparseable df → patch applied: ok\n'
   else
     printf 'T6: disk-guard degrade: FAIL\n' >&2
@@ -626,9 +702,9 @@ EOART
   # Seed 10 decisions (d0..d9) + 8 dispatched_agents (mix launched/completed), then
   # patch any stage; atomic_merge must clamp both arrays at the single chokepoint.
   jq -n '
-    {version:1, worktask_id:"selftest", plan_file:".context/planning-0.md",
+    {version:2, worktask_id:"selftest", plan_file:".context/planning-0.md",
      platform:"all", run_index:0,
-     stages:{PL:{status:"completed", verdict:"ok"}},
+     tasks:{PL0:{status:"completed", verdict:"ok", metadata:{}}},
      facts:{
        files_modified:[], tests_added:[], open_questions:[], verdicts:{PL:"ok"},
        decisions:[ range(0;10) | {id:("d"+(.|tostring)), summary:("dec "+(.|tostring)), ref:"x.md#y"} ],
@@ -676,7 +752,7 @@ EOART
       printf 'T11: state-patch returned non-zero\n' >&2
       exit 1
     }
-  if jq -e '.stages.QA.status == "completed" and (.stages.QA.artifact | endswith("qa-0.md"))' \
+  if jq -e '.tasks.QA0.status == "completed" and (.tasks.QA0.artifact | endswith("qa-0.md"))' \
     .context/state.json > /dev/null; then
     printf 'T11: alias basename resolves: ok\n'
   else
@@ -694,7 +770,7 @@ handoff:
 ---
 EOART
   bash "$SELF" --stage QA
-  if jq -e '(.stages.QA.artifact | endswith("testing-0.md"))' .context/state.json > /dev/null; then
+  if jq -e '(.tasks.QA0.artifact | endswith("testing-0.md"))' .context/state.json > /dev/null; then
     printf 'T11: canonical preferred over alias: ok\n'
   else
     printf 'T11: canonical must outrank alias: FAIL\n' >&2
@@ -759,6 +835,211 @@ EOART
     exit 1
   fi
 
+  # ---- T14: ledger ops (create / block union / status) ----
+  make_state
+  bash "$SELF" --task-create DV0 --metadata '{"stage":"DV","agent":"corpflow:developer"}' \
+    && bash "$SELF" --task-create DV1 --metadata '{"stage":"DV","agent":"corpflow:developer"}' \
+    && bash "$SELF" --task-create DR0 --metadata '{"stage":"DR","agent":"corpflow:technical-lead"}' \
+    && bash "$SELF" --task-block DR0 --on DV0,DV1 \
+    && bash "$SELF" --task-block DR0 --on DV0 \
+    && bash "$SELF" --task-status DV0 in_progress \
+    || {
+      printf 'T14: ledger op returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '(.tasks.DR0.blocked_by == ["DV0","DV1"]) and .tasks.DV0.status == "in_progress"
+            and .tasks.DV1.status == "pending"' .context/state.json > /dev/null; then
+    printf 'T14: ledger create/status + blocked_by union: ok\n'
+  else
+    printf 'T14: ledger ops: FAIL\n' >&2
+    jq '.tasks' .context/state.json >&2
+    exit 1
+  fi
+
+  bash "$SELF" --task-create DV0 --metadata '{"clobbered":true}' > /dev/null
+  if jq -e '.tasks.DV0.metadata.agent == "corpflow:developer"
+            and (.tasks.DV0.metadata | has("clobbered") | not)' \
+    .context/state.json > /dev/null; then
+    printf 'T14: duplicate --task-create is a no-op: ok\n'
+  else
+    printf 'T14: duplicate create clobbered metadata: FAIL\n' >&2
+    exit 1
+  fi
+
+  bash "$SELF" --task-create QA0 \
+    || {
+      printf 'T14: --task-create without --metadata returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '.tasks.QA0.status == "pending" and .tasks.QA0.metadata == {}' \
+    .context/state.json > /dev/null; then
+    printf 'T14: --task-create without --metadata defaults to {}: ok\n'
+  else
+    printf 'T14: bare --task-create: FAIL\n' >&2
+    jq '.tasks.QA0' .context/state.json >&2
+    exit 1
+  fi
+
+  bash "$SELF" --task-unblock DR0 --off DV1 \
+    || {
+      printf 'T14: --task-unblock returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '.tasks.DR0.blocked_by == ["DV0"]' .context/state.json > /dev/null; then
+    printf 'T14: --task-unblock subtracts the edge: ok\n'
+  else
+    printf 'T14: unblock subtraction: FAIL\n' >&2
+    jq '.tasks.DR0' .context/state.json >&2
+    exit 1
+  fi
+
+  bash "$SELF" --task-unblock DR0 --off ST0 \
+    || {
+      printf 'T14: --task-unblock of an absent edge returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '.tasks.DR0.blocked_by == ["DV0"]' .context/state.json > /dev/null; then
+    printf 'T14: --task-unblock of an absent edge is a no-op: ok\n'
+  else
+    printf 'T14: unblock no-op: FAIL\n' >&2
+    exit 1
+  fi
+
+  st14_rc=0
+  bash "$SELF" --task-status ZZ0 pending > /dev/null 2>&1 || st14_rc=$?
+  if [[ "$st14_rc" != "0" ]]; then
+    printf 'T14: --task-status on a malformed id fails loudly: ok\n'
+  else
+    printf 'T14: malformed id must not be accepted: FAIL\n' >&2
+    exit 1
+  fi
+
+  # Only --task-create may introduce a key, so every other op must reject an unknown id
+  # rather than autovivify a ghost through its .tasks[$id] assignment.  The stderr match
+  # pins WHICH guard fired: a plain non-zero exit would also be satisfied by a parse error,
+  # which would leave the real behaviour untested.
+  cp .context/state.json .context/state.json.snap14
+  assert_ghost_rejected() {
+    local label="$1"
+    shift
+    local rc=0 err=""
+    err=$(bash "$SELF" "$@" 2>&1 > /dev/null) || rc=$?
+    if [[ "$rc" == "0" ]] || [[ "$err" != *"unknown task id"* ]] \
+      || ! diff -q .context/state.json .context/state.json.snap14 > /dev/null; then
+      printf 'T14: %s on an unknown id must hit the existence guard (rc=%s err=%s): FAIL\n' \
+        "$label" "$rc" "$err" >&2
+      jq '.tasks | keys' .context/state.json >&2
+      exit 1
+    fi
+  }
+  assert_ghost_rejected status --task-status FN0 pending
+  assert_ghost_rejected block --task-block FN0 --on DV0
+  assert_ghost_rejected unblock --task-unblock FN0 --off DV0
+  assert_ghost_rejected meta --task-meta FN0 --set '{}'
+  printf 'T14: status/block/unblock/meta on an unknown id all fail, state untouched: ok\n'
+
+  # ---- T15: split-stage id resolution (the case bare stage codes could not express) ----
+  # DV0 in_progress + DV1 pending: the running instance outranks the queued one, so a
+  # bare --stage DV cannot stamp the higher-numbered track that has not started.
+  t15_id=$(bash "$SELF" --resolve-task-id DV)
+  if [[ "$t15_id" == "DV0" ]]; then
+    printf 'T15: in_progress instance outranks pending: ok\n'
+  else
+    printf 'T15: in_progress must win (got %s): FAIL\n' "$t15_id" >&2
+    jq '.tasks' .context/state.json >&2
+    exit 1
+  fi
+
+  bash "$SELF" --task-status DV0 completed > /dev/null
+  t15_id=$(bash "$SELF" --resolve-task-id DV)
+  if [[ "$t15_id" == "DV1" ]]; then
+    printf 'T15: settled instance yields to the pending one: ok\n'
+  else
+    printf 'T15: pending must win once DV0 settles (got %s): FAIL\n' "$t15_id" >&2
+    exit 1
+  fi
+  cat > .context/development-0.md << 'EOSPLIT'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "second track"
+---
+EOSPLIT
+  bash "$SELF" --stage DV --via step6_5 \
+    || {
+      printf 'T15: state-patch returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '.tasks.DV1.status == "completed" and .tasks.DV1.verdict == "ok"
+            and (.tasks.DV0.artifact // "") == ""' .context/state.json > /dev/null; then
+    printf 'T15: --stage resolves to the open split instance: ok\n'
+  else
+    printf 'T15: split-stage resolution: FAIL\n' >&2
+    jq '.tasks' .context/state.json >&2
+    exit 1
+  fi
+
+  bash "$SELF" --stage DV --task-id DV0 --via step6_5 > /dev/null
+  if jq -e '(.tasks.DV0.artifact // "") | endswith("development-0.md")' \
+    .context/state.json > /dev/null; then
+    printf 'T15: explicit --task-id overrides resolution: ok\n'
+  else
+    printf 'T15: --task-id override: FAIL\n' >&2
+    exit 1
+  fi
+
+  # ---- T16: unsupported ledger version halts before any write ----
+  cat > .context/state.json << 'EOSTATE'
+{"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"PL0":{"status":"completed","verdict":"ok"}},"facts":{},"handoffs":{}}
+EOSTATE
+  cp .context/state.json .context/state.json.snap16
+  st16_rc=0
+  bash "$SELF" --task-status PL0 in_progress > /dev/null 2>&1 || st16_rc=$?
+  if [[ "$st16_rc" != "0" ]] \
+    && diff -q .context/state.json .context/state.json.snap16 > /dev/null; then
+    printf 'T16: v1 ledger rejected on the ledger-op path, file untouched: ok\n'
+  else
+    printf 'T16: ledger-op version guard (rc=%s): FAIL\n' "$st16_rc" >&2
+    exit 1
+  fi
+
+  st16b_rc=0
+  bash "$SELF" --stage DV --artifact .context/development-0.md --via hook > /dev/null 2>&1 \
+    || st16b_rc=$?
+  if [[ "$st16b_rc" != "0" ]] \
+    && diff -q .context/state.json .context/state.json.snap16 > /dev/null; then
+    printf 'T16: v1 ledger rejected on the --stage path, file untouched: ok\n'
+  else
+    printf 'T16: --stage version guard (rc=%s): FAIL\n' "$st16b_rc" >&2
+    exit 1
+  fi
+
+  # ---- T17: --via hook appends exactly one audit row; other paths stay silent ----
+  make_state
+  rm -f .context/logs/audit.jsonl
+  bash "$SELF" --stage DV --artifact .context/development-0.md --via hook > /dev/null
+  if [[ -f .context/logs/audit.jsonl ]] \
+    && jq -e 'select(.action == "stage_transition" and .actor == "hook:state-merge")
+              | .task_id == "DV0" and .metadata.via == "hook"' \
+      .context/logs/audit.jsonl > /dev/null; then
+    printf 'T17: hook completion writes its stage_transition row: ok\n'
+  else
+    printf 'T17: hook audit row missing: FAIL\n' >&2
+    cat .context/logs/audit.jsonl >&2 2> /dev/null || true
+    exit 1
+  fi
+
+  make_state
+  rm -f .context/logs/audit.jsonl
+  bash "$SELF" --stage DV --artifact .context/development-0.md --via step6_5 > /dev/null
+  if [[ ! -s .context/logs/audit.jsonl ]]; then
+    printf 'T17: step6_5 completion writes no row (Bash scrape owns it): ok\n'
+  else
+    printf 'T17: non-hook path must not append: FAIL\n' >&2
+    exit 1
+  fi
+
   printf 'self-test: ALL PASS\n'
   exit 0
 }
@@ -772,6 +1053,11 @@ LOG_FILE=".context/logs/state-merge.log"
 DISK_CHECK_ROOT=""
 VIA_ARG=""
 ALLOW_MISSING_ARTIFACT=""
+TASK_ID_ARG=""
+TASK_OP=""
+TASK_OP_ID=""
+TASK_OP_VALUE=""
+RESOLVE_CODE_ARG=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -819,6 +1105,53 @@ while [[ $# -gt 0 ]]; do
       ALLOW_MISSING_ARTIFACT="1"
       shift
       ;;
+    --task-id)
+      shift
+      TASK_ID_ARG="${1:-}"
+      shift
+      ;;
+    --task-create)
+      shift
+      TASK_OP="create"
+      TASK_OP_ID="${1:-}"
+      shift
+      ;;
+    --task-status)
+      shift
+      TASK_OP="status"
+      TASK_OP_ID="${1:-}"
+      shift
+      TASK_OP_VALUE="${1:-}"
+      shift
+      ;;
+    --task-block)
+      shift
+      TASK_OP="block"
+      TASK_OP_ID="${1:-}"
+      shift
+      ;;
+    --task-unblock)
+      shift
+      TASK_OP="unblock"
+      TASK_OP_ID="${1:-}"
+      shift
+      ;;
+    --task-meta)
+      shift
+      TASK_OP="meta"
+      TASK_OP_ID="${1:-}"
+      shift
+      ;;
+    --on | --off | --metadata | --set)
+      shift
+      TASK_OP_VALUE="${1:-}"
+      shift
+      ;;
+    --resolve-task-id)
+      shift
+      RESOLVE_CODE_ARG="${1:-}"
+      shift
+      ;;
     --self-test) run_self_test ;;
     -h | --help) usage ;;
     *)
@@ -845,6 +1178,120 @@ fi
 
 # ENOSPC guard (optional — only when caller requests it).
 [[ -n "$DISK_CHECK_ROOT" ]] && disk_guard "$DISK_CHECK_ROOT"
+
+# Ledger schema guard. This script is the single writer, so the version check belongs here
+# rather than in each caller. An absent .version is a pre-versioning seed and is tolerated;
+# an unreadable file is left to the callers below, which already no-op on it.
+if [[ -f "$STATE_PATH" ]] && command -v jq > /dev/null 2>&1; then
+  if STATE_VERSION=$(jq -r '.version // empty' "$STATE_PATH" 2> /dev/null); then
+    if [[ -n "$STATE_VERSION" && "$STATE_VERSION" != "2" ]]; then
+      printf >&2 'ledger version %s unsupported (expected 2)\n' "$STATE_VERSION"
+      log_msg ERROR "ledger version ${STATE_VERSION} unsupported (expected 2); state.json unchanged"
+      exit 1
+    fi
+  fi
+fi
+
+# ---------- Query mode ----------
+# Read-only id resolution for sibling scripts that would otherwise re-implement the
+# preference ladder in their own jq. No lock: nothing is written.
+if [[ -n "$RESOLVE_CODE_ARG" ]]; then
+  if [[ -z "$(basename_for_stage "$RESOLVE_CODE_ARG")" ]]; then
+    printf >&2 'invalid --resolve-task-id code: %s (expected a stage code: PL AR TL DV DR SR QA DC RE FN ST IR ET)\n' \
+      "$RESOLVE_CODE_ARG"
+    exit 1
+  fi
+  if [[ ! -f "$STATE_PATH" ]]; then
+    printf >&2 'no state.json at %s — cannot resolve a task id\n' "$STATE_PATH"
+    exit 1
+  fi
+  printf '%s\n' "$(resolve_task_id "$RESOLVE_CODE_ARG")"
+  exit 0
+fi
+
+# ---------- Ledger ops ----------
+# Direct tasks{} writes for the orchestrator loop; they short-circuit the
+# artifact/frontmatter path entirely.
+#
+# Each op yields a jq filter rather than a precomputed patch so that atomic_apply evaluates
+# it against the file INSIDE the merge lock — mandatory for the read-modify-write ops.
+if [[ -n "$TASK_OP" ]]; then
+  if ! [[ "$TASK_OP_ID" =~ ^(PL|AR|TL|DV|DR|SR|QA|DC|RE|FN|ST|IR|ET)[0-9]+$ ]]; then
+    printf >&2 'invalid task id: %s (expected <STAGE><N>, e.g. DV0)\n' "$TASK_OP_ID"
+    usage
+  fi
+  command -v jq > /dev/null 2>&1 || {
+    log_msg ERROR "ledger op needs jq; state.json unchanged"
+    exit 1
+  }
+
+  TASK_FILTER=""
+  TASK_JQ_ARGS=()
+  case "$TASK_OP" in
+    create)
+      # Seeding is idempotent: an existing task keeps the metadata it has accumulated, so a
+      # re-run of a seed script cannot roll it back to the seed's view.
+      if [[ -f "$STATE_PATH" ]] \
+        && jq -e --arg id "$TASK_OP_ID" 'has("tasks") and (.tasks | has($id))' \
+          "$STATE_PATH" > /dev/null 2>&1; then
+        log_msg INFO "idempotent: tasks.${TASK_OP_ID} already exists"
+        exit 0
+      fi
+      # --metadata is optional; absent ⇒ an empty object, never a parse abort.
+      TASK_FILTER='.tasks[$id] = {status: "pending", metadata: ($meta // {})}'
+      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
+      ;;
+    status)
+      case "$TASK_OP_VALUE" in
+        pending | in_progress | completed | blocked | skipped) ;;
+        *)
+          printf >&2 'invalid status: %s\n' "$TASK_OP_VALUE"
+          usage
+          ;;
+      esac
+      require_task_exists "$TASK_OP_ID" status
+      TASK_FILTER='.tasks[$id].status = $st'
+      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --arg st "$TASK_OP_VALUE")
+      ;;
+    block)
+      [[ -n "$TASK_OP_VALUE" ]] || {
+        printf >&2 'missing value: --task-block %s requires --on <ID[,ID...]>\n' "$TASK_OP_ID"
+        usage
+      }
+      require_task_exists "$TASK_OP_ID" block
+      # Union, not append: re-running a seed must not duplicate an edge.
+      TASK_FILTER='.tasks[$id].blocked_by =
+        (((.tasks[$id].blocked_by // []) + ($on | split(","))) | unique)'
+      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --arg on "$TASK_OP_VALUE")
+      ;;
+    unblock)
+      [[ -n "$TASK_OP_VALUE" ]] || {
+        printf >&2 'missing value: --task-unblock %s requires --off <ID[,ID...]>\n' "$TASK_OP_ID"
+        usage
+      }
+      require_task_exists "$TASK_OP_ID" unblock
+      # Set subtraction mirroring --task-block: dropping an edge that was never there is a no-op.
+      TASK_FILTER='.tasks[$id].blocked_by =
+        (((.tasks[$id].blocked_by // []) - ($off | split(","))) | unique)'
+      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --arg off "$TASK_OP_VALUE")
+      ;;
+    meta)
+      require_task_exists "$TASK_OP_ID" meta
+      # Recursive merge, so a partial --set updates named keys without dropping the rest.
+      TASK_FILTER='.tasks[$id].metadata = ((.tasks[$id].metadata // {}) * ($meta // {}))'
+      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
+      ;;
+  esac
+
+  if atomic_apply "$STATE_PATH" "$TASK_FILTER" "${TASK_JQ_ARGS[@]}"; then
+    log_msg INFO "ledger ${TASK_OP}: tasks.${TASK_OP_ID} ${TASK_OP_VALUE}"
+    exit 0
+  fi
+  printf >&2 'ledger %s failed on tasks.%s; state.json unchanged (see %s)\n' \
+    "$TASK_OP" "$TASK_OP_ID" "$LOG_FILE"
+  log_msg ERROR "jq apply failed for ledger ${TASK_OP} on tasks.${TASK_OP_ID}; state.json unchanged"
+  exit 1
+fi
 
 # ---------- Resolve artifact ----------
 ART="$ARTIFACT_ARG"
@@ -879,7 +1326,7 @@ if [[ -z "$ART" || ! -f "$ART" ]]; then
 fi
 
 if [[ ! -f "$STATE_PATH" ]]; then
-  log_msg INFO "state.json absent — F1 fallback active, no merge needed (artifact=$ART)"
+  log_msg INFO "state.json absent — nothing to merge (artifact=$ART)"
   exit 0
 fi
 
@@ -891,16 +1338,18 @@ if [[ -z "$PARSED_STAGE" ]]; then
   exit 0
 fi
 
+# ---------- Resolve the ledger key ----------
+TASK_ID=$(resolve_task_id "$PARSED_STAGE")
+
 # ---------- Idempotency check ----------
+# One @tsv read for all three fields: this runs on every hook-driven stage completion, so
+# each extra jq spawn is paid per stage per run. Artifact paths never contain a tab.
+CURRENT_STATUS="" CURRENT_VERDICT="" CURRENT_ARTIFACT=""
 if command -v jq > /dev/null 2>&1; then
-  CURRENT_STATUS=$(jq -r --arg s "$PARSED_STAGE" '.stages[$s].status // ""' \
-    "$STATE_PATH" 2> /dev/null || printf '')
-  CURRENT_VERDICT=$(jq -r --arg s "$PARSED_STAGE" '.stages[$s].verdict // ""' \
-    "$STATE_PATH" 2> /dev/null || printf '')
-  CURRENT_ARTIFACT=$(jq -r --arg s "$PARSED_STAGE" '.stages[$s].artifact // ""' \
-    "$STATE_PATH" 2> /dev/null || printf '')
-else
-  CURRENT_STATUS="" CURRENT_VERDICT="" CURRENT_ARTIFACT=""
+  IDEM_TSV=$(jq -r --arg s "$TASK_ID" \
+    '[.tasks[$s].status // "", .tasks[$s].verdict // "", .tasks[$s].artifact // ""] | @tsv' \
+    "$STATE_PATH" 2> /dev/null || printf '\t\t')
+  IFS=$'\t' read -r CURRENT_STATUS CURRENT_VERDICT CURRENT_ARTIFACT <<< "$IDEM_TSV" || true
 fi
 
 # A remediation loop re-completes a stage at the same verdict with a fresh artifact and summary,
@@ -922,22 +1371,21 @@ if [[ "$CURRENT_STATUS" == "completed" && "$CURRENT_VERDICT" == "$PARSED_VERDICT
   fi
 
   if [[ "$PATCH_IS_NOOP" == "1" ]]; then
-    log_msg INFO "idempotent: stages.${PARSED_STAGE} already completed verdict=${PARSED_VERDICT}"
+    log_msg INFO "idempotent: tasks.${TASK_ID} already completed verdict=${PARSED_VERDICT}"
     exit 0
   fi
   log_msg INFO \
-    "re-merge: stages.${PARSED_STAGE} verdict unchanged (${PARSED_VERDICT}) but artifact/handoff differ"
+    "re-merge: tasks.${TASK_ID} verdict unchanged (${PARSED_VERDICT}) but artifact/handoff differ"
 fi
 
 # ---------- Build patch + atomic write ----------
-# Base stage object; additive keys (completed_via, worktree) are folded in only when
-# present so absence stays absence (version:1, no renames, tolerant consumers).
-# When --prev is given, ALSO emit handoffs["<PREV>→<CODE>"] from the parsed summary +
-# artifact basename (schema: maxLength 300, must contain "ref:"). Absent --prev ⇒ no
-# handoffs key ⇒ byte-identical to the pre-flag patch.
+# Additive keys (completed_via, worktree) fold in only when present, so absence stays
+# absence. --prev additionally emits handoffs["<PREV>→<CODE>"] (maxLength 300, must
+# contain "ref:"); absent --prev ⇒ no handoffs key at all.
 ART_BASE=$(basename "$ART")
 PATCH=$(jq -cn \
   --arg stage "$PARSED_STAGE" \
+  --arg taskid "$TASK_ID" \
   --arg artifact "$ART" \
   --arg verdict "$PARSED_VERDICT" \
   --arg via "$VIA_ARG" \
@@ -955,16 +1403,40 @@ PATCH=$(jq -cn \
             + (if $wt_branch != "" then {branch: $wt_branch} else {} end))}
        else {} end)
   ) as $stageObj
-  | {stages: {($stage): $stageObj}}
+  | {tasks: {($taskid): $stageObj}}
   + (if $prev != ""
      then {handoffs: {($prev + "→" + $stage): ((($summary) + " ref:" + $ref) | .[0:300])}}
      else {} end)')
 
 if atomic_merge "$STATE_PATH" "$PATCH"; then
-  log_msg INFO "merged stages.${PARSED_STAGE} artifact=${ART} verdict=${PARSED_VERDICT} (summary: ${PARSED_SUMMARY:0:80})"
+  log_msg INFO "merged tasks.${TASK_ID} artifact=${ART} verdict=${PARSED_VERDICT} (summary: ${PARSED_SUMMARY:0:80})"
 else
-  log_msg ERROR "jq merge failed for stage=${PARSED_STAGE} artifact=${ART}; state.json unchanged"
+  log_msg ERROR "jq merge failed for task=${TASK_ID} artifact=${ART}; state.json unchanged"
   exit 1
+fi
+
+# ---------- Audit (hook path only) ----------
+# The SubagentStop hook completes a stage without any Bash tool call, so the tool-use
+# scraper that produces every other stage_transition row never sees it — this is the only
+# place that transition can be recorded. Restricted to --via hook precisely so the scraped
+# paths are not double-counted; dedupe_key lets a reader collapse a replayed hook.
+# Best-effort: an unwritable log must never undo a merge that already landed.
+if [[ "$VIA_ARG" == "hook" ]]; then
+  AUDIT_DIR="${CONTEXT_DIR:-.context}/logs"
+  if mkdir -p "$AUDIT_DIR" 2> /dev/null; then
+    AUDIT_WT_ID=$(jq -r '.worktask_id // "unknown"' "$STATE_PATH" 2> /dev/null || printf 'unknown')
+    AUDIT_RUN_IDX=$(jq -r '.run_index // 0' "$STATE_PATH" 2> /dev/null || printf '0')
+    jq -cn \
+      --arg ts "$(date -u +%FT%TZ)" \
+      --arg subject "$TASK_ID" \
+      --arg verdict "$PARSED_VERDICT" \
+      --arg dedupe "${AUDIT_WT_ID}:${AUDIT_RUN_IDX}:${TASK_ID}:completed" \
+      '{ts: $ts, actor: "hook:state-merge", action: "stage_transition", subject: $subject,
+         result: "ok", task_id: $subject,
+         metadata: {verdict: $verdict, via: "hook", dedupe_key: $dedupe}}' \
+      >> "${AUDIT_DIR}/audit.jsonl" 2> /dev/null \
+      || log_msg WARN "audit append failed for tasks.${TASK_ID} (merge already applied)"
+  fi
 fi
 
 exit 0

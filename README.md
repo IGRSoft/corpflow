@@ -1,61 +1,48 @@
 # Company Worktask Plugin
 
-A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with Task System integration, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
+A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.0.14 · Requires Claude Code 2.1.220+**
+**Plugin 4.0.15 · Requires Claude Code 2.1.233+**
 
 ## Features
 
 - **Worktree-isolated + two approval gates (plan + finalization)**: every worktask runs in a dedicated git worktree and STOPs twice — once after planning to approve the plan (`plan_gate: "checkpoint"`; skipped by `--auto=[plan]` / `--emergency`) and once before finalization to approve commit/push/PR (`fn_gate: "checkpoint"`; skipped by `--auto=[finalization]` / `--emergency`). By default FN STOPs before any commit/push/PR; `--auto=[finalization]` finalizes unattended. The values are orthogonal — `plan` skips only the plan gate, never the FN gate; the third value, `--auto=[decision]`, skips no gate but delegates PL open questions to a Fable-model decision pass instead of the user. Changes are reviewable as PRs. (Batch runs via **`/megatask`** stamp both gates `"bypass"` directly per issue — see the Megatask feature below.)
 - **`/megatask` — dependency-DAG batch orchestration**: run many worktasks across a GitHub milestone (`/megatask N`) or an explicit issue array (`/megatask --issues 12,15,18`). Parses `Depends on:` / `Blocks:` + P0–P3 labels into a DAG, executes in topological + priority order (never starting an issue whose blockers are unmerged), isolates each issue in its own worktree, and drives completion via the `megatask-monitor` hook (unblock-dependents + progress). One human checkpoint: the R1 batch confirmation.
 - **9-Stage Worktask**: Planning → Architecture → Team Lead → Development → Developer Review → QA → Documentation → Finalization → Stakeholder
-- **Task System Integration**: Native `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` tools
-- **Native Dependencies**: `blockedBy` arrays for explicit dependency management
-- **Cross-Session Persistence**: Tasks persist across sessions
-- **Dynamic Task Creation**: PL0 creates subsequent stage tasks based on complexity assessment
+- **State Ledger**: `.context/state.json` `tasks{}` — one durable ledger, written only through `state-patch.sh`
+- **Native Dependencies**: `blocked_by` arrays for explicit dependency management
+- **Durable by construction**: the ledger is a file in the worktask folder, so it survives sessions, compaction, and resume
+- **Dynamic Task Creation**: PL0 seeds subsequent stage tasks based on complexity assessment
 - **Error Handling**: Retry logic (max 3 per stage) and escalation chains
-- **Worktask State Management**: Task System handles all state persistence
-- **Sub-agent Visibility**: All agents can view tasks with `TaskGet`
+- **Sub-agent Visibility**: every agent reads the same ledger
 - **Agent-Specific Commands**: Specialized commands for each worktask role
 - **Ethics Review**: Optional constitutional compliance checkpoint for high-risk features
 
-## Task System
+## State Ledger
 
-The worktask uses Claude Code's Task System for persistent task management:
+Stage state lives in `.context/state.json` under `tasks{}`, keyed by stage id (`PL0`, `DV0`,
+`DV1`). All writes go through `skills/worktask/scripts/state-patch.sh`, which owns the merge
+lock, the atomic write, and the disk guard.
 
-| Tool | Purpose |
-|------|---------|
-| `TaskCreate` | Create tasks with subject, description, activeForm, metadata |
-| `TaskUpdate` | Update status, owner, add/remove blockedBy |
-| `TaskGet` | Retrieve current task state |
-| `TaskList` | View all tasks and their statuses |
+| Operation | Command |
+|-----------|---------|
+| Create | `state-patch.sh --task-create <ID> --metadata '<json>'` |
+| Set status | `state-patch.sh --task-status <ID> <status>` |
+| Add dependency | `state-patch.sh --task-block <ID> --on <ID[,ID...]>` |
+| Merge metadata | `state-patch.sh --task-meta <ID> --set '<json>'` |
 
 ### Key Benefits
 
-- **Cross-session persistence**: Tasks survive session boundaries (see below)
-- **Native dependencies**: `blockedBy` arrays handled by the system
-- **Sub-agent visibility**: Any agent can query task state
-- **Task ownership**: Explicit `owner` field tracks responsible agent
-- **Metadata support**: Store priority, stage, worktask_id per task
-- **UI integration**: `Ctrl+T` task view in Claude Code
+- **Durable**: a file in the worktask folder — survives sessions, compaction, and resume with no configuration
+- **Native dependencies**: `blocked_by` arrays, resolved by the orchestrator loop
+- **Sub-agent visibility**: every agent reads the same ledger
+- **Parallel-track safe**: numbered keys mean `DV0` and `DV1` are distinct entries, not a collision
+- **Metadata support**: routing, gates, and dispatch config per task
 
-### Cross-Session Persistence
-
-By default, tasks persist within a session. For cross-session persistence:
-
-```bash
-# Per-session (temporary)
-CLAUDE_CODE_TASK_LIST_ID="my-project" claude
-
-# Permanent (add to .claude/settings.json)
-{
-  "env": {
-    "CLAUDE_CODE_TASK_LIST_ID": "project-worktask"
-  }
-}
-```
-
-Tasks are stored at `~/.claude/tasks/<list-id>/` as individual JSON files.
+> corpflow does **not** use Claude Code's `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` tools.
+> CC 2.1.233 removed them on Opus 4.8, Sonnet 5, Fable 5, Mythos 5 and newer — every model this
+> plugin dispatches — so the ledger is the only mechanism that works. See
+> `skills/shared/state-ledger.md`.
 
 ## Installation
 
@@ -81,7 +68,7 @@ Run the worktask command:
 
 `/worktask` is the single-issue entry point. PL0 sizes the pipeline by complexity (dropping AR/TL/DC for small tasks). Use `--auto=[plan]` to skip the plan-approval stop; `--auto=[finalization]` to skip the finalization-approval stop (auto commit/push/PR); `--auto=[decision]` to let a Fable-model delegate answer PL0's open questions; combine as `--auto=[plan, decision, finalization]` for a fully unattended run (escalation-class questions still stop). Use `--emergency` for the incident pipeline (skips both gates). You can also launch via `Skill({skill:"corpflow:worktask"})`. For **multi-issue batches**, use **`/megatask N`** (a milestone) or **`/megatask --issues 12,15,18`** (an array) — it orders by a dependency/blocker DAG and runs each issue unattended.
 
-`/worktask` sets up the worktask context, Task System integration, and stage management.
+`/worktask` sets up the worktask context, the state ledger, and stage management.
 
 ### Examples
 
@@ -173,25 +160,22 @@ Single entry point (`/worktask`). PL always runs; PL0 dynamic sizing scores comp
 | FN | Finalization | project-manager | Prepare release |
 | ST | Stakeholder | stakeholder | Final approval |
 
-## Task System Initialization
+## Ledger Initialization
 
-Only `PL0` is created at startup. PL0 creates subsequent stage tasks after planning:
+Only `PL0` is seeded at startup. PL0 seeds subsequent stage tasks after planning:
 
-```typescript
-// Create PL0 only — PL agent creates remaining stages after planning
-TaskCreate({
-  subject: "PL0: Planning",
-  description: "Define requirements, assess complexity, create stage tasks",
-  activeForm: "Planning...",
-  metadata: { stage: "PL", agent: "corpflow:product-manager", worktask_id: "dark-mode", priority: "medium" }
-});
+```bash
+# Seed PL0 only — the PL agent seeds remaining stages after planning.
+state-patch.sh --task-create PL0 --metadata '{
+  "stage":"PL","agent":"corpflow:product-manager",
+  "description":"Define requirements, assess complexity, seed stage tasks",
+  "worktask_id":"dark-mode","priority":"medium"}'
 
-// Start PL0
-TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
+state-patch.sh --task-status PL0 in_progress
 
-// After planning, PL0 creates stages based on complexity:
-// AR0, DV0, QA0, etc. — each with metadata.agent for executor resolution
-// Stage agents can split into sub-tasks: DV0 → DV1, DV2
+# After planning, PL0 seeds stages based on complexity:
+# AR0, DV0, QA0, … — each with metadata.agent for executor resolution.
+# Stage agents can split into sub-tasks: DV0 → DV1, DV2
 ```
 
 ## Context Folder Structure
@@ -369,7 +353,7 @@ Registered in `.claude-plugin/plugin.json`. Several are **gates** — they can b
 
 | Hook | Event | Purpose |
 |------|-------|---------|
-| `audit-tooluse.sh` | PostToolUse (`TaskCreate`/`TaskUpdate`/`Write`/`Edit`) | Appends canonical tool rows to `.context/logs/audit.jsonl` |
+| `audit-tooluse.sh` | PostToolUse (`Bash`/`Write`/`Edit`) | Appends canonical tool rows to `.context/logs/audit.jsonl`; Bash rows only for ledger patches |
 | `anchor-preflight.sh` | PostToolUse (`Write`/`Edit`) | Anchor-lint pre-flight on `.context/<stage>-N.md` artifacts |
 | `comment-standard-context.sh` | PostToolUse (`Write`/`Edit`) | Injects the comment standard once per session on the first source edit |
 | `audit-subagent.sh` | SubagentStop | Writes `subagent_stopped` audit rows |

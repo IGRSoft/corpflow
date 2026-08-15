@@ -56,4 +56,4 @@ tier-driven. Criteria canon: `skills/estimation-methodology/SKILL.md § Stage In
 | TC | Technical Review | On-demand deep technical-lead review (AR/TL/DV/QA). |
 | ET | Ethics Review | On-demand constitutional/harm review (any stage). |
 | PE | Prompt Engineering | Agent/prompt optimization (meta-tooling). |
-| WE | Workflow Engineering | Worktask state-machine and Task System troubleshooting. |
+| WE | Workflow Engineering | Worktask state-machine and state-ledger troubleshooting. |

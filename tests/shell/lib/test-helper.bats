@@ -200,9 +200,9 @@ two three'
 @test "H17: mk_state_fixture applies trailing jq filters in order" {
   mk_state_fixture "$WD/.context/state.json" \
     '.worktask_id="wt-fix"' \
-    '.stages.PL={status:"completed",verdict:"ok"}' \
+    '.tasks.PL0={status:"completed",verdict:"ok"}' \
     '.facts.goal="build a thing"' > /dev/null
-  run jq -r '[.worktask_id, .stages.PL.status, .facts.goal] | @tsv' "$WD/.context/state.json"
+  run jq -r '[.worktask_id, .tasks.PL0.status, .facts.goal] | @tsv' "$WD/.context/state.json"
   assert_success
   assert_output "$(printf 'wt-fix\tcompleted\tbuild a thing')"
 }

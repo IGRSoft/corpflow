@@ -132,6 +132,15 @@ Every file below changes in the same commit. Ordered so later edits can referenc
 A plain `skills/shared/*.md` reference needs no `marketplace.json` entry — only directory skills with
 their own `SKILL.md` are listed in `skills[]`.
 
+### Packaging and validation
+
+- `claude plugin validate` also checks a bare `.claude/skills` directory and reports `SKILL.md`
+  files whose frontmatter fails to parse (CC 2.1.233). Run it before publishing — a malformed
+  frontmatter block is otherwise a silent no-load.
+- A plugin may declare `"."` as a `skills` path, meaning the plugin root itself (CC 2.1.221).
+- The `archive` source installs a plugin from a zip over HTTPS with no git or npm, and accepts an
+  optional SHA-256 pin (CC 2.1.224). Pin the hash for any non-first-party marketplace entry.
+
 ## D. Replacing an existing plugin
 
 1. Work through § C swapping the old plugin's rows, grants, and agent IDs for the replacement's in a

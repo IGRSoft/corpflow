@@ -64,6 +64,6 @@ Files in `shared/` are referenced by skills/agents, not loaded directly — **ex
 | [five-whys.md](shared/five-whys.md) | Five Whys root-cause analysis |
 | [git-conventions.md](shared/git-conventions.md) | Conventional Commits, PR template, git safety |
 | [stage-codes.md](shared/stage-codes.md) | Worktask stage codes |
-| [task-system.md](shared/task-system.md) | Task System integration |
+| [state-ledger.md](shared/state-ledger.md) | State ledger (tasks{}) reference |
 | [worktask-invocation.md](shared/worktask-invocation.md) | Invocation rule + execution model |
 | [milestone-helpers/](shared/milestone-helpers/) | Milestone helpers |

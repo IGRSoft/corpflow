@@ -12,7 +12,6 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 | `StopFailure` | API error causes turn end | — | Error details |
 | `CwdChanged` | Working directory changes | — | New cwd path |
 | `FileChanged` | Monitored file modified | — | File path |
-| `TaskCreated` | TaskCreate tool called | — | Task ID, subject |
 | `WorktreeCreate` | Worktree created | — | Worktree path |
 | `DirectoryAdded` | A working directory is registered mid-session (`/add-dir`, or the SDK `register_repo_root` control request) | — | Added directory path |
 
@@ -28,13 +27,21 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 |------------|------------|---------|----------------|
 | `MessageDisplay` | A message is displayed to the user | — | `message`, `role` (`user`/`assistant`), `display_type` |
 | `SessionStart` | Session begins | — | `session_id`, `session_title`, `reloadSkills` (bool), `source` (session origin — a forked session reports `"fork"`, not `"resume"`) |
-| `Notification` | Background agent needs input or finishes | — | reason ∈ `agent_needs_input` / `agent_completed` |
+| `Notification` | Background agent needs input or finishes; also permission prompts (incl. Claude Desktop / VS Code, fixed CC 2.1.233) | — | reason ∈ `agent_needs_input` / `agent_completed` |
 
 ### Notification as resume wake-up
 
 > **`Notification` as resume wake-up**: background sessions in `claude agents` that need input or finish fire the `Notification` hook with `agent_needs_input` / `agent_completed`. For worktask resume this is the push complement to polling `claude agents --json` — wire a `Notification` hook to nudge the orchestrator (or the operator, via PushNotification) the moment a parked stage needs an answer. The `--json` pre-check remains the authoritative reconciliation (`skills/worktask/references/resume.md` step 0).
 
 > The Agent tool has no `resume` parameter. Use `SendMessage` to communicate with running agents instead.
+
+### Notification now covers permission prompts
+
+> **CC 2.1.233** fixed `Notification` not firing for permission prompts under Claude Desktop and VS Code. An unattended run hosted there now surfaces a parked stage instead of stalling silently.
+
+### PreToolUse auto-allow cannot widen a grant list
+
+> **CC 2.1.222**: a `PreToolUse` hook returning an auto-allow decision inside a background agent task (summaries, compaction, renames) used to grant tools the agent's own `tools:` list denied. An agent's grant list is now the floor — a hook cannot widen it.
 
 ### SessionStart reloadSkills
 

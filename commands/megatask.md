@@ -4,7 +4,7 @@ description: Orchestrate many worktasks across a GitHub milestone or an explicit
 argument-hint: '<milestone-N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
 version: 0.1.0
 model: opus
-allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
+allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
 related:
   - skills/megatask/SKILL.md
   - skills/megatask/references/dependency-graph.md
@@ -38,10 +38,10 @@ graph (DAG), and executes issues in **topological + priority order** — never s
 blockers have not merged — each in an isolated git worktree, each producing its own PR.
 
 > **CRITICAL CONSTRAINTS**
-> - MUST use TaskCreate/TaskUpdate/TaskGet/TaskList for orchestrator + per-issue state. Do NOT use Claude Code's built-in plan mode.
+> - MUST use `.context/state.json` `tasks{}` for orchestrator + per-issue state, written only via `state-patch.sh`. Do NOT use Claude Code's built-in plan mode.
 > - Megatask MUST NOT contain stage logic (PL/AR/DV/…). Stages belong to `/worktask`. Megatask only sequences worktasks.
 > - If a dependency **cycle** is detected, STOP and report the cycle — do NOT guess an order.
-> - If Task tools are unavailable, STOP and report. Do NOT fall back to alternative planning.
+> - If the ledger cannot be read or written, STOP and report. Do NOT fall back to alternative planning.
 
 ## Usage
 
@@ -143,7 +143,7 @@ All three are warn-and-continue, never a hard gate. See `skills/megatask/SKILL.m
 
 | Projection | Formula | Cap (default) |
 |---|---|---|
-| Total spawns | `issue_count × ~9–11 stages` + nested-delegation spawns (counted at every depth) | `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` (200) |
+| Total spawns | `issue_count × ~9–11 stages` + nested-delegation spawns | no cap (removed in CC 2.1.224) |
 | Max chain depth | megatask spends one level on the per-issue orchestrator, so DV → platform-router → Tier-2 lands at **4** | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (3) |
 | Peak concurrent | `parallel_tracks × (orchestrator + stage agent + nested children)` | `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` (20) |
 
@@ -169,9 +169,10 @@ parallel_tracks = reduce_by_concurrency_cap(parallel_tracks)   # CLAUDE_CODE_MAX
 ```
 
 Never a flag, never a fixed default. Re-derived as the ready-set grows when blockers merge.
-See `skills/megatask/SKILL.md § Track Derivation` for the three ceilings this implies: total spawns
-(`CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`, 200), concurrent agents (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`, 20),
-and chain depth (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, 3 — megatask spends one level on the per-issue orchestrator).
+See `skills/megatask/SKILL.md § Track Derivation` for the two ceilings this implies: concurrent
+agents (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`, 20) and chain depth
+(`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, 3 — megatask spends one level on the per-issue
+orchestrator). The per-session total-spawn cap was removed in CC 2.1.224.
 
 ### Phase 2 loop · Steps 1–2 — Select ready issues & assign tracks
 

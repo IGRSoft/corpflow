@@ -48,7 +48,7 @@ When a single .pen file contains multiple states as frames, use the base name wi
 Save to `.context/designs/` with workspace-aware path resolution:
 
 ```typescript
-const task = TaskGet({ taskId: currentTaskId });
+const task = state.tasks[currentTaskId];
 const workspacePath = task.metadata?.workspace_path;
 const designsPath = workspacePath
   ? `${workspacePath}/.context/designs`
