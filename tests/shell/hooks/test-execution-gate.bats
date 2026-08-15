@@ -814,17 +814,51 @@ teardown() {
   assert_success
 }
 
-@test "D2: a ledger with NO stage in_progress fails open — the same command ALLOWS" {
-  # The other half of D1, and the coupling that broke silently: the orchestrator
-  # marked stages in_progress in the Task System only, so state.json never named
-  # an acting stage after PL and every deny above was unreachable in a live run.
-  # skills/worktask/SKILL.md step 5 mirrors the mark into state.json; without it
-  # this allow is what the whole pipeline gets, at every stage.
+@test "D2: a SETTLED ledger (stages present, none in_progress) DENIES" {
+  # Reverses this test's own earlier assertion, deliberately (#295). It used to
+  # require an allow here, on the reading that an empty resolve_stage always
+  # means "cannot tell who is acting". It does not: a non-empty stages map with
+  # zero in_progress is the ledger positively saying NOBODY is acting — the
+  # worktask has finished, or the loop is between stages. Allowing there left a
+  # full suite permitted forever after FN, which is how a post-merge
+  # `./run-tests.sh` got through. The genuine cannot-tell shapes still fail open
+  # and are covered by D2b and the no-state.json case.
   printf '{"stages":{"PL":{"status":"completed"},"RE":{"status":"completed"}}}' > "$WD/.context/state.json"
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
   assert_success
+  assert_output --partial '"permissionDecision":"deny"'
+  assert_output --partial 'No stage is in progress'
+}
+
+@test "D2a: a settled ledger still ALLOWS a non-test command" {
+  # Scope check: the deny must cost a finished worktask only its test runs. If
+  # it reached git/gh the session would be wedged, which is the deadlock the
+  # fail-open contract exists to prevent.
+  printf '{"stages":{"PL":{"status":"completed"},"FN":{"status":"completed"}}}' > "$WD/.context/state.json"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'git status')"
+  assert_success
   [ -z "$output" ]
-  [ ! -f "$WD/.context/logs/audit.jsonl" ]
+}
+
+@test "D2b: an AMBIGUOUS ledger (two stages in_progress) still fails open" {
+  # This is what D2 used to protect and must not be lost: with two concurrent
+  # stages the gate cannot attribute the call, so denying would wedge a session
+  # it cannot reason about. Ambiguity fails open; settled does not.
+  printf '{"stages":{"DV":{"status":"in_progress"},"QA":{"status":"in_progress"}}}' > "$WD/.context/state.json"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "D2c: the exact post-merge invocation from #295 is denied (cd does not evade)" {
+  # cd into an unrelated directory changes nothing: the hook reads
+  # ${CLAUDE_PROJECT_DIR}/.context, the session's ledger, not the cwd's. Pinned
+  # verbatim because this is the command that actually got through.
+  printf '{"stages":{"PL":{"status":"completed"},"DV":{"status":"completed"},"QA":{"status":"completed"},"FN":{"status":"completed"}}}' > "$WD/.context/state.json"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "$(bash_payload 'cd /tmp/corpflow-mergecheck && ./run-tests.sh')"
+  assert_success
+  assert_output --partial '"permissionDecision":"deny"'
 }
 
 @test "D3: SKILL.md step 5 mirrors the in_progress mark into state.json" {
