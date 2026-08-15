@@ -6,10 +6,12 @@
 #        base_branch: field → develop → master; no hardcoding).
 #     2. Derives the feature branch name: feature/{n}-{slug} (milestone-helpers
 #        cmd_branch_name, slug max 50 chars).
-#     3. Runs: git fetch origin <base_branch>
+#     3. Excludes the batch's own scratch metadata from git BEFORE the worktree
+#        exists, so it is never reported by `git status` (see exclude_scratch).
+#     4. Runs: git fetch origin <base_branch>
 #              git worktree add -b <branch> <worktree_path> origin/<base_branch>
-#     4. Creates <worktree_path>/.context/
-#     5. Stamps <worktree_path>/workspace.json v2.0 (schema: references/schemas.md).
+#     5. Creates <worktree_path>/.context/
+#     6. Stamps <worktree_path>/workspace.json v2.0 (schema: references/schemas.md).
 #
 #   Idempotent: if the worktree directory already exists the script skips creation
 #   and reports "already exists" rather than erroring (safe to re-run on retry).
@@ -69,6 +71,41 @@ require_tools() {
 }
 
 ts() { date -u +%FT%TZ 2> /dev/null || date -u '+%Y-%m-%dT%H:%M:%SZ'; }
+
+# ---------------------------------------------------------------------------
+# exclude_scratch  <repo_root> <pattern>...  — idempotent, exact-line matched.
+#
+# Writes to the COMMON git dir because git has no per-worktree exclude file:
+# .git/worktrees/<n>/info/exclude is never consulted. The exclusion is thus
+# checkout-wide (sibling worktrees are covered too) — bounded, because ignore
+# rules never mask a tracked file. The tracked .gitignore is left alone: editing
+# it would commit the exclusion, which is the failure this prevents.
+# ---------------------------------------------------------------------------
+exclude_scratch() {
+  local repo_root="$1"
+  shift
+  local common excl p
+  common=$(git -C "$repo_root" rev-parse --git-common-dir) || return 1
+  # rev-parse answers relatively (".git") when run from the main checkout.
+  case "$common" in
+    /*) ;;
+    *) common="${repo_root}/${common}" ;;
+  esac
+  excl="${common}/info/exclude"
+  mkdir -p -- "${common}/info"
+  [[ -f "$excl" ]] || : > "$excl"
+  # Provenance for the operator who meets the checkout-wide consequence in this
+  # file rather than in the docs. Not a pattern, so it cannot collide below.
+  grep -qxF -- "$SCRATCH_HEADER" "$excl" || printf '%s\n' "$SCRATCH_HEADER" >> "$excl"
+  for p in "$@"; do
+    grep -qxF -- "$p" "$excl" || printf '%s\n' "$p" >> "$excl"
+  done
+}
+
+# Leading slash anchors each pattern to a worktree root, so a nested
+# src/sub/workspace.json stays visible.
+SCRATCH_PATTERNS=('/workspace.json' '/.worktrees/')
+SCRATCH_HEADER='# megatask scratch — skills/megatask/scripts/init-worktree.sh'
 
 # ---------------------------------------------------------------------------
 # resolve_base_branch  <issue_num> [<json_file>]
@@ -249,6 +286,10 @@ run_init() {
     printf '  blocked_by:      %s\n' "$blocked_by_json"
     printf '  blocks:          %s\n' "$blocks_json"
     printf '  labels:          %s\n' "$labels_json"
+    local _p
+    for _p in "${SCRATCH_PATTERNS[@]}"; do
+      printf '  exclude (git common-dir info/exclude): %s\n' "$_p"
+    done
     printf '  git fetch origin %s\n' "$base_branch"
     printf '  git worktree add -b %s %s origin/%s\n' "$branch" "$worktree_path" "$base_branch"
     printf '  mkdir -p %s/.context\n' "$worktree_path"
@@ -271,7 +312,13 @@ run_init() {
   mkdir -p -- "$group_dir"
 
   # ------------------------------------------------------------------
-  # 6. git fetch + worktree add.
+  # 6. Exclude scratch metadata BEFORE the worktree exists, so workspace.json
+  # is never briefly visible to a `git add -A` racing the initialiser.
+  # ------------------------------------------------------------------
+  exclude_scratch "$repo_root" "${SCRATCH_PATTERNS[@]}"
+
+  # ------------------------------------------------------------------
+  # 7. git fetch + worktree add.
   # Uses -C flag so no cd is required; prevents cwd drift.
   # Branch name and base_branch are validated/derived, not user-interpolated.
   # ------------------------------------------------------------------
@@ -279,12 +326,12 @@ run_init() {
   git -C "$repo_root" worktree add -b "$branch" "$worktree_path" "origin/${base_branch}"
 
   # ------------------------------------------------------------------
-  # 7. Create .context directory.
+  # 8. Create .context directory.
   # ------------------------------------------------------------------
   mkdir -p -- "${worktree_path}/.context"
 
   # ------------------------------------------------------------------
-  # 8. Stamp workspace.json v2.0 (atomic write).
+  # 9. Stamp workspace.json v2.0 (atomic write).
   # ------------------------------------------------------------------
   local ws_tmp
   ws_tmp=$(mktemp -t init-worktree-ws.XXXXXX)
@@ -387,6 +434,18 @@ self_test() {
     st_fail "dry-run: branch name missing from output"
   fi
 
+  if grep -q 'exclude (git common-dir info/exclude): /workspace.json' "$td/dry_out.txt"; then
+    st_pass "dry-run: announces the scratch exclusion"
+  else
+    st_fail "dry-run: exclusion not announced"
+  fi
+
+  if ! grep -qxF -- '/workspace.json' "${repo}/.git/info/exclude" 2> /dev/null; then
+    st_pass "dry-run: exclude file not written"
+  else
+    st_fail "dry-run: exclude file was written (should not be)"
+  fi
+
   # ---------------------------------------------------------------
   # Test B: Normal init creates worktree, .context, workspace.json.
   # ---------------------------------------------------------------
@@ -445,12 +504,60 @@ self_test() {
   st_check "git: worktree branch" "feature/42-add-login-flow" "$wt_branch"
 
   # ---------------------------------------------------------------
+  # Test B2: scratch exclusion contract (REQ-2 / AC-2).
+  # ---------------------------------------------------------------
+  # Hermetic: the operator's global excludes file may already hide
+  # workspace.json and .worktrees/, which would satisfy these assertions
+  # without the code doing anything.
+  local -a hermetic
+  hermetic=(env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null git)
+
+  st_check "exclusion: worktree status is clean" "" \
+    "$("${hermetic[@]}" -C "$wt" status --porcelain)"
+  st_check "exclusion: no tracked file modified" "" \
+    "$("${hermetic[@]}" -C "$wt" status --porcelain --untracked-files=no)"
+  # Documented consequence: the rule is checkout-wide, so the main checkout's
+  # own .worktrees/ is hidden too. Asserted so a narrower mechanism cannot
+  # change it silently.
+  st_check "exclusion: main checkout status is clean" "" \
+    "$("${hermetic[@]}" -C "$repo" status --porcelain)"
+
+  # -v names the source, so the assertion cannot be satisfied by some other
+  # ignore file that happens to hide the same name.
+  if "${hermetic[@]}" -C "$wt" check-ignore -v -- workspace.json | grep -q 'info/exclude'; then
+    st_pass "exclusion: workspace.json ignored via the common-dir exclude"
+  else
+    st_fail "exclusion: workspace.json not ignored by our exclude file"
+  fi
+
+  mkdir -p -- "${wt}/src/sub"
+  : > "${wt}/src/sub/workspace.json"
+  if "${hermetic[@]}" -C "$wt" status --porcelain --untracked-files=all \
+    | grep -q 'src/sub/workspace.json'; then
+    st_pass "exclusion: nested workspace.json stays visible"
+  else
+    st_fail "exclusion: nested workspace.json was hidden (pattern not anchored)"
+  fi
+  rm -rf -- "${wt}/src"
+
+  # ---------------------------------------------------------------
   # Test C: Idempotency — running again does not error.
   # ---------------------------------------------------------------
   OPT_ISSUE="42" OPT_TITLE="Add login flow" OPT_GROUP="milestone-1" \
     OPT_FILE="" OPT_TRACK="2" OPT_BLOCKED_BY="" OPT_BLOCKS="" \
     OPT_LABELS="" OPT_DRY_RUN=0 run_init "$repo" 2> /dev/null
   st_pass "idempotent: second run did not error"
+
+  # exclude_scratch is also called directly: the early return above skips it on
+  # an existing worktree, and a repeat batch must not accumulate duplicates.
+  exclude_scratch "$repo" "${SCRATCH_PATTERNS[@]}"
+  exclude_scratch "$repo" "${SCRATCH_PATTERNS[@]}"
+  st_check "idempotent: /workspace.json listed once" "1" \
+    "$(grep -cxF -- '/workspace.json' "${repo}/.git/info/exclude")"
+  st_check "idempotent: /.worktrees/ listed once" "1" \
+    "$(grep -cxF -- '/.worktrees/' "${repo}/.git/info/exclude")"
+  st_check "idempotent: provenance header written once" "1" \
+    "$(grep -cxF -- "$SCRATCH_HEADER" "${repo}/.git/info/exclude")"
 
   # ---------------------------------------------------------------
   # Test D: Second distinct issue on same repo.

@@ -200,6 +200,29 @@ and chain depth (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, 3 — megatask spends o
    `workspace.json` makes the per-issue worktask auto-skip its own GitHub-issue publish (the parent
    milestone/issue is the canonical record).
 
+#### Step 3 — standing directives in the per-issue prompt
+
+Include these verbatim in every per-issue dispatch prompt. They are read once per run, which
+documentation in a reference file is not.
+
+- **Read `## Shared Seams` in the batch's registry issue before introducing any shared protocol,
+  dependency-injection extension point, coordinator, or shared test assertion.** The registry
+  issue is the batch's **foundation issue** — its sole level-0 issue, i.e. the only one with an
+  empty `blocked_by[]` — or, when the batch has several level-0 issues or none, the milestone
+  issue (milestone mode) / orchestrator issue (`--issues` array mode). Name that issue number
+  explicitly in the prompt; there is exactly one per batch. If the seam is already registered,
+  conform to the declaration exactly — labels and order included. If it is not, add an entry
+  rather than inventing a parallel abstraction
+  (`skills/megatask/SKILL.md § Shared-Seam Registry`).
+
+##### Step 3 — conflict directives
+
+- **Conflict recovery lives in `skills/megatask/references/git-integration.md § Conflict
+  Recovery`** — read it before resolving a merge conflict. Two rules apply regardless:
+  (1) dependency-injection and coordinator-shaped conflicts are hand-resolved, never
+  script-merged; (2) run a real build and the real tests after any conflict resolution, before
+  pushing.
+
 #### Step 3 — decision_gate and issue parking
 
 `decision_gate:"auto"` is stamped because a batch run is unattended: that issue's PL0 open

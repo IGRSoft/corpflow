@@ -803,6 +803,39 @@ teardown() {
   [ -z "$output" ]
 }
 
+# --- dispatch coupling: the gate is only live while state.json says a stage is ---
+
+@test "D1: RE + ./run-tests.sh -> deny (RE holds no test-execution authority)" {
+  state_with RE
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  run jq -e '.metadata.stage == "RE" and .metadata.class == "full_test_run"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "D2: a ledger with NO stage in_progress fails open — the same command ALLOWS" {
+  # The other half of D1, and the coupling that broke silently: the orchestrator
+  # marked stages in_progress in the Task System only, so state.json never named
+  # an acting stage after PL and every deny above was unreachable in a live run.
+  # skills/worktask/SKILL.md step 5 mirrors the mark into state.json; without it
+  # this allow is what the whole pipeline gets, at every stage.
+  printf '{"stages":{"PL":{"status":"completed"},"RE":{"status":"completed"}}}' > "$WD/.context/state.json"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
+  assert_success
+  [ -z "$output" ]
+  [ ! -f "$WD/.context/logs/audit.jsonl" ]
+}
+
+@test "D3: SKILL.md step 5 mirrors the in_progress mark into state.json" {
+  # The instruction IS the fix — nothing else makes the gate reachable — and the
+  # orchestrator executes this block, so drift here re-inerts every case above.
+  local skill="$PLUGIN_ROOT/skills/worktask/SKILL.md"
+  run grep -A6 'TaskUpdate({ taskId: task.id, status: "in_progress" });' "$skill"
+  assert_success
+  assert_output --partial 'atomicMergeStateJson({ stages: { [full.metadata.stage]: { status: "in_progress" } } });'
+}
+
 @test "R1-18: flags-before-task build-only gradle tasks ALLOW at a banned stage (was a false deny)" {
   # `gradle -p . assembleAndroidTest` compiles a test APK and runs nothing;
   # the first-token read classified it a scoped test run and denied it at DR.

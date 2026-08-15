@@ -17,6 +17,7 @@ related:
 scripts:
   - scripts/build-orchestrator.sh
   - scripts/init-worktree.sh
+  - scripts/resolve-pbxproj-membership.sh
 ---
 
 # Megatask
@@ -32,9 +33,10 @@ It launches one `/worktask` per issue; it never runs stages itself.
 
 ## Canonical Scripts
 
-Two executable INIT scripts in `scripts/` drive the two heavy init operations. Invoke them
-instead of reading the reference files when doing real work — the references remain the
-authoritative spec but are no longer needed in the happy path.
+Two executable INIT scripts in `scripts/` drive the two heavy init operations, and one resolver
+handles the single merge-conflict class that needs no interpretation. Invoke them instead of
+reading the reference files when doing real work — the references remain the authoritative spec
+but are no longer needed in the happy path.
 
 ### `scripts/build-orchestrator.sh` — DAG builder
 
@@ -89,6 +91,11 @@ bash scripts/init-worktree.sh --self-test
 use. Without `--file`, base-branch resolution calls git ls-remote (thin, optional). Idempotent:
 re-running on an existing worktree path is a no-op (safe on retry).
 
+Before creating the worktree it excludes the batch's scratch metadata (`/workspace.json`,
+`/.worktrees/`) via the git common dir's `info/exclude`, so `git status` in a fresh worktree is
+empty and an unscoped `git add -A` cannot stage it. The exclusion is checkout-wide and never
+masks a tracked file — `references/git-integration.md § Creation`.
+
 The reference file `references/git-integration.md` is the lifecycle spec; this script is its
 executable implementation. Branch naming and base-branch resolution are fully delegated to
 `../shared/milestone-helpers/scripts/milestone-helpers.sh` — no slug or branch logic is
@@ -101,6 +108,33 @@ duplicated here.
 > orchestrator.json. These INIT scripts handle the *creation* side only. The two sides agree on
 > the same `workspace.json v2.0` schema and `orchestrator.json v3.1` schema defined in
 > `references/schemas.md`.
+
+### `scripts/resolve-pbxproj-membership.sh` — membershipExceptions conflict resolver
+
+Resolves a conflict in an Xcode project file's synchronized-build-file
+`membershipExceptions = ( … );` list by **sorted, deduplicated union** of both sides. Keeping only
+one side unregisters test files: the build stays green and those tests silently never run again.
+
+#### Invocation — resolve-pbxproj-membership
+
+```bash
+bash scripts/resolve-pbxproj-membership.sh --file App.xcodeproj/project.pbxproj
+bash scripts/resolve-pbxproj-membership.sh --file <path> --dry-run   # prints result, writes nothing
+bash scripts/resolve-pbxproj-membership.sh --self-test
+```
+
+#### Behavior — resolve-pbxproj-membership
+
+This is the one exception to § Conflict Resolution's hand-resolve rule, and only because it
+**refuses everything it does not recognise**. A conflict elsewhere in the file, a comment or blank
+line inside a side, nested or unterminated markers, a diff3 `|||||||` base section (an entry may
+have been deliberately deleted — a union would resurrect it), or a hunk spanning the list's `);`
+all refuse the **whole file**: exit 1 with a `refusing: <reason>` message, the file byte-identical.
+Byte-identity is structural, not asserted — the parse writes a `mktemp` buffer and `mv -f`s only on
+accept, so there is no in-place edit path. Exit codes: 0 union written / no conflict / dry-run /
+self-test passed; 1 refusal or usage error; 2 `awk` missing.
+
+Rule 2 of § Conflict Resolution still applies: build and test before pushing.
 
 ## Inputs
 
@@ -313,6 +347,67 @@ Per-issue fallback chain (stored in `workspace.json` as `base_branch_source`):
 `feature/{issue#}-{slug}` — slug = lowercase title, spaces→hyphens, no special chars, max 50 chars.
 Canonical definition: `../shared/milestone-helpers/SKILL.md`.
 
+## Shared-Seam Registry
+
+A **seam** is a code surface more than one issue in the batch touches by name: a shared protocol,
+a dependency-injection extension point, a coordinator, or a shared test assertion. Parallel
+tickets cannot see each other's work in progress, so two of them will independently invent the
+same abstraction under different names unless one place tells them it already exists. A
+dependency graph built from issue-body cross-references cannot see this class at all — the
+tickets are genuinely independent; only their *seams* collide.
+
+### Registry location
+
+**Exactly one registry per batch**, in an issue body under a `## Shared Seams` H2. An issue body
+already exists, is already fetched at dispatch, and needs no lifecycle. Which issue hosts it is a
+rule, not a judgement call — two hosts would reproduce the very failure this prevents, with two
+tickets each reading a different registry and each concluding no seam exists:
+
+| Batch shape | Registry host |
+|---|---|
+| Exactly one level-0 issue (no `blocked_by`) — the **foundation issue** | that issue's body |
+| More than one level-0 issue, or none | the **milestone issue** (milestone mode) or the **orchestrator issue** (`--issues` array mode) |
+
+#### What "foundation issue" means
+
+The first row: the batch's *sole* level-0 issue, the one every other issue transitively depends
+on. A batch without one has no foundation issue, and its registry is at the batch level.
+
+**Convention, not a gate.** Nothing validates the registry this release. Its force comes from the
+per-issue prompt directing every issue to read it before introducing a shared abstraction
+(`../../commands/megatask.md § Phase 2 loop · Step 3`).
+
+### Registry schema
+
+One block per seam. `declaration` carries the **verbatim** signature with every parameter label
+in order — a name-only entry would not catch two issues agreeing on a concept but reversing an
+argument order, which is the failure that motivated this.
+
+````markdown
+## Shared Seams
+
+### NotificationDestinationPresence
+- kind: protocol | di-extension-point | coordinator | test-contract
+- status: planned | landed
+- owner: #<issue that introduces it>
+- consumers: #<issue>, #<issue>
+- location: <path/to/File.swift>
+- declaration:
+  ```swift
+  protocol NotificationDestinationPresence {
+      func setPresented(_ presented: Bool, for destination: Destination)
+  }
+  ```
+- change-protocol: adding or reordering a member requires updating this entry in the same PR
+  and naming every issue in `consumers:` in that PR's description.
+````
+
+#### Why consumers and change-protocol are mandatory
+
+`consumers:` plus `change-protocol:` are what make an additive change safe: adding a member to a
+shared protocol silently breaks every test double conforming to it, and the adder is the only
+party positioned to know.
+
 ## Orchestrator Pattern
 
 ### Initialization
@@ -371,6 +466,35 @@ Track count is orchestrator-derived (max 5), gated by the DAG (only ready issues
 
 A deep dependency chain (A→B→C→D→E) runs effectively serially regardless of track count — the DAG,
 not the track cap, bounds it.
+
+## Conflict Resolution
+
+Parallel branches off one base collide on shared files. Two rules are binding for every conflict
+a batch produces.
+
+### Rule 1 — hand-resolve DI and coordinator shapes
+
+**Dependency-injection containers and coordinator-shaped files are hand-resolved by a human;
+never script-merge them.** Any "keep both sides" automation is forbidden on these shapes: a
+registration list, a DI container extension, a coordinator's argument list, or a switch over
+destinations. Observed failure: a scripted keep-both-sides join dropped an argument separator
+(the other side's block opened with a comment line) and duplicated a closing brace twice. Both
+survived review and were caught only by a later build.
+
+A script is allowed only where its conflict class needs no interpretation *and* the script
+refuses everything it does not recognise; § Canonical Scripts names any such tool the batch
+ships. Absent that, this rule stands.
+
+### Rule 2 — build and test before pushing
+
+**Build and test after every conflict resolution, before pushing.** Not a read-through, not a
+syntax check — the real build and the real test run, from the worktree. Rule 1's failure mode is
+invisible to everything cheaper.
+
+### Recovery when the branch cannot be re-pushed
+
+Rebase, push under a new name, open a replacement PR, close the superseded one:
+`references/git-integration.md § Conflict Recovery`.
 
 ## Error Handling
 

@@ -65,6 +65,32 @@ Use git trailer format (`token: value` or `token #value`). Hyphens replace space
 - Always prefix with issue code (#PROJ-123)
 - Body must be separated from summary by a blank line
 
+### Comment-character trap
+
+The mandatory `#<issue>` prefix collides with git's default comment character. Git's `strip`
+cleanup mode deletes every `#`-leading line from a commit message, and `strip` is the default
+for **editor-driven** invocations: `git rebase --continue`, `git commit` with no `-m`,
+`git commit --amend`, and conflict-resolution commits. The subject is deleted silently and the
+body's first paragraph is promoted into its place — no warning, no non-zero exit; the damage
+shows up only later in `git log`. It cost four separate subjects in one megatask batch.
+
+`git commit -m` and `git commit -F` are **not** affected: their default cleanup is `whitespace`,
+which leaves comment lines alone. Only editor-driven invocations need the remedy.
+
+#### Remedy — per invocation
+
+```bash
+git -c core.commentChar=auto rebase --continue   # auto: git picks a char the message does not use
+git -c core.commentChar=';'  commit --amend      # explicit char, when auto is unavailable (git < 2.10)
+git commit --cleanup=verbatim -F <message-file>  # message already final; keep it byte-for-byte
+```
+
+`-c` scopes the override to the one command. Never write the setting into a stored
+configuration file: a persistent mutation is forbidden by the standing rule against
+configuration changes, and it would silently alter message handling for every unrelated
+command run in the same checkout — including ones whose messages rely on `#` comments being
+stripped.
+
 ## Git Safety (beyond CC defaults)
 
 - Never push directly to main/master without PR
