@@ -17,6 +17,7 @@ related:
 scripts:
   - scripts/build-orchestrator.sh
   - scripts/init-worktree.sh
+  - scripts/resolve-pbxproj-membership.sh
 ---
 
 # Megatask
@@ -32,9 +33,10 @@ It launches one `/worktask` per issue; it never runs stages itself.
 
 ## Canonical Scripts
 
-Two executable INIT scripts in `scripts/` drive the two heavy init operations. Invoke them
-instead of reading the reference files when doing real work — the references remain the
-authoritative spec but are no longer needed in the happy path.
+Two executable INIT scripts in `scripts/` drive the two heavy init operations, and one resolver
+handles the single merge-conflict class that needs no interpretation. Invoke them instead of
+reading the reference files when doing real work — the references remain the authoritative spec
+but are no longer needed in the happy path.
 
 ### `scripts/build-orchestrator.sh` — DAG builder
 
@@ -106,6 +108,33 @@ duplicated here.
 > orchestrator.json. These INIT scripts handle the *creation* side only. The two sides agree on
 > the same `workspace.json v2.0` schema and `orchestrator.json v3.1` schema defined in
 > `references/schemas.md`.
+
+### `scripts/resolve-pbxproj-membership.sh` — membershipExceptions conflict resolver
+
+Resolves a conflict in an Xcode project file's synchronized-build-file
+`membershipExceptions = ( … );` list by **sorted, deduplicated union** of both sides. Keeping only
+one side unregisters test files: the build stays green and those tests silently never run again.
+
+#### Invocation — resolve-pbxproj-membership
+
+```bash
+bash scripts/resolve-pbxproj-membership.sh --file App.xcodeproj/project.pbxproj
+bash scripts/resolve-pbxproj-membership.sh --file <path> --dry-run   # prints result, writes nothing
+bash scripts/resolve-pbxproj-membership.sh --self-test
+```
+
+#### Behavior — resolve-pbxproj-membership
+
+This is the one exception to § Conflict Resolution's hand-resolve rule, and only because it
+**refuses everything it does not recognise**. A conflict elsewhere in the file, a comment or blank
+line inside a side, nested or unterminated markers, a diff3 `|||||||` base section (an entry may
+have been deliberately deleted — a union would resurrect it), or a hunk spanning the list's `);`
+all refuse the **whole file**: exit 1 with a `refusing: <reason>` message, the file byte-identical.
+Byte-identity is structural, not asserted — the parse writes a `mktemp` buffer and `mv -f`s only on
+accept, so there is no in-place edit path. Exit codes: 0 union written / no conflict / dry-run /
+self-test passed; 1 refusal or usage error; 2 `awk` missing.
+
+Rule 2 of § Conflict Resolution still applies: build and test before pushing.
 
 ## Inputs
 
