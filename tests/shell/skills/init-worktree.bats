@@ -90,6 +90,94 @@ SCRIPT="skills/megatask/scripts/init-worktree.sh"
   assert_success
 }
 
+# --- scratch-metadata exclusion (REQ-2) --------------------------------------
+# The binding contract is observable, not mechanical: a fresh worktree reports
+# NOTHING to `git status`, so an unscoped `git add -A` during a conflict
+# resolution cannot stage the batch's own workspace.json onto the branch.
+#
+# The status reads run with GIT_CONFIG_GLOBAL/SYSTEM neutralised: mk_git_fixture
+# does not scrub them, and an operator whose ~/.gitignore_global already hides
+# workspace.json or .worktrees/ would satisfy these assertions for free.
+
+@test "exclusion: a freshly initialised worktree reports a clean git status" {
+  local origin repo wt
+  origin="$(mk_git_fixture --branch master \
+            --file 'README.md:seed\n' --commit 'chore: seed')"
+  repo="$(mk_git_fixture --branch master --remote "$origin" \
+          --file 'README.md:seed\n' --commit 'chore: seed')"
+
+  run_script_env --cwd "$repo" -- "$SCRIPT" \
+    --issue 7 --title "Add Feature" --group milestone-3 --repo-root "$repo"
+  assert_success
+
+  wt="$repo/.worktrees/milestone-3/7"
+  [ -f "$wt/workspace.json" ]
+
+  run env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    git -C "$wt" status --porcelain
+  assert_success
+  assert_output ""
+}
+
+@test "exclusion: no tracked file is modified by the exclusion" {
+  local origin repo
+  origin="$(mk_git_fixture --branch master \
+            --file 'README.md:seed\n' --file '.gitignore:build/\n' \
+            --commit 'chore: seed')"
+  repo="$(mk_git_fixture --branch master --remote "$origin" \
+          --file 'README.md:seed\n' --file '.gitignore:build/\n' \
+          --commit 'chore: seed')"
+
+  run_script_env --cwd "$repo" -- "$SCRIPT" \
+    --issue 7 --title "Add Feature" --group milestone-3 --repo-root "$repo"
+  assert_success
+
+  # A mechanism that wrote the repo's tracked .gitignore would show up here.
+  run env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    git -C "$repo/.worktrees/milestone-3/7" status --porcelain --untracked-files=no
+  assert_success
+  assert_output ""
+  run env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    git -C "$repo" status --porcelain --untracked-files=no
+  assert_success
+  assert_output ""
+}
+
+@test "exclusion: --dry-run announces it and writes no exclude entry" {
+  local repo
+  repo="$(mk_git_fixture --branch master \
+          --file 'README.md:seed\n' --commit 'chore: seed')"
+
+  run_script_env --cwd "$repo" -- "$SCRIPT" \
+    --issue 7 --title "Add Feature" --group milestone-3 --dry-run --repo-root "$repo"
+  assert_success
+  assert_output --partial "exclude (git common-dir info/exclude): /workspace.json"
+
+  run grep -qxF -- '/workspace.json' "$repo/.git/info/exclude"
+  assert_failure
+}
+
+@test "exclusion: repeated init does not duplicate the exclude patterns" {
+  local origin repo excl
+  origin="$(mk_git_fixture --branch master \
+            --file 'README.md:seed\n' --commit 'chore: seed')"
+  repo="$(mk_git_fixture --branch master --remote "$origin" \
+          --file 'README.md:seed\n' --commit 'chore: seed')"
+
+  run_script_env --cwd "$repo" -- "$SCRIPT" \
+    --issue 7 --title "Add Feature" --group milestone-3 --repo-root "$repo"
+  assert_success
+  run_script_env --cwd "$repo" -- "$SCRIPT" \
+    --issue 8 --title "Second Thing" --group milestone-3 --repo-root "$repo"
+  assert_success
+
+  excl="$repo/.git/info/exclude"
+  run grep -cxF -- '/workspace.json' "$excl"
+  assert_output "1"
+  run grep -cxF -- '/.worktrees/' "$excl"
+  assert_output "1"
+}
+
 @test "real run: a second issue in the same group gets its own worktree" {
   local origin repo
   origin="$(mk_git_fixture --branch master \

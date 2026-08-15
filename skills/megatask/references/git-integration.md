@@ -47,9 +47,17 @@ Fresh agent context per issue - orchestrator delegates via Task tool, each subag
 
 | Event | Action |
 |-------|--------|
+| Before `worktree add` | Append `/workspace.json` and `/.worktrees/` to the git **common dir**'s `info/exclude` (idempotent, exact-line matched) |
 | Issue starts (PL) | `git worktree add -b {branch} {path} origin/{base}` |
 | Context setup | `mkdir -p {worktree_path}/.context` |
 | Metadata | Write `workspace.json` with `isolation: "worktree"`, `version: "2.0"` |
+
+The exclusion runs **first** so the scratch file is never visible to a `git add -A`, and it goes
+in the common dir because git does not consult a per-worktree `info/exclude`. Consequence, stated
+rather than hidden: the rule covers every worktree of the checkout. It cannot mask a *tracked*
+file, so a repo that legitimately tracks a root `workspace.json` still sees its diffs. The
+repository's own `.gitignore` is deliberately not touched — editing it would commit the exclusion
+to every future branch, the exact mistake this prevents.
 
 ### During Execution
 

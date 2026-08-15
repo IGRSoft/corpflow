@@ -89,6 +89,11 @@ bash scripts/init-worktree.sh --self-test
 use. Without `--file`, base-branch resolution calls git ls-remote (thin, optional). Idempotent:
 re-running on an existing worktree path is a no-op (safe on retry).
 
+Before creating the worktree it excludes the batch's scratch metadata (`/workspace.json`,
+`/.worktrees/`) via the git common dir's `info/exclude`, so `git status` in a fresh worktree is
+empty and an unscoped `git add -A` cannot stage it. The exclusion is checkout-wide and never
+masks a tracked file — `references/git-integration.md § Creation`.
+
 The reference file `references/git-integration.md` is the lifecycle spec; this script is its
 executable implementation. Branch naming and base-branch resolution are fully delegated to
 `../shared/milestone-helpers/scripts/milestone-helpers.sh` — no slug or branch logic is
