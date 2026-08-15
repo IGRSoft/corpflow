@@ -2,6 +2,64 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.16] — 2026-08-15
+
+### Fixed
+
+- **`scan-secrets.sh` no longer fails open.** The regex fallback swallowed grep's exit
+  status with `|| true`, making "no match" (exit 1, normal) indistinguishable from "the
+  engine crashed" (exit >1). On macOS, BSD `grep` can trap on a pattern it cannot compile
+  (`Trace/BPT trap: 5`, status 133); the scan then exited **0** — the documented "no
+  Critical/High findings" code — so a crashed scan read as a clean bill of health to any
+  reviewer following the skill's own instruction to invoke the script rather than reason
+  through the patterns by hand. The status is now discriminated exactly as `gitleaks_scan`
+  already did: >1 reports the failing pattern and file on stderr and returns 2 (the
+  script's existing hard-error code). Clean (0) and findings-present (1) are unchanged.
+  This is the same failure class an existing comment in the file describes one layer down,
+  where a `2> /dev/null` once hid a dead pattern for the life of a regex.
+
+- **`state-merge.sh` resolves the workspace instead of trusting cwd.** The hook fires on
+  `SubagentStop`, and the subagent that just stopped is very often a DV stream — the one
+  stage for which worktree isolation is mandatory. Its cwd is a linked worktree, where
+  `.context/` does not exist, because the directory is gitignored and never carried into a
+  worktree checkout. Resolving `.context/` relative to cwd therefore made the documented
+  "Layer 2 safety net" structurally unable to patch the ledger for the only stage that
+  always needs it, and it failed silently — a `no artifact resolved` line written into a
+  shadow `.context/logs/` inside the worktree, a directory deleted along with it. Had an
+  artifact resolved, the completion patch would have merged into a throwaway ledger. The
+  hook now resolves `WORKSPACE_ROOT`, then `CLAUDE_PROJECT_DIR`, then the parent of
+  `git rev-parse --git-common-dir` (which points at the main checkout from inside a linked
+  worktree), before falling back to `pwd`. The corrupt-ledger repair path derives its temp
+  file from the resolved ledger so the two cannot land on different filesystems.
+
+- **The test-execution denial now names the supported way to build.** Stages without
+  test-execution authority were told only to record `requests_test_evidence` or return
+  blocked. `--no-test` — accepted by every platform plugin's `build-test` command, and
+  already classified `build_only` and allowed by this gate — went unmentioned. In a
+  measured run two streams were denied, neither discovered the flag, both invented
+  `--build-only` (which no command accepts, so the classifier reads it as a full test run
+  and denies again), and both then fell back to invoking the toolchain directly, which
+  `agents/developer.md` forbids. The denial now names `--no-test` first, warns that
+  `--build-only` is not a real flag, and states explicitly that falling back to the raw
+  toolchain is not an option.
+
+- **`publish-pl-issue.sh` no longer silently mislabels the complexity tier.** Tier
+  extraction required the word in parentheses, so a plan writing `Score: 46 / 50 — Critical
+  tier.` did not match, and a silent default labelled the issue `complexity:moderate` — the
+  amber label on the run's highest-risk issue, indistinguishable in the audit trail from a
+  real match. A bare-word arm (word-anchored, so it cannot fire on "critically") now runs
+  when the parenthesised form is absent, and applying the default emits a stderr line.
+
+- **`dv-tree-preflight.sh` reports split worktree parents.** When linked worktrees live
+  under more than one parent directory, anything that reconstructs a worktree path by
+  convention rather than from `metadata.workspace_path` must guess a prefix — and can hand
+  a stage another stream's tree. In a measured four-stream run a stream assigned
+  `.claude/worktrees/dv3-web` was given `.worktrees/dv0-service` at spawn on four
+  consecutive dispatches, because `.worktrees/` held exactly one entry for the glob to land
+  on; normalising to a single parent fixed it on the next dispatch. The preflight now names
+  the condition and the parents involved. Advisory, not blocking: the stream that runs it
+  has already passed the assigned-tree check, and the condition harms a different one.
+
 ## [4.0.15] - 2026-08-15
 
 Claude Code 2.1.233 removed the Todo/task-tracking tools — `TaskCreate`, `TaskGet`, `TaskUpdate`,

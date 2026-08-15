@@ -2456,8 +2456,27 @@ fi
 MODE="create"
 
 # Complexity-tier label (read from facts.decisions or planning § complexity heading).
+# Parenthesised first — "(Critical)" is the shape the templates emit — then the
+# bare word, because PM prose legitimately writes "Score: 46 / 50 — Critical
+# tier." with no parens. Requiring parens made that miss, and the silent default
+# below then labelled a 46/50 critical plan `complexity:moderate` — the amber
+# label, on the run's highest-risk issue, with nothing in the audit trail to
+# show a match had failed. The bare-word arm is anchored on a word boundary so
+# it cannot fire on "critically" or a word inside an unrelated sentence.
 TIER=$(printf '%s' "$COMPLEXITY_S" | grep -oiE '\((Low|Medium|Moderate|High|Critical)\)' | head -1 | tr '[:upper:]' '[:lower:]' | tr -d '()')
-[ -z "$TIER" ] && TIER="moderate"
+if [ -z "$TIER" ]; then
+  TIER=$(printf '%s' "$COMPLEXITY_S" \
+    | grep -oiE '(^|[^[:alnum:]])(Low|Medium|Moderate|High|Critical)([[:space:]]+tier|[^[:alnum:]]|$)' \
+    | grep -oiE 'Low|Medium|Moderate|High|Critical' | head -1 | tr '[:upper:]' '[:lower:]')
+fi
+# A silent default is what made the mislabel invisible. Keep the default — a
+# missing label must never block publication — but record that it was applied,
+# so the discrepancy is greppable instead of indistinguishable from a real match.
+if [ -z "$TIER" ]; then
+  TIER="moderate"
+  printf 'publish-pl-issue: no complexity tier found in the plan; defaulting to "moderate"\n' >&2
+  TIER_DEFAULTED=1
+fi
 
 # Render body via heredoc.
 BODY_TMP="$LOG_DIR/issue-body-${RUN_INDEX}.tmp"

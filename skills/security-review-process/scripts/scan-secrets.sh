@@ -122,6 +122,7 @@ validate_patterns() {
 fallback_scan() {
   local root="$1"
   local found=0
+  local engine_failed=0
 
   validate_patterns
 
@@ -147,7 +148,7 @@ fallback_scan() {
 
   find "${find_args[@]}" -print0 2> /dev/null > "$tmpfile" || true
 
-  local filepath entry severity label regex lineno relpath
+  local filepath entry severity label regex lineno relpath grep_out grep_rc
   while IFS= read -r -d '' filepath; do
     for entry in "${PATTERNS[@]}"; do
       severity="${entry%%|*}"
@@ -164,14 +165,42 @@ fallback_scan() {
       # grep's stderr is deliberately NOT discarded: a `2> /dev/null` here hid a
       # dead pattern for the whole life of the database-url regex, and would hide
       # the next one identically. Unreadable files are worth surfacing too.
+      #
+      # The exit status is discriminated rather than blanket-swallowed, matching
+      # gitleaks_scan's `gl_exit -gt 1` treatment below. grep returns 1 for "no
+      # match" — the overwhelmingly common, entirely normal case — and >1 only
+      # when the engine itself failed: a malformed ERE, or a BSD grep that traps
+      # on a pattern it cannot compile (observed on macOS as
+      # `Trace/BPT trap: 5`, i.e. status 133). A previous `|| true` made those
+      # two indistinguishable, so a crashed scan still exited 0 — the documented
+      # "no Critical/High findings" code — and read as a clean bill of health.
+      # This is the same failure class the stderr comment above describes, one
+      # layer up in the exit code, so it fails closed here.
+      grep_out="$(grep -nEI -- "$regex" "$filepath"; printf '\034%s' "$?")"
+      grep_rc="${grep_out##*$'\034'}"
+      grep_out="${grep_out%$'\034'*}"
+      if [[ "$grep_rc" -gt 1 ]]; then
+        printf >&2 'scan-secrets: ENGINE FAILURE (exit %s) on pattern "%s" in %s\n' \
+          "$grep_rc" "$label" "${filepath#"$root"/}"
+        engine_failed=1
+        continue
+      fi
       while IFS= read -r lineno; do
         [[ -z "$lineno" ]] && continue
         relpath="${filepath#"$root"/}"
         emit_line "$relpath" "$lineno" "$severity" "$label"
         found=1
-      done < <(grep -nEI -- "$regex" "$filepath" | cut -d: -f1 || true)
+      done < <(printf '%s' "$grep_out" | cut -d: -f1)
     done
   done < "$tmpfile"
+
+  # An engine failure outranks both outcomes: the scan is not clean (0) and not
+  # "findings present" (1) — it is unreliable, and must not be reported as
+  # either. 2 is the script's existing hard-error code.
+  if [[ "$engine_failed" -eq 1 ]]; then
+    printf >&2 'scan-secrets: scan is UNRELIABLE — one or more patterns crashed the regex engine; results are incomplete. Install gitleaks, or fix the offending pattern, before treating this scan as evidence.\n'
+    return 2
+  fi
 
   return "$found"
 }
