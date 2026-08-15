@@ -372,6 +372,35 @@ Track count is orchestrator-derived (max 5), gated by the DAG (only ready issues
 A deep dependency chain (A→B→C→D→E) runs effectively serially regardless of track count — the DAG,
 not the track cap, bounds it.
 
+## Conflict Resolution
+
+Parallel branches off one base collide on shared files. Two rules are binding for every conflict
+a batch produces.
+
+### Rule 1 — hand-resolve DI and coordinator shapes
+
+**Dependency-injection containers and coordinator-shaped files are hand-resolved by a human;
+never script-merge them.** Any "keep both sides" automation is forbidden on these shapes: a
+registration list, a DI container extension, a coordinator's argument list, or a switch over
+destinations. Observed failure: a scripted keep-both-sides join dropped an argument separator
+(the other side's block opened with a comment line) and duplicated a closing brace twice. Both
+survived review and were caught only by a later build.
+
+A script is allowed only where its conflict class needs no interpretation *and* the script
+refuses everything it does not recognise; § Canonical Scripts names any such tool the batch
+ships. Absent that, this rule stands.
+
+### Rule 2 — build and test before pushing
+
+**Build and test after every conflict resolution, before pushing.** Not a read-through, not a
+syntax check — the real build and the real test run, from the worktree. Rule 1's failure mode is
+invisible to everything cheaper.
+
+### Recovery when the branch cannot be re-pushed
+
+Rebase, push under a new name, open a replacement PR, close the superseded one:
+`references/git-integration.md § Conflict Recovery`.
+
 ## Error Handling
 
 | Error Type | Workspace Action | Orchestrator Action |

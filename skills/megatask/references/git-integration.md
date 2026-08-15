@@ -77,3 +77,62 @@ Fresh agent context per issue - orchestrator delegates via Task tool, each subag
 2. **Failed issues**: Worktree preserved with `status: "failed"` in orchestrator. User can inspect and retry.
 3. **Stale worktrees**: Worktrees from interrupted parallel runs are auto-cleaned on startup. Manual fallback: `git worktree prune`.
 4. **Disk space**: Each worktree duplicates the working tree. For large repos, monitor with `du -sh .worktrees/`.
+
+## Conflict Recovery
+
+### Precondition — read this first
+
+This playbook applies **only when the environment refuses destructive git**. Some hosts refuse
+`git merge`, `git reset --hard` and `git push --force`: auto-mode guards (see
+`../../shared/git-conventions.md § Auto-mode Git Safety`), a sandbox permission policy, or a CI
+runner's own restrictions. **This plugin ships no deny list of its own** — the refusal belongs to
+whatever host the batch runs on, so confirm you are actually being refused before taking this
+path. Under a permissive host, resolve in place on the existing branch; the steps below are the
+recovery for when you cannot, not the preferred route.
+
+### The recovery — five ordered steps
+
+Recover by replacing the pull request rather than rewriting the ref behind it.
+
+```bash
+WT=.worktrees/milestone-{N}/{issue#}
+git -C "$WT" fetch origin {base_branch}
+git -C "$WT" rebase origin/{base_branch}         # 1. resolve conflicts locally
+# ... resolve, then build + test (see SKILL.md § Conflict Resolution) ...
+git -C "$WT" rebase --continue                   # editor-driven: see the commentChar remedy below
+
+git -C "$WT" push -u origin \
+  HEAD:refs/heads/feature/{issue#}-{slug}-rebased # 2. NEW branch name — no force-push needed
+gh pr create --base {base_branch} \
+  --head feature/{issue#}-{slug}-rebased \
+  --body "Closes #{issue#}"                      # 3. replacement PR
+gh pr close {old_pr} \
+  --comment "Superseded by #{new_pr} (rebased onto {base_branch})"   # 4. close the superseded PR
+gh pr merge {new_pr} --merge                     # 5. merge the replacement
+```
+
+#### Why a new branch name
+
+Step 2 is the whole point: pushing a rebased branch under its **original** name requires
+`--force`, which is exactly what the host refuses. A new name is an ordinary fast-forward push.
+
+### Why this does not contradict the merge strategy
+
+`../../shared/git-conventions.md § Merge Strategy` requires integration by **merge commit** —
+never `--squash`, never `--rebase`. Step 5 obeys it verbatim. The rebase in step 1 is a *local*
+history operation on an unmerged feature branch, performed before review; the merge-strategy rule
+governs how a PR is integrated into the base, not whether a branch may be rebased beforehand.
+Per-commit boundaries survive the rebase, so the per-stage history the rule protects arrives
+intact on the base branch.
+
+### Two hard rules that apply during step 1
+
+1. **Dependency-injection and coordinator-shaped conflicts are hand-resolved, never
+   script-merged** — `../SKILL.md § Conflict Resolution`.
+2. **Build and test after any conflict resolution, before pushing.** A mis-joined argument list
+   compiles in the reviewer's head and nowhere else.
+
+`rebase --continue` opens an editor, so an issue-prefixed subject (`#{issue#} feat: …`) is
+silently destroyed by git's comment-character default. The trap and its per-invocation remedy are
+stated once, in `../../shared/git-conventions.md § Comment-character trap`; do not restate them
+here.
