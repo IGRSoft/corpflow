@@ -4,7 +4,33 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.13** — plugin renamed `company-workflow` → `corpflow`. Every
+- Plugin version: **4.0.14** — megatask conflict-prevention tooling, distilled from a completed
+  9-issue parallel batch (issue #291). Six changes, no breaking change and no new command: (1) a
+  **condition-first** `## Conflict Recovery` playbook in `git-integration.md` — rebase locally,
+  push under a NEW branch name, replacement PR, close the superseded one, merge — written
+  condition-first because the destructive-git refusal was the *host environment's*, not this
+  repo's; this repo ships no deny list, and a playbook citing a file the reader cannot find loses
+  credibility. (2) `init-worktree.sh` excludes `/workspace.json` and `/.worktrees/` at worktree
+  creation via the git **common** dir's `info/exclude` — git has no per-worktree exclude
+  (`.git/worktrees/<n>/info/exclude` is not consulted; verified on git 2.54), so the reach is
+  necessarily checkout-wide, which is bounded because an ignore rule never masks a tracked file.
+  (3) `SKILL.md § Conflict Resolution`: DI-container and coordinator shapes are hand-resolved,
+  never script-merged; always a real build + test before pushing. (4) `git-conventions.md` records
+  the `#NNN` / `core.commentChar` collision with its exact scope — `strip` cleanup eats
+  `#`-leading lines on **editor-driven** invocations only (`rebase --continue`, bare `commit`,
+  `--amend`); `-m`/`-F` are unaffected — remedy per-invocation, a stored `git config` mutation
+  forbidden. (5) `## Shared-Seam Registry`: exactly one registry per batch, hosted by the sole
+  level-0 issue or the milestone/orchestrator issue when there are several or none; the schema
+  demands a verbatim declaration block with **ordered parameter labels**, because the motivating
+  failure was two tickets inventing the same abstraction with a reversed argument order.
+  Convention, not a gate. (6) `resolve-pbxproj-membership.sh` — refusing, all-or-nothing
+  sorted-union resolver for `membershipExceptions`; dropping a side silently unregisters test
+  files (green build, tests never run). Fixed during development: the separated `stat -f '%Lp'`
+  GNU/BSD trap (GNU prints a filesystem block to **stdout** and exits non-zero, so the `||` chain
+  captures garbage) — all four sites use the attached idiom, plus a runtime and a self-test guard.
+  Verified on macOS only; the repo has no CI, so a Linux regression would go uncaught.
+  Full narrative: `CHANGELOG.md § [4.0.14]`.
+- Plugin version (previous): **4.0.13** — plugin renamed `company-workflow` → `corpflow`. Every
   `company-workflow:<agent|skill>` invocation id, the `marketplace.json` plugin entry, the
   `plugin.json` `Stop` matcher and notification title, and the install key (now
   `corpflow@igrsoft`, cache path `cache/igrsoft/corpflow/` — only the plugin segment) move to the
@@ -194,6 +220,19 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-08-15: v4.0.14 — megatask conflict-prevention tooling from a 9-issue parallel-batch
+  post-mortem (#291). Condition-first conflict-recovery playbook (rebase → push under a NEW branch
+  name → replacement PR → close superseded → merge), written condition-first because the
+  destructive-git refusal belonged to the host environment, not this repo. Scratch metadata
+  (`/workspace.json`, `/.worktrees/`) excluded at worktree creation through the git **common**
+  dir's `info/exclude` — git has no per-worktree exclude, so the reach is checkout-wide and
+  bounded only by "ignore never masks a tracked file". Hand-resolve rule for DI/coordinator
+  shapes. The `#NNN` vs `core.commentChar` trap recorded in the SSOT, scoped to editor-driven
+  invocations, remedied per-invocation only. Shared-seam registry convention with ordered
+  parameter labels (the failure it targets was a reversed argument order, invisible to a
+  name-only schema) — convention, not a gate. New refusing sorted-union
+  `resolve-pbxproj-membership.sh`. Also fixed the separated `stat -f` GNU/BSD trap at four sites.
+  QA pass-with-findings: macOS only, no CI, no Linux execution available.
 - 2026-08-13: v4.0.13 — plugin renamed `company-workflow` → `corpflow`, the second rename of the
   same identity (v4.0.0 moved `igrsoft` → `company-workflow`) and run against that entry as its
   template. Same three-role split: plugin identity moves (invocation ids, marketplace entry,

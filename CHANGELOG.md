@@ -2,6 +2,143 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.14] - 2026-08-15
+
+A completed 9-issue parallel `/megatask` batch, turned into tooling. Nothing here is speculative:
+every item below is a collision that actually happened, was paid for once by trial, and is written
+down so the next batch does not pay for it again. Two halves — codifying git mechanics already
+learned (REQ-1..4), and reducing the collision *rate* by giving parallel tickets visibility into
+shared seams and by making the one purely mechanical conflict class self-resolving (REQ-5, REQ-6).
+
+Three of the six changes exist because a premise in the originating post-mortem turned out to be
+false when checked against the tree, so the corrections are part of the release:
+
+- **The deny-list premise does not hold in this repo.** The proposal assumed a `settings.json`
+  denying `git merge` / `git reset --hard` / `git push --force`. This repo ships no such file. That
+  refusal was a property of the *host environment* the batch ran in. A playbook that asserts a file
+  the reader cannot find loses its credibility on the first line, so the playbook is written
+  **condition-first** instead.
+- **Git has no per-worktree exclude.** `.git/worktrees/<name>/info/exclude` is simply not consulted
+  (verified on git 2.54); only the common dir's `info/exclude` works. So the exclusion is
+  necessarily checkout-wide, and the release documents that consequence rather than hiding it.
+- **The "one-line script fix" was not one line.** Three candidate mechanisms with materially
+  different blast radius, one of which pollutes every future commit.
+
+### Added
+
+- **`## Conflict Recovery` playbook** in `skills/megatask/references/git-integration.md`. Five
+  ordered steps for the case where the environment refuses destructive git: rebase locally, push
+  under a **new** branch name, open a replacement PR, close the superseded one, merge the
+  replacement. Step 2 is the non-obvious one and gets its own subsection — re-pushing the original
+  name would need `--force`, which is exactly what is refused. A further subsection reconciles the
+  local rebase with `git-conventions.md § Merge Strategy`: that rule governs how a PR is
+  *integrated*, not whether a branch may be rebased before review.
+- **Scratch metadata excluded at worktree creation**, not reactively. `init-worktree.sh` gains
+  `exclude_scratch`, writing `/workspace.json` and `/.worktrees/` into the git **common** dir's
+  `info/exclude` *before* `git worktree add`, behind an exact-line `grep -qxF` guard so repeated
+  init cannot duplicate entries, with a provenance header naming the script that wrote them. The
+  motivating failure was an unscoped stage-everything command during a conflict resolution that
+  committed the batch's own scratch file to the shared branch. It never touches the tracked
+  `.gitignore` and never writes a stored setting; `--dry-run` announces and writes nothing. The
+  checkout-wide reach is bounded and documented: an ignore rule can never mask a **tracked** file,
+  and the patterns are anchored, so a nested `src/sub/workspace.json` stays visible.
+- **`## Conflict Resolution` rules** in `skills/megatask/SKILL.md`. Rule 1: DI-container and
+  coordinator-shaped conflicts are hand-resolved by a human and **never** script-merged — a scripted
+  "keep both sides" resolver mis-joined an argument list (a missing separator, because the other
+  side's block opened with a comment) and duplicated a closing brace, twice, both caught only by a
+  later build. Rule 2: a real build and test run before pushing any resolution. A script is
+  permitted only where its class needs no interpretation *and* it refuses what it does not
+  recognise — which is the bar `resolve-pbxproj-membership.sh` below is held to.
+- **`## Shared-Seam Registry` convention** — a decision rule, not advice. Exactly one registry per
+  batch, hosted by the sole level-0 issue, or by the milestone / orchestrator issue when there are
+  several level-0 issues or none; the rule is total, so no batch shape is ambiguous. The schema
+  requires a **verbatim declaration block with ordered parameter labels**, plus `consumers:` and
+  `change-protocol:`. The ordering is load-bearing: the motivating failure was two parallel tickets
+  inventing the same abstraction under near-identical names with a **reversed argument order**, and
+  a name-only schema would not have caught it. `commands/megatask.md § Step 3` restates the
+  resolution inline so the per-issue prompt is self-sufficient. **Convention, not a gate** — nothing
+  validates the registry this release, by design.
+- **`skills/megatask/scripts/resolve-pbxproj-membership.sh`** — sorted-union resolver for
+  `PBXFileSystemSynchronizedBuildFileExceptionSet.membershipExceptions`, the one project-file
+  conflict class that needs no interpretation. Dropping either side silently unregisters test
+  files: green build, tests never run. All-or-nothing — any out-of-class conflict anywhere refuses
+  the whole file with exit 1 and leaves it byte-identical (structural, not defensive: the parse goes
+  to a temp buffer and `mv -f` runs only on accept). It refuses a conflict outside the list, a diff3
+  `|||||||` base section (resurrecting a deliberate deletion is worse than refusing), a non-entry
+  line inside a side, nesting, an unterminated conflict, and a list close inside a conflict. Ships
+  with `--dry-run`, a 35-check `--self-test` and dual `--flag value` / `--flag=value` parsing,
+  matching `build-orchestrator.sh`'s established pattern, and is registered in § Canonical Scripts.
+
+### Changed
+
+- **`skills/shared/git-conventions.md` records the comment-character trap.** The `#NNN`
+  commit-subject convention collides with git's default comment character; in the source batch it
+  destroyed the subject on **four** separate invocations, promoting the body's first paragraph to
+  the subject each time. The scope is now stated precisely, because the imprecise version is what
+  makes people distrust the note: `strip` cleanup deletes `#`-leading lines on **editor-driven**
+  invocations only — `rebase --continue`, bare `commit`, `--amend`, conflict commits — while `-m`
+  and `-F` use `whitespace` cleanup and are unaffected. The remedy is **per-invocation**
+  (`git -c core.commentChar=…`, or `--cleanup=verbatim`); writing it into a stored configuration
+  file is explicitly forbidden. Stated once, in the source of truth; the megatask docs reference it
+  rather than restating it.
+
+### Fixed
+
+- **The test-execution gate was inert for every stage after PL, of every worktask.**
+  `hooks/test-execution-gate.sh` resolves the acting stage from `.context/state.json` alone —
+  deliberately, never from `agent_type` or an env var, so a nested delegate inherits the stage and
+  the deny reaches its own leaf `Bash` call. But the orchestrator loop marked stages `in_progress`
+  in the **Task System only**: the sole state.json mirror sat in the step-6.5a2 incomplete-return
+  path, which fires *after* a stage returns, not at dispatch, and stage agents only ever patch
+  `completed`. So from dispatch to completion nothing in the ledger named an acting stage,
+  `resolve_stage()` returned empty, empty means allow — correctly, since guessing in the deny
+  direction would deadlock unrelated sessions — and every deny the hook implements was unreachable
+  in a live run. Nothing was unsafe: this is a fail-*open* backstop by design, and the
+  dispatch-time ban banner and tool-grant narrowing are the primary controls. The backstop simply
+  was not covering. `skills/worktask/SKILL.md` step 5 now mirrors the mark into state.json
+  immediately beside the `TaskUpdate`, with the reason stated inline so the two writes are not
+  separated again. Found by the gate firing twice against a hand-written ledger during this
+  release's own run, while two real full-suite invocations at banned stages had gone through
+  untouched. Both directions are pinned by tests — a non-authority stage denies, and a ledger with
+  nothing `in_progress` fails open — plus an assertion that step 5 still carries the mirror, since
+  that instruction *is* the fix and nothing else guards it.
+- **Separated `stat -f` is a GNU/BSD trap, and it was in the new code.** `stat -f '%Lp' "$f"` is
+  correct on BSD, but on GNU coreutils `-f` is `--file-system` and takes no argument, so the format
+  and the path become operands: stat prints a filesystem block **to stdout** while exiting non-zero,
+  the `|| stat -c%a` fallback sees only the status, and the capture becomes that block concatenated
+  with the fallback value. `chmod` then fails and the script aborts before its `mv` — on Linux,
+  every accepted resolution died. All four sites now use the repo's attached idiom,
+  `stat -f%Lp "$f" 2>/dev/null || stat -c%a "$f" 2>/dev/null || printf '644'`, which is safe because
+  GNU getopt rejects `-f%Lp` at option-parse time and writes nothing to stdout — the same form ten
+  pre-existing call sites already use. Two guards make the class fail locally next time: a runtime
+  `^[0-7]+$` check before the `chmod`, and a self-test probe asserting the token is single-line and
+  purely numeric.
+- **Resolved files keep their permission bits.** The temp buffer is created 0600; the target's mode
+  is captured before the `mv` and re-applied. Tests assert a distinctive `0640` survives, not the
+  644 default that would pass by accident.
+- **No temp-file residue.** `$( )` subshells reset traps, so buffers allocated inside one were
+  unreachable by the cleanup trap, and `TMPDIR` alone does not help (macOS `mktemp -t` ignores it).
+  Buffers now use an explicit template directory under `RESOLVE_TMPDIR`/`TMPDIR`, with a
+  module-level array and a single EXIT trap. Measured across a self-test run: 659 temp entries
+  before, 659 after; previously +34 per run.
+
+### Known limitations
+
+- **Not executed on Linux.** The full suite (913 bats + 52 + 350 unittest, 0 failures) and all
+  self-tests ran on macOS / BSD userland. The `stat` fix above was validated against a faithful
+  GNU-getopt `stat` model with a positive control that reproduces the original break, but that
+  models exactly one binary — `mktemp`, `chmod`, `awk` variants, `sed`, `grep -qxF` and git's
+  `rev-parse --git-common-dir` answer are unexercised on a real GNU userland. This repo has no CI
+  configuration, so nothing catches a Linux regression automatically. A Linux job is recommended
+  before the plugin is relied on off-macOS.
+- **The worktree exclusion is verified on git 2.54 only.** It depends on the per-worktree
+  `info/exclude` *not* being consulted while the common-dir one is — empirically established, not a
+  documented guarantee. A future git could change it; the self-test would catch it, but only when
+  run.
+- **`skills/worktask/scripts/state-patch.sh` still carries the separated-`stat` shape** at its lock
+  mtime read, where it degrades *silently* (`|| printf ''`). Pre-existing at HEAD and deliberately
+  out of scope for this release; tracked as a follow-up.
+
 ## [4.0.13] - 2026-08-13
 
 The same rename, a second time. v4.0.0 moved `igrsoft` → `company-workflow` because the plugin id
