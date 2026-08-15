@@ -78,7 +78,7 @@
 ```json
   // …continued: closing keys of the same orchestrator.json
   "tracks": {
-    "1": { "issue_number": 41, "task_prefix": "t1" },
+    "1": { "issue_number": 41 },
     "2": { "issue_number": null, "status": "available" }
   },
   "progress": {
@@ -125,10 +125,10 @@
     "base_branch_source": "develop_fallback",
     "worktree_path": ".worktrees/milestone-1/42"
   },
-  "worktask": { "track": 1, "task_prefix": "t1", "complexity_score": 18 },
+  "worktask": { "track": 1, "complexity_score": 18 },
   "dependency": { "blocked_by": [41], "blocks": [60] },
   "execution": { "current_stage": "DV", "retry_count": 0, "status": "in_progress", "pr": null },
-  "task_ids": { "PL": "t1-1", "AR": "t1-2", "DV": "t1-3", "DR": "t1-4", "QA": "t1-5" }
+  "task_ids": { "PL": "PL0", "AR": "AR0", "DV": "DV0", "DR": "DR0", "QA": "QA0" }
 }
 ```
 

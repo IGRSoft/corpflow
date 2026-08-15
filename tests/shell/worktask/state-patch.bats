@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Contract tests for skills/worktask/scripts/state-patch.sh (AC-4 priority).
 # Contracts asserted (from the script header + body):
-#   - atomic completion merge into .context/state.json (stages.<S>.status=completed)
+#   - atomic completion merge into .context/state.json (tasks.<ID>.status=completed)
 #   - idempotent re-run leaves state.json byte-identical
 #   - disk-guard hard-halt exits 2 below DISK_MIN_GB
 #   - absent artifact / absent state.json => no-op exit 0
@@ -17,15 +17,15 @@ setup() {
   cp "$FIXTURES/worktask/development-0.sample.md" "$WD/.context/development-0.md"
 }
 
-@test "happy: merges completed DV verdict into stages.DV (atomic)" {
+@test "happy: merges completed DV verdict into tasks.DV0 (atomic)" {
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md
   assert_success
-  run jq -r '.stages.DV.status' .context/state.json
+  run jq -r '.tasks.DV0.status' .context/state.json
   assert_output "completed"
-  run jq -r '.stages.DV.verdict' .context/state.json
+  run jq -r '.tasks.DV0.verdict' .context/state.json
   assert_output "ok"
-  run jq -r '.stages.DV.artifact' .context/state.json
+  run jq -r '.tasks.DV0.artifact' .context/state.json
   assert_output --partial "development-0.md"
 }
 
@@ -33,9 +33,9 @@ setup() {
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV
   assert_success
-  run jq -r '.stages.DV.status' .context/state.json
+  run jq -r '.tasks.DV0.status' .context/state.json
   assert_output "completed"
-  run jq -r '.stages.DV.artifact' .context/state.json
+  run jq -r '.tasks.DV0.artifact' .context/state.json
   assert_output --partial "development-0.md"
 }
 
@@ -83,7 +83,7 @@ setup() {
   run bash "$PLUGIN_ROOT/$SCRIPT" \
     --stage DV --artifact .context/development-0.md --disk-check /no_such_mount_xyz
   assert_success
-  run jq -r '.stages.DV.status' .context/state.json
+  run jq -r '.tasks.DV0.status' .context/state.json
   assert_output "completed"
 }
 
@@ -123,7 +123,7 @@ setup() {
   run jq -r '.handoffs["TL→DV"]' .context/state.json
   assert_output --partial "ref:development-0.md"
   # Stage patch still lands alongside the handoffs edge.
-  run jq -r '.stages.DV.status' .context/state.json
+  run jq -r '.tasks.DV0.status' .context/state.json
   assert_output "completed"
 }
 
@@ -152,7 +152,7 @@ setup() {
   sed 's/stage: DV/stage: QA/' .context/development-0.md > .context/qa-0.md
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage QA
   assert_success
-  run jq -r '.stages.QA.artifact' .context/state.json
+  run jq -r '.tasks.QA0.artifact' .context/state.json
   assert_output --partial "qa-0.md"
 }
 
@@ -162,7 +162,7 @@ setup() {
   sed 's/stage: DV/stage: QA/' .context/development-0.md > .context/testing-0.md
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage QA
   assert_success
-  run jq -r '.stages.QA.artifact' .context/state.json
+  run jq -r '.tasks.QA0.artifact' .context/state.json
   assert_output --partial "testing-0.md"
 }
 
@@ -243,8 +243,8 @@ setup() {
 @test "bounds: facts.decisions clamps to newest-8, dispatched_agents to 6 (launched survive)" {
   cd "$WD"
   jq -n '
-    {version:1, worktask_id:"b", plan_file:".context/planning-0.md", platform:"all",
-     run_index:0, stages:{PL:{status:"completed", verdict:"ok"}},
+    {version:2, worktask_id:"b", plan_file:".context/planning-0.md", platform:"all",
+     run_index:0, tasks:{PL0:{status:"completed", verdict:"ok"}},
      facts:{files_modified:[], tests_added:[], open_questions:[], verdicts:{PL:"ok"},
        decisions:[ range(0;11) | {id:("d"+(.|tostring)), summary:"s", ref:"x.md#y"} ],
        dispatched_agents:(
@@ -287,7 +287,7 @@ setup() {
     run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md \
     --log .context/logs/lock.log
   assert_success
-  run jq -r '.stages.DV.status' .context/state.json
+  run jq -r '.tasks.DV0.status' .context/state.json
   assert_output "completed"
   run grep -c 'proceeding UNLOCKED' .context/logs/lock.log
   assert_output "1"
@@ -301,7 +301,7 @@ setup() {
     run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md \
     --log .context/logs/lock.log
   assert_success
-  run jq -r '.stages.DV.status' .context/state.json
+  run jq -r '.tasks.DV0.status' .context/state.json
   assert_output "completed"
   run grep -c 'lock stale' .context/logs/lock.log
   assert_output "1"
@@ -360,21 +360,21 @@ SHIM
   [ ! -d .context/state.json.lock.d ]
 }
 
-@test "via: --via hook stamps stages.DV.completed_via=hook (additive, version unchanged)" {
+@test "via: --via hook stamps tasks.DV0.completed_via=hook (additive, version unchanged)" {
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --via hook
   assert_success
-  run jq -r '.stages.DV.completed_via' .context/state.json
+  run jq -r '.tasks.DV0.completed_via' .context/state.json
   assert_output "hook"
   run jq -r '.version' .context/state.json
-  assert_output "1"
+  assert_output "2"
 }
 
 @test "via: --via step6_5 stamps completed_via=step6_5; invalid --via value exits 2" {
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --via step6_5
   assert_success
-  run jq -r '.stages.DV.completed_via' .context/state.json
+  run jq -r '.tasks.DV0.completed_via' .context/state.json
   assert_output "step6_5"
   # Invalid enum value is a caller bug → exit 2 via usage.
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --via bogus
@@ -382,7 +382,7 @@ SHIM
   assert_output --partial "invalid --via value"
 }
 
-@test "worktree: worktree_path/worktree_branch frontmatter maps to stages.DV.worktree" {
+@test "worktree: worktree_path/worktree_branch frontmatter maps to tasks.DV0.worktree" {
   cd "$WD"
   cat > .context/development-0.md <<'EOART'
 ---
@@ -399,12 +399,12 @@ handoff:
 EOART
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md
   assert_success
-  run jq -r '.stages.DV.worktree.path' .context/state.json
+  run jq -r '.tasks.DV0.worktree.path' .context/state.json
   assert_output "/tmp/wt/agent-abc"
-  run jq -r '.stages.DV.worktree.branch' .context/state.json
+  run jq -r '.tasks.DV0.worktree.branch' .context/state.json
   assert_output "feature/xyz"
   # Additive: absent worktree frontmatter must NOT synthesize the key.
-  run jq -e '.stages.PL | has("worktree")' .context/state.json
+  run jq -e '.tasks.PL0 | has("worktree")' .context/state.json
   assert_output "false"
 }
 
@@ -431,9 +431,9 @@ EOART
   local qa_pid=$!
   wait "$dv_pid"
   wait "$qa_pid"
-  run jq -r '.stages.DV.status' .context/state.json
+  run jq -r '.tasks.DV0.status' .context/state.json
   assert_output "completed"
-  run jq -r '.stages.QA.status' .context/state.json
+  run jq -r '.tasks.QA0.status' .context/state.json
   assert_output "completed"
 }
 
@@ -484,7 +484,7 @@ EOF
   assert_success
   run jq -r '.handoffs["PL→TL"]' .context/state.json
   assert_output --partial "ref:coordination-0.md"
-  run jq -r '.stages.TL.status' .context/state.json
+  run jq -r '.tasks.TL0.status' .context/state.json
   assert_output "completed"
 }
 

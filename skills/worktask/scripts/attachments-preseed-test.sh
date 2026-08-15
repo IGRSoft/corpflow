@@ -240,11 +240,11 @@ EOF
   # Fixture: state.json
   cat > "$td/.context/state.json" <<'EOF'
 {
-  "version": 1,
+  "version": 2,
   "worktask_id": "fn-attachments-pre-gate",
   "plan_file": ".context/planning-1.md",
   "platform": "all",
-  "stages": { "PL": { "status": "completed", "verdict": "ok" } },
+  "tasks": { "PL0": { "status": "completed", "verdict": "ok" } },
   "facts": { "files_modified": [], "tests_added": [], "decisions": [], "open_questions": [] },
   "handoffs": {}
 }

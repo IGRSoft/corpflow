@@ -13,7 +13,7 @@ version: 0.4.0
 
 # Worktask System
 
-Single source of truth for task worktask management using the Task System.
+Single source of truth for task worktask management using the state ledger.
 
 ## Pipelines
 
@@ -67,7 +67,7 @@ stateDiagram-v2
 
 **Stage codes and invocation**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md` and `${CLAUDE_SKILL_DIR}/../shared/worktask-invocation.md`
 
-**Task System integration**: See `${CLAUDE_SKILL_DIR}/../shared/task-system.md`
+**State ledger**: See `${CLAUDE_SKILL_DIR}/../shared/state-ledger.md`
 
 ## Dynamic Worktask Sizing
 
@@ -128,11 +128,11 @@ Megatask (per-issue) tickets run in isolated workspaces. `.context/` base path b
 
 ### DC + QA Parallel (Default)
 
-```typescript
-TaskUpdate({ taskId: "5", addBlockedBy: ["4"] });  // DR ← DV
-TaskUpdate({ taskId: "6", addBlockedBy: ["5"] });  // QA ← DR
-TaskUpdate({ taskId: "7", addBlockedBy: ["5"] });  // DC ← DR
-TaskUpdate({ taskId: "8", addBlockedBy: ["6", "7"] });  // FN ← QA AND DC
+```bash
+state-patch.sh --task-block DR0 --on DV0   # DR ← DV
+state-patch.sh --task-block QA0 --on DR0   # QA ← DR
+state-patch.sh --task-block DC0 --on DR0   # DC ← DR
+state-patch.sh --task-block FN0 --on QA0,DC0   # FN ← QA AND DC
 ```
 
 Use `--sequential` when DC requires test results.
@@ -248,12 +248,12 @@ Before executing any worktask stage, the orchestrator MUST validate:
 
 ### Validation checks 1–5
 
-1. **TaskList check**: Call `TaskList()` and verify at least one task exists with `metadata.worktask_id` matching the current worktask
+1. **Ledger check**: Read `.context/state.json` and verify it is `version: 2` and holds at least one `tasks{}` entry whose `metadata.worktask_id` matches the current worktask
 2. **PL0 exists**: Verify a task with subject starting with `PL0:` exists
 3. **Stage tasks exist**: After PL0 completes, verify PL0 created subsequent stage tasks (at minimum DV0, DR0, and QA0 for any complexity level)
 3b. **Inclusion decisions are reasoned**: every entry in PL0's `metadata.skipped_stages` and `metadata.added_stages` carries a non-empty, decision-shaped `reason`; a bare score restatement or an entry with no reason fails the check
 4. **Stage contract check**: Verify upstream outputs match the next stage's Required Inputs per `shared/stage-contracts.md` (file exists + required sections present)
-5. **Metadata schema check**: Validate next task's metadata against `shared/task-system.md` § JSON Schema (non-PL tasks require `stage`, `agent`, `model`, `error_file`)
+5. **Metadata schema check**: Validate next task's metadata against `shared/state-ledger.md` § JSON Schema (non-PL tasks require `stage`, `agent`, `model`, `error_file`)
 ### Validation checks 6–7
 
 6. **Model alias check**: `metadata.model ∈ {fable, opus, sonnet, haiku}` — reject unknown aliases before `Task()` delegation. Caveat: under a managed `availableModels` allowlist (applied to subagent model overrides too) or `enforceAvailableModels`, a *valid* alias may silently resolve to a different model at dispatch — emit a `model_resolution_constrained` audit row when a managed allowlist is in effect; do NOT hard-block
@@ -266,7 +266,7 @@ Before executing any worktask stage, the orchestrator MUST validate:
 9. **Hook installation check** (first stage only): Verify `state-merge.sh` SubagentStop hook is operational. Check: (a) `.claude/hooks/state-merge.sh` exists and is executable, OR (b) the plugin's `plugin.json` registers the SubagentStop hook entry. If neither is true, emit a warning: `"⚠ state-merge.sh hook not installed — run hook-install.sh"`. Do NOT block — the orchestrator's Step 6.5 provides Layer 3 coverage. See `references/initialization-patterns.md#hook-installation`.
 ### Validation check 10
 
-10. **Branch naming** (first stage only, after the state.json seed and before `TaskCreate` PL0): run `bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"` — the ONLY point in the pipeline a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). **Unconditional**: the script's "already conventional" arm is a no-op, so running it always is free and is the only correct way to decide — never skip it because the current branch looks fine, and never judge conventionality by eye (the sole authority is `branch_is_conventional()`, queryable as `--check <name>`). A branch created outside the pipeline is covered by exactly this rule. Every outcome exits 0 and the step self-disables under `/megatask`/`--emergency` routing.
+10. **Branch naming** (first stage only, after the state.json seed and before seeding PL0): run `bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"` — the ONLY point in the pipeline a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). **Unconditional**: the script's "already conventional" arm is a no-op, so running it always is free and is the only correct way to decide — never skip it because the current branch looks fine, and never judge conventionality by eye (the sole authority is `branch_is_conventional()`, queryable as `--check <name>`). A branch created outside the pipeline is covered by exactly this rule. Every outcome exits 0 and the step self-disables under `/megatask`/`--emergency` routing.
 
 ### Validation check 10 — pass a title, preview freely
 
@@ -283,7 +283,7 @@ Capture **both** stdout key=value lines — `target_branch=<name>` (the name the
 ### On validation failure
 
 If validation fails:
-- No tasks exist → Worktask not initialized. Re-run initialization (TaskCreate PL0)
+- No tasks exist → Worktask not initialized. Re-run initialization (seed PL0)
 - PL0 exists but no subsequent tasks → PL0 did not complete properly. Re-run PL0
 - Tasks exist but are orphaned (no worktask_id) → Log warning and attempt to match by subject pattern
 - Contract violation → Do NOT transition. Append `missing_input` entry to next stage's `.context/errors/<agent>.md` and block.
@@ -325,8 +325,7 @@ const stateRaw = fs.existsSync(".context/state.json")
   ? fs.readFileSync(".context/state.json", "utf8")
   : null;
 // stateRaw goes inline into preamble section [3] as a fenced JSON code block.
-// If null, F1 fallback applies: orchestrator uses metadata.context_files only,
-// no cache-friendly preamble (`context_files` mode).
+// The ledger is mandatory: a null here is a hard failure, not a degraded mode.
 ```
 
 #### Artifact path helper
@@ -365,11 +364,11 @@ function stageArtifactPath(code: string, runIndex: number): string {
 
 #### Step 6.5 — After Task() returns, enforce state.json patch (MANDATORY)
 
-After every `Task()` return and BEFORE `TaskUpdate(stage→completed)`, execute this three-layer check:
+After every `Task()` return and BEFORE the `completed` patch, execute this three-layer check:
 
 ##### Completion signal (subagents run in the background by default)
 
-> "`Task()` return" here means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the `TaskUpdate(stage→completed)` that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp `completed` over a still-running stage. Errored returns propagate honestly: a subagent cut off by a rate limit or API error reports the error (with any partial work preserved) instead of a successful-looking empty result — classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch on an errored return.
+> "`Task()` return" here means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the `completed` patch that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp `completed` over a still-running stage. Errored returns propagate honestly: a subagent cut off by a rate limit or API error reports the error (with any partial work preserved) instead of a successful-looking empty result — classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch on an errored return.
 
 ###### Layer check — Layers 1–2
 
@@ -377,15 +376,16 @@ After every `Task()` return and BEFORE `TaskUpdate(stage→completed)`, execute 
 // Layer check: re-read state.json.
 const statePost = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
 const code = full.metadata.stage;
+const taskId = task.id;  // numbered ledger key, e.g. "DV0" — tasks{} is never keyed by bare code
 const runIndex = full.metadata.run_index ?? 0;
 const artifactPath = stageArtifactPath(code, runIndex);
 
-if (statePost.stages?.[code]?.status !== "completed") {
+if (statePost.tasks?.[taskId]?.status !== "completed") {
   // Layer 1 (agent self-patch) missed → invoke Layer 2 synchronously via the canonical script
   // (fires even if the SubagentStop hook event was not delivered):
-  //   bash skills/worktask/scripts/state-patch.sh --stage <code> --artifact <path> --via step6_5
+  //   bash skills/worktask/scripts/state-patch.sh --stage <code> --task-id <taskId> --artifact <path> --via step6_5
   // state-patch.sh is the single implementation (.claude/hooks/state-merge.sh is a thin wrapper);
-  // `--via step6_5` stamps stages.<CODE>.completed_via=step6_5 vs the hook default ("hook"). (v1 additive.)
+  // `--via step6_5` stamps tasks.<ID>.completed_via=step6_5 vs the hook default ("hook"). (v1 additive.)
   runStateMergeHook(artifactPath, code, /* via */ "step6_5");
 ```
 
@@ -394,15 +394,15 @@ if (statePost.stages?.[code]?.status !== "completed") {
 ```typescript
   // …continued: re-read after the Layer-2 hook.
   const statePost2 = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
-  if (statePost2.stages?.[code]?.status !== "completed") {
+  if (statePost2.tasks?.[taskId]?.status !== "completed") {
     // Layer 2 also missed (hook absent or artifact lacks frontmatter).
     // Layer 3: orchestrator derives minimal patch from agent return text (F3 fallback).
     // The F3 patch stamps completed_via:"f3" so the enforcement layer is observable.
     const handoff = parseFrontmatter(artifactPath);  // null if missing → F3
     const patch = handoff
       ? buildPatchFromHandoff(code, handoff)
-      : { stages: { [code]: { status: "completed", artifact: artifactPath, verdict: "ok", completed_via: "f3" } } };
-    if (handoff && !patch.stages[code].completed_via) patch.stages[code].completed_via = "f3";
+      : { tasks: { [taskId]: { status: "completed", artifact: artifactPath, verdict: "ok", completed_via: "f3" } } };
+    if (handoff && !patch.tasks[taskId].completed_via) patch.tasks[taskId].completed_via = "f3";
     atomicMergeStateJson(patch);  // read → merge → temp → fsync → rename
   }
 }
@@ -441,9 +441,9 @@ Before entering this loop, verify:
 
 #### Signals 1–3 (incl. 2b)
 
-- **Signal 1 (TaskList audit)**: Call `TaskList()`, find the PL0 task, verify its status is `completed`. If PL0 does not exist or is not completed, STOP — worktask not initialized or planning incomplete.
+- **Signal 1 (ledger audit)**: Read `tasks.PL0` from `.context/state.json` and verify its status is `completed`. If PL0 does not exist or is not completed, STOP — worktask not initialized or planning incomplete.
 
-**Signal 2 (plan gate)**: Read `PL0.metadata.plan_gate` (via `TaskGet`; default `"checkpoint"`).
+**Signal 2 (plan gate)**: Read `PL0.metadata.plan_gate` (from `tasks.PL0.metadata`; default `"checkpoint"`).
 - `"checkpoint"` (default): require BOTH PL0 `completed` AND an `approval_received` audit line with
   `subject:"PL<run_index>"` in `.context/logs/audit.jsonl` before loop entry. If the line is
   absent, STOP — return to `commands/worktask.md § Step A.5` to fulfil the gate.
@@ -468,7 +468,7 @@ FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`)
 After PL0 completes and creates stage tasks, the orchestrator MUST:
 
 1. **Present PL0 results** to the user: complexity score, stages created (with agents), dependency chain, and key planning decisions (presented at the Step A.5 plan gate; on a `checkpoint` gate execution proceeds only after approval).
-2. **Re-validate before executing**: Call `TaskList()` to get all stage tasks. For each task, verify `metadata.agent` and `metadata.model` are set. This checkpoint prevents drift — the orchestrator re-grounds itself in the delegation rules before touching any stage.
+2. **Re-validate before executing**: Re-read `tasks{}` from the ledger. For each task, verify `metadata.agent` and `metadata.model` are set. This checkpoint prevents drift — the orchestrator re-grounds itself in the delegation rules before touching any stage.
 3. **Publish plan to GitHub** (before stage loop). Run:
 
 ##### Step 3 — publish snippet
@@ -502,8 +502,10 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 #### Steps 1–3
 
 ```typescript
-// 1. Get all tasks for this worktask
-let tasks = TaskList();
+// 1. Read the ledger — tasks{} keyed by stage id (PL0, DV0, DV1…).
+let state = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
+if (state.version !== 2) throw new Error(`state.json version ${state.version}; expected 2`);
+let tasks = Object.entries(state.tasks).map(([id, t]) => ({ id, ...t }));
 ```
 
 ##### HANDOFF_SCHEMA
@@ -521,12 +523,13 @@ const HANDOFF_SCHEMA: Record<string, object> = {
 ##### Steps 2–3 — completion loop & ready filter
 
 ```typescript
-// 2. Loop until all tasks are completed
-while (tasks.some(t => t.status !== "completed")) {
+// 2. Loop until every task has settled ("skipped" is terminal, like "completed")
+const SETTLED = new Set(["completed", "skipped"]);
+while (tasks.some(t => !SETTLED.has(t.status))) {
   // 3. Find unblocked pending tasks
   const ready = tasks.filter(t =>
     t.status === "pending" &&
-    (t.blockedBy ?? []).every(dep => tasks.find(d => d.id === dep)?.status === "completed")
+    (t.blocked_by ?? []).every(dep => SETTLED.has(state.tasks[dep]?.status))
   );
 
   for (const task of ready) {
@@ -535,17 +538,15 @@ while (tasks.some(t => t.status !== "completed")) {
 #### Step 4.0
 
 ```typescript
-    // 4. Get full task details
-    const full = TaskGet({ taskId: task.id });
-    const agentType = full.metadata.agent;
-    const model = full.metadata.model;
-
     // 4.0. Re-read the live ledger for this iteration (dispatched_agents[], last_error,
     //      facts.capabilities are all read below and evolve per stage). Cheap: state.json
-    //      is ≤500 tokens. F1 (absent) → empty shape so the additive reads degrade to no-op.
-    const state = fs.existsSync(".context/state.json")
-      ? JSON.parse(fs.readFileSync(".context/state.json", "utf8"))
-      : { stages: {}, facts: {} };
+    //      is ≤500 tokens. An unreadable ledger is a hard failure, never a degraded mode.
+    state = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
+
+    // 4. Full task details come from the ledger entry itself.
+    const full = state.tasks[task.id];
+    const agentType = full.metadata.agent;
+    const model = full.metadata.model;
 ```
 
 ##### Agent-type resolution
@@ -567,16 +568,15 @@ while (tasks.some(t => t.status !== "completed")) {
 #### Step 4.5
 
 ```typescript
-    // 4.5. Soft context_files validation — warn, don't abort
-    //      Low-complexity worktasks legitimately skip upstream stages,
-    //      so a missing listed file is a warning appended to the prompt.
-    //      Exception: error_file absence is expected on first attempt
-    //      (retry_count === 0) — suppress that specific warning.
-    if (full.metadata.context_files) {
-      const listed = full.metadata.context_files.split(',').map(s => s.trim());
+    // 4.5. Soft context_refs validation — warn, don't abort. Low-complexity
+    //      worktasks legitimately skip upstream stages. error_file absence on
+    //      the first attempt (retry_count === 0) is expected, not a warning.
+    if (full.metadata.context_refs) {
+      const listed = JSON.parse(full.metadata.context_refs)
+        .map(r => r.split('#')[0].trim());
       const retryCount = full.metadata.retry_count ?? 0;
       const missing = listed.filter(p =>
-        !fs.existsSync(p) &&
+        !fs.existsSync(p.startsWith('.context/') ? p : `.context/${p}`) &&
         !(p === full.metadata.error_file && retryCount === 0)
       );
       if (missing.length > 0) {
@@ -594,10 +594,10 @@ while (tasks.some(t => t.status !== "completed")) {
     // 4.6-pre. last_error hint — on a retry, prepend one line summarizing the prior
     //          errored return (class + partial + ref) to prompt section [6] so the
     //          re-dispatch targets the recorded failure instead of re-inferring it.
-    //          Reads stages.<CODE>.last_error written by Step 6.5a. (v1 additive; [6]
+    //          Reads tasks.<ID>.last_error written by Step 6.5a. (v1 additive; [6]
     //          is the dynamic retry-hint section — cache prefix [1][2][4] untouched.)
     if ((full.metadata.retry_count ?? 0) > 0) {
-      const le = state.stages?.[full.metadata.stage]?.last_error;
+      const le = state.tasks?.[task.id]?.last_error;
       if (le) {
         full.description =
           `PRIOR ERROR (class=${le.class}` +
@@ -652,12 +652,12 @@ while (tasks.some(t => t.status !== "completed")) {
 ```typescript
     // 4.7. DV checkpoint resume — restart DV from its last budget-aware checkpoint.
     //       A budget-exhausted DV run wrote a partial `development-N.md` (+ `## Blockers`)
-    //       and recorded completed sub-batches at `state.json → stages.DV.progress`
+    //       and recorded completed sub-batches at `state.json → tasks.DV0.progress`
     //       (agents/developer.md § Budget-Aware Checkpointing). On re-dispatch, carry the
     //       checkpoint forward so the re-run resumes from `next_batch` instead of redoing
     //       applied work. Friction precedent: tokamak-reconciler-unification (#14).
     if (full.metadata.stage === "DV") {
-      const dvProgress = state.stages?.DV?.progress;  // {completed_batches, next_batch, updated_at}
+      const dvProgress = state.tasks?.[task.id]?.progress;  // {completed_batches, next_batch, updated_at}
       if (dvProgress && (dvProgress.completed_batches?.length ?? 0) > 0) {
 ```
 
@@ -850,7 +850,7 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
     //      N = state.json.run_index (default 0). See § FN Gate below — Read
     //      references/fn-gate.md at FN time for the full procedure.
     if (full.metadata.stage === "FN") {
-      const fnGate = pl0.metadata.fn_gate ?? "checkpoint";  // TaskGet PL0
+      const fnGate = pl0.metadata.fn_gate ?? "checkpoint";
       const N = state.run_index ?? 0;
 
       // (a) Run the Pre-gate Conductor-attachments writer (checkpoint path only).
@@ -900,15 +900,9 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
 #### Step 5
 
 ```typescript
-    // 5. Mark in_progress in BOTH ledgers. hooks/test-execution-gate.sh resolves the
-    //    acting stage from .context/state.json alone (never agent_type or an env var,
-    //    so nested delegates inherit it) — a Task-System-only mark leaves the gate
-    //    resolving nothing, and nothing means allow, for the whole stage. Keep the two
-    //    writes adjacent so they cannot drift apart again.
-    TaskUpdate({ taskId: task.id, status: "in_progress" });
-    if (fs.existsSync(".context/state.json")) {
-      atomicMergeStateJson({ stages: { [full.metadata.stage]: { status: "in_progress" } } });
-    }
+    // 5. Mark in_progress. hooks/test-execution-gate.sh resolves the acting stage from
+    //    this one write (never agent_type or an env var, so nested delegates inherit it).
+    sh(`state-patch.sh --task-status ${task.id} in_progress`);
 
 ```
 
@@ -1119,7 +1113,7 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
 ```typescript
       // 6.5a. Errored return (errors propagate with partial work).
       //       Classify per agent-coordination § Retry / Escalate Matrix, write
-      //       stages.<CODE>.last_error, flip the dispatch entry to "failed", and route
+      //       tasks.<ID>.last_error, flip the dispatch entry to "failed", and route
       //       to the retry matrix — do NOT run the completion patch. (v1 additive.)
       if (launchAck?.result === "error" || launchAck?.errored) {
         const cls = classifyError(launchAck);  // existing taxonomy, no new vocabulary
@@ -1132,8 +1126,8 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
 ```typescript
         // …continued: step 6.5a body
         atomicMergeStateJson({
-          stages: {
-            [code]: {
+          tasks: {
+            [task.id]: {
               last_error: {
                 class: cls,                              // transient|logic|missing_input|…|exhausted
                 partial: Boolean(launchAck?.partial),    // partial work preserved
@@ -1171,8 +1165,8 @@ Layer-2 path.
       //        forbids running this block while agent_id is live in `claude agents --json`).
       const incArtifact = stageArtifactPath(code, full.metadata.run_index ?? 0);
       const incHandoff = fs.existsSync(incArtifact) ? parseFrontmatter(incArtifact) : null;
-      const selfPatched = post.stages?.[code]?.status === "completed"
-                          && Boolean(post.stages[code].verdict);
+      const selfPatched = post.tasks?.[task.id]?.status === "completed"
+                          && Boolean(post.tasks[task.id].verdict);
       const incomplete = !selfPatched && !incHandoff?.verdict;
 ```
 
@@ -1181,7 +1175,7 @@ Layer-2 path.
 ```typescript
       // …continued: step 6.5a2 body
       if (incomplete) {
-        atomicMergeStateJson({ stages: { [code]: { status: "in_progress" } } });
+        atomicMergeStateJson({ tasks: { [task.id]: { status: "in_progress" } } });
         appendAudit({
           actor: "orchestrator",
           action: "stage_returned_incomplete",
@@ -1212,12 +1206,12 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
 ##### Step 6.5 — Layer 2 (synchronous patch)
 
 ```typescript
-      if (post.stages?.[code]?.status !== "completed") {
+      if (post.tasks?.[task.id]?.status !== "completed") {
         const runIndex = full.metadata.run_index ?? 0;
         const artifactPath = stageArtifactPath(code, runIndex);  // e.g. ".context/development-0.md"
         // Layer 2 (synchronous): delegate to state-patch.sh with --via step6_5 so
         // completed_via distinguishes this path from the SubagentStop hook default ("hook").
-        //   bash skills/worktask/scripts/state-patch.sh --stage <code> --artifact <path> --via step6_5
+        //   bash skills/worktask/scripts/state-patch.sh --stage <code> --task-id ${task.id} --artifact <path> --via step6_5
         // (equivalently: STATE_MERGE_VIA=step6_5 bash .claude/hooks/state-merge.sh)
         runStateMergeHook(artifactPath, code, /* via */ "step6_5");
 ```
@@ -1226,13 +1220,13 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
 
 ```typescript
         const post2 = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
-        if (post2.stages?.[code]?.status !== "completed") {
+        if (post2.tasks?.[task.id]?.status !== "completed") {
           // Layer 3 (F3): derive a minimal patch and stamp completed_via:"f3".
           const handoff = parseFrontmatter(artifactPath);  // null → F3 fallback
           const patch = handoff
             ? buildPatchFromHandoff(code, handoff)
-            : { stages: { [code]: { status: "completed", artifact: artifactPath, verdict: "ok", completed_via: "f3" } } };
-          if (handoff && !patch.stages[code].completed_via) patch.stages[code].completed_via = "f3";
+            : { tasks: { [task.id]: { status: "completed", artifact: artifactPath, verdict: "ok", completed_via: "f3" } } };
+          if (handoff && !patch.tasks[task.id].completed_via) patch.tasks[task.id].completed_via = "f3";
           atomicMergeStateJson(patch);
         }
       }
@@ -1260,18 +1254,19 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
 
 ```typescript
     // 7. Mark completed
-    TaskUpdate({ taskId: task.id, status: "completed" });
+    sh(`state-patch.sh --task-status ${task.id} completed`);
   }
 
-  // Refresh task list
-  tasks = TaskList();
+  // Refresh from the ledger — TL/DV may have added tasks since the last read.
+  state = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
+  tasks = Object.entries(state.tasks).map(([id, t]) => ({ id, ...t }));
 }
 ```
 
 #### Key rules
 
-- NEVER skip TaskUpdate calls (both in_progress and completed)
-- NEVER execute a stage without checking blockedBy dependencies are completed
+- NEVER skip a status patch (both in_progress and completed)
+- NEVER execute a stage without checking its `blocked_by` dependencies have settled
 - ALWAYS pass `model` from task metadata to the Agent tool (e.g. `model: opus` → `model: "opus"`); omitting/mismatching is a violation. Do NOT rely on frontmatter inheritance
 - `metadata.agent`: always fully-qualified `plugin:agent` (`corpflow:developer`, `apple-developer:ios-developer`)
 - If a stage agent fails after 3 retries, escalate per the error handling chain
@@ -1279,8 +1274,12 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
 ##### Key rules — completion & tooling
 
 - NEVER mark a task `completed` without first delegating and receiving results — the most common violation. Launch-ack ≠ results: with background-default subagents the completion notification (or `subagent_stopped` audit row) is the "results received" signal; an errored return (rate-limit/API error — propagated with partial work) routes to the retry/escalate matrix, never to completion
-- The orchestrator uses ONLY TaskCreate, TaskUpdate, TaskGet, TaskList, and Agent tools — Edit/Write/Bash on source files belong to stage agents. It owns the loop; stage agents own their stage's work
-- Prefer in-memory task tracking over `TaskList()` polling. Call `TaskList()` only on first loop entry, after TL/DV stages (which may create sub-tasks), and every 3rd iteration as a consistency check. For linear pipelines, update the local task array from `TaskUpdate` results instead of re-fetching all tasks
+- The orchestrator drives the loop with the `state.json` ledger (read directly, written only via `state-patch.sh`) and the Agent tool — Edit/Write/Bash on source files belong to stage agents
+- Re-read the ledger at loop entry, after TL/DV stages (which may add tasks), and every 3rd iteration. It is ≤500 tokens, so a re-read beats reasoning about staleness
+
+###### Do not reintroduce the Task System
+
+- corpflow does NOT use `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList`. Those tools are absent on every model this plugin dispatches — see `skills/shared/state-ledger.md` for why.
 
 ### PL Issue Publish
 
@@ -1471,7 +1470,7 @@ a restart. Surface the user's feedback verbatim, then route each item to the sta
 ### FN gate rejection — invariants
 
 `run_index` and `plan_file` stay frozen throughout; completed stages are never re-run wholesale —
-only the owning stage's task is reopened (`TaskUpdate` to `in_progress`), and stages that were
+only the owning stage's task is reopened (patched back to `in_progress`), and stages that were
 already green stay green. Increment `metadata.revision_count` on the FN task (absent → `1`) and
 append one `fn_revision_dispatched subject:"FN<N>"` audit row per fix round. When the routed stage
 completes, re-run the pre-FN summary and re-present the FN gate — approval is per presentation,
@@ -1555,7 +1554,7 @@ After the execution loop exits (all tasks completed, including ST): if `.context
 
 ## Resume After Interruption
 
-The orchestrator loop is restartable. **WHEN reattaching** (PostCompact, session crash, `--resume`, or stale `in_progress` tasks found at session start): **Read `references/resume.md` FIRST** — it maps TaskList shape + audit tail → exact action, including the live-agent `claude agents --json --all` pre-check that forbids blind re-delegation of a live, busy, or parked subagent. Never re-delegate before consulting it. Compaction-specific flow: `context-compression.md § PostCompact Recovery`.
+The orchestrator loop is restartable. **WHEN reattaching** (PostCompact, session crash, `--resume`, or stale `in_progress` tasks found at session start): **Read `references/resume.md` FIRST** — it maps ledger shape + audit tail → exact action, including the live-agent `claude agents --json --all` pre-check that forbids blind re-delegation of a live, busy, or parked subagent. Never re-delegate before consulting it. Compaction-specific flow: `context-compression.md § PostCompact Recovery`.
 
 ## FN Finalization Gate
 

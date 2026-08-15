@@ -311,7 +311,7 @@ STUB
   # DV in progress: refuse and hand off, without running anything.
   local ctx; ctx="$(mk_tmpworkdir)"
   mkdir -p "$ctx/.context"
-  printf '{"stages":{"DV":{"status":"in_progress"}}}\n' > "$ctx/.context/state.json"
+  printf '{"tasks":{"DV0":{"status":"in_progress"}}}\n' > "$ctx/.context/state.json"
   CLAUDE_PROJECT_DIR="$ctx" RUN_TESTS_SELECTOR="$stub" \
     run "$PLUGIN_ROOT/run-tests.sh" --changed
   [ "$status" -eq 65 ] || fail "expected exit 65 under DV, got $status: $output"

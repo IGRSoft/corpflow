@@ -16,7 +16,7 @@ related:
 Patterns for coordinating agents across worktask stages, managing handoffs, and handling errors.
 
 **Stage codes and agents**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md`
-**Task System tools**: See `${CLAUDE_SKILL_DIR}/../shared/task-system.md`
+**State ledger**: See `${CLAUDE_SKILL_DIR}/../shared/state-ledger.md`
 
 ## Handoff Protocol
 
@@ -24,11 +24,11 @@ Patterns for coordinating agents across worktask stages, managing handoffs, and 
 
 ```
 1. Current agent completes work (output matches stage-contracts Required Outputs)
-2. Updates task: TaskUpdate({ taskId: "X", status: "completed" })
+2. Updates ledger: state-patch.sh --task-status <ID> completed
 3. Creates stage artifact (e.g., `planning-0.md` for the first PL run, `planning-1.md` for the next; see `agents/product-manager.md § Plan File Naming`) with required sections
 4. Writes compressed handoff (50-100 tokens)
 5. Orchestrator validates against stage-contracts before transition
-6. Next agent starts: TaskUpdate({ taskId: "Y", status: "in_progress" })
+6. Next agent starts: state-patch.sh --task-status <ID> in_progress
 ```
 
 ### Orchestrator → PL0 Handoff
@@ -227,7 +227,8 @@ stage and must not appear in any completion checklist.
 | Actor | Action Examples |
 |-------|-----------------|
 | `hook:audit-subagent` (SubagentStop, plugin) **(authoritative)** | `subagent_stopped` (paired with cost-*.jsonl entry); rows carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`. |
-| `hook:audit-tooluse` (PostToolUse, plugin) **(authoritative)** | `tool_invoked` for `TaskUpdate\|TaskCreate\|Write\|Edit` with `duration_ms` + `effort` |
+| `hook:audit-tooluse` (PostToolUse, plugin) **(authoritative)** | `tool_invoked` for `Bash\|Write\|Edit` (ledger patches recognised by command) with `duration_ms` + `effort` |
+| `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) **(authoritative)** | `stage_transition` with `task_id` + `metadata.{verdict, via, dedupe_key}`. Emitted ONLY on the hook path — a hook completion runs no Bash tool call, so `hook:audit-tooluse` never sees it; the other layers stay scraped to avoid double counting. |
 | `hook:precompact` (PreCompact, plugin) **(authoritative)** | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` |
 | `hook:agent-stop` (Stop, PL/FN/ST agents) **(authoritative)** | `stage_completion_hook` with `metadata.stage`; rows carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`. |
 
@@ -263,7 +264,7 @@ Rows emitted by plugin hooks carry `actor: "hook:<name>"` and `metadata.dedupe_k
   "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run",
   "subject": "task ID or artifact path",
   "result": "ok|error|deferred|blocked",
-  "task_id": "optional — Task System ID",
+  "task_id": "optional — ledger key, e.g. DV0",
   "artifact": "optional — .context/ path",
   "metadata": { "...": "action-specific extras" }
 }
@@ -357,25 +358,28 @@ for full code patterns.
 
 #### Background-by-default dispatch
 
-> **Background-by-default dispatch**: subagents run in the **background by default** — the dispatching agent keeps its turn and receives the child's result as a completion notification. Two consequences for the worktask loop: (1) a `Task()` launch acknowledgement is NOT stage completion — advance a stage (Step 6.5, `TaskUpdate(completed)`) only on the completion notification or the `subagent_stopped` audit row (`skills/worktask/SKILL.md § Orchestrator Execution Loop`); (2) unblocked sibling stages (parallel DVN tracks, DC+QA) genuinely overlap with no extra orchestration.
+> **Background-by-default dispatch**: subagents run in the **background by default** — the dispatching agent keeps its turn and receives the child's result as a completion notification. Two consequences for the worktask loop: (1) a `Task()` launch acknowledgement is NOT stage completion — advance a stage (Step 6.5, the `completed` patch) only on the completion notification or the `subagent_stopped` audit row (`skills/worktask/SKILL.md § Orchestrator Execution Loop`); (2) unblocked sibling stages (parallel DVN tracks, DC+QA) genuinely overlap with no extra orchestration.
 
 ##### Depth accounting & background permission prompts
 
 > Depth accounting stays correct across resume: resumed subagents restore their original spawn depth and forked subagents count toward the depth cap. A resumed background agent also restores its **own prompt and tool restrictions** rather than reverting to the default agent, so a reattached stage row is still that stage's agent — reattach is safe, re-dispatch is not required for identity reasons alone. Permission prompts from background subagents surface in the main session — dialog names the asking agent; Esc denies just that tool — instead of being auto-denied, so an unattended run parks on them (see the resume `waitingFor` branch table).
 
-##### Per-session subagent spawn cap
+##### Two independent ceilings
 
-> A session caps total subagent spawns at **200** by default (`CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`; raise it before a run known to exceed the cap). Distinct from the nesting-depth budget above — this is a running *count* of every spawn in the session regardless of depth. `/clear` resets the counter. A single `/megatask` run is the plugin's most likely path to the default cap — see `skills/megatask/SKILL.md § Track Derivation` for the per-batch spawn estimate and when to raise the env var or split the batch.
-
-##### Three independent ceilings
-
-> A dispatch can be refused by any one of three caps; they are counted separately and raised separately. Check all three before a wide fan-out, not just the one that bit last time.
+> A dispatch can be refused by either of two caps; they are counted separately and raised separately. Check both before a wide fan-out, not just the one that bit last time.
 
 | Ceiling | Default | Env override | Counts |
 |---------|---------|--------------|--------|
 | Nesting depth | 3 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` | Levels below the session root; `=1` disables nesting |
 | Concurrently running | 20 | `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` | Agents alive *right now*, at every depth |
-| Total per session | 200 | `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` | Every spawn since session start; `/clear` resets |
+
+###### Bash memory ceiling (Linux)
+
+> `CLAUDE_CODE_TOOL_MEMORY_LIMIT` (opt-in, CC 2.1.233) puts Bash tool commands in a memory cgroup so a runaway build cannot stall the session. Linux only — on macOS runners a runaway build still has to be caught by the build timeout. Worth setting on CI runners that execute `/<plugin>:build-test`.
+
+###### The per-session total cap is gone
+
+> CC 2.1.224 **removed** the 200-spawn-per-session cap: a long-running session no longer refuses new agents on a running total. Only depth and concurrency still refuse. For `/megatask` this lifts the batch-size ceiling that used to force a split — batch size is now bounded by concurrency, disk, and rate budget alone.
 
 ###### Concurrency is the easy one to hit
 
@@ -410,7 +414,11 @@ Task({ subagent_type: "corpflow:developer", model: "opus" })
 
 > Agent teams inherit the leader's model. Teammates use the parent session's model unless explicitly overridden. Model aliases (`fable`/`opus`/`sonnet`/`haiku`) work correctly across all providers (Anthropic, Bedrock, Vertex, Foundry). Allowlist caveat: a managed `availableModels` list constrains subagent model overrides too, and `enforceAvailableModels` constrains the Default model — a valid alias may silently resolve to a different model; see `skills/worktask/SKILL.md § Pre-Stage Validation` step 6.
 
-> Named subagents appear in `@`-mention typeahead suggestions, making it easier to reference and communicate with running agents via `SendMessage`.
+> Named subagents appear in `@`-mention typeahead suggestions, making it easier to reference and communicate with running agents via `SendMessage`. Typing `@` in the prompt also mentions another Claude *session* by name (CC 2.1.232), and `SendMessage` delivers to a bare name that matches exactly one live session.
+
+#### Cross-session reach
+
+> `SendMessage` reaches sessions on **other machines** (macOS/Linux, CC 2.1.224–2.1.225); `ListAgents` discovers them and labels disconnected Remote Control rows `offline` and cloud rows `cloud` (CC 2.1.229). Interactive sessions on one machine are kept uniquely named, so a bare name is unambiguous. Two settings govern inbound traffic: `crossSessionInbound` (messages into a bypassed-permissions session are held for approval) and `dialogExpiry`. The authority rule below is unchanged and matters more across machines, not less.
 
 #### SendMessage authority hardening
 
@@ -536,7 +544,9 @@ Error propagation is trustworthy: a subagent cut off by a rate limit or server e
 
 ### Forked Subagents
 
-External builds of Claude Code can enable forked subagents by setting `CLAUDE_CODE_FORK_SUBAGENT=1`. This also works in non-interactive sessions (SDK and `claude -p`). Use forked subagents when a stage needs a deterministic snapshot of the parent's context rather than a fresh session.
+Subagent forking is **on by default** as of CC 2.1.232 — `CLAUDE_CODE_FORK_SUBAGENT=1` is no longer needed. Dispatch `subagent_type: "fork"` and the child inherits the parent's full conversation **and its prompt cache**.
+
+That cache inheritance makes a fork the cheapest handoff available: a stage that genuinely needs the orchestrator's whole context pays cache-read rates instead of re-sending a compressed brief. Prefer it over widening `context_refs` when a stage keeps asking for more upstream detail; prefer a normal dispatch when a clean, narrow context is the point (see `skills/cost-optimization/`).
 
 > Command-surface note: the `/fork` slash command copies the conversation into a new **background session** (its own row in `claude agents`); the in-session forked-subagent behavior it used to launch lives at `/subtask`. Neither replaces the env-var mechanism above.
 
@@ -548,9 +558,9 @@ Agent tool with `isolation: "worktree"` never reuses **stale** worktrees from pr
 
 Subagents resumed via `SendMessage` correctly restore the explicit `cwd` they were spawned with. Stages that resume mid-task do not fall back to the parent's cwd unexpectedly.
 
-### TaskList Sort Order
+### Ledger Key Order
 
-`TaskList` returns tasks **sorted by ID**. Stage agents can rely on iteration order matching creation order for stable handoff math (e.g., "the latest DV task is the highest-numbered DVN").
+`tasks{}` keys sort lexically by stage id, so stage agents can rely on stable handoff math (e.g., "the latest DV task is the highest-numbered DVN").
 
 ## Coordination Patterns
 
@@ -701,7 +711,7 @@ When decomposing work for parallel agents:
 
 ### TL-Initiated DV Splitting
 
-TL can split DV0 into parallel streams (DV0, DV1, DV2...) during coordination. Each stream runs in its own worktree after TL completes. The orchestrator picks up new tasks via `TaskList()` refresh — no loop changes needed.
+TL can split DV0 into parallel streams (DV0, DV1, DV2...) during coordination. Each stream runs in its own worktree after TL completes. The orchestrator picks up new tasks on its next ledger re-read — no loop changes needed.
 
 **Split criteria**: 2+ independent file groups with cleanly separable ownership and small interface surface between streams.
 
@@ -720,7 +730,7 @@ For complex bugs with multiple potential causes:
 3. Each investigator gathers confirming/falsifying evidence
 4. Arbitrate across findings, rank by confidence and evidence strength
 
-See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, PostToolUse format-on-save safety, MCP-tool-typed hooks, `duration_ms` in PostToolUse payload, and PostToolUse output replacement via `updatedToolOutput`), agent teams comparison, MCP elicitation patterns, and team communication protocols (message types, anti-patterns, deadlock resolution).
+See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, PostToolUse format-on-save safety, MCP-tool-typed hooks, `duration_ms` in PostToolUse payload, and PostToolUse output replacement via `updatedToolOutput`), agent teams comparison, MCP elicitation patterns, and team communication protocols (message types, anti-patterns, deadlock resolution).
 
 ## Native Dynamic Workflows vs corpflow Staged Worktask
 
@@ -733,7 +743,7 @@ Claude Code ships a native `/workflows` command and Workflow tool for **dynamic 
 | **Scale** | Tens–hundreds of parallel agents | 11 governed sequential/parallel stages |
 | **Governance** | Ad-hoc, minimal overhead | Stage contracts, artifact audit trail, DR/SR/QA quality gates |
 | **Use case** | One-off fan-out (e.g. scan 500 files in parallel) | Full feature development with DR/SR/QA quality gates |
-| **State management** | Orchestrator-in-context | `.context/state.json`, Task System, audit.jsonl |
+| **State management** | Orchestrator-in-context | `.context/state.json`, audit.jsonl |
 | **Resume / rollback** | Manual | Resume Procedure, state.checkpoint-*.json |
 
 ### When to reach for each
@@ -747,7 +757,7 @@ They can compose: a DV agent inside a corpflow worktask may itself spin up a nat
 
 #### Workflow size guideline
 
-> Naming note: the `/config` **"Dynamic workflow size"** setting (advisory agent counts) governs **native dynamic workflows** only — it is unrelated to PL0 dynamic *sizing* (complexity-scored stage selection). It defaults to **medium** (aim for fewer than 15 agents), is settable from any settings file via `workflowSizeGuideline`, and the active default appears in the running-workflow status line. An 11-stage worktask is not "oversized" by this guideline — but a DV fan-out composed *on top of* a worktask is, and it spends from the same 20-concurrent / 200-total spawn budgets.
+> Naming note: the `/config` **"Dynamic workflow size"** setting (advisory agent counts) governs **native dynamic workflows** only — it is unrelated to PL0 dynamic *sizing* (complexity-scored stage selection). It defaults to **medium** (aim for fewer than 15 agents), is settable from any settings file via `workflowSizeGuideline`, and the active default appears in the running-workflow status line. An 11-stage worktask is not "oversized" by this guideline — but a DV fan-out composed *on top of* a worktask is, and it spends from the same 20-concurrent budget.
 
 > Workflow-spawned agents carry `workflow.run_id`/`workflow.name` OpenTelemetry attributes, so a composed DV fan-out can be reconstructed from OTel data alongside the plugin's audit trail.
 

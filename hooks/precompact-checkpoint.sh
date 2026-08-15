@@ -24,7 +24,7 @@ CHECKPOINT="$CONTEXT_DIR/state.checkpoint-$TS.json"
 
 if [ "$SELF_TEST" -eq 1 ]; then
   TMP=$(mktemp -d)
-  echo '{"run_index":0,"stages":{}}' > "$TMP/state.json"
+  echo '{"run_index":0,"tasks":{}}' > "$TMP/state.json"
   cp "$TMP/state.json" "$TMP/state.checkpoint-test.json"
   [ -f "$TMP/state.checkpoint-test.json" ] || { echo "precompact-checkpoint: self-test FAIL"; exit 1; }
   rm -rf "$TMP"

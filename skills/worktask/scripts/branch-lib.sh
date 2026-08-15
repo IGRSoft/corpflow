@@ -284,7 +284,17 @@ audit_fn() {
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   wid=$(jq -r '.worktask_id // "unknown"' "${STATE_PATH:-.context/state.json}" 2> /dev/null || printf 'unknown')
   ri=$(jq -r '.run_index // 0' "${STATE_PATH:-.context/state.json}" 2> /dev/null || printf '0')
-  tid=$(jq -r --arg s "$stage" '.stages[$s].task_id // ($s + "0")' \
+  # Ledger keys are numbered. state-patch.sh owns the resolution ladder, so ask it rather
+  # than keeping a second copy that can drift from the writer's idea of the current
+  # instance. The local jq is the fallback for a truncated install: an audit row is
+  # evidence, never a gate, so an unreachable sibling must not cost us the row.
+  tid=$(STATE_PATH="${STATE_PATH:-.context/state.json}" \
+    bash "$(dirname "${BASH_SOURCE[0]}")/state-patch.sh" \
+    --state "${STATE_PATH:-.context/state.json}" --resolve-task-id "$stage" 2> /dev/null) \
+    || tid=""
+  [ -n "$tid" ] || tid=$(jq -r --arg s "$stage" '
+    [ (.tasks // {}) | keys[] | select(test("^" + $s + "[0-9]+$")) ]
+    | sort_by(ltrimstr($s) | tonumber) | last // ($s + "0")' \
     "${STATE_PATH:-.context/state.json}" 2> /dev/null || printf '%s0' "$stage")
   dk="$wid:$ri:$action"
   mkdir -p "${CONTEXT_DIR:-.context}/logs" 2> /dev/null || true
@@ -316,7 +326,7 @@ audit_fn() {
 #   1. MILESTONE_MODE=1        env override (tests, /megatask)
 #   2. INCIDENT_MODE=1         env override (tests, incident runners)
 #   3. state.json .metadata.milestone non-empty
-#   4. state.json .stages.IR present — the emergency pipeline's marker stage
+#   4. state.json .tasks.IR0 present — the emergency pipeline's marker stage
 #   5. workspace.json present at $WORKSPACE_ROOT or $PWD
 fn_batch_scope() {
   if [ "${MILESTONE_MODE:-0}" = "1" ]; then
@@ -334,7 +344,8 @@ fn_batch_scope() {
       SCOPE_REASON="milestone_metadata"
       return 0
     fi
-    if jq -e '.stages | has("IR")' "${STATE_PATH:-.context/state.json}" > /dev/null 2>&1; then
+    if jq -e '[(.tasks // {}) | keys[] | select(test("^IR[0-9]+$"))] | length > 0' \
+      "${STATE_PATH:-.context/state.json}" > /dev/null 2>&1; then
       SCOPE_REASON="incident_pipeline"
       return 0
     fi

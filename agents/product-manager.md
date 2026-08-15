@@ -12,7 +12,7 @@ version: 0.10.1
 # (commands/worktask.md:99-102 forbid Bash pre-approval), so the PM is the only
 # actor that can fetch the bytes while the URL is still valid. See `skills/shared/figma-capture.md § Capture Workflow`.
 # Bash(mkdir:*) is granted so PL0 can create `.context/designs/` before persisting Figma frames — `curl -o` cannot create parent directories, and `mkdir -p` is benign (creates directories only; documented minimal expansion per the security rule).
-tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), Bash(mkdir:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(corpflow:designer), Task(corpflow:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
+tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), Bash(mkdir:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Task(corpflow:designer), Task(corpflow:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
 hooks:
   Stop:
     - type: command
@@ -47,7 +47,7 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
   `requests_test_evidence: <what and why>` in this stage's artifact. `test_mode` governs breadth
   only; authority is static and does not depend on any plan field.
 - DO NOT fall into analysis paralysis; set research timeboxes
-- DO NOT call `TaskUpdate(status: "in_progress")` on any task other than your own PL0. Downstream stage tasks (AR/TL/DV/DR/SR/QA/DC/RE/FN/ST) MUST be created with `status: pending` and left untouched — only the orchestrator may promote them.
+- DO NOT patch any task to `in_progress` other than your own PL0. Downstream stage tasks (AR/TL/DV/DR/SR/QA/DC/RE/FN/ST) MUST be seeded `pending` and left untouched — only the orchestrator may promote them.
 
 ## Capabilities
 
@@ -193,7 +193,7 @@ Both rows describe a **new run**. A plan-gate revision is not a new run and allo
 > new run. **Skip algorithm steps 1–3**: `run_index` and `plan_file` are frozen, so edit the
 > current `.context/<plan_file>` in place. **Skip the Step-4 reset** below — patch `facts.*`
 > additively instead, so `facts.decisions[]` (the answers just given at the gate) and every other
-> fact gathered this run survive. **Do not create stage tasks** — `TaskUpdate` the existing chain
+> fact gathered this run survive. **Do not create stage tasks** — patch the existing chain
 > in place when the revision changes subjects, ACs, or the stage set. The never-overwrite rule
 > above protects the historical plans of **finished** runs; a plan under active revision is not
 > history, and rewriting it is the point.
@@ -201,7 +201,7 @@ Both rows describe a **new run**. A plan-gate revision is not a new run and allo
 #### Step 4 — state.json reset
 
 4. **state.json reset** (new run in existing `.context/`; **skipped on a `plan_revision` turn** —
-   see above): atomically rewrite `.context/state.json` with `"run_index": N`, `"stages": {"PL": {"status": "in_progress"}}`, `metadata.requires_screenshots` set to the detector's value (the channel `hooks/dv-screenshot-gate.sh` and `attach-visual-evidence.sh` read), `metadata.base_ref` set to the detected integration branch (see **Integration-branch detection** below), and empty `facts.*` (preserves `version`, `worktask_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
+   see above): atomically rewrite `.context/state.json` with `"run_index": N`, `"tasks": {"PL0": {"status": "in_progress"}}`, `metadata.requires_screenshots` set to the detector's value (the channel `hooks/dv-screenshot-gate.sh` and `attach-visual-evidence.sh` read), `metadata.base_ref` set to the detected integration branch (see **Integration-branch detection** below), and empty `facts.*` (preserves `version`, `worktask_id`, `platform`). Use the atomic-write pattern from `handoff-protocol.md#atomic-write`.
 
 ##### Step 4 — plan_file shape
 
@@ -209,7 +209,7 @@ Write the **path** shape into `state.json.plan_file` — `".context/planning-${N
 
 #### Downstream propagation
 
-When PL creates downstream stage tasks via `TaskCreate`, stamp **all** of the following on each (table continues across the two sub-sections below — every row is mandatory):
+When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp **all** of the following on each (table continues across the two sub-sections below — every row is mandatory):
 
 | Key | Value | Purpose |
 |---|---|---|
@@ -240,7 +240,7 @@ See `skills/agent-coordination/SKILL.md § metadata.skip_exploration Propagation
 
 #### Optional dispatch metadata
 
-PL0 MAY populate the optional dispatch fields (`skills/shared/task-system.md § Dispatch metadata`); they map 1:1 to `claude agents run` flags (`headless-dispatch.md`), honoured in-process for `model` (always) and `permission_mode` (audited), advisory otherwise.
+PL0 MAY populate the optional dispatch fields (`skills/shared/state-ledger.md § Dispatch metadata`); they map 1:1 to `claude agents run` flags (`headless-dispatch.md`), honoured in-process for `model` (always) and `permission_mode` (audited), advisory otherwise.
 
 ##### Default writer rules
 
@@ -277,7 +277,7 @@ Every stage writes `<basename>-N.md` where N = the `planning-N.md` index for thi
 #### Branch naming (already done by the orchestrator — do not re-run)
 
 The branch was already named once, by the **orchestrator**, at `commands/worktask.md § Step 3c` —
-before this PL0 turn began, immediately after the state.json seed and before `TaskCreate` for
+before this PL0 turn began, immediately after the state.json seed and before seeding
 PL0 itself. PM MUST NOT invoke `branch-name.sh` **in rename mode** at any point; the once-only
 rule (`skills/shared/git-conventions.md § Branch Naming`) means exactly one rename-mode run per
 worktask, and that run already happened.
@@ -373,7 +373,7 @@ The PM MUST name each persisted per-frame file with a **placeholder token**, nev
 When invoked as PL0 stage agent:
 1. Compute `<plan_file>` per **Plan File Naming** (glob `.context/planning-*.md`, pick next N) and create `.context/<plan_file>` with the requirements template — **except on a `plan_revision` turn**, which reuses the frozen `plan_file` and rewrites it in place (§ Revision of the run in flight)
 2. Fill out `<plan_file>` with requirements, acceptance criteria, success metrics
-3. Assess complexity (0-50 scale) and create stage tasks via `TaskCreate`, setting `metadata.plan_file = "<plan_file>"` AND `metadata.run_index = N` on each — **except on a `plan_revision` turn**, which never creates a second chain: `TaskUpdate` the existing stage tasks in place when the revision changes subjects, ACs, or the stage set (§ Revision of the run in flight)
+3. Assess complexity (0-50 scale) and seed stage tasks via `state-patch.sh --task-create`, setting `metadata.plan_file = "<plan_file>"` AND `metadata.run_index = N` on each — **except on a `plan_revision` turn**, which never creates a second chain: patch the existing stage tasks in place when the revision changes subjects, ACs, or the stage set (§ Revision of the run in flight)
 
 #### Post-publish verification (scaffolding step 4)
 
@@ -433,14 +433,14 @@ Use the **Unified Complexity Assessment** from `skills/worktask/SKILL.md § Dyna
 
 Stamp `metadata.skipped_stages` (`{stage, reason}`) for every stage of the full `PL→AR→TL→DV→DR→QA→DC→FN→ST` pipeline that is NOT created, and `metadata.added_stages` (same `{stage, reason}` shape) for every stage included beyond the tier default — so `state.json` self-documents both directions of the decision. Reasons are one sentence and decision-shaped, never a restatement of the score. Record the AR0 and TL0 decisions with their reasons in `planning-${N}.md ## stages`; the plan-approval gate summary surfaces both.
 
-**context_files seeding**: when AR0 is included, the DV0 task's `metadata.context_files` MUST name `architecture-${N}.md`, and the DV0/DR0/QA0 dispatches carry `metadata.architecture_ref` once AR completes. When AR0 is excluded, `architecture-${N}.md` MUST NOT appear in any `context_files` list and no `architecture_ref` is stamped.
+**context_refs seeding**: when AR0 is included, the DV0 task's `metadata.context_refs` MUST name an `architecture-${N}.md` anchor, and the DV0/DR0/QA0 dispatches carry `metadata.architecture_ref` once AR completes. When AR0 is excluded, `architecture-${N}.md` MUST NOT appear in any `context_refs` list and no `architecture_ref` is stamped.
 
 #### Dependency chain & run-index stamping (steps 4–5)
 
-4. **Set dependency chain** between created tasks using `TaskUpdate({ addBlockedBy })`
+4. **Set dependency chain** between seeded tasks using `state-patch.sh --task-block <ID> --on <ID[,ID…]>`
 5. **Mark PL0 completed** after creating all stage tasks
 
-Every `TaskCreate` for a downstream stage MUST include `metadata.run_index = N` and `metadata.plan_file = "planning-${N}.md"`. Stage artifact paths embedded in the task description use `<basename>-${N}.md` (e.g., `architecture-${N}.md`, `development-${N}.md`).
+Every seeded downstream stage MUST include `metadata.run_index = N` and `metadata.plan_file = "planning-${N}.md"`. Stage artifact paths embedded in the task description use `<basename>-${N}.md` (e.g., `architecture-${N}.md`, `development-${N}.md`).
 
 #### Agent mapping for `metadata.agent`
 
@@ -473,7 +473,7 @@ Example: a `publish-pl-issue.sh` change → DV0 `workflow-engineer`, DR0 `techni
 
 **See**: `skills/worktask/SKILL.md` for full assessment table. `skills/worktask/references/initialization-patterns.md § PL Creates Subsequent Tasks` for code pattern.
 
-**Task System**: Stage PL, Owner: product-manager. See `skills/shared/task-system.md`.
+**State ledger**: Stage PL, Owner: product-manager. See `skills/shared/state-ledger.md`.
 
 ### PL Stage: Automatic Design Detection
 
@@ -552,7 +552,7 @@ PL0 scans the task for high-risk domain signals and inserts ET0 between PL0 and 
 
 #### ET0 Insertion Pattern
 
-When threshold met, PL0: (1) `TaskCreate` an `ET0: Ethics review` task *before* AR0 with `metadata` `{stage: ET, agent: "corpflow:ethics-reviewer", model: "opus", error_file: ".context/errors/ethics-reviewer.md", plan_file, run_index: N, worktask_id}`; its description asks for `.context/ethics-review-${N}.md` with `Decision ∈ {pass, block, conditional}`. (2) `TaskUpdate({ taskId: "AR0", addBlockedBy: [et.id] })` so AR0 blocks on ET0 instead of PL0.
+When threshold met, PL0: (1) seed an `ET0` ethics-review task *before* AR0 with `metadata` `{stage: ET, agent: "corpflow:ethics-reviewer", model: "opus", error_file: ".context/errors/ethics-reviewer.md", plan_file, run_index: N, worktask_id}`; its description asks for `.context/ethics-review-${N}.md` with `Decision ∈ {pass, block, conditional}`. (2) `state-patch.sh --task-block AR0 --on ET0` so AR0 additionally blocks on ET0 (PL0 completes first, so ET0 is the effective gate).
 **Decision cascade**:
 - `Decision: pass` → AR0 unblocks, worktask continues
 - `Decision: conditional` → AR0 unblocks with ethics constraints injected into prompt
@@ -683,15 +683,14 @@ Before marking PL0 complete, verify:
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-pl`. Prev→this label: `USER→PL`.
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-pl`. Prev→this label: `USER→PL`.
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage PL --prev USER` (`skills/worktask/scripts/`) to atomically patch `stages.PL` + the `USER→PL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Put the one-line goal (verb + object, ≤120 chars) in that summary — downstream stages read it as the worktask goal alongside `planning-N.md#requirements`. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `state-patch.sh --stage PL --prev USER` (`skills/worktask/scripts/`) to atomically patch `tasks.PL0` + the `USER→PL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Put the one-line goal (verb + object, ≤120 chars) in that summary — downstream stages read it as the worktask goal alongside `planning-N.md#requirements`. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
-Task-management tooling is already in this agent's grant list (`TaskCreate`, `TaskUpdate`,
-`TaskGet`, `TaskList`), so stage-task creation needs no fallback — the ladder above exists for
-the patch script alone.
+Stage-task seeding uses the same `state-patch.sh` grant, so it shares this fallback ladder —
+there is no separate task tool to fall back to.
 
 #### State Patch — `facts.goal` is part of the contract
 

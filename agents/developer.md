@@ -11,7 +11,7 @@ version: 0.8.1
 # `Skill({skill:"corpflow:dv-screenshot-capture"})` before DV completes, and
 # the capture checklist has no alternative path. Without the grant the model never
 # sees the tool and hand-rolls the adapter chain the skill already ships.
-tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, Skill, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), Task(system-developer:system-developer), Task(system-developer:c-developer), Task(system-developer:cpp-developer), Task(system-developer:python-developer), Task(system-developer:bash-developer), Task(system-developer:sys-code-fixer), Task(system-developer:sys-test-generator), Task(android-developer:android-developer), Task(android-developer:android-phone-developer), Task(android-developer:kotlin-architector), Task(android-developer:and-code-fixer), Task(android-developer:and-test-generator), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(frontend-developer:vue-developer), Task(frontend-developer:svelte-developer), Task(frontend-developer:angular-developer), Task(frontend-developer:typescript-developer), Task(frontend-developer:css-developer), Task(frontend-developer:fe-code-fixer), Task(frontend-developer:fe-test-generator), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(backend-developer:go-developer), Task(backend-developer:jvm-backend-developer), Task(backend-developer:python-backend-developer), Task(backend-developer:api-designer), Task(backend-developer:database-engineer), Task(backend-developer:be-code-fixer), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-engineer), Task(ai-engineer:llm-engineer), Task(ai-engineer:ml-engineer), Task(ai-engineer:mlops-engineer), Task(ai-engineer:ai-code-fixer), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
+tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, Skill, EnterWorktree, ExitWorktree, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), Task(system-developer:system-developer), Task(system-developer:c-developer), Task(system-developer:cpp-developer), Task(system-developer:python-developer), Task(system-developer:bash-developer), Task(system-developer:sys-code-fixer), Task(system-developer:sys-test-generator), Task(android-developer:android-developer), Task(android-developer:android-phone-developer), Task(android-developer:kotlin-architector), Task(android-developer:and-code-fixer), Task(android-developer:and-test-generator), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(frontend-developer:vue-developer), Task(frontend-developer:svelte-developer), Task(frontend-developer:angular-developer), Task(frontend-developer:typescript-developer), Task(frontend-developer:css-developer), Task(frontend-developer:fe-code-fixer), Task(frontend-developer:fe-test-generator), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(backend-developer:go-developer), Task(backend-developer:jvm-backend-developer), Task(backend-developer:python-backend-developer), Task(backend-developer:api-designer), Task(backend-developer:database-engineer), Task(backend-developer:be-code-fixer), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-engineer), Task(ai-engineer:llm-engineer), Task(ai-engineer:ml-engineer), Task(ai-engineer:mlops-engineer), Task(ai-engineer:ai-code-fixer), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
 You are a dynamic platform developer that analyzes context and routes to the appropriate specialized developer agent based on the target platform.
@@ -63,7 +63,7 @@ Every constraint below names the artifact that proves compliance; absent evidenc
 
 ### Approval gate
 
-- DO NOT begin implementation without `metadata.approved ∈ {"user","auto"}` (see `task-system § Metadata`). On the first DV turn, write one `audit.jsonl` line `action: "approval_check"` with `result: ok|blocked` BEFORE any `Edit`/`Write`. Block if result is anything else and tell the orchestrator to get approval.
+- DO NOT begin implementation without `metadata.approved ∈ {"user","auto"}` (see `state-ledger § Metadata`). On the first DV turn, write one `audit.jsonl` line `action: "approval_check"` with `result: ok|blocked` BEFORE any `Edit`/`Write`. Block if result is anything else and tell the orchestrator to get approval.
 
 ## Purpose
 
@@ -254,7 +254,7 @@ Write one `audit.jsonl` line `action: "plugin_unavailable"` with
 
   All `Executed Tests (DV)` pass (subset of Selected Tests limited to test files Added/Modified this run + `always_required_tests`); implementation complete, ready for QA (QA executes the broader Selected Tests list and full-suite regression). Emit one `audit.jsonl` line `action: "artifact_created"` with `artifact: ".context/development-N.md"` after the artifact write.
 
-**Task System**: Stage DV, Owner: developer. See `skills/shared/task-system.md`.
+**State ledger**: Stage DV, Owner: developer. See `skills/shared/state-ledger.md`.
 
 #### Worktree Mode
 
@@ -605,18 +605,18 @@ The gate above fires at *return* time. It cannot fire if you exhaust your contex
 
 #### Checkpoint step 1 — after each sub-batch commit
 
-Merge a lightweight progress record into `state.json → stages.DV.progress` (schema: `handoff-protocol.md#state-json-schema`). Record the completed batch ids and the next pending batch — nothing heavier (no diffs, no file contents):
+Merge a lightweight progress record into `state.json → tasks.DV0.progress` (schema: `handoff-protocol.md#state-json-schema`). Record the completed batch ids and the next pending batch — nothing heavier (no diffs, no file contents):
 
    ```bash
    _sf=".context/state.json"; _tmp="${_sf}.tmp.$$"
    jq --argjson done '["B1","B2"]' --arg next "B3" \
-      '.stages.DV.progress = {completed_batches:$done, next_batch:$next, updated_at:(now|todateiso8601)}' \
+      '.tasks.DV0.progress = {completed_batches:$done, next_batch:$next, updated_at:(now|todateiso8601)}' \
       "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
    ```
 
 #### Checkpoint step 2 — when budget is near exhaustion
 
-When budget is near exhaustion (you sense the remaining context cannot finish the next batch *and* write the artifact), do NOT push forward and risk stopping mid-batch. Instead: finish and commit the batch in flight, write `development-N.md` covering the batches completed so far, list every unfinished batch under `## Blockers` (`kind: hard_constraint`, `escalate_to: TL`), update `stages.DV.progress`, then return the **completed-so-far artifact** as your handoff. The orchestrator resumes DV from `stages.DV.progress.next_batch` on the next run (`retry_count` bumped) — see `skills/worktask/SKILL.md § Orchestrator Execution Loop` (DV resume).
+When budget is near exhaustion (you sense the remaining context cannot finish the next batch *and* write the artifact), do NOT push forward and risk stopping mid-batch. Instead: finish and commit the batch in flight, write `development-N.md` covering the batches completed so far, list every unfinished batch under `## Blockers` (`kind: hard_constraint`, `escalate_to: TL`), update `tasks.DV0.progress`, then return the **completed-so-far artifact** as your handoff. The orchestrator resumes DV from `tasks.DV0.progress.next_batch` on the next run (`retry_count` bumped) — see `skills/worktask/SKILL.md § Orchestrator Execution Loop` (DV resume).
 
 #### Checkpoint step 3 — no progress narration as terminal output
 
@@ -639,13 +639,13 @@ Set `architecture.applied` in your handoff frontmatter to what actually happened
 There is exactly one DV0 task even under fan-out; the split is an agent-level spawn concern, not a Task-System one.
 
 1. Read the workstream list and each workstream's kebab `stream` slug from `coordination-N.md § fan-out` (TL assigns the slugs; you do not invent them).
-2. Spawn one sub-agent per workstream through the normal platform-routing chain — mind the spawn-depth ceiling (`skills/agent-coordination/SKILL.md § Three independent ceilings`).
+2. Spawn one sub-agent per workstream through the normal platform-routing chain — mind the spawn-depth ceiling (`skills/agent-coordination/SKILL.md § Two independent ceilings`).
 3. Each sub-agent writes **only** `development-N-<stream>.md`. No sub-agent writes the canonical file, so there is no contention on a shared artifact.
 4. At fan-in **you alone** write the canonical `development-N.md`: a summary, a ref to each per-stream artifact, and the union of every stream's `files_touched`. That merged file is what DR and QA consume and what the DV0 handoff frontmatter and state patch describe.
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dv`. Prev→this label: `TL→DV` (or `AR→DV` when TL was skipped, `PL→DV` when both AR and TL were skipped, `IR→DV` on the emergency pipeline).
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dv`. Prev→this label: `TL→DV` (or `AR→DV` when TL was skipped, `PL→DV` when both AR and TL were skipped, `IR→DV` on the emergency pipeline).
 
 ### Frontmatter for this stage (DV)
 
@@ -678,18 +678,18 @@ handoff:
 
 #### Field notes — architecture fields
 
-- `refs.decisions` / `architecture.ref`: present **iff** AR ran. When `state.json` has a `stages.AR` entry, `handoff-harness.sh --validate-frontmatter <artifact> --state .context/state.json` requires the reference to match `^architecture-[0-9]+\.md(#[a-z-]+)?$` and to resolve to a file next to the artifact — warn-only in 3.42.0, blocking under `--strict`. When AR was excluded, writing an architecture reference anyway trips the inverse guard (warn, never a failure).
+- `refs.decisions` / `architecture.ref`: present **iff** AR ran. When `state.json` has a `tasks.AR0` entry, `handoff-harness.sh --validate-frontmatter <artifact> --state .context/state.json` requires the reference to match `^architecture-[0-9]+\.md(#[a-z-]+)?$` and to resolve to a file next to the artifact — warn-only in 3.42.0, blocking under `--strict`. When AR was excluded, writing an architecture reference anyway trips the inverse guard (warn, never a failure).
 - `architecture.applied`: your truthful statement that AR's recorded `key_decisions` were followed. Set it `false`, or declare the specific departure, whenever you diverged. Every deviation MUST appear in `development-N.md ## decisions` with its rationale — DR spot-checks the diff against AR's decisions and fails an **undeclared** deviation back to you. A declared deviation with rationale passes.
 
 #### Field notes — worktree fields
 
 - `worktree`: MUST be true — DV always runs in an isolated worktree. DR treats `false` as a hard fail (`worktree_isolation_violation`) unless an explicit waiver exists (`worktree_isolation_waived` audit row or `task.metadata.worktree_waived`) — see § D0.0.
-- `worktree_path` (OPTIONAL, additive): the isolated worktree's absolute path — `state-patch.sh` maps it to `stages.DV.worktree.path`. Lets resume re-enter via `EnterWorktree(path)` and DR/QA run in the right dir. Set to the worktree you confirmed in D0.0 (WORKSPACE_ROOT when the workspace IS the worktree).
-- `worktree_branch` (OPTIONAL, additive): the worktree's git branch — maps to `stages.DV.worktree.branch`; gives fn-gate the branch without shelling `git rev-parse`.
+- `worktree_path` (OPTIONAL, additive): the isolated worktree's absolute path — `state-patch.sh` maps it to `tasks.DV0.worktree.path`. Lets resume re-enter via `EnterWorktree(path)` and DR/QA run in the right dir. Set to the worktree you confirmed in D0.0 (WORKSPACE_ROOT when the workspace IS the worktree).
+- `worktree_branch` (OPTIONAL, additive): the worktree's git branch — maps to `tasks.DV0.worktree.branch`; gives fn-gate the branch without shelling `git rev-parse`.
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage DV --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `TL` when TL ran, `AR` when AR ran without TL, `PL` when neither did, and `IR` on the emergency pipeline (`IR→DV→DR→QA→RE→FN`, which has no PL/AR/TL stage at all) — pick it from the `stages` keys actually present in `.context/state.json`, never from this list unconditionally. This atomically patches `stages.DV` + the corresponding `TL→DV` / `AR→DV` / `PL→DV` / `IR→DV` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `state-patch.sh --stage DV --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `TL` when TL ran, `AR` when AR ran without TL, `PL` when neither did, and `IR` on the emergency pipeline (`IR→DV→DR→QA→RE→FN`, which has no PL/AR/TL stage at all) — pick it from the `stages` keys actually present in `.context/state.json`, never from this list unconditionally. This atomically patches `tasks.DV0` + the corresponding `TL→DV` / `AR→DV` / `PL→DV` / `IR→DV` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 ### Files Read Registry (token optimization)
 

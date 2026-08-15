@@ -20,7 +20,7 @@ setup() {
 
 _seed_state() {
   cat > "$WD/.context/state.json" <<'EOF'
-{"run_index":0,"worktask_id":"wt-fix","stages":{"PL":{"status":"completed","verdict":"ok"},"DV":{"status":"in_progress"}}}
+{"run_index":0,"worktask_id":"wt-fix","tasks":{"PL0":{"status":"completed","verdict":"ok"},"DV0":{"status":"in_progress"}}}
 EOF
 }
 
@@ -55,9 +55,9 @@ EOF
   run bash -c "cd '$WD' && CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV bash '$PLUGIN_ROOT/$SCRIPT'"
   assert_success
   local dv_status
-  dv_status=$(jq -r '.stages.DV.status' "$WD/.context/state.json")
+  dv_status=$(jq -r '.tasks.DV0.status' "$WD/.context/state.json")
   local dv_verdict
-  dv_verdict=$(jq -r '.stages.DV.verdict' "$WD/.context/state.json")
+  dv_verdict=$(jq -r '.tasks.DV0.verdict' "$WD/.context/state.json")
   [ "$dv_status" = "completed" ]
   [ "$dv_verdict" = "ok" ]
 }
@@ -93,12 +93,12 @@ _backup_paths() {
   [ "$plan_file" = ".context/planning-0.md" ]
 
   # 3. The real field merge still happens in state-patch.sh — the skeleton alone
-  #    would leave .stages empty, so this is what proves the fall-through.
+  #    would leave .tasks empty, so this is what proves the fall-through.
   #    (AR0 S6 T1 says `.verdict == "ok"`; no top-level verdict key exists in the
   #    schema — state-patch.sh writes it under the stage object. Corrected here.)
   local dv_status dv_verdict
-  dv_status=$(jq -r '.stages.DV.status' "$WD/.context/state.json")
-  dv_verdict=$(jq -r '.stages.DV.verdict' "$WD/.context/state.json")
+  dv_status=$(jq -r '.tasks.DV0.status' "$WD/.context/state.json")
+  dv_verdict=$(jq -r '.tasks.DV0.verdict' "$WD/.context/state.json")
   [ "$dv_status" = "completed" ]
   [ "$dv_verdict" = "ok" ]
 
@@ -185,7 +185,7 @@ _backup_paths() {
   [ "$(cat "$real_backups")" = "NOT JSON {{{" ]
 
   local dv_status
-  dv_status=$(jq -r '.stages.DV.status' "$WD/.context/state.json")
+  dv_status=$(jq -r '.tasks.DV0.status' "$WD/.context/state.json")
   [ "$dv_status" = "completed" ]
 }
 
@@ -195,7 +195,7 @@ _backup_paths() {
   run bash -c "cd '$WD' && CLAUDE_TASK_METADATA_STAGE=DV bash '$PLUGIN_ROOT/$SCRIPT'"
   assert_success
   local dv_status
-  dv_status=$(jq -r '.stages.DV.status' "$WD/.context/state.json")
+  dv_status=$(jq -r '.tasks.DV0.status' "$WD/.context/state.json")
   [ "$dv_status" = "in_progress" ]
 }
 
@@ -209,7 +209,7 @@ _backup_paths() {
   run bash -c "cd '$WD' && CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV bash '$PLUGIN_ROOT/$SCRIPT'"
   assert_success
   local via
-  via=$(jq -r '.stages.DV.completed_via' "$WD/.context/state.json")
+  via=$(jq -r '.tasks.DV0.completed_via' "$WD/.context/state.json")
   [ "$via" = "hook" ]
 }
 
@@ -219,7 +219,7 @@ _backup_paths() {
   run bash -c "cd '$WD' && STATE_MERGE_VIA=step6_5 CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV bash '$PLUGIN_ROOT/$SCRIPT'"
   assert_success
   local via
-  via=$(jq -r '.stages.DV.completed_via' "$WD/.context/state.json")
+  via=$(jq -r '.tasks.DV0.completed_via' "$WD/.context/state.json")
   [ "$via" = "step6_5" ]
 }
 
@@ -241,7 +241,7 @@ _install_project_local() {
   run bash -c "cd '$WD' && CLAUDE_PLUGIN_ROOT='$PLUGIN_ROOT' CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV bash '$WD/.claude/hooks/state-merge.sh'"
   assert_success
   local dv_status
-  dv_status=$(jq -r '.stages.DV.status' "$WD/.context/state.json")
+  dv_status=$(jq -r '.tasks.DV0.status' "$WD/.context/state.json")
   [ "$dv_status" = "completed" ]
 }
 
@@ -253,6 +253,6 @@ _install_project_local() {
   run bash -c "cd '$WD' && CLAUDE_PLUGIN_ROOT='$WD/nowhere' CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV bash '$WD/.claude/hooks/state-merge.sh'"
   assert_success
   local dv_status
-  dv_status=$(jq -r '.stages.DV.status' "$WD/.context/state.json")
+  dv_status=$(jq -r '.tasks.DV0.status' "$WD/.context/state.json")
   [ "$dv_status" = "in_progress" ]
 }

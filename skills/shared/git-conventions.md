@@ -114,6 +114,14 @@ FN-stage commit/cleanup therefore runs under this guard. None of the worktask fl
 
 CC guards destructive removals broadly: auto mode asks before `rm -rf` on an unresolvable variable; catastrophic removals inside `$(…)`/backticks/`<(…)` prompt even under `--dangerously-skip-permissions` and auto mode; and an auto-mode rule blocks tampering with session transcript files. FN-stage cleanup is unaffected — it never expands unresolved variables into `rm` targets.
 
+#### Dangerous git flags are no longer auto-approved
+
+Since CC 2.1.229, `/commit-push-pr` no longer auto-approves git/gh commands carrying `--force`, `--amend`, `--no-verify` and similar — they prompt. This is the runtime backstop for the rules above, so an FN stage that reaches for one now stops on a prompt instead of proceeding silently. Under an unattended run (`--auto=[finalization]`, `/megatask`), treat such a prompt as a stage failure to route through the retry matrix, not something to work around.
+
+#### Background sessions preserve their work
+
+Since CC 2.1.221, a background session commits and pushes to preserve work, opens a draft PR only when the task calls for one, follows the repo's `CLAUDE.md` git instructions, and ends by reporting where the work lives. The plugin's no-AI-footer and branch-naming rules therefore apply to background stages without extra wiring.
+
 ## Pull Request Format
 
 Title: `<type>[scope][!]: <summary>`

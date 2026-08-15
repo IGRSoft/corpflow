@@ -13,59 +13,40 @@ Single source of truth for what each stage consumes, produces, and how the orche
 - **Inputs**: `.context/` artifacts and metadata read before starting. Missing → `missing_input` escalation (see `agent-coordination` § Error Handling).
 - **Outputs**: artifacts produced before `status: completed`, each with minimum sections. **Every output MUST start with a `---\nhandoff:\n` YAML frontmatter block** per `skills/worktask/references/handoff-protocol.md#frontmatter-schema` (required fields in that file's per-stage matrix).
 - **Validation**: the exact check the orchestrator runs on completion. If false, the stage is not complete.
-- **Error File**: per-agent narrative path (`metadata.error_file`), auto-derived from `metadata.agent` basename. See `task-system` § Metadata Fields.
+- **Error File**: per-agent narrative path (`metadata.error_file`), auto-derived from `metadata.agent` basename. See `state-ledger` § Metadata Fields.
 
 ## Required Inputs (handoff-protocol)
 
 Every stage agent reads inputs in this order, anchor-first:
 
-1. Read `.context/state.json` (the worktask ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, `run_index`, and `stages` relevant to your stage.
+1. Read `.context/state.json` (the worktask ledger). Extract `facts.decisions`, `facts.open_questions`, `handoffs`, `run_index`, and the `tasks` entries relevant to your stage.
 2. Resolve `N = task.metadata.run_index ?? state.run_index ?? 0`. All stage artifacts for this run use `<basename>-${N}.md`.
 3. Read only the listed anchors in upstream artifacts (e.g. `architecture-N.md#decisions`, `planning-N.md#requirements`). Do **not** read whole files unless an anchor is absent.
 4. Deep-read a full artifact only on retry (`retry_count > 0`) or when the frontmatter `next_stage_focus` explicitly names a non-anchored section.
 
-### Run index and F1 fallback
+### Run index
 
 **Run Index Resolution** (two-step resolver — see `agents/product-manager.md § Stage Artifact Naming`):
 1. `task.metadata.run_index` → `<basename>-${N}.md`.
 2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
 
-**Fallback (F1)**: If `.context/state.json` is absent, fall back to `metadata.context_files` (`context_files` mode), reading the listed files in full. Rationale and full F1 description: `skills/worktask/references/handoff-protocol.md#f1-fallback`.
-
-### F1 telemetry emission
-
-To surface F1 entries, agents MUST emit one telemetry line:
-
-```bash
-mkdir -p .context/logs
-N="${run_index:-0}"
-printf '%s\t%s\t%s\t%s\n' \
-  "$(date -u +%FT%TZ)" \
-  "${metadata_agent:-unknown}" \
-  "F1" \
-  "state.json absent; using metadata.context_files" \
-  >> ".context/logs/fallback-${N}.log"
-```
-
-Then proceed with the `context_files` read. The fallback log is consumed by `/cost-report` to flag worktasks that lost cache hits silently.
+**The ledger is mandatory.** An absent or unreadable `.context/state.json` is a hard failure,
+not a degraded mode: stop and report rather than guessing at context. There is no whole-file
+fallback list to fall back to.
 
 ### No-restate rule
 
-> Agents MUST NOT restate this F1 telemetry snippet, the run-index resolver, or the atomic-write pseudocode in their own files — link to `#f1-telemetry`, `#run-index-resolution`, or `handoff-protocol.md#atomic-write` instead. Drift checker: `cache-lint.sh --frontmatter-template-lint`.
+> Agents MUST NOT restate the run-index resolver or the atomic-write pseudocode in their own files — link to `#run-index-resolution` or `handoff-protocol.md#atomic-write` instead. Drift checker: `cache-lint.sh --frontmatter-template-lint`.
 
 ### #run-index-resolution
 
 Two-step resolver (canonical), as in **Run Index Resolution** above: (1) `task.metadata.run_index` → `<basename>-${N}.md`; (2) newest glob `<basename>-*.md` (highest N) when metadata is absent.
 
-### #f1-telemetry
-
-See the F1 paragraph and bash snippet immediately above. Cross-references: `handoff-protocol.md#fallback-paths` (F1..F4 matrix), `/cost-report § Cache Performance` (operator surface).
-
 ### #diff-only-read
 
 Canonical cheapest-first read order for review/finalization stages (DR/SR/QA/DC/FN) when only a verdict, decisions, refs, or the delta is needed — full reads stay available whenever context requires them:
 
-1. **Frontmatter-first**: read an upstream artifact's `handoff:` block (≤200 tok, `#f1-telemetry` schema) instead of the whole artifact when only verdict/decisions/refs are needed.
+1. **Frontmatter-first**: read an upstream artifact's `handoff:` block (≤200 tok, `handoff-protocol.md#frontmatter-schema`) instead of the whole artifact when only verdict/decisions/refs are needed.
 2. **Diff-only**: if `state.json → facts.files_read` lists a source path (read by DV or a prior stage), use `git diff <base>..HEAD -- <path>` for changed-file context, NOT `Read <path>`.
 3. **Anchor-scoped**: when a single `## <anchor>` section suffices, `Read` that anchor's range, not the whole file.
 
@@ -79,7 +60,7 @@ Every stage's output artifact MUST:
 
 1. Start with `---\nhandoff:\n` YAML frontmatter (≤30 lines, ≤200 tokens) matching the per-stage required-field matrix in `skills/worktask/references/handoff-protocol.md#frontmatter-schema`.
 2. Use H2 anchors from the per-stage allow-list in `handoff-protocol.md#anchor-allow-list` (kebab-case, no spaces, no underscores).
-3. Patch `.context/state.json` atomically (read → merge → temp → fsync → rename per `handoff-protocol.md#atomic-write`) with `stages.<CODE>` (status, artifact, verdict, retry_count) and `handoffs["<PREV>→<CODE>"]` (≤300-char summary ending in `ref:` pointer).
+3. Patch `.context/state.json` atomically (read → merge → temp → fsync → rename per `handoff-protocol.md#atomic-write`) with `tasks.<ID>` (status, artifact, verdict, retry_count) and `handoffs["<PREV>→<CODE>"]` (≤300-char summary ending in `ref:` pointer).
 
 ## Contract Table
 
@@ -152,9 +133,9 @@ All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolve
 
 ## Validation Protocol
 
-The orchestrator runs validation between `TaskUpdate({status: "completed"})` and the next stage's `status: in_progress`:
+The orchestrator runs validation between a stage's `completed` patch and the next stage's `in_progress`:
 
-1. **File check**: Read `metadata.context_refs` (anchor-based, preferred) or `metadata.context_files` (F1 fallback) for next stage — verify every referenced file exists on disk. `metadata.error_file` is always present in `context_files` (orchestrator auto-appends on `TaskCreate`/`TaskUpdate`); treat its absence on disk as "no prior retries" (not a failure).
+1. **File check**: Read `metadata.context_refs` for the next stage — verify every referenced file exists on disk. Treat a missing `metadata.error_file` on disk as "no prior retries" (not a failure).
 
 ### Step 2 — frontmatter / typed-return check
 
@@ -172,16 +153,16 @@ When **no** typed return is present (the runtime dispatch primitive does not acc
 
 ### Steps 6–7
 
-6. **Metadata check**: Validate task `metadata` against `task-system` § JSON Schema.
-7. **Error file check**: If `retry_count > 0`, `metadata.error_file` MUST exist on disk AND appear in `context_files`. If `metadata.error_file` is set but the path does NOT exist on disk (e.g. orchestrator stamped the path but no agent has appended yet), treat the situation as `retry_count = 0` (no prior retries) — do NOT fail validation. The file is created lazily by the first appending agent (mkdir -p its parent, then append the retry block).
+6. **Metadata check**: Validate task `metadata` against `state-ledger` § JSON Schema.
+7. **Error file check**: If `retry_count > 0`, `metadata.error_file` MUST exist on disk. If `metadata.error_file` is set but the path does NOT exist on disk (e.g. orchestrator stamped the path but no agent has appended yet), treat the situation as `retry_count = 0` (no prior retries) — do NOT fail validation. The file is created lazily by the first appending agent (mkdir -p its parent, then append the retry block).
 
 ### Step 8 and failure rule
 
-8. **state.json patch check**: After Task() returns, orchestrator re-reads `.context/state.json`. If `stages.<CODE>.status` is still `in_progress`, parse the artifact's `handoff:` frontmatter and atomic-merge into state.json (third belt-and-suspenders layer; see `handoff-protocol.md#fallback-paths` F2/F3).
+8. **state.json patch check**: After Task() returns, orchestrator re-reads `.context/state.json`. If `tasks.<ID>.status` is still `in_progress`, parse the artifact's `handoff:` frontmatter and atomic-merge into state.json (third belt-and-suspenders layer; see `handoff-protocol.md#fallback-paths` F2/F3).
 
 ### Step 9 — AR-reference check (DV completion, warn-only in 3.42.0)
 
-9. **AR-reference check**: At DV completion, if `.context/state.json` has a `stages.AR` entry, run:
+9. **AR-reference check**: At DV completion, if `.context/state.json` has a `tasks.AR0` entry, run:
 
    ```bash
    skills/worktask/scripts/handoff-harness.sh --validate-frontmatter .context/development-N.md \
@@ -197,8 +178,8 @@ When **no** typed return is present (the runtime dispatch primitive does not acc
 #### Step 9 — dispatch-time companion check
 
 **Dispatch-time companion check**: when AR completed, the DV0, DR0 **and** QA0 tasks MUST each
-   carry `metadata.architecture_ref` (`{path, anchors, key_decisions}`) and name `architecture-N.md`
-   in `context_files`. When AR was excluded, none of them may carry either.
+   carry `metadata.architecture_ref` (`{path, anchors, key_decisions}`) and name an
+   `architecture-N.md` anchor in `context_refs`. When AR was excluded, none of them may carry either.
 
 Failure at any step → do NOT transition. Append a `missing_input` entry to the *next* stage's error file and block until resolved.
 
@@ -336,7 +317,7 @@ absent `architecture` object as `missing_input`.
 Gate precedence, in the single order shared by the harness, the schema and the DR rule:
 `refs.decisions`, then `architecture.ref`. The chosen value must match
 `^architecture-[0-9]+\.md(#[a-z-]+)?$` and resolve to a file next to the artifact — warn-only in
-3.42.0, blocking under `--strict`. An architecture reference with no `stages.AR` entry trips the
+3.42.0, blocking under `--strict`. An architecture reference with no `tasks.AR0` entry trips the
 inverse guard (warn, never a failure).
 
 ##### Unreadable-state exception
@@ -525,7 +506,7 @@ Single source of truth for what every stage agent verifies before `status: compl
 
 ### Steps 4–5
 
-4. **Patch state.json**: `.context/state.json` MUST be patched with `stages.<CODE>` (`status`, `artifact`, `verdict`, `retry_count`) and `handoffs["<PREV>→<CODE>"]` (≤300-char summary ending with `ref:` pointer). `<PREV>→<CODE>` is documented in the template's footer (e.g. `PL→AR`, `USER→IR`).
+4. **Patch state.json**: `.context/state.json` MUST be patched with `tasks.<ID>` (`status`, `artifact`, `verdict`, `retry_count`) and `handoffs["<PREV>→<CODE>"]` (≤300-char summary ending with `ref:` pointer). `<PREV>→<CODE>` is documented in the template's footer (e.g. `PL→AR`, `USER→IR`).
 5. **Atomic write**: Use `handoff-protocol.md#atomic-write` (read → merge → temp → `sync` → `mv -f`). NEVER write `.context/state.json` directly.
 
 #### Atomic-merge snippet
@@ -534,22 +515,24 @@ Single source of truth for what every stage agent verifies before `status: compl
 # Inline atomic-merge — run BEFORE returning (steps 4+5 combined)
 _sf=".context/state.json"
 _tmp="${_sf}.tmp.$$"
-jq --arg code "<CODE>" --arg artifact "<artifact>-N.md" --arg verdict "<pass|fail>" \
+# $id is the numbered ledger key (DV1); $code is the bare stage code the handoff edge uses.
+jq --arg id "<ID>" --arg code "<CODE>" --arg artifact "<artifact>-N.md" \
+   --arg verdict "<pass|fail>" \
    --arg prev_code "<PREV>" --arg summary "<≤300-char summary> ref:<artifact>" \
-   '.stages[$code] += {status:"completed", artifact:$artifact, verdict:$verdict} |
+   '.tasks[$id] += {status:"completed", artifact:$artifact, verdict:$verdict} |
     .handoffs[($prev_code + "→" + $code)] = $summary' \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
 
 ### Post-return repair (F2/F3)
 
-The orchestrator verifies `stages.<CODE>.status == "completed"` after the task returns. If still `in_progress`, the SubagentStop hook (`state-merge.sh`) repairs the ledger from the artifact's frontmatter (F2 fallback). If the artifact itself lacks frontmatter, the orchestrator derives a minimal handoff record from the agent's return text (F3) — but downstream cache hits collapse, so producing valid frontmatter is mandatory in steady state.
+The orchestrator verifies `tasks.<ID>.status == "completed"` after the task returns. If still `in_progress`, the SubagentStop hook (`state-merge.sh`) repairs the ledger from the artifact's frontmatter (F2 fallback). If the artifact itself lacks frontmatter, the orchestrator derives a minimal handoff record from the agent's return text (F3) — but downstream cache hits collapse, so producing valid frontmatter is mandatory in steady state.
 
 ## Cross References
 
 - `skills/worktask/references/handoff-protocol.md` — canonical state.json + frontmatter + anchor specs
 - `skills/shared/stage-codes.md` — code/agent/model lookup
-- `skills/shared/task-system.md` — metadata schema, `error_file` derivation, `context_refs`/`state_file`
+- `skills/shared/state-ledger.md` — metadata schema, `error_file` derivation, `context_refs`/`state_file`
 - `skills/agent-coordination/SKILL.md` § Error Handling — retry/escalate matrix
 - `skills/logging-conventions/SKILL.md` — raw capture paths (`.context/logs/`)
 - `skills/task-folder-organization/SKILL.md` — artifact naming and retention

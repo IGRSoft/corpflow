@@ -341,14 +341,7 @@ cmd_validate_pr() {
   fi
 
   # No issue resolvable → audit-defer row, proceed WITHOUT a closing line.
-  local ts wid ri tid
-  ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  wid=$(jq -r '.worktask_id // "unknown"' "$STATE_PATH" 2> /dev/null || printf 'unknown')
-  ri=$(jq -r '.run_index // 0' "$STATE_PATH" 2> /dev/null || printf '0')
-  tid=$(jq -r '.stages.FN.task_id // "FN0"' "$STATE_PATH" 2> /dev/null || printf 'FN0')
-  mkdir -p "${CONTEXT_DIR}/logs" 2> /dev/null || true
-  printf '{"ts":"%s","actor":"project-manager","action":"pr_issue_link","subject":"FN0","result":"deferred","task_id":"%s","metadata":{"reason":"no_issue_resolved","dedupe_key":"%s:%s:pr_issue_link"}}\n' \
-    "$ts" "$tid" "$wid" "$ri" >> "${CONTEXT_DIR}/logs/audit.jsonl"
+  audit_fn pr_issue_link deferred "$(meta_json reason no_issue_resolved)"
   printf 'validate-pr: no issue resolved — audit-deferred, proceeding without closing line\n'
   return 0
 }

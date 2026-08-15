@@ -52,6 +52,12 @@ effort: low
 
 > **Allowlist hardening + `/fast` refusal**: an alias that points at a model **outside** the managed list redirects to an allowed model deterministically rather than leaking the disallowed id. The `/fast` command is likewise constrained: if fast mode resolves to a model not on the allowlist, `/fast` is **refused** rather than silently switching. For worktasks this means a `metadata.model` alias under management resolves predictably (audit per step 6), and `/fast` cannot escape a managed list.
 
+### Restricted-alias resolution
+
+> **Family step-down (CC 2.1.222)**: an org-restricted family alias like `model: opus` steps down to the **newest org-allowed model in that family** instead of silently dropping to the parent's model. A restricted `opus` stage therefore still lands on an Opus, not on whatever the orchestrator happened to be running.
+
+> **Restriction warning (CC 2.1.223)**: when a workflow agent, forked skill, slash command, or resumed background agent requests a restricted subagent model and the parent runs instead, CC emits a warning. Treat it as the signal to check the step-6 audit row rather than assuming the alias resolved.
+
 ### Frontmatter model-deprecation warnings
 
 > **Frontmatter model-deprecation warnings**: the model-deprecation warning covers models pinned in **agent frontmatter** (`model:` field), not just the interactive picker. A stage agent that frontmatter-pins a deprecated model id surfaces the deprecation at load — prefer aliases (`opus`/`sonnet`/`haiku`/`fable`) over hard-pinned ids in agent frontmatter so deprecations don't silently strand a stage.

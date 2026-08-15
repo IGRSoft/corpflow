@@ -2,6 +2,95 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.15] - 2026-08-15
+
+Claude Code 2.1.233 removed the Todo/task-tracking tools — `TaskCreate`, `TaskGet`, `TaskUpdate`,
+`TaskList`, `TodoWrite` — on Opus 4.8, Sonnet 5, Fable 5, Mythos 5 **and newer**. Every model this
+plugin dispatches is on that list, and the orchestrator loop was built entirely on those four
+tools, so on 2.1.233 every worktask and megatask run was broken before it started. Verified
+empirically rather than inferred: the tools are absent from an Opus 5 session on 2.1.233.
+
+`CLAUDE_CODE_ENABLE_TODO_TOOLS=1` restores them. This release deliberately does **not** depend on
+that. Instead the plugin moves to a single durable ledger, with no mirror and no fallback path —
+one mechanism, one code path, correct whether or not the tools exist.
+
+Two premises worth recording, because both were checked rather than assumed:
+
+- **`CLAUDE_CODE_ENABLE_TASKS` is not the switch.** It was set in the observed environment and does
+  nothing for these tools. Confusing the two costs a debugging session.
+- **`state.json` already held most of the ledger.** `stages{}` carried the same status enum,
+  `retry_count`, `error_file`, `artifact`, `verdict`; `state-patch.sh` already owned locking and the
+  atomic write; and 13 of 16 agents already held its Bash grant. The cutover is smaller than the
+  tool removal makes it sound.
+
+### Changed
+
+- **BREAKING — `state.json` is `version: 2`.** `tasks{}`, keyed by numbered stage id (`PL0`, `DV0`,
+  `DV1`), is now the sole stage ledger. It replaces **both** the Task System and the old `stages{}`
+  map. A `version: 1` ledger is not migrated and not tolerated — readers fail loud. There were no
+  in-flight ledgers on disk when this landed, so no converter ships.
+- **The numbered key is the point.** `stages{}` was keyed by bare stage code and could not represent
+  parallel DVN tracks, which is why `dispatched_agents[]` had to be keyed separately. `DV0` and
+  `DV1` are now simply distinct keys. `hooks/test-execution-gate.sh` gains from this: two parallel
+  tracks of one stage resolve to a single unambiguous stage code where bare codes forced a
+  fail-open.
+- **BREAKING — the four Task tools are removed from all 16 agents' `tools:` frontmatter**, and from
+  `commands/worktask.md`, `commands/megatask.md`, `commands/cost-report.md`,
+  `commands/context-status.md`, `commands/test-report.md`, `commands/improve-yourself.md`.
+- **BREAKING — `metadata.context_files` and the F1 fallback are deleted.** `context_files` existed
+  solely as the degraded path for "state.json is absent". The ledger is mandatory now, so that path
+  cannot occur and a second context-delivery mechanism is exactly the kind of dual path this
+  release removes. `context_refs` + `state_file` is the whole contract.
+- `skills/shared/task-system.md` → **`skills/shared/state-ledger.md`**, with all 33 inbound
+  references updated (two of them structured frontmatter deps, not prose).
+- `.claude-plugin/plugin.json` — the `PostToolUse` audit matcher moves from
+  `TaskUpdate|TaskCreate|Write|Edit` to `Bash|Write|Edit`. Without this the stage-transition audit
+  trail silently stops, and `audit.jsonl` is load-bearing: it drives all nine resume branch tables.
+  `hooks/audit-tooluse.sh` now recognises a `state-patch.sh` invocation, records `task_id` and
+  `status` from it, and drops every other Bash call so widening the matcher does not turn the audit
+  log into shell noise.
+- `workspace.json` `worktask.task_prefix` (`"t1"`) is removed with no replacement. The `t{track}-{n}`
+  id scheme it namespaced no longer exists, and no key-level namespace succeeds it: every track's
+  ledger keys are the plain `<STAGE>0` ids, isolated by the track's own worktree.
+
+### Added
+
+- `state-patch.sh` ledger operations, replacing the retired tools: `--task-create <ID> --metadata`,
+  `--task-status <ID> <status>`, `--task-block <ID> --on <ID[,ID...]>`, `--task-meta <ID> --set`.
+  `--task-create` is idempotent and `--task-block` unions rather than appends, so re-running a seed
+  is safe. A new `--task-id` overrides id resolution; without it the script resolves a stage code to
+  the open instance of a split stage, else the highest existing, else `<CODE>0`.
+- Self-test groups T14 (ledger ops, blocked_by union, idempotent create) and T15 (split-stage id
+  resolution, explicit override); three bats tests covering the audit hook's ledger filtering.
+- `Bash(bash skills/worktask/scripts/state-patch.sh:*)` granted to `designer`. `prompt-engineer` and
+  `workflow-engineer` already held unrestricted `Bash`.
+
+### Changed — Claude Code 2.1.221→2.1.233 integration
+
+- **The 200-subagent per-session spawn cap is gone** (2.1.224). "Three independent ceilings" is now
+  two — depth and concurrency. `/megatask`'s ~18/~22-issue batch ceiling and the advice to raise
+  `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` or split the batch are deleted; batch size is bounded by
+  concurrency, disk, and rate budget alone.
+- **Subagent forking is on by default** (2.1.232) — `CLAUDE_CODE_FORK_SUBAGENT=1` is no longer
+  needed, and a fork inherits the parent's prompt cache, making it the cheapest available handoff
+  for a stage that needs whole-orchestrator context.
+- **Worktree git isolation is runtime-enforced** (2.1.222), promoting a corpflow convention to a
+  guarantee. The v4.0.14 conflict-recovery precondition stays as written — it is conditioned on the
+  *host* refusing destructive git, which is still the right framing.
+- Documented: `/commit-push-pr` no longer auto-approving dangerous git flags (2.1.229);
+  background sessions preserving work per `CLAUDE.md` (2.1.221); `/review` as a `/code-review` alias
+  with `ultra` and background high-effort runs (2.1.223, 2.1.232); org-restricted family aliases
+  stepping down within the family and the restricted-model warning (2.1.222, 2.1.223); `Notification`
+  firing for permission prompts under Desktop/VS Code (2.1.233); PreToolUse auto-allow no longer
+  widening an agent's grant list (2.1.222); immediate plugin activation, `"."` skills paths, the
+  `archive` source with SHA-256 pinning, and `plugin validate` frontmatter checking (2.1.221,
+  2.1.224, 2.1.233); cross-session `SendMessage`/`ListAgents` (2.1.224-2.1.232);
+  `CLAUDE_CODE_WORKFLOW_PREFIX_STAGGER_MS` sibling staggering (2.1.229); and
+  `CLAUDE_CODE_TOOL_MEMORY_LIMIT` (2.1.233, Linux only).
+- Minimum Claude Code raised **2.1.220 → 2.1.233**, pinned to the band top per the v3.35.0/v3.37.0
+  precedent.
+- `MEMORY.md` trimmed from 37KB to under its own documented ~5KB cap.
+
 ## [4.0.14] - 2026-08-15
 
 A completed 9-issue parallel `/megatask` batch, turned into tooling. Nothing here is speculative:

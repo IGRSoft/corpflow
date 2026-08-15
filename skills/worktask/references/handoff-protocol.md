@@ -7,7 +7,7 @@ Canonical specification for worktask inter-stage communication. Defines the `sta
 This file is the single source of truth referenced by:
 
 - `skills/shared/stage-contracts.md` — Required Inputs / Required Outputs vocabulary
-- `skills/shared/task-system.md` — `metadata.context_refs` + `metadata.state_file` semantics
+- `skills/shared/state-ledger.md` — `metadata.context_refs` + `metadata.state_file` semantics
 - `skills/worktask/SKILL.md` — Orchestrator Execution Loop reads ledger + builds preamble
 - `skills/worktask/references/initialization-patterns.md` — PL0 seeds state.json
 - `skills/context-compression/SKILL.md` — frontmatter as canonical compression form
@@ -338,13 +338,13 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
 #### DVHandoff — architecture field notes
 
 `architecture` is optional at the schema level but **required whenever `state.json` has a
-`stages.AR` entry**, together with `refs.decisions` — both are written when AR ran and both are
+`tasks.AR0` entry**, together with `refs.decisions` — both are written when AR ran and both are
 omitted when it did not (`stage-contracts.md#tpl-dv § Architecture reference contract`). The gate
 resolves the reference in one precedence shared by the harness, this schema and the DR rule:
 `refs.decisions`, then `architecture.ref`. `handoff-harness.sh --validate-frontmatter <artifact>
 --state <state.json>` enforces it (warn-only in 3.42.0, blocking under `--strict`). When AR was
 excluded the object MUST be omitted;
-the harness's inverse guard warns if an `architecture-*` reference appears without a `stages.AR`
+the harness's inverse guard warns if an `architecture-*` reference appears without a `tasks.AR0`
 entry. `applied` is DV's truthful statement that AR's recorded decisions were followed;
 deviations are declared in `development-N.md ## decisions` with rationale, and DR fails an
 undeclared one.
@@ -511,57 +511,57 @@ populated from the artifact's `handoff:` frontmatter instead (F2/F3) — the map
 
 | Schema field | state.json target | Artifact anchor |
 |--------------|-------------------|-----------------|
-| `PL.verdict` | `stages.PL.verdict` | planning-N.md (frontmatter) |
-| `PL.complexity` | `stages.PL.complexity` | planning-N.md `## complexity` |
+| `PL.verdict` | `tasks.PL0.verdict` | planning-N.md (frontmatter) |
+| `PL.complexity` | `tasks.PL0.complexity` | planning-N.md `## complexity` |
 | `PL.key_decisions` | `facts.decisions[]` | planning-N.md `## stages` |
-| `AR.verdict` | `stages.AR.verdict` | architecture-N.md `## decisions` |
+| `AR.verdict` | `tasks.AR0.verdict` | architecture-N.md `## decisions` |
 | `AR.key_decisions` | `facts.decisions[]` | architecture-N.md `## decisions` |
-| `TL.verdict` | `stages.TL.verdict` | coordination-N.md `## fan-out` |
+| `TL.verdict` | `tasks.TL0.verdict` | coordination-N.md `## fan-out` |
 | `TL.fanout` | (DV sub-task prompts; not a ledger field) | coordination-N.md `## fan-out` |
 
 #### Map — DV
 
 | Schema field | state.json target | Artifact anchor |
 |--------------|-------------------|-----------------|
-| `DV.verdict` | `stages.DV.verdict` | development-N.md `## deviations` (summary line) |
+| `DV.verdict` | `tasks.DV0.verdict` | development-N.md `## deviations` (summary line) |
 | `DV.files_modified` | `facts.files_modified` (union) | development-N.md `## files-changed` |
 | `DV.tests_added` | `facts.tests_added` (union) | development-N.md `## tests-added` |
-| `DV.build_status` | `stages.DV.status` derivation | development-N.md `## deviations` |
+| `DV.build_status` | `tasks.DV0.status` derivation | development-N.md `## deviations` |
 | `DV.decisions` | `facts.decisions[]` | development-N.md (inline) |
 
 #### Map — DR, SR, QA, DC, RE
 
 | Schema field | state.json target | Artifact anchor |
 |--------------|-------------------|-----------------|
-| `DR.verdict` | `stages.DR.verdict` + `facts.verdicts.DR` | developer-review-N.md `## verdict` |
+| `DR.verdict` | `tasks.DR0.verdict` + `facts.verdicts.DR` | developer-review-N.md `## verdict` |
 | `DR.findings`/`blockers` | `facts.decisions[]` (= findings) | developer-review-N.md `## findings`/`## blockers` |
 | `SR.*` | mirrors DR targets (`facts.verdicts.SR`) | security-review-N.md |
-| `QA.verdict` | `stages.QA.verdict` + `facts.verdicts.QA` | testing-N.md `## verdict` |
+| `QA.verdict` | `tasks.QA0.verdict` + `facts.verdicts.QA` | testing-N.md `## verdict` |
 | `QA.tests_passed`/`failed` | `facts.verdicts.QA` (count string) | testing-N.md `## results` |
-| `DC.verdict` | `stages.DC.verdict` | documentation-N.md `## files-changed` |
+| `DC.verdict` | `tasks.DC0.verdict` | documentation-N.md `## files-changed` |
 | `DC.files_modified` | `facts.files_modified` (union) | documentation-N.md `## files-changed` |
-| `RE.verdict` | `stages.RE.verdict` | release-N.md `## version` |
+| `RE.verdict` | `tasks.RE0.verdict` | release-N.md `## version` |
 | `RE.version` | `facts.decisions[]` (version) | release-N.md `## version` |
 
 #### Map — FN, ST, IR, ET, worktree
 
 | Schema field | state.json target | Artifact anchor |
 |--------------|-------------------|-----------------|
-| `FN.verdict` | `stages.FN.verdict` | complete-summary-N.md `## summary` |
+| `FN.verdict` | `tasks.FN0.verdict` | complete-summary-N.md `## summary` |
 | `FN.pr_url` | `handoffs["RE→FN"]`/`DC→FN` (ref pointer) | complete-summary-N.md `## artifacts` |
-| `ST.verdict` | `stages.ST.verdict` + `facts.verdicts.ST` | retrospective-N.md `## decision` |
-| `IR.verdict` | `stages.IR.verdict` | incident-N.md `## root-cause` |
+| `ST.verdict` | `tasks.ST0.verdict` + `facts.verdicts.ST` | retrospective-N.md `## decision` |
+| `IR.verdict` | `tasks.IR0.verdict` | incident-N.md `## root-cause` |
 | `IR.root_cause` | `facts.decisions[]` | incident-N.md `## root-cause` |
-| `ET.verdict` | `stages.ET.verdict` + `facts.verdicts.ET` | ethics-review-N.md `## verdict` |
-| `DV.worktree_path` | `stages.DV.worktree.path` | development-N.md (frontmatter `worktree_path`) |
-| `DV.worktree_branch` | `stages.DV.worktree.branch` | development-N.md (frontmatter `worktree_branch`) |
+| `ET.verdict` | `tasks.ET0.verdict` + `facts.verdicts.ET` | ethics-review-N.md `## verdict` |
+| `DV.worktree_path` | `tasks.DV0.worktree.path` | development-N.md (frontmatter `worktree_path`) |
+| `DV.worktree_branch` | `tasks.DV0.worktree.branch` | development-N.md (frontmatter `worktree_branch`) |
 
 #### Additive-field writers
 
 The v1 additive fields have **orchestrator-loop / hook writers**, not schema-mapped stage returns
-(`facts.dispatched_agents[]`, `stages.<CODE>.last_error`, `stages.<CODE>.completed_via`,
+(`facts.dispatched_agents[]`, `tasks.<ID>.last_error`, `tasks.<ID>.completed_via`,
 `facts.capabilities` — see `skills/worktask/SKILL.md § Orchestrator Execution Loop` steps 6/6.5).
-Only `stages.<CODE>.worktree` maps from a stage artifact — the DV handoff frontmatter
+Only `tasks.<ID>.worktree` maps from a stage artifact — the DV handoff frontmatter
 `worktree_path`/`worktree_branch`, applied by `state-patch.sh` (rows above).
 
 #### Additive-field writers — facts.branch
@@ -592,9 +592,9 @@ JSON-Schema-style spec:
 $schema: https://json-schema.org/draft/2020-12/schema
 title: WorktaskStateLedger
 type: object
-required: [version, worktask_id, plan_file, platform, run_index, stages, facts, handoffs]
+required: [version, worktask_id, plan_file, platform, run_index, tasks, facts, handoffs]
 properties:
-  version: { type: integer, const: 1 }
+  version: { type: integer, const: 2 }
   worktask_id: { type: string, pattern: '^[a-z0-9\-]+$' }
   plan_file: { type: string }
   platform: { type: string, enum: [all, apple, android, web, systems, backend, ai] }  # canonical keys — skills/shared/platform-detection.md
@@ -650,17 +650,44 @@ any reader, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`,
 fallback: readers report unresolved and degrade non-blocking. Implemented in
 `skills/worktask/scripts/fn-preflight.sh` `resolve_base_ref`.
 
-#### stages
+#### tasks
+
+The **sole** stage ledger, keyed by numbered stage id (`[STAGE][N]` — `PL0`, `DV0`, `DV1`):
+the same identity used in artifact names and handoff edges. Replaces the bare-stage-code
+map that could not represent parallel DVN tracks, and the retired Task System — see
+`skills/shared/state-ledger.md`.
+
+Handoff edges keep bare **stage codes** (`PL→AR`); only the ledger key is numbered.
 
 ```yaml
-# …continued: WorktaskStateLedger.properties.stages
-  stages:
+# …continued: WorktaskStateLedger.properties.tasks
+  tasks:
     type: object
+    propertyNames: { pattern: '^(PL|AR|TL|DV|DR|SR|QA|DC|RE|FN|ST|IR|ET)[0-9]+$' }
     additionalProperties:
       type: object
-      required: [status]
+      required: [status, metadata]
       properties:
         status: { type: string, enum: [pending, in_progress, completed, blocked, skipped] }
+```
+
+##### tasks — routing & dependencies
+
+```yaml
+# …continued: WorktaskStateLedger.properties.tasks.additionalProperties.properties
+        blocked_by:
+          type: array
+          items: { type: string }
+          description: "Stage ids this task waits on, e.g. ['DV0','DV1']. Ready ⇔ every entry is completed."
+        metadata:
+          type: object
+          description: "Routing + dispatch contract — schema in skills/shared/state-ledger.md § JSON Schema."
+```
+
+##### tasks — execution results
+
+```yaml
+# …continued: WorktaskStateLedger.properties.tasks.additionalProperties.properties
         artifact: { type: string }
         complexity: { type: integer, minimum: 0, maximum: 50 }
         verdict: { type: string }
@@ -675,17 +702,17 @@ fallback: readers report unresolved and degrade non-blocking. Implemented in
             updated_at: { type: string, format: date-time }
 ```
 
-#### stages — completed_via, last_error
+#### tasks — completed_via, last_error
 
 ```yaml
-# …continued: WorktaskStateLedger.properties.stages.additionalProperties.properties
+# …continued: WorktaskStateLedger.properties.tasks.additionalProperties.properties
         completed_via:
           type: string
           enum: [hook, step6_5, f3]
-          description: "OPTIONAL (additive, version:1) — see field notes"
+          description: "OPTIONAL — see field notes"
         last_error:
           type: object
-          description: "OPTIONAL (additive, version:1) — see field notes"
+          description: "OPTIONAL — see field notes"
           required: [class, at]
           properties:
             class: { type: string, enum: [transient, logic, missing_input, ambiguous_requirements, design_flaw, hard_constraint, exhausted] }
@@ -694,13 +721,13 @@ fallback: readers report unresolved and degrade non-blocking. Implemented in
             ref: { type: string, description: "pointer into .context/errors/<agent>.md (e.g. #retry-1)" }
 ```
 
-#### stages — worktree
+#### tasks — worktree
 
 ```yaml
-# …continued: WorktaskStateLedger.properties.stages.additionalProperties.properties
+# …continued: WorktaskStateLedger.properties.tasks.additionalProperties.properties
         worktree:
           type: object
-          description: "OPTIONAL (additive, version:1; DV primarily) — see field notes"
+          description: "OPTIONAL (DV primarily) — see field notes"
           properties:
             path: { type: string }
             branch: { type: string }
@@ -779,13 +806,13 @@ fallback: readers report unresolved and degrade non-blocking. Implemented in
       dispatched_agents:
         type: array
         maxItems: 6
-        description: "OPTIONAL (additive, version:1); writer: the orchestrator loop ONLY — see field notes. Bounded (B3): 6 survive, launched-survive-first (live agents resume needs are kept ahead of terminal rows). Clamped in state-patch.sh atomic_merge() (AD-7)."
+        description: "OPTIONAL (additive); writer: the orchestrator loop ONLY — see field notes. Bounded (B3): 6 survive, launched-survive-first (live agents resume needs are kept ahead of terminal rows). Clamped in state-patch.sh atomic_merge() (AD-7)."
         items:
           type: object
           required: [stage, task_id, subagent_type, status]
           properties:
             stage: { type: string, description: "stage CODE (DV, DR, …)" }
-            task_id: { type: string, description: "Task System id — the dedupe key" }
+            task_id: { type: string, description: "Ledger key (e.g. DV0) — the dedupe key" }
             subagent_type: { type: string, description: "resolved plugin:agent id" }
 ```
 
@@ -806,7 +833,7 @@ fallback: readers report unresolved and degrade non-blocking. Implemented in
 # …continued: WorktaskStateLedger.properties.facts.properties
       capabilities:
         type: object
-        description: "OPTIONAL (additive, version:1); probe cache for account-level hard-fails — see field notes"
+        description: "OPTIONAL (additive); probe cache for account-level hard-fails — see field notes"
         additionalProperties: true
 ```
 
@@ -874,12 +901,11 @@ Every stage agent's State Patch section points here. Three outcomes, in order.
    The stage claims an artifact that is not on disk. Write it and re-run. If you cannot, use
    item 2 — `--allow-missing-artifact` only silences the error and patches **nothing**.
 2. **The tool cannot run at all** — not granted, denied, or not found. Do **NOT** skip silently.
-   Patch `.context/state.json` with `Edit`: write both the `stages.<CODE>` completion entry and
+   Patch `.context/state.json` with `Edit`: write both the `tasks.<ID>` completion entry and
    the `handoffs["<PREV>→<CODE>"]` edge, then record the failure under
    `metadata.pl_tooling_gaps`. The SubagentStop hook is **not** a substitute — it builds its
    args without `--prev`, so it repairs the stage entry and drops the edge.
 3. **`jq` or `.context/state.json` genuinely absent** — skipping is correct here, and only here
-   (F1 fallback).
 
 #### Field notes — progress
 
@@ -887,19 +913,19 @@ OPTIONAL. Budget-aware checkpoint for multi-batch stages (currently DV). Written
 
 #### Field notes — completed_via
 
-OPTIONAL (additive, version:1). Which enforcement layer stamped this stage `completed`. `hook` = SubagentStop delegation (Layer 2, `state-merge.sh` default); `step6_5` = orchestrator synchronous Step-6.5 (`STATE_MERGE_VIA=step6_5`); `f3` = orchestrator F3 minimal-patch fallback. **Absence encodes a Layer-1 agent self-patch** — the hook's idempotency check exits before writing when Layer 1 already landed, so no value is stamped. Observability only; no consumer behavior branches on it.
+OPTIONAL (additive). Which enforcement layer stamped this stage `completed`. `hook` = SubagentStop delegation (Layer 2, `state-merge.sh` default); `step6_5` = orchestrator synchronous Step-6.5 (`STATE_MERGE_VIA=step6_5`); `f3` = orchestrator F3 minimal-patch fallback. **Absence encodes a Layer-1 agent self-patch** — the hook's idempotency check exits before writing when Layer 1 already landed, so no value is stamped. Observability only; no consumer behavior branches on it.
 
 #### Field notes — last_error
 
-OPTIONAL (additive, version:1). Written by the orchestrator Step-6.5 errored-return branch (errors propagate with partial work) BEFORE routing to the retry matrix. `class` reuses the EXISTING taxonomy from `agent-coordination § Retry / Escalate Matrix` — no new vocabulary. Dropped once the stage reaches `status: completed` (see eviction rules).
+OPTIONAL (additive). Written by the orchestrator Step-6.5 errored-return branch (errors propagate with partial work) BEFORE routing to the retry matrix. `class` reuses the EXISTING taxonomy from `agent-coordination § Retry / Escalate Matrix` — no new vocabulary. Dropped once the stage reaches `status: completed` (see eviction rules).
 
 #### Field notes — worktree
 
-OPTIONAL (additive, version:1; DV primarily). Records WHICH worktree the stage ran in — not just `worktree: true` semantics. Written by mapping the DV handoff frontmatter `worktree_path`/`worktree_branch` (`state-patch.sh`). Lets resume re-enter the exact worktree via `EnterWorktree(path)` and DR/QA run in the right dir, and FN carry PR context. The PR *head* comes from `facts.branch`, not from here — see the disambiguation note below. Kept through FN for PR context; dropped at archival.
+OPTIONAL (additive; DV primarily). Records WHICH worktree the stage ran in — not just `worktree: true` semantics. Written by mapping the DV handoff frontmatter `worktree_path`/`worktree_branch` (`state-patch.sh`). Lets resume re-enter the exact worktree via `EnterWorktree(path)` and DR/QA run in the right dir, and FN carry PR context. The PR *head* comes from `facts.branch`, not from here — see the disambiguation note below. Kept through FN for PR context; dropped at archival.
 
 #### Field notes — branch
 
-OPTIONAL (additive, version:1). The worktask's **planned** working-branch name — the
+OPTIONAL (additive). The worktask's **planned** working-branch name — the
 host-session branch as `branch-name.sh` left it at the start of PL, whether it renamed the
 branch or found it already conventional. Written at PL start and rewritten at most once, at
 `commands/worktask.md § Step A.4b`, before any commit exists — never rewritten by a **stage**
@@ -907,7 +933,7 @@ branch or found it already conventional. Written at PL start and rewritten at mo
 pull-request head.** Reading the ledger instead of shelling `git rev-parse` at FN time is
 what makes an external mid-run rename unable to silently retarget the PR: the PR opens
 against the name the worktask committed to, and divergence surfaces as a mismatch rather
-than as a differently-named PR. Not the same field as `stages.DV.worktree.branch` — see the
+than as a differently-named PR. Not the same field as `tasks.DV0.worktree.branch` — see the
 disambiguation note below. Kept through FN; dropped at archival.
 
 ##### Field notes — branch, divergence from the local branch name
@@ -934,11 +960,11 @@ HEAD:refs/heads/<facts.branch>` refspec entirely, falling back to a plain
 this fallback fails loudly** with "The destination you provided is not a full refname" —
 an acceptable failure (no wrong target, no silent error).
 
-##### Disambiguation — `facts.branch` vs `stages.DV.worktree.branch`
+##### Disambiguation — `facts.branch` vs `tasks.DV0.worktree.branch`
 
 Two fields, disjoint definitions, neither derived from the other:
 
-| | `facts.branch` | `stages.DV.worktree.branch` |
+| | `facts.branch` | `tasks.DV0.worktree.branch` |
 |---|---|---|
 | Meaning | **planned** host-session branch name | **observed** branch of the worktree DV ran in |
 | Writer | orchestrator, from `branch-name.sh` stdout, at PL start; then `refine-branch-target.sh` at Step A.4b | `state-patch.sh`, from DV handoff `worktree_branch` |
@@ -965,17 +991,17 @@ Source files read by prior stages. Populated by DV; consumed by DR/QA to prefer 
 
 #### Field notes — dispatched_agents
 
-OPTIONAL (additive, version:1). Writer: the orchestrator loop ONLY. One entry per `task_id` (NOT per stage — parallel DVN tracks share the stage code), replaced on re-dispatch; dispatch history stays in `audit.jsonl`. Read by resume (`resume.md` step 0) to reconcile against `claude agents --json --all` under background-default dispatch. No dispatch-timestamp field is stored (no consumer; `claude agents` rows carry their own start time). Terminal entries (`status: completed|failed`) are eviction candidates.
+OPTIONAL (additive). Writer: the orchestrator loop ONLY. One entry per `task_id` (NOT per stage — parallel DVN tracks share the stage code), replaced on re-dispatch; dispatch history stays in `audit.jsonl`. Read by resume (`resume.md` step 0) to reconcile against `claude agents --json --all` under background-default dispatch. No dispatch-timestamp field is stored (no consumer; `claude agents` rows carry their own start time). Terminal entries (`status: completed|failed`) are eviction candidates.
 
 #### Field notes — capabilities
 
-OPTIONAL (additive, version:1). Probe cache for account-level hard-fails so every later stage does not re-hit the same error. Written by the orchestrator on first observed failure; model resolution consults it before any fable-tier dispatch. Example: `{ "fable_dispatch": "credit_blocked", "checked_at": "<ISO>" }` — Fable 5 is 1M-by-default but *dispatch* fails hard without 1M credits (observed live per model-selection.md).
+OPTIONAL (additive). Probe cache for account-level hard-fails so every later stage does not re-hit the same error. Written by the orchestrator on first observed failure; model resolution consults it before any fable-tier dispatch. Example: `{ "fable_dispatch": "credit_blocked", "checked_at": "<ISO>" }` — Fable 5 is 1M-by-default but *dispatch* fails hard without 1M credits (observed live per model-selection.md).
 
 ### Eviction order on overflow
 
 When state.json approaches the 500-token cap:
 
-1. Drop `stages.<CODE>.artifact` paths for stages with `status=completed` once their `handoffs[FROM→TO]` string captures the essentials.
+1. Drop `tasks.<ID>.artifact` paths for stages with `status=completed` once their `handoffs[FROM→TO]` string captures the essentials.
 2. Drop `facts.open_questions` whose status is resolved.
 3. Drop `facts.decisions` older than 2 stages back (keep current + previous stage decisions).
 4. Drop `facts.files_read` entries whose `stage` is older than 2 stages back.
@@ -983,8 +1009,8 @@ When state.json approaches the 500-token cap:
 #### Eviction steps 5–8
 
 5. Drop `facts.dispatched_agents[]` entries in a terminal state (`status: completed|failed`) — the live-agent reconciliation they exist for no longer applies; audit history persists in `audit.jsonl`.
-6. Drop `stages.<CODE>.last_error` and `stages.<CODE>.completed_via` for stages that have reached `status: completed` (the error is resolved; provenance was observability-only).
-7. Keep `stages.<CODE>.worktree` through FN (PR context needs the branch); drop it only at archival.
+6. Drop `tasks.<ID>.last_error` and `tasks.<ID>.completed_via` for stages that have reached `status: completed` (the error is resolved; provenance was observability-only).
+7. Keep `tasks.<ID>.worktree` through FN (PR context needs the branch); drop it only at archival.
 8. NEVER store diffs, file contents, or test output. Fetch from git/disk on demand.
 
 ### PL0 seed (initial state) {#pl0-seed}
@@ -1004,13 +1030,13 @@ the `plan_file` shape boundary under § state.json schema.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "worktask_id": "<from task metadata>",
   "plan_file": ".context/planning-${N}.md",
   "platform": "all",
   "run_index": ${N},
-  "stages": {
-    "PL": { "status": "in_progress" }
+  "tasks": {
+    "PL0": { "status": "in_progress" }
   },
   "facts": {
     "goal": "<one-sentence intent — first 240 chars of task.description or issue title>",
@@ -1027,9 +1053,9 @@ the `plan_file` shape boundary under § state.json schema.
 
 #### Additive-field seeding
 
-The seed includes `facts.dispatched_agents: []` (additive, version:1) so the orchestrator loop
+The seed includes `facts.dispatched_agents: []` (additive) so the orchestrator loop
 appends/replaces per-`task_id` dispatch entries in place rather than lazily creating the array on
-first dispatch. The other additive fields (`stages.<CODE>.completed_via`/`last_error`/`worktree`,
+first dispatch. The other additive fields (`tasks.<ID>.completed_via`/`last_error`/`worktree`,
 `facts.capabilities`) are written on demand by their writers and MUST NOT be seeded — their absence
 is meaningful (Layer-1 self-patch, no error, no worktree record, no observed capability hard-fail).
 
@@ -1042,12 +1068,12 @@ data lives in the on-disk `<stage>-N.md` artifacts, not in state.json.
 
 ## #fallback-paths
 
-Four documented degradation paths. Worktask MUST complete in all four (AC-16, AC-17).
+Three documented degradation paths. The ledger itself is NOT one of them: `state.json` is
+mandatory, and its absence is a hard failure rather than a recoverable mode.
 
 | Path | Trigger | Behavior |
 |------|---------|----------|
-| F1 | state.json **absent** | Fall back to `metadata.context_files` mode. Read listed files in full. No cache-friendly preamble. Log INFO `state.json not found, context_files mode`. |
-| F2 | state.json **present**, agent ignores it | No penalty. Agent reads listed files and writes its artifact. Orchestrator's hook patches state.json from frontmatter (or return text on F3). |
+| F2 | state.json **present**, agent ignores it | No penalty. Agent reads the anchors it was given and writes its artifact. Orchestrator's hook patches state.json from frontmatter (or return text on F3). |
 
 ### Paths F3–F4
 
@@ -1066,7 +1092,7 @@ shipped behaviour, upheld on review rather than treated as defects.
 - **The audit trail is a `state_repair` row in `.context/logs/audit.jsonl`**, not a separate
   `state-recovery.log`. One audit surface, not two.
 - **There is no completed-stage frontmatter walk.** The hook rebuilds the skeleton (including an
-  empty `stages: {}`) and recovers only the stage whose patch triggered the repair.
+  empty `tasks: {}`) and recovers only the stage whose patch triggered the repair.
 
 #### F4 — consequences for readers {#f4-consequences}
 
@@ -1082,23 +1108,15 @@ aborts, `state.json` is left **byte-identical**, no backup and no audit row are 
 still exits 0. Corrupt-and-untouched is the designed outcome; the repair never destroys the original.
 An unchanged ledger is therefore not evidence the hook failed to run.
 
-#### F1 — `context_files` mode {#f1-fallback}
+#### The ledger is mandatory {#f1-fallback}
 
-The preferred handoff mode is anchor-based: a stage reads `.context/state.json` plus the anchors
-named in `metadata.context_refs` (≥30% input-token reduction, cache-friendly preamble).
+The handoff mode is anchor-based: a stage reads `.context/state.json` plus the anchors named in
+`metadata.context_refs` (≥30% input-token reduction, cache-friendly preamble).
 
-When `state.json` is absent (or `context_refs` is missing), stages fall back to reading every
-`metadata.context_files` path in full — **`context_files` mode**. There is no cache-friendly
-preamble in this mode, so the prompt-cache benefit collapses; the degradation is silent to the
-worktask but surfaced via the `#f1-telemetry` log consumed by `/cost-report`.
-
-##### F1 is required behavior, not compatibility
-
-This path is **required** (AC-16/AC-17): a worktask MUST complete even
-when `state.json` is absent — e.g. on a read-only filesystem, where the seed write fails. Both
-metadata forms are dual-written by current code. `context_refs` wins when `state.json` is present;
-`context_files` is the safety net. The F1 telemetry snippet lives in
-`skills/shared/stage-contracts.md#f1-telemetry`.
+There is no whole-file fallback list. If `state.json` cannot be read, the stage stops and reports
+rather than guessing at its inputs — a silently degraded run that loses both the cache benefit and
+the dependency graph is worse than a loud one. A read-only or unwritable `.context/` is an
+environment defect to fix, not a mode to accommodate.
 
 ### F4 regeneration walk
 
@@ -1106,7 +1124,7 @@ metadata forms are dual-written by current code. `context_refs` wins when `state
 2. For each file, extract `handoff:` frontmatter (yq or fallback parser).
 3. Sort by stage order: PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET.
 4. Build state.json from PL0's frontmatter as seed.
-5. For each subsequent stage, merge `stages.<CODE>` from its frontmatter + add to `handoffs[FROM→TO]`.
+5. For each subsequent stage, merge `tasks.<ID>` from its frontmatter + add to `handoffs[FROM→TO]`.
 6. Atomic-write per `#atomic-write`.
 
 ---
@@ -1276,7 +1294,7 @@ Anchor-lint also runs at the DR gate, but that is post-hoc — a missing anchor 
 
 ## Future work (out of scope for v1)
 
-- `version: 1` is the migration hook. v2 schema additions ship behind that field.
+- `version` is the migration hook (currently `2` — the `tasks{}` ledger). Future schema additions ship behind that field.
 - A relaxed-profile schema for cross-plugin agents (apple-developer:*) is documented as a stub in `skills/cross-plugin-handoff/SKILL.md` for future negotiation.
 - Compression of `.context/logs/audit.jsonl` is out of scope.
 - Migration of historical `.context/` artifacts is out of scope.

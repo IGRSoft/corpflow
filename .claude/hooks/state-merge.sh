@@ -182,10 +182,10 @@ _repair_corrupt_state() {
   # Same directory as the target so the rename is atomic.
   tmp=".context/.state.json.repair.$$.tmp"
   if ! jq -cn --arg id "$wt_id" --arg plat "$platform" --argjson n "$n" '
-      { version: 1, worktask_id: $id,
+      { version: 2, worktask_id: $id,
         plan_file: (".context/planning-" + ($n | tostring) + ".md"),
         platform: $plat, run_index: $n,
-        stages: {}, facts: {}, handoffs: {}, metadata: {} }' > "$tmp" 2> /dev/null; then
+        tasks: {}, facts: {}, handoffs: {}, metadata: {} }' > "$tmp" 2> /dev/null; then
     log WARN "corrupt state.json: skeleton write failed — file untouched (backup at $backup)"
     if [[ -e "$tmp" ]] && ! rm -f "$tmp" 2> /dev/null; then
       log WARN "corrupt state.json: stale temp left at $tmp"
@@ -222,6 +222,9 @@ fi
 PATCH_ARGS=()
 [[ -n "${CLAUDE_TASK_METADATA_STAGE:-}" ]] && PATCH_ARGS+=(--stage "$CLAUDE_TASK_METADATA_STAGE")
 [[ -n "${CLAUDE_ARTIFACT_PATH:-}" ]] && PATCH_ARGS+=(--artifact "$CLAUDE_ARTIFACT_PATH")
+# The stage code alone cannot name a split stage's instance, so forward the runtime's task
+# id when it supplies one; the shape guard keeps a malformed value from becoming a new key.
+[[ "${CLAUDE_TASK_ID:-}" =~ ^[A-Z]{2}[0-9]+$ ]] && PATCH_ARGS+=(--task-id "$CLAUDE_TASK_ID")
 PATCH_ARGS+=(--log "$LOG")
 # completed_via provenance: this delegating hook is enforcement Layer 2 ("hook").
 # The orchestrator's synchronous Step-6.5 path overrides via STATE_MERGE_VIA=step6_5

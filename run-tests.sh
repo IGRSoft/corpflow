@@ -112,10 +112,13 @@ dv_in_progress() {
   local ctx="${CLAUDE_PROJECT_DIR:-$PLUGIN_ROOT}/.context/state.json"
   [ -r "$ctx" ] || return 1
   local running
-  running="$(jq -r '[.stages // {} | to_entries[] | select(.value.status == "in_progress") | .key] | join(",")' \
+  # Ledger keys are numbered (DV0, DV1), so strip the index: parallel tracks of one
+  # stage are still that stage, not an ambiguity.
+  running="$(jq -r '[.tasks // {} | to_entries[] | select(.value.status == "in_progress")
+    | .key | sub("[0-9]+$"; "")] | unique | join(",")' \
     "$ctx" 2>/dev/null)" || return 1
-  # Ambiguity is not DV: two in-progress stages means the ledger cannot say whose
-  # authority applies, and refusing on a guess would block a human mid-run.
+  # Ambiguity is not DV: two distinct in-progress stages means the ledger cannot say
+  # whose authority applies, and refusing on a guess would block a human mid-run.
   [ "$running" = "DV" ]
 }
 

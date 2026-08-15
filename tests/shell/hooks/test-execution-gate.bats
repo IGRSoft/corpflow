@@ -15,10 +15,10 @@ state_with() {
   # stage(s) in_progress.
   local s1="$1" s2="${2:-}"
   if [ -n "$s2" ]; then
-    printf '{"stages":{"%s":{"status":"in_progress"},"%s":{"status":"in_progress"}}}' "$s1" "$s2" \
+    printf '{"tasks":{"%s0":{"status":"in_progress"},"%s0":{"status":"in_progress"}}}' "$s1" "$s2" \
       > "$WD/.context/state.json"
   else
-    printf '{"stages":{"%s":{"status":"in_progress"}}}' "$s1" > "$WD/.context/state.json"
+    printf '{"tasks":{"%s0":{"status":"in_progress"}}}' "$s1" > "$WD/.context/state.json"
   fi
 }
 
@@ -823,7 +823,7 @@ teardown() {
   # full suite permitted forever after FN, which is how a post-merge
   # `./run-tests.sh` got through. The genuine cannot-tell shapes still fail open
   # and are covered by D2b and the no-state.json case.
-  printf '{"stages":{"PL":{"status":"completed"},"RE":{"status":"completed"}}}' > "$WD/.context/state.json"
+  printf '{"tasks":{"PL0":{"status":"completed"},"RE0":{"status":"completed"}}}' > "$WD/.context/state.json"
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
   assert_success
   assert_output --partial '"permissionDecision":"deny"'
@@ -834,7 +834,7 @@ teardown() {
   # Scope check: the deny must cost a finished worktask only its test runs. If
   # it reached git/gh the session would be wedged, which is the deadlock the
   # fail-open contract exists to prevent.
-  printf '{"stages":{"PL":{"status":"completed"},"FN":{"status":"completed"}}}' > "$WD/.context/state.json"
+  printf '{"tasks":{"PL0":{"status":"completed"},"FN0":{"status":"completed"}}}' > "$WD/.context/state.json"
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'git status')"
   assert_success
   [ -z "$output" ]
@@ -844,7 +844,7 @@ teardown() {
   # This is what D2 used to protect and must not be lost: with two concurrent
   # stages the gate cannot attribute the call, so denying would wedge a session
   # it cannot reason about. Ambiguity fails open; settled does not.
-  printf '{"stages":{"DV":{"status":"in_progress"},"QA":{"status":"in_progress"}}}' > "$WD/.context/state.json"
+  printf '{"tasks":{"DV0":{"status":"in_progress"},"QA0":{"status":"in_progress"}}}' > "$WD/.context/state.json"
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
   assert_success
   [ -z "$output" ]
@@ -854,20 +854,20 @@ teardown() {
   # cd into an unrelated directory changes nothing: the hook reads
   # ${CLAUDE_PROJECT_DIR}/.context, the session's ledger, not the cwd's. Pinned
   # verbatim because this is the command that actually got through.
-  printf '{"stages":{"PL":{"status":"completed"},"DV":{"status":"completed"},"QA":{"status":"completed"},"FN":{"status":"completed"}}}' > "$WD/.context/state.json"
+  printf '{"tasks":{"PL0":{"status":"completed"},"DV0":{"status":"completed"},"QA0":{"status":"completed"},"FN0":{"status":"completed"}}}' > "$WD/.context/state.json"
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" \
     <<< "$(bash_payload 'cd /tmp/corpflow-mergecheck && ./run-tests.sh')"
   assert_success
   assert_output --partial '"permissionDecision":"deny"'
 }
 
-@test "D3: SKILL.md step 5 mirrors the in_progress mark into state.json" {
+@test "D3: SKILL.md step 5 marks in_progress in the ledger the gate reads" {
   # The instruction IS the fix — nothing else makes the gate reachable — and the
   # orchestrator executes this block, so drift here re-inerts every case above.
   local skill="$PLUGIN_ROOT/skills/worktask/SKILL.md"
-  run grep -A6 'TaskUpdate({ taskId: task.id, status: "in_progress" });' "$skill"
+  run grep -A2 '// 5. Mark in_progress' "$skill"
   assert_success
-  assert_output --partial 'atomicMergeStateJson({ stages: { [full.metadata.stage]: { status: "in_progress" } } });'
+  assert_output --partial 'state-patch.sh --task-status ${task.id} in_progress'
 }
 
 @test "R1-18: flags-before-task build-only gradle tasks ALLOW at a banned stage (was a false deny)" {

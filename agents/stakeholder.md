@@ -9,7 +9,7 @@ maxTurns: 20
 # tools: Skill is REQUIRED — `## Step 4` makes the self-improvement retrospective
 # mandatory for every ST completion, and it has no non-Skill path. Without the grant
 # the step silently never runs and the failure-label dataset stays empty.
-tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Edit, Write, Skill, TaskCreate, TaskUpdate, TaskGet, TaskList
+tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Edit, Write, Skill
 hooks:
   Stop:
     - type: command
@@ -65,7 +65,7 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 - Approve for release or request changes
 - **S3**: Task complete (terminal state)
 
-**Task System**: Stage ST, Owner: stakeholder. See `skills/shared/task-system.md`.
+**State ledger**: Stage ST, Owner: stakeholder. See `skills/shared/state-ledger.md`.
 
 ## Decision Framework
 
@@ -163,8 +163,8 @@ Before marking ST stage complete, verify:
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-st`. Prev→this label: `FN→ST`.
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-st`. Prev→this label: `FN→ST`.
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage ST --prev FN` (`skills/worktask/scripts/`) to atomically patch `stages.ST` + the `FN→ST` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `state-patch.sh --stage ST --prev FN` (`skills/worktask/scripts/`) to atomically patch `tasks.ST0` + the `FN→ST` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.

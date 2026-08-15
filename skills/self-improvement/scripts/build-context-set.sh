@@ -2,7 +2,7 @@
 # build-context-set.sh — produce the used-in-context file-path set for this worktask.
 #
 # Inputs (env vars, all optional):
-#   TASK_LIST_JSON   Path to a JSON dump of TaskList (array of tasks with metadata).
+#   LEDGER_JSON      Path to a state.json (or a bare tasks{} object) to read stage metadata from.
 #                    When absent, falls back to scanning .context/*.md for agent trailers.
 #   CONTEXT_DIR      Defaults to ".context"
 #   BASELINE_SHA     If present, scan `git log $BASELINE_SHA..HEAD` for `Agent:` trailers.
@@ -23,22 +23,23 @@ CONTEXT_DIR="${CONTEXT_DIR:-.context}"
 raw="$(mktemp)"
 trap 'rm -f "$raw"' EXIT
 
-# Source 1 — Task List JSON (preferred).
-if [ -n "${TASK_LIST_JSON:-}" ] && [ -f "$TASK_LIST_JSON" ]; then
+# Source 1 — the state ledger (preferred).
+if [ -n "${LEDGER_JSON:-}" ] && [ -f "$LEDGER_JSON" ]; then
   # Extract metadata.agent and metadata.embedded_commands from completed tasks.
   # Tolerates jq absence by using python as fallback.
   if command -v jq >/dev/null 2>&1; then
     jq -r '
-      .[] | select(.status == "completed") |
+      (.tasks // .) | to_entries[] | .value |
+      select(.status == "completed") |
       .metadata // {} |
       (.agent // empty), (.embedded_commands // empty | split(",") | .[])
-    ' "$TASK_LIST_JSON" 2>/dev/null >> "$raw" || true
+    ' "$LEDGER_JSON" 2>/dev/null >> "$raw" || true
   elif command -v python3 >/dev/null 2>&1; then
-    python3 - "$TASK_LIST_JSON" >> "$raw" <<'PY' || true
+    python3 - "$LEDGER_JSON" >> "$raw" <<'PY' || true
 import json, sys
 with open(sys.argv[1]) as f:
     data = json.load(f)
-for task in data:
+for task in (data.get("tasks", data) or {}).values():
     if task.get("status") != "completed":
         continue
     meta = task.get("metadata") or {}

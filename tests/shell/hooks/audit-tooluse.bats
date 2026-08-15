@@ -40,6 +40,31 @@ setup() {
   assert_success
 }
 
+@test "ledger: a state-patch status call is audited with task_id and status" {
+  # The stage-transition trail resume depends on: this Bash call is the ONLY signal
+  # that a stage advanced.
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"tool_name":"Bash","tool_input":{"command":"bash skills/worktask/scripts/state-patch.sh --task-status DV1 in_progress"},"tool_use_id":"t1","duration_ms":10,"session_id":"s1","effort":{"level":"high"}}'
+  assert_success
+  run jq -e '.subject == "state-patch" and .metadata.task_id == "DV1"
+             and .metadata.status == "in_progress"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "ledger: an ordinary Bash call writes NO row" {
+  # Widening the matcher to all of Bash must not turn the audit log into shell noise.
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"tool_name":"Bash","tool_input":{"command":"ls -la"},"tool_use_id":"t2","duration_ms":5,"session_id":"s1"}'
+  assert_success
+  [ ! -s "$WD/.context/logs/audit.jsonl" ]
+}
+
+@test "ledger: a non-status state-patch call still audits, without task fields" {
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"tool_name":"Bash","tool_input":{"command":"bash skills/worktask/scripts/state-patch.sh --task-create QA0 --metadata {}"},"tool_use_id":"t4","duration_ms":9,"session_id":"s1"}'
+  assert_success
+  run jq -e '.subject == "state-patch" and (.metadata | has("task_id") | not)' \
+    "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
 @test "failure: malformed JSON exits 0 and writes no row" {
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< 'xxx'
   assert_success

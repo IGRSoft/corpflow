@@ -5,7 +5,7 @@ Read when running in megatask/worktree mode, inside a Conductor workspace clone,
 ## Workspace Detection
 
 ```typescript
-const task = TaskGet({ taskId: currentTaskId });
+const task = state.tasks[currentTaskId];
 const workspacePath = task.metadata?.workspace_path;
 const isolation = task.metadata?.isolation;  // always 'worktree' for file-writing stages
 
@@ -183,10 +183,16 @@ at the FN gate. The comparison base is the `to` of the last `branch_renamed / ok
 
 ## Task ID Namespacing
 
+The ledger key is `<STAGE>0` in every track — the worktree supplies the namespace, so the key
+never has to.
+
 | Track | Task IDs |
 |-------|----------|
-| Track 1 | `t1-1`, `t1-2`, ... |
-| Track N | `t{N}-1`, `t{N}-2`, ... |
+| Track 1 | `PL0`, `AR0`, `DV0`, ... |
+| Track N | `PL0`, `AR0`, `DV0`, ... |
+
+Each track holds its own `.context/state.json` inside its own worktree, so identical ids across
+tracks address different ledgers and cannot collide.
 
 See `../../megatask/SKILL.md` (§ Workspace Architecture) for full workspace documentation.
 

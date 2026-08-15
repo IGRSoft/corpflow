@@ -2,8 +2,8 @@
 
 ## Conventions used in this document
 
-- **`planFile`** — the plan filename PL produced for the current worktask run (`planning-N.md`, e.g. `planning-0.md`, `planning-3.md`). Computed by PL0 per `agents/product-manager.md § Plan File Naming`. Every downstream task carries it as `metadata.plan_file`; the same value is interpolated into `context_files`. Stage agents resolve the plan file from `task.metadata.plan_file` first, then newest `.context/planning-*.md`.
-- **handoff-protocol mode** — the preferred metadata mode (per `skills/worktask/references/handoff-protocol.md`): tasks carry `state_file` + `context_refs` (anchor list); `context_files` is the F1 fallback (state.json absent — see `../../worktask/references/handoff-protocol.md#f1-fallback`). Examples below show both forms — use `context_refs` for new code; keep `context_files` as the safety net.
+- **`planFile`** — the plan filename PL produced for the current worktask run (`planning-N.md`, e.g. `planning-0.md`, `planning-3.md`). Computed by PL0 per `agents/product-manager.md § Plan File Naming`. Every downstream task carries it as `metadata.plan_file`; the same value is interpolated into `context_refs`. Stage agents resolve the plan file from `task.metadata.plan_file` first, then newest `.context/planning-*.md`.
+- **handoff-protocol mode** — the metadata contract (per `skills/worktask/references/handoff-protocol.md`): tasks carry `state_file` + `context_refs` (anchor list). The ledger is mandatory, so there is no whole-file fallback list.
 
 ## PL0 state.json Initialization (Phase 1)
 
@@ -30,7 +30,7 @@ done
 ### plan_file shape boundary
 
 Both shapes appear in this file: the state seed below writes the **path** shape
-(`.context/planning-N.md`); every `TaskCreate` snippet further down writes the **basename**
+(`.context/planning-N.md`); every seed snippet further down writes the **basename**
 shape (`planning-N.md`). Both are legal and every reader MUST accept either — the rule and
 its resolution order are canonical in `handoff-protocol.md § plan_file shape boundary`.
 
@@ -45,13 +45,13 @@ WORKSPACE_PATH=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 tmp=".context/.state.json.$$.${RANDOM}.tmp"
 cat > "$tmp" <<EOF
 {
-  "version": 1,
+  "version": 2,
   "worktask_id": "${WORKTASK_ID}",
   "plan_file": ".context/planning-${N}.md",
   "platform": "${PLATFORM:-all}",
   "run_index": ${N},
   "metadata": { "workspace_path": "${WORKSPACE_PATH}" },
-  "stages": { "PL": { "status": "in_progress" } },
+  "tasks": { "PL0": { "status": "in_progress" } },
   "facts": {
     "goal": "${GOAL}",
     "files_modified": [],
@@ -100,9 +100,9 @@ clone, wrote nothing, and passed all three checks. Isolation is not assignment �
 
 ### Post-seed notes
 
-`facts.dispatched_agents: []` is seeded (additive, version:1) so the orchestrator loop appends per-`task_id` dispatch entries in place. The other v1 additive fields (`stages.<CODE>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are written on demand — never seeded; their absence is meaningful. Schema: `handoff-protocol.md#state-json-schema`.
+`facts.dispatched_agents: []` is seeded (additive) so the orchestrator loop appends per-`task_id` dispatch entries in place. The other additive fields (`tasks.<ID>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are written on demand — never seeded; their absence is meaningful. Schema: `handoff-protocol.md#state-json-schema`.
 
-Subsequent stage agents read `.context/state.json` first; if absent, they fall back to `metadata.context_files` mode (path F1 — see `handoff-protocol.md#f1-fallback`; matrix at `handoff-protocol.md#fallback-paths`).
+Subsequent stage agents read `.context/state.json` first. Its absence is a hard failure, not a fallback mode.
 
 ## Hook Installation
 
@@ -130,37 +130,26 @@ fi
 
 ### PL0 invariant
 
-Before continuing to TaskCreate, verify:
+Before seeding the stage chain, verify:
 1. `.context/state.json` exists and is valid JSON
 2. `.claude/hooks/state-merge.sh` exists and is executable
 3. The plugin's `plugin.json` registers the SubagentStop hook (this is declarative — no project-local action needed)
 
 If hook source is not found (e.g. plugin root unresolved — the fallback line left unsubstituted), log a warning and continue — the plugin.json-registered hook will still fire via the plugin hook system. The project-local copy is a belt-and-suspenders fallback for environments where plugin hooks are not supported.
 
-### Sample TaskCreate using context_refs (handoff-protocol mode)
+### Sample seed using context_refs
 
 `planFile` is the **basename** shape — see § plan_file shape boundary.
 
-```typescript
-const ar0 = TaskCreate({
-  subject: "AR0: Architecture",
-  description: "Design dark mode architecture with theme switching",
-  activeForm: "Architecting solution",
-  metadata: {
-    stage: "AR", agent: "corpflow:software-architector", model: "opus",
-    error_file: ".context/errors/software-architector.md",
-    state_file: ".context/state.json",
-    context_refs: JSON.stringify([
-      `${planFile}#requirements`,
-      `${planFile}#scope`,
-      `${planFile}#acceptance-criteria`
-    ]),
-    // F1 fallback — kept so the worktask runs even if state.json is absent:
-    context_files: `${planFile},.context/errors/software-architector.md`,
-    plan_file: planFile,
-    worktask_id: worktaskId, priority: "medium"
-  }
-});
+```bash
+state-patch.sh --task-create AR0 --metadata "$(jq -n \
+  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
+  '{stage:"AR", agent:"corpflow:software-architector", model:"opus",
+    description:"Design dark mode architecture with theme switching",
+    error_file:".context/errors/software-architector.md",
+    state_file:".context/state.json",
+    context_refs:(["\($plan)#requirements","\($plan)#scope","\($plan)#acceptance-criteria"]|tojson),
+    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
 ```
 
 ## Multi-Issue Initialization → `/megatask`
@@ -181,19 +170,15 @@ See:
 
 Only PL0 is created at startup. PL0 creates all subsequent stage tasks after planning.
 
-```typescript
-const worktaskId = "dark-mode-2025";
+```bash
+WORKTASK_ID="dark-mode-2025"
 
-// Create only PL0 — PL agent creates subsequent stages after planning
-TaskCreate({
-  subject: "PL0: Planning",
-  description: "Define requirements, assess complexity, create stage tasks",
-  activeForm: "Planning task requirements",
-  metadata: { stage: "PL", agent: "corpflow:product-manager", model: "opus", worktask_id: worktaskId, priority: "medium" }
-});
-
-// Start immediately
-TaskUpdate({ taskId: "1", status: "in_progress", owner: "product-manager" });
+# The state.json seed already created PL0 as in_progress, so this attaches its
+# metadata — --task-create would early-exit as a no-op and drop the payload.
+state-patch.sh --task-meta PL0 --set "$(jq -n --arg wid "$WORKTASK_ID" \
+  '{stage:"PL", agent:"corpflow:product-manager", model:"opus",
+    description:"Define requirements, assess complexity, seed stage tasks",
+    worktask_id:$wid, priority:"medium"}')"
 ```
 
 ## Pre-Stage Exploration Cache
@@ -297,110 +282,79 @@ const requiresScreenshots = planMetadata.requires_screenshots; // boolean
 AR0 is a tier default at score ≥11, not a mandate — PL0 resolves its inclusion against
 `skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria (PL0 authority)` and records
 the outcome in `skipped_stages`/`added_stages`. The block below is the AR-included branch; when
-AR is excluded, skip this `TaskCreate` entirely and chain DV0 directly off PL0.
+AR is excluded, skip this seed entirely and chain DV0 directly off PL0.
 
-#### AR0 TaskCreate
+#### AR0 seed
 
-```typescript
-// …continued: AR0 creation
-// Capture task IDs returned by TaskCreate.
-// NOTE: context_files includes error_file per task-system § context_files ↔ error_file coupling.
-// If omitted, the orchestrator appends it at delegation time (normalizeMetadata).
-const ar0 = TaskCreate({
-  subject: "AR0: Architecture",
-  description: "Design dark mode architecture with theme switching",
-  activeForm: "Architecting solution",
-  metadata: {
-    stage: "AR", agent: "corpflow:software-architector", model: "opus",
-    error_file: ".context/errors/software-architector.md",
-    context_files: `exploration.md,${planFile},.context/errors/software-architector.md`,
-    plan_file: planFile,  // e.g. "planning-0.md" — propagated so AR resolves the right plan
-    worktask_id: worktaskId, priority: "medium"
-  }
-});
+```bash
+# The ledger key IS the id — nothing to capture from the call.
+state-patch.sh --task-create AR0 --metadata "$(jq -n \
+  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
+  '{stage:"AR", agent:"corpflow:software-architector", model:"opus",
+    description:"Design dark mode architecture with theme switching",
+    error_file:".context/errors/software-architector.md",
+    context_refs:(["exploration.md#findings","\($plan)#requirements"]|tojson),
+    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
 ```
 
 ### DV0 task
 
-**context_files seeding rule**: `architecture-${N}.md` appears in DV0's `context_files` if and only
-if AR0 was included. When AR is excluded it MUST NOT appear in any downstream `context_files`,
-and no `metadata.architecture_ref` is stamped on DV0/DR0/QA0.
+**context_refs seeding rule**: an `architecture-${N}.md` anchor appears in DV0's `context_refs` if
+and only if AR0 was included. When AR is excluded it MUST NOT appear in any downstream
+`context_refs`, and no `metadata.architecture_ref` is stamped on DV0/DR0/QA0.
 
-#### DV0 TaskCreate
+#### DV0 seed
 
-```typescript
-// …continued: DV0 creation
-const dv0 = TaskCreate({
-  subject: "DV0: Development",
-  description: "Implement dark mode theme system and color tokens",
-  activeForm: "Implementing code",
-  metadata: {
-    stage: "DV", agent: "corpflow:developer", model: "opus",
-    error_file: ".context/errors/developer.md",
-    context_files: `exploration.md,${planFile},architecture.md,coordination.md,.context/errors/developer.md`,
-    plan_file: planFile,
-    // requires_screenshots is the value PL0 stamped on the plan frontmatter
-    // (set by detect-ui-change.sh — see agents/product-manager.md). Propagated
-    // here so the capture skill + dv-screenshot-gate fire deterministically.
-    requires_screenshots: requiresScreenshots,
-    worktask_id: worktaskId, priority: "medium"
-  }
-});
+```bash
+# requires_screenshots is the value PL0 stamped on the plan frontmatter (set by
+# detect-ui-change.sh), propagated so the capture skill + dv-screenshot-gate fire
+# deterministically.
+state-patch.sh --task-create DV0 --metadata "$(jq -n \
+  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" --argjson shots "$REQUIRES_SCREENSHOTS" \
+  '{stage:"DV", agent:"corpflow:developer", model:"opus",
+    description:"Implement dark mode theme system and color tokens",
+    error_file:".context/errors/developer.md",
+    context_refs:(["\($plan)#requirements","architecture-0.md#decisions","coordination-0.md#fan-out"]|tojson),
+    plan_file:$plan, requires_screenshots:$shots, worktask_id:$wid, priority:"medium"}')"
 ```
 
 ### DR0 task
 
-```typescript
-// …continued: DR0 creation
-const dr0 = TaskCreate({
-  subject: "DR0: Developer Review",
-  description: "Review code quality, patterns, and platform-specific best practices",
-  activeForm: "Reviewing code",
-  metadata: {
-    stage: "DR", agent: "corpflow:technical-lead", model: "sonnet",
-    error_file: ".context/errors/technical-lead.md",
-    context_files: `exploration.md,${planFile},architecture.md,coordination.md,development.md,.context/errors/technical-lead.md`,
-    plan_file: planFile,
-    worktask_id: worktaskId, priority: "medium"
-  }
-});
+```bash
+state-patch.sh --task-create DR0 --metadata "$(jq -n \
+  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
+  '{stage:"DR", agent:"corpflow:technical-lead", model:"sonnet",
+    description:"Review code quality, patterns, and platform-specific best practices",
+    error_file:".context/errors/technical-lead.md",
+    context_refs:(["\($plan)#requirements","architecture-0.md#decisions","development-0.md#deviations"]|tojson),
+    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
 ```
 
 ### QA0 task
 
-```typescript
-// …continued: QA0 creation
-const qa0 = TaskCreate({
-  subject: "QA0: QA Testing",
-  description: "Test theme switching, contrast ratios, persistence",
-  activeForm: "Testing solution",
-  metadata: {
-    stage: "QA", agent: "corpflow:qa-engineer", model: "sonnet",
-    error_file: ".context/errors/qa-engineer.md",
-    context_files: `exploration.md,${planFile},developer-review.md,testing.md,.context/errors/qa-engineer.md`,
-    plan_file: planFile,
-    // Same flag PL0 stamped on the plan frontmatter — QA's Q1.5 manifest
-    // ingestion / advisory-skip reads it (agents/qa-engineer.md).
-    requires_screenshots: requiresScreenshots,
-    worktask_id: worktaskId, priority: "medium"
-  }
-});
+```bash
+# Same requires_screenshots flag PL0 stamped on the plan frontmatter — QA's Q1.5
+# manifest ingestion / advisory-skip reads it (agents/qa-engineer.md).
+state-patch.sh --task-create QA0 --metadata "$(jq -n \
+  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" --argjson shots "$REQUIRES_SCREENSHOTS" \
+  '{stage:"QA", agent:"corpflow:qa-engineer", model:"sonnet",
+    description:"Test theme switching, contrast ratios, persistence",
+    error_file:".context/errors/qa-engineer.md",
+    context_refs:(["\($plan)#acceptance-criteria","developer-review-0.md#verdict"]|tojson),
+    plan_file:$plan, requires_screenshots:$shots, worktask_id:$wid, priority:"medium"}')"
 ```
 
 ### Dependency chain
 
-```typescript
-// …continued: wire dependencies, close PL0
-// Chain dependencies using captured IDs (PL0 is taskId "1" from initial creation)
-TaskUpdate({ taskId: ar0, addBlockedBy: ["1"] });  // AR0 ← PL0
-// DV0's predecessor is whichever of TL0/AR0/PL0 is the last stage actually created:
-// TL0 when TL ran, AR0 when AR ran without TL, PL0 when neither did.
-TaskUpdate({ taskId: dv0, addBlockedBy: [ar0] });  // DV0 ← AR0 (AR-included branch)
-TaskUpdate({ taskId: dr0, addBlockedBy: [dv0] });  // DR0 ← DV0
-TaskUpdate({ taskId: qa0, addBlockedBy: [dr0] });  // QA0 ← DR0
+```bash
+# DV0's predecessor is whichever of TL0/AR0/PL0 is the last stage actually seeded:
+# TL0 when TL ran, AR0 when AR ran without TL, PL0 when neither did.
+state-patch.sh --task-block AR0 --on PL0   # AR0 ← PL0
+state-patch.sh --task-block DV0 --on AR0   # DV0 ← AR0 (AR-included branch)
+state-patch.sh --task-block DR0 --on DV0   # DR0 ← DV0
+state-patch.sh --task-block QA0 --on DR0   # QA0 ← DR0
 
-// Mark PL0 completed
-TaskUpdate({ taskId: "1", status: "completed" });
+state-patch.sh --task-status PL0 completed
 ```
 
 ## Task Execution Pattern
@@ -410,7 +364,7 @@ When a task starts, the executor reads `metadata.agent` and spawns the agent. **
 ### Resolve agent & model
 
 ```typescript
-const task = TaskGet({ taskId: currentTaskId });
+const task = state.tasks[currentTaskId];
 const agentType = task.metadata.agent;  // e.g., "corpflow:developer" or "apple-developer:ios-developer"
 const model = task.metadata.model;      // e.g., "haiku"
 
@@ -456,52 +410,44 @@ PL0 → AR0 → TL0 ─┤→ DV1 ─├→ DR0 → QA0
 
 #### Narrow scope & DV1 stream
 
-```typescript
-// TL narrows DV0 scope to primary stream
-TaskUpdate({ taskId: dv0_id, description: "Implement theme color tokens (owns: Source/Theme/Colors/)" });
+```bash
+# TL narrows DV0 scope to the primary stream.
+state-patch.sh --task-meta DV0 --set \
+  '{"description":"Implement theme color tokens (owns: Source/Theme/Colors/)"}'
 
-// TL creates parallel streams. All DVN share the same error_file (developer.md)
-// with distinct section headers per sub-task (## DV1 Retry N, ## DV2 Retry N).
-const dv1 = TaskCreate({
-  subject: "DV1: Implement theme switcher",
-  description: "Add toggle and persistence (owns: Source/Settings/Theme/)",
-  metadata: {
-    stage: "DV", agent: "corpflow:developer", model: "opus",
-    error_file: ".context/errors/developer.md",
-    context_files: `${planFile},architecture.md,coordination.md,.context/errors/developer.md`,
-    plan_file: planFile,
-    worktask_id: worktaskId, priority: "medium"
-  }
-});
+# TL seeds parallel streams. All DVN share the same error_file (developer.md)
+# with distinct section headers per sub-task (## DV1 Retry N, ## DV2 Retry N).
+state-patch.sh --task-create DV1 --metadata "$(jq -n \
+  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
+  '{stage:"DV", agent:"corpflow:developer", model:"opus",
+    description:"Add toggle and persistence (owns: Source/Settings/Theme/)",
+    error_file:".context/errors/developer.md",
+    context_refs:(["\($plan)#requirements","architecture-0.md#decisions","coordination-0.md#fan-out"]|tojson),
+    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
 ```
 
 #### DV2 stream
 
-```typescript
-// …continued: second parallel stream
-const dv2 = TaskCreate({
-  subject: "DV2: Implement dark mode assets",
-  description: "Create dark variants for all image assets (owns: Assets/Dark/)",
-  metadata: {
-    stage: "DV", agent: "corpflow:developer", model: "opus",
-    error_file: ".context/errors/developer.md",
-    context_files: `${planFile},architecture.md,coordination.md,.context/errors/developer.md`,
-    plan_file: planFile,
-    worktask_id: worktaskId, priority: "medium"
-  }
-});
+```bash
+# …continued: second parallel stream
+state-patch.sh --task-create DV2 --metadata "$(jq -n \
+  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
+  '{stage:"DV", agent:"corpflow:developer", model:"opus",
+    description:"Create dark variants for all image assets (owns: Assets/Dark/)",
+    error_file:".context/errors/developer.md",
+    context_refs:(["\($plan)#requirements","architecture-0.md#decisions","coordination-0.md#fan-out"]|tojson),
+    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
 ```
 
 #### Dependency wiring
 
-```typescript
-// …continued: block streams on TL0, DR0 on all streams
-// All DVN blocked by TL0 (not DV0) — enables true parallelism
-TaskUpdate({ taskId: dv1, addBlockedBy: [tl0_id] });
-TaskUpdate({ taskId: dv2, addBlockedBy: [tl0_id] });
+```bash
+# All DVN blocked by TL0 (not DV0) — enables true parallelism.
+state-patch.sh --task-block DV1 --on TL0
+state-patch.sh --task-block DV2 --on TL0
 
-// DR0 must wait for ALL DV tasks
-TaskUpdate({ taskId: dr0_id, addBlockedBy: [dv1, dv2] });
+# DR0 must wait for ALL DV tasks; --task-block unions with the existing DV0 edge.
+state-patch.sh --task-block DR0 --on DV1,DV2
 ```
 
 ### DV-Initiated Split (Sequential Sub-tasks)
@@ -510,39 +456,30 @@ DV agent splits during its own execution. Sub-tasks are children of DV0 — sequ
 
 #### DV1 sub-task
 
-```typescript
-// Developer splits DV0 into focused sub-tasks.
-// Sub-tasks share developer.md — orchestrator auto-appends error_file to context_files.
-const dv1 = TaskCreate({
-  subject: "DV1: Implement theme color tokens",
-  description: "Create semantic color tokens for light/dark themes",
-  metadata: {
-    stage: "DV", agent: "corpflow:developer", model: "opus",
-    error_file: ".context/errors/developer.md",
-    context_files: `${planFile},architecture.md,.context/errors/developer.md`,
-    plan_file: planFile,
-    worktask_id: worktaskId, priority: "medium"
-  }
-});
+```bash
+# Developer splits DV0 into focused sub-tasks, which share developer.md.
+state-patch.sh --task-create DV1 --metadata "$(jq -n \
+  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
+  '{stage:"DV", agent:"corpflow:developer", model:"opus",
+    description:"Create semantic color tokens for light/dark themes",
+    error_file:".context/errors/developer.md",
+    context_refs:(["\($plan)#requirements","architecture-0.md#decisions"]|tojson),
+    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
 ```
 
 #### DV2 sub-task & sequencing
 
-```typescript
-// …continued: second sub-task, then block both on DV0
-const dv2 = TaskCreate({
-  subject: "DV2: Implement theme switcher",
-  description: "Add toggle and persistence for theme preference",
-  metadata: {
-    stage: "DV", agent: "corpflow:developer", model: "opus",
-    error_file: ".context/errors/developer.md",
-    context_files: `${planFile},architecture.md,.context/errors/developer.md`,
-    plan_file: planFile,
-    worktask_id: worktaskId, priority: "medium"
-  }
-});
+```bash
+# …continued: second sub-task, then block both on DV0
+state-patch.sh --task-create DV2 --metadata "$(jq -n \
+  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
+  '{stage:"DV", agent:"corpflow:developer", model:"opus",
+    description:"Add toggle and persistence for theme preference",
+    error_file:".context/errors/developer.md",
+    context_refs:(["\($plan)#requirements","architecture-0.md#decisions"]|tojson),
+    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
 
-// Sequential: DV1 and DV2 blocked by DV0
-TaskUpdate({ taskId: dv1, addBlockedBy: [dv0_id] });
-TaskUpdate({ taskId: dv2, addBlockedBy: [dv0_id] });
+# Sequential: DV1 and DV2 blocked by DV0
+state-patch.sh --task-block DV1 --on DV0
+state-patch.sh --task-block DV2 --on DV0
 ```

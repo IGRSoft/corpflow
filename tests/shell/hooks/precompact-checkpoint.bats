@@ -11,7 +11,7 @@ setup() {
 }
 
 @test "happy: copies state.json to a checkpoint and logs result=ok" {
-  printf '%s' '{"run_index":0,"stages":{}}' > "$WD/.context/state.json"
+  printf '%s' '{"run_index":0,"tasks":{}}' > "$WD/.context/state.json"
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   # A timestamped checkpoint file must now exist alongside state.json.
@@ -33,7 +33,7 @@ setup() {
 }
 
 @test "edge: checkpoint records pointers to planning/development artifacts" {
-  printf '%s' '{"run_index":2,"stages":{}}' > "$WD/.context/state.json"
+  printf '%s' '{"run_index":2,"tasks":{}}' > "$WD/.context/state.json"
   printf '# plan\n' > "$WD/.context/planning-2.md"
   printf '# dev\n' > "$WD/.context/development-2.md"
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
@@ -59,8 +59,8 @@ setup() {
   # A non-trivial ledger: nested stages, arrays, unicode and a float.
   cat > "$state" <<'JSON'
 {"version":1,"worktask_id":"wt-fidelity","run_index":3,"platform":"systems",
- "stages":{"PL":{"status":"complete","verdict":"ok"},
-           "DV":{"status":"in_progress","progress":{"completed_batches":["B1","B2"],"ratio":0.75}}},
+ "tasks":{"PL0":{"status":"complete","verdict":"ok"},
+           "DV0":{"status":"in_progress","progress":{"completed_batches":["B1","B2"],"ratio":0.75}}},
  "facts":{"files_modified":["a.md","b/c.md"],"note":"ünïcode — em dash"},
  "handoffs":{"PL→DV":{"summary":"go"}}}
 JSON
@@ -76,7 +76,7 @@ JSON
   assert_success
   assert_output ""
   # And the nested content really survived, not just a valid-JSON stub.
-  run jq -r '.stages.DV.progress.completed_batches | join(",")' "$ckpt"
+  run jq -r '.tasks.DV0.progress.completed_batches | join(",")' "$ckpt"
   assert_output "B1,B2"
   run jq -r '.facts.note' "$ckpt"
   assert_output "ünïcode — em dash"
@@ -84,7 +84,7 @@ JSON
 
 @test "fidelity: the original ledger is left untouched by the checkpoint" {
   local state="$WD/.context/state.json"
-  printf '%s' '{"run_index":0,"stages":{"DV":{"status":"in_progress"}}}' > "$state"
+  printf '%s' '{"run_index":0,"tasks":{"DV0":{"status":"in_progress"}}}' > "$state"
   local before
   before="$(cat "$state")"
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
@@ -95,12 +95,12 @@ JSON
 
 @test "fidelity: a second checkpoint does not clobber the first" {
   local state="$WD/.context/state.json"
-  printf '%s' '{"run_index":0,"stages":{},"facts":{"seq":1}}' > "$state"
+  printf '%s' '{"run_index":0,"tasks":{},"facts":{"seq":1}}' > "$state"
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   # Timestamped names are second-resolution; make the second one distinct.
   sleep 1
-  printf '%s' '{"run_index":0,"stages":{},"facts":{"seq":2}}' > "$state"
+  printf '%s' '{"run_index":0,"tasks":{},"facts":{"seq":2}}' > "$state"
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
 

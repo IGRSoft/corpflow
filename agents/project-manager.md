@@ -6,7 +6,7 @@ color: cyan
 effort: medium
 maxTurns: 40
 version: 0.5.1
-tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskGet, TaskList
+tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), EnterWorktree, ExitWorktree
 hooks:
   Stop:
     - type: command
@@ -220,9 +220,9 @@ Create PR from workspace/worktree branch using `workspace.json` metadata. Archiv
 
 Use resolved `git.base_branch` from workspace.json. Reference issue number in title and body. Use `ExitWorktree` before `git worktree remove` in worktree mode (use `EnterWorktree` with `path` parameter to target the correct worktree when multiple exist — `EnterWorktree` can switch between Claude-managed worktrees mid-session without an intervening `ExitWorktree`; honors `worktree.baseRef` = `head`\|`fresh` setting — plugin assumes `head`). Stale worktrees are auto-cleaned. An `EnterWorktree` `path` outside `.claude/worktrees/` triggers a confirmation prompt — keep unattended re-targets under `.claude/worktrees/` or pre-authorize via skip-permissions mode.
 
-#### Task System
+#### State ledger
 
-Stage FN, Owner: project-manager. See `skills/shared/task-system.md`.
+Stage FN, Owner: project-manager. See `skills/shared/state-ledger.md`.
 
 ## Task Specification Format
 
@@ -268,8 +268,8 @@ Before marking FN stage complete, verify:
 
 ## Handoff Protocol
 
-Inputs (anchor-first + F1 fallback), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-fn`. Prev→this label: `RE→FN` (or `DC→FN` when RE is absent).
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-fn`. Prev→this label: `RE→FN` (or `DC→FN` when RE is absent).
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage FN --prev RE` (`skills/worktask/scripts/`; use `--prev DC` when RE is skipped) to atomically patch `stages.FN` + the `RE→FN` (or `DC→FN`) handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `state-patch.sh --stage FN --prev RE` (`skills/worktask/scripts/`; use `--prev DC` when RE is skipped) to atomically patch `tasks.FN0` + the `RE→FN` (or `DC→FN`) handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.

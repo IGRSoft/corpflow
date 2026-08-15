@@ -1355,8 +1355,8 @@ MOCK
     rm -rf "$run"; mkdir -p "$run/.context/logs"
     cp "$plan" "$run/.context/planning-0.md"
     jq -n --arg w "$wid" --arg g "$goal" \
-      '{version:1, worktask_id:$w, run_index:0, plan_file:".context/planning-0.md",
-        stages:{PL:{status:"completed"}},
+      '{version:2, worktask_id:$w, run_index:0, plan_file:".context/planning-0.md",
+        tasks:{PL0:{status:"completed"}},
         facts:(if $g == "" then {} else {goal:$g} end),
         handoffs:{}, metadata:{}}' > "$run/.context/state.json"
     ( cd "$run" && WORKSPACE_ROOT="$run" STATE_FILE="$run/.context/state.json" \

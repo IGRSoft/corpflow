@@ -13,7 +13,7 @@ related:
   - ../../hooks/megatask-monitor.sh
   - ../../commands/worktask.md
   - ../shared/stage-codes.md
-  - ../shared/task-system.md
+  - ../shared/state-ledger.md
 scripts:
   - scripts/build-orchestrator.sh
   - scripts/init-worktree.sh
@@ -265,7 +265,7 @@ Recorded in `orchestrator.json → configuration.parallel_tracks`. Never a flag/
 
 ### Subagent spawn budget
 
-> **Subagent spawn budget**: each issue dispatches ~9–11 stage subagents (9-stage default, 11-stage `--secure`) from the single megatask orchestrator session, and the cap counts **every** spawn regardless of depth (`agent-coordination § Three independent ceilings`; default **200** via `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`) — nested delegation (DV routing to platform agents and Tier-2 specialists, QA spawning `test-generator`) adds several more spawns per issue on top of the stage count. Stage count alone puts the **best-case** ceiling at **~18 issues** (11-stage) / **~22 issues** (9-stage); with routine nested delegation and retries, expect to hit the default cap several issues sooner. For batches near that ceiling, raise `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` before starting, or split into multiple `/megatask --issues` batches.
+> **Subagent spawn budget**: each issue dispatches ~9–11 stage subagents (9-stage default, 11-stage `--secure`) from the single megatask orchestrator session, plus nested delegation (DV routing to platform agents and Tier-2 specialists, QA spawning `test-generator`). CC 2.1.224 removed the per-session total-spawn cap, so batch size is **no longer bounded by a running count** — there is no ~18/~22-issue ceiling to plan around and no env var to raise. What still refuses a dispatch is **concurrency** (`agent-coordination § Two independent ceilings`) and, below it, disk for the per-issue worktrees and your rate budget. Size batches against peak concurrency, not a total.
 
 ### Nesting-depth budget
 
@@ -310,29 +310,35 @@ per-issue worktask (PL→…→ST) with gates pre-bypassed.
 `orchestrator.json`, **unblocks dependents**, and frees the track. A `failed` issue writes
 `execution.status: "failed"` — its dependents stay `blocked`.
 
-## Track-Prefixed Task IDs
+## Per-Track Task IDs
+
+Every track uses the same plain `<STAGE>0` ledger keys. The namespace is the **worktree**, not
+the key: each track has its own `.context/state.json` under its own worktree, so two tracks both
+writing `PL0` never share a ledger and cannot collide. Track-offset ids would additionally break
+every hardcoded `PL0`/`AR0`/`FN0` reader and the `PL is always PL0 only` rule in
+`../shared/state-ledger.md`.
 
 ```
-Track 1: t1-1 (PL0), t1-2 (AR0), t1-3 (DV0), t1-4 (DR0), t1-5 (QA0)
-Track 2: t2-1 (PL1), t2-2 (AR1), t2-3 (DV1), t2-4 (DR1), t2-5 (QA1)
+Track 1: PL0, AR0, DV0, DR0, QA0
+Track 2: PL0, AR0, DV0, DR0, QA0   ← own worktree, own ledger
 ```
 
-```typescript
-// stageIndex = track - 1: Track 1→PL0, Track 2→PL1, …
-const stageIndex = track - 1;
-TaskCreate({
-  taskId: `t${track}-1`,
-  subject: `PL${stageIndex}: Planning - Issue #${issueNumber}`,
-  metadata: {
-    stage: "PL", agent: "corpflow:product-manager",
-    issue_number: issueNumber, track: track,
-    workspace_path: `.worktrees/${group}/${issueNumber}`,
-    isolation: "worktree",
-    megatask_group: group, milestone: milestoneOrNull,
-    fn_gate: "bypass", plan_gate: "bypass",  // megatask bypasses both default-checkpoint gates
-    decision_gate: "auto"  // unattended: open questions → Fable decision pass; escalate → park issue
-  }
-});
+### Seeding a track's PL
+
+```bash
+# megatask bypasses both default-checkpoint gates; decision_gate=auto means open
+# questions go to a Fable decision pass and an escalation parks the issue.
+state-patch.sh --task-create "PL0" --metadata "$(jq -n \
+  --argjson issue "$ISSUE_NUMBER" --argjson track "$TRACK" \
+  --arg group "$GROUP" --arg ms "$MILESTONE_OR_EMPTY" \
+  '{stage:"PL", agent:"corpflow:product-manager",
+    description:"Planning - Issue #\($issue)",
+    issue_number:$issue, track:$track,
+    workspace_path:".worktrees/\($group)/\($issue)",
+    isolation:"worktree",
+    megatask_group:$group, milestone:(if $ms == "" then null else $ms end),
+    fn_gate:"bypass", plan_gate:"bypass",
+    decision_gate:"auto"}')"
 ```
 
 ## Base Branch Resolution

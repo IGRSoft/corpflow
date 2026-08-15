@@ -1,10 +1,10 @@
 ---
 name: worktask
-description: Initialize a new worktask task with proper folder structure and Task System integration
+description: Initialize a new worktask task with proper folder structure and state-ledger integration
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]]'
 version: 0.4.0
 model: opus
-allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCreate, TaskUpdate, TaskGet, TaskList, Task(corpflow:product-manager)
+allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Task(corpflow:product-manager)
 ---
 
 > **EXECUTION MODEL (BINDING)** — two gates, two human checkpoints, plus an optional decision delegate.
@@ -24,12 +24,12 @@ allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), TaskCre
 
 # Worktask Command
 
-Initialize a new worktask task with proper folder structure and Task System integration.
+Initialize a new worktask task with proper folder structure and state-ledger integration.
 
 > **CRITICAL CONSTRAINTS**
-> - MUST use TaskCreate/TaskUpdate/TaskGet/TaskList for worktask state. Do NOT use Claude Code's built-in plan mode.
-> - Every stage MUST be a Task System task. Do NOT skip TaskCreate.
-> - If Task tools are unavailable, STOP and report. Do NOT fall back to alternative planning.
+> - MUST use `.context/state.json` `tasks{}` for worktask state, written only via `state-patch.sh`. Do NOT use Claude Code's built-in plan mode.
+> - Every stage MUST have a ledger entry. Do NOT skip seeding one.
+> - If the ledger cannot be read or written, STOP and report. Do NOT fall back to alternative planning.
 
 ## Usage
 
@@ -98,7 +98,7 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 ## Phase 1: Planning (execute immediately)
 
 > **BINDING CONSTRAINTS FOR PHASE 1**
-> 1. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/designs .context/images .context/errors` and TaskCreate/TaskUpdate calls are permitted. ALL file modifications belong to DV stage or later.
+> 1. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/designs .context/images .context/errors` and `state-patch.sh` ledger writes are permitted. ALL file modifications belong to DV stage or later.
 
 ### Phase 1 binding constraint 2 — Context-Interruption Recovery
 
@@ -112,11 +112,11 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 
 ### Step 3a — Initialize state.json (handoff-protocol)
 
-3a. **Initialize state.json (handoff-protocol)**: Atomic-write `.context/state.json` seed using temp+fsync+rename per `skills/worktask/references/handoff-protocol.md#atomic-write`. PL0 stage marked `in_progress`. Schema per `handoff-protocol.md#state-json-schema`. **Re-run aware**: the seed MUST compute the next free planning index from any pre-existing `.context/planning-*.md` (NOT hard-code `0`) — on a re-run in a populated `.context/`, hard-coding `planning-0.md` would pin the old plan and cause PL0 to overwrite it. Backward-compat: if creation fails (e.g. read-only filesystem), log a warning and continue — F1 fallback (`metadata.context_files` mode) keeps the worktask operational.
+3a. **Initialize state.json (handoff-protocol)**: Atomic-write `.context/state.json` seed using temp+fsync+rename per `skills/worktask/references/handoff-protocol.md#atomic-write`. PL0 stage marked `in_progress`. Schema per `handoff-protocol.md#state-json-schema`. **Re-run aware**: the seed MUST compute the next free planning index from any pre-existing `.context/planning-*.md` (NOT hard-code `0`) — on a re-run in a populated `.context/`, hard-coding `planning-0.md` would pin the old plan and cause PL0 to overwrite it. If creation fails (e.g. read-only filesystem), STOP and report — the ledger is mandatory and there is no degraded mode that keeps the worktask correct without it.
 
 #### Step 3a snippets — init procedure
 
-   The re-run-aware next-free-planning-index resolver (N=0 on a fresh `.context/`, nullglob-safe) and the atomic `state.json` seed write are canonical in `skills/worktask/references/initialization-patterns.md`. Compute N, then atomic-write the seed (`{version:1, worktask_id, plan_file: .context/planning-${N}.md, platform, run_index:N, metadata.workspace_path, stages.PL.status:in_progress, facts.goal seeded from the task description plus the otherwise-empty facts incl. dispatched_agents:[], handoffs:{}}`) per `handoff-protocol.md#atomic-write`.
+   The re-run-aware next-free-planning-index resolver (N=0 on a fresh `.context/`, nullglob-safe) and the atomic `state.json` seed write are canonical in `skills/worktask/references/initialization-patterns.md`. Compute N, then atomic-write the seed (`{version:2, worktask_id, plan_file: .context/planning-${N}.md, platform, run_index:N, metadata.workspace_path, tasks.PL0.status:in_progress, facts.goal seeded from the task description plus the otherwise-empty facts incl. dispatched_agents:[], handoffs:{}}`) per `handoff-protocol.md#atomic-write`.
 
 #### Step 3a — seed `metadata.workspace_path` (UNCONDITIONAL)
 
@@ -135,7 +135,7 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 
 #### Step 3a field notes
 
-   `facts.dispatched_agents: []` is seeded (additive, version:1) so the orchestrator loop appends per-`task_id` dispatch entries in place. The other v1 additive fields (`stages.<CODE>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are written on demand — do NOT seed them; their absence is meaningful. See `handoff-protocol.md#state-json-schema`.
+   `facts.dispatched_agents: []` is seeded (additive) so the orchestrator loop appends per-`task_id` dispatch entries in place. The other v1 additive fields (`tasks.<ID>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are written on demand — do NOT seed them; their absence is meaningful. See `handoff-protocol.md#state-json-schema`.
 ### Step 3b — Verify SubagentStop hook installed
 
 3b. **Verify SubagentStop hook installed**: After state.json seed, verify `.claude/hooks/state-merge.sh` exists and is executable AND the plugin's `plugin.json` registers the SubagentStop hook entry. If the project-local hook is missing, copy from `<plugin-root>/.claude/hooks/state-merge.sh` (resolved in the snippet below). This hook is the Layer 2 safety net that patches state.json when agents skip self-patching. See `initialization-patterns.md#hook-installation`.
@@ -158,7 +158,7 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
    **Regression guard**: If neither the plugin-registered hook NOR the project-local copy exist, emit a warning: `"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge (Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."` Do NOT block the worktask.
 ### Step 3c — Name the branch once (PL start)
 
-3c. **Name the branch — UNCONDITIONAL**: after the state.json seed and before `TaskCreate`
+3c. **Name the branch — UNCONDITIONAL**: after the state.json seed and before seeding PL0
    for PL0, run `bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"`.
    This is the ONLY place a worktask branch is ever renamed — the once-only rule per
    `skills/shared/git-conventions.md § Branch Naming`. The *planned* name on the ledger may
@@ -324,9 +324,9 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
    no STOP, no retry, no rename. A rename at this point would violate the once-only rule,
    and a naming problem is never worth failing a worktask over.
 
-### Step 4 — TaskCreate PL0
+### Step 4 — attach PL0 metadata
 
-4. **TaskCreate PL0**: `TaskCreate({ subject: "PL0: Planning", description: "<task description>", metadata: { stage: "PL", agent: "corpflow:product-manager", model: "opus", worktask_id: "<slug>", priority: "<priority>", plan_gate: "checkpoint", decision_gate: "user", fn_gate: "checkpoint", isolation: "worktree", workspace_path: "<resolved root>" } })` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`corpflow:`, `apple-developer:`, etc.).
+4. **Attach PL0 metadata**: the Step 3a seed already created `tasks.PL0`, so this step MERGES its metadata rather than creating the task — `--task-create` would hit the create op's idempotent early-exit and drop the payload silently. `state-patch.sh --task-meta PL0 --set '{"stage":"PL","agent":"corpflow:product-manager","model":"opus","worktask_id":"<slug>","priority":"<priority>","plan_gate":"checkpoint","decision_gate":"user","fn_gate":"checkpoint","isolation":"worktree","workspace_path":"<resolved root>","description":"<task description>"}'` — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`corpflow:`, `apple-developer:`, etc.).
 
 #### Step 4 — workspace_path stamping
 
@@ -346,14 +346,14 @@ Also stamp `decision_gate`: default `decision_gate: "user"` (PL open questions s
 
 ### Steps 5–6 — Dispatch the PL agent
 
-5. **TaskUpdate PL0 → in_progress**: `TaskUpdate({ taskId: "<pl0_id>", status: "in_progress" })`
+5. **PL0 → in_progress**: `state-patch.sh --task-status PL0 in_progress`
 6. **Delegate to PL agent**: `Task({ subagent_type: "corpflow:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative. Glob+increment applies to a **new run** only: a plan-gate revision re-dispatches PM with `plan_revision: true` and reuses the frozen index (§ Plan-revision re-dispatch).
 #### Step 6 — record dropped stages
 
    - **Record dropped and added stages**: when PL0's dynamic sizing omits any of the full 9-stage pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PM stamps the PL0 task's `metadata.skipped_stages` (`{stage, reason}` list) so `state.json` self-documents the drops; when PL0 includes a stage beyond the tier default (AR0 forced at a low tier, TL0 at any tier), it stamps the symmetric `metadata.added_stages` with the identical `{stage, reason}` shape. See `agents/product-manager.md § Dynamic Worktask Sizing (PL0 Stage)`.
 ### Steps 7–8 — Complete PL0 and present the plan
 
-7. **TaskUpdate PL0 → completed**: `TaskUpdate({ taskId: "<pl0_id>", status: "completed" })`
+7. **PL0 → completed**: `state-patch.sh --task-status PL0 completed`
 8. **Present plan summary**: Show complexity score, stages created (with agents), dependency chain, and key decisions, then continue to Phase 2, which runs the Plan Gate Check (Step A.5) before the stage loop.
 
 ## Phase 2: Execute Stages (proceeds automatically)
@@ -362,7 +362,7 @@ Phase 2 begins with the Auto-Decision Pre-Pass (Step A.4, no-op unless `decision
 
 ### Step A.4 — Auto-Decision Pre-Pass (runs before Step A.5)
 
-Read `PL0.metadata.decision_gate` via `TaskGet` (default `"user"` when absent) and PL0's
+Read `tasks.PL0.metadata.decision_gate` from the ledger (default `"user"` when absent) and PL0's
 `open_questions[]` (typed handoff / plan-frontmatter — the numbered elicitation list from
 `agents/product-manager.md § Plan-Gate Open-Question Batching`). This step is a **no-op** when
 `decision_gate == "user"` or `open_questions[]` is empty/absent — fall through to Step A.5.
@@ -477,7 +477,7 @@ or pushed.
 
 ### Step A.5 — Plan Gate Check (runs after Step A.4, before Step A publish)
 
-Read `PL0.metadata.plan_gate` via `TaskGet` (default `"checkpoint"` when absent). Resolve the run
+Read `tasks.PL0.metadata.plan_gate` from the ledger (default `"checkpoint"` when absent). Resolve the run
 index `N` from `state.json.run_index` (default `0`).
 
 #### Plan gate checkpoint path
@@ -555,7 +555,7 @@ the old index, and splits the published-issue record. Re-dispatch product-manage
 |---|---|---|
 | 1 | Edit the existing `planning-<N>.md` in place | Allocate `planning-<N+1>.md` |
 | 2 | Patch `facts.*` additively — `facts.decisions[]` survives | Run the state.json reset |
-| 3 | `TaskUpdate` the existing stage tasks | `TaskCreate` a second stage chain |
+| 3 | Patch the existing stage tasks | Seed a second stage chain |
 | 4 | Leave the published GitHub issue as-is | Re-publish or re-anchor the issue |
 | 5 | Leave the refined `facts.branch` as-is | Re-run Step A.4b or re-refine — a revision is not a new naming window |
 
@@ -654,7 +654,7 @@ The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line
 
 #### Post-delegation state.json enforcement (BINDING)
 
-**BINDING: Post-delegation state.json enforcement** — After every `Task()` return (the *completed stage result* — under background-default subagents, that is the completion notification, not the launch acknowledgement; see `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5), before `TaskUpdate(stage→completed)`: re-read `.context/state.json`; if `stages.<CODE>.status` is NOT `completed`, run
+**BINDING: Post-delegation state.json enforcement** — After every `Task()` return (the *completed stage result* — under background-default subagents, that is the completion notification, not the launch acknowledgement; see `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5), before the `completed` patch: re-read `.context/state.json`; if `tasks.<ID>.status` is NOT `completed`, run
    ```bash
    CLAUDE_ARTIFACT_PATH=".context/<artifact>-N.md" \
    CLAUDE_TASK_METADATA_STAGE="<CODE>" \
@@ -664,11 +664,11 @@ The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line
 
 ##### Layer-3 stamp and F3 fallback
 
-   `STATE_MERGE_VIA=step6_5` stamps `stages.<CODE>.completed_via=step6_5` so this synchronous Layer-3 path is distinguishable from the SubagentStop-hook Layer-2 default (`hook`). Then re-read; if STILL not `completed`, apply the F3 fallback (derive minimal patch from agent return text — the F3 patch stamps `completed_via: "f3"`). This covers environments where the SubagentStop hook never fired. Full three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5.
+   `STATE_MERGE_VIA=step6_5` stamps `tasks.<ID>.completed_via=step6_5` so this synchronous Layer-3 path is distinguishable from the SubagentStop-hook Layer-2 default (`hook`). Then re-read; if STILL not `completed`, apply the F3 fallback (derive minimal patch from agent return text — the F3 patch stamps `completed_via: "f3"`). This covers environments where the SubagentStop hook never fired. Full three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5.
 
 ### Step B — AR-reference check at DV completion
 
-Runs only when `.context/state.json` has a `stages.AR` entry (AR is optional — see `skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`). After DV0 completes and before dispatching DR0:
+Runs only when `.context/state.json` has a `tasks.AR0` entry (AR is optional — see `skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`). After DV0 completes and before dispatching DR0:
 
 ```bash
 STRICT_FLAG=""
@@ -688,7 +688,7 @@ skills/worktask/scripts/handoff-harness.sh --validate-frontmatter ".context/deve
 
 A warning is **not** a `missing_input` block and never stops the transition.
 
-**Early opt-in — `CORPFLOW_AR_REF_STRICT=1`.** Set the env var and the orchestrator passes `--strict`; violations become `fail:` lines with exit 1 and block the DR dispatch until DV fixes the reference. Use it to shake out dangling references before the next minor, which flips `--strict` to the default. The inverse guard (an architecture reference with no `stages.AR` entry) warns in both modes and never fails.
+**Early opt-in — `CORPFLOW_AR_REF_STRICT=1`.** Set the env var and the orchestrator passes `--strict`; violations become `fail:` lines with exit 1 and block the DR dispatch until DV fixes the reference. Use it to shake out dangling references before the next minor, which flips `--strict` to the default. The inverse guard (an architecture reference with no `tasks.AR0` entry) warns in both modes and never fails.
 
 ## Phase 3: Post-Worktask Self-Improvement
 
@@ -789,7 +789,7 @@ returning to the orchestrator.
 
 ## Headless Dispatch (external runners)
 
-External orchestrators (CI, cron, the user's shell) can invoke a single stage via `claude agents run …` instead of the in-process Task() path. PL0 populates the optional dispatch fields documented in `skills/shared/task-system.md § Dispatch metadata`; the runner reads them and builds the flag string. Full table and per-stage examples live in `skills/agent-coordination/references/headless-dispatch.md`.
+External orchestrators (CI, cron, the user's shell) can invoke a single stage via `claude agents run …` instead of the in-process Task() path. PL0 populates the optional dispatch fields documented in `skills/shared/state-ledger.md § Dispatch metadata`; the runner reads them and builds the flag string. Full table and per-stage examples live in `skills/agent-coordination/references/headless-dispatch.md`.
 
 ### Canonical one-liner & runner rules
 

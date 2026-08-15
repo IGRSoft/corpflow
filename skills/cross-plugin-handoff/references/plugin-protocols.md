@@ -145,7 +145,7 @@ IF external_agent_fails:
   2. IF critical_task:
        Retry with same context (max 3 attempts)
        IF still_fails:
-         TaskUpdate({ taskId, status: "pending" })  // Reset for manual handling
+         state-patch.sh --task-status "<ID>" pending   # Reset for manual handling
          Create blocker task
      ELSE:
        Mark partial completion

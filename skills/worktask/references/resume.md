@@ -1,12 +1,12 @@
 # Resume After Interruption — full procedure
 
-Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (stub). The orchestrator loop is restartable. On reattach (PostCompact, session crash, `--resume` flag), diagnose state via `TaskList()` + `.context/logs/audit.jsonl` tail before resuming.
+Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (stub). The orchestrator loop is restartable. On reattach (PostCompact, session crash, `--resume` flag), diagnose state via `.context/state.json` `tasks{}` + the `.context/logs/audit.jsonl` tail before resuming.
 
 ## State → Action Table
 
 ### Initialization rows
 
-| TaskList Shape | Audit Tail | Action |
+| Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | No tasks | — | Worktask never initialized. Start over with `/worktask <task>` |
 | PL0 only, `pending` | — | PL0 not started. Delegate PL0; after PL0 completes, the Step A.5 plan gate applies (STOP for approval unless `plan_gate == "bypass"`) |
@@ -24,21 +24,21 @@ refinement of `facts.branch` never registers as an external rename.
 
 ### Branch-target refinement row
 
-| TaskList Shape | Audit Tail | Action |
+| Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | PL0 `completed`, stage tasks `pending` | No `branch_target_refined` row for `PL<run_index>` | The one-shot refinement of the planned branch name has not run. Run `commands/worktask.md § Step A.4b` once, then continue to the plan-gate row below. The helper is self-guarding (it scans the audit log for a prior successful row), so a duplicate invocation is a `noop`, never a second refinement — and it performs no git mutation, so running it on resume cannot disturb the working tree. A resumed orchestrator reads `facts.branch` from the ledger and MUST NOT re-run `branch-name.sh` in rename mode; re-derivation is what would silently discard a refined value. |
 
 ### Plan-gate row
 
-| TaskList Shape | Audit Tail | Action |
+| Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | PL0 `completed`, stage tasks `pending`, no stage `in_progress` | No `approval_received` audit line for PL<run_index> | Before branching on `plan_gate`, run Step A.4b if no `branch_target_refined` row exists for `PL<run_index>` (row above) — the gate summary must carry the final name. Then branch on `PL<run_index>.metadata.plan_gate`. If `"bypass"` (`--auto=[plan]` / `--emergency`, or stamped by `/megatask`): stages not yet dispatched — re-enter the stage loop and delegate the first unblocked stage; do NOT stop. If `"checkpoint"` (default): parked at the post-plan human checkpoint — STOP and prompt for approval; proceed only once an `approval_received` line with `subject:"PL<run_index>"` is logged. |
 
 ### Plan-revision row
 
-| TaskList Shape | Audit Tail | Action |
+| Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
-| PL0 `in_progress`, stage tasks present | `plan_revision_dispatched` for `PL<run_index>` with no later `approval_received` | Plan revision in flight (gate rejection). NOT the fresh-run path — a plain PL0 re-delegate would allocate `planning-<N+1>`, reset `facts.*`, and `TaskCreate` a duplicate chain. If the Step 0 pre-check shows the PM agent still live, leave/reattach per the live-agent rows; only if it is gone, re-dispatch PM **with `plan_revision: true`** and the original rejection feedback — if the feedback is no longer in context (compaction), ask the user to restate it rather than dispatching without it (`commands/worktask.md § Plan-revision re-dispatch` — frozen `run_index`/`plan_file`, no state.json reset, `TaskUpdate` only). On PM's return, re-enter the plan gate at Step A.5. |
+| PL0 `in_progress`, stage tasks present | `plan_revision_dispatched` for `PL<run_index>` with no later `approval_received` | Plan revision in flight (gate rejection). NOT the fresh-run path — a plain PL0 re-delegate would allocate `planning-<N+1>`, reset `facts.*`, and seed a duplicate chain. If the Step 0 pre-check shows the PM agent still live, leave/reattach per the live-agent rows; only if it is gone, re-dispatch PM **with `plan_revision: true`** and the original rejection feedback — if the feedback is no longer in context (compaction), ask the user to restate it rather than dispatching without it (`commands/worktask.md § Plan-revision re-dispatch` — frozen `run_index`/`plan_file`, no state.json reset, in-place patches only). On PM's return, re-enter the plan gate at Step A.5. |
 
 #### Plan-revision row — the branch target is not re-refined
 
@@ -46,27 +46,27 @@ A revision leaves the refined `facts.branch` as-is and never re-refines: the onc
 
 ### Auto-decision row
 
-| TaskList Shape | Audit Tail | Action |
+| Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | PL0 `completed`, stage tasks `pending`, `PL0.metadata.decision_gate == "auto"`, PL0 handoff carries non-empty `open_questions[]` | `auto_decision_dispatched` for `PL<run_index>` present but no matching `auto_decision_resolved` | Auto-decision pass interrupted mid-delegate. Re-run `commands/worktask.md § Step A.4` — already-applied decisions are visible as `(auto-decided)` entries in `facts.decisions[]`; do not re-decide those — then continue to the plan-gate row above. Unanswered `escalate` items always STOP for the user, even on a `bypass` plan gate (a `/megatask` per-issue run never reaches this row — it parks instead: settled `failed` + `parked_escalation`, `commands/worktask.md § Step A.4 Escalation guard`). |
 
 ### Mid-stage & FN-gate rows
 
-| TaskList Shape | Audit Tail | Action |
+| Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | PL0 `completed`, `approval_received` present, some stages `in_progress` | most recent `subagent_stopped` `result: error` | Mid-stage failure. Read `.context/errors/<agent>.md`, honor `retry_count` |
 | PL0 `completed`, all stages `completed` except FN, FN `pending`, audit tail has `fn_gate_waiting` for FN | No `approval_received` audit line for `FN<run_index>` | At the FN gate, parked. Branch on `PL<run_index>.metadata.fn_gate` (default `"checkpoint"`). If `"checkpoint"`: re-present the pre-FN summary (`references/fn-gate.md`), STOP, and delegate FN only once an `approval_received` line with `subject:"FN<run_index>"` is logged. If `"bypass"` (`--auto=[finalization]` / `--emergency`, or stamped by `/megatask`): proceed — delegate FN. |
 
 ### Near-done & stale rows
 
-| TaskList Shape | Audit Tail | Action |
+| Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | PL0 `completed`, all stages `completed` except FN | — | Near-done. Re-enter loop; the FN gate check (step 4.9) decides whether to STOP (`checkpoint`) or proceed (`bypass`) |
 | Stages `in_progress` with no `metadata.retry_count` | missing audit lines | Stale task state. Re-derive from most recent `.context/logs/` capture |
 
 ### Live-agent rows — liveness branch
 
-| TaskList Shape | Audit Tail | Action |
+| Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | Any stage `in_progress` AND `claude agents --json --all` shows live `agent_id` matching that stage | — | Subagent still alive. Branch on `{state, waitingFor}` (see Resume Procedure step 0) — never blind re-delegate a live agent |
 | Live `agent_id` matching that stage AND `waitingFor` = `approval`/`input` | — | Agent parked **on us**. Cheap `SendMessage` reattach with the awaited answer — do not re-delegate |
@@ -75,7 +75,7 @@ A revision leaves the refined `facts.branch` as-is and never re-refines: the onc
 
 ### Live-agent rows — parked or gone
 
-| TaskList Shape | Audit Tail | Action |
+| Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | `agent_id` for an `in_progress` stage shows `state: blocked` | — | Alive but parked. Reattach via `SendMessage` — do not re-delegate |
 | `agent_id` absent from `claude agents --json --all` (or `state: done`) for an `in_progress` stage | — | Agent gone. Re-delegate from the first incomplete stage |
@@ -83,7 +83,7 @@ A revision leaves the refined `facts.branch` as-is and never re-refines: the onc
 
 ### Mid-stage yield
 
-| TaskList Shape | Audit Tail | Action |
+| Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | Stage returned (not live, not errored) but the artifact is absent, or present with no `handoff.verdict` | `stage_returned_incomplete` | Reattach via `SendMessage`; never re-delegate |
 
@@ -117,7 +117,7 @@ redoes work against a tree the yielded agent already edited — and do **not** i
    - **entry `status: completed|failed`** (terminal) → the stage already resolved; do not reattach — advance to the next incomplete stage. (Terminal entries are eviction candidates and may be absent after compaction; treat absence as "no live agent".)
 #### Worktree re-entry
 
-   - **`stages.<CODE>.worktree.path` recorded** → re-enter the exact worktree with `EnterWorktree(path)` before resuming that stage (mid-session worktree switching), so DR/QA/DV-retry run in the right directory rather than the shared checkout. The recorded `worktree.branch` gives the branch without shelling `git rev-parse`.
+   - **`tasks.<ID>.worktree.path` recorded** → re-enter the exact worktree with `EnterWorktree(path)` before resuming that stage (mid-session worktree switching), so DR/QA/DV-retry run in the right directory rather than the shared checkout. The recorded `worktree.branch` gives the branch without shelling `git rev-parse`.
 
 ### Step 0 notes — state-signal reliability
 
@@ -156,7 +156,7 @@ redoes work against a tree the yielded agent already edited — and do **not** i
 ### Steps 1–7 — replay & audit
 
 1. `tail -n 50 .context/logs/audit.jsonl | jq .` — last 50 audit lines
-2. `TaskList()` — current Task System state
+2. `.context/state.json` `tasks{}` — current ledger state
 3. Cross-reference with `stage-contracts.md` — identify first incomplete stage
 4. Re-read that stage's `.context/*.md` artifact (if partial)
 5. If `metadata.retry_count > 0`, read `.context/errors/<agent>.md` for retry history

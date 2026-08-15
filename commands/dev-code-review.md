@@ -28,7 +28,7 @@ Perform a **recall-first, read-only** developer code review using specialized de
 
 ### Disambiguation (DR gate vs CC-native reviews)
 
-> **Disambiguation**: This plugin command (`/dev-code-review`) is the **DR stage** review — read-only analysis; DV applies the fixes. It is distinct from two CC-native commands: `/code-review --fix` (applies findings directly to the working tree) and `/simplify` (cleanup-only structural review). Use `/dev-code-review` when you want the corpflow governed review gate with stage contracts and audit trail; use the CC-native commands for quick ad-hoc fixes outside the worktask pipeline.
+> **Disambiguation**: This plugin command (`/dev-code-review`) is the **DR stage** review — read-only analysis; DV applies the fixes. It is distinct from the CC-native commands: `/code-review` (with `/review` as its alias since CC 2.1.223) reviews the current diff or a PR and applies findings with `--fix`; `/code-review ultra` runs a deep multi-agent cloud review; `/simplify` is a cleanup-only structural review. At high, xhigh, and max effort `/code-review` runs as a background agent (CC 2.1.232), so it returns via completion notification rather than inline. Use `/dev-code-review` when you want the corpflow governed review gate with stage contracts and audit trail; use the CC-native commands for quick ad-hoc fixes outside the worktask pipeline.
 
 ## Your Job (read this first)
 

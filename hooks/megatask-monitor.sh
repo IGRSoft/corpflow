@@ -153,7 +153,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   "issues":[
     {"number":41,"priority":"P0","status":"in_progress","track":1,"level":0,"blocked_by":[],"blocks":[42]},
     {"number":42,"priority":"P1","status":"blocked","track":null,"level":1,"blocked_by":[41],"blocks":[]}],
-  "tracks":{"1":{"issue_number":41,"task_prefix":"t1"},"2":{"issue_number":null,"status":"available"}},
+  "tracks":{"1":{"issue_number":41},"2":{"issue_number":null,"status":"available"}},
   "progress":{"total":2,"completed":0,"in_progress":1,"ready":0,"blocked":1,"failed":0} }
 EOF
   # Issue 41 reports completed via its workspace.json.

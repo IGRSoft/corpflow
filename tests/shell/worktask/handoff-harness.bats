@@ -128,9 +128,9 @@ dv_artifact() {
   } > "$path"
 }
 
-# state.sample.json has PL only; the gate keys off stages.AR presence.
+# state.sample.json has PL only; the gate keys off tasks.AR0 presence.
 state_with_ar() {
-  jq '.stages.AR = {"status":"completed","verdict":"ok"}' "$WD/state.json" > "$WD/state-ar.json"
+  jq '.tasks.AR0 = {"status":"completed","verdict":"ok"}' "$WD/state.json" > "$WD/state-ar.json"
 }
 
 @test "ar-gate: AR in state + missing ref => warn, exit 0 (default warn-only rollout)" {
@@ -182,7 +182,7 @@ state_with_ar() {
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv.md" --state "$WD/state.json"
   assert_success
   refute_output --partial "AR completed but"
-  refute_output --partial "but state has no stages.AR"
+  refute_output --partial "but state has no tasks.AR0"
 }
 
 @test "ar-gate: inverse guard — no AR in state + architecture ref => warn, exit 0 in BOTH modes" {
@@ -191,11 +191,11 @@ state_with_ar() {
 
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv.md" --state "$WD/state.json"
   assert_success
-  assert_output --partial "warn: DV references architecture-0.md#decisions but state has no stages.AR entry"
+  assert_output --partial "warn: DV references architecture-0.md#decisions but state has no tasks.AR0 entry"
 
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv.md" --state "$WD/state.json" --strict
   assert_success
-  assert_output --partial "warn: DV references architecture-0.md#decisions but state has no stages.AR entry"
+  assert_output --partial "warn: DV references architecture-0.md#decisions but state has no tasks.AR0 entry"
   refute_output --partial "fail:"
 }
 

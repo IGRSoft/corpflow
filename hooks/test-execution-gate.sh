@@ -586,17 +586,20 @@ resolve_stage() {
   [ -f "$_state" ] || { printf ''; return; }
   command -v jq >/dev/null 2>&1 || { printf ''; return; }
 
+  # Ledger keys are numbered (DV0, DV1); authority is per stage CODE, so parallel
+  # tracks of one stage collapse to a single unambiguous answer.
   _stages=$(jq -r '
-    if (.stages|type=="object") then
-      (.stages | to_entries | map(select(.value.status=="in_progress")) | map(.key))
+    if (.tasks|type=="object") then
+      (.tasks | to_entries | map(select(.value.status=="in_progress"))
+        | map(.key | sub("[0-9]+$"; "")) | unique)
     else [] end
     | join(",")
   ' "$_state" 2>/dev/null) || { printf ''; return; }
 
   case "$_stages" in
     # Empty (no stage in progress — the common between-stage window and every
-    # non-worktask session) or more than one (ambiguous — cannot tell which
-    # of two concurrent stages issued this call) both resolve to unknown.
+    # non-worktask session) or more than one DISTINCT stage (ambiguous — cannot
+    # tell which issued this call) both resolve to unknown.
     *,*|"") printf ''; return ;;
   esac
 
@@ -608,7 +611,7 @@ resolve_stage() {
 
 # ---------------------------------------------------------------------------
 # ledger_settled <ctx> -> echoes "settled" when the ledger positively says NOBODY
-# is acting: state.json parses, .stages is a non-empty object, and zero entries
+# is acting: state.json parses, .tasks is a non-empty object, and zero entries
 # are in_progress. Empty for every other shape.
 #
 # This splits resolve_stage's single empty answer, which conflated two very
@@ -628,11 +631,11 @@ ledger_settled() {
   [ -f "$_state" ] || { printf ''; return; }
   command -v jq >/dev/null 2>&1 || { printf ''; return; }
 
-  _n_stages=$(jq -r 'if (.stages|type=="object") then (.stages|length) else 0 end' \
+  _n_stages=$(jq -r 'if (.tasks|type=="object") then (.tasks|length) else 0 end' \
     "$_state" 2>/dev/null) || { printf ''; return; }
   _n_active=$(jq -r '
-    if (.stages|type=="object")
-    then (.stages | to_entries | map(select(.value.status=="in_progress")) | length)
+    if (.tasks|type=="object")
+    then (.tasks | to_entries | map(select(.value.status=="in_progress")) | length)
     else 0 end
   ' "$_state" 2>/dev/null) || { printf ''; return; }
 
@@ -924,7 +927,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
 
   # DR + scoped bats -> deny
   _ctx1="$_tmp/dr/.context"; mkdir -p "$_ctx1"
-  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx1/state.json"
+  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx1/state.json"
   _p1='{"tool_name":"Bash","tool_input":{"command":"tests/vendor/bats-core/bin/bats tests/shell/foo.bats"}}'
   _o1=$(run_gate "$_p1" "$_ctx1")
   printf '%s' "$_o1" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
@@ -932,7 +935,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
 
   # DV + full run-tests.sh -> deny (DV holds scoped authority only)
   _ctx2="$_tmp/dv/.context"; mkdir -p "$_ctx2"
-  printf '{"stages":{"DV":{"status":"in_progress"}}}' > "$_ctx2/state.json"
+  printf '{"tasks":{"DV0":{"status":"in_progress"}}}' > "$_ctx2/state.json"
   _p2='{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}'
   _o2=$(run_gate "$_p2" "$_ctx2")
   printf '%s' "$_o2" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
@@ -952,7 +955,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
 
   # QA + full run-tests.sh -> allow
   _ctx3="$_tmp/qa/.context"; mkdir -p "$_ctx3"
-  printf '{"stages":{"QA":{"status":"in_progress"}}}' > "$_ctx3/state.json"
+  printf '{"tasks":{"QA0":{"status":"in_progress"}}}' > "$_ctx3/state.json"
   _p3='{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}'
   _o3=$(run_gate "$_p3" "$_ctx3")
   [ -z "$_o3" ] || { echo "test-execution-gate: self-test FAIL (QA full allow)"; _fail=1; }
@@ -966,7 +969,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   # Task carrying ban text -> allow, observe-only row, never deny
   # (a prose-matching deny here would refuse to dispatch this very policy)
   _ctx5="$_tmp/task/.context"; mkdir -p "$_ctx5"
-  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx5/state.json"
+  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx5/state.json"
   _p5='{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"Never run bats or pytest outside DV/QA"}}'
   _o5=$(run_gate "$_p5" "$_ctx5")
   [ -z "$_o5" ] || { echo "test-execution-gate: self-test FAIL (Task must never deny)"; _fail=1; }
@@ -982,7 +985,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
 
   # command_head only, never the full command, in a deny's audit row.
   _ctx6="$_tmp/redact/.context"; mkdir -p "$_ctx6"
-  printf '{"stages":{"SR":{"status":"in_progress"}}}' > "$_ctx6/state.json"
+  printf '{"tasks":{"SR0":{"status":"in_progress"}}}' > "$_ctx6/state.json"
   _p6='{"tool_name":"Bash","tool_input":{"command":"bats /secret/path/leak.bats -f token-abc123"}}'
   run_gate "$_p6" "$_ctx6" >/dev/null
   tail -n 1 "$_ctx6/logs/audit.jsonl" | jq -e '.metadata.command_head == "bats" and (.metadata | has("command") | not)' >/dev/null 2>&1 \
@@ -990,7 +993,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
 
   # Regression: a leading secret env assignment must not reach command_head.
   _ctx6b="$_tmp/redact-secret/.context"; mkdir -p "$_ctx6b"
-  printf '{"stages":{"SR":{"status":"in_progress"}}}' > "$_ctx6b/state.json"
+  printf '{"tasks":{"SR0":{"status":"in_progress"}}}' > "$_ctx6b/state.json"
   _p6b='{"tool_name":"Bash","tool_input":{"command":"API_KEY=sk-test-xyz pytest tests/"}}'
   run_gate "$_p6b" "$_ctx6b" >/dev/null
   tail -n 1 "$_ctx6b/logs/audit.jsonl" | jq -e '.metadata.command_head == "pytest" and (.metadata.command_head | test("sk-test-xyz|API_KEY") | not)' >/dev/null 2>&1 \
@@ -998,20 +1001,20 @@ if [ "$SELF_TEST" -eq 1 ]; then
 
   # CORPFLOW_TEST_GATE=off -> allow even for a banned stage
   _ctx7="$_tmp/off/.context"; mkdir -p "$_ctx7"
-  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx7/state.json"
+  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx7/state.json"
   _o7=$(CORPFLOW_TEST_GATE=off run_gate '{"tool_name":"Bash","tool_input":{"command":"bats foo.bats"}}' "$_ctx7")
   [ -z "$_o7" ] || { echo "test-execution-gate: self-test FAIL (escape hatch)"; _fail=1; }
 
   # DR + build-test --no-test -> allow (build-only stays permitted everywhere)
   _ctx8="$_tmp/buildonly/.context"; mkdir -p "$_ctx8"
-  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx8/state.json"
+  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx8/state.json"
   _o8=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"/system-developer:build-test --no-test"}}' "$_ctx8")
   [ -z "$_o8" ] || { echo "test-execution-gate: self-test FAIL (build-test --no-test)"; _fail=1; }
 
   # DR + Skill payload in its real {skill, args} shape -> --no-test allows,
   # bare denies (the flag lives in `args`, not in the skill name).
   _ctx8b="$_tmp/skill-args/.context"; mkdir -p "$_ctx8b"
-  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx8b/state.json"
+  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx8b/state.json"
   _p8b='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test","args":"--no-test"}}'
   _o8b=$(run_gate "$_p8b" "$_ctx8b")
   [ -z "$_o8b" ] || { echo "test-execution-gate: self-test FAIL (Skill args --no-test)"; _fail=1; }
@@ -1023,7 +1026,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   # `make test` reaches the classifier at all (the zero-fork prefilter used
   # to drop it before classification, allowing it at every banned stage).
   _ctx8d="$_tmp/make-test/.context"; mkdir -p "$_ctx8d"
-  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx8d/state.json"
+  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx8d/state.json"
   _o8d=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"make test"}}' "$_ctx8d")
   printf '%s' "$_o8d" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (make test must deny at DR)"; _fail=1; }
@@ -1031,7 +1034,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   # xcodebuild's action follows its options — the trailing-action shape must
   # classify identically to the action-first shape.
   _ctx8e="$_tmp/xcodebuild/.context"; mkdir -p "$_ctx8e"
-  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx8e/state.json"
+  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx8e/state.json"
   _o8e=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"xcodebuild -scheme MyApp -destination generic/platform=iOS test"}}' "$_ctx8e")
   printf '%s' "$_o8e" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (xcodebuild trailing test action)"; _fail=1; }
@@ -1041,11 +1044,11 @@ if [ "$SELF_TEST" -eq 1 ]; then
   # Regression: pure build/non-test commands on multi-purpose runners must
   # ALLOW at a banned stage — build-only stays permitted everywhere.
   _ctx9="$_tmp/gradle-build/.context"; mkdir -p "$_ctx9"
-  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx9/state.json"
+  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx9/state.json"
   _o9=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./gradlew assembleDebug"}}' "$_ctx9")
   [ -z "$_o9" ] || { echo "test-execution-gate: self-test FAIL (gradlew assembleDebug must allow)"; _fail=1; }
   _ctx9b="$_tmp/py-coverage/.context"; mkdir -p "$_ctx9b"
-  printf '{"stages":{"SR":{"status":"in_progress"}}}' > "$_ctx9b/state.json"
+  printf '{"tasks":{"SR0":{"status":"in_progress"}}}' > "$_ctx9b/state.json"
   _o9b=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"python3 tools/coverage_report.py"}}' "$_ctx9b")
   [ -z "$_o9b" ] || { echo "test-execution-gate: self-test FAIL (coverage_report.py must allow)"; _fail=1; }
 
@@ -1053,12 +1056,12 @@ if [ "$SELF_TEST" -eq 1 ]; then
   # signal — a real test run carrying `-c` must still classify (and deny) as
   # a test, not slip through as build-only.
   _ctx10="$_tmp/dashc-dr/.context"; mkdir -p "$_ctx10"
-  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx10/state.json"
+  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx10/state.json"
   _o10=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"swift test -c release"}}' "$_ctx10")
   printf '%s' "$_o10" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (swift test -c release must still deny at DR)"; _fail=1; }
   _ctx10b="$_tmp/dashc-dv/.context"; mkdir -p "$_ctx10b"
-  printf '{"stages":{"DV":{"status":"in_progress"}}}' > "$_ctx10b/state.json"
+  printf '{"tasks":{"DV0":{"status":"in_progress"}}}' > "$_ctx10b/state.json"
   _o10b=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"swift test -c release"}}' "$_ctx10b")
   printf '%s' "$_o10b" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (swift test -c release must deny DV-full)"; _fail=1; }
@@ -1067,7 +1070,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   # flags to run at all, so before the per-runner strip each of these was a
   # full suite that classified scoped and sailed past the DV deny.
   _ctx11="$_tmp/nonselecting-dv/.context"; mkdir -p "$_ctx11"
-  printf '{"stages":{"DV":{"status":"in_progress"}}}' > "$_ctx11/state.json"
+  printf '{"tasks":{"DV0":{"status":"in_progress"}}}' > "$_ctx11/state.json"
   while IFS= read -r _c; do
     [ -n "$_c" ] || continue
     _o11=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
@@ -1097,7 +1100,7 @@ EOF
   # QA keeps sole full-suite authority — the strip changes classification, not
   # who may run a full suite.
   _ctx11b="$_tmp/nonselecting-qa/.context"; mkdir -p "$_ctx11b"
-  printf '{"stages":{"QA":{"status":"in_progress"}}}' > "$_ctx11b/state.json"
+  printf '{"tasks":{"QA0":{"status":"in_progress"}}}' > "$_ctx11b/state.json"
   _o11b=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"xcodebuild test -project a.xcodeproj -scheme s -destination d"}}' "$_ctx11b")
   [ -z "$_o11b" ] || { echo "test-execution-gate: self-test FAIL (QA multi-flag xcodebuild allow)"; _fail=1; }
 
@@ -1164,7 +1167,7 @@ EOF
   # `go test -c` is build-only, so it is allowed at a BANNED stage too, not
   # merely at DV — the promise that compiling stays permitted everywhere.
   _ctx13="$_tmp/go-compile/.context"; mkdir -p "$_ctx13"
-  printf '{"stages":{"DR":{"status":"in_progress"}}}' > "$_ctx13/state.json"
+  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx13/state.json"
   _o15=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"go test -c ./pkg"}}' "$_ctx13")
   [ -z "$_o15" ] || { echo "test-execution-gate: self-test FAIL (go test -c is build-only everywhere)"; _fail=1; }
 
@@ -1187,7 +1190,7 @@ EOF
   # against a future edit to that limb quietly dropping the row, not a bug
   # catch, so do not delete it as a test that never fails.
   _ctx12="$_tmp/fn/.context"; mkdir -p "$_ctx12"
-  printf '{"stages":{"FN":{"status":"in_progress"}}}' > "$_ctx12/state.json"
+  printf '{"tasks":{"FN0":{"status":"in_progress"}}}' > "$_ctx12/state.json"
   _o13=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"swift test"}}' "$_ctx12")
   printf '%s' "$_o13" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (FN must have no test-execution authority)"; _fail=1; }
@@ -1198,7 +1201,7 @@ EOF
   # same command with nothing in_progress ALLOWS — so a dispatch loop that marks
   # stages in the Task System only leaves this gate inert, not merely quiet.
   _ctx14="$_tmp/re/.context"; mkdir -p "$_ctx14"
-  printf '{"stages":{"RE":{"status":"in_progress"}}}' > "$_ctx14/state.json"
+  printf '{"tasks":{"RE0":{"status":"in_progress"}}}' > "$_ctx14/state.json"
   _o20=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctx14")
   printf '%s' "$_o20" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (RE must have no test-execution authority)"; _fail=1; }
@@ -1209,7 +1212,7 @@ EOF
   # fail-open contract is unchanged and is asserted by the no-state.json case
   # above and the ambiguity case below — those are the shapes that protect an
   # unrelated session; a finished worktask is not one of them.
-  printf '{"stages":{"PL":{"status":"completed"},"RE":{"status":"completed"}}}' > "$_ctx14/state.json"
+  printf '{"tasks":{"PL0":{"status":"completed"},"RE0":{"status":"completed"}}}' > "$_ctx14/state.json"
   _o21=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctx14")
   printf '%s' "$_o21" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (settled ledger must deny)"; _fail=1; }
@@ -1221,7 +1224,7 @@ EOF
 
   # Ambiguity — two stages in_progress — still fails OPEN. Denying here would
   # wedge a session the gate cannot reason about.
-  printf '{"stages":{"DV":{"status":"in_progress"},"QA":{"status":"in_progress"}}}' > "$_ctx14/state.json"
+  printf '{"tasks":{"DV0":{"status":"in_progress"},"QA0":{"status":"in_progress"}}}' > "$_ctx14/state.json"
   _o23=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctx14")
   [ -z "$_o23" ] || { echo "test-execution-gate: self-test FAIL (ambiguous ledger must fail open)"; _fail=1; }
 
