@@ -318,6 +318,67 @@ Per-issue fallback chain (stored in `workspace.json` as `base_branch_source`):
 `feature/{issue#}-{slug}` — slug = lowercase title, spaces→hyphens, no special chars, max 50 chars.
 Canonical definition: `../shared/milestone-helpers/SKILL.md`.
 
+## Shared-Seam Registry
+
+A **seam** is a code surface more than one issue in the batch touches by name: a shared protocol,
+a dependency-injection extension point, a coordinator, or a shared test assertion. Parallel
+tickets cannot see each other's work in progress, so two of them will independently invent the
+same abstraction under different names unless one place tells them it already exists. A
+dependency graph built from issue-body cross-references cannot see this class at all — the
+tickets are genuinely independent; only their *seams* collide.
+
+### Registry location
+
+**Exactly one registry per batch**, in an issue body under a `## Shared Seams` H2. An issue body
+already exists, is already fetched at dispatch, and needs no lifecycle. Which issue hosts it is a
+rule, not a judgement call — two hosts would reproduce the very failure this prevents, with two
+tickets each reading a different registry and each concluding no seam exists:
+
+| Batch shape | Registry host |
+|---|---|
+| Exactly one level-0 issue (no `blocked_by`) — the **foundation issue** | that issue's body |
+| More than one level-0 issue, or none | the **milestone issue** (milestone mode) or the **orchestrator issue** (`--issues` array mode) |
+
+#### What "foundation issue" means
+
+The first row: the batch's *sole* level-0 issue, the one every other issue transitively depends
+on. A batch without one has no foundation issue, and its registry is at the batch level.
+
+**Convention, not a gate.** Nothing validates the registry this release. Its force comes from the
+per-issue prompt directing every issue to read it before introducing a shared abstraction
+(`../../commands/megatask.md § Phase 2 loop · Step 3`).
+
+### Registry schema
+
+One block per seam. `declaration` carries the **verbatim** signature with every parameter label
+in order — a name-only entry would not catch two issues agreeing on a concept but reversing an
+argument order, which is the failure that motivated this.
+
+````markdown
+## Shared Seams
+
+### NotificationDestinationPresence
+- kind: protocol | di-extension-point | coordinator | test-contract
+- status: planned | landed
+- owner: #<issue that introduces it>
+- consumers: #<issue>, #<issue>
+- location: <path/to/File.swift>
+- declaration:
+  ```swift
+  protocol NotificationDestinationPresence {
+      func setPresented(_ presented: Bool, for destination: Destination)
+  }
+  ```
+- change-protocol: adding or reordering a member requires updating this entry in the same PR
+  and naming every issue in `consumers:` in that PR's description.
+````
+
+#### Why consumers and change-protocol are mandatory
+
+`consumers:` plus `change-protocol:` are what make an additive change safe: adding a member to a
+shared protocol silently breaks every test double conforming to it, and the adder is the only
+party positioned to know.
+
 ## Orchestrator Pattern
 
 ### Initialization
