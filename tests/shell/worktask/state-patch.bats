@@ -309,6 +309,43 @@ setup() {
   [ ! -d .context/state.json.lock.d ]
 }
 
+@test "lock: the mtime probe keeps its format attached to the flag (GNU stdout-pollution guard)" {
+  # Separated (`stat -f %m`), GNU reads -f as --file-system, which takes no
+  # argument: the path becomes an operand, stat prints a filesystem block to
+  # stdout and exits non-zero, and `||` — testing status only — appends the
+  # fallback to that block. $mtime becomes junk, not empty. Attached is safe
+  # because GNU getopt rejects `-f%m` before anything reaches stdout. This
+  # asserts the source form, because the failure is unreachable on BSD/macOS.
+  run grep -nE 'stat -[fc] +%' "$PLUGIN_ROOT/$SCRIPT"
+  assert_failure
+  run grep -c 'stat -f%m .* || stat -c%Y ' "$PLUGIN_ROOT/$SCRIPT"
+  assert_output "1"
+}
+
+@test "lock: a non-numeric mtime probe is treated as un-ageable, not as age 0" {
+  cd "$WD"
+  # A junk probe must not reach the arithmetic. Shadow `stat` with the exact
+  # GNU-separated failure shape: multi-line stdout plus non-zero status.
+  mkdir -p "$WD/binshim" .context/state.json.lock.d
+  cat > "$WD/binshim/stat" <<'SHIM'
+#!/usr/bin/env bash
+printf '  File: "/x"\n    ID: 0 Namelen: 255\n'
+exit 1
+SHIM
+  chmod +x "$WD/binshim/stat"
+  # The discriminator is the arithmetic, not the log: without the numeric guard
+  # the junk reaches `age=$((now - mtime))`, whose first word is unset under
+  # `set -u`, and the run dies with "File: unbound variable". Asserting only
+  # "no 'lock stale' line" would pass either way — the aborted run prints no
+  # such line either. Verified by mutation: reverting the guard to the old
+  # emptiness test reproduces the unbound-variable abort.
+  PATH="$WD/binshim:$PATH" STATE_LOCK_TIMEOUT_S=1 STATE_LOCK_STALE_S=0 \
+    run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md \
+    --log .context/logs/lock.log
+  refute_output --partial "unbound variable"
+  refute_output --partial "lock stale"
+}
+
 @test "lock: EXIT-trap releases the lock even when the jq merge fails (release-on-fail)" {
   cd "$WD"
   # Corrupt state.json so the jq merge inside atomic_merge() fails (rc=1), then
