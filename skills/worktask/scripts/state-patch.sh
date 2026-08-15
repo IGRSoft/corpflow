@@ -291,9 +291,14 @@ disk_guard() {
 _lock_break_if_stale() {
   local lockdir="$1" mtime now age
   [[ -d "$lockdir" ]] || return 0
-  # stat -f %m (BSD/macOS) then -c %Y (GNU); degrade silently if neither parses.
-  mtime=$(stat -f %m "$lockdir" 2> /dev/null || stat -c %Y "$lockdir" 2> /dev/null || printf '')
-  [[ -z "$mtime" ]] && return 0
+  # stat -f%m (BSD/macOS) then -c%Y (GNU). The format MUST stay attached to the
+  # flag: separated, GNU reads -f as --file-system, which takes no argument, so
+  # the path becomes an operand and stat prints a filesystem block to stdout
+  # while exiting non-zero — `||` tests only status, so the fallback's value is
+  # appended to that block and $mtime becomes junk rather than empty.
+  mtime=$(stat -f%m "$lockdir" 2> /dev/null || stat -c%Y "$lockdir" 2> /dev/null || printf '')
+  # Non-numeric means neither probe parsed; treat as "cannot age the lock".
+  [[ "$mtime" =~ ^[0-9]+$ ]] || return 0
   now=$(date +%s 2> /dev/null || printf '')
   [[ -z "$now" ]] && return 0
   age=$((now - mtime))
