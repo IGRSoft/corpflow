@@ -607,6 +607,42 @@ resolve_stage() {
 }
 
 # ---------------------------------------------------------------------------
+# ledger_settled <ctx> -> echoes "settled" when the ledger positively says NOBODY
+# is acting: state.json parses, .stages is a non-empty object, and zero entries
+# are in_progress. Empty for every other shape.
+#
+# This splits resolve_stage's single empty answer, which conflated two very
+# different things. "Cannot tell who is acting" (no state.json, no jq,
+# unparseable, or >1 in_progress) must keep failing open — denying an unrelated
+# session would deadlock it. "Nobody is acting" is not an ambiguity: the worktask
+# has finished, or the loop is between stages, and no stage holds test authority
+# either way. Allowing there let a full suite run indefinitely after FN, which is
+# how a post-merge `./run-tests.sh` slipped through (#295).
+#
+# Note this cannot be evaded by cd'ing elsewhere: the caller reads
+# ${CLAUDE_PROJECT_DIR}/.context, the SESSION's ledger, not the cwd's.
+# ---------------------------------------------------------------------------
+ledger_settled() {
+  local _ctx="$1" _state _n_stages _n_active
+  _state="$_ctx/state.json"
+  [ -f "$_state" ] || { printf ''; return; }
+  command -v jq >/dev/null 2>&1 || { printf ''; return; }
+
+  _n_stages=$(jq -r 'if (.stages|type=="object") then (.stages|length) else 0 end' \
+    "$_state" 2>/dev/null) || { printf ''; return; }
+  _n_active=$(jq -r '
+    if (.stages|type=="object")
+    then (.stages | to_entries | map(select(.value.status=="in_progress")) | length)
+    else 0 end
+  ' "$_state" 2>/dev/null) || { printf ''; return; }
+
+  case "$_n_stages" in ''|*[!0-9]*) printf ''; return ;; esac
+  case "$_n_active" in ''|*[!0-9]*) printf ''; return ;; esac
+  [ "$_n_stages" -gt 0 ] && [ "$_n_active" -eq 0 ] && printf 'settled'
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # run_gate <payload json> <ctx dir> -> echoes decision JSON (deny) or nothing
 # (allow/observe). Appends an audit row for a deny or a Task observation.
 # Parameterized over .context/ so every branch is fixture-reachable, per the
@@ -687,7 +723,15 @@ run_gate() {
   esac
 
   _stage=$(resolve_stage "$_ctx")
-  [ -n "$_stage" ] || return 0  # no resolvable acting stage — allow
+  # A settled ledger is a deny, not an allow — see ledger_settled(). The sentinel
+  # is not a stage code, so it can never match the DV/QA authority arms below; it
+  # only selects its own deny reason.
+  _settled=""
+  if [ -z "$_stage" ]; then
+    [ "$(ledger_settled "$_ctx")" = "settled" ] || return 0  # cannot tell — allow
+    _settled=1
+    _stage="(none in progress)"
+  fi
 
   case "$_tool" in
     mcp__*test*)
@@ -786,7 +830,14 @@ run_gate() {
   # agent-serviceable — the hook reads process env, not the command string,
   # so a retry with a command-string prefix denies identically — so the text
   # frames it explicitly as a human ask, not a retry an agent can perform.
+  if [ -n "$_settled" ]; then
+    # Naming the real condition matters: reusing the per-stage text here would
+    # print "Stage '(none in progress)' has no authority", which reads as a bug
+    # and tells the caller nothing about why now is the wrong time.
+    _reason="No stage is in progress — this worktask is finished, or the loop is between stages, so nobody holds test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). Running a suite here gates no decision: the work it would verify is already committed or not yet dispatched. To proceed: (1) if a stage needs this, dispatch it and let DV (scoped) or QA (full) run it under its own authority, or (2) if you want evidence for work already merged, say so and ask a human first. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
+  else
   _reason="Stage '$_stage' has no test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). DV may run scoped tests only; QA is the sole full-suite authority. To proceed: (1) record requests_test_evidence: <what and why> in this stage's artifact so QA executes it, or (2) return verdict: blocked with error_escalated_to: \"DV\" if it blocks this stage's completion. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
+  fi
   _deny=$(jq -cn --arg reason "$_reason" '
     {hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}
   ') || return 0
@@ -1151,9 +1202,28 @@ EOF
   _o20=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctx14")
   printf '%s' "$_o20" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (RE must have no test-execution authority)"; _fail=1; }
+  # A SETTLED ledger — stages present, none in_progress — now DENIES (#295).
+  # This assertion is the reverse of the one shipped alongside the RE pair, and
+  # the reversal is the point: "nobody is acting" was being treated as "cannot
+  # tell who is acting", so a full suite stayed permitted forever after FN. The
+  # fail-open contract is unchanged and is asserted by the no-state.json case
+  # above and the ambiguity case below — those are the shapes that protect an
+  # unrelated session; a finished worktask is not one of them.
   printf '{"stages":{"PL":{"status":"completed"},"RE":{"status":"completed"}}}' > "$_ctx14/state.json"
   _o21=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctx14")
-  [ -z "$_o21" ] || { echo "test-execution-gate: self-test FAIL (no in_progress stage must fail open)"; _fail=1; }
+  printf '%s' "$_o21" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+    || { echo "test-execution-gate: self-test FAIL (settled ledger must deny)"; _fail=1; }
+
+  # A settled ledger must still allow everything that is not a test invocation,
+  # or a finished worktask could not run git, gh, or anything else.
+  _o22=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"git status"}}' "$_ctx14")
+  [ -z "$_o22" ] || { echo "test-execution-gate: self-test FAIL (settled must not block non-test commands)"; _fail=1; }
+
+  # Ambiguity — two stages in_progress — still fails OPEN. Denying here would
+  # wedge a session the gate cannot reason about.
+  printf '{"stages":{"DV":{"status":"in_progress"},"QA":{"status":"in_progress"}}}' > "$_ctx14/state.json"
+  _o23=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctx14")
+  [ -z "$_o23" ] || { echo "test-execution-gate: self-test FAIL (ambiguous ledger must fail open)"; _fail=1; }
 
   # Gradle's task token is found order-independently: flags before the task
   # must classify the same as task-first, in both fail directions.
