@@ -897,12 +897,24 @@ call and the orchestrator's own shell (`architecture-1.md § layering`, AR-7).
 
 ```
 
-#### Steps 5–5a
+#### Step 5
 
 ```typescript
-    // 5. Mark in_progress
+    // 5. Mark in_progress in BOTH ledgers. hooks/test-execution-gate.sh resolves the
+    //    acting stage from .context/state.json alone (never agent_type or an env var,
+    //    so nested delegates inherit it) — a Task-System-only mark leaves the gate
+    //    resolving nothing, and nothing means allow, for the whole stage. Keep the two
+    //    writes adjacent so they cannot drift apart again.
     TaskUpdate({ taskId: task.id, status: "in_progress" });
+    if (fs.existsSync(".context/state.json")) {
+      atomicMergeStateJson({ stages: { [full.metadata.stage]: { status: "in_progress" } } });
+    }
 
+```
+
+#### Step 5a
+
+```typescript
     // 5a. Resolve embedded commands for DV stages
     //     If worktask has embedded_commands metadata, inject Skill invocation into DV prompt
     if (full.metadata.stage === "DV" && worktask_embedded_commands) {

@@ -1141,6 +1141,20 @@ EOF
   printf '%s' "$_o13" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
     || { echo "test-execution-gate: self-test FAIL (FN must have no test-execution authority)"; _fail=1; }
 
+  # RE has no test-execution authority either, and unlike FN it is a stage that
+  # routinely wants a full run to confirm a version bump. The pair below is the
+  # coupling this gate depends on: a ledger with RE in_progress denies, and the
+  # same command with nothing in_progress ALLOWS — so a dispatch loop that marks
+  # stages in the Task System only leaves this gate inert, not merely quiet.
+  _ctx14="$_tmp/re/.context"; mkdir -p "$_ctx14"
+  printf '{"stages":{"RE":{"status":"in_progress"}}}' > "$_ctx14/state.json"
+  _o20=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctx14")
+  printf '%s' "$_o20" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+    || { echo "test-execution-gate: self-test FAIL (RE must have no test-execution authority)"; _fail=1; }
+  printf '{"stages":{"PL":{"status":"completed"},"RE":{"status":"completed"}}}' > "$_ctx14/state.json"
+  _o21=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctx14")
+  [ -z "$_o21" ] || { echo "test-execution-gate: self-test FAIL (no in_progress stage must fail open)"; _fail=1; }
+
   # Gradle's task token is found order-independently: flags before the task
   # must classify the same as task-first, in both fail directions.
   while IFS= read -r _c; do
