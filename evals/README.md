@@ -24,7 +24,11 @@ One row per kept, classified change:
 - **No diff bodies are ever stored** — counts and a redacted one-line summary only
 - Opt out with `SELF_IMPROVE_LABELS=0`
 
-Aggregate with `skills/self-improvement/scripts/label-stats.sh`.
+Aggregate with `skills/self-improvement/scripts/label-stats.sh`. It reports
+per-target and per-category counts, flags targets and categories at or above
+`--min-count=<n>` (default 3), and prints progress toward the 100-row taxonomy
+gate below. It reports only — acting on a repeat still goes through the human
+approval gate on a Step 5 proposal.
 
 ## `failure-taxonomy.md` (not yet written)
 
