@@ -165,6 +165,41 @@ MD
   assert_output "agents/developer.md"
 }
 
+# --- local plugin naming -----------------------------------------------------
+
+# The whole pipeline is gated on this set being non-empty: a ref classified as
+# cross-plugin is dropped, and an empty set makes map-and-filter discard every
+# change, so Step 5b never writes a label. These two cases are what would go red
+# if the accepted-prefix list narrowed back to a single hard-coded name.
+@test "legacy igrsoft: refs resolve to local files" {
+  cat > "$WD/tasks.json" <<'JSON'
+{"version":2,"tasks":{
+  "DV0":{"status":"completed","metadata":{"agent":"igrsoft:developer"}}
+}}
+JSON
+  run_script_env --cwd "$WD" \
+    --env "LEDGER_JSON=$WD/tasks.json" --env "CONTEXT_DIR=$WD/.ctx_none" \
+    -- "$SCRIPT"
+  assert_success
+  assert_output "agents/developer.md"
+}
+
+@test "the manifest's own plugin name is accepted as local" {
+  mkdir -p "$WD/.claude-plugin"
+  printf '{"name":"renamed-plugin","version":"9.0.0"}\n' > "$WD/.claude-plugin/plugin.json"
+  cat > "$WD/tasks.json" <<'JSON'
+{"version":2,"tasks":{
+  "DV0":{"status":"completed","metadata":{"agent":"renamed-plugin:developer"}},
+  "QA0":{"status":"completed","metadata":{"agent":"apple-developer:qa-engineer"}}
+}}
+JSON
+  run_script_env --cwd "$WD" \
+    --env "LEDGER_JSON=$WD/tasks.json" --env "CONTEXT_DIR=$WD/.ctx_none" \
+    -- "$SCRIPT"
+  assert_success
+  assert_output "agents/developer.md"
+}
+
 # --- empty inputs ------------------------------------------------------------
 
 @test "empty task list and empty context dir produce no output (exit 0)" {
