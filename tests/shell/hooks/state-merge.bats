@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # tests/shell/hooks/state-merge.bats — DV0c
-# Target: .claude/hooks/state-merge.sh
+# Target: hooks/state-merge.sh
 # Covers: F1 absent-state.json no-op, happy merge DV→completed, corrupt-ledger repair
 #         (rebuild + backup + audit row) and its fail-safe non-trigger path,
 #         absent-artifact no-op, state-patch.sh resolution from a project-local install.
@@ -9,7 +9,7 @@
 # Tests run via `bash -c "cd WD && ..."` to set the working directory correctly.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
-SCRIPT=".claude/hooks/state-merge.sh"
+SCRIPT="hooks/state-merge.sh"
 
 setup() {
   WD="$(mk_tmpworkdir)"

@@ -186,16 +186,18 @@ state_with_ar() {
 }
 
 @test "ar-gate: inverse guard — no AR in state + architecture ref => warn, exit 0 in BOTH modes" {
+  # `AR<N>` is literal in the warning: the gate matches any AR[0-9]+, so when none exists
+  # there is no index to name. Pinning AR0 would contradict the any-instance rule.
   dv_artifact "$WD/dv.md" 'decisions: architecture-0.md#decisions'
   printf -- '---\nhandoff:\n  stage: AR\n---\n\n# Architecture\n' > "$WD/architecture-0.md"
 
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv.md" --state "$WD/state.json"
   assert_success
-  assert_output --partial "warn: DV references architecture-0.md#decisions but state has no tasks.AR0 entry"
+  assert_output --partial "warn: DV references architecture-0.md#decisions but state has no tasks.AR<N> entry"
 
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv.md" --state "$WD/state.json" --strict
   assert_success
-  assert_output --partial "warn: DV references architecture-0.md#decisions but state has no tasks.AR0 entry"
+  assert_output --partial "warn: DV references architecture-0.md#decisions but state has no tasks.AR<N> entry"
   refute_output --partial "fail:"
 }
 

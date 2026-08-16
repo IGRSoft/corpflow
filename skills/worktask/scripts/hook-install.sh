@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # hook-install.sh — Idempotent installer for the state-merge.sh SubagentStop hook.
 #
-# Copies state-merge.sh from the plugin install directory to .claude/hooks/
+# Copies state-merge.sh from the plugin's hooks/ to the project's .claude/hooks/
 # and verifies the plugin.json registration. Safe to re-run.
 #
 # Usage:
@@ -65,7 +65,7 @@ install_hook() {
     return 1
   fi
 
-  local src="$plugin_root/.claude/hooks/state-merge.sh"
+  local src="$plugin_root/hooks/state-merge.sh"
   local dst=".claude/hooks/state-merge.sh"
 
   if [[ ! -f "$src" ]]; then
@@ -97,12 +97,12 @@ self_test() {
   td=$(mktemp -d -t hook-install-XXXXXX)
   trap "rm -rf '$td'" EXIT
 
-  mkdir -p "$td/plugin/.claude/hooks" "$td/plugin/.claude-plugin"
-  cat > "$td/plugin/.claude/hooks/state-merge.sh" <<'HOOK'
+  mkdir -p "$td/plugin/hooks" "$td/plugin/.claude-plugin"
+  cat > "$td/plugin/hooks/state-merge.sh" <<'HOOK'
 #!/usr/bin/env bash
 echo "state-merge stub"
 HOOK
-  chmod +x "$td/plugin/.claude/hooks/state-merge.sh"
+  chmod +x "$td/plugin/hooks/state-merge.sh"
 
   cat > "$td/plugin/.claude-plugin/plugin.json" <<'JSON'
 {"name":"test","hooks":{"SubagentStop":[{"hooks":[{"type":"command","command":"state-merge.sh"}]}]}}

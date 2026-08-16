@@ -2,6 +2,68 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.17] — 2026-08-16
+
+### Changed
+
+- **`state-merge.sh` ships from `hooks/` like every other hook.** It was the lone occupant
+  of `.claude/hooks/`, a split that bought nothing and cost a carve-out in every rule that
+  quantifies over hooks. Only the **plugin-root source path** moved: the project-local
+  install destination written by `hook-install.sh` is still `<project>/.claude/hooks/state-merge.sh`,
+  because that is Claude Code's per-project hook directory, not a corpflow convention. The
+  file is now executable, which is what `manifest-parity`'s AC-9 contract already required
+  of everything under `hooks/`; the exemption that excused it from the mode bit is gone.
+
+### Fixed
+
+- **The relocation would have silently disabled the Layer-2 net.** `state-merge.sh` locates
+  `state-patch.sh` — the only merge implementation — through `$CLAUDE_PLUGIN_ROOT` first and
+  a relative arm second. That arm read `${HOOK_DIR}/../..`, which is the plugin root from
+  `.claude/hooks/` but its *parent* from `hooks/`, so the shipped copy resolved a path with
+  no `skills/` tree under it. A SubagentStop hook must never block a stage transition, so the
+  not-found branch exits 0 — the failure mode is not a crash but a merge that quietly stops
+  happening, the same silent-net class as the cwd bug fixed in 4.0.16. Both arms (dispatch
+  path and `--self-test`) now go up one level. Six of the eleven `state-merge.bats` cases
+  caught it; the two that stayed green were the ones passing `CLAUDE_PLUGIN_ROOT` explicitly.
+
+- **Version parity was red before this release.** `plugin.json` read 4.0.16 while
+  `marketplace.json` and `README.md` still read 4.0.15, so `manifest-parity` AC-4 failed on a
+  clean checkout of 4.0.16. All four sites now agree.
+
+- **The `state_repair` audit row recorded an absolute backup path.** 4.0.16 moved the hook onto
+  a resolved `WORKSPACE_DIR`, which made `STATE_FILE` — and with it the backup path derived from
+  it — absolute, so the row leaked the worktree it happened to fire in. `handoff-protocol.md` F4
+  names the backup `.context/state.json.corrupt.<iso-ts>` and the sibling `artifact` field in the
+  same row is workspace-relative; the row now matches both. Filesystem operations still use the
+  absolute path — only what is written to the trail changed.
+
+- **The AR-gate test pinned an index the gate deliberately does not name.** `handoff-harness.sh`
+  matches any `AR[0-9]+` ("did AR run", not "did AR0 run"), so when no entry exists there is no
+  index to report and the warning says `tasks.AR<N>`. The test asserted `tasks.AR0`, contradicting
+  the any-instance rule it was meant to guard. The test now matches; no behaviour changed.
+
+### Documentation
+
+- **A green test run no longer reads as a measured skill eval.** `tests/python/test_skill_evals.py`
+  described itself as grading "captured responses," and `evals/README.md` said every case "is
+  graded by binary, code-checked assertions" — but no capture step exists: nothing dispatches
+  the case prompts and no responses are stored. What runs offline is the assertion engine
+  against hand-built fixture plans plus the eval-set lint. Both files now say so, and
+  `benchmark/README.md`'s totals line no longer counts them as "skill-eval tests green".
+
+- **Published test counts were stale and mutually contradictory.** `tests/README.md` and
+  `benchmark/README.md` disagreed on the same suites (202 vs 344 harness tests, 37 vs 52
+  skill-script tests). Every figure is re-derived: **924** bats across **60** files, 52 Python
+  skill-script, 350 Python harness, 48 Swift — **1374** total. The hand-maintained coverage
+  roster in `tests/README.md` is replaced by a pointer to `meta/coverage-proxy.bats`, which
+  computes the target set at run time; a prose count that nothing enforces is what drifted.
+
+- **Two sections were over the 1000-char lint cap.** `agent-coordination/SKILL.md`'s plugin-hook
+  writers table (1178) had the same lifecycle-field sentence duplicated across two rows and an
+  inline aside on the `state_transition` hook path; both are factored into a `Plugin-hook row
+  fields` subsection. `shared/state-ledger.md`'s write-operations section (1137) gained an
+  `Idempotency and key creation` heading over its existing trailing paragraph. No content removed.
+
 ## [4.0.16] — 2026-08-15
 
 ### Fixed

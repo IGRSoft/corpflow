@@ -147,7 +147,7 @@ All changes committed to the issue branch, branch pushed to origin, PR created w
 
 #### Runbook — Steps 4-5 and Prevention
 
-4. **F4 recovery** (corrupt state.json): automatic. `.claude/hooks/state-merge.sh` backs the file up
+4. **F4 recovery** (corrupt state.json): automatic. `state-merge.sh` backs the file up
    to `.context/state.json.corrupt.<iso-ts>`, rebuilds the skeleton and recovers **only the stage
    being patched** — re-run step 3 above to replay the rest. If the backup cannot be written the
    repair aborts and `state.json` is left byte-identical, so an unchanged ledger is not evidence the

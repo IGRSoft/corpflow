@@ -1,8 +1,8 @@
 """Skill-eval assertion engine + eval-set lint.
 
-Offline and free: grades captured responses and pins the eval sets themselves as
-binary and code-checkable. Capturing a response is a separate, opt-in live step —
-nothing here dispatches a model.
+Offline and free: `grade()` scores a response the caller supplies; the lint pins
+the eval sets as binary and code-checkable. No capture step exists yet, so a pass
+proves the engine and the sets — never a skill's output quality.
 """
 
 import json

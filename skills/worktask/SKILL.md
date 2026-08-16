@@ -384,7 +384,7 @@ if (statePost.tasks?.[taskId]?.status !== "completed") {
   // Layer 1 (agent self-patch) missed → invoke Layer 2 synchronously via the canonical script
   // (fires even if the SubagentStop hook event was not delivered):
   //   bash skills/worktask/scripts/state-patch.sh --stage <code> --task-id <taskId> --artifact <path> --via step6_5
-  // state-patch.sh is the single implementation (.claude/hooks/state-merge.sh is a thin wrapper);
+  // state-patch.sh is the single implementation (hooks/state-merge.sh is a thin wrapper);
   // `--via step6_5` stamps tasks.<ID>.completed_via=step6_5 vs the hook default ("hook"). (v1 additive.)
   runStateMergeHook(artifactPath, code, /* via */ "step6_5");
 ```
@@ -1212,7 +1212,7 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
         // Layer 2 (synchronous): delegate to state-patch.sh with --via step6_5 so
         // completed_via distinguishes this path from the SubagentStop hook default ("hook").
         //   bash skills/worktask/scripts/state-patch.sh --stage <code> --task-id ${task.id} --artifact <path> --via step6_5
-        // (equivalently: STATE_MERGE_VIA=step6_5 bash .claude/hooks/state-merge.sh)
+        // (equivalently: STATE_MERGE_VIA=step6_5 bash hooks/state-merge.sh)
         runStateMergeHook(artifactPath, code, /* via */ "step6_5");
 ```
 
@@ -1570,7 +1570,7 @@ Executable helpers (never read into context — invoke via `bash`):
 
 | Script | One-line invocation | Purpose |
 |--------|---------------------|---------|
-| `scripts/state-patch.sh` | `--stage <CODE> --prev <PREV>` | **Canonical** state.json patch; `.claude/hooks/state-merge.sh` delegates here. Self-test: `--self-test`. |
+| `scripts/state-patch.sh` | `--stage <CODE> --prev <PREV>` | **Canonical** state.json patch; `hooks/state-merge.sh` delegates here. Self-test: `--self-test`. |
 
 Exits **3** (Layer-1 self-patch signature) when unresolved AND `--prev` given AND `--via` absent;
 otherwise exits 0. `--allow-missing-artifact` silences that but writes **nothing**. Contract:

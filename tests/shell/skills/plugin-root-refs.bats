@@ -201,8 +201,8 @@ composed_token_check() {
   run bash -c 'cd "$PLUGIN_ROOT" && git ls-files -z -- "*.sh" \
     | xargs -0 grep -l "CLAUDE_PLUGIN_ROOT" 2>/dev/null \
     | grep -v "^benchmark/run-benchmark.sh$" | LC_ALL=C sort; true'
-  assert_output ".claude/hooks/state-merge.sh
-hooks/anchor-preflight.sh
+  assert_output "hooks/anchor-preflight.sh
+hooks/state-merge.sh
 skills/dv-screenshot-capture/scripts/apple-canvas.sh
 skills/worktask/scripts/hook-install.sh"
 }

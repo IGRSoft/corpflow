@@ -26,7 +26,7 @@
 #   All merge logic lives in skills/worktask/scripts/state-patch.sh.
 #   This hook is a thin delegating wrapper — exit 0 guard wraps the call.
 #   Path: $CLAUDE_PLUGIN_ROOT first (a project-local copy of this hook has no
-#   skills/ tree beside it), else HOOK_DIR up two levels to the repo root.
+#   skills/ tree beside it), else HOOK_DIR up one level to the plugin root.
 #
 # Usage (manual self-test):
 #   state-merge.sh --self-test
@@ -110,11 +110,10 @@ _basename_for_stage() {
 # run_index + highest-N), and absent-artifact no-op.
 if [[ "${1:-}" == "--self-test" ]]; then
   HOOK_DIR=$(cd "$(dirname "$0")" && pwd)
-  # .claude/hooks/ is two levels below the repo root; go up two levels to reach
-  # the repo root, then descend into skills/worktask/scripts/.
-  PATCH_SCRIPT="${CLAUDE_PLUGIN_ROOT:-${HOOK_DIR}/../..}/skills/worktask/scripts/state-patch.sh"
+  # hooks/ sits one level below the plugin root.
+  PATCH_SCRIPT="${CLAUDE_PLUGIN_ROOT:-${HOOK_DIR}/..}/skills/worktask/scripts/state-patch.sh"
   if [[ ! -f "$PATCH_SCRIPT" ]]; then
-    PATCH_SCRIPT="${HOOK_DIR}/../../skills/worktask/scripts/state-patch.sh"
+    PATCH_SCRIPT="${HOOK_DIR}/../skills/worktask/scripts/state-patch.sh"
   fi
   if [[ ! -f "$PATCH_SCRIPT" ]]; then
     printf 'self-test: state-patch.sh not found at %s\n' "$PATCH_SCRIPT" >&2
@@ -141,9 +140,10 @@ HOOK_DIR=$(cd "$(dirname "$0")" && pwd)
 # Plugin root first: worktask.md Step 3b copies this hook into <project>/.claude/hooks/,
 # where the relative arm resolves to a skills/ tree that does not exist. state-patch.sh is
 # the only merge implementation, so failing to find it silently disables the Layer-2 net.
-PATCH_SCRIPT="${CLAUDE_PLUGIN_ROOT:-${HOOK_DIR}/../..}/skills/worktask/scripts/state-patch.sh"
+# The relative arm serves the shipped copy, one level below the plugin root at hooks/.
+PATCH_SCRIPT="${CLAUDE_PLUGIN_ROOT:-${HOOK_DIR}/..}/skills/worktask/scripts/state-patch.sh"
 if [[ ! -f "$PATCH_SCRIPT" ]]; then
-  PATCH_SCRIPT="${HOOK_DIR}/../../skills/worktask/scripts/state-patch.sh"
+  PATCH_SCRIPT="${HOOK_DIR}/../skills/worktask/scripts/state-patch.sh"
 fi
 
 if [[ ! -f "$PATCH_SCRIPT" ]]; then
@@ -189,7 +189,7 @@ _salvage_field() {
 # untouched, which is the pre-existing behaviour this must stay byte-identical to; only
 # a repair that starts and then fails is worth a log line.
 _repair_corrupt_state() {
-  local art="${CLAUDE_ARTIFACT_PATH:-}" fm backup tmp wt_id platform row n=0 suffix
+  local art="${CLAUDE_ARTIFACT_PATH:-}" fm backup backup_rel tmp wt_id platform row n=0 suffix
 
   [[ -n "$art" && -f "$art" ]] || return 0
   fm=$(sed -n '1,40p' "$art" 2> /dev/null) || return 0
@@ -238,7 +238,12 @@ _repair_corrupt_state() {
     return 0
   fi
 
-  if row=$(jq -cn --arg ts "$(date -u +%FT%TZ)" --arg id "$wt_id" --arg backup "$backup" \
+  # Audit rows carry workspace-relative paths (handoff-protocol.md #f4 names the backup
+  # `.context/state.json.corrupt.<iso-ts>`, and `artifact` below is relative), so the trail
+  # stays portable across the worktree the hook happened to fire in.
+  backup_rel="${backup#"$WORKSPACE_DIR"/}"
+
+  if row=$(jq -cn --arg ts "$(date -u +%FT%TZ)" --arg id "$wt_id" --arg backup "$backup_rel" \
     --argjson n "$n" --arg stage "${CLAUDE_TASK_METADATA_STAGE:-}" --arg art "$art" '
       { ts: $ts, actor: "hook:state-merge", action: "state_repair", subject: $id,
         result: "repaired",

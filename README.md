@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.0.15 · Requires Claude Code 2.1.233+**
+**Plugin 4.0.17 · Requires Claude Code 2.1.233+**
 
 ## Features
 
@@ -46,15 +46,76 @@ lock, the atomic write, and the disk guard.
 
 ## Installation
 
-Add to your Claude Code configuration:
+### Requirements
+
+| Requirement | Needed for |
+|-------------|------------|
+| **Claude Code 2.1.233+** | The state ledger. 2.1.233 removed the `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` tools on every model this plugin dispatches, and the ledger is the replacement — see the note under [State Ledger](#state-ledger) |
+| **git** | Every worktask runs in a dedicated worktree |
+| **jq** | `state-patch.sh`, the only writer to the ledger. Hard requirement — without it no stage can complete |
+| **`gh`**, authenticated | Post-PL issue publishing, `/megatask` milestone and issue reads, FN pull requests |
+| **yq** | Full artifact frontmatter validation. Without it the handoff gate degrades to a grep-only check rather than failing |
+| **python3 ≥ 3.10** | `/estimate --export csv` only. Note macOS ships 3.9.6 as `/usr/bin/python3`, which is too old — `brew install python@3.12` if you need the CSV pack |
+
+Screenshot capture at the DV stage pulls in per-platform tooling on demand (ImageMagick,
+pngquant, Playwright, a Swift toolchain). None of it is needed to install or to run a
+worktask; see `skills/dv-screenshot-capture/SKILL.md` for what each capture path expects.
+
+### Install
+
+This repository is both a Claude Code marketplace (`igrsoft`) and the plugin it publishes
+(`corpflow`). From inside Claude Code:
+
+```
+/plugin marketplace add IGRSoft/corpflow
+/plugin install corpflow@igrsoft
+```
+
+The plugin activates as soon as it is safe to do so; if the commands do not appear, run
+`/reload-plugins`. Hooks — including the `SubagentStop` state-merge safety net — are registered
+by `.claude-plugin/plugin.json` on install. There is no manual hook step.
+
+### Verify
+
+`/plugin` should list **corpflow** as enabled, and `/worktask` should autocomplete. Then:
+
+```
+/request-plan "add a dark mode toggle to settings"
+```
+
+A plan comes back without touching the repo — the cheapest end-to-end check that agents,
+skills, and routing all resolved.
+
+### Optional — platform plugins
+
+The DV stage routes to whichever platform plugin matches the repo, and falls back to project
+tooling when none is installed. Each is a separate marketplace under the same org, installed the
+same way (`/plugin marketplace add IGRSoft/<name>` then `/plugin install <name>@<name>`):
+
+| Plugin | Covers |
+|--------|--------|
+| `apple-developer` | Swift, SwiftUI, UIKit, AppKit |
+| `android-developer` | Kotlin, Jetpack Compose, Gradle |
+| `frontend-developer` | TypeScript, React, Vue, Svelte, Angular, CSS |
+| `backend-developer` | Node, Go, JVM, Python-web, Ruby, PHP, .NET |
+| `system-developer` | C, C++, Python, Bash |
+| `ai-engineer` | LLM apps, RAG, fine-tuning, MLOps, evals |
+
+Version floors and the routing contract live in `skills/shared/compatible-plugins.md`.
+
+### From source
+
+For contributing, or to run the plugin from a working tree:
 
 ```bash
-# Clone the repository
-git clone https://github.com/igrsoft/corpflow.git
-
-# Or add as a plugin
-claude plugins add /path/to/corpflow
+git clone https://github.com/IGRSoft/corpflow.git
+cd corpflow
+make bootstrap     # vendor bats, check the swift toolchain, probe kcov
+make test          # offline suite — no API calls, no spend
 ```
+
+Then point Claude Code at the checkout with `/plugin marketplace add /path/to/corpflow`
+and install as above.
 
 ## Quick Start
 
@@ -358,7 +419,7 @@ Registered in `.claude-plugin/plugin.json`. Several are **gates** — they can b
 | `comment-standard-context.sh` | PostToolUse (`Write`/`Edit`) | Injects the comment standard once per session on the first source edit |
 | `audit-subagent.sh` | SubagentStop | Writes `subagent_stopped` audit rows |
 | `dv-screenshot-gate.sh` | SubagentStop | **Blocks** DV completion when the screenshot manifest is missing |
-| `.claude/hooks/state-merge.sh` | SubagentStop | Merges artifact `handoff:` frontmatter into `.context/state.json` |
+| `state-merge.sh` | SubagentStop | Merges artifact `handoff:` frontmatter into `.context/state.json` |
 | `megatask-monitor.sh` | SubagentStop | Drives the megatask completion loop (unblock dependents, progress) |
 | `precompact-checkpoint.sh` | PreCompact | Checkpoints `state.json` before auto-compaction |
 | `agent-stop.sh` | Stop (wired via agent frontmatter) | Stage-boundary audit row + PL/FN approval-gate notification |

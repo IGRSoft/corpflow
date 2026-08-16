@@ -15,7 +15,7 @@
 # Sources:
 #   1. skills/worktask/scripts/cache-lint.sh   canonical_basename_for_stage()
 #   2. skills/worktask/scripts/state-patch.sh  basename_for_stage()
-#   3. .claude/hooks/state-merge.sh            _basename_for_stage()
+#   3. hooks/state-merge.sh                    _basename_for_stage()
 #   4. skills/worktask/SKILL.md                ARTIFACT_BASE (orchestrator executes it)
 #   5. hooks/anchor-preflight.sh               ARTIFACT_RE alternation
 #   6. handoff-protocol.md                     #stage-artifact-map table
@@ -96,7 +96,7 @@ EOF
 @test "parity: state-merge.sh _basename_for_stage matches the canonical map" {
   # Unreachable in normal runs (only used when state-patch.sh is absent), so this
   # is the ONLY test that ever reads it.
-  run map_from_case "$PLUGIN_ROOT/.claude/hooks/state-merge.sh" _basename_for_stage
+  run map_from_case "$PLUGIN_ROOT/hooks/state-merge.sh" _basename_for_stage
   assert_success
   [ "$output" = "$(expected_map)" ]
 }
@@ -155,7 +155,7 @@ EOF
   local f
   for f in skills/worktask/scripts/cache-lint.sh \
            skills/worktask/scripts/state-patch.sh \
-           .claude/hooks/state-merge.sh \
+           hooks/state-merge.sh \
            hooks/anchor-preflight.sh; do
     run bash -c 'grep -nE "\"analyzing\"|'"'"'analyzing'"'"'|\|analyzing\|" "$1" || true' _ "$PLUGIN_ROOT/$f"
     assert_output ""
