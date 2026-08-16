@@ -75,8 +75,8 @@ reinvent these:
 - **Effort** is a T-shirt size plus the 5-factor complexity score (0–25) from
   `skills/estimation-methodology/SKILL.md`. Give a range, not false precision — this is a rough cut, not a budget.
   **Both parts are required for every request type**, incidents included: a severity or priority
-  table is not an effort estimate and does not replace one. Show the five factors behind the score
-  rather than a bare number — an unexplained `2` cannot be checked or argued with.
+  table is not an effort estimate and does not replace one. Naming the factors that drove the score
+  helps when the score is surprising, but a size and a number are what the section owes.
 - **Tests live inside each phase's scope**, never as a separate phase (per the estimation skill).
 
 ### 4. Recommend the handoff
