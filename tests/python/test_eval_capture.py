@@ -209,6 +209,17 @@ class OfflineGrading(_Fixture):
         result = grader.grade_record(self.eval_set, self._record("here is roughly what I would do."))
         self.assertEqual(result["status"], "fail")
 
+    def test_bold_section_labels_still_count_as_a_plan(self):
+        """A real dev capture used `**Context**` throughout; reading that as a
+        refusal drops a complete plan out of the denominator entirely."""
+        bold = ("## Plan: x\n**Context**\nc\n**Goal**\ng\n**Scope**\ns\n"
+                "**Phases**\np\n**Effort (rough)**\ne\n**Risks**\nr\nWhy this order?\n")
+        self.assertEqual(engine.classify_outcome(bold), "plan")
+
+    def test_two_incidental_section_words_are_not_a_plan(self):
+        asked = "What's the goal here, and what scope did you have in mind?"
+        self.assertEqual(engine.classify_outcome(asked), "clarify")
+
     def test_a_plan_asking_a_rhetorical_question_is_still_a_plan(self):
         plan = self._conforming_plan() + "\nWhy this order? Risk first.\n"
         self.assertEqual(grader.grade_record(self.eval_set, self._record(plan))["outcome"], "plan")

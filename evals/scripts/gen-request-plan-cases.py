@@ -242,7 +242,8 @@ CASES = [
 
 
 def build_case(index: int, spec) -> dict:
-    kind, grounding, route, prompt, paths, discovery = spec
+    kind, grounding, _declared_route, prompt, paths, discovery = spec
+    route = derive_route(prompt)
     case = {"id": index, "prompt": prompt,
             "dimensions": {"type": kind, "grounding": grounding, "route": route}}
     if grounding == "absent":
@@ -254,29 +255,80 @@ def build_case(index: int, spec) -> dict:
 
     route_id, route_why, route_values = ROUTE_ASSERTION[route]
     case["expected_outcome"] = "plan"
-    case["assertions"] = [
-        {"id": route_id, "why": route_why, "type": "regex_all", "values": route_values},
+    # An `obvious` prompt already names the file, so any discovery target would be a
+    # guess at which OTHER file the plan should touch — and a guess fails correct
+    # plans that decomposed differently. Demand evidence of reading instead: a
+    # slashed repo path, which a prompt carrying a bare filename cannot supply.
+    discovery_assertion = (
+        {"id": "cites-a-repo-path",
+         "why": "A plan that located the file cites its real path; echoing the bare filename "
+                "from the request proves nothing was read",
+         "type": "regex_any", "values": [r"[\w.-]+/[\w.-]+\.(py|sh|md|json|bats)"]}
+        if grounding == "obvious" else
         {"id": "finds-the-real-surface",
          "why": "The plan must reach the surface this repo actually has; naming it is what "
                 "separates a grounded plan from a plausible template",
-         "type": "regex_any", "values": discovery},
+         "type": "regex_any", "values": discovery})
+    case["assertions"] = [
+        {"id": route_id, "why": route_why, "type": "regex_all", "values": route_values},
+        discovery_assertion,
     ]
     case["grounding"] = paths
     case["deferred"] = ["Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."]
     return case
 
 
+# Routing ground truth must follow from the REQUEST, never from what investigation
+# later reveals. Hand-assigned tiers failed correct plans: a prompt was labelled
+# secure on a suspicion the code turned out not to have.
+# Names a protected asset or attacker-controlled input. Deliberately excludes words
+# that only make a request ABOUT security ("threat-model the reviewer agent"), which
+# is a documentation task carrying no sensitive surface of its own.
+SECURE_MARKERS = ("credential", "secret", "token", "api key", "password", "pii",
+                  "personal data", "encrypt", "auth", "sensitive",
+                  "untrusted", "injection", "exploit", "vulnerab")
+# Live breakage only — present-tense incident markers, not any present participle,
+# which would sweep in ordinary bug reports.
+EMERGENCY_MARKERS = ("right now", "is down", "outage", "503", "is failing",
+                     "is rejecting", "is hanging", "is killing", "is blocking")
+
+
+def derive_route(prompt: str) -> str:
+    text = prompt.lower()
+    if any(m in text for m in SECURE_MARKERS):
+        return "secure"
+    if any(m in text for m in EMERGENCY_MARKERS):
+        return "emerg"
+    return "std"
+
+
 SPLIT_CYCLE = ("dev", "test", "dev", "test", "train")  # ~40/40/20
 
 
+SPLIT_MANIFEST = os.path.join(REPO, "evals", "splits", "request-plan.json")
+
+
 def assign_splits(cases: list) -> None:
-    """Stratify within each (grounding, route) stratum so no tranche inherits a
-    dimension the others lack. Deterministic: position in the stratum, not RNG."""
-    strata: dict = {}
+    """Read tranche membership from the frozen manifest; stratify only what is new.
+
+    Membership must never move. Stratifying on a dimension that later gets
+    re-derived reshuffled dev and test after dev had been read, which silently
+    put examined cases into the held-out set.
+    """
+    try:
+        with open(SPLIT_MANIFEST, encoding="utf-8") as f:
+            frozen = json.load(f)["splits"]
+    except (OSError, ValueError, KeyError):
+        frozen = {}
+
+    unseen: dict = {}
     for case in cases:
-        key = (case["dimensions"]["grounding"], case["dimensions"]["route"])
-        strata.setdefault(key, []).append(case)
-    for members in strata.values():
+        pinned = frozen.get(str(case["id"]))
+        if pinned:
+            case["split"] = pinned
+        else:
+            unseen.setdefault(case["dimensions"]["grounding"], []).append(case)
+    for members in unseen.values():
         for position, case in enumerate(members):
             case["split"] = SPLIT_CYCLE[position % len(SPLIT_CYCLE)]
 

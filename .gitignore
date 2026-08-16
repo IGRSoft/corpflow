@@ -18,3 +18,8 @@ benchmark/results/runs/deterministic/
 
 # kcov coverage output
 .coverage-kcov/
+
+# Captured skill-eval responses — regenerate with evals/scripts/eval-capture.py.
+# Unlike benchmark live records above, these stay untracked: a clone re-captures
+# rather than inheriting them, so a grade cites the local run's own provenance.
+skills/*/evals/responses/

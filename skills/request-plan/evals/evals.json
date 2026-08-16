@@ -42,10 +42,10 @@
     },
     {
       "id": "effort-sized-with-complexity",
-      "why": "Effort is a T-shirt size AND a 0-25 complexity score together; a bare digit anywhere in the text is not evidence either was given. An approximation marker on the score still answers the question — rejecting `~8` would fail a correct plan for hedging",
+      "why": "Effort is a T-shirt size AND a 0-25 complexity score together; a bare digit anywhere in the text is not evidence either was given. The cell may carry an approximation marker or the 5-factor breakdown estimation-methodology asks for — rejecting either fails a plan for answering in more detail",
       "type": "regex_any",
       "values": [
-        "\\|\\s*(XS|S|M|L|XL)(\\s*[-—–]\\s*(XS|S|M|L|XL))?\\s*\\|\\s*[~≈]?\\s*([0-9]|1[0-9]|2[0-5])\\s*(/\\s*25)?\\s*\\|",
+        "\\|\\s*(XS|S|M|L|XL)(\\s*[-—–]\\s*(XS|S|M|L|XL))?\\s*\\|\\s*[~≈]?\\s*([0-9]|1[0-9]|2[0-5])\\b[^|]*\\|",
         "(XS|S|M|L|XL)[^\\n]*\\b([0-9]|1[0-9]|2[0-5])\\s*/\\s*25\\b"
       ]
     },
@@ -88,13 +88,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "state-patch",
-            "atomic",
-            "ledger"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -125,13 +123,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "preamble",
-            "baseline",
-            "budget"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -162,13 +158,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "pr-body-lint",
-            "branch-lib",
-            "section-lint"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -199,13 +193,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "release",
-            "version",
-            "semver"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -236,13 +228,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "comment-standard",
-            "code-comment",
-            "DocC ratio"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -273,13 +263,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "milestone",
-            "dependency",
-            "issue"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -310,13 +298,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "oracle",
-            "deterministic",
-            "generators"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -347,13 +333,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "branch-lib",
-            "conventional",
-            "guard"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -384,13 +368,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "csv-export",
-            "token",
-            "usage"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -421,13 +403,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "era",
-            "comparab",
-            "report"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -458,13 +438,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "login",
-            "probe",
-            "boolean"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -495,13 +473,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "gitleaks",
-            "trufflehog",
-            "scan"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -519,26 +495,24 @@
       "dimensions": {
         "type": "bug",
         "grounding": "obvious",
-        "route": "secure"
+        "route": "std"
       },
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-secure-tier",
-          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
           "type": "regex_all",
           "values": [
-            "/worktask\\s+--secure"
+            "/worktask\\s+\\\""
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "redact",
-            "sanitis",
-            "sanitiz"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -569,13 +543,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "timeout",
-            "watchdog",
-            "stall"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -606,13 +578,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "resume",
-            "transcript",
-            "ledger"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1103,16 +1073,16 @@
       "dimensions": {
         "type": "migration",
         "grounding": "buried",
-        "route": "secure"
+        "route": "std"
       },
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-secure-tier",
-          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
           "type": "regex_all",
           "values": [
-            "/worktask\\s+--secure"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1140,16 +1110,16 @@
       "dimensions": {
         "type": "incident",
         "grounding": "buried",
-        "route": "emerg"
+        "route": "std"
       },
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-emergency-tier",
-          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
           "type": "regex_all",
           "values": [
-            "/worktask\\s+--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1498,13 +1468,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "state-merge",
-            "ledger",
-            "atomic"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1535,13 +1503,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "gh-issue-dedup",
-            "milestone",
-            "anchor"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1551,7 +1517,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "dev"
     },
     {
       "id": 46,
@@ -1572,13 +1538,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "cleanup",
-            "trap",
-            "mktemp"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1609,13 +1573,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "section-lint",
-            "structured",
-            "machine"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1625,7 +1587,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "train"
     },
     {
       "id": 48,
@@ -1646,13 +1608,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "screenshot",
-            "visual",
-            "evidence"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1662,7 +1622,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "train"
+      "split": "dev"
     },
     {
       "id": 49,
@@ -1683,13 +1643,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "coverage",
-            "usage",
-            "report"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1720,13 +1678,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "metrics",
-            "analysis",
-            "precision"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1736,7 +1692,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "dev"
     },
     {
       "id": 51,
@@ -1757,13 +1713,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "oracle",
-            "rotation",
-            "seed"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1794,13 +1748,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "order",
-            "bias",
-            "arm"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1810,7 +1762,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "train"
     },
     {
       "id": 53,
@@ -1831,13 +1783,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "resolve_arm",
-            "selection",
-            "policy"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1847,7 +1797,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "train"
+      "split": "dev"
     },
     {
       "id": 54,
@@ -1868,13 +1818,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "threshold",
-            "running tally",
-            "breach"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1905,13 +1853,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "routing",
-            "platform",
-            "delegate"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1921,7 +1867,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "dev"
     },
     {
       "id": 56,
@@ -1942,13 +1888,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "requirements",
-            "planning",
-            "template"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1979,13 +1923,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "testing-strategy",
-            "authority",
-            "scoped"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -1995,7 +1937,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "train"
     },
     {
       "id": 58,
@@ -2016,13 +1958,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "frontmatter",
-            "handoff",
-            "structured"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -2032,7 +1972,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "train"
+      "split": "dev"
     },
     {
       "id": 59,
@@ -2053,13 +1993,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "semver",
-            "changelog",
-            "release-engineering"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -2077,26 +2015,24 @@
       "dimensions": {
         "type": "feature",
         "grounding": "obvious",
-        "route": "secure"
+        "route": "std"
       },
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-secure-tier",
-          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
           "type": "regex_all",
           "values": [
-            "/worktask\\s+--secure"
+            "/worktask\\s+\\\""
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "OWASP",
-            "security-review-process",
-            "auditor"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -2106,7 +2042,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "dev"
     },
     {
       "id": 61,
@@ -2127,13 +2063,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "injection",
-            "quote",
-            "eval"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -2143,7 +2077,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "train"
+      "split": "dev"
     },
     {
       "id": 62,
@@ -2151,26 +2085,24 @@
       "dimensions": {
         "type": "migration",
         "grounding": "obvious",
-        "route": "secure"
+        "route": "std"
       },
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-secure-tier",
-          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
           "type": "regex_all",
           "values": [
-            "/worktask\\s+--secure"
+            "/worktask\\s+\\\""
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "idempot",
-            "rollback",
-            "restore"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -2201,13 +2133,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "subagent",
-            "stop",
-            "signal"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -2238,13 +2168,11 @@
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
           "type": "regex_any",
           "values": [
-            "visual",
-            "evidence",
-            "requires_screenshots"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
           ]
         }
       ],
@@ -2291,7 +2219,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "dev"
     },
     {
       "id": 66,
@@ -2328,7 +2256,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "train"
+      "split": "test"
     },
     {
       "id": 67,
@@ -2476,7 +2404,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "dev"
     },
     {
       "id": 71,
@@ -2513,7 +2441,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "train"
+      "split": "test"
     },
     {
       "id": 72,
@@ -2660,7 +2588,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "dev"
     },
     {
       "id": 76,
@@ -2696,7 +2624,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "train"
+      "split": "test"
     },
     {
       "id": 77,
@@ -2815,16 +2743,16 @@
       "dimensions": {
         "type": "feature",
         "grounding": "buried",
-        "route": "secure"
+        "route": "std"
       },
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-secure-tier",
-          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
           "type": "regex_all",
           "values": [
-            "/worktask\\s+--secure"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -2844,7 +2772,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "dev"
     },
     {
       "id": 81,
@@ -2852,16 +2780,16 @@
       "dimensions": {
         "type": "migration",
         "grounding": "buried",
-        "route": "secure"
+        "route": "std"
       },
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-secure-tier",
-          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
           "type": "regex_all",
           "values": [
-            "/worktask\\s+--secure"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -2918,7 +2846,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "dev"
     },
     {
       "id": 83,
@@ -2926,16 +2854,16 @@
       "dimensions": {
         "type": "incident",
         "grounding": "buried",
-        "route": "emerg"
+        "route": "std"
       },
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-emergency-tier",
-          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
           "type": "regex_all",
           "values": [
-            "/worktask\\s+--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -3181,16 +3109,16 @@
       "dimensions": {
         "type": "incident",
         "grounding": "adjacent",
-        "route": "emerg"
+        "route": "std"
       },
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-emergency-tier",
-          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
           "type": "regex_all",
           "values": [
-            "/worktask\\s+--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {

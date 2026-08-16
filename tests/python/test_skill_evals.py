@@ -109,6 +109,14 @@ class Grading(unittest.TestCase):
             self.assertNotIn("effort-sized-with-complexity",
                              grade(self.eval_set, 1, plan + _CASE1_TOKEN)["failed"], score)
 
+    def test_effort_assertion_accepts_the_five_factor_breakdown(self):
+        """estimation-methodology asks for the factor split; a dev capture supplied
+        it inside the cell and was failed for the extra detail."""
+        cell = "| S–M | 11 (Technical 3, Integration 1, Risk 3, Uncertainty 2, Scope 2) | n |\n"
+        plan = self._plan(effort="## Effort (rough)\n" + cell)
+        self.assertNotIn("effort-sized-with-complexity",
+                         grade(self.eval_set, 1, plan + _CASE1_TOKEN)["failed"])
+
     def test_effort_assertion_still_rejects_an_out_of_range_score(self):
         plan = self._plan(effort="## Effort (rough)\n| S | ~99 | drivers |\n")
         self.assertIn("effort-sized-with-complexity",

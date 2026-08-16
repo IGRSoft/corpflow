@@ -43,14 +43,19 @@ def assertions_for(eval_set: dict, case_id: int) -> list:
     return eval_set.get("shared_assertions", []) + case.get("assertions", [])
 
 
-# Headers a rendered plan must carry; zero of them means no plan was attempted.
-PLAN_SECTIONS = ("## Context", "## Goal", "## Scope", "## Phases", "## Effort", "## Risks")
+PLAN_SECTIONS = ("Context", "Goal", "Scope", "Phases", "Effort", "Risks")
+
+# Enough sections to prove a plan was attempted, whatever heading syntax was used.
+# Matching on `## Context` instead misread a full plan that used `**Context**` as a
+# refusal, which silently drops good plans out of the denominator.
+PLAN_SECTION_QUORUM = 3
 
 
 def classify_outcome(response: str) -> str:
-    """`clarify` when the skill asked instead of answering — no plan section at all,
-    plus a question. Scoring that as a broken plan is what produced a misleading 0/2."""
-    if any(section in response for section in PLAN_SECTIONS):
+    """`clarify` when the skill asked instead of answering: too few plan sections
+    to be a plan, plus a question."""
+    present = sum(1 for section in PLAN_SECTIONS if section in response)
+    if present >= PLAN_SECTION_QUORUM:
         return "plan"
     return "clarify" if "?" in response else "plan"
 

@@ -105,5 +105,16 @@ is what made a correct refusal read as 0/2 on the first live run.
 | No echoed assertion values | A value already in the case's own prompt, which rewards restatement over judgement |
 | ≥2 case-specific assertions | Cases that only re-measure the shared template checks and cannot tell each other apart |
 
-Captured responses are evidence — commit them, so a grade stays reproducible
-against a known `plugin_sha`, `model`, and `skill_version`.
+Captured responses are gitignored. A clone re-captures rather than inheriting
+them, so every grade cites the `plugin_sha`, `model` and `skill_version` of the
+run that actually produced it. The tradeoff is real: a grade is reproducible only
+by paying for the capture again (~$1/case), so record the numbers that matter in
+the commit or a findings doc rather than assuming the responses will be there.
+
+### Splits
+
+`evals/splits/<skill>.json` freezes tranche membership. A case **never** changes
+tranche: stratifying on a dimension that later gets re-derived once reshuffled dev
+and test after dev had been read, quietly moving examined cases into the held-out
+set. Generation reads the manifest and stratifies only genuinely new cases.
+Anything already examined stays in `dev` — something read cannot be un-read.
