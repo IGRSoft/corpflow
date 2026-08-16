@@ -114,7 +114,7 @@ kcov **cannot run on macOS bash 3.2** (mis-parses `BASH_VERSINFO` guards; >2 min
   `lib/test-helper`, `skills/{test-authority-matrix,cross-plugin-refs,plugin-root-refs,skill-refs}`,
   `worktask/{artifact-map-parity,manifest-parity,gh-issue-dedup}`,
   `benchmark/{run-benchmark,canvas-e2e-guards}`).
-- **935 `@test`** assertions across those 60 files.
+- **937 `@test`** assertions across those 60 files.
 - **Min 3 / avg ~15 / max 90** scenarios per file. The ≥3 rule now has **no exceptions** — the one
   standing exception (`comment-hooks-self-test.bats`, 2 self-delegating tests) was deleted, and
   `meta/coverage-proxy.bats` enforces the rule as an executable gate with an empty exemption list.
@@ -128,10 +128,10 @@ exclude the vendored bats trees, which contain their own `.bats` suites:
 # 60 — test files
 find tests -name '*.bats' -not -path '*/vendor/*' | wc -l
 
-# 935 — test cases (every declaration is column-0 `^@test `)
+# 937 — test cases (every declaration is column-0 `^@test `)
 grep -rh --include='*.bats' '^@test ' tests --exclude-dir=vendor | wc -l
 
-# independent cross-check of the same 935
+# independent cross-check of the same 937
 find tests -name '*.bats' -not -path '*/vendor/*' -exec grep -c '^@test ' {} + \
   | awk -F: '{s+=$NF} END {print s}'
 ```
@@ -139,7 +139,7 @@ find tests -name '*.bats' -not -path '*/vendor/*' -exec grep -c '^@test ' {} + \
 Provenance, so the figures are not over-claimed: QA measured **677** across two consecutive full runs
 with byte-identical TAP streams. The final **3** were added afterwards by the documentation pass
 itself (`worktask/manifest-parity.bats`, 3 → 6, covering frontmatter-wired hooks), so 680 is the
-re-derived tree total for that release; the current figure is 935 and is re-derived, never incremented.
+re-derived tree total for that release; the current figure is 937 and is re-derived, never incremented.
 
 High-logic-density targets (14+ scenarios):
 - `branch-name.sh` (90), `test-execution-gate` (85), `branch-lib` (54), `fn-preflight` (52)
@@ -153,8 +153,8 @@ High-logic-density targets (14+ scenarios):
 
 - `benchmark/ttt-template` — 48 Swift Testing tests (engine, AI, models, router, view-model); the iOS slice runs via `make test-ios` (xcodebuild, iPhone simulator; SKIPs cleanly without a runtime)
 
-**Total deterministic suite:** 935 bats tests + 52 Python skill-script tests + 350 Python harness
-tests + 48 Swift ttt-template tests = **1385 test methods** green (`./run-tests.sh` rc 0).
+**Total deterministic suite:** 937 bats tests + 52 Python skill-script tests + 350 Python harness
+tests + 48 Swift ttt-template tests = **1387 test methods** green (`./run-tests.sh` rc 0).
 
 See `tests/COVERAGE.md` for per-file details and proxy exemption policy.
 
@@ -242,7 +242,7 @@ over-selection:
 |---|---|---|
 | L1 | computed live — every repo path a `.bats` names literally, plus the `X.sh` → `X.bats` convention resolver | 13 scripts have more than one consumer; convention alone returns one of them |
 | L2 | `tests/selection/matrix.tsv` | dependencies that are a *pattern*, not a path — the glob lives inside the script the test invokes |
-| L3 | a constant in `tests/lib/select_lib.bash` | the ALWAYS floor: `lib/test-helper`, `meta/coverage-proxy`, `skills/plugin-root-refs`, `worktask/manifest-parity` (48 of 935 tests) |
+| L3 | a constant in `tests/lib/select_lib.bash` | the ALWAYS floor: `lib/test-helper`, `meta/coverage-proxy`, `skills/plugin-root-refs`, `worktask/manifest-parity` (48 of 937 tests) |
 
 **Fail-closed.** An unrecognised path, an unresolvable base, an empty changed
 set, a delete under `tests/`, `hooks/`, `.claude/hooks/` or a skill `scripts/`

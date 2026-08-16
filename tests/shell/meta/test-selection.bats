@@ -448,3 +448,27 @@ STUB
   run grep -c "CLAUDE_PLUGIN""_ROOT" "$SELECTOR"
   [ "$output" = "0" ] || fail "select-tests.sh names the plugin-root env var $output time(s)"
 }
+
+@test "M18: every hooks/lib self-test body resolves to its owning hook's .bats" {
+  # The bodies moved out of the hooks in #303. An unmapped path fails the whole
+  # selection closed to FULL, which silently costs a full suite on every hook
+  # change — so the mapping is pinned here rather than left to convention.
+  local f base resolved
+  for f in "$PLUGIN_ROOT"/hooks/lib/*-selftest.sh; do
+    [ -e "$f" ] || continue
+    base="$(basename "$f")"
+    resolved="$(sel_resolve_bats "$base" "$PLUGIN_ROOT/tests/shell")"
+    [ -n "$resolved" ] || fail "$base resolves to no .bats — selection will fail closed to FULL"
+    [ -f "$resolved" ] || fail "$base resolves to a missing file: $resolved"
+  done
+}
+
+@test "M19: the self-test alias chains through an aliased owner" {
+  # dv-comment-density-gate.sh is itself aliased to comment-density-gate.bats,
+  # so stripping the -selftest suffix alone would leave this one unmapped.
+  run sel_alias_for dv-comment-density-gate-selftest.sh
+  assert_output "comment-density-gate.bats"
+  # A non-selftest script keeps its previous answer.
+  run sel_alias_for state-merge.sh
+  assert_output ""
+}
