@@ -280,6 +280,28 @@ Capture **both** stdout key=value lines — `target_branch=<name>` (the name the
 
 **When `branch=` is empty or fails `--check` but `target_branch=` is non-empty, stamp the target** — the local name may be blocked from changing (upstream tracked, target exists) while the PR head is still ours to name. Then run the non-blocking post-check (`commands/worktask.md § Step 3c — post-check`): a stamped name failing `--check` emits one `branch_convention_check` warning row naming the actual and derived target, and never blocks planning. Invoking `/worktask` authorizes the rename against a host's no-rename session rule — never revert it, never re-ask (`references/workspace-modes.md § Host session authorization`).
 
+### Validation check 11
+
+11. **Dispatch-depth projection** (non-blocking): project the deepest dispatch chain the next stage will open and compare it against `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (default 3). This is `/megatask`'s R1 depth projection applied per-stage instead of once per batch — `skills/megatask/SKILL.md § Nesting-depth budget` holds the canonical level table both must agree with:
+
+```
+projected_depth = orchestrator_offset      # 1 under /megatask (it spends a level), else 0
+                + 1                        # the stage agent itself
+                + 1 if that agent routes through a platform router
+                + 1 if the router dispatches a Tier-2 specialist
+headroom = cap - projected_depth
+```
+
+Emit one `dispatch_depth_projected` audit row with `metadata: {projected_depth, cap, headroom, chain}` — `chain` naming the agents level by level, so a later `dispatch_flattened` row can be read against what was forecast.
+
+### Validation check 11 — what warns, and what stays quiet
+
+**Warn on the console only when `headroom < 0`.** At `headroom >= 0` the row is written and nothing is printed. That threshold is a deliberate choice, not an oversight: the canonical DV chain — session → `developer` (1) → platform router (2) → Tier-2 specialist (3) — lands on **exactly** the cap with zero headroom, so warning at `headroom == 0` would fire on every DV stage in the repo and teach the operator to skip the line that matters. The zero-headroom fact still reaches the ledger in `metadata.headroom`, which is where `/cost-report` and incident review look. A projection that does not compute `3` for that chain is wrong regardless of whether it prints.
+
+**Never blocks.** A hard gate would fail that same canonical chain, which is legal and routine. Precedent: check 8's `artifact_path_resolved`, and `commands/megatask.md § R1 spawn-budget projections` ("warn-and-continue, never a hard gate"). When it does warn, name megatask's two remediations — raise the env var, or flatten Tier-2 dispatch (`skills/megatask/SKILL.md § Depth remediations`).
+
+**A forecast, not an observation.** An unanticipated hop lands past the cap without this check seeing it; that case is caught after the fact by the refused agent's own `dispatch_flattened` row (`agent-coordination § Depth-refusal self-report`). The two are complements — neither makes the other redundant.
+
 ### On validation failure
 
 If validation fails:

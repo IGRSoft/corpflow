@@ -211,8 +211,9 @@ review, the audit tail is the single source of truth for what happened.
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created` |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11) |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run` |
+| Any agent whose nested `Task()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
 
 `full_test_run` / `scoped_test_run` are one row per test **invocation**, keyed on the invocation's
@@ -274,7 +275,7 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>`: every install
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_delegation_observed|test_gate_disabled|test_dedupe_disabled",
+  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|dispatch_depth_projected|dispatch_flattened",
   "subject": "task ID or artifact path",
   "result": "ok|error|deferred|blocked",
   "task_id": "optional — ledger key, e.g. DV0",
@@ -369,6 +370,25 @@ for full code patterns.
 #### Pre-launch spawn classification
 
 > **Pre-launch spawn classification**: in auto mode the permission classifier evaluates a subagent spawn **before** it launches, so a dispatch can be denied up front (`PermissionDenied` hook fires). The orchestrator must handle a refused spawn — treat a denied dispatch like a failed stage and route per the retry/escalate matrix rather than assuming every `Task(...)` starts.
+
+#### Depth-refusal self-report
+
+> **When the depth cap refuses a nested `Task()`, the refused dispatcher MUST append one `dispatch_flattened` row to `.context/logs/audit.jsonl` BEFORE doing that work inline.** Emitting it afterwards is the exact failure this contract exists to prevent: an agent that finishes the specialist's job and then forgets leaves an artifact indistinguishable from one the specialist actually produced.
+
+Unlike a refused *tool* (`PermissionDenied`) there is **no hook for this refusal type** — nothing in the plugin hook vocabulary (`references/hook-monitoring.md`) is depth-shaped, so the row is a self-report, downgraded to advisory only when a future hook supersedes it. A self-report closes the silence; it does not guarantee capture.
+
+| Field | Value |
+|---|---|
+| `actor` | the refused dispatcher (e.g. `apple-developer:apple-developer`), never `orchestrator` |
+| `action` | `dispatch_flattened` |
+| `subject` | the **specialist that would have been used** (e.g. `apple-developer:test-generator`) |
+| `result` | `deferred` — the dispatch did not happen; the work still did |
+| `metadata.attempted_depth` | the depth the refused child would have occupied |
+| `metadata.cap` | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` as resolved at refusal time |
+
+All three of `subject`, `attempted_depth`, and `cap` are required. A row saying only that flattening happened does not tell an operator **whose judgment is missing from the output**, which is the only question the row is written to answer.
+
+Pairs with the orchestrator's forward-looking `dispatch_depth_projected` (`skills/worktask/SKILL.md § Validation check 11`): the projection warns before the stage runs, this row records what the projection missed.
 
 #### Background-by-default dispatch
 
