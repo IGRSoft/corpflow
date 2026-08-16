@@ -209,6 +209,8 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/self-improvement/scripts/build-context-set.sh` | `tests/shell/skills/build-context-set.bats` | — | — | — |
 | `skills/self-improvement/scripts/detect-user-changes.sh` | `tests/shell/skills/detect-user-changes.bats` | — | — | — |
 | `skills/release-engineering/scripts/changelog-from-git.sh` | `tests/shell/skills/changelog-from-git.bats` | — | — | — |
+| `skills/release-engineering/scripts/version-bump-from-git.sh` | `tests/shell/skills/version-bump-from-git.bats` | — | — | — |
+| `skills/release-engineering/scripts/conventional-commits-lib.sh` | `tests/shell/skills/version-bump-from-git.bats` + `changelog-from-git.bats` (sourced by both consumers) | — | — | — |
 | `skills/security-review-process/scripts/scan-secrets.sh` | `tests/shell/skills/scan-secrets.bats` | — | — | — |
 | `skills/context-compression/scripts/post-compact-recovery.sh` | `tests/shell/skills/post-compact-recovery.bats` | — | — | — |
 | `skills/agent-coordination/scripts/audit-dedup.sh` | `tests/shell/skills/agent-coordination__audit-dedup.bats` | — | — | — |

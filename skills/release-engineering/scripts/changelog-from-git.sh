@@ -6,7 +6,8 @@
 # @arg $1  Git range, e.g. "v1.1.0..HEAD" or "abc123..def456" (required unless --self-test/--file)
 # @arg --version VERSION  Version label for the section header (default: Unreleased)
 # @arg --date DATE        Date string for the section header (default: today, YYYY-MM-DD)
-# @arg --file PATH        Read pre-fetched commit subjects from a file (one per line)
+# @arg --file PATH        Read pre-fetched commits from a file: NUL-separated whole
+#                         messages, or one subject per line when it contains no NUL
 # @arg --repo PATH        Path to git repo (default: current directory)
 # @arg --self-test        Run built-in tests against a temp repo (no network)
 # @exitcode 0  Success — markdown written to stdout
@@ -14,6 +15,21 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' ERR
+
+# Commit parsing is shared with version-bump-from-git.sh so the two cannot
+# disagree about which commits are breaking. A missing same-commit sibling means
+# a broken install; `[ -r ]` first because `.` on a missing file is a special-
+# builtin error that exits before any `if ! .` guard can run.
+_CC_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/conventional-commits-lib.sh"
+if [ -r "$_CC_LIB" ]; then
+  # shellcheck source=conventional-commits-lib.sh
+  # shellcheck disable=SC1090
+  . "$_CC_LIB"
+else
+  printf >&2 'changelog-from-git: helper library unreachable at %s — plugin install broken\n' \
+    "$_CC_LIB"
+  exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Keep-a-Changelog section order — determines output ordering.
@@ -48,74 +64,45 @@ section_append() {
 }
 
 # ---------------------------------------------------------------------------
-# classify_type <type_lowercase> <breaking_flag>
-# Prints the KCL section name, or empty string for silent types.
-# ---------------------------------------------------------------------------
-classify_type() {
-  local type="$1"
-  case "$type" in
-    feat) printf 'Added' ;;
-    fix) printf 'Fixed' ;;
-    refactor | perf) printf 'Changed' ;;
-    docs | style | test | chore | ci | build) printf '' ;; # suppress
-    *) printf 'Other' ;;
-  esac
-}
-
-# ---------------------------------------------------------------------------
-# parse_and_bucket <subject_line>
-# Parses one commit subject and appends to the appropriate section bucket.
-# Silently skips blank/whitespace-only subjects.
+# parse_and_bucket <commit_message>
+# Buckets one commit. Only its subject becomes the entry text; the body is read
+# solely for a BREAKING CHANGE footer. Blank messages are skipped.
 # ---------------------------------------------------------------------------
 parse_and_bucket() {
   local raw="$1"
+  local entry section
 
-  # Strip leading/trailing whitespace
-  local subj
-  subj="$(printf '%s' "$raw" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-  [[ -z "$subj" ]] && return 0
+  if ! cc_parse "$raw"; then
+    return 0
+  fi
 
-  # Match conventional-commit prefix: type[(scope)][!]: description
-  # Variable holds regex to satisfy shellcheck SC2221 for [[ =~ ]]
-  local cc_re='^([a-zA-Z]+)(\([^)]*\))?(!)?: '
-  local type scope breaking desc entry section
+  if [[ "$CC_CONVENTIONAL" != "1" ]]; then
+    section_append "Other" "$CC_SUBJECT"
+    return 0
+  fi
 
-  if [[ "$subj" =~ $cc_re ]]; then
-    type="${BASH_REMATCH[1]}"
-    scope="${BASH_REMATCH[2]}" # may be empty
-    breaking=0
-    [[ "${BASH_REMATCH[3]}" == "!" ]] && breaking=1
+  section="$(cc_classify_section "$CC_TYPE" "$CC_BREAKING")"
+  if [[ -z "$section" ]]; then
+    return 0 # silent type
+  fi
 
-    # Extract description: everything after the matched prefix
-    local prefix_len="${#BASH_REMATCH[0]}"
-    desc="${subj:$prefix_len}"
-    desc="$(printf '%s' "$desc" | sed 's/^[[:space:]]*//')"
+  local prefix=""
+  if [[ "$CC_BREAKING" == "1" ]]; then
+    prefix="**BREAKING**"
+  fi
 
-    # Lowercase type — use tr for Bash 3.2 compat (no ${var,,})
-    type="$(printf '%s' "$type" | tr '[:upper:]' '[:lower:]')"
-
-    section="$(classify_type "$type" "$breaking")"
-    [[ -z "$section" ]] && return 0 # silent type — suppress
-
-    # Build entry text: bold scope if present; BREAKING prefix if applicable
-    if [[ -n "$scope" ]]; then
-      local scope_label="${scope:1:${#scope}-2}" # strip parens
-      if [[ "$breaking" == "1" ]]; then
-        entry="**BREAKING** **${scope_label}**: ${desc}"
-      else
-        entry="**${scope_label}**: ${desc}"
-      fi
+  if [[ -n "$CC_SCOPE" ]]; then
+    if [[ -n "$prefix" ]]; then
+      entry="${prefix} **${CC_SCOPE}**: ${CC_DESC}"
     else
-      if [[ "$breaking" == "1" ]]; then
-        entry="**BREAKING**: ${desc}"
-      else
-        entry="${desc}"
-      fi
+      entry="**${CC_SCOPE}**: ${CC_DESC}"
     fi
   else
-    # Non-conventional commit — bucket under Other (never dropped)
-    section="Other"
-    entry="$subj"
+    if [[ -n "$prefix" ]]; then
+      entry="${prefix}: ${CC_DESC}"
+    else
+      entry="${CC_DESC}"
+    fi
   fi
 
   section_append "$section" "$entry"
@@ -191,6 +178,10 @@ run_self_test() {
   git -C "$tmpdir" commit -q --allow-empty -m "ci: update GitHub Actions workflow"
   git -C "$tmpdir" commit -q --allow-empty -m "build: switch to esbuild"
   git -C "$tmpdir" commit -q --allow-empty -m "feat!: remove legacy v1 endpoints"
+  git -C "$tmpdir" commit -q --allow-empty \
+    -m "fix: drop the compat shim" -m "BREAKING CHANGE: callers must migrate."
+  git -C "$tmpdir" commit -q --allow-empty \
+    -m "chore: retire the shim" -m "BREAKING CHANGE: callers must migrate."
   git -C "$tmpdir" commit -q --allow-empty -m "Non-conventional commit message"
 
   local fail=0
@@ -209,6 +200,14 @@ run_self_test() {
   }
   grep -q 'crash on empty input' <<< "$output" || {
     printf >&2 'FAIL: fix not in Fixed\n'
+    fail=1
+  }
+  grep -q 'BREAKING.*drop the compat shim' <<< "$output" || {
+    printf >&2 'FAIL: BREAKING CHANGE footer not marked BREAKING\n'
+    fail=1
+  }
+  grep -q 'BREAKING.*retire the shim' <<< "$output" || {
+    printf >&2 'FAIL: breaking commit of a silent type was suppressed\n'
     fail=1
   }
   grep -q 'extract helper module' <<< "$output" || {
@@ -294,7 +293,8 @@ Options:
   --repo PATH        Path to git repository (default: current directory).
   --version VERSION  Version label for section header.  Default: Unreleased
   --date DATE        Date for section header (YYYY-MM-DD).  Default: today
-  --file PATH        Read commit subjects from file (one per line) instead of git.
+  --file PATH        Read commits from file instead of git: NUL-separated whole
+                     messages, or one subject per line if it holds no NUL.
   --self-test        Run built-in tests against a temp repo (no network).
 
 Output: Keep-a-Changelog markdown section written to stdout.
@@ -367,32 +367,15 @@ main() {
   # Initialise section buckets (temp files; EXIT trap wired inside)
   init_buckets
 
-  # Collect commit subjects
-  local subjects_raw=""
+  # Staged through a file so a git or read failure aborts here; a process
+  # substitution would swallow it and render an empty-but-successful changelog.
+  local records="${_BUCKET_DIR}/.records"
+  cc_collect_records "$range" "$repo_path" "$input_file" > "$records"
 
-  if [[ -n "$input_file" ]]; then
-    if [[ ! -r "$input_file" ]]; then
-      printf >&2 'error: cannot read file: %s\n' "$input_file"
-      exit 1
-    fi
-    subjects_raw="$(cat -- "$input_file")"
-  else
-    # Validate range — allow only chars safe in git revision specs
-    if [[ ! "$range" =~ ^[a-zA-Z0-9_.^~/@{}-]+(\.\.[a-zA-Z0-9_.^~/@{}-]+)?$ ]]; then
-      printf >&2 'error: git range contains unsafe characters: %s\n' "$range"
-      exit 1
-    fi
-    if [[ -n "$repo_path" ]]; then
-      subjects_raw="$(git -C "$repo_path" log "$range" --pretty=format:'%s' --)"
-    else
-      subjects_raw="$(git log "$range" --pretty=format:'%s' --)"
-    fi
-  fi
-
-  # Parse and classify each subject line into section buckets
-  while IFS= read -r subj; do
-    parse_and_bucket "$subj"
-  done <<< "$subjects_raw"
+  local msg
+  while IFS= read -r -d '' msg || [[ -n "$msg" ]]; do
+    parse_and_bucket "$msg"
+  done < "$records"
 
   render_sections "$version" "$date"
 }

@@ -42,3 +42,4 @@ tests/fixtures/README.md	NONE	R23	Reviewed: the fixture index is prose about wri
 examples/canvas-fixture/*	benchmark/canvas-e2e-guards	R20	The canvas end-to-end guard drives this fixture tree directly.
 # STALE-OK: .context/ is gitignored worktask scratch, so no tracked path can ever match this glob; the row exists so the silence is reviewed rather than an F3 on every worktask run.
 .context/*	NONE	R24	Reviewed: worktask run artifacts are scratch state written by the pipeline; no test reads them, so ALWAYS is the correct answer.
+skills/release-engineering/scripts/conventional-commits-lib.sh	skills/changelog-from-git,skills/version-bump-from-git	R26	The conventional-commit parser is sourced by both release scripts; neither consumer suite names the library path, so an edit confined to it selects nothing at L1 and a breaking-detection change ships untested.
