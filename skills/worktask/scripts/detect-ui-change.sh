@@ -9,7 +9,12 @@
 #
 # Usage:
 #   detect-ui-change.sh <plan-file> [--platform <p>]
+#   detect-ui-change.sh --path-classes
 #   detect-ui-change.sh --self-test
+#
+# --path-classes prints the S4 UI path-class regex and exits 0, so a caller that
+# classifies a git diff instead of a plan reads the vocabulary from its one owner
+# rather than keeping a second copy free to drift.
 #
 # Output (stdout, single JSON line):
 #   {"requires_screenshots": <bool>, "signals": ["S1",...], "rationale": "<one line>"}
@@ -272,6 +277,13 @@ MD
 }
 
 # ---------- entrypoint ------------------------------------------------------
+# Answered before the plan-file parser so the vocabulary is readable in a tree
+# that has no plan at all.
+if [ "${1:-}" = "--path-classes" ]; then
+  printf '%s\n' "$UI_PATH_CLASSES"
+  exit 0
+fi
+
 if [ "${1:-}" = "--self-test" ]; then
   run_self_tests || exit 2
   exit 0
