@@ -2,6 +2,83 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **The test-execution gate now denies a run that already happened.** Authority answered *who*
+  may execute tests; nothing asked *again?*. A stage re-running a suite against a tree nobody
+  touched burns full wall-clock and, on live runs, real spend, to reproduce a result already on
+  record. Once an authorized invocation is allowed, the identical invocation is denied while the
+  tree is byte-identical, scoped to `run_index` so a run recorded by one stage covers a later
+  stage's identical run. The deny names the prior run's stage and timestamp so the caller cites
+  it rather than working around the gate.
+
+  Suppression is keyed on the **tree**, never on an outcome: the hook is `PreToolUse`, so whether
+  a run passed is unknowable to it. The fingerprint is HEAD plus `git status --porcelain` **and**
+  `git diff HEAD` — the diff is load-bearing, because porcelain reports only names and status
+  letters, so two successive edits to one file look identical to it and a porcelain-only
+  fingerprint would deny the retest after a real fix. Any edit re-enables the command with no
+  flag, which is what keeps test → fix → retest working.
+
+  Checked on the allow path only, so suppression can never widen what the gate permits: a banned
+  stage still gets the authority deny. Build-only verification is never suppressed. Every
+  unresolvable input — no git, no `shasum`, no `run_index` on the ledger — skips the check and
+  allows, matching the hook's fail-open contract. `CORPFLOW_TEST_DEDUPE=off` is the human-only
+  hatch, mirroring `CORPFLOW_TEST_GATE=off`.
+
+  The gate keeps its own sentinels under `.context/logs/.test-runs/` and does **not** read the
+  `full_test_run` / `scoped_test_run` audit rows, which `agent-coordination` binds as audit-only
+  and never a gate. That rule is preserved, not amended.
+
+### Changed
+
+- **The gate no longer forks `sed`, and resolves the stage only for test commands.** It fires on
+  every Bash, Skill and Task call, and paid 3 `jq` forks on each one to resolve a stage that
+  classification never reads — so an ordinary `git status` bought an answer it then discarded.
+  Classification now runs first. `sed` is gone from the classify path entirely (5 forks to 0):
+  `_trim` assigns to a global because `x=$(f)` forks even for a shell function, `strip_assignments`
+  uses `[[ =~ ]]`, and the segment split uses literal `${var//x/y}` passes ordered so `&&` and `||`
+  are consumed before the single-pipe pass. `ledger_settled` reads both its counts in one `jq`.
+  Measured: benign call 13ms → 10ms, test command 36ms → 27ms.
+
+  The separator in `strip_assignments` is `[[:blank:]]`, not `[[:space:]]`, deliberately: `sed`
+  worked line-by-line, and a whole-string regex matching a newline would consume a first-line
+  assignment and promote the second line's runner into head position — changing which invocations
+  get a redacted `command_head`. The suite caught that as a real behaviour change, not a flaky test.
+
+- **`classify_segment` is 216 lines, down from 270.** The gradle and xcodebuild action scans moved
+  into `_gradle_subcmd` / `_xcodebuild_subcmd`, which signal through a return code and a global
+  rather than an echoed value, so the split does not reintroduce the forks just removed.
+
+- **Hook comments compacted to `skills/code-comment-standard`.** The worst file ran 86%
+  comment-to-code against a standard asking for "well below 1:1". What came out was what the
+  standard names: incident history, issue IDs as provenance (`#295`, `OV-56`, `SR2-M1`),
+  verification logs ("measured, not guessed", "QA-confirmed live"), calibration data, and
+  drift-prone `file.md:184` references. Every contract and invariant stayed — exit-0-always, the
+  fail-open direction, `set -f` being load-bearing, the backup-before-write rule. Densities:
+  test-execution-gate 86% → 69%, anchor-preflight 71% → 42%, state-merge 69% → 60%, and four more.
+  Code lines are byte-stable in every file.
+
+- **Self-test bodies moved to `hooks/lib/`.** Four hooks shed 660 lines of test code from
+  production files: `dv-comment-density-gate` (416 → 247), `dv-screenshot-gate` (283 → 206),
+  `comment-standard-context` (142 → 105), plus the gate below. Each dispatcher fails **closed** — a
+  missing body reports a failure rather than "OK". `anchor-preflight` and `precompact-checkpoint`
+  were left alone: an 8-line dispatcher against a 9-line body is churn, not simplification.
+
+- **`hooks/test-execution-gate.sh` is 1078 lines, down from 1280.** Its 351-line `--self-test`
+  body moved to `hooks/lib/test-execution-gate-selftest.sh`, sourced only under `--self-test` and
+  never on the `PreToolUse` dispatch path — so the hot path resolves no sibling path at hook time,
+  the failure mode just fixed in `state-merge.sh`. That arm alone fails **closed**: a self-test
+  that cannot find its cases reports a failure rather than "OK". The classifier stayed inline
+  deliberately (it is the hot path), and the WHY-comments stayed (they encode incident history).
+  Net effect: smaller than before despite gaining a feature.
+
+- `hooks/test-execution-gate.sh` is now the documented writer of `test_execution_blocked`,
+  `test_execution_deduped`, `test_delegation_observed`, `test_gate_disabled` and
+  `test_dedupe_disabled`. The first three predate this change and were absent from
+  `agent-coordination`'s writers table and action enum entirely.
+
 ## [4.0.17] — 2026-08-16
 
 ### Changed

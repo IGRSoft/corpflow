@@ -1,36 +1,22 @@
 #!/usr/bin/env bash
-# Test-Execution Authority gate — PreToolUse hook (corpflow worktask plugin).
+# test-execution-gate — PreToolUse gate for skills/shared/testing-strategy.md
+# § Test-Execution Authority: only DV (scoped) and QA (scoped + full) may run
+# tests, and an already-recorded run is denied while the tree is unchanged.
 #
-# Enforces skills/shared/testing-strategy.md § Test-Execution Authority: only
-# DV (scoped) and QA (scoped + full) may execute tests; every other stage is
-# denied, and DV itself is denied a full-suite run. Stage resolution reads
-# .context/state.json ONLY — never agent_type or an env var claiming to carry
-# it — so a nested delegate inherits the in-progress stage automatically,
-# closing the delegation-path hole at the delegate's own leaf Bash call.
+# Stage comes from .context/state.json alone, never agent identity or env, so a
+# nested delegate inherits the in-progress stage. The Task branch only observes:
+# a dispatch prompt quoting the ban names every runner, so matching prose there
+# would refuse to dispatch the stages that implement the policy.
 #
-# The Task branch is OBSERVE-ONLY, never a deny: a delegation prompt quoting
-# this very ban contains every runner name (including this worktask's own
-# DV/DR/SR/QA dispatch prompts), so a prose-matching deny would refuse to
-# dispatch the stages implementing the policy.
+# Exits 0 always; the decision travels in hookSpecificOutput.permissionDecision,
+# so a malformed emission fails OPEN. Hatches are process env only and cannot be
+# reached from a command string: CORPFLOW_TEST_GATE=off, CORPFLOW_TEST_DEDUPE=off.
 #
-# Exit code is ALWAYS 0 — the decision travels in JSON
-# (hookSpecificOutput.permissionDecision, matching dv-screenshot-gate.sh), so
-# a malformed emission fails OPEN by design: this is a backstop, not a
-# sandbox — tool-grant narrowing and the orchestrator's dispatch-time ban
-# banner are the primary controls. Escape hatch: CORPFLOW_TEST_GATE=off
-# (process env only — a command-string prefix cannot reach it, since this
-# hook's env comes from the CC parent process, not the command string).
+# No `set -e`: a false compound test is control flow here, and aborting mid-
+# classification would turn a fail-open backstop closed. `set -f` is load-bearing
+# — the xcodebuild and gradle scans word-split an unquoted fragment on purpose.
 #
-# Deliberately no `set -e`: several branches rely on a compound `[ ]`/case
-# test evaluating false as ordinary control flow, and `set -e` would abort
-# mid-classification instead of falling through, turning a fail-open
-# backstop fail-*closed*. `set -f` is load-bearing, not merely
-# defense-in-depth: the xcodebuild action scan and the gradle task scan
-# word-split an unquoted command fragment on purpose (`for _tok in $_rest`),
-# and without `set -f` a `*` or `?` in an argument would glob against the
-# working directory before those loops ever saw the token.
-#
-# --self-test: fixture-driven, no live process, covers the fail-open ladder.
+# --self-test body: lib/test-execution-gate-selftest.sh.
 set -u
 set -f
 
@@ -38,34 +24,35 @@ SELF_TEST=0
 [ "${1:-}" = "--self-test" ] && SELF_TEST=1
 
 # ---------------------------------------------------------------------------
-# RUNNERS — parity counterpart of testing-strategy.md's canonical runner
-# list; test-authority-matrix.bats asserts the two enumerations agree. Head
-# token after wrapper-stripping is matched against this set.
+# RUNNERS — parity counterpart of testing-strategy.md's canonical list;
+# test-authority-matrix.bats asserts the two agree. Matched against the head
+# token after wrapper-stripping.
 #
-# MULTI_PURPOSE_RUNNERS is a subset: these heads have non-test uses (`swift
-# build`, `./gradlew assembleDebug`, `xcodebuild archive`, `go build`, `npm
-# run lint`, ...), so a bare head match is NOT sufficient — the subcommand
-# must name "test" (or, for gradle, a task containing "test") before the
-# invocation classifies as test execution at all. Single-purpose runners
-# (bats, pytest, ctest, jest, vitest, playwright, rspec) have no non-test
-# invocation shape worth distinguishing.
+# MULTI_PURPOSE_RUNNERS is the subset with non-test shapes (`swift build`,
+# `go build`), where the subcommand must name "test" — for gradle, a task
+# containing "test" — before anything classifies as test execution.
 # ---------------------------------------------------------------------------
 RUNNERS="bats swift pytest ctest cargo jest vitest playwright rspec gradle gradlew python python3 go make npx uvx pnpm yarn bunx xcodebuild dotnet npm"
 MULTI_PURPOSE_RUNNERS="swift cargo go npm pnpm yarn dotnet xcodebuild gradle gradlew"
 
-# Known bypasses (measured, not guessed): $(...)/backticks/here-docs aren't
-# segment-split; `find -exec`/`xargs` and a renamed or written-then-executed
-# runner never reach head position; `env -i`/`/usr/bin/env`/`\pytest` aren't
-# unwrapped by strip_assignments; `bash -c'x'` with no space before the quote
-# misses the `-c ` match; `bash -c 'bash -c "pytest"'` beyond MAX_RECURSE_DEPTH
-# classifies not_test (allow) rather than chasing further — an accepted
-# trade against unbounded recursion (CWE-674), not a code gap to close;
-# `npm test --dry-run` classifies build_only and allows, but `--dry-run` has
-# no effect on `npm test`/run-scripts (only the `npm install` family) — npm
-# actually executes the script (QA-confirmed live), so this is a real,
-# accepted bypass, not merely a theoretical one. This hook is a backstop, not
-# a sandbox — tool-grant narrowing and the orchestrator's ban banner are the
-# controls without these gaps.
+# Known bypasses, all allow-direction: $(...)/backticks/here-docs are not
+# segment-split; `find -exec`, `xargs`, and a renamed or written-then-executed
+# runner never reach head position; `env -i`, `\pytest`, and `bash -c'x'` (no
+# space) are not unwrapped; nesting past MAX_RECURSE_DEPTH classifies not_test
+# rather than recursing unboundedly; `npm test --dry-run` classifies build_only
+# while npm still runs the script. This hook is a backstop — tool-grant
+# narrowing and the orchestrator's ban banner are the controls without gaps.
+
+# ---------------------------------------------------------------------------
+# _trim <string> -> sets TRIMMED to the string without surrounding whitespace.
+# Assigns to a global rather than echoing: `x=$(f)` forks a subshell even for a
+# shell function, and this runs on the hot path of every classified command.
+# ---------------------------------------------------------------------------
+_trim() {
+  local _t="$1"
+  _t="${_t#"${_t%%[![:space:]]*}"}"
+  TRIMMED="${_t%"${_t##*[![:space:]]}"}"
+}
 
 # ---------------------------------------------------------------------------
 # strip_assignments <segment> -> echoes the segment with leading VAR=value /
@@ -73,22 +60,29 @@ MULTI_PURPOSE_RUNNERS="swift cargo go npm pnpm yarn dotnet xcodebuild gradle gra
 # (classification) and run_gate (command_head derivation) so a secret in a
 # leading env assignment (e.g. `API_KEY=sk-... pytest x`) can never reach
 # either the classifier's runner-name check or the audit log.
+#
+# A quoted value containing a space (`FOO="a b" pytest x`) is not one
+# space-delimited word, so a naive strip-to-next-space leaves a fragment in head
+# position — which either drops the invocation out of RUNNERS (the gate never
+# fires) or collides with a real runner name and denies something that was never
+# a test. The pattern consumes a quoted or bare value as one unit; `[[ =~ ]]`
+# keeps it fork-free.
+#
+# The separator is [[:blank:]], never [[:space:]]: this runs against a whole
+# multi-line command, and matching a newline would consume an assignment on the
+# FIRST line and promote the second line's runner into head position — changing
+# which invocations get a redacted command_head.
 # ---------------------------------------------------------------------------
+_ASSIGN_RE='^[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]*)[[:blank:]]+'
 strip_assignments() {
   local _s _next
   _s="$1"
-  # A quoted value containing a space (`FOO="a b" pytest x`) is not one
-  # space-delimited word, so a naive "strip to the next space" leaves a
-  # fragment of the value in head position — which then either drops the
-  # invocation out of RUNNERS entirely (a deny bypass: the gate never fires)
-  # or, if the fragment happens to collide with a real runner name, denies
-  # something that was never a test at all. The regex below consumes a
-  # double-quoted, single-quoted, or bare (no-space) value as one unit.
   while :; do
     case "$_s" in
       env\ *) _s="${_s#env }" ;;
       *)
-        _next="$(printf '%s' "$_s" | sed -E 's/^[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]*)[[:space:]]+//')"
+        [[ $_s =~ $_ASSIGN_RE ]] || break
+        _next="${_s#"${BASH_REMATCH[0]}"}"
         [ "$_next" != "$_s" ] || break
         _s="$_next"
         ;;
@@ -98,21 +92,79 @@ strip_assignments() {
 }
 
 # ---------------------------------------------------------------------------
-# tokenize_quoted <string> -> fills the global array TOKENIZED_ARGV with the
-# string's words, splitting on UNQUOTED whitespace only, so a quoted
-# multi-word value ("platform=iOS Simulator,name=iPhone 16 Pro" — the normal
-# shape of a simulator destination) is ONE token. Surrounding quotes are
-# removed; the value itself is never interpreted.
+# _gradle_subcmd / _xcodebuild_subcmd <rest> -> 0 when the invocation executes
+# tests, 1 when it does not. Both set _rest_effective to <rest> minus the
+# consumed action token, so the caller's selector check judges only what follows.
+#
+# Return code plus a global, not an echoed value: `x=$(f)` forks, and these sit
+# on the hot path of every classified command.
+# ---------------------------------------------------------------------------
+_gradle_subcmd() {
+  local _rest="$1" _task="" _skipv=0 _found=0 _tok
+  # The task is FOUND, not read from first position: gradle accepts options
+  # before tasks (`gradle -p . test`), where a first-token read sees `-p` and
+  # lets a full run through as scoped. `-p` values are skipped so a dir named
+  # `test-utils` is not mistaken for the task; an unlisted flag's value still
+  # can be — the allow direction.
+  for _tok in $_rest; do
+    if [ "$_skipv" -eq 1 ]; then _skipv=0; continue; fi
+    case "$_tok" in
+      -p|--project-dir) _skipv=1 ;;
+      -*) : ;;
+      *) _task="$_tok"; break ;;
+    esac
+  done
+  # Task names containing "test" that only build it — assembleAndroidTest,
+  # installDebugAndroidTest, compileDebugUnitTest* — execute nothing, and
+  # denying them would break the build-only promise.
+  case "$_task" in
+    install*|assemble*|compile*) return 1 ;;
+  esac
+  case "$_rest" in
+    *[Tt]est*) : ;;
+    *) return 1 ;;
+  esac
+  _rest_effective=""
+  for _tok in $_rest; do
+    if [ "$_found" -eq 0 ] && [ -n "$_task" ] && [ "$_tok" = "$_task" ]; then
+      _found=1; continue
+    fi
+    _rest_effective="$_rest_effective $_tok"
+  done
+  return 0
+}
+
+_xcodebuild_subcmd() {
+  local _rest="$1" _found=0 _tok
+  # xcodebuild puts its ACTION after the options (`xcodebuild -scheme A test`),
+  # so the first-token read used for every other multi-purpose runner sees
+  # `-scheme` and lets a real test run through. Scan every token, word-exact: a
+  # substring match would fire on `-scheme MyTests`, and `build-for-testing`
+  # compiles without running. Residual, accepted: an option value that is
+  # literally `test` reads as the action — a false deny, the safe direction.
+  _rest_effective=""
+  for _tok in $_rest; do
+    if [ "$_found" -eq 0 ]; then
+      case "$_tok" in
+        test|test-without-building) _found=1; continue ;;
+      esac
+    fi
+    _rest_effective="$_rest_effective $_tok"
+  done
+  [ "$_found" -eq 1 ] || return 1
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# tokenize_quoted <string> -> fills TOKENIZED_ARGV, splitting on UNQUOTED
+# whitespace only, so a quoted multi-word value stays one token. Surrounding
+# quotes are dropped; the value itself is never interpreted.
 #
 # Returns 1 on an unterminated quote, which the caller MUST treat as "strip
-# nothing" — a half-parsed argument list could drop the very token that makes
-# a run scoped. No `eval`, no `xargs`, no sentinel character: this parses an
-# untrusted command string inside a security control, so it may not execute
-# it, and it may not assume any byte is absent from the input.
-#
-# Not handled, deliberately: backslash-escaped whitespace (`-destination
-# platform=iOS\ Simulator`) still splits, leaving a fragment that survives as
-# a positional and classifies scoped — the allow direction.
+# nothing" — a half-parsed list can drop the token that makes a run scoped. No
+# eval, xargs, or sentinel byte: this parses an untrusted string inside a
+# security control. Backslash-escaped whitespace still splits, leaving a
+# positional that classifies scoped — the allow direction.
 # ---------------------------------------------------------------------------
 tokenize_quoted() {
   local _s="$1" _i=0 _n=${#1} _ch _cur="" _open=0 _q=""
@@ -126,9 +178,7 @@ tokenize_quoted() {
     fi
     case "$_ch" in
       \'|\") _q="$_ch"; _open=1 ;;
-      # $'\t' is a literal, expanded by the parser. A `$(printf '\t')` here
-      # forks a subshell PER CHARACTER of every command this hook inspects,
-      # in a file whose header promises a zero-fork fast path.
+      # $'\t' is parser-expanded; $(printf '\t') would fork per character.
       ' '|$'\t')
         [ "$_open" -eq 1 ] && { TOKENIZED_ARGV[${#TOKENIZED_ARGV[@]}]="$_cur"; _cur=""; _open=0; }
         ;;
@@ -141,21 +191,15 @@ tokenize_quoted() {
 }
 
 # ---------------------------------------------------------------------------
-# strip_nonselecting_flags <head> <rest> -> echoes <rest> with the flags that
-# the named runner carries on EVERY invocation regardless of scope removed, so
-# the positional limb's "an argument survived" genuinely means "the caller
-# narrowed the run" rather than "this runner needs flags to start at all".
+# strip_nonselecting_flags <head> <rest> -> <rest> minus the flags the runner
+# carries on every invocation, so a surviving positional means the caller
+# narrowed the run rather than that the runner needs flags to start at all.
 #
-# Fail direction is load-bearing: an unlisted future flag survives, classifies
-# scoped, and degrades to today's allow — never to a false deny. Every arm here
-# must preserve that, which is why the value-consuming arms refuse to eat a
-# token beginning with `-`: `-scheme -only-testing:X` (flag missing its value)
-# must leave the selector standing rather than swallow it into the flag.
-#
-# Token-walked rather than sed-driven: a `s/(^| )-flag [^ ]+/ /g` pass cannot
-# express the "not if the next token is a flag" guard, cannot keep a quoted
-# multi-word value together, and consuming the delimiting space makes an
-# adjacent second switch unmatchable on the same `g` scan.
+# Fail direction is load-bearing: an unlisted flag survives, classifies scoped,
+# and degrades to allow — never to a false deny. Value-consuming arms therefore
+# refuse to eat a token beginning with `-`, so `-scheme -only-testing:X` leaves
+# the selector standing. Token-walked, not sed: a regex cannot express that
+# guard, keep a quoted value whole, or match adjacent switches on one pass.
 # ---------------------------------------------------------------------------
 strip_nonselecting_flags() {
   local _h="$1" _in="$2" _out="" _tok _skip=0
@@ -211,19 +255,13 @@ strip_nonselecting_flags() {
         esac
         ;;
     esac
-    # Runner-independent: a build configuration is not a test selection. `-c`
-    # and `--config(uration)` were a sed at the call site until this round;
-    # folded in so they get the same quote-awareness and the same `-`-guard as
-    # every other value-consuming flag, since the sed form split a quoted
-    # value and left a fragment behind.
+    # Runner-independent: a build configuration is not a test selection.
     #
     # `-c` takes a value on swift/pytest/jest/vitest/gradle/dotnet but is
-    # VALUELESS on bats (--count), go (compile-only) and rspec (--colour).
-    # Each of those three is handled BEFORE this arm — the first two return
-    # build_only above, rspec drops it in the per-runner case — because a
-    # value-consuming arm applied to a valueless flag eats the token after it
-    # and turns a scoped run, or a compile, into a full-suite deny. Any flag
-    # added here needs the same per-runner check.
+    # VALUELESS on bats (--count), go (compile-only) and rspec (--colour), each
+    # handled BEFORE this arm. A value-consuming arm applied to a valueless flag
+    # eats the next token and turns a scoped run into a full-suite deny. Any
+    # flag added here needs the same per-runner check.
     case "$_tok" in
       -c|--config|--configuration) _skip=1; continue ;;
       --release) continue ;;
@@ -249,7 +287,13 @@ classify_cmd() {
   # Segment split on && || ; | and newline. Command substitution, backticks,
   # and here-docs are NOT split — a documented, accepted hole (see the
   # bypass note above RUNNERS).
-  _norm=$(printf '%s' "$_cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g')
+  # Fork-free: bash substitution patterns are globs, where & ; | are all literal,
+  # so four literal passes replace one alternation regex. Order matters — && and
+  # || are consumed before the single-pipe pass can split them.
+  _norm="${_cmd//&&/$'\n'}"
+  _norm="${_norm//||/$'\n'}"
+  _norm="${_norm//;/$'\n'}"
+  _norm="${_norm//|/$'\n'}"
   while IFS= read -r _seg; do
     [ -n "$_seg" ] || continue
     _class=$(classify_segment "$_seg")
@@ -276,7 +320,7 @@ EOF
 # real latency on a single tool call, not a crash, but not "depth 1" either.
 MAX_RECURSE_DEPTH=2
 classify_segment() {
-  local _seg _depth _head_full _head _rest _launcher _inner _mod _padded _subcmd _rest_for_selection _rest_effective _second _task _tok _found _skipv
+  local _seg _depth _head_full _head _rest _launcher _inner _mod _padded _subcmd _rest_for_selection _rest_effective _second
 
   _seg="$1"
   _depth="${2:-0}"
@@ -285,7 +329,7 @@ classify_segment() {
   fi
 
   # trim leading/trailing whitespace
-  _seg="$(printf '%s' "$_seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+  _trim "$_seg"; _seg="$TRIMMED"
   [ -n "$_seg" ] || { printf 'not_test'; return; }
 
   _seg="$(strip_assignments "$_seg")"
@@ -350,10 +394,10 @@ classify_segment() {
   # build-test arm below — an unanchored match would fire on `cat run-tests.sh`.
   # The >50% widening cap is NOT enforced here: only run-tests.sh knows the
   # selection size, and this hook must stay a cheap PreToolUse classifier.
-  _rt_padded=" $_seg "
+  _padded=" $_seg "
   case "$_head_full" in
     */run-tests.sh|run-tests.sh)
-      case "$_rt_padded" in
+      case "$_padded" in
         *' --print-selection '*) printf 'build_only'; return ;;
         *' --changed '*|*' --base '*|*' --only '*) printf 'scoped_test_run'; return ;;
         *) printf 'full_test_run'; return ;;
@@ -372,7 +416,6 @@ classify_segment() {
   # the whole segment would also fire on `cat docs/build-test.md` or
   # `git log --grep=build-test` — neither executes anything, both must stay
   # allowed since build-only verification is permitted everywhere.
-  _padded=" $_seg "
   case "$_head_full" in
     build-test|*/build-test|*:build-test)
       case "$_padded" in
@@ -394,94 +437,26 @@ classify_segment() {
       ;;
   esac
 
-  # Multi-purpose runners (swift/cargo/go/npm/pnpm/yarn/dotnet/xcodebuild/
-  # gradle/gradlew) have non-test invocation shapes (`swift build`,
-  # `./gradlew assembleDebug`, `xcodebuild archive`, `go build`) that are
-  # build-only, not test execution. A bare head match on these is NOT
-  # sufficient evidence — without the subcommand check below, a build-only
-  # command like `./gradlew assembleDebug` would falsely deny at every
-  # banned stage, breaking the promise that build-only stays allowed
-  # everywhere. Require the "test" subcommand (gradle/gradlew: any task
-  # NAME containing "test", e.g. `testDebugUnitTest`, `connectedAndroidTest`).
+  # Multi-purpose runners also have build-only shapes (`swift build`,
+  # `./gradlew assembleDebug`), so a bare head match would falsely deny them at
+  # a banned stage and break the build-only-everywhere promise. Require the
+  # "test" subcommand — for gradle, any task NAME containing "test".
   #
-  # _rest_effective drops the consumed subcommand/task token from _rest so
-  # the trailing-content selector check below judges only what follows it —
-  # otherwise the subcommand word itself ("test") is mistaken for a
-  # positional selector and `swift test` misreads as scoped instead of full.
+  # _rest_effective drops the consumed subcommand token so the selector check
+  # below judges only what follows; otherwise "test" itself reads as a
+  # positional selector and `swift test` misclassifies as scoped.
   _rest_effective="$_rest"
   case " $MULTI_PURPOSE_RUNNERS " in
     *" $_head "*)
       case "$_head" in
         gradle|gradlew)
-          # Exclude task-name prefixes that are pure build steps even though
-          # their full name contains "test" — `assembleAndroidTest` compiles
-          # a test APK, `installDebugAndroidTest` installs one,
-          # `compileDebugUnitTestKotlin` is a compile step. None of the
-          # three execute a test; denying them breaks the same build-only
-          # promise the subcommand check exists to protect.
-          #
-          # The task token is FOUND, not read from first position: gradle
-          # accepts options before task names (`gradle -p . test`), so a
-          # first-token read sees `-p` there, mistakes the project dir for a
-          # surviving positional, and lets the full run through as scoped.
-          # `-p`/`--project-dir` values are skipped so a directory named
-          # `test-utils` is never mistaken for the task; an unlisted flag's
-          # value can still be — the allow direction, since the extra
-          # surviving token classifies scoped.
-          _task=""
-          _skipv=0
-          for _tok in $_rest; do
-            if [ "$_skipv" -eq 1 ]; then _skipv=0; continue; fi
-            case "$_tok" in
-              -p|--project-dir) _skipv=1 ;;
-              -*) : ;;
-              *) _task="$_tok"; break ;;
-            esac
-          done
-          case "$_task" in
-            install*|assemble*|compile*) printf 'not_test'; return ;;
-          esac
-          case "$_rest" in
-            *[Tt]est*) : ;;              # task name mentions test (case-insensitive-ish)
-            *) printf 'not_test'; return ;;
-          esac
-          # Drop the one task token; flags in any position and any further
-          # task go on to selection analysis.
-          _rest_effective=""
-          _found=0
-          for _tok in $_rest; do
-            if [ "$_found" -eq 0 ] && [ -n "$_task" ] && [ "$_tok" = "$_task" ]; then
-              _found=1; continue
-            fi
-            _rest_effective="$_rest_effective $_tok"
-          done
+          _gradle_subcmd "$_rest" || { printf 'not_test'; return; }
           ;;
         xcodebuild)
-          # xcodebuild conventionally puts its ACTION after the options
-          # (`xcodebuild -scheme A -destination B test`), so the first-token
-          # subcommand read used for every other multi-purpose runner sees
-          # `-scheme` and lets a real test run through. Scan every remaining
-          # token instead, word-exact: a substring match would fire on
-          # `-scheme MyTests` (a build), and `build-for-testing` compiles a
-          # test bundle without running it, so only the two executing actions
-          # count. Residual, accepted: an option VALUE that is literally the
-          # word `test` (e.g. `-resultBundlePath test`) reads as the action —
-          # a false deny at a banned stage, the safe direction for a backstop.
-          _rest_effective=""
-          _found=0
-          for _tok in $_rest; do
-            if [ "$_found" -eq 0 ]; then
-              case "$_tok" in
-                test|test-without-building) _found=1; continue ;;
-              esac
-            fi
-            _rest_effective="$_rest_effective $_tok"
-          done
-          [ "$_found" -eq 1 ] || { printf 'not_test'; return; }
+          _xcodebuild_subcmd "$_rest" || { printf 'not_test'; return; }
           ;;
         *)
-          _subcmd="$(printf '%s' "$_rest" | sed -E 's/^[[:space:]]+//')"
-          _subcmd="${_subcmd%% *}"
+          _trim "$_rest"; _subcmd="${TRIMMED%% *}"
           case "$_subcmd" in
             test) _rest_effective="$(printf '%s' "$_rest" | sed -E 's/^[[:space:]]*test//')" ;;
             # `npm run test` / `pnpm run test` / `yarn run test` is the other
@@ -510,17 +485,11 @@ classify_segment() {
 
   # Build-only / collection-only flags override execution classification.
   # Token-exact (padded) matches only — a substring match would let `--list`
-  # wrongly fire on `--listener`, misclassifying a real test invocation as
-  # build-only. Bare `-c` is build-only ONLY for bats (its count flag); for
-  # every other runner `-c`/`--config` is a normal configuration flag
-  # (`swift test -c release`, `pytest -c pytest.ini` both execute tests) —
-  # treating it as build-only there would let one flag bypass the DV
-  # full-suite deny below.
-  # Extends the original five-flag set with four more sanctioned
-  # collect/compile-without-run forms: `cargo test --no-run` (compiles,
-  # runs nothing), `ctest -N`/`--show-only` (lists tests), `--listTests`
-  # (jest's camelCase spelling of the same idea), `--co` (pytest's short
-  # form of --collect-only).
+  # fire on `--listener` and misclassify a real invocation as build-only.
+  #
+  # Bare `-c` is build-only ONLY for bats (its count flag); elsewhere it is a
+  # configuration flag (`swift test -c release` executes tests), and treating it
+  # as build-only would let one flag bypass the DV full-suite deny below.
   case "$_padded" in
     *' --no-test '*|*' --dry-run '*|*' --collect-only '*|*' --list-tests '*|*' --list '*|*' --no-run '*|*' -N '*|*' --show-only '*|*' --listTests '*|*' --co '*)
       printf 'build_only'; return ;;
@@ -550,22 +519,18 @@ classify_segment() {
     *" -f "*|*"--filter"*|*" -k "*|*"-only-testing:"*|*" -run "*|*"--testcase"*|*"::"*|*"-gtest_filter"*|*" -R "*|*" -g "*|*" -t "*|*"--tests "*)
       printf 'scoped_test_run'; return ;;
   esac
-  # A bare runner with a trailing positional path/file argument also counts
-  # as a selection argument (`bats tests/foo.bats`, `cargo test foo`) — the
-  # positional limb of the shared predicate above; without it DV's own bare
-  # `bats <file>` would misclassify as full and deny DV its own run. A
-  # whole-tree argument (`pytest tests/`) therefore reads as scoped, not
-  # full — a deliberate policy limit, not a gap specific to this hook.
+  # A trailing positional path also counts as a selection (`bats tests/foo.bats`);
+  # without it DV's own bare `bats <file>` would read as full and deny DV its own
+  # run. A whole-tree argument (`pytest tests/`) therefore reads as scoped — a
+  # deliberate policy limit, not a gap specific to this hook.
   #
-  # `-c <value>` / `--config(uration) <value>` is a CONFIGURATION flag for
-  # swift/pytest, not a selector — strip it, or `swift test -c release`
-  # misreads as scoped and slips past the DV full-suite deny on the strength
-  # of one ordinary flag. It is joined there by the per-runner table:
-  # xcodebuild/gradle/dotnet REQUIRE non-selecting flags to run at all, so
-  # without it every executable invocation of them carries an argument and the
-  # positional limb below reads it as scoping.
+  # Configuration flags are stripped first, or `swift test -c release` reads as
+  # scoped and slips past the DV full-suite deny. Same for the per-runner table:
+  # xcodebuild/gradle/dotnet require non-selecting flags to run at all, so every
+  # executable invocation would otherwise carry an argument and read as scoped.
   _rest_for_selection="$(strip_nonselecting_flags "$_head" "$_rest_effective")"
-  if [ -n "$(printf '%s' "$_rest_for_selection" | sed -E 's/^[[:space:]]+//')" ]; then
+  _trim "$_rest_for_selection"
+  if [ -n "$TRIMMED" ]; then
     printf 'scoped_test_run'; return
   fi
   printf 'full_test_run'
@@ -610,38 +575,149 @@ resolve_stage() {
 }
 
 # ---------------------------------------------------------------------------
-# ledger_settled <ctx> -> echoes "settled" when the ledger positively says NOBODY
-# is acting: state.json parses, .tasks is a non-empty object, and zero entries
-# are in_progress. Empty for every other shape.
+# ledger_settled <ctx> -> "settled" when the ledger positively says NOBODY is
+# acting: state.json parses, .tasks is a non-empty object, zero in_progress.
+# Empty for every other shape.
 #
-# This splits resolve_stage's single empty answer, which conflated two very
-# different things. "Cannot tell who is acting" (no state.json, no jq,
-# unparseable, or >1 in_progress) must keep failing open — denying an unrelated
-# session would deadlock it. "Nobody is acting" is not an ambiguity: the worktask
-# has finished, or the loop is between stages, and no stage holds test authority
-# either way. Allowing there let a full suite run indefinitely after FN, which is
-# how a post-merge `./run-tests.sh` slipped through (#295).
-#
-# Note this cannot be evaded by cd'ing elsewhere: the caller reads
-# ${CLAUDE_PROJECT_DIR}/.context, the SESSION's ledger, not the cwd's.
+# Split from resolve_stage's single empty answer: "cannot tell" (no state.json,
+# no jq, unparseable, >1 in_progress) must fail open, while "nobody is acting"
+# is not an ambiguity — no stage holds test authority then. Reads the SESSION's
+# ledger under CLAUDE_PROJECT_DIR, so cd'ing elsewhere does not evade it.
 # ---------------------------------------------------------------------------
 ledger_settled() {
-  local _ctx="$1" _state _n_stages _n_active
+  local _ctx="$1" _state _counts _n_stages _n_active
   _state="$_ctx/state.json"
   [ -f "$_state" ] || { printf ''; return; }
   command -v jq >/dev/null 2>&1 || { printf ''; return; }
 
-  _n_stages=$(jq -r 'if (.tasks|type=="object") then (.tasks|length) else 0 end' \
-    "$_state" 2>/dev/null) || { printf ''; return; }
-  _n_active=$(jq -r '
+  # Both counts in ONE jq: they read the same file for the same decision, and a
+  # second invocation costs more than the comparison it feeds.
+  _counts=$(jq -r '
     if (.tasks|type=="object")
-    then (.tasks | to_entries | map(select(.value.status=="in_progress")) | length)
-    else 0 end
+    then "\(.tasks|length) \(.tasks | to_entries | map(select(.value.status=="in_progress")) | length)"
+    else "0 0" end
   ' "$_state" 2>/dev/null) || { printf ''; return; }
+  _n_stages="${_counts%% *}"
+  _n_active="${_counts##* }"
 
   case "$_n_stages" in ''|*[!0-9]*) printf ''; return ;; esac
   case "$_n_active" in ''|*[!0-9]*) printf ''; return ;; esac
   [ "$_n_stages" -gt 0 ] && [ "$_n_active" -eq 0 ] && printf 'settled'
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# Redundant-run suppression. Keyed on the TREE, never on an outcome: PreToolUse
+# fires before the command, so a pass is unknowable here. Any edit changes the
+# fingerprint and re-enables the run — protect that property in any change here.
+#
+# Keeps its OWN sentinels; never reads the full_test_run / scoped_test_run audit
+# rows, which agent-coordination binds as audit-only. Fail-open throughout: an
+# empty answer anywhere means "cannot tell", and the caller allows.
+# ---------------------------------------------------------------------------
+
+# tree_fingerprint -> digest of HEAD plus the uncommitted delta, or empty.
+tree_fingerprint() {
+  local _head _delta
+  command -v git >/dev/null 2>&1 || return 0
+  command -v shasum >/dev/null 2>&1 || return 0
+  _head=$(git rev-parse HEAD 2>/dev/null) || return 0
+  [ -n "$_head" ] || return 0
+  # `git diff HEAD` as well as `--porcelain`: porcelain reports only NAMES and
+  # status letters, so editing one file twice leaves it `M` both times and the
+  # digests would match — the second retest would be denied after a real fix.
+  # Diff content is what makes the fingerprint track edits rather than filenames.
+  # Gap, deliberately accepted: content edits to a never-added untracked file
+  # move neither output. Its creation does, and CORPFLOW_TEST_DEDUPE=off covers
+  # the rest; hashing untracked contents costs an unbounded walk on every call.
+  _delta=$({ git status --porcelain 2>/dev/null; git diff HEAD 2>/dev/null; } \
+    | shasum 2>/dev/null | cut -d' ' -f1) || return 0
+  printf '%s' "$_head$_delta" | shasum 2>/dev/null | cut -d' ' -f1
+}
+
+# run_index_of <ctx> -> the ledger's run_index, or empty on any other shape.
+run_index_of() {
+  local _state="$1/state.json"
+  [ -f "$_state" ] || return 0
+  jq -r 'if (.run_index | type) == "number" then (.run_index | tostring) else empty end' \
+    "$_state" 2>/dev/null
+}
+
+# dedupe_key <class> <invocation> <fingerprint> <run_index> -> digest, or empty.
+# The invocation is hashed, never stored: a full command can carry a secret, and
+# only the digest reaches the filesystem.
+dedupe_key() {
+  command -v shasum >/dev/null 2>&1 || return 0
+  printf '%s\n%s\n%s\n%s' "$1" "$2" "$3" "$4" | shasum 2>/dev/null | cut -d' ' -f1
+}
+
+# dedupe_lookup <ctx> <key> -> "<stage> <ts>" of the recorded run, or empty.
+dedupe_lookup() {
+  local _f="$1/logs/.test-runs/$2"
+  [ -f "$_f" ] || return 0
+  [ ! -L "$_f" ] || return 0
+  head -c 200 "$_f" 2>/dev/null
+}
+
+# dedupe_record <ctx> <key> <stage> — best-effort; a failure just means the next
+# identical run is allowed, which is the safe direction.
+dedupe_record() {
+  local _d="$1/logs/.test-runs" _ts
+  mkdir -p "$_d" 2>/dev/null || return 0
+  [ ! -L "$_d/$2" ] || return 0
+  _ts=$(date -u +%FT%TZ 2>/dev/null) || _ts="unknown"
+  printf '%s %s\n' "$3" "$_ts" > "$_d/$2" 2>/dev/null || return 0
+}
+
+# dedupe_decide <ctx> <stage> <class> <invocation> <cmd_head> <tool>
+# Echoes a deny for a run already recorded against this tree; otherwise records
+# it and echoes nothing. Always returns 0 — the decision travels in stdout, and
+# every unresolvable input allows.
+dedupe_decide() {
+  local _ctx="$1" _stage="$2" _class="$3" _inv="$4" _head="$5" _tool="$6"
+  local _fp _n _key _prior _sentinel _reason _deny
+
+  # Same shape as the CORPFLOW_TEST_GATE hatch above, and the same reason for
+  # it: a control switching off must not be silent, but the note is written
+  # once per .context/ so the common path never pays for it.
+  if [ "${CORPFLOW_TEST_DEDUPE:-}" = "off" ]; then
+    if [ -f "$_ctx/state.json" ]; then
+      _sentinel="$_ctx/logs/.dedupe-off-noted"
+      if [ ! -f "$_sentinel" ]; then
+        mkdir -p "$_ctx/logs" 2>/dev/null && : > "$_sentinel" 2>/dev/null
+        write_audit_row "$_ctx" "test_dedupe_disabled" '{"vector":"CORPFLOW_TEST_DEDUPE"}'
+      fi
+    fi
+    return 0
+  fi
+
+  _fp=$(tree_fingerprint)
+  [ -n "$_fp" ] || return 0          # no git, no repo, no shasum — cannot tell
+  _n=$(run_index_of "$_ctx")
+  [ -n "$_n" ] || return 0           # no resolvable run — nothing to key on
+  _key=$(dedupe_key "$_class" "$_inv" "$_fp" "$_n")
+  [ -n "$_key" ] || return 0
+
+  _prior=$(dedupe_lookup "$_ctx" "$_key")
+  if [ -z "$_prior" ]; then
+    dedupe_record "$_ctx" "$_key" "$_stage"
+    return 0
+  fi
+
+  # Naming the prior run is what makes this actionable: the caller's next move
+  # is to CITE that run, not to find a way around the gate. Reruns after any
+  # edit are automatic, so the env var is framed as the human-only hatch it is.
+  _reason="This exact test invocation already ran during run_index $_n (stage: ${_prior% *}, at ${_prior#* }) against a byte-identical tree, so it can only reproduce the result already on record (skills/shared/testing-strategy.md § Test-Execution Authority). To proceed: (1) cite that run as the evidence for this stage — it covers the same tree and the same selection; (2) if you have since changed something, make the edit and re-run — any modification to tracked content re-enables this command automatically, no flag required; or (3) if you need a repeat run of an unchanged tree to investigate a flake, ask a human to restart with CORPFLOW_TEST_DEDUPE=off in the process environment. An agent cannot self-serve that by retrying the command with a prefix, because this hook reads process env rather than the command string."
+  _deny=$(jq -cn --arg reason "$_reason" '
+    {hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}
+  ') || return 0
+  printf '%s\n' "$_deny"
+
+  write_audit_row "$_ctx" "test_execution_deduped" \
+    "$(jq -cn --arg st "$_stage" --arg tool "$_tool" --arg head "$_head" \
+        --arg class "$_class" --arg prior "$_prior" --arg n "$_n" \
+        '{stage:$st, tool:$tool, command_head:$head, classification:$class,
+          prior_run:$prior, run_index:$n}')"
   return 0
 }
 
@@ -656,16 +732,11 @@ run_gate() {
   local _tool _stage _subagent _prompt _matched _class _cmd _cmd_head _stripped
   local _skill_cmd _reason _deny _sentinel
 
-  # Process-env escape hatch, checked first: cheapest possible check, and
-  # the human relief valve named in the deny message below. A security
-  # control switching off should never be silent (CWE-778): note it once per
-  # .context/ via a builtin [ -f ] sentinel, so the zero-fork fast path is
-  # untouched on every other call and only the (rare, human-initiated) hatch
-  # path pays the one-time cost of an audit row. Gated on a resolvable
-  # .context/state.json existing at all — otherwise a shell-profile-wide
-  # CORPFLOW_TEST_GATE=off would materialize .context/logs/ in every unrelated
-  # directory the user opens, the same no-side-effects-without-a-live-context
-  # invariant the Task branch already enforces.
+  # Process-env hatch, checked first: cheapest check, and a control switching
+  # off must not be silent. The [ -f ] sentinel notes it once per .context/ so
+  # only the rare hatch path pays for an audit row. Gated on state.json existing
+  # at all — otherwise a shell-profile-wide CORPFLOW_TEST_GATE=off would
+  # materialize .context/logs/ in every unrelated directory the user opens.
   if [ "${CORPFLOW_TEST_GATE:-}" = "off" ] && [ -f "$_ctx/state.json" ]; then
     _sentinel="$_ctx/logs/.gate-off-noted"
     if [ ! -f "$_sentinel" ]; then
@@ -683,20 +754,14 @@ run_gate() {
   case "$_tool" in
     Bash|Skill) ;;
     Task)
-      # Task is OBSERVE-ONLY, never a deny: a delegation prompt that quotes
-      # this very ban contains every runner name (including this worktask's
-      # own DV/DR/SR/QA dispatch prompts), so a prose-matching deny would
-      # refuse to dispatch the stages implementing the policy.
+      # Task is OBSERVE-ONLY: a dispatch prompt quoting the ban names every
+      # runner, so matching prose would refuse to dispatch the stages that
+      # implement the policy.
       #
-      # Resolve the stage FIRST, before touching the filesystem at all. No
-      # .context/ or no resolvable in-progress stage means this session has
-      # no worktask in flight — the common case in a third-party repo where
-      # the plugin is merely installed — so there must be zero side effects:
-      # no directory creation, no log growth, in a repo unrelated to this
-      # policy. Only a live, single-in-progress-stage session gets a
-      # telemetry row, and only for an unambiguous runner token (see
-      # first_runner_token below — word-boundary matched against a curated,
-      # English-word-safe token list, not a bare substring scan).
+      # Resolve the stage BEFORE touching the filesystem. No resolvable stage
+      # means no worktask is in flight — the common case in a repo where the
+      # plugin is merely installed — and such a session must see zero side
+      # effects: no directory creation, no log growth.
       _stage=$(resolve_stage "$_ctx")
       if [ -n "$_stage" ]; then
         _subagent=$(printf '%s' "$_payload" | jq -r '.tool_input.subagent_type // "unknown"' 2>/dev/null)
@@ -724,17 +789,6 @@ run_gate() {
       esac
       ;;
   esac
-
-  _stage=$(resolve_stage "$_ctx")
-  # A settled ledger is a deny, not an allow — see ledger_settled(). The sentinel
-  # is not a stage code, so it can never match the DV/QA authority arms below; it
-  # only selects its own deny reason.
-  _settled=""
-  if [ -z "$_stage" ]; then
-    [ "$(ledger_settled "$_ctx")" = "settled" ] || return 0  # cannot tell — allow
-    _settled=1
-    _stage="(none in progress)"
-  fi
 
   case "$_tool" in
     mcp__*test*)
@@ -765,18 +819,14 @@ run_gate() {
         *) return 0 ;;
       esac
       _class=$(classify_cmd "$_cmd")
-      # command_head is telemetry, not classification input, and it is
-      # derived from the WHOLE command while classify_cmd works per segment
-      # — a `;`/`&&`/`||`/`|`/newline-separated command can carry a secret
-      # in an early segment while a LATER segment is what actually classifies
-      # non-benign (e.g. `SECRET="a b"; pytest tests/`). Stripping VAR=value
-      # from the whole-command head is not sufficient defense against that
-      # shape. The channel is instead bounded structurally: _cmd_head may
-      # only ever be a token this hook already recognizes as a runner name —
-      # anything else (a secret fragment, a stray flag, a multi-KB blob) is
-      # redacted. A runner name is never a secret, and this also caps the
-      # logged value to a short known set regardless of input length.
-      _stripped="$(strip_assignments "$(printf '%s' "$_cmd" | sed -E 's/^[[:space:]]+//')")"
+      # command_head is telemetry, not classification input, and is derived from
+      # the WHOLE command while classify_cmd works per segment — so a secret can
+      # sit in an early segment while a later one classifies (`SECRET="a b";
+      # pytest tests/`), which stripping VAR=value does not cover. Bounded
+      # structurally instead: _cmd_head may only ever be a token already
+      # recognized as a runner name; anything else is redacted.
+      _trim "$_cmd"
+      _stripped="$(strip_assignments "$TRIMMED")"
       _cmd_head="${_stripped%% *}"
       _cmd_head="${_cmd_head##*/}"
       _cmd_head="$(redact_unless_known_head "$_cmd_head")"
@@ -815,6 +865,22 @@ run_gate() {
     not_test|build_only) return 0 ;;
   esac
 
+  # Stage resolution runs only once the command is known to be a test run.
+  # Classification never reads the stage, and the overwhelming majority of tool
+  # calls are not tests, so resolving first made every ordinary Bash call pay
+  # jq to learn something it then discarded.
+  #
+  # A settled ledger is a deny, not an allow — see ledger_settled(). The sentinel
+  # is not a stage code, so it can never match the DV/QA authority arms below; it
+  # only selects its own deny reason.
+  _stage=$(resolve_stage "$_ctx")
+  _settled=""
+  if [ -z "$_stage" ]; then
+    [ "$(ledger_settled "$_ctx")" = "settled" ] || return 0  # cannot tell — allow
+    _settled=1
+    _stage="(none in progress)"
+  fi
+
   # DV is allowed scoped test execution but denied a full-suite run — this
   # is the one mechanical check that actually enforces DV's authority limit
   # (everything else here is about who is denied outright). QA is exempt
@@ -823,7 +889,12 @@ run_gate() {
     if [ "$_stage" = "DV" ] && [ "$_class" = "full_test_run" ]; then
       : # fall through to deny
     else
-      return 0  # DV-scoped or QA (either mode) — allow
+      # Authority said yes. The only remaining question is whether this exact
+      # run already happened against this exact tree — asked here, on the allow
+      # path alone, so suppression can never widen what the gate permits.
+      dedupe_decide "$_ctx" "$_stage" "$_class" \
+        "${_cmd:-${_skill_cmd:-$_cmd_head}}" "$_cmd_head" "$_tool"
+      return 0
     fi
   fi
 
@@ -927,345 +998,17 @@ write_audit_row() {
 # ---------------------------------------------------------------------------
 # --self-test
 # ---------------------------------------------------------------------------
+# The body lives in lib/ — it is test code, and this file is a hot-path gate.
+# Sourced only here, never on the dispatch path below, so the PreToolUse call
+# resolves no sibling path at hook time. Unlike that path this arm fails CLOSED:
+# a self-test that cannot find its cases must report a failure, never "OK".
 if [ "$SELF_TEST" -eq 1 ]; then
-  _fail=0
-  command -v jq >/dev/null 2>&1 || { echo "test-execution-gate: jq not found — self-test skipped"; exit 0; }
-
-  _tmp=$(mktemp -d)
-  trap 'rm -rf "$_tmp"' EXIT
-
-  # DR + scoped bats -> deny
-  _ctx1="$_tmp/dr/.context"; mkdir -p "$_ctx1"
-  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx1/state.json"
-  _p1='{"tool_name":"Bash","tool_input":{"command":"tests/vendor/bats-core/bin/bats tests/shell/foo.bats"}}'
-  _o1=$(run_gate "$_p1" "$_ctx1")
-  printf '%s' "$_o1" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (DR scoped deny)"; _fail=1; }
-
-  # DV + full run-tests.sh -> deny (DV holds scoped authority only)
-  _ctx2="$_tmp/dv/.context"; mkdir -p "$_ctx2"
-  printf '{"tasks":{"DV0":{"status":"in_progress"}}}' > "$_ctx2/state.json"
-  _p2='{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}'
-  _o2=$(run_gate "$_p2" "$_ctx2")
-  printf '%s' "$_o2" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (DV full deny)"; _fail=1; }
-
-  # DV + run-tests.sh --changed -> allow (scoped selection is DV's own authority)
-  _p2b='{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh --changed"}}'
-  _o2b=$(run_gate "$_p2b" "$_ctx2")
-  printf '%s' "$_o2b" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-    && { echo "test-execution-gate: self-test FAIL (DV --changed must not deny)"; _fail=1; }
-
-  # DV + run-tests.sh --print-selection -> allow (build_only: runs nothing)
-  _p2c='{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh --changed --print-selection"}}'
-  _o2c=$(run_gate "$_p2c" "$_ctx2")
-  printf '%s' "$_o2c" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-    && { echo "test-execution-gate: self-test FAIL (DV --print-selection must not deny)"; _fail=1; }
-
-  # QA + full run-tests.sh -> allow
-  _ctx3="$_tmp/qa/.context"; mkdir -p "$_ctx3"
-  printf '{"tasks":{"QA0":{"status":"in_progress"}}}' > "$_ctx3/state.json"
-  _p3='{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}'
-  _o3=$(run_gate "$_p3" "$_ctx3")
-  [ -z "$_o3" ] || { echo "test-execution-gate: self-test FAIL (QA full allow)"; _fail=1; }
-
-  # No state.json -> allow, no row (nothing resolves, so nothing to enforce)
-  _ctx4="$_tmp/none/.context"; mkdir -p "$_ctx4"
-  _o4=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"bats foo.bats"}}' "$_ctx4")
-  [ -z "$_o4" ] || { echo "test-execution-gate: self-test FAIL (no state.json)"; _fail=1; }
-  [ ! -f "$_ctx4/logs/audit.jsonl" ] || { echo "test-execution-gate: self-test FAIL (no state.json wrote a row)"; _fail=1; }
-
-  # Task carrying ban text -> allow, observe-only row, never deny
-  # (a prose-matching deny here would refuse to dispatch this very policy)
-  _ctx5="$_tmp/task/.context"; mkdir -p "$_ctx5"
-  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx5/state.json"
-  _p5='{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"Never run bats or pytest outside DV/QA"}}'
-  _o5=$(run_gate "$_p5" "$_ctx5")
-  [ -z "$_o5" ] || { echo "test-execution-gate: self-test FAIL (Task must never deny)"; _fail=1; }
-  tail -n 1 "$_ctx5/logs/audit.jsonl" 2>/dev/null | jq -e '.action == "test_delegation_observed"' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (Task observe row)"; _fail=1; }
-
-  # Regression: Task dispatch with NO .context/ at all -> zero side effects
-  # (no worktask in flight means nothing should be created or logged).
-  _ctx5b="$_tmp/task-no-ctx/.context"   # deliberately NOT created
-  _o5b=$(run_gate '{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"go ahead and make the change"}}' "$_ctx5b")
-  [ -z "$_o5b" ] || { echo "test-execution-gate: self-test FAIL (Task no-ctx must be silent)"; _fail=1; }
-  [ ! -d "$_ctx5b" ] || { echo "test-execution-gate: self-test FAIL (Task no-ctx created .context/)"; _fail=1; }
-
-  # command_head only, never the full command, in a deny's audit row.
-  _ctx6="$_tmp/redact/.context"; mkdir -p "$_ctx6"
-  printf '{"tasks":{"SR0":{"status":"in_progress"}}}' > "$_ctx6/state.json"
-  _p6='{"tool_name":"Bash","tool_input":{"command":"bats /secret/path/leak.bats -f token-abc123"}}'
-  run_gate "$_p6" "$_ctx6" >/dev/null
-  tail -n 1 "$_ctx6/logs/audit.jsonl" | jq -e '.metadata.command_head == "bats" and (.metadata | has("command") | not)' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (command_head redaction)"; _fail=1; }
-
-  # Regression: a leading secret env assignment must not reach command_head.
-  _ctx6b="$_tmp/redact-secret/.context"; mkdir -p "$_ctx6b"
-  printf '{"tasks":{"SR0":{"status":"in_progress"}}}' > "$_ctx6b/state.json"
-  _p6b='{"tool_name":"Bash","tool_input":{"command":"API_KEY=sk-test-xyz pytest tests/"}}'
-  run_gate "$_p6b" "$_ctx6b" >/dev/null
-  tail -n 1 "$_ctx6b/logs/audit.jsonl" | jq -e '.metadata.command_head == "pytest" and (.metadata.command_head | test("sk-test-xyz|API_KEY") | not)' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (secret leaked into command_head)"; _fail=1; }
-
-  # CORPFLOW_TEST_GATE=off -> allow even for a banned stage
-  _ctx7="$_tmp/off/.context"; mkdir -p "$_ctx7"
-  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx7/state.json"
-  _o7=$(CORPFLOW_TEST_GATE=off run_gate '{"tool_name":"Bash","tool_input":{"command":"bats foo.bats"}}' "$_ctx7")
-  [ -z "$_o7" ] || { echo "test-execution-gate: self-test FAIL (escape hatch)"; _fail=1; }
-
-  # DR + build-test --no-test -> allow (build-only stays permitted everywhere)
-  _ctx8="$_tmp/buildonly/.context"; mkdir -p "$_ctx8"
-  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx8/state.json"
-  _o8=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"/system-developer:build-test --no-test"}}' "$_ctx8")
-  [ -z "$_o8" ] || { echo "test-execution-gate: self-test FAIL (build-test --no-test)"; _fail=1; }
-
-  # DR + Skill payload in its real {skill, args} shape -> --no-test allows,
-  # bare denies (the flag lives in `args`, not in the skill name).
-  _ctx8b="$_tmp/skill-args/.context"; mkdir -p "$_ctx8b"
-  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx8b/state.json"
-  _p8b='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test","args":"--no-test"}}'
-  _o8b=$(run_gate "$_p8b" "$_ctx8b")
-  [ -z "$_o8b" ] || { echo "test-execution-gate: self-test FAIL (Skill args --no-test)"; _fail=1; }
-  _p8c='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test","args":"--scheme App"}}'
-  _o8c=$(run_gate "$_p8c" "$_ctx8b")
-  printf '%s' "$_o8c" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (Skill args full run)"; _fail=1; }
-
-  # `make test` reaches the classifier at all (the zero-fork prefilter used
-  # to drop it before classification, allowing it at every banned stage).
-  _ctx8d="$_tmp/make-test/.context"; mkdir -p "$_ctx8d"
-  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx8d/state.json"
-  _o8d=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"make test"}}' "$_ctx8d")
-  printf '%s' "$_o8d" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (make test must deny at DR)"; _fail=1; }
-
-  # xcodebuild's action follows its options — the trailing-action shape must
-  # classify identically to the action-first shape.
-  _ctx8e="$_tmp/xcodebuild/.context"; mkdir -p "$_ctx8e"
-  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx8e/state.json"
-  _o8e=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"xcodebuild -scheme MyApp -destination generic/platform=iOS test"}}' "$_ctx8e")
-  printf '%s' "$_o8e" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (xcodebuild trailing test action)"; _fail=1; }
-  _o8f=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"xcodebuild -scheme MyTests build-for-testing"}}' "$_ctx8e")
-  [ -z "$_o8f" ] || { echo "test-execution-gate: self-test FAIL (xcodebuild build-for-testing must allow)"; _fail=1; }
-
-  # Regression: pure build/non-test commands on multi-purpose runners must
-  # ALLOW at a banned stage — build-only stays permitted everywhere.
-  _ctx9="$_tmp/gradle-build/.context"; mkdir -p "$_ctx9"
-  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx9/state.json"
-  _o9=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./gradlew assembleDebug"}}' "$_ctx9")
-  [ -z "$_o9" ] || { echo "test-execution-gate: self-test FAIL (gradlew assembleDebug must allow)"; _fail=1; }
-  _ctx9b="$_tmp/py-coverage/.context"; mkdir -p "$_ctx9b"
-  printf '{"tasks":{"SR0":{"status":"in_progress"}}}' > "$_ctx9b/state.json"
-  _o9b=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"python3 tools/coverage_report.py"}}' "$_ctx9b")
-  [ -z "$_o9b" ] || { echo "test-execution-gate: self-test FAIL (coverage_report.py must allow)"; _fail=1; }
-
-  # Regression: `-c` is a config flag for swift/pytest, not a build-only
-  # signal — a real test run carrying `-c` must still classify (and deny) as
-  # a test, not slip through as build-only.
-  _ctx10="$_tmp/dashc-dr/.context"; mkdir -p "$_ctx10"
-  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx10/state.json"
-  _o10=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"swift test -c release"}}' "$_ctx10")
-  printf '%s' "$_o10" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (swift test -c release must still deny at DR)"; _fail=1; }
-  _ctx10b="$_tmp/dashc-dv/.context"; mkdir -p "$_ctx10b"
-  printf '{"tasks":{"DV0":{"status":"in_progress"}}}' > "$_ctx10b/state.json"
-  _o10b=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"swift test -c release"}}' "$_ctx10b")
-  printf '%s' "$_o10b" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (swift test -c release must deny DV-full)"; _fail=1; }
-
-  # Non-selecting flags no longer read as scoping: every runner below REQUIRES
-  # flags to run at all, so before the per-runner strip each of these was a
-  # full suite that classified scoped and sailed past the DV deny.
-  _ctx11="$_tmp/nonselecting-dv/.context"; mkdir -p "$_ctx11"
-  printf '{"tasks":{"DV0":{"status":"in_progress"}}}' > "$_ctx11/state.json"
-  while IFS= read -r _c; do
-    [ -n "$_c" ] || continue
-    _o11=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
-    printf '%s' "$_o11" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-      || { echo "test-execution-gate: self-test FAIL (DV-full deny expected: $_c)"; _fail=1; }
-  done <<'EOF'
-xcodebuild test -project a.xcodeproj -scheme overlay -destination generic/platform=iOS
-gradle test -p .
-dotnet test MySolution.sln
-npm test -- --ci
-cargo test --release
-EOF
-
-  # The allow direction of the same change — an over-deny would block
-  # legitimate scoped work mid-run, which is the worse failure.
-  while IFS= read -r _c; do
-    [ -n "$_c" ] || continue
-    _o12=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
-    [ -z "$_o12" ] || { echo "test-execution-gate: self-test FAIL (DV allow expected: $_c)"; _fail=1; }
-  done <<'EOF'
-xcodebuild test -project a.xcodeproj -scheme s -only-testing:UnitTests/LogTests
-xcodebuild build -project a.xcodeproj -scheme s
-cargo test --release foo
-go test ./...
-EOF
-
-  # QA keeps sole full-suite authority — the strip changes classification, not
-  # who may run a full suite.
-  _ctx11b="$_tmp/nonselecting-qa/.context"; mkdir -p "$_ctx11b"
-  printf '{"tasks":{"QA0":{"status":"in_progress"}}}' > "$_ctx11b/state.json"
-  _o11b=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"xcodebuild test -project a.xcodeproj -scheme s -destination d"}}' "$_ctx11b")
-  [ -z "$_o11b" ] || { echo "test-execution-gate: self-test FAIL (QA multi-flag xcodebuild allow)"; _fail=1; }
-
-  # A quoted multi-word value is ONE token. A simulator destination normally
-  # contains spaces, so without this the strip missed the exact shape of the
-  # incident that motivated it while the space-free forms denied.
-  while IFS= read -r _c; do
-    [ -n "$_c" ] || continue
-    _o11d=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
-    printf '%s' "$_o11d" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-      || { echo "test-execution-gate: self-test FAIL (quoted value escaped the strip: $_c)"; _fail=1; }
-  done <<'EOF'
-xcodebuild test -project a.xcodeproj -scheme overlay -destination "platform=iOS Simulator,name=iPhone 16 Pro"
-xcodebuild test -project a.xcodeproj -scheme overlay -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
-dotnet test "My Solution.sln"
-EOF
-
-  # Same quoted value, plus a real selector -> still allowed.
-  # The payload is built through a variable, never inlined: an unbalanced quote
-  # inside `"$( ... )"` flips the outer parser's quoting state, brace expansion
-  # then splits the jq filter, and the fixture silently passes on an empty
-  # payload. That is how the unterminated-quote case below was first written.
-  _c='xcodebuild test -project a -scheme overlay -destination "platform=iOS Simulator,name=iPhone 16 Pro" -only-testing:UnitTests/LogTests'
-  _p11e=$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')
-  _o11e=$(run_gate "$_p11e" "$_ctx11")
-  [ -z "$_o11e" ] || { echo "test-execution-gate: self-test FAIL (quoted value + selector must allow)"; _fail=1; }
-
-  # Unbalanced quoting strips nothing rather than half the argument list — the
-  # ambiguous parse degrades to allow, never to a deny.
-  _c='xcodebuild test -project a -scheme overlay -destination "platform=iOS Simulator'
-  _p11f=$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')
-  [ -n "$_p11f" ] || { echo "test-execution-gate: self-test FAIL (unterminated-quote payload did not build)"; _fail=1; }
-  _o11f=$(run_gate "$_p11f" "$_ctx11")
-  [ -z "$_o11f" ] || { echo "test-execution-gate: self-test FAIL (unterminated quote must allow)"; _fail=1; }
-
-  # Fail-open guard: a value-consuming flag whose value is missing must not
-  # swallow the token that follows it. The surviving token must NOT be in the
-  # explicit selector list — that limb decides on $_seg before the strip ever
-  # runs, so a `-only-testing:` case here passes with the guard deleted and
-  # proves nothing. Verified to flip to a deny when the guard is removed.
-  _o11c=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"xcodebuild test -project a -scheme -MyScheme"}}' "$_ctx11")
-  [ -z "$_o11c" ] || { echo "test-execution-gate: self-test FAIL (valueless flag ate the next token)"; _fail=1; }
-
-  # The guard at the unit level, independent of which limb classifies first.
-  _o11g="$(strip_nonselecting_flags xcodebuild " -scheme -only-testing:UnitTests/LogTests")"
-  case "$_o11g" in
-    *-only-testing:UnitTests/LogTests*) : ;;
-    *) echo "test-execution-gate: self-test FAIL (strip ate a selector after a valueless flag)"; _fail=1 ;;
-  esac
-
-  # `-c` is value-taking on some runners and valueless on others. The
-  # valueless ones must not consume the token after them: `go test -c` only
-  # COMPILES, and rspec's `-c` is --colour, so both were denied as full runs.
-  while IFS= read -r _c; do
-    [ -n "$_c" ] || continue
-    _o14=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
-    [ -z "$_o14" ] || { echo "test-execution-gate: self-test FAIL (valueless -c must not deny: $_c)"; _fail=1; }
-  done <<'EOF'
-go test -c
-go test -c ./pkg
-rspec -c spec/models/user_spec.rb
-EOF
-
-  # `go test -c` is build-only, so it is allowed at a BANNED stage too, not
-  # merely at DV — the promise that compiling stays permitted everywhere.
-  _ctx13="$_tmp/go-compile/.context"; mkdir -p "$_ctx13"
-  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx13/state.json"
-  _o15=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"go test -c ./pkg"}}' "$_ctx13")
-  [ -z "$_o15" ] || { echo "test-execution-gate: self-test FAIL (go test -c is build-only everywhere)"; _fail=1; }
-
-  # The value-taking `-c` runners are unaffected: the value is still consumed,
-  # so these stay full runs.
-  while IFS= read -r _c; do
-    [ -n "$_c" ] || continue
-    _o16=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
-    printf '%s' "$_o16" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-      || { echo "test-execution-gate: self-test FAIL (value-taking -c must still deny: $_c)"; _fail=1; }
-  done <<'EOF'
-swift test -c release
-dotnet test -c Release
-go test
-rspec
-EOF
-
-  # FN has no test-execution authority. This passes the day it is written —
-  # the stage limb already denies every stage but DV/QA. It is a parity lock
-  # against a future edit to that limb quietly dropping the row, not a bug
-  # catch, so do not delete it as a test that never fails.
-  _ctx12="$_tmp/fn/.context"; mkdir -p "$_ctx12"
-  printf '{"tasks":{"FN0":{"status":"in_progress"}}}' > "$_ctx12/state.json"
-  _o13=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"swift test"}}' "$_ctx12")
-  printf '%s' "$_o13" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (FN must have no test-execution authority)"; _fail=1; }
-
-  # RE has no test-execution authority either, and unlike FN it is a stage that
-  # routinely wants a full run to confirm a version bump. The pair below is the
-  # coupling this gate depends on: a ledger with RE in_progress denies, and the
-  # same command with nothing in_progress ALLOWS — so a dispatch loop that marks
-  # stages in the Task System only leaves this gate inert, not merely quiet.
-  _ctx14="$_tmp/re/.context"; mkdir -p "$_ctx14"
-  printf '{"tasks":{"RE0":{"status":"in_progress"}}}' > "$_ctx14/state.json"
-  _o20=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctx14")
-  printf '%s' "$_o20" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (RE must have no test-execution authority)"; _fail=1; }
-  # A SETTLED ledger — stages present, none in_progress — now DENIES (#295).
-  # This assertion is the reverse of the one shipped alongside the RE pair, and
-  # the reversal is the point: "nobody is acting" was being treated as "cannot
-  # tell who is acting", so a full suite stayed permitted forever after FN. The
-  # fail-open contract is unchanged and is asserted by the no-state.json case
-  # above and the ambiguity case below — those are the shapes that protect an
-  # unrelated session; a finished worktask is not one of them.
-  printf '{"tasks":{"PL0":{"status":"completed"},"RE0":{"status":"completed"}}}' > "$_ctx14/state.json"
-  _o21=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctx14")
-  printf '%s' "$_o21" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (settled ledger must deny)"; _fail=1; }
-
-  # A settled ledger must still allow everything that is not a test invocation,
-  # or a finished worktask could not run git, gh, or anything else.
-  _o22=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"git status"}}' "$_ctx14")
-  [ -z "$_o22" ] || { echo "test-execution-gate: self-test FAIL (settled must not block non-test commands)"; _fail=1; }
-
-  # Ambiguity — two stages in_progress — still fails OPEN. Denying here would
-  # wedge a session the gate cannot reason about.
-  printf '{"tasks":{"DV0":{"status":"in_progress"},"QA0":{"status":"in_progress"}}}' > "$_ctx14/state.json"
-  _o23=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctx14")
-  [ -z "$_o23" ] || { echo "test-execution-gate: self-test FAIL (ambiguous ledger must fail open)"; _fail=1; }
-
-  # Gradle's task token is found order-independently: flags before the task
-  # must classify the same as task-first, in both fail directions.
-  while IFS= read -r _c; do
-    [ -n "$_c" ] || continue
-    _o17=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
-    printf '%s' "$_o17" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-      || { echo "test-execution-gate: self-test FAIL (flags-before-task gradle must deny: $_c)"; _fail=1; }
-  done <<'EOF'
-gradle -p . test
-./gradlew -p app testDebugUnitTest
-EOF
-  _o18=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"gradle -p . test --tests com.foo.Bar"}}' "$_ctx11")
-  [ -z "$_o18" ] || { echo "test-execution-gate: self-test FAIL (flags-before-task + selector must allow)"; _fail=1; }
-  _o19=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"gradle -p . assembleAndroidTest"}}' "$_ctx13")
-  [ -z "$_o19" ] || { echo "test-execution-gate: self-test FAIL (flags-first assembleAndroidTest is build-only)"; _fail=1; }
-
-  # Exit code always 0, even on a deny.
-  set +e
-  ( run_gate "$_p1" "$_ctx1" >/dev/null 2>&1 )
-  _ec=$?
-  set +e
-  [ "$_ec" -eq 0 ] || { echo "test-execution-gate: self-test FAIL (non-zero exit on deny path)"; _fail=1; }
-
-  if [ "$_fail" -ne 0 ]; then
-    echo "test-execution-gate: self-test FAIL"
+  _selftest_body="$(dirname "$0")/lib/test-execution-gate-selftest.sh"
+  if [ ! -f "$_selftest_body" ]; then
+    echo "test-execution-gate: self-test body missing at $_selftest_body" >&2
     exit 1
   fi
-  echo "test-execution-gate: self-test OK"
-  exit 0
+  . "$_selftest_body"
 fi
 
 # ---------------------------------------------------------------------------

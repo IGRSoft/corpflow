@@ -1,28 +1,26 @@
 #!/usr/bin/env bash
 # megatask-monitor.sh — SubagentStop/Stop hook (corpflow worktask plugin).
 #
-# Drives the megatask completion loop. On every subagent/turn stop it RECONCILES
-# every active megatask group: for each per-issue worktask that has finished, it
-#   1. marks the issue `completed` (or `failed`) in orchestrator.json,
-#   2. UNBLOCKS dependents — removes the completed issue from every other issue's
-#      `blocked_by[]`, promoting any now-empty dependent from `blocked` → `ready`,
-#   3. frees the issue's track,
-#   4. writes a `megatask_progress` audit row and emits a terminal notification.
+# Drives the megatask completion loop. On every stop it reconciles each active
+# group: a finished issue is marked completed/failed in orchestrator.json, its
+# dependents are unblocked (a dependent whose blocked_by empties is promoted
+# blocked → ready), its track is freed, and a megatask_progress row plus a
+# terminal notification are emitted.
 #
-# Design is a RECONCILIATION SWEEP, not a per-agent signal: the hook does not need
-# to know which agent stopped. It scans `.worktrees/*/orchestrator.json` and reads
-# each in-progress issue's `workspace.json.execution.status`. This makes it
-# idempotent (already-completed issues are skipped) and correct under retries.
+# A reconciliation SWEEP, not a per-agent signal: it never needs to know which
+# agent stopped, which makes it idempotent and correct under retries. It scans
+# .worktrees/*/orchestrator.json and reads each in-progress issue's
+# workspace.json .execution.status.
 #
-# Completion contract (written by the per-issue worktask's FN/ST stage):
-#   .worktrees/<group>/<issue#>/workspace.json :
-#     .execution.status ∈ {"completed","failed"}   ("in_progress" otherwise)
-#     .execution.pr      (PR URL, optional, recorded on completion)
+# Completion contract, written by the per-issue worktask's FN/ST stage:
+#   .worktrees/<group>/<issue#>/workspace.json
+#     .execution.status ∈ {"completed","failed"}  ("in_progress" otherwise)
+#     .execution.pr      PR URL, optional
 #
 # Non-blocking contract:
 #   - Exit 0 ALWAYS. Never blocks a stage/turn transition.
-#   - Self-SKIPS when no `.worktrees/*/orchestrator.json` exists (plain single
-#     `/worktask` runs are untouched).
+#   - Self-skips when no `.worktrees/*/orchestrator.json` exists, so plain
+#     `/worktask` runs are untouched.
 #   - Missing `jq` → log to stderr and exit 0.
 #
 # Self-test:  hooks/megatask-monitor.sh --self-test

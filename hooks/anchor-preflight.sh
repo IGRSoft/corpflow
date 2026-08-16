@@ -1,26 +1,15 @@
 #!/usr/bin/env bash
-# PostToolUse → anchor-lint pre-flight (corpflow worktask plugin).
+# anchor-preflight — PostToolUse (Write|Edit) anchor lint for worktask
+# artifacts. Runs cache-lint.sh --anchor-lint on a path matching the canonical
+# .context/<stage>-N.md regex, so a bad H2 anchor surfaces at the producing
+# write rather than at the DR gate.
 #
-# Managed plugin hook (registered in .claude-plugin/plugin.json). Fires on
-# Write|Edit. Gates on the canonical worktask-artifact filename regex
-# (.context/<stage>-N.md per handoff-protocol.md#stage-artifact-map); for a
-# matching artifact it runs `cache-lint.sh --anchor-lint <artifact>` so a
-# missing/extra H2 anchor surfaces at the PRODUCING Write/Edit instead of
-# post-hoc at the DR gate.
+# Reads tool_input.file_path from the hook stdin JSON, falling back to
+# CLAUDE_TOOL_INPUT_FILE_PATH without jq. A non-zero exit shows the agent the
+# diagnostic; continueOnBlock keeps a non-artifact write unblocked.
 #
-# Shift-left rationale + cost: handoff-protocol.md#anchor-allow-list
-#   § Anchor Pre-Flight (PostToolUse hook).
-#
-# Reads the CC hook stdin JSON (tool_input.file_path); falls back to the
-# CLAUDE_TOOL_INPUT_FILE_PATH env var when jq/stdin are unavailable. A
-# non-zero exit shows the producing agent the diagnostic so it self-amends;
-# registered with continueOnBlock so a non-artifact write is never blocked.
-#
-# Plugin root: env-first ($CLAUDE_PLUGIN_ROOT, exported by the CC hook
-# runtime), else self-locate from $0 — provider-agnostic per
-# skills/shared/plugin-root-resolution.md.
-#
-# Self-test: pass --self-test to assert the gating regex.
+# Plugin root is env-first ($CLAUDE_PLUGIN_ROOT), else self-located from $0.
+# --self-test asserts the gating regex.
 set -eu
 
 SELF_TEST=0
@@ -72,10 +61,8 @@ fi
 printf '%s' "$FILE_PATH" | grep -qE "$ARTIFACT_RE" || exit 0
 [ -f "$FILE_PATH" ] || exit 0
 
-# Plugin root: an explicitly set env var always wins (override contract);
-# otherwise this script ships at <plugin-root>/hooks/, so derive the root from
-# its own location, validated by the .claude-plugin/plugin.json marker.
-# Mirrors find_plugin_root() in skills/worktask/scripts/hook-install.sh.
+# An explicitly set env var always wins; otherwise derive the root from this
+# script's own location, validated by the .claude-plugin/plugin.json marker.
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 if [ -z "$PLUGIN_ROOT" ]; then
   SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd -P)" || SCRIPT_DIR=""
@@ -86,6 +73,5 @@ fi
 LINT="${PLUGIN_ROOT:-.}/skills/worktask/scripts/cache-lint.sh"
 [ -x "$LINT" ] || [ -f "$LINT" ] || exit 0
 
-# Delegate to the canonical anchor-lint mode. Non-zero exit propagates the
-# diagnostic to the producing agent (continueOnBlock in plugin.json).
+# Non-zero exit propagates the diagnostic to the producing agent.
 exec bash "$LINT" --anchor-lint "$FILE_PATH"

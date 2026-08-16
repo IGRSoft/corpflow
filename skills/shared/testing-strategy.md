@@ -390,6 +390,37 @@ test-runner invocations outside `{DV, QA}` (and DV full-suite runs). Exit code i
 decision travels in the JSON `hookSpecificOutput.permissionDecision`. This is the only layer that
 covers delegated calls and the orchestrator's own shell.
 
+### Redundant-run suppression
+
+Authority answers *who*; this answers *again?*. Once a stage holding authority has been allowed a
+test invocation, the same invocation is denied while the tree is byte-identical — it can only
+reproduce the result already on record. Suppression is scoped to `run_index`, so a run recorded by
+one stage covers a later stage's identical run within the same run.
+
+Denied callers are told to **cite** the prior run: its stage and timestamp appear in the deny
+reason and in a `test_execution_deduped` audit row. Build-only verification is never suppressed.
+
+#### Keyed on the tree, never on an outcome
+
+The hook is `PreToolUse`, so whether a run passed is unknowable to it. Any edit to tracked content
+changes the fingerprint and re-enables the command with no flag. **This is what keeps test → fix →
+retest working, and it is the property to protect in any change to the fingerprint.**
+
+The fingerprint is HEAD plus `git status --porcelain` **and** `git diff HEAD`. The diff is
+load-bearing: porcelain reports only names and status letters, so two successive edits to one file
+are identical to it, and a porcelain-only fingerprint would deny the retest after a real fix.
+
+#### Fail-open and the hatch
+
+Every unresolvable input — no git, no `shasum`, no `run_index` on the ledger — skips suppression
+and allows, matching the hook's fail-open contract. `CORPFLOW_TEST_DEDUPE=off` in the process
+environment disables it for flake investigation; like `CORPFLOW_TEST_GATE=off` it is a human ask,
+not agent-serviceable, and it is noted once per `.context/` in the audit trail.
+
+The gate keeps its own sentinels under `.context/logs/.test-runs/`. It does **not** read
+`full_test_run` / `scoped_test_run` audit rows, which `skills/agent-coordination/SKILL.md` binds
+as audit-only and never a gate.
+
 ### SR/RE control layering
 
 **For SR and RE specifically, the hook is not a backstop behind the grant narrowing — it is the

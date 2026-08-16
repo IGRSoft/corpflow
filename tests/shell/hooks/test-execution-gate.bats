@@ -878,3 +878,162 @@ teardown() {
   assert_success
   [ -z "$output" ]
 }
+
+# --- redundant-run suppression ----------------------------------------------
+# Dedupe keys on the tree, so these need a repo they can mutate, and a ledger
+# carrying run_index (fixtures above deliberately omit it, which self-disables
+# dedupe — that is what keeps every case above asserting authority alone).
+
+git_ctx() {
+  # git_ctx <stage> [run_index]
+  git -C "$WD" init -q
+  git -C "$WD" config user.email t@example.com
+  git -C "$WD" config user.name t
+  git -C "$WD" config commit.gpgsign false
+  echo seed > "$WD/src.txt"
+  git -C "$WD" add -A
+  git -C "$WD" commit -qm init
+  printf '{"run_index":%s,"tasks":{"%s0":{"status":"in_progress"}}}' "${2:-0}" "$1" \
+    > "$WD/.context/state.json"
+}
+
+@test "D1: QA repeats an identical full run on an unchanged tree -> deny + audit row" {
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  run jq -e '.action == "test_execution_deduped" and .metadata.stage == "QA"' \
+    "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "D2: an edit to the tree re-enables the same command (test -> fix -> retest)" {
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+
+  echo 'fix' >> "$WD/src.txt"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "D3: a SECOND edit to the same file re-enables it (fingerprint reads content, not filenames)" {
+  # Regression guard: `git status --porcelain` reports only names and status
+  # letters, so two successive edits to one file are indistinguishable to it.
+  # A porcelain-only fingerprint denies the retest after a real fix.
+  git_ctx QA
+  echo 'first' >> "$WD/src.txt"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+
+  echo 'second' >> "$WD/src.txt"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "D4: a run recorded by DV suppresses the identical run in QA (cross-stage, same run_index)" {
+  git_ctx DV
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload 'tests/vendor/bats-core/bin/bats tests/shell/foo.bats')" \
+    "$SCRIPT"
+
+  printf '{"run_index":0,"tasks":{"QA0":{"status":"in_progress"}}}' > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload 'tests/vendor/bats-core/bin/bats tests/shell/foo.bats')" \
+    "$SCRIPT"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("already ran during run_index")'
+}
+
+@test "D5: a different selection is a different run -> allow" {
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload 'tests/vendor/bats-core/bin/bats tests/shell/a.bats')" \
+    "$SCRIPT"
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload 'tests/vendor/bats-core/bin/bats tests/shell/b.bats')" \
+    "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "D6: a bumped run_index re-enables the same command" {
+  git_ctx QA 0
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+
+  printf '{"run_index":1,"tasks":{"QA0":{"status":"in_progress"}}}' > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "D7: a ledger with no run_index self-disables dedupe -> allow (back-compat)" {
+  git_ctx QA
+  state_with QA   # rewrites state.json without run_index
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "D8: CORPFLOW_TEST_DEDUPE=off allows the repeat and notes the hatch once" {
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --env "CORPFLOW_TEST_DEDUPE=off" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+  run jq -e 'select(.action == "test_dedupe_disabled")' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "D9: a build-only run is never deduped (it executes no tests)" {
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh --print-selection')" "$SCRIPT"
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh --print-selection')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "D10: outside a git repo the fingerprint is unresolvable -> allow (fail-open)" {
+  # No git_ctx: $WD is not a repo, so tree_fingerprint returns empty.
+  printf '{"run_index":0,"tasks":{"QA0":{"status":"in_progress"}}}' > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "D11: a banned stage still gets the AUTHORITY deny, not the dedupe deny" {
+  git_ctx DR
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("has no test-execution authority")'
+}
