@@ -58,6 +58,8 @@ def main(argv_in: list) -> int:
     p.add_argument("--eval-set", required=True)
     p.add_argument("--responses", default=None)
     p.add_argument("--case", action="append", type=int, default=None)
+    p.add_argument("--split", choices=("train", "dev", "test"), default=None,
+                   help="grade only this tranche; test stays unread until judge validation")
     p.add_argument("--json", action="store_true")
     try:
         args = p.parse_args(argv_in)
@@ -78,7 +80,8 @@ def main(argv_in: list) -> int:
             f"eval-grade: no responses at {responses_dir}; run eval-capture.py first\n")
         return 2
 
-    ids = [c["id"] for c in eval_set["evals"]]
+    ids = [c["id"] for c in eval_set["evals"]
+           if args.split is None or c.get("split") == args.split]
     selected = ids if not args.case else [i for i in ids if i in args.case]
 
     results, missing, stale = [], [], []
@@ -95,6 +98,7 @@ def main(argv_in: list) -> int:
             stale.append(cid)
             continue
         result = grade_record(eval_set, record)
+        result["dimensions"] = engine.find_case(eval_set, cid).get("dimensions", {})
         if result["status"] == "stale":
             stale.append(cid)
         results.append(result)
@@ -104,10 +108,20 @@ def main(argv_in: list) -> int:
     clarified = [r for r in results if r["status"] == "clarify"]
     graded = [r for r in results if r["status"] not in ("stale", "clarify")]
     failed = [r for r in graded if r["status"] == "fail"]
+    # Clarify-expected cases ARE scored, so they belong in the per-axis rates;
+    # an unexpected clarification is not, and would otherwise read as a pass.
+    scored = graded + [r for r in clarified if r.get("expected_outcome") == "clarify"]
+    by_dimension: dict = {}
+    for result in scored:
+        for axis, value in result.get("dimensions", {}).items():
+            passed, total = by_dimension.setdefault(axis, {}).get(value, (0, 0))
+            by_dimension[axis][value] = (passed + (result["status"] == "pass"), total + 1)
+
     summary = {
         "skill": eval_set["skill_name"],
         "graded": len(graded), "passed": len(graded) - len(failed), "failed": len(failed),
         "clarified": [r["case_id"] for r in clarified],
+        "by_dimension": by_dimension,
         "missing_captures": missing, "stale_captures": stale, "results": results,
     }
 
@@ -129,7 +143,12 @@ def main(argv_in: list) -> int:
             print(f"  missing captures: {missing}")
         if summary["clarified"]:
             print(f"  clarified (unscored): {summary['clarified']}")
-        print(f"{eval_set['skill_name']}: {summary['passed']}/{summary['graded']} passed")
+        for axis, rates in summary["by_dimension"].items():
+            print(f"\n  by {axis}:")
+            for value, (passed, total) in sorted(rates.items()):
+                bar = "" if not total else f"  {100 * passed // total}%"
+                print(f"    {value:<10} {passed}/{total}{bar}")
+        print(f"\n{eval_set['skill_name']}: {summary['passed']}/{summary['graded']} passed")
 
     if stale:
         return 2

@@ -1,0 +1,22 @@
+{
+  "capture_contract": "skill-eval-capture-v1",
+  "case_id": 4,
+  "skill": "request-plan",
+  "mode": "command",
+  "model": "claude-sonnet-5",
+  "permission_mode": "bypassPermissions",
+  "prompt_digest": "f01849de643583a9",
+  "assertions_digest": "3eeea323aa8d6cd1",
+  "sent_prompt": "/corpflow:request-plan \"CHANGELOG.md is 183KB and unreadable. what's the plan to split it?\"",
+  "response": "# Plan: Split CHANGELOG.md into per-release files under a size budget\n\n## Context\n`CHANGELOG.md` is 2,165 lines / 183KB, Keep a Changelog format, 34 version headers (`3.35.0` → `4.0.17`, plus `Unreleased`) — entries have grown verbose (the `[Unreleased]` section alone documents a single fix in 9 lines). It's referenced from `README.md` (\"release history\"), `tests/README.md` (a fix disclosure link), and `skills/cross-plugin-handoff/references/plugin-contract.md` (version-bump/release-notes contract row) — any split has to keep those links resolvable. `4.0.x` alone accounts for ~18 of the 34 entries, so a flat by-major-minor split is uneven; by-major (`3.x` vs `4.x`) is more balanced.\n\n## Goal\n`CHANGELOG.md` stays small enough to read in one shot (current + a couple recent releases), with older history moved to dated archive file(s), and every existing inbound reference still resolves.\n\n## Scope\n**In:** archive old release entries out of the root file, keep `[Unreleased]` + the most recent N releases in `CHANGELOG.md`, add a link from `CHANGELOG.md` to the archive(s), fix the two doc references that assume everything lives in one file.\n**Out:** changing the changelog *format* (Keep a Changelog stays), automating changelog generation, or touching the release-engineering tooling that appends new entries — cite `corpflow:release-engineering` skill separately if that's wanted next.\n\n## Phases\n| Phase | Scope | Why this order |\n|-------|-------|----------------|\n| P0 — Required | Split at a version boundary (e.g. keep `4.0.x` + `Unreleased` in `CHANGELOG.md`, move `3.x` into `CHANGELOG-3.x.md` or `docs/changelog-archive/`); add a \"full history\" link at the bottom of the trimmed file | Delivers the actual readability fix; one clean cut is lower-risk than a multi-file scheme |\n| P1 — Nice-to-have | Update the two cross-references (`tests/README.md` disclosure link, `plugin-contract.md` row) to note the archive split | Keeps existing docs accurate, but nothing breaks if deferred a cycle |\n| P2 — v1.1 | Per-major-version archive files (`CHANGELOG-3.x.md`, future `CHANGELOG-5.x.md`) instead of one big archive, if `4.x` alone regrows past budget | Only worth doing once there's evidence one archive file is itself getting unwieldy |\n\n## Effort (rough)\n| Size | Complexity (0–25) | Notes |\n|------|-------------------|-------|\n| XS–S | 3–5 | Mechanical file split + two doc-link edits; no code or test surface touched |\n\n## Risks & Dependencies\n- **Broken links**: `README.md`, `tests/README.md`, and `plugin-contract.md` all point at `CHANGELOG.md` directly — mitigate by grepping for `CHANGELOG.md` repo-wide after the split (already confirmed: 3 non-CHANGELOG files reference it) and updating any that assume full history is inline.\n- **Release tooling assumptions**: if any script appends to `CHANGELOG.md` expecting it to be the sole/growing file (not found in this repo, but worth a final grep before executing), the split needs to preserve that append point.\n- No security-sensitive surface — pure docs/file reorganization.\n\n## Recommended next step\n`/worktask \"split CHANGELOG.md into a trimmed current file plus an archived-history file, keeping all existing doc references valid\"` — XS/S-sized, no security surface, so PL0 dynamic sizing will run this as a lightweight (likely single-stage) pipeline.",
+  "usage": {
+    "input_tokens": 18,
+    "output_tokens": 3157,
+    "cache_read_input_tokens": 799381,
+    "cache_creation_input_tokens": 76268,
+    "cost_usd": 0.7448313
+  },
+  "captured_at": "2026-08-16T09:24:26Z",
+  "plugin_sha": "dd5ac83",
+  "skill_version": "0.1.0"
+}
