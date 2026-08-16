@@ -43,6 +43,9 @@ LOG_DIR="${CLAUDE_PROJECT_DIR:-.}/.context/logs"
 printf '%s' "$PAYLOAD" | jq -e '.tool_name != "Bash" or ((.tool_input.command // "") | test("state-patch\\.sh"))' \
   >/dev/null 2>&1 || exit 0
 
+# CONTRACT: .tool_input carries file contents, diffs and full command lines, and
+# audit.jsonl is committed — so task_id and status, captured below, are the only
+# values that may ever be derived from it. Guarded by audit-tooluse.bats.
 ROW=$(printf '%s' "$PAYLOAD" | jq -c \
   --arg ts "$(date -u +%FT%TZ)" \
   --arg actor "hook:audit-tooluse" \
