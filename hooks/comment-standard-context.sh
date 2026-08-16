@@ -1,29 +1,24 @@
 #!/usr/bin/env bash
-# PostToolUse hook: injects the corpflow comment-standard reminder into the
-# transcript the first time a source file is touched in a session, so DV
-# agents see it without re-reading a skill file every edit.
+# comment-standard-context — PostToolUse hook injecting the corpflow
+# comment-standard reminder into the transcript the first time a source file is
+# touched, so DV agents see it without re-reading a skill file on every edit.
 #
-# Fires once per AGENT (sentinel in $TMPDIR) and only for a known set of
-# source extensions; every other input (non-source file, missing file_path,
-# missing jq, malformed stdin) is a silent no-op exit 0 — this hook must
-# NEVER block a tool call.
+# Fires once per AGENT (sentinel in $TMPDIR) and only for known source
+# extensions; every other input (non-source path, missing file_path, no jq,
+# malformed stdin) is a silent exit 0 — this must NEVER block a tool call.
 #
-# The sentinel is keyed on transcript_path's basename, not session_id: every
-# subagent inherits the parent's session_id, so a session-keyed sentinel fired
-# once for an entire multi-agent worktask and left every later DV agent without
-# the standard. transcript_path is per-agent; session_id is the fallback.
+# The sentinel keys on transcript_path's basename, not session_id: subagents
+# inherit the parent's session_id, so a session-keyed sentinel would fire once
+# for a whole multi-agent worktask. session_id is the fallback.
 #
-# Injection safety: tool_input.file_path is untrusted, attacker-influenceable
-# content. It is only ever read into a bash variable and pattern-matched
-# (case/parameter-expansion) for its extension — never eval'd, never expanded
-# inside a command string, never passed to ls/stat/cat or any subshell.
-# session_id is similarly stripped to [A-Za-z0-9_-] via bash pattern
-# substitution (no external process) before it is used to build the sentinel
-# path, so a crafted session_id cannot traverse directories.
+# Injection safety: tool_input.file_path is untrusted. It is only ever read into
+# a variable and pattern-matched for its extension — never eval'd, never
+# expanded inside a command string, never passed to a subshell. session_id is
+# stripped to [A-Za-z0-9_-] before building the sentinel path, so a crafted
+# value cannot traverse directories.
 #
-# --self-test feeds a synthetic source-file fixture through the same code
-# path and asserts the emitted JSON shape; it uses a throwaway session id and
-# deletes its own sentinel so repeated runs stay deterministic.
+# --self-test drives a synthetic fixture through the same path, asserts the JSON
+# shape, and deletes its own sentinel so repeat runs stay deterministic.
 set -eu
 
 STANDARD_TEXT='corpflow code-comment-standard: comment the non-obvious WHY and the contract only — never the WHAT, the history, or design provenance. Budgets: function doc 1–3 lines (one is the norm, only when the name isn'"'"'t clear); var/const doc ≤1 sentence, only when needed; inline // = one short line per non-obvious literal; #Preview blocks are never commented; comment-to-code density well below 1:1 and ≤40% of a change'"'"'s added lines (enforced by dv-comment-density-gate.sh on SubagentStop). Never write: multi-paragraph /// essays, before/after or "the previous X" narration, Figma/hex provenance, caller enumeration, AC-/REQ- IDs, issue tags as provenance, prose restating the signature, QA tuning runbooks, or a justification written to answer a DR finding. Rationale — including threshold derivations and review answers — belongs in the PR / .context/development-N.md, not in source. Full standard: skill `corpflow:code-comment-standard`.'
@@ -93,48 +88,16 @@ run_hook() {
   return 0
 }
 
+# Body lives in lib/ — test code, sourced only here and never on the dispatch
+# path below. This arm fails CLOSED: a self-test that cannot find its cases must
+# report a failure, never "OK".
 if [ "$SELF_TEST" -eq 1 ]; then
-  _agent_a="agentA_selftest_$$"
-  _agent_b="agentB_selftest_$$"
-  _agent_c="agentC_selftest_$$"
-  trap 'rm -f "${TMPDIR:-/tmp}/corpflow-comment-standard-${_agent_a}" "${TMPDIR:-/tmp}/corpflow-comment-standard-${_agent_b}" "${TMPDIR:-/tmp}/corpflow-comment-standard-${_agent_c}"' EXIT
-
-  _emits_context() {
-    printf '%s' "$1" | jq -e '
-      .hookSpecificOutput.hookEventName == "PostToolUse"
-      and (.hookSpecificOutput.additionalContext | length > 0)
-    ' >/dev/null 2>&1
-  }
-
-  # 1. First touch by agent A injects.
-  _emits_context "$(run_hook "$(selftest_payload "$_agent_a")")" || {
-    echo "comment-standard-context: self-test FAIL (agent A got no injection)"
-    exit 1
-  }
-
-  # 2. Agent B — SAME session_id, different transcript — must ALSO inject.
-  #    Regression guard: a session-keyed sentinel silently skipped every
-  #    subagent after the first, so one worktask got one reminder.
-  _emits_context "$(run_hook "$(selftest_payload "$_agent_b")")" || {
-    echo "comment-standard-context: self-test FAIL (agent B suppressed by agent A's sentinel)"
-    exit 1
-  }
-
-  # 3. Agent A again — same transcript — stays silent (once per agent).
-  if _emits_context "$(run_hook "$(selftest_payload "$_agent_a")")"; then
-    echo "comment-standard-context: self-test FAIL (agent A injected twice)"
+  _selftest_body="$(dirname "$0")/lib/comment-standard-context-selftest.sh"
+  if [ ! -f "$_selftest_body" ]; then
+    echo "comment-standard-context: self-test body missing at $_selftest_body" >&2
     exit 1
   fi
-
-  # 4. A shell path must inject: shell sat outside the extension gate. Fresh
-  #    agent key — injection fires once per agent.
-  _emits_context "$(run_hook "$(selftest_payload "$_agent_c" /tmp/deploy.sh)")" || {
-    echo "comment-standard-context: self-test FAIL (shell path got no injection)"
-    exit 1
-  }
-
-  echo "comment-standard-context: self-test OK"
-  exit 0
+  . "$_selftest_body"
 fi
 
 PAYLOAD=$(read_stdin)

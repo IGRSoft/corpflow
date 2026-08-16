@@ -3,30 +3,25 @@
 # the handoff protocol). Reads the artifact's `handoff:` frontmatter and
 # atomic-merges it into .context/state.json.
 #
-# Contract (per analyzing.md#integration-points § IP-2):
-#   - Exit 0 ALWAYS (must NOT block stage transition). Failures log to
-#     .context/logs/state-merge.log + stderr.
-#   - Idempotent: if state.json already reflects this frontmatter, exit 0
-#     silently. Otherwise atomic-merge and exit 0.
-#   - YAML parsing: prefer `yq`; fallback to inline awk subset (we own the
-#     handoff: schema so a strict subset parser is safe).
-#   - state.json absent: log INFO and exit 0 (path F1 — `context_files` mode).
-#   - state.json corrupt: back the original up to state.json.corrupt.<ts>, rebuild a
-#     skeleton so the merge below can proceed, and audit it. The backup is never
-#     skipped and the original is never destroyed; if it cannot be verified the
-#     repair aborts and the corrupt file is left exactly as found.
-#   - Frontmatter missing: derive minimal handoff from $CLAUDE_AGENT_NAME
-#     and $CLAUDE_ARTIFACT_PATH; merge minimal record.
+# Contract:
+#   - Exits 0 ALWAYS — must never block a stage transition. Failures log to
+#     .context/logs/state-merge.log and stderr.
+#   - Idempotent: a ledger already reflecting this frontmatter is left alone.
+#   - Absent state.json: log INFO and exit 0 (F1, context_files mode).
+#   - Corrupt state.json: the original is copied aside and verified before any
+#     write; an unverifiable backup aborts the repair and leaves the file as
+#     found. The original is never destroyed.
+#   - Absent frontmatter: derive a minimal handoff from CLAUDE_AGENT_NAME and
+#     CLAUDE_ARTIFACT_PATH.
+#   - YAML: prefer yq, else an inline awk subset (we own the schema).
 #
-# Env vars (provided by Claude Code on SubagentStop):
-#   CLAUDE_TASK_ID, CLAUDE_AGENT_NAME, CLAUDE_ARTIFACT_PATH,
-#   CLAUDE_WORKTASK_ID, CLAUDE_DURATION_MS, CLAUDE_TASK_METADATA_STAGE
+# Env from Claude Code: CLAUDE_TASK_ID, CLAUDE_AGENT_NAME,
+# CLAUDE_ARTIFACT_PATH, CLAUDE_WORKTASK_ID, CLAUDE_DURATION_MS,
+# CLAUDE_TASK_METADATA_STAGE.
 #
-# Implementation:
-#   All merge logic lives in skills/worktask/scripts/state-patch.sh.
-#   This hook is a thin delegating wrapper — exit 0 guard wraps the call.
-#   Path: $CLAUDE_PLUGIN_ROOT first (a project-local copy of this hook has no
-#   skills/ tree beside it), else HOOK_DIR up one level to the plugin root.
+# All merge logic lives in skills/worktask/scripts/state-patch.sh; this is a
+# delegating wrapper. That script is resolved from $CLAUDE_PLUGIN_ROOT first (a
+# project-local copy has no skills/ tree beside it), else one level up.
 #
 # Usage (manual self-test):
 #   state-merge.sh --self-test
@@ -39,22 +34,14 @@
 set -euo pipefail
 
 # ---------- Workspace resolution ----------
-# This hook fires on SubagentStop, and the subagent that just stopped is very
-# often a DV stream — the ONE stage for which worktree isolation is mandatory.
-# Its cwd is therefore a linked worktree, where `.context/` does not exist:
-# the directory is gitignored and never carried into a worktree checkout.
+# Never resolve `.context/` from cwd: this fires on SubagentStop, often for a DV
+# stream, whose cwd is a linked worktree where `.context/` does not exist (it is
+# gitignored and never carried into a worktree checkout). A cwd-relative merge
+# lands in a throwaway ledger, silently.
 #
-# Resolving `.context/` relative to cwd made this hook — documented as the
-# Layer 2 safety net that patches state.json when agents skip self-patching —
-# structurally unable to do that for the only stage that always needs it. It
-# failed silently: a `[WARN] no artifact resolved` line written into a shadow
-# `.context/logs/` inside the worktree, a directory deleted with the worktree.
-# Worse, had an artifact resolved, the completion patch would have merged into
-# a throwaway ledger instead of the real one.
-#
-# Resolve the real workspace instead, most-explicit first. The git arm is what
-# recovers the worktree case: in a linked worktree `--git-common-dir` points at
-# the MAIN checkout's .git, whose parent is the workspace that owns `.context/`.
+# Most-explicit source first. The git arm recovers the worktree case:
+# `--git-common-dir` points at the MAIN checkout's .git, whose parent owns
+# `.context/`.
 _resolve_workspace_root() {
   if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
     printf '%s' "$WORKSPACE_ROOT"; return
@@ -153,14 +140,13 @@ if [[ ! -f "$PATCH_SCRIPT" ]]; then
 fi
 
 # ---------- Corrupt-ledger repair ----------
-# state-patch.sh cannot merge into a ledger it cannot parse: it logs the jq failure and
-# leaves the file alone, so one corrupt write silently swallows every later stage. The
-# repair rebuilds the SKELETON ONLY and re-enters the delegation below, which still owns
-# the field merge — nothing here parses handoff fields, and state-patch.sh is unchanged.
+# One corrupt write would otherwise swallow every later stage: state-patch.sh
+# leaves a ledger it cannot parse alone. Rebuilds the SKELETON ONLY and re-enters
+# the delegation, which still owns the field merge.
 #
-# Invariant: the corrupt original is copied aside and verified byte-equal BEFORE anything
-# is written, and an unverifiable backup aborts the repair. A corrupt ledger is
-# recoverable; a destroyed one is not.
+# Invariant: the original is copied aside and verified byte-equal BEFORE any
+# write, and an unverifiable backup aborts the repair — a corrupt ledger is
+# recoverable, a destroyed one is not.
 STATE_FILE="$WORKSPACE_DIR/.context/state.json"
 
 # First unused name in the base, base-1, base-2 … series.
