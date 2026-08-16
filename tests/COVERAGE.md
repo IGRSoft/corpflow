@@ -101,14 +101,13 @@ scenario `@test`s (happy / edge / failure-exit) asserting its documented contrac
 
 #### Measured, not derived (this file's fifth correction this worktask)
 
-**879** `@test` assertions across **59** `.bats` files — the 45 script-dedicated files plus
-14 meta / repo-invariant files (Phase 4 of this worktask added `tests/shell/meta/test-selection.bats`,
-17 `@test`, to the meta set). **Min 3 / avg ~15 / max 90** per file; the ≥3 rule has no
-exceptions. Measured directly (`grep -c '^@test'` across `tests/shell/**`), not derived by
+**1022** `@test` assertions across **64** `.bats` files — the 50 script-dedicated files plus
+14 meta / repo-invariant files. **Min 3 / avg ~16 / max 90** per file; the ≥3 rule has no
+exceptions. Measured directly (`grep -c '^@test'` across `tests/**`), not derived by
 arithmetic on a prior claim — this file drifted repeatedly across the worktask (`680`→`683`,
 then a stale self-contradictory `683`/`53`, then `787`/`54` before the selection-matrix work
 landed its own test file; the `4.0.7` `### Fixed` entry documents the earlier repairs), and
-879/59 is re-derived directly from the tree, not incremented from any prior claim.
+1022/64 is re-derived directly from the tree, not incremented from any prior claim.
 
 R6 landed in `branch-name.sh.bats` (worktree rename, opt-out, ledger-based once-guard,
 disclosure) and `fn-preflight.bats` (the new `branch-divergence` subcommand). DV's final
@@ -191,6 +190,7 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/branch-name.sh` | `tests/shell/worktask/branch-name.sh.bats` | — | — | — |
 | `skills/worktask/scripts/branch-lib.sh` | `tests/shell/worktask/branch-lib.bats` | — | — | — |
 | `skills/worktask/scripts/refine-branch-target.sh` | `tests/shell/worktask/refine-branch-target.bats` | — | — | — |
+| `skills/worktask/scripts/preflight-issue-scan.sh` | `tests/shell/worktask/preflight-issue-scan.bats` | — | — | — |
 | `skills/worktask/scripts/fn-preflight.sh` | `tests/shell/worktask/fn-preflight.bats` (incl. `branch-divergence`, `issue-close-required`) | — | — | — |
 | `skills/worktask/scripts/fn-preflight-cmds.sh` | `tests/shell/worktask/fn-preflight.bats` (alias; the CLI is a black box to its suite) | — | — | — |
 | `skills/worktask/scripts/dv-tree-preflight.sh` | `tests/shell/worktask/dv-tree-preflight.bats` | — | — | — |

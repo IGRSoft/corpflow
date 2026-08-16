@@ -2,9 +2,9 @@
 name: worktask
 description: Initialize a new worktask task with proper folder structure and state-ledger integration
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]]'
-version: 0.4.0
+version: 0.5.0
 model: opus
-allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Task(corpflow:product-manager)
+allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Task(corpflow:product-manager)
 ---
 
 > **EXECUTION MODEL (BINDING)** — two gates, two human checkpoints, plus an optional decision delegate.
@@ -98,16 +98,83 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 ## Phase 1: Planning (execute immediately)
 
 > **BINDING CONSTRAINTS FOR PHASE 1**
-> 1. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/designs .context/images .context/errors` and `state-patch.sh` ledger writes are permitted. ALL file modifications belong to DV stage or later.
+> 1. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/designs .context/images .context/errors`, `state-patch.sh` ledger writes, and the Step 2a `.context/gh-issue.json` anchor (reuse path only) are permitted. ALL file modifications belong to DV stage or later.
 
 ### Phase 1 binding constraint 2 — Context-Interruption Recovery
 
 > 2. **Context-Interruption Recovery**: If worktask execution is interrupted (auth flows, tool failures), upon resumption MUST verify that the PL0 task exists with status `completed`. If not, restart from the appropriate phase — **except** when PL0 is `in_progress` with stage tasks present and the audit tail has a `plan_revision_dispatched` row with no later `approval_received` for `PL<run_index>`: that is a plan revision in flight, resumed per § Plan-revision re-dispatch (re-dispatch PM with `plan_revision: true`; never the fresh-run path). (There are two human checkpoints — the PL gate at Step A.5 and the FN gate before finalization; the FN gate check applies (STOP on `checkpoint`, proceed on `bypass`) — `skills/worktask/SKILL.md § FN Gate`.)
 
-### Steps 1–3 — Parse flags and create context folders
+### Steps 1–2 — Parse flags and detect embedded commands
 
 1. **Parse** task description and flags (`--secure`, `--auto=[plan, decision, finalization]`, `--emergency`, etc.). Resolve the `--auto` array per § Gate automation flag: strip optional brackets, split on commas, trim whitespace, reject unknown values. See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:fix-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
+
+### Step 2a — Duplicate-issue pre-flight (advisory)
+
+Runs once the request is known and **strictly before** Step 3 creates `.context/`. The
+`skills/gh-issue-dedup` anchor binds one issue per `.context/` and so guards *re-runs* only —
+a first run of work already filed under different wording still opens a second issue, and by
+the time `.context/` exists the duplicate is no longer preventable. This step surfaces the
+candidates while it still is.
+
+#### Step 2a snippet — invoke the scan, non-blocking
+
+    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
+    [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+    SCAN="$PLUGIN_ROOT/skills/worktask/scripts/preflight-issue-scan.sh"
+    scan_out=""
+    if [ -f "$SCAN" ]; then scan_out=$(bash "$SCAN" --goal "<task description>") || true; fi
+    scan_result=$(printf '%s\n' "$scan_out" | sed -n 's/^result=//p' | tail -n 1)
+
+Append `--no-gh-issue` to the invocation when that flag was supplied — a run that publishes no
+issue has no duplicate to prevent.
+
+#### Step 2a — the gate
+
+Anything other than `result=shown` proceeds to Step 3 unchanged, with no prompt. On
+`result=shown`, present each `candidate=<json>` line (number, title, url — at most three, most
+likely first) and call `AskUserQuestion` with exactly two outcomes:
+
+- **Start a new worktask** — proceed to Step 3 as normal. Nothing has been written yet, so
+  declining leaves no partial or orphaned state behind.
+- **Use one of the existing issues** — proceed to Step 3, then bind this context to the chosen
+  issue per § Step 2a — reusing an existing issue.
+
+#### Step 2a — reusing an existing issue
+
+Picking a candidate does not abort the worktask; planning still runs, bound to the issue that
+already exists. After Step 3a seeds `state.json`, write the dedup anchor for the chosen issue:
+
+    jq -cn --arg url "<chosen url>" --argjson num <chosen number> \
+       --arg wid "$(jq -r '.worktask_id // "unknown"' .context/state.json)" \
+       --arg ts "$(date -u +%FT%TZ)" \
+       '{version:1, url:$url, number:$num, created_run_index:-1, created_worktask_id:$wid,
+         created_at:$ts, last_commented_run_index:-1}' > .context/gh-issue.json
+
+`created_run_index: -1` is the "predates this context" value `publish-pl-issue.sh` already uses
+for a recovered search hit, so Step A posts a follow-up comment on that issue instead of opening
+a second one — the same end state as having resumed that worktask directly.
+
+#### Step 2a invariants
+
+- The trailing `|| true` is mandatory. The helper is **non-blocking by contract**: no network,
+  no `gh`, no auth, no remote, an API error, a rate limit, a timeout, a malformed response, or
+  zero hits each print `result=skipped`/`result=none` and Step 3 runs unchanged.
+- **Advisory only.** It never links, comments, closes, or writes anything, and it does NOT relax
+  the exact-title auto-bind in `publish-pl-issue.sh` (`skills/gh-issue-dedup § Resolution order`)
+  — an ambiguous match is still refused there rather than bound automatically.
+- It writes **no audit row** — the ledger it would append to does not exist yet at this point.
+
+#### Step 2a invariants — runs that skip the question
+
+- **Unattended runs never reach it.** The helper self-skips under `CORPFLOW_NONINTERACTIVE=1`,
+  under `/megatask` (`MILESTONE_MODE=1` or a `workspace.json`), and under `--emergency`
+  (`INCIDENT_MODE=1`). `PREFLIGHT_ISSUE_SCAN=0` disables it outright.
+- A `.context/` that already carries a `gh-issue.json` anchor is a resume, not a first run: the
+  helper skips with `reason=already_anchored` and the anchor answers the question authoritatively.
+
+### Step 3 — Create context folders
+
 3. **Create context folders**: `mkdir -p .context/designs .context/images .context/errors .context/logs`
 
 ### Step 3a — Initialize state.json (handoff-protocol)

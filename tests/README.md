@@ -109,13 +109,13 @@ kcov **cannot run on macOS bash 3.2** (mis-parses `BASH_VERSINFO` guards; >2 min
   per-file verdict are enumerated by `meta/coverage-proxy.bats`, which globs `hooks/*.sh`
   and `skills/**/scripts/*` at run time — read its failure output for the current roster
   rather than a hand-maintained count here, which drifts silently between releases.
-- **60 bats files**, split between files dedicated to one script and meta / repo-invariant
+- **64 bats files**, split between files dedicated to one script and meta / repo-invariant
   files that guard a contract instead (`meta/{coverage-proxy,test-selection}`,
   `lib/test-helper`, `skills/{test-authority-matrix,cross-plugin-refs,plugin-root-refs,skill-refs}`,
   `worktask/{artifact-map-parity,manifest-parity,gh-issue-dedup}`,
   `benchmark/{run-benchmark,canvas-e2e-guards}`).
-- **937 `@test`** assertions across those 60 files.
-- **Min 3 / avg ~15 / max 90** scenarios per file. The ≥3 rule now has **no exceptions** — the one
+- **1022 `@test`** assertions across those 64 files.
+- **Min 3 / avg ~16 / max 90** scenarios per file. The ≥3 rule now has **no exceptions** — the one
   standing exception (`comment-hooks-self-test.bats`, 2 self-delegating tests) was deleted, and
   `meta/coverage-proxy.bats` enforces the rule as an executable gate with an empty exemption list.
 
@@ -125,13 +125,13 @@ simultaneously claimed 34/34; the 53/680 figures they were corrected to had them
 exclude the vendored bats trees, which contain their own `.bats` suites:
 
 ```bash
-# 60 — test files
+# 64 — test files
 find tests -name '*.bats' -not -path '*/vendor/*' | wc -l
 
-# 937 — test cases (every declaration is column-0 `^@test `)
+# 1022 — test cases (every declaration is column-0 `^@test `)
 grep -rh --include='*.bats' '^@test ' tests --exclude-dir=vendor | wc -l
 
-# independent cross-check of the same 937
+# independent cross-check of the same 1022
 find tests -name '*.bats' -not -path '*/vendor/*' -exec grep -c '^@test ' {} + \
   | awk -F: '{s+=$NF} END {print s}'
 ```
@@ -139,7 +139,7 @@ find tests -name '*.bats' -not -path '*/vendor/*' -exec grep -c '^@test ' {} + \
 Provenance, so the figures are not over-claimed: QA measured **677** across two consecutive full runs
 with byte-identical TAP streams. The final **3** were added afterwards by the documentation pass
 itself (`worktask/manifest-parity.bats`, 3 → 6, covering frontmatter-wired hooks), so 680 is the
-re-derived tree total for that release; the current figure is 937 and is re-derived, never incremented.
+re-derived tree total for that release; the current figure is 1022 and is re-derived, never incremented.
 
 High-logic-density targets (14+ scenarios):
 - `branch-name.sh` (90), `test-execution-gate` (85), `branch-lib` (54), `fn-preflight` (52)

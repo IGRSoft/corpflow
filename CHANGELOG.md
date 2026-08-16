@@ -56,6 +56,29 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Added
 
+- **A duplicate GitHub issue is now caught before `.context/` exists.** `skills/gh-issue-dedup`
+  binds one issue per `.context/` through an anchor, or an exact-title single-hit search — both
+  reachable only *after* the context exists, so they guard re-runs and never the first run of
+  work already filed under different wording. A paraphrased request therefore opened a second
+  issue every time, at the one moment prevention was still possible.
+
+  `/worktask` Step 2a now runs `skills/worktask/scripts/preflight-issue-scan.sh` after the
+  request is parsed and strictly before the context folders are created. It scores keyword
+  overlap against open-issue titles locally — GitHub's issue search ANDs free-text terms, so a
+  server-side query built from a whole request sentence returns nothing for exactly the
+  paraphrase this must catch — and offers at most three candidates through `AskUserQuestion`.
+  Choosing one seeds the dedup anchor with `created_run_index: -1`, the same "predates this
+  context" value a recovered search hit uses, so the publish step comments on that issue instead
+  of opening a second one.
+
+  The layer is **advisory and human-confirmed only**: it never links, comments, or writes on its
+  own, and the exact-match-only auto-bind in `publish-pl-issue.sh` is byte-unchanged — widening
+  *that* is what would let an unrelated same-worded issue capture a fresh context. It is also
+  non-blocking on the entry path of every worktask: no `gh`, no auth, no remote, an API error, a
+  rate limit, a timeout, a malformed response, or zero hits all proceed to a new context. Batch
+  (`/megatask`), incident (`--emergency`), and `CORPFLOW_NONINTERACTIVE=1` runs skip the question
+  entirely rather than hang on a prompt nobody can answer; `PREFLIGHT_ISSUE_SCAN=0` disables it.
+
 - **The test-execution gate now denies a run that already happened.** Authority answered *who*
   may execute tests; nothing asked *again?*. A stage re-running a suite against a tree nobody
   touched burns full wall-clock and, on live runs, real spend, to reproduce a result already on
