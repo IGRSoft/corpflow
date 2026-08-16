@@ -27,8 +27,20 @@ SHAPE_ARM = "arm"
 PERMISSION_MODE = "bypassPermissions"
 
 
+def stages_subset(stages: Optional[list], full_pipeline: list) -> Optional[list]:
+    """Subset-ness is a property of the RESOLVED set, never of whether ``--stages`` was
+    typed: a flag spelling out the whole pipeline, in any order, is still a full run.
+    Callers pass the list they will dispatch, never the raw flag value.
+    """
+    if stages is None:
+        return None
+    return None if set(stages) == set(full_pipeline) else list(stages)
+
+
 def resolve_arm_mode(explicit: Optional[str], stages_subset: Optional[list]) -> str:
-    """D2 policy: explicit flag wins; else real on a full run, skip on a `--stages` subset."""
+    """D2 policy: explicit flag wins; else real on a full run, skip on a genuine subset
+    (``stages_subset`` non-empty only when the resolved stages differ from the pipeline).
+    """
     if explicit is not None:
         return explicit
     return ARM_SKIP if stages_subset else ARM_REAL
@@ -55,7 +67,8 @@ _PAIRED_SKIP = ArmSelection(dispatch=(ARM_WITH,), record_shape=SHAPE_PAIRED, arm
 
 def resolve_arm_selection(arm_flag: Optional[str], without_arm_flag: Optional[str],
                           stages_subset: Optional[list]) -> ArmSelection:
-    """Resolve ``--arm`` against ``--without-arm`` and the stage subset.
+    """Resolve ``--arm`` against ``--without-arm`` and the stage subset (``stages_subset()``
+    output — a resolved list that differs from the full pipeline, else None).
 
     ``--arm`` unset is distinct from ``--arm both``: only the unset case defers to the
     legacy subset→skip policy, which is what keeps the pre-existing default byte-stable

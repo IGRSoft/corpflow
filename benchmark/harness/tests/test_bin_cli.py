@@ -1,11 +1,13 @@
 """Subprocess tests for the four CLIs in benchmark/harness/bin/.
 
 bench-live and bench-deterministic are covered by ARGV VALIDATION ONLY: every
-case here must exit on a usage error before any dispatch, build or spend can
-occur. The assertions therefore pin both the exit code and the absence of any
-output artifact — a guard that fires after the record has been written is not a
-guard. bench-report and bench-analyze are exercised end to end against
-throwaway fixtures because neither reaches the live world.
+subprocess case here must exit on a usage error before any dispatch, build or
+spend can occur. The assertions therefore pin both the exit code and the absence
+of any output artifact — a guard that fires after the record has been written is
+not a guard. The single exception is TestBenchLiveArmWiring, which runs in-process
+against a stubbed dispatch(); it cannot spend either. bench-report and
+bench-analyze are exercised end to end against throwaway fixtures because neither
+reaches the live world.
 
 stdlib unittest only (no pytest), matching the rest of this suite.
 """
@@ -283,6 +285,58 @@ class TestBenchLiveArgv(CLITestCase):
         self.assertEqual(0, proc.returncode)
         self.assertIn("bench-live --workdir", proc.stdout)
         self.assertNoRunArtifacts()
+
+
+# ---------------------------------------------------------------------------
+# bench-live — arm-selection wiring. In-process with dispatch STUBBED OUT: the
+# argv-only rule above exists to prevent spend, and a stub cannot spend. This is
+# the only way to see which selection the CLI hands to dispatch().
+# ---------------------------------------------------------------------------
+
+class TestBenchLiveArmWiring(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        from importlib.machinery import SourceFileLoader
+        loader = SourceFileLoader("bench_live_cli", os.path.join(BIN_DIR, "bench-live"))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        cls.cli = importlib.util.module_from_spec(spec)
+        loader.exec_module(cls.cli)
+        cls.full = list(cls.cli.budget_mod.PIPELINE_STAGES)
+
+    def setUp(self):
+        self.calls = []
+        real = self.cli.dispatch_mod.dispatch
+        self.addCleanup(setattr, self.cli.dispatch_mod, "dispatch", real)
+        self.cli.dispatch_mod.dispatch = lambda **kw: self.calls.append(kw) or 0
+
+    def _run(self, *args):
+        with self.assertRaises(SystemExit) as exit_ctx:
+            self.cli.main(["--workdir", "w", "--budget", "1", "--record", "r.json", *args])
+        self.assertEqual(0, exit_ctx.exception.code)
+        return self.calls[-1]
+
+    def test_no_stages_flag_pairs_both_arms(self):
+        self.assertEqual(self._run()["selection"].dispatch, ("without", "with"))
+
+    def test_stages_listing_the_whole_pipeline_pairs_both_arms(self):
+        kwargs = self._run("--stages", ",".join(self.full))
+        self.assertEqual(kwargs["selection"].dispatch, ("without", "with"))
+        self.assertEqual(kwargs["stages"], self.full)
+
+    def test_a_reordered_duplicated_full_list_is_still_a_full_run(self):
+        kwargs = self._run("--stages", ",".join(reversed(self.full)) + ",pl")
+        self.assertEqual(kwargs["selection"].dispatch, ("without", "with"))
+        self.assertEqual(kwargs["stages"], self.full)  # canonical order regardless
+
+    def test_a_genuine_subset_keeps_the_with_only_default(self):
+        kwargs = self._run("--stages", "PL,AR")
+        self.assertEqual(kwargs["selection"].dispatch, ("with",))
+        self.assertEqual(kwargs["stages"], ["PL", "AR"])
+
+    def test_explicit_without_arm_still_overrides_a_subset(self):
+        kwargs = self._run("--stages", "PL", "--without-arm", "real")
+        self.assertEqual(kwargs["selection"].dispatch, ("without", "with"))
 
 
 # ---------------------------------------------------------------------------

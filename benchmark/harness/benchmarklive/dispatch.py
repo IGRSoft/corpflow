@@ -245,7 +245,9 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     require_settings(settings_path)
     captures_dir = os.path.join(workdir_path, "captures")
     if selection is None:
-        selection = baseline_mod.resolve_arm_selection(None, without_arm, None)
+        selection = baseline_mod.resolve_arm_selection(
+            None, without_arm,
+            baseline_mod.stages_subset(stages, budget_mod.PIPELINE_STAGES))
 
     with_spec = ArmSpec(name="with", bind_agent=True,
                         cwd=os.path.join(workdir_path, "with"),

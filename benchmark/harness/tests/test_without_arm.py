@@ -12,6 +12,7 @@ import tempfile
 import unittest
 
 from benchmarklive import baseline
+from benchmarklive import budget as budget_mod
 from benchmarklive.dispatch import DispatchFailure, dispatch
 
 import sys as _sys
@@ -41,6 +42,30 @@ class ResolveArmModeMatrix(unittest.TestCase):
 
     def test_full_run_default_is_real(self):
         self.assertEqual(baseline.resolve_arm_mode(None, None), baseline.ARM_REAL)
+
+
+class StagesSubsetNormalisation(unittest.TestCase):
+    """The full pipeline spelled out is a FULL run, however it was spelled."""
+
+    FULL = budget_mod.PIPELINE_STAGES
+
+    def test_full_pipeline_normalises_to_none(self):
+        self.assertIsNone(baseline.stages_subset(list(self.FULL), self.FULL))
+
+    def test_order_and_duplicates_do_not_make_it_a_subset(self):
+        shuffled = list(reversed(self.FULL)) + ["PL", "PL"]
+        self.assertIsNone(baseline.stages_subset(shuffled, self.FULL))
+
+    def test_genuine_subset_is_returned_verbatim(self):
+        self.assertEqual(baseline.stages_subset(["PL", "AR"], self.FULL), ["PL", "AR"])
+
+    def test_absent_stages_stay_absent(self):
+        self.assertIsNone(baseline.stages_subset(None, self.FULL))
+
+    def test_full_pipeline_via_stages_still_pairs_both_arms(self):
+        sel = baseline.resolve_arm_selection(
+            None, None, baseline.stages_subset(list(self.FULL), self.FULL))
+        self.assertEqual(sel.dispatch, ("without", "with"))
 
 
 class PairedDispatch(unittest.TestCase):
@@ -120,6 +145,25 @@ class PairedDispatch(unittest.TestCase):
         })
         # Skip mode leaves stage rows untagged (byte-stable): no "arm" key.
         self.assertTrue(all("arm" not in s for s in rec["stages"]))
+
+    def test_policy_fallback_reads_the_dispatched_stages_not_none(self):
+        # without_arm=None is the only way into the subset→skip policy from inside
+        # dispatch(); the fallback must consult its own `stages`, not a hardcoded None.
+        fake = SequencedFakeDispatcher([single_object_usage()])
+        rc = self._dispatch(fake, stages=["PL"], without_arm=None)
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(fake.calls), 1)  # subset ⇒ WITH alone
+
+    def test_policy_fallback_pairs_when_the_stage_list_is_the_whole_pipeline(self):
+        for arm in ("with", "without"):
+            d = os.path.join(self.sb.workdir_path, arm, "Sources")
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, "App.swift"), "w", encoding="utf-8") as f:
+                f.write("let x = 1\n")  # clears the DV gate so every stage dispatches
+        fake = SequencedFakeDispatcher([single_object_usage()])
+        rc = self._dispatch(fake, stages=list(budget_mod.PIPELINE_STAGES), without_arm=None)
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(fake.calls), 2 * len(budget_mod.PIPELINE_STAGES))
 
     def test_paired_coverage_is_absent_not_zero(self):
         # Live coverage is never measured: the paired path emits None (absent) for BOTH arms
