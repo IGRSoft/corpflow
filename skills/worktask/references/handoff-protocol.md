@@ -1256,13 +1256,15 @@ Documented in `skills/cost-optimization/SKILL.md`. Without 1h flag, default 5-mi
 
 ### Lint
 
-`skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`. Runs in CI on PRs touching `skills/worktask/`, `skills/shared/`, or `agents/`.
+`skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`.
+
+**Not automated.** Prefix-lint is manual-only: it consumes a `prompt-log.jsonl` (`{worktask_id, stage, prompt}` per line) that nothing in this repo emits — the live harness assembles prompts in `benchmarklive/dispatch.py` but persists only stage stdout. The mode is exercised solely by `cache-lint.sh --self-test` fixtures. There is also no `.github/workflows/` in this repo, so no lint of any kind runs on PRs. Treat this section as the spec the assembler must satisfy, not as an enforced gate.
 
 ---
 
 ## #anchor-allow-list
 
-All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below. DR runs anchor-lint on every produced artifact; CI runs the same lint on PRs touching `skills/` or `agents/`.
+All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below. Anchor-lint runs twice: proactively via the managed `PostToolUse` hook (`hooks/anchor-preflight.sh`, shipped default-on in `.claude-plugin/plugin.json`) and again at the DR gate. Neither is a CI check — this repo has no `.github/workflows/`.
 
 ### Anchors — PL to DR
 
@@ -1312,7 +1314,7 @@ Anchor-lint also runs at the DR gate, but that is post-hoc — a missing anchor 
 
 #### Preflight behavior and cost
 
-`anchor-preflight.sh` matches only the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit is a no-op. When the lint fails (non-zero exit), the agent that produced the artifact sees the diagnostic and amends the file before continuing — no downstream stages incur the cost. `continueOnBlock` follows the same managed-hook discipline as the other entries (the diagnostic is surfaced; an unrelated write is never blocked). The DR-gate lint plus the CI lint (PRs touching `skills/` or `agents/`) remain as the safety net for non-hook environments.
+`anchor-preflight.sh` matches only the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit is a no-op. When the lint fails (non-zero exit), the agent that produced the artifact sees the diagnostic and amends the file before continuing — no downstream stages incur the cost. `continueOnBlock` follows the same managed-hook discipline as the other entries (the diagnostic is surfaced; an unrelated write is never blocked). The DR-gate lint is the only safety net for non-hook environments — there is no CI counterpart.
 
 **Cost**: lint runs in O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit; net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
 

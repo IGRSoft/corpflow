@@ -147,7 +147,7 @@ When **no** typed return is present (the runtime dispatch primitive does not acc
 
 ### Steps 3–5
 
-3. **Anchor lint (DR gate)**: For each produced artifact, verify all H2 headings match the per-stage allow-list in `skills/worktask/references/handoff-protocol.md#anchor-allow-list`. DR runs `cache-lint.sh --anchor-lint <artifact>` as a stage gate. CI runs the same on PRs touching `skills/` or `agents/` as a safety net.
+3. **Anchor lint (DR gate)**: For each produced artifact, verify all H2 headings match the per-stage allow-list in `skills/worktask/references/handoff-protocol.md#anchor-allow-list`. DR runs `cache-lint.sh --anchor-lint <artifact>` as a stage gate, and the managed `PostToolUse` hook (`hooks/anchor-preflight.sh`) runs it at write time. No CI counterpart exists.
 4. **Section check**: Grep the output artifact for required section headers.
 5. **Side-artifact check**: For DV/QA stages, confirm corresponding `.context/logs/` capture exists (build/test logs).
 

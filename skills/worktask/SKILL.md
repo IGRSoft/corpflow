@@ -430,7 +430,7 @@ function markDispatchStatus(state, taskId, status, modelResolved) {
 
 **Banner relocation (R3)**: stage-specific banners (DR Skill, FN Conductor, MCP fallback warning) are appended AFTER `full.description` (suffix), not prepended. Prefixes [1][2][3][4] stay byte-identical across stages so the cache prefix boundary stretches as far as possible.
 
-The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: timestamps, ENV expansions that vary per call, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. CI lint (`skills/worktask/scripts/cache-lint.sh`) asserts byte-stability across consecutive stages of the same `worktask_id`.
+The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: timestamps, ENV expansions that vary per call, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. `skills/worktask/scripts/cache-lint.sh` asserts byte-stability across consecutive stages of the same `worktask_id`, but only when run by hand against a captured prompt-log — it is not wired to CI.
 
 ### CRITICAL: Delegation-Only Rule
 

@@ -305,7 +305,7 @@ Per `handoff-protocol.md#cache-prefix`:
 - Stage 2..N, retry within same stage: ≈ 80% (full preamble cached).
 - Cross-stage average: ≈ 60% — meets AC-14 threshold.
 
-CI lint (`skills/worktask/scripts/cache-lint.sh`) asserts byte-stability of preamble sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`. Drift collapses cache-hit rate.
+`skills/worktask/scripts/cache-lint.sh` asserts byte-stability of preamble sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`. Drift collapses cache-hit rate. The lint is manual-only — no CI runs it, and no producer emits the `prompt-log.jsonl` it consumes (see `handoff-protocol.md#cache-prefix` § Lint).
 
 ### Sibling fan-out staggering
 
