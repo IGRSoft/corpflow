@@ -118,7 +118,7 @@ those three files plus their test helpers.
 
 Highest-density targets: `branch-name.sh` 90, `test-execution-gate` 85, `fn-preflight` 58,
 `branch-lib` 54, `state-patch` 36, `refine-branch-target` 31, `attach-visual-evidence` 25,
-`test-helper` 23, `pr-body-lint` 19, `milestone-helpers` 18, `scan-secrets` 17,
+`test-helper` 23, `pr-body-lint` 19, `milestone-helpers` 26, `scan-secrets` 17,
 `test-selection` 17.
 
 #### Regeneration and enforcement

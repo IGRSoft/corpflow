@@ -4,8 +4,8 @@
 #   For each issue this script:
 #     1. Resolves the base branch via sourced milestone-helpers.sh (issue body
 #        base_branch: field → develop → master; no hardcoding).
-#     2. Derives the feature branch name: feature/{n}-{slug} (milestone-helpers
-#        cmd_branch_name, slug max 50 chars).
+#     2. Derives the branch name: <type>/{n}-{slug} (milestone-helpers
+#        cmd_branch_name — type derived from the title, slug max 50 chars).
 #     3. Excludes the batch's own scratch metadata from git BEFORE the worktree
 #        exists, so it is never reported by `git status` (see exclude_scratch).
 #     4. Runs: git fetch origin <base_branch>

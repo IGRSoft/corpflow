@@ -230,6 +230,33 @@ segment rather than cutting mid-word — `bugfix/ov-164-…-blinking-before`, ne
 `…-blinking-before-r`. At least one whole word always survives, even a word longer than
 the remaining budget, so a long issue key can never starve the slug to nothing.
 
+#### Batch (`/megatask`) branches — one convention, two entry points
+
+Milestone/batch runs name their branches through
+`skills/shared/milestone-helpers/scripts/milestone-helpers.sh branch-name`, not through
+`branch-lib.sh`, and the shape is `<type>/{issue#}-{slug}`. Exactly **one** property
+differs from a solo worktask:
+
+| | worktask (`branch-lib.sh`) | batch (`milestone-helpers.sh`) |
+|---|---|---|
+| Type | `derive_type` on the goal | `derive_type` on the issue title — same function, sourced |
+| Ticket segment | optional, from the goal text | always the issue number |
+| Slug budget | 48, shared with the ticket segment | 50, issue number sits outside it |
+
+The budgets differ deliberately and are not being unified; everything else is **one rule,
+not two**. The type vocabulary has a single machine-readable copy (`BRANCH_TYPES`), and
+`milestone-helpers.sh` sources `branch-lib.sh` for `derive_type` rather than keeping its own
+— an unreachable library stops the run (exit 2) instead of falling back to a plausible
+`feature/`. The kebab body, trimming, and whole-word truncation are the same rules described
+under § Slug budget above, pinned by cross-check tests in
+`tests/shell/skills/milestone-helpers.bats`: the same title must yield the same type and the
+same slug body from both entry points. Change one side and the cross-check fails until the
+other follows.
+
+Batch branches issued before this change carry a `feature/` prefix regardless of type. They
+are not renamed — this changes name *generation* only, and `branch_is_conventional` accepts
+them unchanged.
+
 ### Type vocabulary (13 tokens, accepted by the already-conventional check)
 
 `feat`, `feature`, `bugfix`, `hotfix`, `refactor`, `perf`, `docs`, `chore`, `test`, `ci`,

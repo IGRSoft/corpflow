@@ -26,6 +26,98 @@ SCRIPT="skills/shared/milestone-helpers/scripts/milestone-helpers.sh"
   [ "${#slug}" -le 50 ]
 }
 
+# --- truncation shape + parity with branch-lib.sh ---------------------------
+# The two branch-name implementations (this dispatcher for megatask, branch-lib.sh
+# for worktask) slugify independently. These pin them to one convention: same body,
+# same word-boundary truncation rule. Inputs stay short enough that the 48- vs
+# 50-char budget difference — deliberately left alone — cannot confound the compare.
+
+@test "edge: branch-name truncation ends on a whole word, never mid-word" {
+  run_script "$SCRIPT" branch-name 164 \
+    "Fix the reconstruction scan flow blinking before the first frame renders"
+  assert_success
+  assert_output "bugfix/164-fix-the-reconstruction-scan-flow-blinking-before"
+}
+
+# --- type derivation (batch branches are no longer fixed to feature/) --------
+@test "happy: branch-name derives the type from the title" {
+  run_script "$SCRIPT" branch-name 43 "Fix: crash on startup!!!"
+  assert_success
+  assert_output "bugfix/43-fix-crash-on-startup"
+
+  run_script "$SCRIPT" branch-name 44 "Refactor the reconnect backoff"
+  assert_success
+  assert_output "refactor/44-refactor-the-reconnect-backoff"
+
+  # Nothing defect-shaped in the title still yields the feature default.
+  run_script "$SCRIPT" branch-name 45 "Add dark mode toggle"
+  assert_success
+  assert_output "feature/45-add-dark-mode-toggle"
+}
+
+@test "cross-check: the type matches branch-lib derive_type for the same title" {
+  local title derived
+  for title in \
+    "Fix: crash on startup!!!" \
+    "Refactor the reconnect backoff" \
+    "Add dark mode toggle" \
+    "Ship a hotfix for the release pipeline"; do
+    derived="$(bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'; derive_type \"\$1\"" _ "$title")"
+    run_script "$SCRIPT" branch-name 7 "$title"
+    assert_success
+    [ "${output%%/*}" = "$derived" ]
+  done
+}
+
+@test "failure: an unreachable branch-lib.sh stops the run (exit 2), never silently defaults" {
+  # A copy outside the plugin tree cannot resolve its ../../../worktask sibling. A
+  # `feature/` fallback here would be a plausible-looking wrong name on a real branch.
+  WD="$(mk_tmpworkdir)"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/milestone-helpers.sh"
+  run bash "$WD/milestone-helpers.sh" branch-name 42 "Fix crash on startup"
+  assert_failure 2
+  assert_output --partial "branch-lib.sh"
+}
+
+@test "cross-check: slug body is identical to branch-lib slug_body" {
+  local title body
+  for title in \
+    "Add OAuth Login Flow!!" \
+    "Fix: crash on startup!!!" \
+    "---hello world---" \
+    "Refactor the WebSocket reconnect backoff" \
+    "Update deps: jq 1.7, gh 2.60 (security)"; do
+    body="$(bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'; slug_body \"\$1\"" _ "$title")"
+    run_script "$SCRIPT" branch-name 7 "$title"
+    assert_success
+    # Strip whatever type was derived — this arm pins the slug body only.
+    [ "${output#*/7-}" = "$body" ]
+  done
+}
+
+@test "cross-check: an over-budget title truncates to the same slug as derive_slug" {
+  local title="Fix the reconstruction scan flow blinking before the first frame renders"
+  local derived
+  derived="$(bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'; derive_slug \"\$1\"" _ "$title")"
+  run_script "$SCRIPT" branch-name 164 "$title"
+  assert_success
+  [ "${output#*/164-}" = "$derived" ]
+}
+
+@test "edge: a single over-budget word survives whole rather than emptying the slug" {
+  local word
+  word="$(printf 'a%.0s' {1..80})"
+  run_script "$SCRIPT" branch-name 1 "$word"
+  assert_success
+  assert_output "feature/1-${word}"
+}
+
+@test "edge: a multi-line title yields a single-line branch name" {
+  run_script "$SCRIPT" branch-name 7 "$(printf 'Add login\nflow')"
+  assert_success
+  assert_output "feature/7-add-login-flow"
+}
+
 # --- priority-score ---------------------------------------------------------
 @test "happy: priority-score returns min score when multiple labels given" {
   # P2 and P0 together should yield 0 (P0 wins).

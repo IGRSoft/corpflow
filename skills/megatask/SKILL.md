@@ -350,8 +350,9 @@ Per-issue fallback chain (stored in `workspace.json` as `base_branch_source`):
 
 ## Branch Naming
 
-`feature/{issue#}-{slug}` — slug = lowercase title, spaces→hyphens, no special chars, max 50 chars.
-Canonical definition: `../shared/milestone-helpers/SKILL.md`.
+`<type>/{issue#}-{slug}` — type derived from the issue title (`feature` by default, `bugfix`
+for a defect, …); slug = lowercase title, spaces→hyphens, no special chars, max 50 chars,
+truncated on a word boundary. Canonical definition: `../shared/milestone-helpers/SKILL.md`.
 
 ## Shared-Seam Registry
 
