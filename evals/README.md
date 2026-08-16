@@ -88,6 +88,20 @@ evals/scripts/eval-grade.py   --eval-set skills/request-plan/evals/evals.json
 explicitly and grades its output; `natural` sends the bare request and so also
 grades whether the skill triggers at all.
 
+### Isolating a session from this repo
+
+`judge-traces.py` runs each judge in an **empty temp directory**, not in the repo.
+That is the only isolation that held. Denying the built-in file tools was not
+enough — an isolated probe reached the repo through a connected MCP server's own
+`read_file`, and after MCP was stripped too, a run still recited an exact tracked
+file census (`py=61 md=189`, both correct) with no tool call at all, because the
+CLI injects working-directory context. Deny-lists chase channels; an empty `cwd`
+removes the thing being read. A settings-file `permissions.deny` is weaker still:
+under `bypassPermissions` it did not apply at all.
+
+The regression test for this is a question whose answer can be checked — ask for
+a file census and compare it against `git ls-files`.
+
 ### Three outcomes, not two
 
 A response that asks a clarifying question instead of answering is reported as

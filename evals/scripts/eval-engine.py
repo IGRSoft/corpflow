@@ -74,6 +74,12 @@ def grade(eval_set: dict, case_id: int, response: str) -> dict:
         return {"case_id": case_id, "total": 1, "passed": int(matched),
                 "failed": [] if matched else ["should-have-asked-not-planned"],
                 "outcome": outcome, "expected_outcome": expected}
+    if outcome == "clarify":
+        # One decision went wrong, not six. Scoring a question against the plan
+        # assertions reported 31 defects across 6 traces and buried the 8 real ones.
+        return {"case_id": case_id, "total": 1, "passed": 0,
+                "failed": ["asked-instead-of-planning"],
+                "outcome": outcome, "expected_outcome": expected}
     assertions = assertions_for(eval_set, case_id)
     failed = [a["id"] for a in assertions if not check(a, response)]
     return {"case_id": case_id, "total": len(assertions),
