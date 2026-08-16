@@ -53,6 +53,8 @@ directly. It owns the merge lock, the atomic tmp→fsync→rename, and the disk 
 | Complete from artifact | `state-patch.sh --stage <CODE> [--task-id <ID>] [--prev <CODE>] [--via <layer>]` |
 | Resolve an id (read-only) | `state-patch.sh --resolve-task-id <CODE>` |
 
+### Idempotency and key creation
+
 `--task-create` is idempotent (an existing key is left untouched); `--task-block` unions and
 `--task-unblock` subtracts, so re-running a seed or a teardown is safe. `--task-create` is also
 the ONLY op that may introduce a key — status, block, unblock, and meta all refuse an id that

@@ -226,11 +226,18 @@ stage and must not appear in any completion checklist.
 
 | Actor | Action Examples |
 |-------|-----------------|
-| `hook:audit-subagent` (SubagentStop, plugin) **(authoritative)** | `subagent_stopped` (paired with cost-*.jsonl entry); rows carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`. |
-| `hook:audit-tooluse` (PostToolUse, plugin) **(authoritative)** | `tool_invoked` for `Bash\|Write\|Edit` (ledger patches recognised by command) with `duration_ms` + `effort` |
-| `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) **(authoritative)** | `stage_transition` with `task_id` + `metadata.{verdict, via, dedupe_key}`. Emitted ONLY on the hook path — a hook completion runs no Bash tool call, so `hook:audit-tooluse` never sees it; the other layers stay scraped to avoid double counting. |
-| `hook:precompact` (PreCompact, plugin) **(authoritative)** | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` |
-| `hook:agent-stop` (Stop, PL/FN/ST agents) **(authoritative)** | `stage_completion_hook` with `metadata.stage`; rows carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`. |
+| `hook:audit-subagent` (SubagentStop, plugin) | `subagent_stopped`, paired with a cost-*.jsonl entry |
+| `hook:audit-tooluse` (PostToolUse, plugin) | `tool_invoked` for `Bash\|Write\|Edit` (ledger patches recognised by command) with `duration_ms` + `effort` |
+| `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) | `stage_transition` with `task_id` + `metadata.{verdict, via, dedupe_key}` |
+| `hook:precompact` (PreCompact, plugin) | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` |
+| `hook:agent-stop` (Stop, PL/FN/ST agents) | `stage_completion_hook` with `metadata.stage` |
+
+#### Plugin-hook row fields
+
+Every row above is **authoritative**. `audit-subagent` and `agent-stop` rows also carry
+`parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`.
+`stage_transition` is emitted ONLY on the hook path — a hook completion runs no Bash tool
+call, so `hook:audit-tooluse` never sees it; other layers stay scraped to avoid double counting.
 
 #### Writers — external & adapters
 
