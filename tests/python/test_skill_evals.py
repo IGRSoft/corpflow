@@ -54,8 +54,20 @@ class AssertionEngine(unittest.TestCase):
 
 
 class Grading(unittest.TestCase):
+    """Exercises the SHARED assertions. Cases are generated and churn, so the
+    fixture supplies its own case rather than pinning to an id in the real set."""
+
     def setUp(self):
-        self.eval_set = _load(_EVAL_SETS[0])
+        self.eval_set = {
+            "skill_name": "request-plan",
+            "shared_assertions": _load(_EVAL_SETS[0])["shared_assertions"],
+            "evals": [
+                {"id": 1, "prompt": "fixture", "assertions": [], "expected_outcome": "plan"},
+                {"id": 3, "prompt": "fixture", "expected_outcome": "plan",
+                 "assertions": [{"id": "routes-to-secure-tier", "why": "fixture",
+                                 "type": "regex_all", "values": [r"/worktask\s+--secure"]}]},
+            ],
+        }
 
     def _plan(self, **overrides):
         parts = {
@@ -155,14 +167,23 @@ class EvalSetLint(unittest.TestCase):
 
     def test_every_case_is_grounded_in_paths_that_exist(self):
         """A case describing a surface this repo lacks can only ever be refused —
-        the first live run burned $1.47 on two such cases before this existed."""
+        the first live run burned $1.47 on two such cases. Cases that EXPECT a
+        refusal are the deliberate exception and may declare no grounding."""
         for path in _EVAL_SETS:
             for case in _load(path)["evals"]:
-                grounding = case.get("grounding")
-                self.assertTrue(grounding, f"{path} case {case['id']} declares no grounding")
+                grounding = case.get("grounding", [])
+                if case.get("expected_outcome") != "clarify":
+                    self.assertTrue(grounding,
+                                    f"{path} case {case['id']} declares no grounding")
                 for rel in grounding:
                     self.assertTrue(os.path.exists(os.path.join(_REPO, rel)),
                                     f"{path} case {case['id']} grounds on missing {rel}")
+
+    def test_expected_outcome_is_a_known_value(self):
+        for path in _EVAL_SETS:
+            for case in _load(path)["evals"]:
+                self.assertIn(case.get("expected_outcome", "plan"), ("plan", "clarify"),
+                              f"{path} case {case['id']}")
 
     def test_no_assertion_can_be_satisfied_by_echoing_the_prompt(self):
         """A value already in the case's own prompt rewards restatement, not judgement."""
@@ -182,6 +203,8 @@ class EvalSetLint(unittest.TestCase):
         tell two cases apart."""
         for path in _EVAL_SETS:
             for case in _load(path)["evals"]:
+                if case.get("expected_outcome") == "clarify":
+                    continue  # scored on the outcome alone; assertions describe an unwanted plan
                 self.assertGreaterEqual(
                     len(case.get("assertions", [])), 2,
                     f"{path} case {case['id']} needs >=2 case-specific assertions")

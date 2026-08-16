@@ -55,12 +55,25 @@ def classify_outcome(response: str) -> str:
     return "clarify" if "?" in response else "plan"
 
 
+def expected_outcome(eval_set: dict, case_id: int) -> str:
+    return find_case(eval_set, case_id).get("expected_outcome", "plan")
+
+
 def grade(eval_set: dict, case_id: int, response: str) -> dict:
+    """A case expecting a clarification is scored on that alone — its assertions
+    describe a plan that should never have been written."""
+    outcome = classify_outcome(response)
+    expected = expected_outcome(eval_set, case_id)
+    if expected == "clarify":
+        matched = outcome == "clarify"
+        return {"case_id": case_id, "total": 1, "passed": int(matched),
+                "failed": [] if matched else ["should-have-asked-not-planned"],
+                "outcome": outcome, "expected_outcome": expected}
     assertions = assertions_for(eval_set, case_id)
     failed = [a["id"] for a in assertions if not check(a, response)]
     return {"case_id": case_id, "total": len(assertions),
             "passed": len(assertions) - len(failed), "failed": failed,
-            "outcome": classify_outcome(response)}
+            "outcome": outcome, "expected_outcome": expected}
 
 
 def _digest(payload) -> str:

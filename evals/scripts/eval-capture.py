@@ -23,6 +23,8 @@ import json
 import os
 import subprocess
 import sys
+import threading
+from concurrent import futures
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import importlib.util
@@ -189,6 +191,10 @@ def main(argv_in: list) -> int:
     p.add_argument("--settings", default=None)
     p.add_argument("--force", action="store_true")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--split", choices=("train", "dev", "test"), default=None,
+                   help="capture only this tranche")
+    p.add_argument("--concurrency", type=int, default=1,
+                   help="parallel dispatches; the budget check trails by up to this many cases")
     try:
         args = p.parse_args(argv_in)
     except SystemExit:
@@ -202,7 +208,8 @@ def main(argv_in: list) -> int:
         sys.stderr.write(f"eval-capture: cannot read eval set: {exc}\n")
         return 64
 
-    ids = [c["id"] for c in eval_set["evals"]]
+    ids = [c["id"] for c in eval_set["evals"]
+           if args.split is None or c.get("split") == args.split]
     selected = ids if not args.case else [i for i in ids if i in args.case]
     unknown = sorted(set(args.case or []) - set(ids))
     if unknown:
@@ -239,37 +246,50 @@ def main(argv_in: list) -> int:
         "skill_version": skill_version(root, eval_set["skill_name"]),
     }
 
-    spent = 0.0
-    failures = []
+    pending = []
     for cid in selected:
-        case = engine.find_case(eval_set, cid)
         dest = os.path.join(out_dir, f"{cid}.json")
         if os.path.exists(dest) and not args.force:
-            print(f"skip case {cid}: {dest} exists (use --force to re-capture)")
+            print(f"skip case {cid}: exists (use --force to re-capture)")
             continue
-        try:
-            sent, response, usage = capture_case(
-                eval_set, case, mode=args.mode, model=args.model,
-                settings_path=settings_path, timeout=args.timeout, cwd=root)
-        except RuntimeError as exc:
-            sys.stderr.write(f"eval-capture: {exc}\n")
-            failures.append(cid)
-            continue
+        pending.append(cid)
 
+    state = {"spent": 0.0, "breached": False}
+    failures = []
+    lock = threading.Lock()
+
+    def work(cid):
+        if state["breached"]:
+            return None
+        case = engine.find_case(eval_set, cid)
+        sent, response, usage = capture_case(
+            eval_set, case, mode=args.mode, model=args.model,
+            settings_path=settings_path, timeout=args.timeout, cwd=root)
         rec = record_for(eval_set, case, args.mode, args.model, sent, response, usage, provenance)
-        with open(dest, "w", encoding="utf-8") as f:
+        with open(os.path.join(out_dir, f"{cid}.json"), "w", encoding="utf-8") as f:
             json.dump(rec, f, indent=2, ensure_ascii=False)
             f.write("\n")
-        print(f"captured case {cid} → {dest}")
-
         cost = usage.get("cost_usd")
-        if isinstance(cost, (int, float)):
-            spent += float(cost)
-        if args.budget is not None and spent > args.budget:
-            sys.stderr.write(
-                f"eval-capture: budget breached (${spent:.4f} > ${args.budget:.4f}); stopping\n")
-            return 4
+        with lock:
+            if isinstance(cost, (int, float)):
+                state["spent"] += float(cost)
+            if args.budget is not None and state["spent"] > args.budget:
+                state["breached"] = True
+            print(f"captured case {cid}  (${state['spent']:.2f} spent)", flush=True)
+        return cid
 
+    with futures.ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:
+        for cid, future in [(c, pool.submit(work, c)) for c in pending]:
+            try:
+                future.result()
+            except RuntimeError as exc:
+                sys.stderr.write(f"eval-capture: {exc}\n")
+                failures.append(cid)
+
+    if state["breached"]:
+        sys.stderr.write(
+            f"eval-capture: budget breached (${state['spent']:.4f} > ${args.budget:.4f})\n")
+        return 4
     if failures:
         sys.stderr.write(f"eval-capture: {len(failures)} case(s) failed: {failures}\n")
         return 1

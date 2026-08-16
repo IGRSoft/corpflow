@@ -39,7 +39,10 @@ def grade_record(eval_set: dict, record: dict) -> dict:
                 "reason": (f"prompt changed since capture "
                            f"(stored {record.get('prompt_digest')}, now {current_prompt})")}
     result = engine.grade(eval_set, cid, record["response"])
-    if result["outcome"] == "clarify":
+    if result["expected_outcome"] == "clarify":
+        # A case that SHOULD draw a question is scored, not excused.
+        result["status"] = "pass" if not result["failed"] else "fail"
+    elif result["outcome"] == "clarify":
         result["status"] = "clarify"
     else:
         result["status"] = "pass" if not result["failed"] else "fail"

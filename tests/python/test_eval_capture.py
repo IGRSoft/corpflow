@@ -30,9 +30,17 @@ def _cli_json(text, cost=0.01):
 
 
 class _Fixture(unittest.TestCase):
+    """Supplies its own case: the real set is generated and its ids churn."""
+
     def setUp(self):
         with open(_EVAL_SET, encoding="utf-8") as f:
-            self.eval_set = json.load(f)
+            real = json.load(f)
+        self.eval_set = {
+            "skill_name": "request-plan",
+            "shared_assertions": real["shared_assertions"],
+            "evals": [{"id": 1, "prompt": "plan a fix for the flaky gate",
+                       "assertions": [], "expected_outcome": "plan"}],
+        }
         self.case = engine.find_case(self.eval_set, 1)
 
 
