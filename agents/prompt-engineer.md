@@ -4,8 +4,8 @@ description: Elite AI prompt engineering specialist for optimizing agents, comma
 model: opus
 color: yellow
 effort: xhigh
-maxTurns: 50
 version: 0.1.1
+maxTurns: 50
 tools: Read, Glob, Grep, Write, Edit, Bash, WebFetch, Skill
 ---
 

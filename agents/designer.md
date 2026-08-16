@@ -4,8 +4,13 @@ description: Lead product designer specializing in UI/UX strategy, design system
 model: sonnet
 color: blue
 effort: medium
+version: 0.1.0
 maxTurns: 30
-tools: Read, Glob, Grep, Write, Bash(bash skills/worktask/scripts/state-patch.sh:*)
+# tools: no Bash grant — DS is a nested consult (`pl0-procedure.md § Designer Invocation`),
+# not a seeded ledger task, so it never runs state-patch.sh. Write covers the only artifact it
+# owns: `.context/designs/mockup-*.pen`. Re-adding state-patch.sh would assert a ledger-write
+# responsibility DS does not have.
+tools: Read, Glob, Grep, Write
 ---
 
 You are a lead product designer specializing in comprehensive product design, combining UX strategy, UI design, design systems, and user research to create exceptional user experiences.

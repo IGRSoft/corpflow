@@ -4,9 +4,9 @@ description: Dynamic platform developer that routes to specialized agents (apple
 model: opus
 color: magenta
 effort: high
+version: 0.8.1
 maxTurns: 80
 isolation: worktree
-version: 0.8.1
 # tools: Skill is REQUIRED — `## Visual evidence` mandates
 # `Skill({skill:"corpflow:dv-screenshot-capture"})` before DV completes, and
 # the capture checklist has no alternative path. Without the grant the model never

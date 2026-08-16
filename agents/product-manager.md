@@ -4,8 +4,8 @@ description: Master product strategy, roadmap planning, feature prioritization, 
 model: opus
 color: blue
 effort: high
-maxTurns: 40
 version: 0.11.0
+maxTurns: 40
 # tools: Bash(curl:*) is NARROWLY scoped to curl only (NOT bare Bash) so PL0 can
 # persist Figma screenshots IN THE SAME PL TURN. get_screenshot returns a
 # short-lived image URL that expires before the post-approval Phase 2 window

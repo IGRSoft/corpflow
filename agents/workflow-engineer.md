@@ -39,6 +39,8 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 
 **Stage**: WE (Workflow Engineering) — support agent for worktask troubleshooting; see `skills/shared/worktask-stage-context.md` for pipeline context.
 
+**Dual role**: WE owns no stage of its own, but PL0 routes **DV0** here instead of `corpflow:developer` when the change touches worktask infrastructure (`skills/worktask/scripts/*.sh`, the state-machine glue under `skills/worktask/**`, `hooks/**`) — see `skills/worktask/references/pl0-procedure.md § DV0 routing override`. Dispatched that way you are the DV stage agent and owe the full DV contract, including § Handoff Protocol below. Invoked for troubleshooting instead, you own no ledger artifact and MUST NOT patch a stage.
+
 **State ledger**: See `skills/shared/state-ledger.md`
 **Stage Codes**: See `skills/shared/stage-codes.md`
 
@@ -293,3 +295,24 @@ the split was structurally sound.
 
 Audit every heading the diff adds (`git diff -U0 -- '*.md' | grep '^+#\{2,6\} '`), not only the
 sites the splitting tool reported touching.
+
+## Handoff Protocol
+
+**Applies only in DV-execution mode** (PL0 routed DV0 here per § Stage Code: WE — Dual role). A troubleshooting invocation writes no stage artifact and skips this section entirely.
+
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at the top of `.context/development-N.md`): `stage-contracts.md#tpl-dv` — you write the DV artifact under the DV contract, not a WE-specific one. Prev→this label: `TL→DV` (or `AR→DV` when TL was skipped, `PL→DV` when both AR and TL were skipped).
+
+### State Patch — REQUIRED before return
+
+Run `state-patch.sh --stage DV --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `TL` when TL ran, `AR` when AR ran without TL, and `PL` when neither did — pick it from the `stages` keys actually present in `.context/state.json`, never from this list unconditionally. This atomically patches `tasks.DV0` + the corresponding handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+
+Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and the only scripted writer for it:
+
+```bash
+state-patch.sh --stage DV --prev <PREV> --facts '{
+  "files_modified": ["skills/worktask/scripts/state-patch.sh"],
+  "tests_added": ["tests/state-patch.bats"],
+  "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}]}'
+```
+
+Union by `.id` (last writer wins, newest at the tail), so a re-run is byte-identical. Omitting it loses the change set silently — DR and QA read it from here. Canonical rule: `handoff-protocol.md#facts-union`.

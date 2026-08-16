@@ -59,6 +59,10 @@ Support-agent model assignments live in the Support Agents table below.
 
 Support agents don't own worktask stages but can be invoked on-demand via Task tool.
 
+### Handoff Protocol exemption
+
+> Owning no stage artifact means owning no ledger write: `designer` and `prompt-engineer` therefore carry **no** `## Handoff Protocol` / `### State Patch` section, and that absence is correct, not drift. Two rows in this table are not exempt: `technical-lead` also owns DR, and `workflow-engineer` takes DV0 under the routing override above — both carry the section. `ethics-reviewer` is support-only but does write `ethics-review-N.md` (Stage Artifacts below), so it patches state like a stage owner. Canonical rule and the full exemption list: `commands/create-agent.md § Handoff Protocol`.
+
 ### Model alias notes
 
 > Model column uses aliases (`opus`, `sonnet`, `haiku`). Full model IDs (e.g., `claude-opus-5`) are also supported in agent frontmatter. Use aliases for portability across providers. **Fable 5** = `claude-fable-5`, the Mythos-class top reasoning model — it ships **1M context by default**, which fails dispatch on accounts without 1M credits (degrade guidance: `skills/shared/model-selection.md`). Under a managed `availableModels` allowlist (applied to subagent overrides; enforced via `enforceAvailableModels`) any alias here may silently resolve to a different model. **Opus 5** = `claude-opus-5`, the current default Opus (1M context, no credit gate) — the `opus` alias resolves here, and `/fast` and auto mode both apply to it (auto mode needs no `--enable-auto-mode` for Max subscribers).

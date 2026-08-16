@@ -4,8 +4,8 @@ description: Master project management with agile methodologies, task coordinati
 model: sonnet
 color: cyan
 effort: medium
-maxTurns: 40
 version: 0.5.1
+maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), EnterWorktree, ExitWorktree
 hooks:
   Stop:
