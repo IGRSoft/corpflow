@@ -1,8 +1,9 @@
 """Skill-eval assertion engine + eval-set lint.
 
 Offline and free: `grade()` scores a response the caller supplies; the lint pins
-the eval sets as binary and code-checkable. No capture step exists yet, so a pass
-proves the engine and the sets — never a skill's output quality.
+the eval sets as binary and code-checkable. Graded scores of real model output
+come from `evals/scripts/eval-grade.py` over captured responses — a pass here
+proves the engine and the sets, never a skill's output quality.
 """
 
 import json
@@ -10,33 +11,19 @@ import os
 import re
 import unittest
 
+from _scriptimport import EVAL_ENGINE, load_module
+
+_engine = load_module(EVAL_ENGINE, "eval_engine")
+check = _engine.check
+grade = _engine.grade
+
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _EVAL_SETS = [os.path.join(_REPO, "skills", "request-plan", "evals", "evals.json")]
 
-_TYPES = {"contains_all", "contains_none", "regex_all", "regex_any"}
+_TYPES = set(_engine.ASSERTION_TYPES)
 
-
-def check(assertion: dict, response: str) -> bool:
-    """Decide one assertion against a response. Every type is objectively decidable."""
-    kind, values = assertion["type"], assertion["values"]
-    if kind == "contains_all":
-        return all(v in response for v in values)
-    if kind == "contains_none":
-        return not any(v in response for v in values)
-    if kind == "regex_all":
-        return all(re.search(v, response, re.MULTILINE) for v in values)
-    if kind == "regex_any":
-        return any(re.search(v, response, re.MULTILINE) for v in values)
-    raise ValueError(f"unknown assertion type: {kind}")
-
-
-def grade(eval_set: dict, case_id: int, response: str) -> dict:
-    """Score one response against a case's shared + case-specific assertions."""
-    case = next(c for c in eval_set["evals"] if c["id"] == case_id)
-    assertions = eval_set.get("shared_assertions", []) + case.get("assertions", [])
-    failed = [a["id"] for a in assertions if not check(a, response)]
-    return {"case_id": case_id, "total": len(assertions),
-            "passed": len(assertions) - len(failed), "failed": failed}
+# Satisfies case 1's own assertion so these fixtures exercise the shared ones in isolation.
+_CASE1_TOKEN = "test-execution-gate\n"
 
 
 def _load(path):
@@ -84,35 +71,49 @@ class Grading(unittest.TestCase):
         return "".join(parts.values())
 
     def test_a_conforming_plan_passes_every_shared_assertion(self):
-        result = grade(self.eval_set, 1, self._plan() + "wake from sleep\n")
+        result = grade(self.eval_set, 1, self._plan() + _CASE1_TOKEN)
         self.assertEqual(result["failed"], [], result)
 
     def test_missing_out_of_scope_fails_that_assertion(self):
         plan = self._plan(sections="## Context\nc\n## Goal\ng\n## Scope\n**In:** a\n"
                                    "## Phases\n| P0 — Required |\n| P1 — Nice-to-have |\n"
                                    "| P2 — v1.1 |\n")
-        result = grade(self.eval_set, 1, plan + "wake\n")
+        result = grade(self.eval_set, 1, plan + _CASE1_TOKEN)
         self.assertIn("scope-names-in-and-out", result["failed"])
 
     def test_effort_assertion_rejects_a_stray_digit(self):
         """Prose mentioning a number is not a size + complexity score."""
         plan = self._plan(effort="## Effort (rough)\nroughly 3 days of work\n")
-        self.assertIn("effort-sized-with-complexity", grade(self.eval_set, 1, plan + "wake\n")["failed"])
+        self.assertIn("effort-sized-with-complexity", grade(self.eval_set, 1, plan + _CASE1_TOKEN)["failed"])
 
     def test_effort_assertion_accepts_the_template_table(self):
-        result = grade(self.eval_set, 1, self._plan() + "wake\n")
+        result = grade(self.eval_set, 1, self._plan() + _CASE1_TOKEN)
         self.assertNotIn("effort-sized-with-complexity", result["failed"])
 
+    def test_effort_assertion_accepts_an_approximated_score(self):
+        """`~8` answers the question; rejecting it failed a correct plan for hedging."""
+        for score in ("~8", "≈8", "8"):
+            plan = self._plan(effort=f"## Effort (rough)\n| S | {score} | drivers |\n")
+            self.assertNotIn("effort-sized-with-complexity",
+                             grade(self.eval_set, 1, plan + _CASE1_TOKEN)["failed"], score)
+
+    def test_effort_assertion_still_rejects_an_out_of_range_score(self):
+        plan = self._plan(effort="## Effort (rough)\n| S | ~99 | drivers |\n")
+        self.assertIn("effort-sized-with-complexity",
+                      grade(self.eval_set, 1, plan + _CASE1_TOKEN)["failed"])
+
     def test_separate_test_phase_fails(self):
-        result = grade(self.eval_set, 1, self._plan() + "wake\nP1 — Testing\n")
+        result = grade(self.eval_set, 1, self._plan() + _CASE1_TOKEN + "P1 — Testing\n")
         self.assertIn("no-separate-test-phase", result["failed"])
 
     def test_security_case_requires_the_secure_tier(self):
-        plain = self._plan() + "Keychain credential migration\n"
+        plain = self._plan() + "credential exposure in headless runs\n"
         self.assertIn("routes-to-secure-tier", grade(self.eval_set, 3, plain)["failed"])
 
-        secure = self._plan(handoff='/worktask --secure "migrate settings"\n') + "Keychain\n"
+        secure = (self._plan(handoff='/worktask --secure "harden the deny-list"\n')
+                  + "credential exposure in headless runs\n")
         self.assertNotIn("routes-to-secure-tier", grade(self.eval_set, 3, secure)["failed"])
+        self.assertNotIn("flags-security-sensitive", grade(self.eval_set, 3, secure)["failed"])
 
 
 class EvalSetLint(unittest.TestCase):

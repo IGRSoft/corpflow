@@ -28,10 +28,10 @@
     },
     {
       "id": "effort-sized-with-complexity",
-      "why": "Effort is a T-shirt size AND a 0-25 complexity score together; a bare digit anywhere in the text is not evidence either was given",
+      "why": "Effort is a T-shirt size AND a 0-25 complexity score together; a bare digit anywhere in the text is not evidence either was given. An approximation marker on the score still answers the question — rejecting `~8` would fail a correct plan for hedging",
       "type": "regex_any",
       "values": [
-        "\\|\\s*(XS|S|M|L|XL)(\\s*[-—–]\\s*(XS|S|M|L|XL))?\\s*\\|\\s*([0-9]|1[0-9]|2[0-5])\\s*(/\\s*25)?\\s*\\|",
+        "\\|\\s*(XS|S|M|L|XL)(\\s*[-—–]\\s*(XS|S|M|L|XL))?\\s*\\|\\s*[~≈]?\\s*([0-9]|1[0-9]|2[0-5])\\s*(/\\s*25)?\\s*\\|",
         "(XS|S|M|L|XL)[^\\n]*\\b([0-9]|1[0-9]|2[0-5])\\s*/\\s*25\\b"
       ]
     },
@@ -51,13 +51,13 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "we keep getting duplicate push notifications on the macOS app when it wakes from sleep. help me plan a fix before i dive in.",
+      "prompt": "the test-execution gate keeps denying QA test reruns even after i've edited files in the tree. help me plan a fix before i dive in.",
       "assertions": [
         {
-          "id": "names-the-wake-surface",
+          "id": "names-the-gate-surface",
           "why": "A grounded plan must name the actual failure surface, not restate the request",
           "type": "regex_any",
-          "values": ["wake", "sleep", "NSWorkspace", "didWake", "notification"]
+          "values": ["test-execution-gate", "CORPFLOW_TEST_DEDUPE", "testing-strategy", "dedupe"]
         }
       ],
       "deferred": [
@@ -66,13 +66,13 @@
     },
     {
       "id": 2,
-      "prompt": "i want to add CSV export to the estimates feature. what's the plan?",
+      "prompt": "i want /estimate --quick to support --export csv too, not just --detailed. what's the plan?",
       "assertions": [
         {
           "id": "reuses-existing-export-surface",
-          "why": "csv-export-templates and /estimate --export csv already exist; rebuilding them is the failure this case targets",
+          "why": "The 13-file pack in csv-export-templates already exists; planning a second exporter is the failure this case targets",
           "type": "regex_any",
-          "values": ["csv-export-templates", "/estimate\\s+--export", "existing (CSV|export)"]
+          "values": ["csv-export-templates", "/estimate\\s+--export", "existing (CSV|export)", "13[- ]CSV", "13 CSV"]
         }
       ],
       "deferred": [
@@ -81,13 +81,13 @@
     },
     {
       "id": 3,
-      "prompt": "plan out migrating our settings storage from UserDefaults to Keychain",
+      "prompt": "plan hardening the benchmark harness deny-list — headless bench-live runs use bypassPermissions and the deny list only covers six entries.",
       "assertions": [
         {
           "id": "flags-security-sensitive",
-          "why": "Credential storage is security-sensitive and must be called out explicitly",
+          "why": "The plan must characterise the risk, not merely echo the deny-list noun from the request",
           "type": "regex_any",
-          "values": ["security-sensitive", "credential", "Keychain"]
+          "values": ["security-sensitive", "secret", "exfiltrat", "credential"]
         },
         {
           "id": "routes-to-secure-tier",
@@ -97,7 +97,7 @@
         }
       ],
       "deferred": [
-        "Whether the migration phasing is safe (dual-read window, rollback) — needs a validated judge."
+        "Whether the proposed additions actually close the bypassPermissions surface — needs a validated judge."
       ]
     }
   ]

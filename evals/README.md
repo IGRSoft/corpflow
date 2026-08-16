@@ -55,14 +55,38 @@ by **binary, code-checked assertions** — no scales, no unvalidated judges.
 Criteria that genuinely need interpretation are parked in each case's `deferred`
 list rather than being graded badly.
 
-**No case has yet been graded against model output.** `grade()` scores a response
-the caller hands it, and no capture step exists: nothing dispatches these prompts
-and no responses are stored. What `./run-tests.sh` executes is
-`tests/python/test_skill_evals.py` — unit tests of the assertion engine against
-hand-built fixture plans, plus the lint that keeps every eval set binary and
-code-checkable. **A green run means the sets are well-formed and the engine is
-correct; it is not a measurement of any skill's output quality.**
+**No case has yet been graded against model output.** What `./run-tests.sh`
+executes is `tests/python/test_skill_evals.py` and
+`tests/python/test_eval_capture.py` — unit tests of the assertion engine and the
+capture tooling against injected dispatches, plus the lint that keeps every eval
+set binary and code-checkable. **A green run means the sets are well-formed and
+the tooling is correct; it is not a measurement of any skill's output quality.**
 
-Capture is the missing step: dispatch each case `prompt`, store the response
-beside the eval set, grade it offline with the existing engine. Until that lands,
-these sets are a specification, not a result.
+## Capture and grading
+
+`scripts/` holds the loop. Capture costs money and needs a credential; grading is
+free and offline.
+
+```sh
+evals/scripts/eval-capture.py --eval-set skills/request-plan/evals/evals.json --dry-run
+evals/scripts/eval-capture.py --eval-set skills/request-plan/evals/evals.json --budget 1.00
+evals/scripts/eval-grade.py   --eval-set skills/request-plan/evals/evals.json
+```
+
+- `eval-engine.py` — assertion engine + digests, shared by capture, grading, and
+  the test suite so two scores of one response can never disagree.
+- `eval-capture.py` — dispatches each case `prompt` through headless `claude -p`
+  and writes `<eval-set-dir>/responses/<case_id>.json`. A failed or empty
+  dispatch **raises and stores nothing**; a fabricated blank would be graded as a
+  genuine skill failure.
+- `eval-grade.py` — scores stored responses. Refuses (rc 2) when a record's
+  `prompt_digest` no longer matches the eval set, since that response answers a
+  question the set no longer asks. A moved `assertions_digest` is flagged, not
+  refused — the response stands, only its score went stale.
+
+`--mode` picks what is being measured: `command` (default) invokes the skill
+explicitly and grades its output; `natural` sends the bare request and so also
+grades whether the skill triggers at all.
+
+Captured responses are evidence — commit them, so a grade stays reproducible
+against a known `plugin_sha`, `model`, and `skill_version`.
