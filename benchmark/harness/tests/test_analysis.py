@@ -211,6 +211,62 @@ class ArmAttribution(unittest.TestCase):
         self.assertIn("| PL | — |", md)
 
 
+class CostFormatting(unittest.TestCase):
+    """`cost_usd` renders at fixed 2dp in the Markdown report; the generic formatter
+    that still serves token counts keeps trimming trailing zeros."""
+
+    def _md(self, stage_cost):
+        stages = [StageAttribution(stage="PL", fresh_in=100, cache_creation=0, cache_read=0,
+                                   out=50, cost_usd=stage_cost)]
+        return analysis.render_markdown(analysis.analyze(_paired_live_record(stages=stages)))
+
+    def _row_cells(self, md, prefix):
+        line = next(ln for ln in md.splitlines() if ln.startswith(prefix))
+        return [c.strip() for c in line.strip("|").split("|")]
+
+    def _stage_cost_cell(self, md):
+        return self._row_cells(md, "| PL |")[2]
+
+    def test_whole_dollar_stage_cost_keeps_two_decimals(self):
+        self.assertEqual(self._stage_cost_cell(self._md(3.0)), "3.00")
+
+    def test_one_decimal_stage_cost_pads_to_two(self):
+        self.assertEqual(self._stage_cost_cell(self._md(3.5)), "3.50")
+
+    def test_long_float_stage_cost_truncates_to_two(self):
+        self.assertEqual(self._stage_cost_cell(self._md(3.14159265)), "3.14")
+
+    def test_sub_cent_stage_cost_rounds_up(self):
+        self.assertEqual(self._stage_cost_cell(self._md(0.005)), "0.01")
+
+    def test_missing_stage_cost_degrades_to_em_dash(self):
+        self.assertEqual(self._stage_cost_cell(self._md(None)), "—")
+
+    def test_totals_row_including_delta_is_two_decimals(self):
+        # _paired_live_record: WITH 0.20, WITHOUT 0.10 → Δ 0.10.
+        cells = self._row_cells(self._md(1.0), "| cost (USD) |")
+        self.assertEqual(cells[1:4], ["0.20", "0.10", "0.10"])
+
+    def test_non_cost_fields_keep_trimmed_formatting(self):
+        md = self._md(1.0)
+        self.assertEqual(self._row_cells(md, "| tokens total |")[1:4], ["1500", "600", "900"])
+
+    def test_html_and_markdown_agree_on_the_same_value(self):
+        import re
+
+        from benchmarkkit import report
+
+        for value in (3.0, 3.5, 3.14159265, 0.005):
+            with self.subTest(value=value):
+                pm = PathMetrics(Tokens(input=1, output=1, total=2), value, 1.0, 1, 1, 0.0,
+                                 1, 1, "pass", "benchmark/workdirs/x/with")
+                rec = make_record("x", "2026-08-01T00:00:00Z", "live", "s", None, pm, pm)
+                html = report.render_html({"live": [rec.to_dict()]})
+                row = html.split("cost (USD)</td>", 1)[1].split("</tr>", 1)[0]
+                html_cell = re.findall(r"<td[^>]*>(.*?)</td>", row)[0]
+                self.assertEqual(self._stage_cost_cell(self._md(value)), html_cell)
+
+
 class PairedCachedInput(unittest.TestCase):
     """Item 1: the paired-tokens table exposes per-arm cached-input mass (cache_creation +
     cache_read) so input columns are no longer a fresh-only understatement."""

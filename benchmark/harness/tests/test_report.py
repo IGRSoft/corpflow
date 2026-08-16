@@ -4,6 +4,7 @@ build_report writes a file. HTML is substring-gated.
 """
 
 import os
+import re
 import shutil
 import tempfile
 import unittest
@@ -93,6 +94,60 @@ class ReportTests(unittest.TestCase):
                 self.assertIn("No benchmark results yet", f.read())
         finally:
             shutil.rmtree(td, ignore_errors=True)
+
+
+class CostFormatting(unittest.TestCase):
+    """`cost_usd` renders at fixed 2dp in the HTML report; the generic formatter that
+    still serves tokens/LOC/wall-clock keeps trimming trailing zeros."""
+
+    def _rec(self, with_cost, without_cost, wall_clock=10.0):
+        with_pm = PathMetrics(Tokens(input=1, output=1, total=2), with_cost, wall_clock,
+                              345, 20, 0.0, 15, 5, "pass", "benchmark/workdirs/c-1/with")
+        without_pm = PathMetrics(Tokens(input=1, output=1, total=2), without_cost, wall_clock,
+                                 345, 20, 0.0, 15, 5, "pass", "benchmark/workdirs/c-1/without")
+        return make_record("c-1", "2026-08-01T00:00:00Z", "live", "sha", None,
+                           with_pm, without_pm).to_dict()
+
+    def _cost_cells(self, html):
+        row = html.split("cost (USD)</td>", 1)[1].split("</tr>", 1)[0]
+        return re.findall(r"<td[^>]*>(.*?)</td>", row)
+
+    def test_whole_dollar_keeps_two_decimals(self):
+        html = report.render_html({"live": [self._rec(3.0, 3.0)]})
+        self.assertEqual(self._cost_cells(html)[:2], ["3.00", "3.00"])
+
+    def test_one_decimal_pads_to_two(self):
+        html = report.render_html({"live": [self._rec(3.5, 3.5)]})
+        self.assertEqual(self._cost_cells(html)[:2], ["3.50", "3.50"])
+
+    def test_long_float_truncates_to_two(self):
+        html = report.render_html({"live": [self._rec(3.14159265, 3.14159265)]})
+        self.assertEqual(self._cost_cells(html)[:2], ["3.14", "3.14"])
+
+    def test_sub_cent_rounds_up(self):
+        html = report.render_html({"live": [self._rec(0.005, 0.005)]})
+        self.assertEqual(self._cost_cells(html)[:2], ["0.01", "0.01"])
+
+    def test_delta_keeps_sign_at_two_decimals(self):
+        html = report.render_html({"live": [self._rec(3.0, 1.5)]})
+        self.assertEqual(self._cost_cells(html)[2], "+1.50")
+        html = report.render_html({"live": [self._rec(1.5, 3.0)]})
+        self.assertEqual(self._cost_cells(html)[2], "-1.50")
+
+    def test_missing_cost_degrades_to_em_dash(self):
+        html = report.render_html({"live": [self._rec(None, None)]})
+        self.assertEqual(self._cost_cells(html), ["&mdash;", "&mdash;", "&mdash;"])
+
+    def test_budget_badge_is_two_decimals(self):
+        rec = self._rec(3.0, 3.0)
+        rec["budget_usd"] = 5.0
+        self.assertIn("budget $5.00", report.render_html({"live": [rec]}))
+
+    def test_non_cost_fields_keep_trimmed_formatting(self):
+        html = report.render_html({"live": [self._rec(3.0, 3.0, wall_clock=10.0)]})
+        self.assertIn(">10</td>", html)   # wall clock 10.0, not 10.00
+        self.assertIn(">345</td>", html)  # LOC produced
+        self.assertIn(">0</td>", html)    # coverage % 0.0
 
 
 class CoverageAbsentVsZero(unittest.TestCase):
