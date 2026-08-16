@@ -32,6 +32,9 @@ tests included inside the phase, not split out.
 | P2 — v1.1 | … | … |
 ```
 
+All three rows are required. With nothing deferrable, write `P2 — v1.1: none` rather than
+omitting the row.
+
 #### Template — effort, risks, next step
 
 ```markdown

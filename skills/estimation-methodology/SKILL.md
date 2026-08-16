@@ -151,14 +151,30 @@ Phase % Min = Phase Hours Min / Total Hours Min × 100  |  Phase % Max = Phase H
 
 Canonical tier-selection logic. `commands/estimate.md` cites this section instead of duplicating it.
 
-```
-size = T-shirt size from sizing table
+Tier is decided by *what the work touches* first, and only then by size. Size alone sent
+ordinary work into the security pipeline and left live incidents on the standard one.
 
-IF size == XL:
+```
+# 1. Surface check — beats size in both directions
+IF the work reads, writes, or exposes credentials, tokens, secrets, PII,
+   payments, authn/authz, or executes untrusted input:
+  → /worktask --secure     (regardless of size)
+ELIF the request describes something broken RIGHT NOW and still failing:
+  → /worktask --emergency  (regardless of size)
+
+# 2. Otherwise, size decides
+ELIF size == XL:
   → split into ≤ L sub-tasks first
 ELSE:
   → /worktask   (PL0 dynamic sizing selects which of the 9 stages run)
 ```
+
+**--secure is not "security-adjacent".** Hardening a lint, adding a deny-list guard, or renaming a
+branch touches no protected asset — those are standard tier. The test is whether the work itself
+handles a secret or an untrusted input, not whether the word "security" appears nearby.
+
+**--emergency is not "urgent-sounding".** A wedged task or a runaway batch is standard work. The
+test is whether something is failing as you write the plan.
 
 Notes:
 - XL must be split into ≤ L sub-tasks before tier selection runs.

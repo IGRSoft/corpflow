@@ -15,7 +15,7 @@ IF size == XL:   → split first (recommend ≤ L sub-tasks; no single command)
 ELSE:            → /worktask "<goal>"   (PL0 dynamic sizing drops stages for small work)
 ```
 
-Security-sensitive work should use `/worktask --secure "<goal>"` to run the 11-stage pipeline with the security review stage.
+The surface check above decides `--secure` and `--emergency`; the size rule only applies once both are ruled out.
 
 ## Command lines
 
@@ -23,8 +23,15 @@ Emit exactly one of these, with the restated goal as the payload:
 
 | Tier | Line to emit | For |
 |------|--------------|-----|
-| `/worktask` | `/worktask "<goal>"` | any task — PL0 dynamic sizing picks the stage set |
+| `--secure` | `/worktask --secure "<goal>"` | work handling credentials, tokens, secrets, PII, payments, authn/authz, or untrusted input — any size |
+| `--emergency` | `/worktask --emergency "<goal>"` | something is broken right now and still failing |
+| `/worktask` | `/worktask "<goal>"` | everything else — PL0 dynamic sizing picks the stage set |
 | split | *(no single command)* | XL — recommend splitting into ≤ L sub-tasks first, then re-plan |
+
+Check the two escalation rows before the size rule; both beat size in either direction. Escalating
+ordinary work burns the security pipeline, and leaving a live failure on the standard one delays it.
+Emit exactly one line — a plan that recommends running some other command *instead* of a worktask
+has not made the handoff.
 
 For the split case, don't emit a command. Instead list the 2–3 sub-tasks the work should break into,
 and note that each can be re-planned with this skill once separated.
