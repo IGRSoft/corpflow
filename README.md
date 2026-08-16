@@ -472,7 +472,7 @@ make clean
 - [tests/README.md](tests/README.md) — suite organization, fixtures, coverage verdict
 - [benchmark/README.md](benchmark/README.md) — the WITH/WITHOUT Tic-Tac-Toe A/B harness
 - [skills/README.md](skills/README.md) — full skill index with effort levels
-- [CHANGELOG.md](CHANGELOG.md) — release history
+- [CHANGELOG.md](CHANGELOG.md) — release history (`4.0.0`+); earlier majors archived in [CHANGELOG-3.x.md](CHANGELOG-3.x.md), [CHANGELOG-2.x.md](CHANGELOG-2.x.md), and [CHANGELOG-1.x.md](CHANGELOG-1.x.md)
 
 ## License
 

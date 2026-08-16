@@ -127,7 +127,7 @@ Every file below changes in the same commit. Ordered so later edits can referenc
 | 10 | `commands/dev-code-review.md` | `--platform` enum |
 | 11 | `skills/agent-coordination/SKILL.md` | Sub-Task Delegation model table; AR-collaboration note |
 | 12 | `README.md` | Plugin mentions and worktask examples |
-| 13 | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `CHANGELOG.md`, `MEMORY.md` | MINOR version bump + release notes |
+| 13 | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `CHANGELOG.md`, `MEMORY.md` | MINOR version bump + release notes. New entries always land in `CHANGELOG.md`; `CHANGELOG-3.x.md` is a frozen archive and is never appended to |
 
 A plain `skills/shared/*.md` reference needs no `marketplace.json` entry — only directory skills with
 their own `SKILL.md` are listed in `skills[]`.
