@@ -252,3 +252,31 @@ class CaptureCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PathsResolve(unittest.TestCase):
+    """Grounding without naming a target: the author's guess at WHICH file failed
+    three plans that reached a better one."""
+
+    def _a(self, n=2):
+        return {"id": "finds-the-real-surface", "why": "fixture",
+                "type": "paths_resolve", "values": [n]}
+
+    def test_counts_only_paths_the_resolver_accepts(self):
+        text = "touch hooks/state-merge.sh and skills/worktask/SKILL.md"
+        self.assertTrue(engine.check(self._a(2), text, lambda p: True))
+        self.assertFalse(engine.check(self._a(2), text, lambda p: False))
+
+    def test_an_invented_path_does_not_count(self):
+        real = {"hooks/state-merge.sh"}
+        text = "edit hooks/state-merge.sh and src/totally/made-up.py"
+        self.assertTrue(engine.check(self._a(1), text, lambda p: p in real))
+        self.assertFalse(engine.check(self._a(2), text, lambda p: p in real))
+
+    def test_a_bare_filename_is_not_a_cited_path(self):
+        self.assertEqual(engine.cited_paths("state-merge.sh is broken"), [])
+        self.assertIn("hooks/state-merge.sh", engine.cited_paths("see hooks/state-merge.sh"))
+
+    def test_missing_resolver_raises_rather_than_passing(self):
+        with self.assertRaises(ValueError):
+            engine.check(self._a(), "hooks/state-merge.sh", None)

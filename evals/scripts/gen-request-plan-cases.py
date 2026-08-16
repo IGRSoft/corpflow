@@ -275,9 +275,10 @@ def build_case(index: int, spec) -> dict:
          "type": "regex_any", "values": [r"[\w.-]+/[\w.-]+\.(py|sh|md|json|bats)"]}
         if grounding == "obvious" else
         {"id": "finds-the-real-surface",
-         "why": "The plan must reach the surface this repo actually has; naming it is what "
-                "separates a grounded plan from a plausible template",
-         "type": "regex_any", "values": discovery})
+         "why": "The plan must reach a surface this repo actually has. Which one is not the "
+                "author's to dictate — three plans were failed for naming a better file than "
+                "the one guessed here — so this checks that two cited paths resolve",
+         "type": "paths_resolve", "values": [2]})
     case["assertions"] = [
         {"id": route_id, "why": route_why, "type": route_kind, "values": route_values},
         discovery_assertion,
@@ -356,6 +357,8 @@ def validate(cases: list) -> list:
             if not assertion["values"]:
                 errors.append(f"case {cid}: {assertion['id']} has no values")
             for value in assertion["values"]:
+                if not isinstance(value, str):
+                    continue  # paths_resolve carries a count, not a pattern
                 for token in (t for t in value.lower().split() if len(t) > 5):
                     if token.strip("\\s+*?[]()") in prompt:
                         errors.append(f"case {cid}: {assertion['id']} echoes '{token}'")

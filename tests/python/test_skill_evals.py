@@ -164,6 +164,9 @@ class EvalSetLint(unittest.TestCase):
                 if a["type"].startswith("regex"):
                     for pattern in a["values"]:
                         re.compile(pattern)
+                if a["type"] == "paths_resolve":
+                    self.assertTrue(a["values"] and isinstance(a["values"][0], int),
+                                    f"{a['id']} must carry an integer path count")
 
     def test_assertion_ids_are_unique_within_a_case(self):
         for path in _EVAL_SETS:
@@ -200,6 +203,8 @@ class EvalSetLint(unittest.TestCase):
                 prompt = case["prompt"].lower()
                 for assertion in case.get("assertions", []):
                     for value in assertion["values"]:
+                        if not isinstance(value, str):
+                            continue
                         literal = re.sub(r"\\[sbwd]\*?|\[.*?\]|[\\()?+*|^$]", " ", value)
                         for token in (t for t in literal.lower().split() if len(t) > 5):
                             self.assertNotIn(token, prompt,

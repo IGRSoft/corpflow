@@ -30,6 +30,15 @@ sys.modules["eval_engine"] = engine
 _spec.loader.exec_module(engine)
 
 
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def repo_resolver(rel: str) -> bool:
+    """A cited path counts only if it exists here — an invented path is the failure
+    paths_resolve is looking for."""
+    return os.path.exists(os.path.join(REPO, rel))
+
+
 def grade_record(eval_set: dict, record: dict) -> dict:
     """Score one stored record, refusing when it answers a superseded prompt."""
     cid = record["case_id"]
@@ -38,7 +47,7 @@ def grade_record(eval_set: dict, record: dict) -> dict:
         return {"case_id": cid, "status": "stale",
                 "reason": (f"prompt changed since capture "
                            f"(stored {record.get('prompt_digest')}, now {current_prompt})")}
-    result = engine.grade(eval_set, cid, record["response"])
+    result = engine.grade(eval_set, cid, record["response"], repo_resolver)
     if result["expected_outcome"] == "clarify":
         # A case that SHOULD draw a question is scored, not excused.
         result["status"] = "pass" if not result["failed"] else "fail"

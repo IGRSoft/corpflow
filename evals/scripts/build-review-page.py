@@ -242,6 +242,8 @@ def main(argv) -> int:
     p.add_argument("--eval-set", default=os.path.join(REPO, "skills", "request-plan", "evals", "evals.json"))
     p.add_argument("--responses", default=None)
     p.add_argument("--grades", default=None, help="eval-grade --json output, for the harness column")
+    p.add_argument("--only", default=None,
+                   help="JSON list of case ids — the stratified subset worth labelling first")
     p.add_argument("--out", default=os.path.join(REPO, "evals", "review", "request-plan-review.html"))
     args = p.parse_args(argv)
 
@@ -255,13 +257,18 @@ def main(argv) -> int:
         with open(args.grades, encoding="utf-8") as f:
             grades = {r["case_id"]: r for r in json.load(f)["results"]}
 
+    only = None
+    if args.only:
+        with open(args.only, encoding="utf-8") as f:
+            only = set(json.load(f))
+
     traces = []
     for path in sorted(glob.glob(os.path.join(responses, "*.json")),
                        key=lambda x: int(os.path.basename(x)[:-5])):
         with open(path, encoding="utf-8") as f:
             rec = json.load(f)
         case = cases.get(rec["case_id"])
-        if case is None:
+        if case is None or (only is not None and rec["case_id"] not in only):
             continue
         grade = grades.get(rec["case_id"], {})
         traces.append({

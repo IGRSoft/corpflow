@@ -614,11 +614,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "csv-export-templates",
-            "13[- ]CSV"
+            2
           ]
         }
       ],
@@ -650,12 +649,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "state-merge",
-            "state-patch",
-            "ledger"
+            2
           ]
         }
       ],
@@ -687,11 +684,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "attach-visual-evidence",
-            "dv-screenshot"
+            2
           ]
         }
       ],
@@ -723,11 +719,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "pr-body-lint",
-            "body.lint"
+            2
           ]
         }
       ],
@@ -759,11 +754,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "self-improvement",
-            "failure-labels"
+            2
           ]
         }
       ],
@@ -795,12 +789,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "branch-lib",
-            "derive_type",
-            "conventional"
+            2
           ]
         }
       ],
@@ -832,12 +824,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "audit-subagent",
-            "coverage",
-            "manifest"
+            2
           ]
         }
       ],
@@ -869,11 +859,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "section-lint",
-            "anchor-preflight"
+            2
           ]
         }
       ],
@@ -905,11 +894,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "estimation-methodology",
-            "complexity"
+            2
           ]
         }
       ],
@@ -941,12 +929,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "cache-lint",
-            "prefix",
-            "preamble"
+            2
           ]
         }
       ],
@@ -978,11 +964,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "gh-issue-dedup",
-            "anchor"
+            2
           ]
         }
       ],
@@ -1014,12 +999,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "pairing",
-            "paired",
-            "arm"
+            2
           ]
         }
       ],
@@ -1051,11 +1034,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "agent-coordination",
-            "nesting"
+            2
           ]
         }
       ],
@@ -1087,12 +1069,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "redact",
-            "no diff bodies",
-            "summary only"
+            2
           ]
         }
       ],
@@ -1124,12 +1104,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "state-patch",
-            "ledger",
-            "stuck"
+            2
           ]
         }
       ],
@@ -1161,11 +1139,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "handoff-protocol",
-            "escalate"
+            2
           ]
         }
       ],
@@ -1197,11 +1174,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "cost-report",
-            "budget"
+            2
           ]
         }
       ],
@@ -1233,11 +1209,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "megatask-monitor",
-            "monitor"
+            2
           ]
         }
       ],
@@ -1269,11 +1244,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "audit",
-            "jsonl"
+            2
           ]
         }
       ],
@@ -1305,11 +1279,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "three-stage-planning",
-            "P0"
+            2
           ]
         }
       ],
@@ -1341,12 +1314,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "agent-stop",
-            "SubagentStop",
-            "audit-subagent"
+            2
           ]
         }
       ],
@@ -2225,12 +2196,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "analysis",
-            "era",
-            "comparab"
+            2
           ]
         }
       ],
@@ -2262,12 +2231,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "oracle",
-            "golden",
-            "conformance"
+            2
           ]
         }
       ],
@@ -2299,12 +2266,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "rotation",
-            "order",
-            "arm"
+            2
           ]
         }
       ],
@@ -2336,12 +2301,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "deny",
-            "settings",
-            "permission"
+            2
           ]
         }
       ],
@@ -2373,12 +2336,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "arch-decision",
-            "ADR",
-            "TDR"
+            2
           ]
         }
       ],
@@ -2410,12 +2371,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "pm-prioritize",
-            "RICE",
-            "WSJF"
+            2
           ]
         }
       ],
@@ -2447,12 +2406,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "docs-audit",
-            "gap",
-            "outdated"
+            2
           ]
         }
       ],
@@ -2484,11 +2441,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "release-notes",
-            "changelog"
+            2
           ]
         }
       ],
@@ -2520,12 +2476,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "accessibility",
-            "audit",
-            "WCAG"
+            2
           ]
         }
       ],
@@ -2557,12 +2511,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "context-status",
-            "compression",
-            "utilization"
+            2
           ]
         }
       ],
@@ -2594,12 +2546,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "business-report",
-            "ROI",
-            "case"
+            2
           ]
         }
       ],
@@ -2631,11 +2581,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "prompt-audit",
-            "consistency"
+            2
           ]
         }
       ],
@@ -2667,12 +2616,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "test-coverage",
-            "gap",
-            "quality"
+            2
           ]
         }
       ],
@@ -2704,12 +2651,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "ethics-review",
-            "constitutional",
-            "harm"
+            2
           ]
         }
       ],
@@ -2741,12 +2686,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "code-comment-standard",
-            "WHY",
-            "contract"
+            2
           ]
         }
       ],
@@ -2778,12 +2721,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "security-review-process",
-            "supply-chain",
-            "OWASP"
+            2
           ]
         }
       ],
@@ -2815,12 +2756,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "git-conventions",
-            "credential",
-            "durable"
+            2
           ]
         }
       ],
@@ -2852,12 +2791,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "incident-response",
-            "triage",
-            "post-mortem"
+            2
           ]
         }
       ],
@@ -2889,12 +2826,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "incident-responder",
-            "emergency",
-            "triage"
+            2
           ]
         }
       ],
@@ -2926,11 +2861,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "megatask-monitor",
-            "monitor"
+            2
           ]
         }
       ],
@@ -2962,11 +2896,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "state-patch",
-            "ledger"
+            2
           ]
         }
       ],
@@ -2998,11 +2931,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "estimation-methodology",
-            "complexity"
+            2
           ]
         }
       ],
@@ -3034,12 +2966,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "agent-coordination",
-            "depth",
-            "ceiling"
+            2
           ]
         }
       ],
@@ -3071,12 +3001,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "auth status",
-            "login",
-            "probe"
+            2
           ]
         }
       ],
@@ -3108,11 +3036,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "pm-requirements",
-            "PRD"
+            2
           ]
         }
       ],
@@ -3144,12 +3071,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "running tally",
-            "breach",
-            "ceiling"
+            2
           ]
         }
       ],
@@ -3245,12 +3170,10 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
-          "type": "regex_any",
+          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
+          "type": "paths_resolve",
           "values": [
-            "README",
-            "component table",
-            "commands/"
+            2
           ]
         }
       ],

@@ -17,10 +17,19 @@ import hashlib
 import json
 import re
 
-ASSERTION_TYPES = frozenset({"contains_all", "contains_none", "regex_all", "regex_any"})
+ASSERTION_TYPES = frozenset({"contains_all", "contains_none", "regex_all", "regex_any",
+                             "paths_resolve"})
+
+_PATH_RE = re.compile(r"[\w.-]+(?:/[\w.-]+)+\.(?:py|sh|md|json|bats|swift|toml)")
 
 
-def check(assertion: dict, response: str) -> bool:
+def cited_paths(response: str) -> list:
+    return sorted(set(_PATH_RE.findall(response)))
+
+
+def check(assertion: dict, response: str, resolver=None) -> bool:
+    """`resolver` decides whether a cited path exists; required only by paths_resolve,
+    which is the one type that cannot be settled from the text alone."""
     kind, values = assertion["type"], assertion["values"]
     if kind == "contains_all":
         return all(v in response for v in values)
@@ -30,6 +39,13 @@ def check(assertion: dict, response: str) -> bool:
         return all(re.search(v, response, re.MULTILINE) for v in values)
     if kind == "regex_any":
         return any(re.search(v, response, re.MULTILINE) for v in values)
+    if kind == "paths_resolve":
+        # Tests grounding without naming the target: an author's guess at WHICH file
+        # the plan should reach failed three plans that reached a better one.
+        if resolver is None:
+            raise ValueError("paths_resolve needs a resolver")
+        need = int(values[0]) if values else 1
+        return sum(1 for p in cited_paths(response) if resolver(p)) >= need
     raise ValueError(f"unknown assertion type: {kind}")
 
 
@@ -64,7 +80,7 @@ def expected_outcome(eval_set: dict, case_id: int) -> str:
     return find_case(eval_set, case_id).get("expected_outcome", "plan")
 
 
-def grade(eval_set: dict, case_id: int, response: str) -> dict:
+def grade(eval_set: dict, case_id: int, response: str, resolver=None) -> dict:
     """A case expecting a clarification is scored on that alone — its assertions
     describe a plan that should never have been written."""
     outcome = classify_outcome(response)
@@ -81,7 +97,7 @@ def grade(eval_set: dict, case_id: int, response: str) -> dict:
                 "failed": ["asked-instead-of-planning"],
                 "outcome": outcome, "expected_outcome": expected}
     assertions = assertions_for(eval_set, case_id)
-    failed = [a["id"] for a in assertions if not check(a, response)]
+    failed = [a["id"] for a in assertions if not check(a, response, resolver)]
     return {"case_id": case_id, "total": len(assertions),
             "passed": len(assertions) - len(failed), "failed": failed,
             "outcome": outcome, "expected_outcome": expected}
