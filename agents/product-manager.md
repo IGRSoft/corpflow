@@ -689,6 +689,16 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 Run `state-patch.sh --stage PL --prev USER` (`skills/worktask/scripts/`) to atomically patch `tasks.PL0` + the `USER→PL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Put the one-line goal (verb + object, ≤120 chars) in that summary — downstream stages read it as the worktask goal alongside `planning-N.md#requirements`. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
+Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and the only scripted writer for it. PL owns both `key_decisions` and the `open_questions[]` a `--auto=[decision]` delegate later resolves:
+
+```bash
+state-patch.sh --stage PL --prev USER --facts '{
+  "decisions": [{"id":"pl-1","summary":"≤160 chars","ref":"planning-0.md#stages"}],
+  "open_questions": [{"id":"q1","summary":"…","stage":"PL"}]}'
+```
+
+Union by `.id` (last writer wins, newest at the tail): it never clobbers an upstream stage's entries and a re-run is byte-identical. Omitting it loses the fact silently. Canonical rule: `handoff-protocol.md#facts-union`.
+
 Stage-task seeding uses the same `state-patch.sh` grant, so it shares this fallback ladder —
 there is no separate task tool to fall back to.
 

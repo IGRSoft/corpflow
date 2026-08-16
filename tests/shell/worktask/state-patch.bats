@@ -263,6 +263,148 @@ setup() {
   assert_output "3"
 }
 
+# ---------------------------------------------------------------------------
+# --facts union — the compressed-fact channel's write path.
+# Asserts on CONTENT survival, not merely on the field existing: the bug these
+# cover is stage B's patch silently replacing stage A's entries.
+# ---------------------------------------------------------------------------
+
+@test "facts: a decision recorded upstream survives a later stage's patch (content-asserted)" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"decisions":[{"id":"pl-1","summary":"union not replace","ref":"planning-0.md#stages"}]}'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --facts \
+    '{"decisions":[{"id":"dv-1","summary":"tail append","ref":"development-0.md"}]}'
+  assert_success
+  run jq -r '[.facts.decisions[] | select(.id=="pl-1")] | .[0].summary' .context/state.json
+  assert_output "union not replace"
+  run jq -c '[.facts.decisions[] | select(.id=="pl-1" or .id=="dv-1") | .id]' .context/state.json
+  assert_output '["pl-1","dv-1"]'
+}
+
+@test "facts: union survives where jq object-merge (. * \$patch) would replace" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"decisions":[{"id":"a","summary":"A","ref":"r"}]}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"decisions":[{"id":"b","summary":"B","ref":"r"}]}'
+  # `. * $patch` semantics for the same two writes: the second array wins outright.
+  run jq -n --argjson p '{"facts":{"decisions":[{"id":"b"}]}}' \
+    '({"facts":{"decisions":[{"id":"a"}]}} * $p) | .facts.decisions | length'
+  assert_output "1"
+  run jq -r '.facts.decisions | length' .context/state.json
+  assert_output "2"
+}
+
+@test "facts: all four fields union, keyed by .id and by string" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts '{
+    "decisions":[{"id":"d1","summary":"s","ref":"r"}],
+    "open_questions":[{"id":"q1","summary":"s","stage":"PL"}],
+    "files_modified":["a.sh"], "tests_added":["a.bats"]}'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{
+    "decisions":[{"id":"d2","summary":"s","ref":"r"}],
+    "open_questions":[{"id":"q2","summary":"s","stage":"AR"}],
+    "files_modified":["b.sh"], "tests_added":["b.bats"]}'
+  assert_success
+  run jq -c '[(.facts.decisions|map(.id)), (.facts.open_questions|map(.id)),
+              .facts.files_modified, .facts.tests_added]' .context/state.json
+  assert_output '[["d1","d2"],["q1","q2"],["a.sh","b.sh"],["a.bats","b.bats"]]'
+}
+
+@test "facts: same .id from a later stage supersedes and moves to the tail" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"decisions":[{"id":"x","summary":"old","ref":"r"},{"id":"y","summary":"y","ref":"r"}]}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"decisions":[{"id":"x","summary":"new","ref":"r"}]}'
+  run jq -c '[.facts.decisions[] | select(.id=="x" or .id=="y") | .id]' .context/state.json
+  assert_output '["y","x"]'
+  run jq -r '[.facts.decisions[] | select(.id=="x")] | length' .context/state.json
+  assert_output "1"
+  run jq -r '[.facts.decisions[] | select(.id=="x")] | .[0].summary' .context/state.json
+  assert_output "new"
+}
+
+@test "facts: re-merging an already-merged payload is byte-identical" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"decisions":[{"id":"d1","summary":"s","ref":"r"}],"files_modified":["a.sh","b.sh"]}'
+  cp .context/state.json snap
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"decisions":[{"id":"d1","summary":"s","ref":"r"}],"files_modified":["a.sh","b.sh"]}'
+  run diff -q .context/state.json snap
+  assert_success
+}
+
+@test "bounds: clamp after union keeps the NEWEST 8 decisions, not an arbitrary 8" {
+  cd "$WD"
+  jq '.facts.decisions = [range(0;6) | {id:("d"+(.|tostring)), summary:"s", ref:"x.md#y"}]' \
+    .context/state.json > s2 && mv s2 .context/state.json
+  # 6 existing + 5 unioned = 11; the clamp must evict d0..d2, never the fresh tail.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    "$(jq -cn '{decisions:[range(6;11)|{id:("d"+(.|tostring)),summary:"s",ref:"x.md#y"}]}')"
+  assert_success
+  run jq -c '.facts.decisions | map(.id)' .context/state.json
+  assert_output '["d3","d4","d5","d6","d7","d8","d9","d10"]'
+}
+
+@test "bounds: a superseded old decision re-enters at the tail and survives the clamp" {
+  cd "$WD"
+  jq '.facts.decisions = [range(0;8) | {id:("d"+(.|tostring)), summary:"s", ref:"x.md#y"}]' \
+    .context/state.json > s2 && mv s2 .context/state.json
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"decisions":[{"id":"d0","summary":"revised","ref":"x"}]}'
+  run jq -c '.facts.decisions | map(.id)' .context/state.json
+  assert_output '["d1","d2","d3","d4","d5","d6","d7","d0"]'
+  run jq -r '.facts.decisions[-1].summary' .context/state.json
+  assert_output "revised"
+}
+
+@test "facts: unknown key is rejected and state.json is left unchanged" {
+  cd "$WD"
+  cp .context/state.json snap
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"verdicts":{"PL":"ok"}}'
+  assert_failure
+  assert_output --partial "unknown key(s): verdicts"
+  run diff -q .context/state.json snap
+  assert_success
+}
+
+@test "facts: wrong array shape is rejected before the merge lock" {
+  cd "$WD"
+  cp .context/state.json snap
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"decisions":["not-an-object"]}'
+  assert_failure
+  assert_output --partial "bad shape for decisions"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"files_modified":[7]}'
+  assert_failure
+  assert_output --partial "bad shape for files_modified"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts 'not json'
+  assert_failure
+  assert_output --partial "not valid JSON"
+  run diff -q .context/state.json snap
+  assert_success
+}
+
+@test "facts: ledger channel is untouched by a standalone --facts call" {
+  cd "$WD"
+  before_tasks="$(jq -c '.tasks' .context/state.json)"
+  before_handoffs="$(jq -c '.handoffs' .context/state.json)"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"files_modified":["a.sh"]}'
+  assert_success
+  run jq -c '.tasks' .context/state.json
+  assert_output "$before_tasks"
+  run jq -c '.handoffs' .context/state.json
+  assert_output "$before_handoffs"
+}
+
+@test "facts: lands even when the completion merge short-circuits as idempotent" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --facts \
+    '{"decisions":[{"id":"late","summary":"after idempotent stop","ref":"r"}]}'
+  assert_success
+  run jq -r '[.facts.decisions[] | select(.id=="late")] | .[0].summary' .context/state.json
+  assert_output "after idempotent stop"
+}
+
 @test "bounds: small arrays are untouched (no clamp, byte-stable)" {
   cd "$WD"
   # The fixture state has short decisions/dispatched_agents; a patch must not perturb them.

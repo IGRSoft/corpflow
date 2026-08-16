@@ -262,3 +262,12 @@ its own without the surrounding body text.
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage AR --prev PL` (`skills/worktask/scripts/`) to atomically patch `tasks.AR0` + the `PL→AR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+
+Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and the only scripted writer for it:
+
+```bash
+state-patch.sh --stage AR --prev PL --facts '{
+  "decisions": [{"id":"ar-1","summary":"≤160 chars","ref":"architecture-0.md#decisions"}]}'
+```
+
+Union by `.id` (last writer wins, newest at the tail): it never clobbers PL's entries and a re-run is byte-identical. Omitting it loses the decision silently — do not assume the orchestrator digests it for you. Canonical rule: `handoff-protocol.md#facts-union`.

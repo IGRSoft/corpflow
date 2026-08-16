@@ -367,3 +367,12 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage DR --prev DV` (`skills/worktask/scripts/`) to atomically patch `tasks.DR0` + the `DV→DR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+
+Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and the only scripted writer for it. DR's findings and blockers map onto `decisions[]`:
+
+```bash
+state-patch.sh --stage DR --prev DV --facts '{
+  "decisions": [{"id":"dr-1","summary":"≤160 chars","ref":"developer-review-0.md#findings"}]}'
+```
+
+Union by `.id` (last writer wins, newest at the tail): it never clobbers an upstream stage's entries and a re-run is byte-identical. Omitting it loses the finding silently. Canonical rule: `handoff-protocol.md#facts-union`.

@@ -43,6 +43,12 @@
 #                           so NEITHER the stage entry NOR the handoff edge is written.
 #                           To record a stage whose artifact does not exist, write
 #                           state.json directly (handoff-protocol.md#layer-1-fallback).
+# @arg --facts <json>       Union-merge compressed facts into facts.*.  Object keyed by any
+#                           subset of decisions | open_questions | files_modified |
+#                           tests_added.  COMPOSES with --stage: applied first, in its own
+#                           atomic window, so one call patches both the ledger row and the
+#                           facts a stage recorded; standalone it exits 0 after the merge.
+#                           Union, never replace — identity rule at § Facts union below.
 #
 #   Ledger ops — direct tasks{} writes.  Each short-circuits the artifact path and exits.
 #   --task-create is the ONLY op that may introduce a key; the rest reject an unknown ID
@@ -425,6 +431,63 @@ _STATE_BOUNDS_FILTER='
             (([ .[] | select(.status == "launched") ]
             + [ .[] | select(.status != "launched") ])[0:6])
        else . end)'
+
+# Union semantics for the facts.* arrays. Object-merge (`. * $patch`) REPLACES arrays, so
+# a downstream stage's patch would silently drop every entry an upstream stage recorded.
+# Identity is `.id` for the keyed arrays and the string itself for the scalar ones.
+# Keyed survivors move to the TAIL because _STATE_BOUNDS_FILTER keeps `.[-8:]` — appending
+# is what makes "newest 8 survive" true after a union; sorting (unique_by) would hand the
+# clamp an arbitrary 8. Scalars keep first-seen order: no clamp reads them.
+_FACTS_UNION_FILTER='
+      def _union_keyed(k):
+        reduce .[] as $e ([]; map(select((. | k) != ($e | k))) + [$e]);
+      def _union_scalar:
+        reduce .[] as $e ([]; if (index($e) != null) then . else . + [$e] end);
+      .facts = ((.facts // {})
+        | (if ($f.decisions // null) != null
+           then .decisions = (((.decisions // []) + $f.decisions) | _union_keyed(.id))
+           else . end)
+        | (if ($f.open_questions // null) != null
+           then .open_questions =
+                (((.open_questions // []) + $f.open_questions) | _union_keyed(.id))
+           else . end)
+        | (if ($f.files_modified // null) != null
+           then .files_modified = (((.files_modified // []) + $f.files_modified) | _union_scalar)
+           else . end)
+        | (if ($f.tests_added // null) != null
+           then .tests_added = (((.tests_added // []) + $f.tests_added) | _union_scalar)
+           else . end))'
+
+# Shape gate for --facts, run BEFORE the lock: a malformed payload is a caller bug, and the
+# union filter would otherwise persist an array no downstream reader can parse.
+_FACTS_VALIDATE_FILTER='
+      def _allowed: ["decisions","files_modified","open_questions","tests_added"];
+      if type != "object" then "must be a JSON object"
+      elif (keys | length) == 0 then "object has no keys"
+      else
+        (keys - _allowed) as $unknown
+        | [ to_entries[]
+            | select(.key == "decisions" or .key == "open_questions")
+            | select((.value | type) != "array"
+                     or ((.value | map(select((type != "object")
+                                              or ((.id | type) != "string")))) | length) > 0)
+            | .key ] as $badkeyed
+        | [ to_entries[]
+            | select(.key == "files_modified" or .key == "tests_added")
+            | select((.value | type) != "array"
+                     or ((.value | map(select(type != "string"))) | length) > 0)
+            | .key ] as $badscalar
+        | if ($unknown | length) > 0
+          then "unknown key(s): " + ($unknown | join(", "))
+               + " (allowed: " + (_allowed | join(", ")) + ")"
+          elif ($badkeyed | length) > 0
+          then "bad shape for " + ($badkeyed | join(", "))
+               + " (expected an array of objects each with a string .id)"
+          elif ($badscalar | length) > 0
+          then "bad shape for " + ($badscalar | join(", "))
+               + " (expected an array of strings)"
+          else "" end
+      end'
 
 # Atomic state.json mutation (read → apply → temp → fsync → rename), serialized by the
 # mkdir-spinlock so concurrent sibling writers cannot drop a patch.
@@ -1058,6 +1121,7 @@ TASK_OP=""
 TASK_OP_ID=""
 TASK_OP_VALUE=""
 RESOLVE_CODE_ARG=""
+FACTS_ARG=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -1103,6 +1167,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --allow-missing-artifact)
       ALLOW_MISSING_ARTIFACT="1"
+      shift
+      ;;
+    --facts)
+      shift
+      FACTS_ARG="${1:-}"
       shift
       ;;
     --task-id)
@@ -1291,6 +1360,43 @@ if [[ -n "$TASK_OP" ]]; then
     "$TASK_OP" "$TASK_OP_ID" "$LOG_FILE"
   log_msg ERROR "jq apply failed for ledger ${TASK_OP} on tasks.${TASK_OP_ID}; state.json unchanged"
   exit 1
+fi
+
+# ---------- Facts union ----------
+# The compressed-fact channel's write path: facts.* is what stage-contracts.md tells every
+# downstream stage to read first, and until this op it had no scripted writer at all.
+# Runs before the ledger patch so a stage's facts land even when the ledger row is already
+# current and the completion merge below short-circuits as idempotent.
+if [[ -n "$FACTS_ARG" ]]; then
+  command -v jq > /dev/null 2>&1 || {
+    printf >&2 '--facts needs jq; state.json unchanged\n'
+    log_msg ERROR "--facts needs jq; state.json unchanged"
+    exit 1
+  }
+
+  FACTS_ERR=$(printf '%s' "$FACTS_ARG" | jq -r "$_FACTS_VALIDATE_FILTER" 2> /dev/null) \
+    || FACTS_ERR="not valid JSON"
+  if [[ -n "$FACTS_ERR" ]]; then
+    printf >&2 'invalid --facts: %s\n' "$FACTS_ERR"
+    log_msg ERROR "invalid --facts (${FACTS_ERR}); state.json unchanged"
+    usage
+  fi
+
+  if [[ ! -f "$STATE_PATH" ]]; then
+    log_msg INFO "state.json absent — --facts is a no-op"
+  elif atomic_apply "$STATE_PATH" "$_FACTS_UNION_FILTER" --argjson f "$FACTS_ARG"; then
+    log_msg INFO "facts union: $(printf '%s' "$FACTS_ARG" | jq -r 'keys | join(",")')"
+  else
+    printf >&2 'facts union failed; state.json unchanged (see %s)\n' "$LOG_FILE"
+    log_msg ERROR "jq apply failed for --facts; state.json unchanged"
+    exit 1
+  fi
+
+  # Standalone --facts is done here; with --stage/--artifact it falls through to the
+  # completion merge, which takes its own lock.
+  if [[ -z "$STAGE_ARG" && -z "$ARTIFACT_ARG" ]]; then
+    exit 0
+  fi
 fi
 
 # ---------- Resolve artifact ----------

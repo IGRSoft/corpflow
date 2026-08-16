@@ -564,6 +564,32 @@ The v1 additive fields have **orchestrator-loop / hook writers**, not schema-map
 Only `tasks.<ID>.worktree` maps from a stage artifact — the DV handoff frontmatter
 `worktree_path`/`worktree_branch`, applied by `state-patch.sh` (rows above).
 
+#### #facts-union
+
+`facts.decisions[]`, `facts.open_questions[]`, `facts.files_modified` and `facts.tests_added`
+are written by `state-patch.sh --facts '<json>'`, passed on the same self-patch call that
+lands the stage's ledger row. It is the channel's ONLY scripted writer — the "(union)" in the
+maps above was prose until it existed, so a fact survived a handoff only when the orchestrator
+remembered to transcribe it.
+
+The merge is a union, never `. * $patch`: jq object-merge REPLACES arrays, which is precisely
+how a downstream stage silently dropped the entries an upstream stage recorded.
+
+| Array | Identity | Collision | Order |
+|---|---|---|---|
+| `decisions`, `open_questions` | `.id` | last writer wins | survivor moves to the TAIL |
+| `files_modified`, `tests_added` | the string itself | duplicate dropped | first-seen position kept |
+
+Tail placement for the keyed arrays is load-bearing, not cosmetic: the B3 clamp keeps `.[-8:]`,
+so appending is what makes "newest 8 survive" true after a union as well as after an overwrite.
+Never sort (`unique_by` does) — that hands the clamp an arbitrary 8 instead of the newest 8.
+
+Both shapes are idempotent: re-merging an already-merged payload leaves `state.json`
+byte-identical, so a remediation loop may re-run its self-patch freely. A payload whose shape
+does not match the table is rejected before the merge lock is taken, leaving `state.json`
+unchanged. `--facts` applies ahead of the completion merge, so facts still land when the
+ledger row is already current and that merge short-circuits as idempotent.
+
 #### Additive-field writers — facts.branch
 
 `facts.branch` has **two** writers: the orchestrator at `commands/worktask.md § Step 3c`, and
