@@ -138,7 +138,7 @@ Title: `<type>[scope][!]: <summary>`
 - [How this was verified]
 
 ## Visual evidence
-[UI runs only — inserted verbatim from `attach-visual-evidence.sh --emit pr`]
+[UI changes only — inserted verbatim; see Visual evidence below]
 
 ## Notes
 [Additional context, testing instructions, etc.]
@@ -154,6 +154,27 @@ so the three enforcement points and this spec agree on one shape.
 **Never paste a local path into a PR body** — `.context/`, `/Users/…`, `~/…` and `../…` are
 per-workspace and gitignored, so they are meaningless to a reviewer and leak host layout. This
 holds inside backticks too: a code span is not an escape hatch. `pr-body-lint.sh` checks it.
+
+### Visual evidence
+
+Both PR paths render the same block because both end in `attach-visual-evidence.sh
+--emit pr`. A worktask PR gets it from FN, automatically, on
+`metadata.requires_screenshots: true` (the default). An ad-hoc PR — `gh pr create`
+outside a worktask — gets it from:
+
+```bash
+bash skills/worktask/scripts/adhoc-visual-evidence.sh --emit pr
+```
+
+Run that **unconditionally** (gating lives inside it) and splice its stdout between
+`## Test plan` and `## Notes` **before** `gh pr create`, so no second API call patches
+the body afterwards. Empty stdout means insert nothing — the answer for a docs-only or
+backend-only change.
+
+It captures only when the diff touches the UI path classes owned by
+`detect-ui-change.sh --path-classes`, refuses to run in a worktask tree, and exits 0 on
+every failure: a missing screenshot must never become an unopened PR. `ADHOC_SKIP=1`
+suppresses a run the heuristic gets wrong; `--base <ref>` overrides the resolved target.
 
 ## Merge Strategy
 
