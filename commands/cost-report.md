@@ -2,11 +2,12 @@
 name: cost-report
 description: Generate cost analysis for worktasks with token usage breakdown and optimization recommendations
 argument-hint: '[--worktask-id ID] [--json]'
-allowed-tools: Read
+allowed-tools: Read, Write
 model: sonnet
 related:
   - skills/cost-optimization/SKILL.md
   - skills/context-compression/SKILL.md
+  - skills/csv-export-templates/SKILL.md
   - commands/estimate.md
   - commands/context-status.md
 ---
@@ -30,7 +31,7 @@ Generate cost analysis for completed or in-progress worktasks with token usage b
 
 - `--stage <code>` - Show costs for specific stage only (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR)
 - `--budget-alert <percent>` - Set alert threshold (default: 75%)
-- `--export` - Export cost data to CSV
+- `--export` - Write the By Stage breakdown to `.context/cost-report.csv` (see § CSV Export)
 - `--json` - Emit the summary as one JSON object on stdout instead of the markdown report (see § Budget Tracking JSON)
 - `--optimize` - Include optimization recommendations
 - `--detailed` - Show per-operation token breakdown (includes Background Activity)
@@ -167,15 +168,20 @@ and the `--json` object print. Neither output restates these rules.
 |----------|------------|-----------------|
 | Stage tokens | `input_tokens + output_tokens` summed over that stage's `cost-*.jsonl` rows | integer |
 | Total tokens | Sum of stage tokens across all stages with data | integer |
-| Stage cost | Formula above, at that stage's `model` rate | USD, 3 decimals |
-| Total cost | Sum of stage costs, rounded **after** summing | USD, 2 decimals |
-| Budget used | `total_cost / budget_limit × 100` | integer percent |
-| % of total | `stage_tokens / total_tokens × 100` — a **token** share, not a cost share | integer percent |
-| Estimated remaining | Baseline cost of stages not yet run, from `skills/cost-optimization/references/token-baselines.md` | USD, 2 decimals |
+| Stage cost | Formula above, at that stage's `model` rate | USD, 3 decimals, half-up |
+| Total cost | Sum of stage costs, rounded **after** summing | USD, 2 decimals, half-up |
+| Budget used | `total_cost / budget_limit × 100` | integer percent, half-up |
+| % of total | `stage_tokens / total_tokens × 100` — a **token** share, not a cost share | integer percent, half-up |
+| Estimated remaining | Baseline cost of stages not yet run, from `skills/cost-optimization/references/token-baselines.md` | USD, 2 decimals, half-up |
 
 Stages with no `cost-*.jsonl` rows have **no value**, not a zero: the markdown
 `### By Stage` table renders them as `-`, and `--json` omits them from `by_stage`.
 Alert levels come from § Alert Thresholds — not restated in either output.
+
+#### Rounding mode
+
+Half-up on the exact decimal value, not on a binary float: `0.0555` rounds to
+`0.056`, which IEEE-754 nearest-even gives as `0.055`.
 
 ### Budget Tracking JSON
 
@@ -236,6 +242,87 @@ goes to stdout). It does not compose with `--stage`, `--optimize`, `--detailed`,
 refuses the combination on stderr and writes nothing to stdout rather than emitting a
 partial object.
 
+## CSV Export
+
+**Normative `--export` output contract.** `--export` writes the `### By Stage`
+breakdown to `.context/cost-report.csv`, overwriting any file already there. That
+table and nothing else: no Overview, Cache Performance, Effort Distribution or
+Background Activity rows, and no totals row — totals live in the Overview table and
+in `--json`, and a totals row inside the data is what breaks a spreadsheet the first
+time someone sorts the sheet.
+
+Delimiter, encoding, header row and multiline-cell quoting are **not restated here**.
+They come from `skills/csv-export-templates/SKILL.md § Format Specification`, the
+single source for this plugin's CSV shape; when that convention moves, this export
+moves with it.
+
+### CSV Column Schema
+
+Five columns in this order, header row exactly `stage;tokens;model;cost;% of total`:
+
+| # | Column | Value | Type / unit |
+|---|--------|-------|-------------|
+| 1 | `stage` | Stage code (`PL`, `AR`, `TL`, …) | string |
+| 2 | `tokens` | Stage tokens | integer, no thousands separator |
+| 3 | `model` | `model` field of that stage's rows | string, alias verbatim |
+| 4 | `cost` | Stage cost | bare number, 3 decimals, `.` point, **no `$`** |
+| 5 | `% of total` | % of total | bare integer 0–100, **no `%`** |
+
+Definitions, rounding and units for columns 2, 4 and 5 are § Derived Quantities,
+Units, Rounding; the CSV restates none of them. Its numbers therefore equal the
+markdown `### By Stage` cells digit for digit, minus the `$`, `%` and thousands
+separators markdown adds for readability — those are presentation, and a spreadsheet
+reads them as text.
+
+### CSV Example
+
+```csv
+stage;tokens;model;cost;% of total
+PL;7500;opus;0.113;17
+AR;15000;opus;0.225;33
+TL;4000;sonnet;0.012;9
+DV;18500;sonnet;0.056;41
+```
+
+Same run as the § Summary Report example: same stages, same figures.
+
+### CSV Rows and Ordering
+
+One row per stage **with data**, in execution order — `status.stages_complete` order,
+then the current stage, then any later stage that has rows. Stages with no
+`cost-*.jsonl` rows are **omitted**: the markdown `-` placeholder has no CSV
+equivalent, and `--json` omits them from `by_stage` for the same reason. Four rows out
+of nine stages is the correct rendering of four stages having run.
+
+With `--stage <code>` the export narrows to that stage's row. `% of total` keeps the
+full-run denominator, so the narrowed row still shows that stage's true share rather
+than a self-referential 100.
+
+### CSV Quoting
+
+`csv-export-templates` quotes cells containing line breaks; this export also quotes
+any cell containing the delimiter or a double quote, per RFC 4180 — wrap the cell in
+`"` and double every embedded `"`. `model` is free text out of
+`CLAUDE_TASK_METADATA_MODEL` and is the realistic carrier of a stray `;`: unquoted, it
+shifts every later column by one and the import still reports success.
+
+```csv
+stage;tokens;model;cost;% of total
+TL;4000;"sonnet;fallback";0.012;9
+```
+
+### CSV Missing-Data Fallback
+
+`--export` reuses § Missing-Data Fallback unchanged: with no
+`.context/logs/cost-*.jsonl` it writes the same five columns populated from
+`token-baselines.md`, and prints the same hook-not-configured warning to the report
+(to stderr under `--json`). The warning never enters the CSV — a comment or note row
+would break the header contract on import.
+
+With no worktask anchored there is nothing to estimate from. The command then writes
+**no file** and reports the error, rather than leaving a header-only or stale
+`cost-report.csv` on disk for a spreadsheet to pick up as current.
+
 ## Alert Thresholds
 
 | Threshold | Action | Visual |
@@ -253,7 +340,7 @@ partial object.
 /cost-report --stage AR               # per-stage detail
 /cost-report --optimize               # + actionable recommendations
 /cost-report --budget-alert 60%      # alert at 60% budget consumption
-/cost-report --export                 # writes cost-report.csv to .context/
+/cost-report --export                 # writes .context/cost-report.csv (§ CSV Export)
 /cost-report --json                   # one JSON summary object on stdout
 /cost-report --json | jq .cost_tracking.budget_used_percent
 /cost-report --compare <task-id>      # side-by-side with another worktask
