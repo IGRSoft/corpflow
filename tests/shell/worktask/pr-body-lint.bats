@@ -191,3 +191,36 @@ EOF
   assert_output --partial "warn: P2"
   assert_output --partial "2 finding(s)"
 }
+
+@test "P1: a /Volumes/ checkout path is caught (the reported leak)" {
+  printf 'Plan at `/Volumes/internal/Projects/igrsoft/corpflow/.ctx/plan.md`\n' >> "$CLEAN"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --body "$CLEAN" --strict
+  assert_failure
+  assert_output --partial "warn: P1"
+}
+
+@test "P1: every claimed mount prefix is caught under --strict" {
+  local p
+  for p in /Users/me /home/me /tmp/w /var/w /opt/w /etc/w /root/w \
+    /Volumes/internal /mnt/data /mnt/c/Users/me /media/usb /private/tmp/w /srv/www; do
+    cp "$CLEAN" "$WD/case.md"
+    printf 'Ref `%s/x.md`\n' "$p" >> "$WD/case.md"
+    run bash "$PLUGIN_ROOT/$SCRIPT" --body "$WD/case.md" --strict
+    [ "$status" -eq 1 ] || fail "prefix not caught: $p"
+  done
+}
+
+@test "P1: a Windows drive-letter path is caught" {
+  printf 'Ref `C:\\Users\\me\\x.md`\n' >> "$CLEAN"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --body "$CLEAN" --strict
+  assert_failure
+  assert_output --partial "warn: P1"
+}
+
+@test "over-match: repo-relative paths and srv/media prose stay clean" {
+  printf 'Edit `skills/worktask/scripts/pr-body-lint.sh`.\n' >> "$CLEAN"
+  printf 'Deployed under srv and media naming; the var name is opt_in.\n' >> "$CLEAN"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --body "$CLEAN" --strict
+  assert_success
+  assert_output --partial "clean"
+}

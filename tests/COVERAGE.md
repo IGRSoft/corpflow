@@ -233,6 +233,7 @@ excluded from the 45/45 denominator. They are counted in the 59 `.bats` / 879 `@
 | `tests/shell/skills/plugin-root-refs.bats` | `${CLAUDE_PLUGIN_ROOT}` composed-token grammar (a **predicate**, not a frozen line count — see below) |
 | `tests/shell/worktask/artifact-map-parity.bats` | Stage↔artifact map matches `ARTIFACT_RE` |
 | `tests/shell/worktask/manifest-parity.bats` | `plugin.json` / `marketplace.json` / filesystem / README version + registration parity |
+| `tests/shell/worktask/local-path-regex-parity.bats` | The absolute-host-path strip rule is byte-identical in `publish-pl-issue.sh` and `pr-body-lint.sh` |
 | `tests/shell/worktask/gh-issue-dedup.bats` | Issue dedupe-anchor contract |
 | `tests/shell/benchmark/run-benchmark.bats` | The paid-dispatch barrier — no `--live`, no spend |
 | `tests/shell/benchmark/canvas-e2e-guards.bats` | Canvas E2E audit-row gate |

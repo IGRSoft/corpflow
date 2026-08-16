@@ -280,17 +280,43 @@ EOF
   assert_output "missing_visual_evidence_row"
 }
 
-@test "F8: MILESTONE_MODE=1 skips the gate on a body that fails F1-F3" {
+@test "F8: MILESTONE_MODE=1 drops the composition gate but still sanitises" {
   cd "$WD"
   printf 'Leak at /Users/korich/secret/run.log and no headings.\n' > body.md
   run env MILESTONE_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT" pr-body --body body.md
   assert_success
-  assert_output --partial "skipped (milestone_mode_env)"
+  assert_output --partial "composition gate skipped (milestone_mode_env)"
   run jq -r 'select(.action=="pr_body_gate") | .result' .context/logs/audit.jsonl
   assert_output "skipped"
-  # The body must be untouched: batch routing keeps today's behaviour byte-for-byte.
+  # The exemption covers this command's BLOCKING checks only — a working-folder
+  # path must not reach a published body on the batch route either.
   run cat body.md
-  assert_output --partial "/Users/korich/secret/run.log"
+  refute_output --partial "/Users/korich/secret/run.log"
+}
+
+@test "F8b: a /Volumes checkout path is stripped on the batch route too" {
+  cd "$WD"
+  printf 'Plan at /Volumes/internal/Projects/corpflow/.ctx/plan.md and no headings.\n' > body.md
+  run env MILESTONE_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT" pr-body --body body.md
+  assert_success
+  run cat body.md
+  refute_output --partial "/Volumes/internal/Projects"
+}
+
+@test "F8c: batch routing degrades an unreachable sanitiser to a warning" {
+  cd "$WD"
+  mkdir -p "$WD/lonely"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/lonely/fn-preflight.sh"
+  cp "$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh" "$WD/lonely/branch-lib.sh"
+  cp "$PLUGIN_ROOT/skills/worktask/scripts/fn-preflight-cmds.sh" "$WD/lonely/fn-preflight-cmds.sh"
+  printf 'Leak at /Users/korich/secret/run.log and no headings.\n' > body.md
+  # The whole point of the batch exemption: a broken plugin cache cannot wedge
+  # /megatask, so this reports and passes where F12 blocks.
+  run env MILESTONE_MODE=1 bash "$WD/lonely/fn-preflight.sh" pr-body --body body.md
+  assert_success
+  assert_output --partial "sanitiser unavailable"
+  run jq -r 'select(.action=="pr_body_gate") | .result' .context/logs/audit.jsonl
+  assert_output "skipped"
 }
 
 @test "F9: metadata.milestone skips the gate" {
