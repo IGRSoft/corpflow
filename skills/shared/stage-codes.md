@@ -35,6 +35,20 @@ Single source of truth for worktask stage codes.
 
 > DV defaults to `developer` (platform app code). For plugin worktask-infrastructure scope (`skills/worktask/scripts/*.sh`, the stage state-machine, `hooks/**`), PL0 routes DV to `workflow-engineer` instead — see `skills/worktask/references/pl0-procedure.md` § DV0 routing override. This table keeps the single unconditional default; the conditional rule lives there.
 
+### Side-effect-bearing stages
+
+> Canonical list. These two stages act **outside** the ledger when they complete, so re-running
+> one is not a free retry: it can produce a second commit, PR or tag for one unit of work.
+> `state-patch.sh --task-replay --cascade` therefore traverses through them but never resets
+> them **as dependents**, and mirrors this list as one constant (bash cannot read the table; the
+> bats parity test asserts the two agree). A directly named `--task-replay FN0` is still reset —
+> an explicit id is the user's instruction, and with or without `--cascade` — but warns.
+
+| Code | External side effect on completion |
+|------|------------------------------------|
+| FN | Commits, pushes, and opens the pull request |
+| RE | Tags the release and publishes artifacts |
+
 ## Model Lookup
 
 Orchestrator MUST pass `model` parameter when spawning stage agents:

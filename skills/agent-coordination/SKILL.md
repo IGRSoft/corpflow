@@ -211,7 +211,7 @@ review, the audit tail is the single source of truth for what happened.
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned`, `github_issue_created` |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created` |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run` |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
 
@@ -265,6 +265,7 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>`: every install
 #### Dedupe-key shapes — stage & issue
 
 - `stage_completion_hook`: `"<session_id>:<agent_id>:stage:<PL|FN|ST>"`
+- `stage_replay`: `"<worktask_id>:<run_index>:<task_id>:replay:<ts>"` — the timestamp is deliberate: replay is repeatable by design, so two legitimate replays of one stage must NOT collapse. Written by `state-patch.sh --task-replay`, on success only; a refusal changed nothing and records nothing.
 - `github_issue_created`: `"<worktask_id>:<run_index>:gh_issue"` — collision on resume detects already-published; multi-track safety via `run_index` increment. Writer: orchestrator (via `skills/worktask/scripts/publish-pl-issue.sh` between PL approval and stage-loop entry).
 
 ### Schema
@@ -273,7 +274,7 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>`: every install
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_delegation_observed|test_gate_disabled|test_dedupe_disabled",
+  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_delegation_observed|test_gate_disabled|test_dedupe_disabled",
   "subject": "task ID or artifact path",
   "result": "ok|error|deferred|blocked",
   "task_id": "optional — ledger key, e.g. DV0",

@@ -87,6 +87,13 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 | `--emergency` | Run the incident pipeline (IR→DV→DR→QA→RE→FN) instead of the standard PL-first pipeline; IR stage owned by `incident-responder`. Replaces the former `emergency:` prefix. |
 | `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish step. Sets `metadata.no_gh_issue: true` on the PL0 task; `skills/worktask/scripts/publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues as normal. |
 
+### Replay flags
+
+| Option | Effect |
+|--------|--------|
+| `--resume <STAGE_ID>` | Replay one already-settled stage of the worktask in this `.context/` — see § Phase 0. Takes a ledger id (`DV1`), not a stage code. Creates no run: no new `planning-N.md`, no issue, no branch rename. Composes with none of the flags above. |
+| `--cascade` | Only with `--resume`. Also replays the dependents transitively reachable from the target through `blocked_by`. FN/RE **dependents** are traversed through but never reset. An FN/RE named as the *target* is still reset — an explicitly named id is your instruction — with a `side-effect-target` warning. |
+
 ## Examples
 
 ```bash
@@ -94,6 +101,62 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 /worktask --emergency "Production login failing"   # Emergency (incident pipeline)
 # Multi-issue: /megatask 1   (milestone)   or   /megatask --issues 12,15,18   (array)
 ```
+
+## Phase 0: Replay one stage (`--resume <STAGE_ID>`)
+
+Entered ONLY by `/worktask --resume <STAGE_ID> [--cascade]`. This is the explicit half of
+recovery: automatic reattach continues from the first incomplete stage and honours the retry
+ceiling, while a replay is *given* one ledger id by a human and may override that ceiling. The
+two are distinguished in `skills/worktask/references/resume.md § Explicit-replay row`.
+
+Phase 0 replaces Phase 1 entirely and then re-enters the existing stage loop. It adds **no**
+dispatch route and **no** readiness rule: the replayed task becomes `pending` with its
+dependencies still `completed`, so it is the first unblocked task and every other stage stays
+settled.
+
+### Phase 0 — what it must NOT run
+
+**MUST SKIP** — all of Phase 1 (Step 2a issue dedup, Step 3 folders, Step 3a seed, Step 3c
+branch naming, Step 4 PL0 metadata, Steps 5–6 PL dispatch, Steps 7–8 plan presentation) and
+every pre-loop Phase 2 step (A.4 auto-decision, A.4b branch refinement, A.5 plan gate, Step A
+publish). `run_index` is frozen; no `planning-N.md` is written, no branch is renamed, no issue
+is published.
+
+**MUST RUN** — Step 3b hook-install verification (idempotent, and a resumed loop still needs
+SubagentStop), the `fn-preflight.sh branch-divergence` check from `resume.md § Branch-rename
+detection`, and the BINDING workspace-root cross-check before every `Task()`.
+
+### Phase 0 — procedure
+
+1. No `.context/state.json` in the working tree → error out: "no worktask here — use
+   `/worktask <task>`". Do not seed one.
+2. Present the **pre-replay confirmation and STOP**. It names: the target id with its current
+   status, `retry_count` and `error_escalated_to`; whether the escalation cap is being
+   overridden; any already-`completed` dependents, marked *these may now be stale* (warn only —
+   they are never auto-reset); a plan-unapproved warning if there is no `approval_received` row
+   for `PL<run_index>`; and under `--cascade` the full member list plus the FN/RE members that
+   will be skipped. There is no bypass flag — a replay always confirms.
+3. Run the primitive:
+
+       bash "$PLUGIN_ROOT/skills/worktask/scripts/state-patch.sh" --task-replay <ID> [--cascade]
+
+### Phase 0 — procedure, steps 4–6
+
+4. **Exit 4** means a guard refused (target live or parked, liveness indeterminate, planning
+   incomplete, or a blocked cascade member). `state.json` is byte-unchanged. Print the refusal
+   line verbatim and STOP — do NOT enter the stage loop. Exit 1 is an unknown id, exit 2 a
+   malformed one; both are typos, not states.
+5. Append the ordinary `resume` audit row (`resume.md` step 7). It complements the
+   `stage_replay` row the primitive wrote: one records session re-entry, the other records what
+   changed in the ledger.
+6. Re-enter `§ After Step A — run the stage loop`, unchanged.
+
+### Phase 0 — gates on a resumed run
+
+| Gate | Behaviour |
+|------|-----------|
+| `plan_gate` (Step A.5) | **Never re-fires.** It gates the Phase-1→Phase-2 transition; a replay reopens no planning and the `approval_received` row persists. Its absence is a warning at step 2, not a stop |
+| `fn_gate` | **Applies unchanged.** It is a property of the loop, not of the entry point — a resumed run must not slip a commit past the finalization checkpoint |
 
 ## Phase 1: Planning (execute immediately)
 

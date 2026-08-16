@@ -54,7 +54,7 @@ A revision leaves the refined `facts.branch` as-is and never re-refines: the onc
 
 | Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
-| PL0 `completed`, `approval_received` present, some stages `in_progress` | most recent `subagent_stopped` `result: error` | Mid-stage failure. Read `.context/errors/<agent>.md`, honor `retry_count` |
+| PL0 `completed`, `approval_received` present, some stages `in_progress` | most recent `subagent_stopped` `result: error` | Mid-stage failure. Read `.context/errors/<agent>.md`, honor `retry_count` — never overrides the retry ceiling; an exhausted stage needs § Explicit-replay row |
 | PL0 `completed`, all stages `completed` except FN, FN `pending`, audit tail has `fn_gate_waiting` for FN | No `approval_received` audit line for `FN<run_index>` | At the FN gate, parked. Branch on `PL<run_index>.metadata.fn_gate` (default `"checkpoint"`). If `"checkpoint"`: re-present the pre-FN summary (`references/fn-gate.md`), STOP, and delegate FN only once an `approval_received` line with `subject:"FN<run_index>"` is logged. If `"bypass"` (`--auto=[finalization]` / `--emergency`, or stamped by `/megatask`): proceed — delegate FN. |
 
 ### Near-done & stale rows
@@ -80,6 +80,31 @@ A revision leaves the refined `facts.branch` as-is and never re-refines: the onc
 | `agent_id` for an `in_progress` stage shows `state: blocked` | — | Alive but parked. Reattach via `SendMessage` — do not re-delegate |
 | `agent_id` absent from `claude agents --json --all` (or `state: done`) for an `in_progress` stage | — | Agent gone. Re-delegate from the first incomplete stage |
 | **Several** `agent_id`s absent at once, all vanishing at the same timestamp, session run under `--max-budget-usd` | no per-stage failure rows | **Budget halt, not stage failure.** Reaching the cap denies new spawns *and* halts running background subagents, so healthy in-flight stages die together with no error of their own. Raise the budget, then re-dispatch — and do **not** increment `metadata.retry_count`: those 3 retries are reserved for genuine stage failures, and spending them on an external stop escalates a run that never actually failed |
+
+### Explicit-replay row
+
+| Ledger Shape | Audit Tail | Action |
+|----------------|------------|--------|
+| A settled stage (`completed`, or `in_progress` at `retry_count == 3` with `error_escalated_to` set) **and a human has asked for that one stage to run again** | — | Explicit replay, **not** reattach. `/worktask --resume <STAGE_ID>` (add `--cascade` for transitive dependents). The only path that may override the retry ceiling; never entered automatically |
+
+#### Explicit replay vs automatic reattach — the three discriminators
+
+1. **Trigger.** Automatic reattach is entered by the orchestrator on re-entry (PostCompact, crash, session resume). Explicit replay is entered only by a human typing `--resume <STAGE_ID>`.
+2. **Target selection.** Reattach *derives* its target — the first incomplete stage. Replay is *given* its target — one named ledger id, which may be `completed`.
+3. **Retry ceiling.** Reattach honours it (exhausted ⇒ escalate, never re-run). Replay overrides it and records the override in a `stage_replay` audit row.
+
+The non-overlap is structural, not stylistic: this row's Ledger Shape carries a **non-ledger** condition (a human instruction), so a diagnostic scan of the ledger can never *match* it — it is reachable only by invocation.
+
+#### Explicit replay — the guarded primitive
+
+`/worktask --resume` calls `state-patch.sh --task-replay <ID> [--cascade]`, which refuses (exit 4, ledger byte-unchanged) when the target's agent is live or parked, when liveness cannot be determined at all, when `PL0` is not `completed`, or when any cascade member is blocked. Liveness comes from this runbook's own detector (`stale-check.sh`) — there is deliberately no second implementation to drift from these tables. Full procedure and the pre-replay confirmation: `commands/worktask.md § Phase 0`.
+
+#### Parked-or-gone rows — the retry ceiling still binds
+
+Neither row above, and neither of the automatic rows in § Mid-stage & FN-gate rows, may override
+`metadata.retry_count`: a re-delegate is still subject to the ceiling, and a stage that already
+exhausted it escalates rather than re-running. Overriding the ceiling is reachable only through
+§ Explicit-replay row, which a human enters by name.
 
 ### Mid-stage yield
 

@@ -60,6 +60,18 @@
 # @arg --task-block   <ID> --on  <ID[,ID...]> Union into blocked_by[].
 # @arg --task-unblock <ID> --off <ID[,ID...]> Subtract from blocked_by[].
 # @arg --task-meta    <ID> --set <json>       Merge into tasks.<ID>.metadata.
+# @arg --task-replay  <ID> [--cascade]        Reset one settled/failed task to pending so the
+#                                             stage loop dispatches it again.  Clears
+#                                             metadata.retry_count, metadata.error_escalated_to
+#                                             and completed_via; artifact, verdict, worktree and
+#                                             handoffs survive (the completion merge rewrites
+#                                             them together).  Every guard runs BEFORE any
+#                                             mutation, so a refusal leaves state.json
+#                                             byte-identical.  --cascade also resets the
+#                                             transitive dependents reachable through
+#                                             blocked_by, skipping FN/RE with a warning.
+# @arg --agents-json <path>                   Passed through to stale-check.sh for the replay
+#                                             liveness guard.  Test/diagnostic seam only.
 #
 # @arg --resolve-task-id <CODE>
 #                           Print the ledger key a bare stage CODE resolves to and exit.
@@ -76,6 +88,13 @@
 # @exitcode 3   Artifact unresolved on the agent self-patch path (--prev given, --via absent).
 #               An agent patching the artifact it just wrote and finding nothing on disk is a
 #               real failure; every other unresolved case keeps the exit-0 no-op contract.
+# @exitcode 4   Replay refused by a pre-mutation guard (target live/parked, liveness
+#               indeterminate, planning incomplete, or a blocked cascade member).
+#               state.json is untouched.  Unknown ids stay 1 and malformed ids stay 2.
+#
+# Note: --task-replay's liveness guard shells out to stale-check.sh, which needs python3.
+# The dependency is out-of-process and fail-closed — without it the replay refuses (exit 4)
+# rather than proceeding.  Every other op still needs only bash 3.2 + jq.
 #
 # Env vars honoured:
 #   DISK_MIN_GB         (default 5)   — hard halt threshold in GiB
@@ -103,6 +122,12 @@ DISK_MIN_GB="${DISK_MIN_GB:-5}"
 DISK_WARN_GB="${DISK_WARN_GB:-8}"
 STATE_LOCK_TIMEOUT_S="${STATE_LOCK_TIMEOUT_S:-5}"
 STATE_LOCK_STALE_S="${STATE_LOCK_STALE_S:-60}"
+
+# Stage codes whose completion acts outside the ledger (FN commits/pushes/opens a PR, RE
+# tags a release), so resetting one invites a second commit or tag for one unit of work.
+# Canonical list: skills/shared/stage-codes.md § Side-effect-bearing stages — bash cannot
+# read that table, so QA asserts the two agree.
+REPLAY_SIDE_EFFECT_STAGES="FN,RE"
 
 # Set by _lock_acquire so the EXIT trap and _lock_release know which dir to remove.
 _LOCK_DIR=""
@@ -326,6 +351,143 @@ require_task_exists() {
     log_msg ERROR "${op} op on unknown tasks.${id}; state.json unchanged"
     exit 1
   fi
+}
+
+# ---------- Replay guards ----------
+# Every exit-4 line starts `replay refused: <class-token> — ` so callers and tests match the
+# token rather than the prose.
+replay_refuse() {
+  local token="$1" detail="$2"
+  printf >&2 'replay refused: %s — %s\n' "$token" "$detail"
+  log_msg ERROR "replay refused (${token}) on tasks.${TASK_OP_ID}: ${detail}; state.json unchanged"
+  exit 4
+}
+
+replay_warn() {
+  printf >&2 'replay warning: %s — %s\n' "$1" "$2"
+  log_msg WARN "replay warning (${1}) on tasks.${TASK_OP_ID}: ${2}"
+}
+
+# Read-only survey of the ledger: cascade closure, per-member prior fields, stale dependents.
+# Pure function of the file, so it can run before the lock without racing a mutation it owns.
+replay_survey() {
+  jq -c --arg id "$1" --arg se "$REPLAY_SIDE_EFFECT_STAGES" \
+    --argjson cascade "${REPLAY_CASCADE:-false}" '
+    def deps_of($st; $tid):
+      [ ($st.tasks // {}) | to_entries[]
+        | select((.value.blocked_by // []) | index($tid)) | .key ];
+    def is_side_effect($tid; $codes):
+      any($codes[]; . as $c | $tid | test("^" + $c + "[0-9]+$"));
+    def member_row($st; $tid):
+      ($st.tasks[$tid]) as $t
+      | { id: $tid,
+          prior_status: ($t.status // null),
+          prior_retry: ($t.metadata.retry_count // null),
+          prior_escalated: ($t.metadata.error_escalated_to // null),
+          cleared: [ "retry_count", "error_escalated_to", "completed_via"
+                     | . as $k
+                     | select(if $k == "completed_via"
+                              then ($t | has("completed_via"))
+                              else (($t.metadata // {}) | has($k)) end) ] };
+    . as $st
+    | ($se | split(",")) as $codes
+    # blocked_by has no acyclicity enforcement anywhere, so the visited set alone is not
+    # allowed to be the only termination proof; the task count bounds the frontier walk.
+    | (($st.tasks // {}) | length) as $bound
+    | ( if $cascade
+        then ( { frontier: [$id], visited: [$id], order: [], n: 0 }
+               | until((.frontier | length) == 0 or .n >= $bound;
+                   . as $s
+                   | ( [ $s.frontier[] | deps_of($st; .) ] | add // [] | unique ) as $next
+                   | ( [ $next[] | . as $d | select(($s.visited | index($d)) == null) ]
+                       | sort ) as $new
+                   | { frontier: $new,
+                       visited: ($s.visited + $new),
+                       order: ($s.order + $new),
+                       n: ($s.n + 1) })
+               | .order )
+        else [] end ) as $downstream
+    | ([$id] + [ $downstream[] | select(is_side_effect(.; $codes) | not) ]) as $reset
+    | { root: $id,
+        cascade: $cascade,
+        plan_status: ($st.tasks.PL0.status // null),
+        run_index: ($st.run_index // 0),
+        worktask_id: ($st.worktask_id // "unknown"),
+        target_side_effect: is_side_effect($id; $codes),
+        skipped: [ $downstream[] | select(is_side_effect(.; $codes)) ],
+        # Only dependents this write is NOT resetting can be stale.  Naming a member would
+        # assert the opposite of what the same atomic apply is about to do to it, and that
+        # false claim would land in the durable audit row a later diagnosis reads.
+        stale_dependents: ( [ deps_of($st; $id)[] | . as $d
+                              | select((($st.tasks[$d].status) // "") == "completed")
+                              | select(($reset | index($d)) == null) ] | sort ),
+        members: [ $reset[] | member_row($st; .) ] }' \
+    "$STATE_PATH"
+}
+
+# Liveness comes from stale-check.sh's per-task FINDING, never from its exit code: rc 1
+# ("attention") can be about an unrelated task, so mapping rc→verdict would both refuse
+# legitimate replays and allow rc-0 shapes it never examined.  Prints the payload, or the
+# empty string when the payload cannot be trusted at all.
+replay_liveness_payload() {
+  local sc out="" rc=0
+  sc="$(dirname "$0")/stale-check.sh"
+  [[ -f "$sc" ]] || return 1
+  if [[ -n "${AGENTS_JSON_ARG:-}" ]]; then
+    out=$(bash "$sc" --state "$STATE_PATH" --context "${CONTEXT_DIR:-.context}" --json \
+      --agents-json "$AGENTS_JSON_ARG" 2> /dev/null) || rc=$?
+  else
+    out=$(bash "$sc" --state "$STATE_PATH" --context "${CONTEXT_DIR:-.context}" --json \
+      2> /dev/null) || rc=$?
+  fi
+  # rc 2 is stale-check's usage/unreadable-input error (and the shape a missing python3
+  # produces); only 0/1/3 mean it actually classified the ledger.
+  case "$rc" in
+    0 | 1 | 3) ;;
+    *) return 1 ;;
+  esac
+  jq -e '(.findings | type) == "array" and .liveness == "ok"' <<< "$out" > /dev/null 2>&1 \
+    || return 1
+  printf '%s' "$out"
+}
+
+# One row per reset member, root first then BFS order — and none at all on a refusal.
+# That asymmetry is load-bearing: stale-check.sh's budget-halt classifier reads ANY
+# result:"error" row as evidence of a real stage failure, so a refusal row would
+# mis-diagnose every later look at this worktask.  Best-effort, mirroring --via hook.
+replay_audit() {
+  local dir="${CONTEXT_DIR:-.context}/logs" ts
+  ts=$(date -u +%FT%TZ)
+  mkdir -p "$dir" 2> /dev/null || return 0
+  jq -c --arg ts "$ts" --arg root "$TASK_OP_ID" --argjson cascade "$REPLAY_CASCADE" '
+    (.worktask_id + ":" + (.run_index | tostring)) as $pfx
+    | (if $cascade then $pfx + ":" + $root + ":cascade:" + $ts else null end) as $cid
+    | .stale_dependents as $stale
+    | .skipped as $skipped
+    | [ .members[].id ] as $ids
+    | .members[]
+    | (.id == $root) as $isroot
+    | {ts: $ts, actor: "orchestrator", action: "stage_replay", subject: .id,
+       result: "ok", task_id: .id,
+       metadata: {
+         via: "state-patch --task-replay",
+         prior_status: .prior_status,
+         cleared: .cleared,
+         escalation_cap_override: ((.prior_retry // 0) >= 3 or (.prior_escalated != null)),
+         prior_retry_count: .prior_retry,
+         prior_escalated_to: .prior_escalated,
+         liveness: .liveness,
+         stale_dependents: (if $isroot then $stale else [] end),
+         cascade: $cascade,
+         cascade_root: (if $cascade then $root else null end),
+         cascade_id: $cid,
+         cascade_members: (if ($isroot and $cascade) then $ids else [] end),
+         cascade_skipped: (if ($isroot and $cascade) then $skipped else [] end),
+         # A replay is intentionally repeatable, so the key carries $ts: unlike the
+         # completion row, two legitimate replays must not collapse into one.
+         dedupe_key: ($pfx + ":" + .id + ":replay:" + $ts)}}' \
+    <<< "$REPLAY_PLAN" >> "$dir/audit.jsonl" 2> /dev/null \
+    || log_msg WARN "audit append failed for replay of tasks.${TASK_OP_ID} (reset already applied)"
 }
 
 # ENOSPC guard.  Returns 0 (ok/warn), exits 2 (halt).
@@ -1103,6 +1265,62 @@ EOSTATE
     exit 1
   fi
 
+  # ---- T18: --task-replay resets one task, and refuses while its agent is alive ----
+  # Liveness is fixture-injected so the self-test needs no live agent and no claude CLI.
+  make_state
+  rm -f .context/logs/audit.jsonl
+  printf '[]\n' > agents-gone.json
+  printf '%s\n' '[{"id":"sess-dv0","sessionId":"sess-dv0deadbeef","name":"dv","state":"active"}]' \
+    > agents-busy.json
+  bash "$SELF" --task-create DV0 \
+    --metadata '{"stage":"DV","agent":"corpflow:developer","retry_count":3,"error_escalated_to":"AR"}' \
+    > /dev/null
+  bash "$SELF" --task-status DV0 in_progress > /dev/null
+  # An in_progress task with no dispatch row classifies no-dispatch-record, which the guard
+  # (correctly) refuses — absence of a record proves nothing about liveness. Seed one.
+  jq '.facts.dispatched_agents = [{stage:"DV", task_id:"DV0",
+        subagent_type:"corpflow:developer", agent_id:"sess-dv0", status:"launched"}]' \
+    .context/state.json > .context/state.next && mv .context/state.next .context/state.json
+  bash "$SELF" --task-replay DV0 --agents-json agents-gone.json 2> /dev/null \
+    || {
+      printf 'T18: --task-replay returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '.tasks.DV0.status == "pending"
+            and (.tasks.DV0.metadata | has("retry_count") | not)
+            and (.tasks.DV0.metadata | has("error_escalated_to") | not)
+            and .tasks.PL0.status == "completed"' .context/state.json > /dev/null; then
+    printf 'T18: replay resets the target and leaves PL0 alone: ok\n'
+  else
+    printf 'T18: replay blast radius: FAIL\n' >&2
+    jq '.tasks' .context/state.json >&2
+    exit 1
+  fi
+  if jq -e 'select(.action == "stage_replay")
+            | .task_id == "DV0" and .metadata.escalation_cap_override == true' \
+    .context/logs/audit.jsonl > /dev/null; then
+    printf 'T18: replay audits the cap override on success: ok\n'
+  else
+    printf 'T18: stage_replay audit row missing: FAIL\n' >&2
+    cat .context/logs/audit.jsonl >&2 2> /dev/null || true
+    exit 1
+  fi
+
+  jq '.tasks.DV0.status = "in_progress"
+      | .facts.dispatched_agents = [{stage:"DV", task_id:"DV0",
+          subagent_type:"corpflow:developer", agent_id:"sess-dv0", status:"launched"}]' \
+    .context/state.json > .context/state.next && mv .context/state.next .context/state.json
+  cp .context/state.json .context/state.json.snap18
+  st18_rc=0
+  bash "$SELF" --task-replay DV0 --agents-json agents-busy.json > /dev/null 2>&1 || st18_rc=$?
+  if [[ "$st18_rc" -eq 4 ]] \
+    && diff -q .context/state.json .context/state.json.snap18 > /dev/null; then
+    printf 'T18: live target refuses with exit 4, state byte-unchanged: ok\n'
+  else
+    printf 'T18: live-target guard (rc=%s): FAIL\n' "$st18_rc" >&2
+    exit 1
+  fi
+
   printf 'self-test: ALL PASS\n'
   exit 0
 }
@@ -1122,6 +1340,8 @@ TASK_OP_ID=""
 TASK_OP_VALUE=""
 RESOLVE_CODE_ARG=""
 FACTS_ARG=""
+REPLAY_CASCADE="false"
+AGENTS_JSON_ARG=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -1211,6 +1431,21 @@ while [[ $# -gt 0 ]]; do
       TASK_OP_ID="${1:-}"
       shift
       ;;
+    --task-replay)
+      shift
+      TASK_OP="replay"
+      TASK_OP_ID="${1:-}"
+      shift
+      ;;
+    --cascade)
+      REPLAY_CASCADE="true"
+      shift
+      ;;
+    --agents-json)
+      shift
+      AGENTS_JSON_ARG="${1:-}"
+      shift
+      ;;
     --on | --off | --metadata | --set)
       shift
       TASK_OP_VALUE="${1:-}"
@@ -1293,6 +1528,13 @@ if [[ -n "$TASK_OP" ]]; then
     log_msg ERROR "ledger op needs jq; state.json unchanged"
     exit 1
   }
+  # Both modifiers are parsed globally, so silently accepting them on the other five ops
+  # would let `--task-status DV0 pending --cascade` read as a cascade that never happened.
+  if [[ "$TASK_OP" != "replay" ]] \
+    && { [[ "$REPLAY_CASCADE" == "true" ]] || [[ -n "$AGENTS_JSON_ARG" ]]; }; then
+    printf >&2 -- '--cascade / --agents-json apply to --task-replay only (got --task-%s)\n' "$TASK_OP"
+    usage
+  fi
 
   TASK_FILTER=""
   TASK_JQ_ARGS=()
@@ -1350,10 +1592,101 @@ if [[ -n "$TASK_OP" ]]; then
       TASK_FILTER='.tasks[$id].metadata = ((.tasks[$id].metadata // {}) * ($meta // {}))'
       TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
       ;;
+    replay)
+      require_task_exists "$TASK_OP_ID" replay
+      REPLAY_SURVEY=$(replay_survey "$TASK_OP_ID") || {
+        printf >&2 'replay survey failed on tasks.%s; state.json unchanged\n' "$TASK_OP_ID"
+        log_msg ERROR "replay survey failed on tasks.${TASK_OP_ID}; state.json unchanged"
+        exit 1
+      }
+
+      REPLAY_PLAN_STATUS=$(jq -r '.plan_status // ""' <<< "$REPLAY_SURVEY")
+      [[ "$REPLAY_PLAN_STATUS" == "completed" ]] || replay_refuse plan-incomplete \
+        "PL0 is ${REPLAY_PLAN_STATUS:-absent}; this is the fresh-run path, use /worktask"
+
+      # One subprocess for the whole cascade: N findings are read from the single payload.
+      REPLAY_LIVENESS=$(replay_liveness_payload) || replay_refuse liveness-indeterminate \
+        "stale-check.sh returned no usable verdict (absent, failed, or unparseable) — the guard cannot prove the target is not still writing"
+
+      REPLAY_CLASS_MAP=""
+      while IFS= read -r _member; do
+        [[ -n "$_member" ]] || continue
+        _class=$(jq -r --arg id "$_member" \
+          '[.findings[]? | select(.task_id == $id)]
+           | if length == 0 then "none" else .[0].classification end' <<< "$REPLAY_LIVENESS")
+        # Allow-list, not deny-list: a class this script has never heard of — including one
+        # resume.md adds later — must refuse rather than fall through as permitted.
+        case "$_class" in
+          none | gone | budget-halt | dispatch-settled) ;;
+          *)
+            case "$_class" in
+              alive-busy) _token="target-live" _why="${_member} agent is busy" ;;
+              alive-parked) _token="target-parked" _why="reattach via SendMessage, see resume.md" ;;
+              *) _token="liveness-indeterminate" _why="${_member} classified ${_class}" ;;
+            esac
+            if [[ "$_member" == "$TASK_OP_ID" ]]; then
+              replay_refuse "$_token" "$_why"
+            fi
+            replay_refuse cascade-member-blocked "${_member}: ${_token}"
+            ;;
+        esac
+        REPLAY_CLASS_MAP="${REPLAY_CLASS_MAP}${_member}=${_class}"$'\n'
+      done <<< "$(jq -r '.members[].id' <<< "$REPLAY_SURVEY")"
+      # A survey that yielded no ids would run the loop zero times and reach the mutation
+      # having checked nothing.  Unreachable while the filter always builds members, which
+      # is exactly why it must be asserted rather than assumed.
+      [[ -n "$REPLAY_CLASS_MAP" ]] || replay_refuse liveness-indeterminate \
+        "the survey produced no member to check"
+
+      REPLAY_PLAN=$(jq -c --arg map "$REPLAY_CLASS_MAP" '
+        ($map | split("\n") | map(select(length > 0) | split("=") | {key: .[0], value: .[1]})
+         | from_entries) as $cls
+        | .members |= map(. + {liveness: ($cls[.id] // "none")})' <<< "$REPLAY_SURVEY")
+
+      if jq -e '(.stale_dependents | length) > 0' <<< "$REPLAY_SURVEY" > /dev/null; then
+        replay_warn stale-dependents \
+          "already-completed dependents may now be stale (never auto-reset): $(jq -r '.stale_dependents | join(", ")' <<< "$REPLAY_SURVEY")"
+      fi
+      if jq -e '(.skipped | length) > 0' <<< "$REPLAY_SURVEY" > /dev/null; then
+        replay_warn side-effect-skipped \
+          "traversed but NOT reset (their completion acted outside the ledger): $(jq -r '.skipped | join(", ")' <<< "$REPLAY_SURVEY")"
+      fi
+      if jq -e '.target_side_effect' <<< "$REPLAY_SURVEY" > /dev/null; then
+        replay_warn side-effect-target \
+          "${TASK_OP_ID} commits/tags outside the ledger; re-running it may produce a second commit, PR or tag"
+      fi
+      REPLAY_RUN_IDX=$(jq -r '.run_index' <<< "$REPLAY_SURVEY")
+      if ! jq -e --arg s "PL${REPLAY_RUN_IDX}" \
+        'select(.action == "approval_received" and .subject == $s)' \
+        "${CONTEXT_DIR:-.context}/logs/audit.jsonl" > /dev/null 2>&1; then
+        replay_warn plan-unapproved \
+          "no approval_received row for PL${REPLAY_RUN_IDX} — the plan behind this stage was never approved at the gate"
+      fi
+
+      # The existence re-assertion lives INSIDE the filter, so a key that vanished
+      # between the survey and the lock makes jq error, atomic_apply drop the tmp, and the
+      # rename never happen — the multi-member write stays genuinely all-or-nothing.
+      TASK_FILTER='
+        def blast:
+            .status = "pending"
+          | del(.completed_via)
+          | (if (.metadata | type) == "object"
+             then .metadata |= (del(.retry_count) | del(.error_escalated_to))
+             else . end);
+        . as $st
+        | [ $members[] | . as $m | select((($st.tasks // {}) | has($m)) | not) ] as $missing
+        | if ($missing | length) > 0
+          then error("replay member(s) absent under the lock: " + ($missing | join(",")))
+          else reduce ($members[]) as $m (.; .tasks[$m] |= blast) end'
+      TASK_JQ_ARGS=(--argjson members "$(jq -c '[.members[].id]' <<< "$REPLAY_PLAN")")
+      ;;
   esac
 
   if atomic_apply "$STATE_PATH" "$TASK_FILTER" "${TASK_JQ_ARGS[@]}"; then
     log_msg INFO "ledger ${TASK_OP}: tasks.${TASK_OP_ID} ${TASK_OP_VALUE}"
+    if [[ "$TASK_OP" == "replay" ]]; then
+      replay_audit
+    fi
     exit 0
   fi
   printf >&2 'ledger %s failed on tasks.%s; state.json unchanged (see %s)\n' \
