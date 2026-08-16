@@ -81,6 +81,7 @@
         "./commands/test-coverage.md",
         "./commands/test-plan.md",
         "./commands/test-report.md",
+        "./commands/worktask-status.md",
         "./commands/worktask.md"
       ],
       "agents": [
@@ -126,6 +127,7 @@
         "./skills/shared/milestone-helpers",
         "./skills/task-folder-organization",
         "./skills/worktask",
+        "./skills/worktask-status",
         "./skills/worktask-testing-strategy"
       ]
     }
