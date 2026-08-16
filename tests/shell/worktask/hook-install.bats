@@ -52,6 +52,25 @@ setup() {
   assert_failure 1
 }
 
+@test "edge: an existing non-executable hook is backed up to .bak before being overwritten" {
+  cd "$PROJ"
+  mkdir -p .claude/hooks
+  printf 'CUSTOMIZED\n' > .claude/hooks/state-merge.sh
+  chmod -x .claude/hooks/state-merge.sh
+  run env CLAUDE_PLUGIN_ROOT="$PLUG" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output --partial "backed up"
+  [ "$(cat .claude/hooks/state-merge.sh.bak)" = "CUSTOMIZED" ]
+  [ -x .claude/hooks/state-merge.sh ]
+}
+
+@test "edge: a fresh install leaves no stray .bak behind" {
+  cd "$PROJ"
+  run env CLAUDE_PLUGIN_ROOT="$PLUG" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ ! -e .claude/hooks/state-merge.sh.bak ]
+}
+
 @test "contract: --self-test passes (smoke, NON-counting)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
