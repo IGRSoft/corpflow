@@ -1,0 +1,5 @@
+stage;tokens;model;cost;% of total
+PL;7500;opus;0.113;17
+AR;15000;opus;0.225;33
+TL;4000;sonnet;0.012;9
+DV;18500;sonnet;0.056;41
