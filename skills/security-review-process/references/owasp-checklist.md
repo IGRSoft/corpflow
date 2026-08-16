@@ -41,8 +41,17 @@
 
 ## A04: Insecure Design
 
+Threat modeling is the SR0 procedure in `threat-model.md` — one methodology, not a second
+one. The sub-items below are its completion criteria; the procedure is what produces them.
+
 ```markdown
-- [ ] Threat modeling completed
+- [ ] Trust boundaries the diff crosses enumerated (both sides + asset named)
+- [ ] Attack surface enumerated per boundary — entry points the diff adds or widens, with the
+      origin of each attacker-controlled input
+- [ ] Each entry point categorized with STRIDE (severity stays the SR severity table)
+- [ ] Every threat carries a `T<n>` ID and every finding cites the threat it realizes
+- [ ] Every Critical/High threat answered by a finding or a recorded mitigation + control
+- [ ] "No material threat surface" recorded with a reason when the diff crosses nothing
 - [ ] Security requirements defined
 - [ ] Secure design patterns used
 - [ ] Defense in depth implemented
