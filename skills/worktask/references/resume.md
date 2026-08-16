@@ -103,6 +103,22 @@ redoes work against a tree the yielded agent already edited — and do **not** i
    - `state` = `blocked` → alive but parked; **reattach** via `SendMessage`, do not re-delegate.
    - `state` = `done`, or the `agent_id` is genuinely absent even with `--all` → re-delegate from the first incomplete stage.
 
+### Step 0 notes — observed CLI field set
+
+   The field names above are the contract; the shipping CLI does not yet expose all of them. An
+   observed `--json --all` row carries `id`, `sessionId`, `name`, `kind`, `cwd`, `pid`,
+   `startedAt`, and **either** `state` (background) **or** `status` (interactive) — no `agent_id`,
+   no `waitingFor`, no `parent_agent_id`. Read identity from `agent_id // id // sessionId` (`id` is
+   a prefix of `sessionId`, so match on prefix too) and liveness from `waitingFor` when present,
+   else `state`/`status`. An unrecognised token is **unknown, not absent** — never re-delegate off
+   one. `skills/worktask/scripts/stale-check.sh` implements exactly this tolerance.
+
+### Step 0 notes — proactive detection
+
+   The rows above fire only once someone resumes the session. To ask "is anything wedged?" without
+   resuming, run `skills/worktask/scripts/stale-check.sh` — it reconciles the same inputs and
+   prints the verdict from these tables. Read-only; it recovers nothing.
+
 ### Step 0 notes — why the pre-check
 
    This single pre-check eliminates three waste classes: blind respawn of an already-working subagent, redundant nudging of a busy one, and blind re-dispatch of an invisible blocked one. If the `claude agents` command is unavailable in the environment (runtime/tool fallback), skip the pre-check and re-delegate from the first incomplete stage. See `skills/agent-coordination/references/headless-dispatch.md § Live Session Discovery`.

@@ -4,7 +4,7 @@ description: Worktask system expert for task management, stage transitions, stat
 model: sonnet
 color: green
 effort: medium
-version: 0.2.1
+version: 0.3.0
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree
 ---
@@ -116,11 +116,34 @@ All changes committed to the issue branch, branch pushed to origin, PR created w
 
 **Trust but verify "done" claims.** A `completed` task or a `status: "completed"` in state.json is a claim, not proof — reconcile it against the on-disk artifact (`.context/<stage>-N.md` + handoff frontmatter) first: a stage can report done while its artifact write silently failed, drifting the ledger out of sync.
 
-### state.json Stuck at PL.in_progress
+### Stage Stuck at in_progress
 
-**Symptoms**: Worktask ran through multiple stages, but `.context/state.json` still shows `tasks.PL0.status: "in_progress"` and empty `handoffs`.
+**Symptoms**: a `tasks.<ID>.status` still reads `in_progress` long after that stage should have settled — artifact missing or partial, `handoffs` empty, no new audit rows. Any stage code reaches this shape; PL0 is only the most-reported instance (worktask ran through several stages, `tasks.PL0.status: "in_progress"`, empty `handoffs`).
 
-**Root cause**: All three state.json enforcement layers failed — agents skipped self-patching (L1), SubagentStop hook not installed (L2), orchestrator Step 6.5 not run (L3).
+**Two causes with opposite fixes.** Diagnose which one before touching anything:
+
+1. **The agent is gone or parked** — the ledger is honest, the work stopped. Classify it (next section), then apply the verdict `references/resume.md § Live-agent rows` assigns to that shape. Never auto-recover.
+2. **The agent finished but the ledger never caught up** — all three state.json enforcement layers failed: agents skipped self-patching (L1), SubagentStop hook not installed (L2), orchestrator Step 6.5 not run (L3). Repair with the runbook below.
+
+#### Detect — stale-check.sh
+
+`bash "<plugin-root>/skills/worktask/scripts/stale-check.sh"` scans every `in_progress` task, reconciles `facts.dispatched_agents[]` against `claude agents --json --all`, and prints the `resume.md` verdict for each — the same classification the resume loop applies, cited per finding rather than restated, so the two cannot drift apart.
+
+Strictly read-only: it writes nothing and recovers nothing. It answers only *is anything wedged right now*, without first resuming the orchestrator session; the fix stays a human decision.
+
+`--state <path>` targets another ledger, `--json` emits machine-readable findings, `--agents-json <path>` substitutes a captured session list for the live CLI.
+
+##### stale-check.sh exit codes
+
+`0` nothing needs attention · `1` a stage needs a decision · `2` bad input · `3` liveness undeterminable.
+
+**`3` is not a staleness verdict.** When the CLI is missing, errors, or returns a shape the script does not recognise, every stage reads `liveness-unknown` and nothing is called stale — a false stale on a healthy long-running stage invites someone to kill live work. Detection keys on agent liveness, never on elapsed time, so a slow stage is safe.
+
+Exit `1` covers `gone`, `budget-halt`, `alive-parked`, plus two ledger-drift shapes — `no-dispatch-record` (in_progress with no dispatch row) and `dispatch-settled` (terminal dispatch row under an `in_progress` task, i.e. cause 2 above).
+
+##### Running stale-check.sh periodically
+
+The plugin ships no daemon and starts no process — staleness surfacing is something an operator opts into per session. Any of these work: a `/loop` iteration that runs the script and reports only when it exits non-zero; a scheduled agent (`/schedule`) invoking it against a known `--state` path; or a shell `while` loop in a spare terminal. Keep the interval coarse (minutes, not seconds) — the check is cheap but the CLI call is not free, and nothing it detects resolves faster than a human can act on it.
 
 #### Plugin-Root Resolution
 
@@ -128,7 +151,8 @@ All changes committed to the issue branch, branch pushed to origin, PR created w
 
 #### Runbook — Steps 1-2
 
-**Runbook**:
+**Runbook — cause 2 only** (the agent finished; the ledger never caught up). If `stale-check.sh` reported `gone`, `budget-halt`, or `alive-parked`, stop here and take the `resume.md` verdict instead — replaying the hook over a stage whose agent is still alive fabricates a settled ledger under running work.
+
 1. **Check hook installation**: `bash "<plugin-root>/skills/worktask/scripts/hook-install.sh" --check`. If missing, install: `bash "<plugin-root>/skills/worktask/scripts/hook-install.sh"`
 2. **Verify settings registration**: Check `.claude-plugin/plugin.json` contains a `SubagentStop` hook entry pointing to `state-merge.sh`
 
