@@ -119,7 +119,9 @@ class CaptureNeverFabricates(_Fixture):
 
 class Provenance(unittest.TestCase):
     def test_reads_the_skill_version_from_frontmatter(self):
-        self.assertEqual(capture.skill_version(_REPO, "request-plan"), "0.1.0")
+        """Shape, not value: pinning the literal breaks on every legitimate bump."""
+        import re
+        self.assertRegex(capture.skill_version(_REPO, "request-plan") or "", r"^\d+\.\d+\.\d+$")
 
     def test_absent_skill_is_unknown_not_an_exception(self):
         self.assertIsNone(capture.skill_version(_REPO, "no-such-skill"))

@@ -56,6 +56,11 @@ stage-ownership plan that never opened the stage-ownership doc, a cost-compariso
 reached the module producing the costs. If you cannot confirm ownership, say which file you believe
 owns it and that you did not verify.
 
+**Do not assert absence or completeness you did not check.** "No other path exists", "that mapping
+is already complete", or a specific count of things you did not enumerate are the claims most likely
+to be wrong and least likely to be questioned, because they sound like the product of a search. If
+you did not run the search, write what you did look at and mark the rest unverified.
+
 ### 3. Synthesize the plan
 
 Fill the template in `references/plan-template.md` exactly (fixed section order). Key reuse — do not
@@ -65,9 +70,13 @@ reinvent these:
   `skills/shared/three-stage-planning.md`. Keep each phase independently deliverable. **All three
   rows always appear.** If the work genuinely has nothing deferrable, write `P2 — v1.1: none` —
   dropping the row reads as an oversight, and folding follow-ups you have already named into P0
-  hides the fact that they are deferrable.
+  hides the fact that they are deferrable. If you name a follow-up anywhere in the plan, it belongs
+  in P1 or P2 — naming it and then folding it into P0 is how a three-phase plan collapses to one.
 - **Effort** is a T-shirt size plus the 5-factor complexity score (0–25) from
   `skills/estimation-methodology/SKILL.md`. Give a range, not false precision — this is a rough cut, not a budget.
+  **Both parts are required for every request type**, incidents included: a severity or priority
+  table is not an effort estimate and does not replace one. Show the five factors behind the score
+  rather than a bare number — an unexplained `2` cannot be checked or argued with.
 - **Tests live inside each phase's scope**, never as a separate phase (per the estimation skill).
 
 ### 4. Recommend the handoff
