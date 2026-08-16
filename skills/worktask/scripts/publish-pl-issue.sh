@@ -331,7 +331,13 @@ sanitise_body() {
       probe = line; gsub(/`/, " ", probe)
       # ---- Pass 1 line-strip --------------------------------------------
       if (probe ~ /(^|[[:space:]])\.context\//) next                 # L1
-      if (probe ~ /(^|[[:space:]])\/(Users|home|tmp|var|opt|etc|root)\//) next  # L2,L3
+      # Covers every mount convention a checkout can sit under, not just the
+      # home-directory ones; WSL needs no arm (/mnt/c/... is already /mnt/).
+      # MUST stay byte-identical to the copy in pr-body-lint.sh — pinned by
+      # tests/shell/worktask/local-path-regex-parity.bats.
+      if (probe ~ /(^|[[:space:]])\/(Users|home|tmp|var|opt|etc|root|Volumes|mnt|media|private|srv)\//) next  # L2,L3
+      # Windows drive-letter paths carry no leading slash, so L2/L3 cannot see them.
+      if (probe ~ /(^|[[:space:]])[A-Za-z]:\\/) next                 # L3b
       if (probe ~ /(^|[[:space:]])~\//) next                         # L4
       if (line ~ /conductor\/workspaces\/[A-Za-z0-9_-]+/) next      # L5
       if (line ~ /(^|[[:space:]])(workspace_path|plan_file|run_index|artifact_path)[[:space:]]*[:=]/) next  # L6
@@ -1666,6 +1672,44 @@ MOCK
     else
       echo "publish-pl-issue: self-test 09c-figma-urls-survive FAIL"
       printf '%s\n' "$urls_out" >&2
+      fail=$((fail + 1))
+    fi
+
+    # Fixture 09d: every absolute-host-path prefix L2,L3/L3b claims, one case each,
+    # plus the relative paths and prose that must survive them.
+    local p pfx_ok=1 pfx_out
+    for p in /Users/me/x.md /home/me/x.md /tmp/x.md /var/f/x.md /opt/f/x.md \
+      /etc/f/x.md /root/x.md /Volumes/internal/Projects/x.md /mnt/data/x.md \
+      /mnt/c/Users/me/x.md /media/usb/x.md /private/tmp/x.md /srv/www/x.md \
+      'C:\Users\me\x.md'; do
+      pfx_out=$(printf 'See %s here\n' "$p" | sanitise_body)
+      if [ -n "$(printf '%s' "$pfx_out" | tr -d '[:space:]')" ]; then
+        echo "publish-pl-issue: self-test 09d prefix NOT stripped: $p" >&2
+        pfx_ok=0
+      fi
+      # Backtick-wrapped is the shape that defeated the anchors before.
+      pfx_out=$(printf 'See `%s` here\n' "$p" | sanitise_body)
+      if [ -n "$(printf '%s' "$pfx_out" | tr -d '[:space:]')" ]; then
+        echo "publish-pl-issue: self-test 09d code-spanned prefix NOT stripped: $p" >&2
+        pfx_ok=0
+      fi
+    done
+    # Over-match guard: repo-relative paths and bare prose keep their lines.
+    local keep
+    for keep in 'Edit skills/worktask/scripts/pr-body-lint.sh now' \
+      'Deployed under srv and media naming' \
+      'The var name is opt_in'; do
+      pfx_out=$(printf '%s\n' "$keep" | sanitise_body)
+      if ! printf '%s' "$pfx_out" | grep -qF "$keep"; then
+        echo "publish-pl-issue: self-test 09d over-match on: $keep" >&2
+        pfx_ok=0
+      fi
+    done
+    if [ "$pfx_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 09d-abs-path-prefixes PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 09d-abs-path-prefixes FAIL"
       fail=$((fail + 1))
     fi
 

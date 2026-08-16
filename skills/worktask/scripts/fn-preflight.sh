@@ -38,8 +38,10 @@
 #   body whose `Closes #<n>` line is validated must be the byte-identical body that
 #   reaches `gh pr create`.
 #
-#   `pr-body` self-disables under batch (`/megatask`) and incident (`--emergency`)
-#   routing, so those pipelines keep their current behaviour byte-for-byte. See
+#   Under batch (`/megatask`) and incident (`--emergency`) routing, `pr-body` still
+#   sanitises — a working-folder path must not reach a published body on any route —
+#   but drops its blocking checks: the composition requirements are skipped and an
+#   unreachable sanitiser library degrades to a warning instead of exit 1. See
 #   `fn_batch_scope` (branch-lib.sh) for the five signals.
 #
 #   Branch naming moved to the start of the planning stage (see
@@ -56,8 +58,8 @@
 # @arg -h | --help        Show this header.
 #
 # @env FN_BASE_REF        Highest-priority integration-branch override (see resolve_base_ref).
-# @env MILESTONE_MODE     1 => batch routing; `pr-body` self-disables.
-# @env INCIDENT_MODE      1 => incident routing; same self-disable.
+# @env MILESTONE_MODE     1 => batch routing; `pr-body` sanitises but stops blocking.
+# @env INCIDENT_MODE      1 => incident routing; same non-blocking mode.
 #
 # @exitcode 0   Check passed (or a non-blocking degrade: no issue resolvable / diverged /
 #               scope-disabled).

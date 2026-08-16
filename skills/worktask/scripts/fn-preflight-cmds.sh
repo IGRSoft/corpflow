@@ -68,8 +68,8 @@ resolve_issue() {
 # Exit 97 = library unreachable or refused to source; 98 = symbol missing. Both are
 # blocking: a working-folder path in a published body must be structurally
 # impossible, and a fail-open degrade would turn that into "usually".
-# The blast radius is bounded by fn_batch_scope — batch and incident runs never
-# reach here, so a broken plugin cache cannot wedge /megatask.
+# Batch and incident runs do reach here, but treat both statuses as non-blocking,
+# so a broken plugin cache still cannot wedge /megatask.
 sanitise_stream() {
   (
     set +e +o pipefail
@@ -139,14 +139,13 @@ cmd_pr_body() {
     printf >&2 'pr-body requires --body <path> to an existing file\n'
     exit 2
   }
-  # The scope guard MUST stay the first executed check. Moving anything that can
-  # touch the sanitiser library above it turns a broken library into a block on
-  # every /megatask and --emergency finalization.
-  if fn_batch_scope; then
-    printf 'pr-body: skipped (%s)\n' "$SCOPE_REASON"
-    audit_fn pr_body_gate skipped "$(meta_json reason "$SCOPE_REASON")"
-    return 0
-  fi
+  # Batch (/megatask) and incident (--emergency) routing is exempt from this
+  # command's BLOCKING checks, never from sanitisation — a working-folder path
+  # must not reach a published body on any route. The exemption exists so an
+  # unreachable sanitiser library cannot wedge those pipelines, so for them the
+  # strip below degrades to a warning rather than returning 1.
+  local batch=0
+  if fn_batch_scope; then batch=1; fi
 
   local ri before after tmp rc=0
   ri=$(jq -r '.run_index // 0' "$STATE_PATH" 2> /dev/null || printf '0')
@@ -155,6 +154,13 @@ cmd_pr_body() {
   sanitise_stream < "$BODY_FILE" > "$tmp" || rc=$?
   if [[ "$rc" -ne 0 ]]; then
     rm -f "$tmp"
+    if [[ "$batch" == 1 ]]; then
+      printf >&2 'warn: PR-body sanitiser unavailable (rc=%s), not blocking under %s: %s\n' \
+        "$rc" "$SCOPE_REASON" "$LIB_PATH"
+      audit_fn pr_body_gate skipped \
+        "$(meta_json reason sanitiser_unavailable scope "$SCOPE_REASON" lib "$LIB_PATH")"
+      return 0
+    fi
     printf >&2 'BLOCKED: PR-body sanitiser unavailable (rc=%s): %s\n' "$rc" "$LIB_PATH"
     audit_fn pr_body_gate blocked "$(meta_json reason sanitiser_unavailable lib "$LIB_PATH")"
     return 1
@@ -183,6 +189,14 @@ cmd_pr_body() {
   if [ -x "${SCRIPT_DIR}/pr-body-lint.sh" ]; then
     bash "${SCRIPT_DIR}/pr-body-lint.sh" --body "$BODY_FILE" --state "$STATE_PATH" \
       --context "$CONTEXT_DIR" || true
+  fi
+
+  # Composition requirements below are worktask-FN contracts; batch and incident
+  # runs compose their bodies elsewhere and only needed the strip above.
+  if [[ "$batch" == 1 ]]; then
+    printf 'pr-body: sanitised; composition gate skipped (%s)\n' "$SCOPE_REASON"
+    audit_fn pr_body_gate skipped "$(meta_json reason "$SCOPE_REASON")"
+    return 0
   fi
 
   # Checked AFTER sanitising, so a heading the sanitiser removed reports as missing

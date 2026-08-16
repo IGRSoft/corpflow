@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Fixed
 
+- **Absolute local paths leaked into published PR and issue bodies from two directions.**
+  The Pass-1 strip rule in `publish-pl-issue.sh` `sanitise_body` — and its byte-identical
+  read-back copy in `pr-body-lint.sh` — only knew the home-directory mount conventions
+  (`/Users`, `/home`, `/tmp`, `/var`, `/opt`, `/etc`, `/root`). A checkout under `/Volumes`,
+  `/mnt`, `/media`, `/private`, or `/srv`, or a Windows drive-letter path, walked straight
+  through both guards. The alternation now covers all of them plus a separate drive-letter
+  rule (WSL needs no arm — `/mnt/c/...` is already `/mnt/`), and
+  `tests/shell/worktask/local-path-regex-parity.bats` pins the two copies byte-identical so
+  a prefix can no longer be added to one guard alone.
+
+  Separately, `fn-preflight.sh pr-body` skipped **all** of its work under batch (`/megatask`)
+  and incident (`--emergency`) routing, so those runs published unsanitised bodies. The
+  documented purpose of that exemption was narrower — an unreachable sanitiser library must
+  not wedge those pipelines — so the strip now always runs and only the *blocking* behaviour
+  is dropped for them: the composition requirements (`Test plan` heading, visual-evidence
+  row) are skipped and a missing sanitiser library degrades to a warning instead of exit 1.
+  Non-batch runs still fail closed, byte-for-byte as before.
+
+  `pr-body-lint.sh` stays warn-only by default; promoting `--strict` remains a separate call.
+
 - **The comment-density gate blocked legitimate per-declaration DocC.** A 20-case enum
   carrying exactly one on-budget `///` per one-line case measured 48% of added lines and
   was blocked, because the aggregate ratio cannot tell an essay from a long list of
