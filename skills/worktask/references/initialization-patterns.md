@@ -2,7 +2,7 @@
 
 ## Conventions used in this document
 
-- **`planFile`** — the plan filename PL produced for the current worktask run (`planning-N.md`, e.g. `planning-0.md`, `planning-3.md`). Computed by PL0 per `agents/product-manager.md § Plan File Naming`. Every downstream task carries it as `metadata.plan_file`; the same value is interpolated into `context_refs`. Stage agents resolve the plan file from `task.metadata.plan_file` first, then newest `.context/planning-*.md`.
+- **`planFile`** — the plan filename PL produced for the current worktask run (`planning-N.md`, e.g. `planning-0.md`, `planning-3.md`). Computed by PL0 per `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`. Every downstream task carries it as `metadata.plan_file`; the same value is interpolated into `context_refs`. Stage agents resolve the plan file from `task.metadata.plan_file` first, then newest `.context/planning-*.md`.
 - **handoff-protocol mode** — the metadata contract (per `skills/worktask/references/handoff-protocol.md`): tasks carry `state_file` + `context_refs` (anchor list). The ledger is mandatory, so there is no whole-file fallback list.
 
 ## PL0 state.json Initialization (Phase 1)

@@ -25,7 +25,7 @@ Patterns for coordinating agents across worktask stages, managing handoffs, and 
 ```
 1. Current agent completes work (output matches stage-contracts Required Outputs)
 2. Updates ledger: state-patch.sh --task-status <ID> completed
-3. Creates stage artifact (e.g., `planning-0.md` for the first PL run, `planning-1.md` for the next; see `agents/product-manager.md § Plan File Naming`) with required sections
+3. Creates stage artifact (e.g., `planning-0.md` for the first PL run, `planning-1.md` for the next; see `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`) with required sections
 4. Writes compressed handoff (50-100 tokens)
 5. Orchestrator validates against stage-contracts before transition
 6. Next agent starts: state-patch.sh --task-status <ID> in_progress
@@ -445,7 +445,7 @@ Task({ subagent_type: "corpflow:developer", model: "opus" })
 
 #### Dispatch flags & /agents UI
 
-> `claude agents` dispatch flags (`--cwd`, `--add-dir`, `--settings`, `--mcp-config`, `--plugin-dir`, `--permission-mode`, `--model`, `--effort`, `--dangerously-skip-permissions`) are mapped to `task.metadata` fields per the **`references/headless-dispatch.md`** translation table. PL0 populates the optional fields per `agents/product-manager.md § Optional dispatch metadata`; external runners consume them via the canonical one-liner in `commands/worktask.md § Headless dispatch`.
+> `claude agents` dispatch flags (`--cwd`, `--add-dir`, `--settings`, `--mcp-config`, `--plugin-dir`, `--permission-mode`, `--model`, `--effort`, `--dangerously-skip-permissions`) are mapped to `task.metadata` fields per the **`references/headless-dispatch.md`** translation table. PL0 populates the optional fields per `skills/worktask/references/pl0-procedure.md § Optional dispatch metadata`; external runners consume them via the canonical one-liner in `commands/worktask.md § Headless dispatch`.
 
 > `/agents` displays a tabbed layout (Running/Library tabs) with a `* N running` indicator next to agent types with live instances.
 

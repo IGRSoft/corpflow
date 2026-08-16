@@ -299,7 +299,7 @@ If validation fails:
 > via its narrowly-scoped `Bash(curl:*)` tool — `get_screenshot` returns a short-lived URL that must be
 > fetched while still valid, during the PL turn. The orchestrator MUST NOT add a post-PL0 download step
 > (it would collide with the Phase-1 Bash prohibition in `commands/worktask.md` and race the expiring URL).
-> See `agents/product-manager.md § Capture Workflow`.
+> See `skills/shared/figma-capture.md § Capture Workflow`.
 
 ### Cache-Friendly Prompt Layout & state.json (handoff-protocol)
 
@@ -1359,7 +1359,7 @@ When the worktask runs under a `/megatask` batch (state.json `metadata.milestone
 
 #### Hard guarantee
 
-**HARD GUARANTEE** — the published GitHub issue contains **no local-file paths**, no `.context/` references, no `planning-N.md` or any other artifact filename, no absolute or relative source paths, no Conductor workspace IDs, and no `workspace_path`/`plan_file`/`run_index`/`artifact_path` literals are EVER written to the published GitHub issue body, under any circumstances. The sanitiser is defence-in-depth: PL0 authoring hygiene is the primary defence (see `agents/product-manager.md § Anchor-content hygiene`), the two-pass sanitiser is the runtime safety net, and the >50% strip-ratio abort is the final brake when both fail.
+**HARD GUARANTEE** — the published GitHub issue contains **no local-file paths**, no `.context/` references, no `planning-N.md` or any other artifact filename, no absolute or relative source paths, no Conductor workspace IDs, and no `workspace_path`/`plan_file`/`run_index`/`artifact_path` literals are EVER written to the published GitHub issue body, under any circumstances. The sanitiser is defence-in-depth: PL0 authoring hygiene is the primary defence (see `skills/worktask/references/pl0-procedure.md § Anchor-content hygiene`), the two-pass sanitiser is the runtime safety net, and the >50% strip-ratio abort is the final brake when both fail.
 
 #### Non-blocking guarantee
 

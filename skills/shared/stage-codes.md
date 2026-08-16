@@ -33,7 +33,7 @@ Single source of truth for worktask stage codes.
 
 ### DV routing note
 
-> DV defaults to `developer` (platform app code). For plugin worktask-infrastructure scope (`skills/worktask/scripts/*.sh`, the stage state-machine, `hooks/**`), PL0 routes DV to `workflow-engineer` instead — see `agents/product-manager.md` § Dynamic Worktask Sizing → DV0 routing override. This table keeps the single unconditional default; the conditional rule lives there.
+> DV defaults to `developer` (platform app code). For plugin worktask-infrastructure scope (`skills/worktask/scripts/*.sh`, the stage state-machine, `hooks/**`), PL0 routes DV to `workflow-engineer` instead — see `skills/worktask/references/pl0-procedure.md` § DV0 routing override. This table keeps the single unconditional default; the conditional rule lives there.
 
 ## Model Lookup
 
@@ -137,7 +137,7 @@ QA0: QA Testing        ← agents can split: QA0, QA1
 | Code | Artifact |
 |------|----------|
 | EX | exploration.md |
-| PL | planning-N.md (numbered per `agents/product-manager.md § Plan File & Run Index Naming`) |
+| PL | planning-N.md (numbered per `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`) |
 | AR | architecture-N.md |
 | TL | coordination-N.md |
 | DV | development-N.md |
@@ -151,4 +151,4 @@ QA0: QA Testing        ← agents can split: QA0, QA1
 | IR | incident-N.md |
 | ET | ethics-review-N.md |
 
-N inherits from PL0's `planning-N.md` (see `agents/product-manager.md § Plan File & Run Index Naming`).
+N inherits from PL0's `planning-N.md` (see `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`).

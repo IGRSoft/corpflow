@@ -1,6 +1,6 @@
 # Fixture 03 — Figma auth failure (soft halt)
 
-Exercises the unchanged auth-failure soft-halt behavior (`agents/product-manager.md`
+Exercises the unchanged auth-failure soft-halt behavior (`skills/shared/figma-capture.md`
 § Auth Probe). When the Figma MCP is not authenticated, the PM emits one user-facing
 authorize line, records an open question, skips the Capture Workflow entirely, and
 still writes the plan. No capture is attempted; no PNG is persisted.

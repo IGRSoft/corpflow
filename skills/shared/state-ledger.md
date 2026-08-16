@@ -74,7 +74,7 @@ does not exist yet, so create the task before wiring or annotating it.
 
 | Field | Purpose |
 |-------|---------|
-| `run_index` | Integer ≥ 0; PL0 stamps this on every downstream task (same N as `planning-N.md`). Default 0. Orchestrator uses it to resolve `<stage>-N.md` paths. See `agents/product-manager.md § Stage Artifact Naming`. |
+| `run_index` | Integer ≥ 0; PL0 stamps this on every downstream task (same N as `planning-N.md`). Default 0. Orchestrator uses it to resolve `<stage>-N.md` paths. See `skills/worktask/references/pl0-procedure.md § Stage Artifact Naming`. |
 | `context_refs` | JSON-encoded array of anchor refs (e.g. `["architecture-N.md#decisions","planning-N.md#requirements"]`) the stage agent should grep instead of reading whole files. The stage agent reads `state.json` + only these anchors |
 | `state_file` | Path to the worktask state ledger. Default `.context/state.json`. Read by the stage agent before delegation (per `skills/worktask/references/handoff-protocol.md#state-json-schema`). The ledger is mandatory — an absent `state.json` is a hard failure, not a degraded mode |
 
@@ -125,7 +125,7 @@ These fields map to `claude agents run` CLI flags per `skills/agent-coordination
 
 #### Dispatch writer rules
 
-PL0's writer rules for these fields live in `agents/product-manager.md § Optional dispatch metadata`. The `workspace_path` field (already documented above — always stamped, not dispatch-optional) doubles as the `--cwd` source for headless dispatchers.
+PL0's writer rules for these fields live in `skills/worktask/references/pl0-procedure.md § Optional dispatch metadata`. The `workspace_path` field (already documented above — always stamped, not dispatch-optional) doubles as the `--cwd` source for headless dispatchers.
 
 ### JSON Schema
 

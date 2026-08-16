@@ -409,15 +409,15 @@ Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOP
 
 #### Step 4 — decision_gate stamping
 
-Also stamp `decision_gate`: default `decision_gate: "user"` (PL open questions surface to the user at the plan gate — existing behavior). Stamp `decision_gate: "auto"` ONLY when the resolved `--auto` array contains `decision`. The carrier is consumed by two readers: the PM agent (holds no gate round-trip for questions — returns them in `open_questions[]`; see `agents/product-manager.md § Plan-Gate Open-Question Batching`) and the orchestrator's Step A.4 auto-decision pre-pass below. `decision_gate` bypasses neither `plan_gate` nor `fn_gate` — it only changes WHO answers PL0's open questions. `--emergency` leaves it at `"user"` (the incident pipeline has no PL stage, so the carrier is inert there). (A batch orchestrator such as `/megatask` stamps `decision_gate: "auto"` directly on each per-issue PL0.)
+Also stamp `decision_gate`: default `decision_gate: "user"` (PL open questions surface to the user at the plan gate — existing behavior). Stamp `decision_gate: "auto"` ONLY when the resolved `--auto` array contains `decision`. The carrier is consumed by two readers: the PM agent (holds no gate round-trip for questions — returns them in `open_questions[]`; see `skills/worktask/references/pl0-procedure.md § Plan-Gate Open-Question Batching`) and the orchestrator's Step A.4 auto-decision pre-pass below. `decision_gate` bypasses neither `plan_gate` nor `fn_gate` — it only changes WHO answers PL0's open questions. `--emergency` leaves it at `"user"` (the incident pipeline has no PL stage, so the carrier is inert there). (A batch orchestrator such as `/megatask` stamps `decision_gate: "auto"` directly on each per-issue PL0.)
 
 ### Steps 5–6 — Dispatch the PL agent
 
 5. **PL0 → in_progress**: `state-patch.sh --task-status PL0 in_progress`
-6. **Delegate to PL agent**: `Task({ subagent_type: "corpflow:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative. Glob+increment applies to a **new run** only: a plan-gate revision re-dispatches PM with `plan_revision: true` and reuses the frozen index (§ Plan-revision re-dispatch).
+6. **Delegate to PL agent**: `Task({ subagent_type: "corpflow:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative. Glob+increment applies to a **new run** only: a plan-gate revision re-dispatches PM with `plan_revision: true` and reuses the frozen index (§ Plan-revision re-dispatch).
 #### Step 6 — record dropped stages
 
-   - **Record dropped and added stages**: when PL0's dynamic sizing omits any of the full 9-stage pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PM stamps the PL0 task's `metadata.skipped_stages` (`{stage, reason}` list) so `state.json` self-documents the drops; when PL0 includes a stage beyond the tier default (AR0 forced at a low tier, TL0 at any tier), it stamps the symmetric `metadata.added_stages` with the identical `{stage, reason}` shape. See `agents/product-manager.md § Dynamic Worktask Sizing (PL0 Stage)`.
+   - **Record dropped and added stages**: when PL0's dynamic sizing omits any of the full 9-stage pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PM stamps the PL0 task's `metadata.skipped_stages` (`{stage, reason}` list) so `state.json` self-documents the drops; when PL0 includes a stage beyond the tier default (AR0 forced at a low tier, TL0 at any tier), it stamps the symmetric `metadata.added_stages` with the identical `{stage, reason}` shape. See `skills/worktask/references/pl0-procedure.md § Dynamic Worktask Sizing (PL0 Stage)`.
 ### Steps 7–8 — Complete PL0 and present the plan
 
 7. **PL0 → completed**: `state-patch.sh --task-status PL0 completed`
@@ -431,7 +431,7 @@ Phase 2 begins with the Auto-Decision Pre-Pass (Step A.4, no-op unless `decision
 
 Read `tasks.PL0.metadata.decision_gate` from the ledger (default `"user"` when absent) and PL0's
 `open_questions[]` (typed handoff / plan-frontmatter — the numbered elicitation list from
-`agents/product-manager.md § Plan-Gate Open-Question Batching`). This step is a **no-op** when
+`skills/worktask/references/pl0-procedure.md § Plan-Gate Open-Question Batching`). This step is a **no-op** when
 `decision_gate == "user"` or `open_questions[]` is empty/absent — fall through to Step A.5.
 
 #### Auto-decision dispatch (Fable delegate)
@@ -626,7 +626,7 @@ the old index, and splits the published-issue record. Re-dispatch product-manage
 | 4 | Leave the published GitHub issue as-is | Re-publish or re-anchor the issue |
 | 5 | Leave the refined `facts.branch` as-is | Re-run Step A.4b or re-refine — a revision is not a new naming window |
 
-PM's own arm of this contract: `agents/product-manager.md § Revision of the run in flight`.
+PM's own arm of this contract: `skills/worktask/references/pl0-procedure.md § Revision of the run in flight`.
 
 ##### Plan-revision bookkeeping
 

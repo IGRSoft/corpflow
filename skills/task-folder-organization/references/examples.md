@@ -79,7 +79,7 @@ When a user attaches images during a worktask task, copy them to `.context/image
 
 ## Folder Structure Examples
 
-> **Note on `planning-N.md`**: each example below shows a single-plan workspace (run 0), so the plan file is `planning-0.md` and all stage artifacts use suffix `-0`. If PL reruns (e.g. mid-worktask re-plan), N increments and all downstream artifacts for that run use the new suffix. Earlier runs are preserved. See `agents/product-manager.md § Plan File & Run Index Naming`.
+> **Note on `planning-N.md`**: each example below shows a single-plan workspace (run 0), so the plan file is `planning-0.md` and all stage artifacts use suffix `-0`. If PL reruns (e.g. mid-worktask re-plan), N increments and all downstream artifacts for that run use the new suffix. Earlier runs are preserved. See `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`.
 
 ### Example 1: Simple Bug Fix (9-stage, low complexity)
 

@@ -146,7 +146,7 @@ Cheapest-first when only the delta is needed to update a doc reference (full rea
 
 #### DC6 — Version-Ordering Verification
 
-- **DC6 — version-ordering verification**: When the worktask touches a version (release, tag, or `version:`/`CHANGELOG`/`MEMORY.md` change), confirm the proposed version is greater than **every** entry in the `MEMORY.md` release-history section. If the proposed version is not the maximum (i.e. it sits at or below an already-released version), flag a **version-ordering anomaly** in `documentation-N.md` naming both versions and request **stakeholder acknowledgment** before FN commits. This is the second gate after PL0's check (`agents/product-manager.md § Version Bump Planning`) — DC is the last reviewer before FN, so a missed PL0 ordering regression is caught here. Non-blocking: surface the anomaly, do not halt the worktask.
+- **DC6 — version-ordering verification**: When the worktask touches a version (release, tag, or `version:`/`CHANGELOG`/`MEMORY.md` change), confirm the proposed version is greater than **every** entry in the `MEMORY.md` release-history section. If the proposed version is not the maximum (i.e. it sits at or below an already-released version), flag a **version-ordering anomaly** in `documentation-N.md` naming both versions and request **stakeholder acknowledgment** before FN commits. This is the second gate after PL0's check (`skills/worktask/references/pl0-procedure.md § Version Bump Planning`) — DC is the last reviewer before FN, so a missed PL0 ordering regression is caught here. Non-blocking: surface the anomaly, do not halt the worktask.
 
 #### DC3 — Completion
 

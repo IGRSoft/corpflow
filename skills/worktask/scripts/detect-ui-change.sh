@@ -5,7 +5,7 @@
 # worktask's change set touches UI, and stamps the result on
 # `metadata.requires_screenshots` (plan frontmatter + DV/QA task metadata +
 # state.json). The flag drives dv-screenshot-capture and its completion gate.
-# See agents/product-manager.md § Required Metadata and analyzing-0.md (ad2).
+# See skills/worktask/references/pl0-procedure.md § Required Metadata: Test Selection Gate and analyzing-0.md (ad2).
 #
 # Usage:
 #   detect-ui-change.sh <plan-file> [--platform <p>]

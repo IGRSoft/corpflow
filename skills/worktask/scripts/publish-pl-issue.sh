@@ -48,7 +48,7 @@
 #   The PM authors the `## design-preview` anchor with placeholder tokens of the
 #   shape `{{asset:<basename>}}` on their own line (basename only — NO `.context/`
 #   path), each followed by a `- <description>` bullet, with the Figma source URL
-#   preserved above (see agents/product-manager.md § Asset-placeholder grammar).
+#   preserved above (see skills/worktask/references/pl0-procedure.md § Asset-placeholder grammar).
 #   Because the tokens carry no `.context/` token, they survive sanitise_body
 #   Pass-1 L1. AFTER sanitisation, resolve_design_assets() rewrites each token to
 #   a hosted markdown image line `![<basename>](<url>)` — so the image line never

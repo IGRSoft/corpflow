@@ -26,7 +26,7 @@ Every stage agent reads inputs in this order, anchor-first:
 
 ### Run index
 
-**Run Index Resolution** (two-step resolver — see `agents/product-manager.md § Stage Artifact Naming`):
+**Run Index Resolution** (two-step resolver — see `skills/worktask/references/pl0-procedure.md § Stage Artifact Naming`):
 1. `task.metadata.run_index` → `<basename>-${N}.md`.
 2. Newest glob `<basename>-*.md` (highest N) when metadata is absent.
 
@@ -70,7 +70,7 @@ All artifact paths use `<basename>-N.md` (`N = task.metadata.run_index`; resolve
 
 | Stage | Agent | Model | Required Inputs | Required Outputs | Validation | Error File |
 |-------|-------|-------|-----------------|------------------|------------|------------|
-| **PL** | product-manager | opus | User request; trigger flags | `.context/<plan_file>` (`planning-N.md` where N = next free integer ≥ 0; see `agents/product-manager.md § Plan File & Run Index Naming`) with sections: Goal, Scope, Complexity Score, Stage Plan, Approval Required + `.context/designs/figma-registry.md` (if Figma URLs provided) | `<plan_file>` exists + Complexity Score int 0–50 + Stage Plan lists downstream task subjects + `metadata.plan_file = <plan_file>` AND `metadata.run_index = N` stamped on every downstream task | `.context/errors/product-manager.md` |
+| **PL** | product-manager | opus | User request; trigger flags | `.context/<plan_file>` (`planning-N.md` where N = next free integer ≥ 0; see `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`) with sections: Goal, Scope, Complexity Score, Stage Plan, Approval Required + `.context/designs/figma-registry.md` (if Figma URLs provided) | `<plan_file>` exists + Complexity Score int 0–50 + Stage Plan lists downstream task subjects + `metadata.plan_file = <plan_file>` AND `metadata.run_index = N` stamped on every downstream task | `.context/errors/product-manager.md` |
 
 ### AR–TL
 

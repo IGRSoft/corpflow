@@ -182,7 +182,7 @@ Notes:
 
 ## PL0 Stage-Set & Test-Mode by Complexity Score
 
-PL0 (`agents/product-manager.md § Dynamic Worktask Sizing` and `§ Test Selection Gate`) uses the 0–50 complexity score to pick the stage set and the default `test_mode`.
+PL0 (`skills/worktask/references/pl0-procedure.md § Dynamic Worktask Sizing (PL0 Stage)` and `§ Required Metadata: Test Selection Gate`) uses the 0–50 complexity score to pick the stage set and the default `test_mode`.
 
 **Stage set by score** — each created stage task carries `metadata.agent`; stamp `metadata.skipped_stages` (`{stage, reason}`) for every stage of the full `PL→AR→TL→DV→DR→QA→DC→FN→ST` pipeline the tier does NOT create, and the symmetric `metadata.added_stages` (same `{stage, reason}` shape) for every stage PL0 includes beyond the tier default. Both lists are measured against the full nine-stage reference pipeline, so a stage PL0 declines always appears in `skipped_stages` with a reason.
 

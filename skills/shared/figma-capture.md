@@ -2,7 +2,7 @@
 
 Read this when a Figma URL is detected in the task description or user input. It carries the full
 capture mechanics; the `{{asset:<basename>}}` placeholder grammar, the canonical example, and the
-Figma-URL trigger/regex stay inline in `agents/product-manager.md` (steady-path, no-Figma runs
+Figma-URL trigger/regex stay inline in `skills/worktask/references/pl0-procedure.md` (steady-path, no-Figma runs
 never Read this doc).
 
 When a Figma URL is provided in the task description or user input, capture design screenshots regardless of the keyword-based design detection score.
@@ -16,7 +16,7 @@ figma\.com/(?:file|design|proto)/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
 ```
 
 - Group 1: `fileKey`, Group 4: `nodeId` (convert `-` to `:` for API calls)
-- `(?:file|design|proto)` covers all three design-file path forms and is **non-capturing**, so group numbers are unchanged (Group 1 `fileKey`, Group 4 `nodeId`). Keep it in lockstep with the two trigger regexes in `agents/product-manager.md § Figma Design Capture`; if they drift, a `/file/` or `/proto/` URL surfaces in `design-preview` but never fires capture (no PNGs, no registry, QA design gate skipped).
+- `(?:file|design|proto)` covers all three design-file path forms and is **non-capturing**, so group numbers are unchanged (Group 1 `fileKey`, Group 4 `nodeId`). Keep it in lockstep with the two trigger regexes in `skills/worktask/references/pl0-procedure.md § Figma Design Capture`; if they drift, a `/file/` or `/proto/` URL surfaces in `design-preview` but never fires capture (no PNGs, no registry, QA design gate skipped).
 - Do **not** add `/board/` or `/slides/`: `get_metadata` is design-file-only and rejects FigJam/Slides.
 - Branch URLs: `figma.com/design/:fileKey/branch/:branchKey/...` → use `branchKey` as fileKey
 - URLs without `node-id` are valid — capture the top-level frame
@@ -90,7 +90,7 @@ For each Figma URL (state defaults to `default`):
 
 #### Persist in-turn (3c)
 
-   c. **Persist in-turn**: compute `target_path = .context/designs/` + the basename from the filename grammar below — the directory is **always** `.context/designs/`, **NEVER** `.context/images/` (see Placement guard in `agents/product-manager.md`; `images/` is reserved for DV implementation screenshots and disables the QA design gate). Then download immediately. Always double-quote both arguments so the MCP-returned URL (an external value) cannot break out of the `curl` invocation — the `Bash(curl:*)` grant matches only commands that begin with `curl`, never a bare shell:
+   c. **Persist in-turn**: compute `target_path = .context/designs/` + the basename from the filename grammar below — the directory is **always** `.context/designs/`, **NEVER** `.context/images/` (see Placement guard in `skills/worktask/references/pl0-procedure.md`; `images/` is reserved for DV implementation screenshots and disables the QA design gate). Then download immediately. Always double-quote both arguments so the MCP-returned URL (an external value) cannot break out of the `curl` invocation — the `Bash(curl:*)` grant matches only commands that begin with `curl`, never a bare shell:
       ```bash
       # target_path MUST be under .context/designs/ — e.g. .context/designs/figma-models-review-page-default-2456-16736.png
       curl -sf -o ".context/designs/<basename>" "<image_url>"
@@ -181,7 +181,7 @@ Reference the registry from `<plan_file> § Figma Design References`:
 
 ## Post-Capture Plan Update (REQ-D)
 
-After persistence and registry write — **in this same PL turn**, since the PM is now Bash-capable and has already verified the files on disk — update the plan's `## design-preview` anchor so DV implements and QA verifies against the discrete per-frame files. Use the **Asset-placeholder grammar** in `agents/product-manager.md` (token + description bullet, no raw paths):
+After persistence and registry write — **in this same PL turn**, since the PM is now Bash-capable and has already verified the files on disk — update the plan's `## design-preview` anchor so DV implements and QA verifies against the discrete per-frame files. Use the **Asset-placeholder grammar** in `skills/worktask/references/pl0-procedure.md` (token + description bullet, no raw paths):
 
 ### Anchor update steps
 

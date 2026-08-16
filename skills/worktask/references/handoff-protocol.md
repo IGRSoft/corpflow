@@ -1188,7 +1188,7 @@ handoff carriers.
 
 ### Run-index resolution
 
-The same N is shared across all stages within a worktask run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. See `agents/product-manager.md § Plan File & Run Index Naming` for the full resolver and propagation algorithm.
+The same N is shared across all stages within a worktask run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. See `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming` for the full resolver and propagation algorithm.
 
 ### Alias basenames (resolution-only)
 

@@ -128,7 +128,7 @@ When involved in planning, the designer provides:
 ## Output Artifacts
 
 ### Planning Phase
-- UX requirements addendum to the plan file (PL's current `.context/planning-N.md`; PM resolves N — see `agents/product-manager.md § Plan File Naming`)
+- UX requirements addendum to the plan file (PL's current `.context/planning-N.md`; PM resolves N — see `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`)
 - User flow diagrams
 - Wireframe concepts
 - Component inventory assessment
