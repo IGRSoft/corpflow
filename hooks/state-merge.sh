@@ -189,7 +189,7 @@ _salvage_field() {
 # untouched, which is the pre-existing behaviour this must stay byte-identical to; only
 # a repair that starts and then fails is worth a log line.
 _repair_corrupt_state() {
-  local art="${CLAUDE_ARTIFACT_PATH:-}" fm backup tmp wt_id platform row n=0 suffix
+  local art="${CLAUDE_ARTIFACT_PATH:-}" fm backup backup_rel tmp wt_id platform row n=0 suffix
 
   [[ -n "$art" && -f "$art" ]] || return 0
   fm=$(sed -n '1,40p' "$art" 2> /dev/null) || return 0
@@ -238,7 +238,12 @@ _repair_corrupt_state() {
     return 0
   fi
 
-  if row=$(jq -cn --arg ts "$(date -u +%FT%TZ)" --arg id "$wt_id" --arg backup "$backup" \
+  # Audit rows carry workspace-relative paths (handoff-protocol.md #f4 names the backup
+  # `.context/state.json.corrupt.<iso-ts>`, and `artifact` below is relative), so the trail
+  # stays portable across the worktree the hook happened to fire in.
+  backup_rel="${backup#"$WORKSPACE_DIR"/}"
+
+  if row=$(jq -cn --arg ts "$(date -u +%FT%TZ)" --arg id "$wt_id" --arg backup "$backup_rel" \
     --argjson n "$n" --arg stage "${CLAUDE_TASK_METADATA_STAGE:-}" --arg art "$art" '
       { ts: $ts, actor: "hook:state-merge", action: "state_repair", subject: $id,
         result: "repaired",
