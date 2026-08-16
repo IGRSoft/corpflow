@@ -324,9 +324,10 @@ EOF
   cd "$WD"
   mkdir -p "$WD/lonely"
   cp "$PLUGIN_ROOT/$SCRIPT" "$WD/lonely/fn-preflight.sh"
-  # branch-lib.sh must ship alongside fn-preflight.sh — this test isolates the
-  # OTHER sibling (publish-pl-issue.sh) being unreachable, not this one.
+  # branch-lib.sh and fn-preflight-cmds.sh must ship alongside fn-preflight.sh — this
+  # test isolates the sanitiser sibling (publish-pl-issue.sh), not either of those.
   cp "$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh" "$WD/lonely/branch-lib.sh"
+  cp "$PLUGIN_ROOT/skills/worktask/scripts/fn-preflight-cmds.sh" "$WD/lonely/fn-preflight-cmds.sh"
   no_screenshots
   mk_body
   run bash "$WD/lonely/fn-preflight.sh" pr-body --body body.md
@@ -374,6 +375,7 @@ EOF
   mkdir -p "$WD/lonely"
   cp "$PLUGIN_ROOT/$SCRIPT" "$WD/lonely/fn-preflight.sh"
   cp "$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh" "$WD/lonely/branch-lib.sh"
+  cp "$PLUGIN_ROOT/skills/worktask/scripts/fn-preflight-cmds.sh" "$WD/lonely/fn-preflight-cmds.sh"
   printf 'Leak at /Users/korich/secret/run.log and no headings.\n' > body.md
   cp body.md body.orig.md
   run env MILESTONE_MODE=1 bash "$WD/lonely/fn-preflight.sh" pr-body --body body.md
@@ -518,6 +520,26 @@ EOF
   assert_output ""
   run bash "$WD/lonely/fn-preflight.sh" resolve-issue
   assert_failure 3
+}
+
+@test "T4b: fn-preflight.sh exits 3 naming fn-preflight-cmds.sh when only that sibling is missing" {
+  cd "$WD"
+  # branch-lib.sh present, cmds library absent: proves the second guard is reached
+  # and reports its own path rather than being masked by the first one.
+  mkdir -p "$WD/halflonely"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/halflonely/fn-preflight.sh"
+  cp "$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh" "$WD/halflonely/branch-lib.sh"
+  run --separate-stderr bash "$WD/halflonely/fn-preflight.sh" attachments
+  assert_failure 3
+  [[ "$stderr" == *"fn-preflight-cmds.sh"* ]]
+  assert_output ""
+}
+
+@test "T4c: fn-preflight-cmds.sh refuses direct execution" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/skills/worktask/scripts/fn-preflight-cmds.sh"
+  assert_failure 2
+  assert_output --partial "source it, do not execute it directly"
 }
 
 @test "pr-body: missing --body => usage exit 2" {
