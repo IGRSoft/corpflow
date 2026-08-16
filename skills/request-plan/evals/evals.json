@@ -10,15 +10,15 @@
   "shared_assertions": [
     {
       "id": "template-sections-present",
-      "why": "references/plan-template.md fixes the section order; a dropped header breaks the contract",
-      "type": "contains_all",
+      "why": "references/plan-template.md fixes the section order; a dropped header breaks the contract. A bold pseudo-heading still names the section, so requiring ## exactly failed a plan that carried all eight",
+      "type": "regex_all",
       "values": [
-        "## Context",
-        "## Goal",
-        "## Scope",
-        "## Phases",
-        "## Effort",
-        "## Risks"
+        "(#+\\s*Context|\\*\\*Context)",
+        "(#+\\s*Goal|\\*\\*Goal)",
+        "(#+\\s*Scope|\\*\\*Scope)",
+        "(#+\\s*Phases|\\*\\*Phases)",
+        "(#+\\s*Effort|\\*\\*Effort)",
+        "(#+\\s*Risks|\\*\\*Risks)"
       ]
     },
     {
@@ -80,11 +80,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -115,11 +115,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -150,11 +150,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -185,11 +185,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -220,11 +220,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -255,11 +255,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -290,11 +290,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -325,11 +325,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -360,11 +360,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -395,11 +395,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -500,11 +500,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -605,19 +605,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "SKILL.md",
+            "csv-export-templates",
+            "skills/csv-export-templates/SKILL.md"
           ]
         }
       ],
@@ -640,19 +642,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "hooks/state-merge.sh",
+            "state-merge",
+            "state-merge.sh"
           ]
         }
       ],
@@ -675,19 +679,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "attach-visual-evidence",
+            "attach-visual-evidence.sh",
+            "skills/worktask/scripts/attach-visual-evidence.sh"
           ]
         }
       ],
@@ -710,19 +716,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "pr-body-lint",
+            "pr-body-lint.sh",
+            "skills/worktask/scripts/pr-body-lint.sh"
           ]
         }
       ],
@@ -745,19 +753,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "SKILL.md",
+            "self-improvement",
+            "skills/self-improvement/SKILL.md"
           ]
         }
       ],
@@ -780,19 +790,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "branch-lib",
+            "branch-lib.sh",
+            "skills/worktask/scripts/branch-lib.sh"
           ]
         }
       ],
@@ -815,19 +827,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "audit-subagent",
+            "audit-subagent.sh",
+            "hooks/audit-subagent.sh"
           ]
         }
       ],
@@ -850,19 +864,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "section-lint",
+            "section-lint.sh",
+            "skills/worktask/scripts/section-lint.sh"
           ]
         }
       ],
@@ -885,19 +901,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "SKILL.md",
+            "estimation-methodology",
+            "skills/estimation-methodology/SKILL.md"
           ]
         }
       ],
@@ -920,19 +938,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "cache-lint",
+            "cache-lint.sh",
+            "skills/worktask/scripts/cache-lint.sh"
           ]
         }
       ],
@@ -955,19 +975,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "SKILL.md",
+            "gh-issue-dedup",
+            "skills/gh-issue-dedup/SKILL.md"
           ]
         }
       ],
@@ -990,19 +1012,20 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "benchmark/harness/benchmarkkit/pairing.py",
+            "pairing.py"
           ]
         }
       ],
@@ -1025,19 +1048,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "SKILL.md",
+            "agent-coordination",
+            "skills/agent-coordination/SKILL.md"
           ]
         }
       ],
@@ -1060,19 +1085,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "SKILL.md",
+            "self-improvement",
+            "skills/self-improvement/SKILL.md"
           ]
         }
       ],
@@ -1095,19 +1122,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "skills/worktask/scripts/state-patch.sh",
+            "state-patch",
+            "state-patch.sh"
           ]
         }
       ],
@@ -1130,19 +1159,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "handoff-protocol",
+            "handoff-protocol.md",
+            "skills/worktask/references/handoff-protocol.md"
           ]
         }
       ],
@@ -1165,19 +1196,22 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "/cost-report",
+            "commands/cost-report.md",
+            "cost-report",
+            "cost-report.md"
           ]
         }
       ],
@@ -1200,19 +1234,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "hooks/megatask-monitor.sh",
+            "megatask-monitor",
+            "megatask-monitor.sh"
           ]
         }
       ],
@@ -1244,10 +1280,12 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "audit-tooluse",
+            "audit-tooluse.sh",
+            "hooks/audit-tooluse.sh"
           ]
         }
       ],
@@ -1270,19 +1308,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "skills/shared/three-stage-planning.md",
+            "three-stage-planning",
+            "three-stage-planning.md"
           ]
         }
       ],
@@ -1299,33 +1339,14 @@
       "prompt": "add a Slack notifier that posts when each stage completes. plan it.",
       "dimensions": {
         "type": "feature",
-        "grounding": "buried",
+        "grounding": "absent",
         "route": "std"
       },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
-          "values": [
-            "--emergency"
-          ]
-        },
-        {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
-          "values": [
-            2
-          ]
-        }
-      ],
-      "grounding": [
-        "hooks/agent-stop.sh"
-      ],
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the question it asks is the most useful one — needs a validated judge."
       ],
       "split": "dev"
     },
@@ -1452,11 +1473,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1487,11 +1508,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1522,11 +1543,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1557,11 +1578,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1592,11 +1613,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1627,11 +1648,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1662,11 +1683,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1697,11 +1718,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1732,11 +1753,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1767,11 +1788,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1802,11 +1823,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1837,11 +1858,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1872,11 +1893,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1907,11 +1928,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1942,11 +1963,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -1977,11 +1998,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -2012,11 +2033,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -2082,11 +2103,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
@@ -2187,19 +2208,20 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "analysis.py",
+            "benchmark/harness/benchmarkkit/analysis.py"
           ]
         }
       ],
@@ -2222,19 +2244,20 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "benchmark/harness/benchmarkkit/oracle.py",
+            "oracle.py"
           ]
         }
       ],
@@ -2257,19 +2280,20 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "benchmark/harness/benchmarkkit/rotation.py",
+            "rotation.py"
           ]
         }
       ],
@@ -2292,19 +2316,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "benchmark-settings",
+            "benchmark-settings.json",
+            "benchmark/live/settings/benchmark-settings.json"
           ]
         }
       ],
@@ -2327,19 +2353,22 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "/arch-decision",
+            "arch-decision",
+            "arch-decision.md",
+            "commands/arch-decision.md"
           ]
         }
       ],
@@ -2362,19 +2391,22 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "/pm-prioritize",
+            "commands/pm-prioritize.md",
+            "pm-prioritize",
+            "pm-prioritize.md"
           ]
         }
       ],
@@ -2397,19 +2429,22 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "/docs-audit",
+            "commands/docs-audit.md",
+            "docs-audit",
+            "docs-audit.md"
           ]
         }
       ],
@@ -2432,19 +2467,22 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "/docs-release-notes",
+            "commands/docs-release-notes.md",
+            "docs-release-notes",
+            "docs-release-notes.md"
           ]
         }
       ],
@@ -2467,19 +2505,22 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "/design-accessibility",
+            "commands/design-accessibility.md",
+            "design-accessibility",
+            "design-accessibility.md"
           ]
         }
       ],
@@ -2502,19 +2543,22 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "/context-status",
+            "commands/context-status.md",
+            "context-status",
+            "context-status.md"
           ]
         }
       ],
@@ -2537,19 +2581,22 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "/business-report",
+            "business-report",
+            "business-report.md",
+            "commands/business-report.md"
           ]
         }
       ],
@@ -2572,19 +2619,22 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "/prompt-audit",
+            "commands/prompt-audit.md",
+            "prompt-audit",
+            "prompt-audit.md"
           ]
         }
       ],
@@ -2607,19 +2657,22 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "/test-coverage",
+            "commands/test-coverage.md",
+            "test-coverage",
+            "test-coverage.md"
           ]
         }
       ],
@@ -2642,19 +2695,22 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "/ethics-review",
+            "commands/ethics-review.md",
+            "ethics-review",
+            "ethics-review.md"
           ]
         }
       ],
@@ -2677,19 +2733,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "SKILL.md",
+            "code-comment-standard",
+            "skills/code-comment-standard/SKILL.md"
           ]
         }
       ],
@@ -2712,19 +2770,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "SKILL.md",
+            "security-review-process",
+            "skills/security-review-process/SKILL.md"
           ]
         }
       ],
@@ -2747,19 +2807,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "git-conventions",
+            "git-conventions.md",
+            "skills/shared/git-conventions.md"
           ]
         }
       ],
@@ -2791,10 +2853,12 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "SKILL.md",
+            "incident-response",
+            "skills/incident-response/SKILL.md"
           ]
         }
       ],
@@ -2817,19 +2881,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "agents/incident-responder.md",
+            "incident-responder",
+            "incident-responder.md"
           ]
         }
       ],
@@ -2852,19 +2918,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "hooks/megatask-monitor.sh",
+            "megatask-monitor",
+            "megatask-monitor.sh"
           ]
         }
       ],
@@ -2887,19 +2955,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "skills/worktask/scripts/state-patch.sh",
+            "state-patch",
+            "state-patch.sh"
           ]
         }
       ],
@@ -2922,19 +2992,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "SKILL.md",
+            "estimation-methodology",
+            "skills/estimation-methodology/SKILL.md"
           ]
         }
       ],
@@ -2957,19 +3029,21 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "SKILL.md",
+            "agent-coordination",
+            "skills/agent-coordination/SKILL.md"
           ]
         }
       ],
@@ -3001,10 +3075,11 @@
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "benchmark/harness/benchmarklive/credentials.py",
+            "credentials.py"
           ]
         }
       ],
@@ -3027,19 +3102,22 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "/pm-requirements",
+            "commands/pm-requirements.md",
+            "pm-requirements",
+            "pm-requirements.md"
           ]
         }
       ],
@@ -3062,19 +3140,20 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
           "values": [
-            "--emergency"
+            "/worktask\\s+\\\""
           ]
         },
         {
           "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
           "values": [
-            2
+            "benchmark/harness/benchmarklive/budget.py",
+            "budget.py"
           ]
         }
       ],
@@ -3155,33 +3234,14 @@
       "prompt": "our public API reference is out of date. plan the documentation.",
       "dimensions": {
         "type": "docs",
-        "grounding": "buried",
+        "grounding": "absent",
         "route": "std"
       },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "does-not-declare-an-emergency",
-          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
-          "type": "contains_none",
-          "values": [
-            "--emergency"
-          ]
-        },
-        {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach a surface this repo actually has. Which one is not the author's to dictate — three plans were failed for naming a better file than the one guessed here — so this checks that two cited paths resolve",
-          "type": "paths_resolve",
-          "values": [
-            2
-          ]
-        }
-      ],
-      "grounding": [
-        "README.md"
-      ],
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the question it asks is the most useful one — needs a validated judge."
       ],
       "split": "train"
     },

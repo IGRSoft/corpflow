@@ -30,13 +30,12 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 DEFAULT_OUT = os.path.join(REPO, "skills", "request-plan", "evals", "evals.json")
 
 ROUTE_ASSERTION = {
-    # Deliberately one-sided: it rejects a declared emergency, never an escalation to
-    # --secure. Two captures escalated correctly after finding a secrets surface the
-    # prompt never named, and the old two-sided assertion failed them for being right.
-    "std": ("does-not-declare-an-emergency",
-            "Nothing in an ordinary request describes a live outage, so the incident "
-            "pipeline is wrong regardless of what investigation later finds",
-            None),
+    # Two-sided on purpose. Removing the escalation half let four over-routed plans
+    # through; the labels call every one of them a failure.
+    "std": ("routes-to-standard-tier",
+            "Ordinary work takes the plain trigger; escalating it burns the security "
+            "pipeline on work with no credential, auth or secret surface",
+            [r"/worktask\s+\""]),
     "secure": ("routes-to-secure-tier",
                "Security-sensitive work routes to --secure regardless of size "
                "(skills/request-plan/references/handoff.md)",
@@ -126,8 +125,7 @@ CASES = [
      ["skills/shared/three-stage-planning.md"], ["three-stage-planning", "P0"]),
 
     # ---- absent: nothing to ground on; the correct answer is a question ----
-    ("feature", "buried", "std", "add a Slack notifier that posts when each stage completes. plan it.",
-     ["hooks/agent-stop.sh"], ["agent-stop", "SubagentStop", "audit-subagent"]),
+    ("feature", "absent", "std", "add a Slack notifier that posts when each stage completes. plan it.", [], []),
     ("bug", "absent", "std", "the iOS build keeps failing on the signing step. help me plan a fix.", [], []),
     ("feature", "absent", "std", "add dark mode to the settings screen. what's the plan?", [], []),
     ("migration", "absent", "std", "plan migrating our Postgres schema off the legacy user table.", [], []),
@@ -241,10 +239,37 @@ CASES = [
     ("bug", "absent", "std", "our Kubernetes pods keep OOMing under load. plan a fix.", [], []),
     ("migration", "absent", "secure", "plan moving customer PII out of the analytics warehouse.", [], []),
     ("incident", "absent", "emerg", "the payment processor is rejecting every charge. plan the response.", [], []),
-    ("docs", "buried", "std", "our public API reference is out of date. plan the documentation.",
-     ["README.md"], ["README", "component table", "commands/"]),
+    ("docs", "absent", "std", "our public API reference is out of date. plan the documentation.", [], []),
     ("feature", "absent", "std", "add an offline mode to the desktop client. what's the plan?", [], []),
 ]
+
+
+def surface_tokens(paths: list) -> list:
+    """Name the ground file, not the vocabulary around it.
+
+    Hand-written values leaked: three plans passed on `era`, `breach` and a
+    neighbouring hook's name while never touching the declared file. These accept
+    only forms that identify the file itself — including how a plan naturally
+    refers to it, which for a command is `/name`, not `commands/name.md`.
+
+    A bare stem counts only when hyphenated. `state-patch` is unique in this repo;
+    `analysis` and `budget` are words any plan might use, and admitting them is
+    what let the leaks through.
+    """
+    tokens = []
+    for rel in paths:
+        base = os.path.basename(rel)
+        stem, _, _ = base.rpartition(".")
+        tokens.append(rel)
+        tokens.append(base)
+        if base == "SKILL.md":
+            tokens.append(os.path.basename(os.path.dirname(rel)))
+            continue
+        if rel.startswith("commands/"):
+            tokens.append("/" + stem)
+        if "-" in stem:
+            tokens.append(stem)
+    return sorted(set(tokens))
 
 
 def build_case(index: int, spec) -> dict:
@@ -260,9 +285,7 @@ def build_case(index: int, spec) -> dict:
         return case
 
     route_id, route_why, route_values = ROUTE_ASSERTION[route]
-    route_kind = "contains_none" if route_values is None else "regex_all"
-    if route_values is None:
-        route_values = ["--emergency"]
+    route_kind = "regex_all"
     case["expected_outcome"] = "plan"
     # An `obvious` prompt already names the file, so any discovery target would be a
     # guess at which OTHER file the plan should touch — and a guess fails correct
@@ -275,10 +298,10 @@ def build_case(index: int, spec) -> dict:
          "type": "regex_any", "values": [r"[\w.-]+/[\w.-]+\.(py|sh|md|json|bats)"]}
         if grounding == "obvious" else
         {"id": "finds-the-real-surface",
-         "why": "The plan must reach a surface this repo actually has. Which one is not the "
-                "author's to dictate — three plans were failed for naming a better file than "
-                "the one guessed here — so this checks that two cited paths resolve",
-         "type": "paths_resolve", "values": [2]})
+         "why": "The plan must reach the surface this repo actually has. Relaxing this to "
+                "'any real path' let seven plans past that named a plausible neighbour and "
+                "never touched the ground file",
+         "type": "regex_any", "values": surface_tokens(paths)})
     case["assertions"] = [
         {"id": route_id, "why": route_why, "type": route_kind, "values": route_values},
         discovery_assertion,
