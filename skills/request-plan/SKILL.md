@@ -89,6 +89,11 @@ command line (e.g. `/worktask "<restated goal>"`). The surface check in that sec
 **Every plan ends with exactly one `/worktask` line.** Naming a more specific command
 (`/pm-prioritize`, `/estimate`) is useful context, never a replacement — recommending one *instead*
 of the worktask leaves the user with no handoff. Mention it alongside the trigger, not in place of it.
+**Disputing the premise does not suspend the line.** A plan concluding that the reported defect is
+misdiagnosed, unreproducible, or absent from the file it was blamed on still emits one — triage is
+work, and on a present-tense report `--emergency` is the tier that triages it. Prose naming the tier
+("route this to incident response", "this warrants the incident pipeline") is not the line; the line
+is a command the user can paste.
 
 ### 5. Output
 
