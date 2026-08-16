@@ -193,7 +193,7 @@
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/.claude/hooks/state-merge.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/state-merge.sh",
             "continueOnBlock": true
           },
           {

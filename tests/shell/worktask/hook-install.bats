@@ -13,9 +13,9 @@ setup() {
   WD="$(mk_tmpworkdir)"
   # synthetic plugin root with a source hook + registering plugin.json
   PLUG="$WD/plugin"
-  mkdir -p "$PLUG/.claude/hooks" "$PLUG/.claude-plugin"
-  printf '#!/usr/bin/env bash\necho stub\n' > "$PLUG/.claude/hooks/state-merge.sh"
-  chmod +x "$PLUG/.claude/hooks/state-merge.sh"
+  mkdir -p "$PLUG/hooks" "$PLUG/.claude-plugin"
+  printf '#!/usr/bin/env bash\necho stub\n' > "$PLUG/hooks/state-merge.sh"
+  chmod +x "$PLUG/hooks/state-merge.sh"
   printf '%s\n' '{"name":"t","hooks":{"SubagentStop":[{"hooks":[{"type":"command","command":"state-merge.sh"}]}]}}' \
     > "$PLUG/.claude-plugin/plugin.json"
   PROJ="$WD/project"

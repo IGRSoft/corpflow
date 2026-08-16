@@ -2,7 +2,7 @@
 # tests/shell/meta/coverage-proxy.bats
 # Target: the test suite itself.
 #
-# Every executable script under hooks/, .claude/hooks/ and skills/**/scripts/
+# Every executable script under hooks/ and skills/**/scripts/
 # must have a dedicated .bats driving it. This is the standing guard against the
 # class of gap that motivated this worktask: dv-comment-density-gate.sh,
 # comment-standard-context.sh and the three capture adapters all shipped wired

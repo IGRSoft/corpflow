@@ -26,7 +26,7 @@
 #   All merge logic lives in skills/worktask/scripts/state-patch.sh.
 #   This hook is a thin delegating wrapper — exit 0 guard wraps the call.
 #   Path: $CLAUDE_PLUGIN_ROOT first (a project-local copy of this hook has no
-#   skills/ tree beside it), else HOOK_DIR up two levels to the repo root.
+#   skills/ tree beside it), else HOOK_DIR up one level to the plugin root.
 #
 # Usage (manual self-test):
 #   state-merge.sh --self-test
@@ -110,11 +110,10 @@ _basename_for_stage() {
 # run_index + highest-N), and absent-artifact no-op.
 if [[ "${1:-}" == "--self-test" ]]; then
   HOOK_DIR=$(cd "$(dirname "$0")" && pwd)
-  # .claude/hooks/ is two levels below the repo root; go up two levels to reach
-  # the repo root, then descend into skills/worktask/scripts/.
-  PATCH_SCRIPT="${CLAUDE_PLUGIN_ROOT:-${HOOK_DIR}/../..}/skills/worktask/scripts/state-patch.sh"
+  # hooks/ sits one level below the plugin root.
+  PATCH_SCRIPT="${CLAUDE_PLUGIN_ROOT:-${HOOK_DIR}/..}/skills/worktask/scripts/state-patch.sh"
   if [[ ! -f "$PATCH_SCRIPT" ]]; then
-    PATCH_SCRIPT="${HOOK_DIR}/../../skills/worktask/scripts/state-patch.sh"
+    PATCH_SCRIPT="${HOOK_DIR}/../skills/worktask/scripts/state-patch.sh"
   fi
   if [[ ! -f "$PATCH_SCRIPT" ]]; then
     printf 'self-test: state-patch.sh not found at %s\n' "$PATCH_SCRIPT" >&2
@@ -141,9 +140,10 @@ HOOK_DIR=$(cd "$(dirname "$0")" && pwd)
 # Plugin root first: worktask.md Step 3b copies this hook into <project>/.claude/hooks/,
 # where the relative arm resolves to a skills/ tree that does not exist. state-patch.sh is
 # the only merge implementation, so failing to find it silently disables the Layer-2 net.
-PATCH_SCRIPT="${CLAUDE_PLUGIN_ROOT:-${HOOK_DIR}/../..}/skills/worktask/scripts/state-patch.sh"
+# The relative arm serves the shipped copy, one level below the plugin root at hooks/.
+PATCH_SCRIPT="${CLAUDE_PLUGIN_ROOT:-${HOOK_DIR}/..}/skills/worktask/scripts/state-patch.sh"
 if [[ ! -f "$PATCH_SCRIPT" ]]; then
-  PATCH_SCRIPT="${HOOK_DIR}/../../skills/worktask/scripts/state-patch.sh"
+  PATCH_SCRIPT="${HOOK_DIR}/../skills/worktask/scripts/state-patch.sh"
 fi
 
 if [[ ! -f "$PATCH_SCRIPT" ]]; then

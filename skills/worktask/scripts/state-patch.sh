@@ -7,7 +7,7 @@
 #   (< DISK_MIN_GB halts; < DISK_WARN_GB warns) so callers share one policy.
 #
 #   This is the SINGLE IMPLEMENTATION of the state-patch logic.  The
-#   SubagentStop hook at .claude/hooks/state-merge.sh delegates to this script
+#   SubagentStop hook at hooks/state-merge.sh delegates to this script
 #   via `bash <path>/state-patch.sh [opts]` — no merge logic lives in the hook
 #   itself beyond the delegation call.
 #

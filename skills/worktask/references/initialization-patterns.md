@@ -112,13 +112,13 @@ PL0 (or `commands/worktask.md` Phase 1) MUST verify the `state-merge.sh` Subagen
 
 ```bash
 # Idempotent hook installation — run after state.json seed, before PL0 delegation.
-# Source: <plugin-root>/.claude/hooks/state-merge.sh (ships with corpflow plugin).
+# Source: <plugin-root>/hooks/state-merge.sh (ships with corpflow plugin).
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
 # Empty? Substitute <plugin-root>: the dir containing .claude-plugin/plugin.json — two levels
 # above this skill's base directory (see skills/shared/plugin-root-resolution.md).
 [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
-hook_src="$PLUGIN_ROOT/.claude/hooks/state-merge.sh"
+hook_src="$PLUGIN_ROOT/hooks/state-merge.sh"
 hook_dst=".claude/hooks/state-merge.sh"
 
 if [[ ! -x "$hook_dst" ]]; then

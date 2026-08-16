@@ -91,8 +91,7 @@ _frontmatter_hook_refs() {
     [ -n "$cmd" ] || continue
     script="${cmd#\$\{CLAUDE_PLUGIN_ROOT\}/}"
     [ -f "$PLUGIN_ROOT/$script" ] || fail "plugin.json hook missing on disk: $script"
-    # `hooks/*` are exec'd directly and are +x (see AC-9). `.claude/hooks/state-merge.sh`
-    # is documented as invoked through `bash <path>`, so its mode bit is not a contract.
+    # `hooks/*` are exec'd directly and are +x (see AC-9).
     case "$script" in
       hooks/*) [ -x "$PLUGIN_ROOT/$script" ] || fail "plugin.json hook not executable: $script" ;;
     esac
