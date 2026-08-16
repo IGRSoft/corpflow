@@ -1,7 +1,7 @@
 ---
 name: cost-report
 description: Generate cost analysis for worktasks with token usage breakdown and optimization recommendations
-argument-hint: '[--worktask-id ID] [--format table|csv]'
+argument-hint: '[--worktask-id ID] [--json]'
 allowed-tools: Read
 model: sonnet
 related:
@@ -23,6 +23,7 @@ Generate cost analysis for completed or in-progress worktasks with token usage b
 /cost-report --budget-alert 80%
 /cost-report --export
 /cost-report --optimize
+/cost-report --json
 ```
 
 ## Options
@@ -30,6 +31,7 @@ Generate cost analysis for completed or in-progress worktasks with token usage b
 - `--stage <code>` - Show costs for specific stage only (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR)
 - `--budget-alert <percent>` - Set alert threshold (default: 75%)
 - `--export` - Export cost data to CSV
+- `--json` - Emit the summary as one JSON object on stdout instead of the markdown report (see § Budget Tracking JSON)
 - `--optimize` - Include optimization recommendations
 - `--detailed` - Show per-operation token breakdown (includes Background Activity)
 - `--bg-activity` - Show Background Activity table only (default off to keep summary compact)
@@ -46,8 +48,8 @@ Generate cost analysis for completed or in-progress worktasks with token usage b
 | Metric | Value |
 |--------|-------|
 | Total Tokens | 45,000 |
-| Estimated Cost | $0.28 |
-| Budget Used | 56% |
+| Estimated Cost | $0.41 |
+| Budget Used | 81% |
 | Worktask Type | standard |
 
 ### By Stage
@@ -156,23 +158,83 @@ Stage Cost = (Input Tokens × input rate) + (Output Tokens × output rate)
 
 Model rates: canonical table in `skills/shared/model-selection.md § Cost Tiers` — do not hardcode rates here; pull current `$/1M` from `/model` when the table lags.
 
-### Budget Tracking
+### Derived Quantities, Units, Rounding
+
+This subsection is the **single source** for every number both the markdown report
+and the `--json` object print. Neither output restates these rules.
+
+| Quantity | Definition | Unit / rounding |
+|----------|------------|-----------------|
+| Stage tokens | `input_tokens + output_tokens` summed over that stage's `cost-*.jsonl` rows | integer |
+| Total tokens | Sum of stage tokens across all stages with data | integer |
+| Stage cost | Formula above, at that stage's `model` rate | USD, 3 decimals |
+| Total cost | Sum of stage costs, rounded **after** summing | USD, 2 decimals |
+| Budget used | `total_cost / budget_limit × 100` | integer percent |
+| % of total | `stage_tokens / total_tokens × 100` — a **token** share, not a cost share | integer percent |
+| Estimated remaining | Baseline cost of stages not yet run, from `skills/cost-optimization/references/token-baselines.md` | USD, 2 decimals |
+
+Stages with no `cost-*.jsonl` rows have **no value**, not a zero: the markdown
+`### By Stage` table renders them as `-`, and `--json` omits them from `by_stage`.
+Alert levels come from § Alert Thresholds — not restated in either output.
+
+### Budget Tracking JSON
+
+**Normative `--json` output contract.** With `--json`, the command writes exactly one
+JSON object to stdout — no markdown, no log lines, nothing else — carrying the same
+numbers as the default markdown summary, computed per § Derived Quantities, Units,
+Rounding.
 
 ```json
 {
   "cost_tracking": {
+    "worktask_id": "20260816-json-cost-summary",
+    "worktask_type": "standard",
     "total_estimated_tokens": 45000,
-    "total_cost": 0.28,
-    "budget_limit": 0.50,
-    "budget_used_percent": 56,
+    "total_cost": 0.41,
+    "budget_limit": 0.5,
+    "budget_used_percent": 81,
     "by_stage": {
-      "PL": { "tokens": 7500, "model": "opus", "cost": 0.113 },
-      "AR": { "tokens": 15000, "model": "opus", "cost": 0.225 }
+      "PL": { "tokens": 7500, "model": "opus", "cost": 0.113, "percent_of_total": 17 },
+      "AR": { "tokens": 15000, "model": "opus", "cost": 0.225, "percent_of_total": 33 },
+      "TL": { "tokens": 4000, "model": "sonnet", "cost": 0.012, "percent_of_total": 9 },
+      "DV": { "tokens": 18500, "model": "sonnet", "cost": 0.056, "percent_of_total": 41 }
     },
-    "alerts": []
+    "status": {
+      "current_stage": "DV",
+      "current_stage_state": "in_progress",
+      "stages_complete": ["PL", "AR", "TL"],
+      "estimated_remaining_cost": 0.15
+    },
+    "alerts": [
+      { "threshold_percent": 75, "level": "orange", "action": "user_notified" }
+    ]
   }
 }
 ```
+
+#### Field Contract
+
+| Field | Type | Source |
+|-------|------|--------|
+| `worktask_id` | string | `.context/state.json`; `null` when no worktask is anchored |
+| `worktask_type` | string | Sizing from PL0 — mirrors the markdown Overview row |
+| `total_estimated_tokens` | integer | Total tokens |
+| `total_cost` | number | Total cost |
+| `budget_limit` | number | Budget envelope in USD; `null` when unset |
+| `budget_used_percent` | integer | Budget used; `null` when `budget_limit` is `null` |
+| `by_stage` | object | Stage code → `{tokens, model, cost, percent_of_total}`; stages without data are absent |
+| `status.current_stage` | string | Stage code, or `null` when the worktask is complete |
+| `status.current_stage_state` | string | Ledger stage state (`in_progress`, `blocked`, …) |
+| `status.stages_complete` | array of string | Stage codes, in execution order |
+| `status.estimated_remaining_cost` | number | Estimated remaining |
+| `alerts` | array of object | One entry per crossed threshold: `{threshold_percent, level, action}`, levels and actions verbatim from § Alert Thresholds; `[]` when none crossed |
+
+`--json` is **summary-only**. It composes with `--budget-alert` (which shifts the
+`alerts[]` threshold) and with `--export` (the CSV is still written; the JSON still
+goes to stdout). It does not compose with `--stage`, `--optimize`, `--detailed`,
+`--bg-activity`, or `--compare` — those have no schema surface here, so the command
+refuses the combination on stderr and writes nothing to stdout rather than emitting a
+partial object.
 
 ## Alert Thresholds
 
@@ -192,6 +254,8 @@ Model rates: canonical table in `skills/shared/model-selection.md § Cost Tiers`
 /cost-report --optimize               # + actionable recommendations
 /cost-report --budget-alert 60%      # alert at 60% budget consumption
 /cost-report --export                 # writes cost-report.csv to .context/
+/cost-report --json                   # one JSON summary object on stdout
+/cost-report --json | jq .cost_tracking.budget_used_percent
 /cost-report --compare <task-id>      # side-by-side with another worktask
 ```
 
@@ -240,6 +304,41 @@ baselines from `skills/cost-optimization/references/token-baselines.md` and
 prints a warning that the hook is not configured. If the JSONL exists but the
 cache columns are missing or zero, the Cache Performance table renders `n/a`
 and prints a note pointing at the Capture Script update.
+
+Under `--json` the same fallback fires on the same condition, but the warning cannot
+go to stdout — it would break the single-object contract. Instead the command emits
+the **full** schema, populated from the baselines, plus a top-level `warning` string
+inside `cost_tracking`. It never fails, and never emits a partial or empty object:
+
+```json
+{
+  "cost_tracking": {
+    "warning": "no .context/logs/cost-*.jsonl — figures estimated from token-baselines.md; SubagentStop hook not configured",
+    "worktask_id": "20260816-json-cost-summary",
+    "worktask_type": "standard",
+    "total_estimated_tokens": 21000,
+    "total_cost": 0.32,
+    "budget_limit": 0.5,
+    "budget_used_percent": 63,
+    "by_stage": {
+      "PL": { "tokens": 7000, "model": "opus", "cost": 0.105, "percent_of_total": 33 },
+      "AR": { "tokens": 14000, "model": "opus", "cost": 0.21, "percent_of_total": 67 }
+    },
+    "status": {
+      "current_stage": "AR",
+      "current_stage_state": "in_progress",
+      "stages_complete": ["PL"],
+      "estimated_remaining_cost": 0.18
+    },
+    "alerts": [
+      { "threshold_percent": 50, "level": "yellow", "action": "warning_logged" }
+    ]
+  }
+}
+```
+
+`warning` is absent — not `null` — on a normal run, so `has("warning")` is the
+consumer's estimated-vs-measured test.
 
 ## Integration
 

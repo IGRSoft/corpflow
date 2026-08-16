@@ -209,7 +209,7 @@ absent, omit the table and note "cost hook not configured".
 | DV | developer | opus | 8200 / 4600 | 3m08s | $0.47 | 1 |
 | **Total** | — | — | **23,400 / 12,000** | **6m40s** | **$0.90** | **1** |
 
-Generated from `.context/logs/cost-*.jsonl` via `/cost-report --format md`.
+Generated from `.context/logs/cost-*.jsonl` via `/cost-report`.
 ```
 
 #### Workspace Mode
