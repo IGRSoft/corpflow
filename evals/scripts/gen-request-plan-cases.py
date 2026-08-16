@@ -289,13 +289,14 @@ def build_case(index: int, spec) -> dict:
     case["expected_outcome"] = "plan"
     # An `obvious` prompt already names the file, so any discovery target would be a
     # guess at which OTHER file the plan should touch — and a guess fails correct
-    # plans that decomposed differently. Demand evidence of reading instead: a
-    # slashed repo path, which a prompt carrying a bare filename cannot supply.
+    # plans that decomposed differently. paths_resolve keeps that restraint: it names
+    # no target, and only requires that what the plan cites is real.
     discovery_assertion = (
         {"id": "cites-a-repo-path",
-         "why": "A plan that located the file cites its real path; echoing the bare filename "
-                "from the request proves nothing was read",
-         "type": "regex_any", "values": [r"[\w.-]+/[\w.-]+\.(py|sh|md|json|bats)"]}
+         "why": "A plan that located the file cites paths that resolve. Matching a path's "
+                "shape passed 36 of 36, including one plan citing three invented files "
+                "beside the one it was handed. Two, because the prompt supplies the first",
+         "type": "paths_resolve", "values": [2]}
         if grounding == "obvious" else
         {"id": "finds-the-real-surface",
          "why": "The plan must reach the surface this repo actually has. Relaxing this to "

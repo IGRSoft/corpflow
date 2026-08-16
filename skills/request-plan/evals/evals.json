@@ -5,7 +5,8 @@
     "contains_all": "every literal substring must be present",
     "contains_none": "no listed literal substring may be present",
     "regex_all": "every pattern must match (multiline)",
-    "regex_any": "at least one pattern must match (multiline)"
+    "regex_any": "at least one pattern must match (multiline)",
+    "paths_resolve": "at least N cited repo paths must exist here; values carries the integer N, not a pattern. The one type that cannot be settled from the response text"
   },
   "shared_assertions": [
     {
@@ -89,10 +90,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -124,10 +125,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -159,10 +160,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -194,10 +195,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -229,10 +230,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -264,10 +265,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -299,10 +300,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -334,10 +335,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -369,10 +370,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -404,10 +405,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -439,10 +440,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -474,10 +475,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -509,10 +510,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -544,10 +545,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -579,10 +580,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1482,10 +1483,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1517,10 +1518,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1552,10 +1553,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1587,10 +1588,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1622,10 +1623,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1657,10 +1658,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1692,10 +1693,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1727,10 +1728,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1762,10 +1763,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1797,10 +1798,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1832,10 +1833,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1867,10 +1868,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1902,10 +1903,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1937,10 +1938,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -1972,10 +1973,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -2007,10 +2008,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -2042,10 +2043,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -2077,10 +2078,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -2112,10 +2113,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -2147,10 +2148,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
@@ -2182,10 +2183,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites its real path; echoing the bare filename from the request proves nothing was read",
-          "type": "regex_any",
+          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "type": "paths_resolve",
           "values": [
-            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)"
+            2
           ]
         }
       ],
