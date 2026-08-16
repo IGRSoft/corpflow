@@ -1,0 +1,25 @@
+{
+  "capture_contract": "skill-eval-capture-v1",
+  "arm": "opus-noctx",
+  "effort": "max",
+  "isolated": true,
+  "case_id": 43,
+  "skill": "request-plan",
+  "mode": "natural",
+  "model": "claude-opus-5",
+  "permission_mode": "bypassPermissions",
+  "prompt_digest": "fc6c2d09e98d9a68",
+  "assertions_digest": "bfcb3ef19a192009",
+  "sent_prompt": "our React components are a mess of prop drilling. plan a refactor.",
+  "response": "No React in this repo. Census of tracked files:\n\n```\ntsx=0  jsx=0  ts=0  js=0   react-dep=0\npy=61  md=189  pkg=3 (none depends on react)\n```\n\n`/Volumes/internal/Projects/igrsoft/ai-agents/corpflow` is the agent-plugin repo — Python evals, markdown skills. Current branch is `feature/eval-capture-and-regrounded-cases`. Nothing to refactor here.\n\n**Which codebase did you mean?** Give me the path or repo and I'll ground the plan in the actual component tree.\n\nTwo things to know before you do:\n\n- This session has **no file tools** — no Read, Glob, Grep, Edit, Write. Only a shell via Monitor. I can survey a repo (grep prop chains, count depth) but can't read files normally or apply edits. Worth restarting in the target repo with a normal toolset if you want the refactor executed, not just planned.\n- A real plan needs the shape of the drilling: how deep the chains run, whether the props are server state or UI state, and whether re-render cost is actually a problem. That distinction drives the whole thing.\n\nGeneric ladder, cheapest first — not from your code, just the decision order I'd apply:\n\n1. **Composition / `children`** — passing props through a layer that only forwards them usually means the layer should accept the rendered node instead. Kills the most chains, adds zero dependencies.\n2. **Colocate state downward** — state lifted higher than its actual consumers is the most common cause. Push it to the lowest common ancestor.\n3. **Server state → a query cache** (TanStack Query or equivalent) — if the drilled props are fetched data, this deletes the chains outright rather than relocating them.\n4. **Context, narrowly scoped** — one context per concern, split value/dispatch, and only for genuinely cross-cutting things (theme, auth, locale). Broad context is a re-render footgun, not a fix.\n5. **External store** (Zustand/Jotai) — only if 1–4 leave real cross-tree shared state.\n\nMost \"prop drilling messes\" are 80% #1 and #3. Reaching for a global store first is the usual mistake — it converts a visible problem into an invisible one.",
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 4214,
+    "cache_read_input_tokens": 113239,
+    "cache_creation_input_tokens": 21576,
+    "cost_usd": 0.3783805
+  },
+  "captured_at": "2026-08-16T11:17:17Z",
+  "plugin_sha": "5a22462",
+  "skill_version": "0.1.0"
+}

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "deny": [
+      "Read", "Glob", "Grep", "Bash", "Edit", "Write", "NotebookEdit",
+      "Task", "Agent", "Skill", "SlashCommand",
+      "WebFetch", "WebSearch"
+    ]
+  }
+}

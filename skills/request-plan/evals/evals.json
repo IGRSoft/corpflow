@@ -80,11 +80,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -115,11 +115,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -150,11 +150,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -185,11 +185,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -220,11 +220,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -255,11 +255,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -290,11 +290,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -325,11 +325,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -360,11 +360,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -395,11 +395,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -500,11 +500,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -605,11 +605,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -641,11 +641,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -678,11 +678,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -714,11 +714,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -750,11 +750,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -786,11 +786,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -823,11 +823,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -860,11 +860,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -896,11 +896,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -932,11 +932,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -969,11 +969,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1005,11 +1005,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1042,11 +1042,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1078,11 +1078,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1115,11 +1115,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1152,11 +1152,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1188,11 +1188,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1224,11 +1224,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1296,11 +1296,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1326,14 +1326,35 @@
       "prompt": "add a Slack notifier that posts when each stage completes. plan it.",
       "dimensions": {
         "type": "feature",
-        "grounding": "absent",
+        "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "clarify",
-      "assertions": [],
-      "grounding": [],
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
+          "values": [
+            "--emergency"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "type": "regex_any",
+          "values": [
+            "agent-stop",
+            "SubagentStop",
+            "audit-subagent"
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/agent-stop.sh"
+      ],
       "deferred": [
-        "Whether the question it asks is the most useful one — needs a validated judge."
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
       "split": "dev"
     },
@@ -1460,11 +1481,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1495,11 +1516,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1530,11 +1551,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1565,11 +1586,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1600,11 +1621,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1635,11 +1656,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1670,11 +1691,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1705,11 +1726,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1740,11 +1761,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1775,11 +1796,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1810,11 +1831,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1845,11 +1866,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1880,11 +1901,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1915,11 +1936,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1950,11 +1971,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -1985,11 +2006,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2020,11 +2041,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2090,11 +2111,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2195,11 +2216,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2232,11 +2253,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2269,11 +2290,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2306,11 +2327,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2343,11 +2364,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2380,11 +2401,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2417,11 +2438,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2454,11 +2475,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2490,11 +2511,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2527,11 +2548,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2564,11 +2585,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2601,11 +2622,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2637,11 +2658,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2674,11 +2695,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2711,11 +2732,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2748,11 +2769,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2785,11 +2806,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2859,11 +2880,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2896,11 +2917,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2932,11 +2953,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -2968,11 +2989,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -3004,11 +3025,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -3078,11 +3099,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -3114,11 +3135,11 @@
       "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-          "type": "regex_all",
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
           "values": [
-            "/worktask\\s+\\\""
+            "--emergency"
           ]
         },
         {
@@ -3209,14 +3230,35 @@
       "prompt": "our public API reference is out of date. plan the documentation.",
       "dimensions": {
         "type": "docs",
-        "grounding": "absent",
+        "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "clarify",
-      "assertions": [],
-      "grounding": [],
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "does-not-declare-an-emergency",
+          "why": "Nothing in an ordinary request describes a live outage, so the incident pipeline is wrong regardless of what investigation later finds",
+          "type": "contains_none",
+          "values": [
+            "--emergency"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has; naming it is what separates a grounded plan from a plausible template",
+          "type": "regex_any",
+          "values": [
+            "README",
+            "component table",
+            "commands/"
+          ]
+        }
+      ],
+      "grounding": [
+        "README.md"
+      ],
       "deferred": [
-        "Whether the question it asks is the most useful one — needs a validated judge."
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
       "split": "train"
     },

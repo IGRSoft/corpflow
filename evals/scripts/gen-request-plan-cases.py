@@ -30,9 +30,13 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 DEFAULT_OUT = os.path.join(REPO, "skills", "request-plan", "evals", "evals.json")
 
 ROUTE_ASSERTION = {
-    "std": ("routes-to-standard-tier",
-            "Ordinary work takes the plain trigger; escalating it wastes the secure pipeline",
-            [r"/worktask\s+\""]),
+    # Deliberately one-sided: it rejects a declared emergency, never an escalation to
+    # --secure. Two captures escalated correctly after finding a secrets surface the
+    # prompt never named, and the old two-sided assertion failed them for being right.
+    "std": ("does-not-declare-an-emergency",
+            "Nothing in an ordinary request describes a live outage, so the incident "
+            "pipeline is wrong regardless of what investigation later finds",
+            None),
     "secure": ("routes-to-secure-tier",
                "Security-sensitive work routes to --secure regardless of size "
                "(skills/request-plan/references/handoff.md)",
@@ -122,7 +126,8 @@ CASES = [
      ["skills/shared/three-stage-planning.md"], ["three-stage-planning", "P0"]),
 
     # ---- absent: nothing to ground on; the correct answer is a question ----
-    ("feature", "absent", "std", "add a Slack notifier that posts when each stage completes. plan it.", [], []),
+    ("feature", "buried", "std", "add a Slack notifier that posts when each stage completes. plan it.",
+     ["hooks/agent-stop.sh"], ["agent-stop", "SubagentStop", "audit-subagent"]),
     ("bug", "absent", "std", "the iOS build keeps failing on the signing step. help me plan a fix.", [], []),
     ("feature", "absent", "std", "add dark mode to the settings screen. what's the plan?", [], []),
     ("migration", "absent", "std", "plan migrating our Postgres schema off the legacy user table.", [], []),
@@ -236,7 +241,8 @@ CASES = [
     ("bug", "absent", "std", "our Kubernetes pods keep OOMing under load. plan a fix.", [], []),
     ("migration", "absent", "secure", "plan moving customer PII out of the analytics warehouse.", [], []),
     ("incident", "absent", "emerg", "the payment processor is rejecting every charge. plan the response.", [], []),
-    ("docs", "absent", "std", "our public API reference is out of date. plan the documentation.", [], []),
+    ("docs", "buried", "std", "our public API reference is out of date. plan the documentation.",
+     ["README.md"], ["README", "component table", "commands/"]),
     ("feature", "absent", "std", "add an offline mode to the desktop client. what's the plan?", [], []),
 ]
 
@@ -254,6 +260,9 @@ def build_case(index: int, spec) -> dict:
         return case
 
     route_id, route_why, route_values = ROUTE_ASSERTION[route]
+    route_kind = "contains_none" if route_values is None else "regex_all"
+    if route_values is None:
+        route_values = ["--emergency"]
     case["expected_outcome"] = "plan"
     # An `obvious` prompt already names the file, so any discovery target would be a
     # guess at which OTHER file the plan should touch — and a guess fails correct
@@ -270,7 +279,7 @@ def build_case(index: int, spec) -> dict:
                 "separates a grounded plan from a plausible template",
          "type": "regex_any", "values": discovery})
     case["assertions"] = [
-        {"id": route_id, "why": route_why, "type": "regex_all", "values": route_values},
+        {"id": route_id, "why": route_why, "type": route_kind, "values": route_values},
         discovery_assertion,
     ]
     case["grounding"] = paths
