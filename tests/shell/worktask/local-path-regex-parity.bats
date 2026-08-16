@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# The absolute-host-path prefix rule is a BLOCKING strip in publish-pl-issue.sh
+# The absolute-host-path prefix rule is a BLOCKING strip in publish-pl-issue-lib.sh
 # sanitise_body and a read-back finding in pr-body-lint.sh. Two literals, one
 # contract: a prefix added to only one of them makes the lint and the sanitiser
 # disagree about the same body, which is the failure this pins.
@@ -7,7 +7,7 @@
 bats_require_minimum_version 1.5.0
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
-SANITISER="skills/worktask/scripts/publish-pl-issue.sh"
+SANITISER="skills/worktask/scripts/publish-pl-issue-lib.sh"
 LINT="skills/worktask/scripts/pr-body-lint.sh"
 
 # Both files carry the rule as a single awk ERE literal; extract the alternation

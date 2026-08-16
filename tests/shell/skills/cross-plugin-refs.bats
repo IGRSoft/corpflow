@@ -147,11 +147,11 @@ mk_plugin_layout() {
   # into published GitHub issues. Asserted against the alternation groups
   # themselves — a `grep -c <plugin>` over the whole file was satisfied by any
   # comment that happened to mention the name.
-  local script="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue.sh"
+  local script="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue-lib.sh"
   local alts n p
   alts="$(grep -n '(corpflow|' "$script")"
   n="$(printf '%s\n' "$alts" | grep -c '(corpflow|')"
-  # L348 (line-drop predicate) and L394 (token predicate); both must survive.
+  # The line-drop predicate and the token predicate; both must survive.
   [ "$n" -ge 2 ]
   local line
   for p in $SIBLINGS; do

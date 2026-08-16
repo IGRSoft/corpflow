@@ -175,6 +175,8 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | Source file | Test file | Lines valid | Lines covered | % |
 |-------------|-----------|-------------|---------------|---|
 | `skills/worktask/scripts/publish-pl-issue.sh` | `tests/shell/worktask/publish-pl-issue.bats` | — | — | — |
+| `skills/worktask/scripts/publish-pl-issue-lib.sh` | `tests/shell/worktask/publish-pl-issue.bats` (alias; sourced-only helper library) | — | — | — |
+| `skills/worktask/scripts/publish-pl-issue-selftest.sh` | `tests/shell/worktask/publish-pl-issue.bats` (alias; the `--self-test` harness it drives) | — | — | — |
 | `skills/worktask/scripts/attach-visual-evidence.sh` | `tests/shell/worktask/attach-visual-evidence.bats` | — | — | — |
 | `skills/worktask/scripts/adhoc-visual-evidence.sh` | `tests/shell/worktask/adhoc-visual-evidence.bats` | — | — | — |
 | `skills/worktask/scripts/cache-lint.sh` | `tests/shell/worktask/cache-lint.bats` | — | — | — |
@@ -233,7 +235,7 @@ excluded from the 45/45 denominator. They are counted in the 59 `.bats` / 879 `@
 | `tests/shell/skills/plugin-root-refs.bats` | `${CLAUDE_PLUGIN_ROOT}` composed-token grammar (a **predicate**, not a frozen line count — see below) |
 | `tests/shell/worktask/artifact-map-parity.bats` | Stage↔artifact map matches `ARTIFACT_RE` |
 | `tests/shell/worktask/manifest-parity.bats` | `plugin.json` / `marketplace.json` / filesystem / README version + registration parity |
-| `tests/shell/worktask/local-path-regex-parity.bats` | The absolute-host-path strip rule is byte-identical in `publish-pl-issue.sh` and `pr-body-lint.sh` |
+| `tests/shell/worktask/local-path-regex-parity.bats` | The absolute-host-path strip rule is byte-identical in `publish-pl-issue-lib.sh` and `pr-body-lint.sh` |
 | `tests/shell/worktask/gh-issue-dedup.bats` | Issue dedupe-anchor contract |
 | `tests/shell/benchmark/run-benchmark.bats` | The paid-dispatch barrier — no `--live`, no spend |
 | `tests/shell/benchmark/canvas-e2e-guards.bats` | Canvas E2E audit-row gate |
