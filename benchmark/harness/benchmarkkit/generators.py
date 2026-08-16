@@ -15,7 +15,7 @@ import shutil
 import tempfile
 from typing import Callable, Optional
 
-from . import genlib
+from . import genlib, treecopy
 from .genlib import Subprocess, Timer
 from .metrics import PathMetrics
 
@@ -77,7 +77,7 @@ def generate_with_plugin(workdir: str, template_dir: str, plugin_root: str,
     timer = Timer()
     timer.start()
     score, _ = run_estimate(estimate_calc_path, runner=estimate_runner)
-    stage_count = genlib.copy_template_staged(template_dir, app_dir)
+    stage_count = treecopy.copy_template_staged(template_dir, app_dir)
     elapsed = timer.elapsed
     # Deterministic mode records cost as null (estimate is not real spend).
     return genlib.build_path_metrics(
@@ -92,7 +92,7 @@ def generate_without_plugin(workdir: str, template_dir: str, plugin_root: str,
     app_dir = os.path.join(workdir, "without")
     timer = Timer()
     timer.start()
-    stage_count = genlib.copy_template_single_shot(template_dir, app_dir)
+    stage_count = treecopy.copy_template_single_shot(template_dir, app_dir)
     elapsed = timer.elapsed
     return genlib.build_path_metrics(
         app_dir=app_dir, plugin_root_dir=plugin_root, stage_count=stage_count,
