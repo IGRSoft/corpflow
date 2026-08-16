@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Fixed
+
+- **Change→test selection failed closed to FULL for `hooks/lib/` self-test bodies.** Moving those
+  bodies out of the production hooks left them unmapped, so any change touching one selected the
+  whole suite — a 5.6-minute run where a scoped one would do, and a silent loss of `--changed` for
+  hook work. Failing closed on an unmapped path is correct; the missing mapping was the defect.
+  `sel_alias_for` now resolves `<name>-selftest.sh` to its owning hook's `.bats`, **chaining
+  through the alias table** rather than stripping the suffix — `dv-comment-density-gate.sh` is
+  itself aliased to `comment-density-gate.bats`, so a plain strip would have left one of the four
+  unmapped and failed closed again. Two tests pin the mapping, both verified to fail without it.
+
 ### Added
 
 - **The test-execution gate now denies a run that already happened.** Authority answered *who*

@@ -21,9 +21,20 @@ SEL_INDEX_FILE=""
 # re-resolves each here, so a key with no arm fails loudly.
 sel_alias_for() {
   [ "$#" -eq 1 ] || return 2
+  local _owner _alias
   case "$1" in
     dv-comment-density-gate.sh) echo "comment-density-gate.bats" ;;
     audit-dedup.sh) echo "agent-coordination__audit-dedup.bats" ;;
+    # A self-test body under hooks/lib/ is exercised by its OWNING hook's .bats.
+    # Resolved through this table rather than by stripping the suffix, because
+    # the owner may itself be aliased — dv-comment-density-gate-selftest.sh has
+    # to reach comment-density-gate.bats, and a plain strip would leave it
+    # unmapped and fail the whole selection closed to FULL.
+    *-selftest.sh)
+      _owner="${1%-selftest.sh}.sh"
+      _alias="$(sel_alias_for "$_owner")"
+      if [ -n "$_alias" ]; then echo "$_alias"; else echo "${_owner%.sh}.bats"; fi
+      ;;
     *) echo "" ;;
   esac
 }
