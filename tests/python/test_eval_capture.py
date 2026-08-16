@@ -172,7 +172,8 @@ class OfflineGrading(_Fixture):
                 "## Scope\n**In:** a\n**Out:** b\n"
                 "## Phases\n| P0 — Required | x |\n| P1 — Nice-to-have | x |\n"
                 "| P2 — v1.1 | x |\n## Effort (rough)\n| M | 12 |\n"
-                "## Risks\n- r\n/worktask \"fix the test-execution-gate dedupe branch\"\n")
+                "## Risks\n- allow a rerun once the tree hash changes\n"
+                "/worktask \"fix the test-execution-gate dedupe branch\"\n")
 
     def test_a_conforming_response_passes(self):
         result = grader.grade_record(self.eval_set, self._record(self._conforming_plan()))
@@ -188,6 +189,21 @@ class OfflineGrading(_Fixture):
         result = grader.grade_record(self.eval_set, record)
         self.assertEqual(result["status"], "stale")
         self.assertNotIn("failed", result)
+
+    def test_a_clarifying_question_is_not_scored_as_a_broken_plan(self):
+        asked = ("The current working directory has no macOS app to ground a plan against. "
+                 "Do you mean a different project directory?")
+        result = grader.grade_record(self.eval_set, self._record(asked))
+        self.assertEqual(result["status"], "clarify")
+
+    def test_a_plan_that_merely_lacks_sections_still_fails(self):
+        """Absent sections plus no question is a bad plan, not a clarification."""
+        result = grader.grade_record(self.eval_set, self._record("here is roughly what I would do."))
+        self.assertEqual(result["status"], "fail")
+
+    def test_a_plan_asking_a_rhetorical_question_is_still_a_plan(self):
+        plan = self._conforming_plan() + "\nWhy this order? Risk first.\n"
+        self.assertEqual(grader.grade_record(self.eval_set, self._record(plan))["outcome"], "plan")
 
     def test_moved_assertions_are_flagged_but_still_graded(self):
         record = self._record(self._conforming_plan(), assertions_digest="0000000000000000")

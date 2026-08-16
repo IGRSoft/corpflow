@@ -88,5 +88,22 @@ evals/scripts/eval-grade.py   --eval-set skills/request-plan/evals/evals.json
 explicitly and grades its output; `natural` sends the bare request and so also
 grades whether the skill triggers at all.
 
+### Three outcomes, not two
+
+A response that asks a clarifying question instead of answering is reported as
+`CLARIFY` and left out of the pass/fail denominator. The skill declined to
+answer, so its output quality was never exercised — scoring that as a broken plan
+is what made a correct refusal read as 0/2 on the first live run.
+
+### Case lints
+
+`tests/python/test_skill_evals.py` fails a set that would waste a capture:
+
+| Lint | Rejects |
+|---|---|
+| `grounding` paths resolve | A case describing a surface this repo lacks — it can only ever be refused |
+| No echoed assertion values | A value already in the case's own prompt, which rewards restatement over judgement |
+| ≥2 case-specific assertions | Cases that only re-measure the shared template checks and cannot tell each other apart |
+
 Captured responses are evidence — commit them, so a grade stays reproducible
 against a known `plugin_sha`, `model`, and `skill_version`.

@@ -43,11 +43,24 @@ def assertions_for(eval_set: dict, case_id: int) -> list:
     return eval_set.get("shared_assertions", []) + case.get("assertions", [])
 
 
+# Headers a rendered plan must carry; zero of them means no plan was attempted.
+PLAN_SECTIONS = ("## Context", "## Goal", "## Scope", "## Phases", "## Effort", "## Risks")
+
+
+def classify_outcome(response: str) -> str:
+    """`clarify` when the skill asked instead of answering — no plan section at all,
+    plus a question. Scoring that as a broken plan is what produced a misleading 0/2."""
+    if any(section in response for section in PLAN_SECTIONS):
+        return "plan"
+    return "clarify" if "?" in response else "plan"
+
+
 def grade(eval_set: dict, case_id: int, response: str) -> dict:
     assertions = assertions_for(eval_set, case_id)
     failed = [a["id"] for a in assertions if not check(a, response)]
     return {"case_id": case_id, "total": len(assertions),
-            "passed": len(assertions) - len(failed), "failed": failed}
+            "passed": len(assertions) - len(failed), "failed": failed,
+            "outcome": classify_outcome(response)}
 
 
 def _digest(payload) -> str:

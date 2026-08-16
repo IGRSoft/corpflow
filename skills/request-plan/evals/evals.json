@@ -12,19 +12,33 @@
       "id": "template-sections-present",
       "why": "references/plan-template.md fixes the section order; a dropped header breaks the contract",
       "type": "contains_all",
-      "values": ["## Context", "## Goal", "## Scope", "## Phases", "## Effort", "## Risks"]
+      "values": [
+        "## Context",
+        "## Goal",
+        "## Scope",
+        "## Phases",
+        "## Effort",
+        "## Risks"
+      ]
     },
     {
       "id": "scope-names-in-and-out",
       "why": "Out-of-scope is what stops scope creep; a plan with only In is half a scope",
       "type": "contains_all",
-      "values": ["**In:**", "**Out:**"]
+      "values": [
+        "**In:**",
+        "**Out:**"
+      ]
     },
     {
       "id": "three-phase-model",
       "why": "P0/P1/P2 per skills/shared/three-stage-planning.md",
       "type": "regex_all",
-      "values": ["P0\\s*—\\s*Required", "P1\\s*—\\s*Nice-to-have", "P2\\s*—\\s*v1\\.1"]
+      "values": [
+        "P0\\s*—\\s*Required",
+        "P1\\s*—\\s*Nice-to-have",
+        "P2\\s*—\\s*v1\\.1"
+      ]
     },
     {
       "id": "effort-sized-with-complexity",
@@ -39,13 +53,19 @@
       "id": "single-worktask-trigger",
       "why": "The handoff is one ready-to-paste command line",
       "type": "regex_all",
-      "values": ["/worktask(\\s+--\\w+)?\\s+\""]
+      "values": [
+        "/worktask(\\s+--\\w+)?\\s+\""
+      ]
     },
     {
       "id": "no-separate-test-phase",
       "why": "Tests live inside each phase's scope, never as a phase of their own",
       "type": "contains_none",
-      "values": ["P1 — Testing", "P2 — Testing", "Phase: Testing"]
+      "values": [
+        "P1 — Testing",
+        "P2 — Testing",
+        "Phase: Testing"
+      ]
     }
   ],
   "evals": [
@@ -57,11 +77,32 @@
           "id": "names-the-gate-surface",
           "why": "A grounded plan must name the actual failure surface, not restate the request",
           "type": "regex_any",
-          "values": ["test-execution-gate", "CORPFLOW_TEST_DEDUPE", "testing-strategy", "dedupe"]
+          "values": [
+            "test-execution-gate",
+            "CORPFLOW_TEST_DEDUPE",
+            "testing-strategy",
+            "dedupe"
+          ]
+        },
+        {
+          "id": "plans-a-rerun-path",
+          "why": "The complaint is that a rerun is refused; a plan that never addresses re-running after a tree change has not answered the request",
+          "type": "regex_any",
+          "values": [
+            "rerun",
+            "re-run",
+            "tree",
+            "hash",
+            "changed"
+          ]
         }
       ],
       "deferred": [
         "Whether the Context section reflects THIS repo rather than a generic template — needs a validated judge."
+      ],
+      "grounding": [
+        "hooks/test-execution-gate.sh",
+        "skills/shared/testing-strategy.md"
       ]
     },
     {
@@ -72,11 +113,30 @@
           "id": "reuses-existing-export-surface",
           "why": "The 13-file pack in csv-export-templates already exists; planning a second exporter is the failure this case targets",
           "type": "regex_any",
-          "values": ["csv-export-templates", "/estimate\\s+--export", "existing (CSV|export)", "13[- ]CSV", "13 CSV"]
+          "values": [
+            "csv-export-templates",
+            "13[- ]CSV",
+            "13 CSV"
+          ]
+        },
+        {
+          "id": "addresses-the-breakdown-gap",
+          "why": "--export csv requires --detailed because a quick estimate has no breakdown to export; a plan that never says what a quick export would contain has skipped the actual design problem",
+          "type": "regex_any",
+          "values": [
+            "breakdown",
+            "subset",
+            "columns",
+            "schema"
+          ]
         }
       ],
       "deferred": [
         "Whether the reuse is load-bearing in the phases or merely name-dropped — needs a validated judge."
+      ],
+      "grounding": [
+        "skills/csv-export-templates/SKILL.md",
+        "commands/estimate.md"
       ]
     },
     {
@@ -87,17 +147,28 @@
           "id": "flags-security-sensitive",
           "why": "The plan must characterise the risk, not merely echo the deny-list noun from the request",
           "type": "regex_any",
-          "values": ["security-sensitive", "secret", "exfiltrat", "credential"]
+          "values": [
+            "security-sensitive",
+            "secret",
+            "exfiltrat",
+            "credential"
+          ]
         },
         {
           "id": "routes-to-secure-tier",
           "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
           "type": "regex_all",
-          "values": ["/worktask\\s+--secure"]
+          "values": [
+            "/worktask\\s+--secure"
+          ]
         }
       ],
       "deferred": [
         "Whether the proposed additions actually close the bypassPermissions surface — needs a validated judge."
+      ],
+      "grounding": [
+        "benchmark/live/settings/benchmark-settings.json",
+        "benchmark/harness/bin/bench-live"
       ]
     }
   ]

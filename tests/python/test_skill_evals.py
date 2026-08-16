@@ -22,8 +22,8 @@ _EVAL_SETS = [os.path.join(_REPO, "skills", "request-plan", "evals", "evals.json
 
 _TYPES = set(_engine.ASSERTION_TYPES)
 
-# Satisfies case 1's own assertion so these fixtures exercise the shared ones in isolation.
-_CASE1_TOKEN = "test-execution-gate\n"
+# Satisfies case 1's own assertions so these fixtures exercise the shared ones in isolation.
+_CASE1_TOKEN = "test-execution-gate rerun after a tree change\n"
 
 
 def _load(path):
@@ -152,6 +152,39 @@ class EvalSetLint(unittest.TestCase):
             for case in eval_set["evals"]:
                 ids = shared + [a["id"] for a in case.get("assertions", [])]
                 self.assertEqual(len(ids), len(set(ids)), f"{path} case {case['id']}")
+
+    def test_every_case_is_grounded_in_paths_that_exist(self):
+        """A case describing a surface this repo lacks can only ever be refused —
+        the first live run burned $1.47 on two such cases before this existed."""
+        for path in _EVAL_SETS:
+            for case in _load(path)["evals"]:
+                grounding = case.get("grounding")
+                self.assertTrue(grounding, f"{path} case {case['id']} declares no grounding")
+                for rel in grounding:
+                    self.assertTrue(os.path.exists(os.path.join(_REPO, rel)),
+                                    f"{path} case {case['id']} grounds on missing {rel}")
+
+    def test_no_assertion_can_be_satisfied_by_echoing_the_prompt(self):
+        """A value already in the case's own prompt rewards restatement, not judgement."""
+        for path in _EVAL_SETS:
+            for case in _load(path)["evals"]:
+                prompt = case["prompt"].lower()
+                for assertion in case.get("assertions", []):
+                    for value in assertion["values"]:
+                        literal = re.sub(r"\\[sbwd]\*?|\[.*?\]|[\\()?+*|^$]", " ", value)
+                        for token in (t for t in literal.lower().split() if len(t) > 5):
+                            self.assertNotIn(token, prompt,
+                                             f"{path} case {case['id']} {assertion['id']}: "
+                                             f"'{token}' is echoed from the prompt")
+
+    def test_every_case_carries_enough_case_specific_assertions(self):
+        """Shared assertions re-measure template conformance; only case-specific ones
+        tell two cases apart."""
+        for path in _EVAL_SETS:
+            for case in _load(path)["evals"]:
+                self.assertGreaterEqual(
+                    len(case.get("assertions", [])), 2,
+                    f"{path} case {case['id']} needs >=2 case-specific assertions")
 
 
 if __name__ == "__main__":

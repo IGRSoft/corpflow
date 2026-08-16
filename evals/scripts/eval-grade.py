@@ -39,7 +39,10 @@ def grade_record(eval_set: dict, record: dict) -> dict:
                 "reason": (f"prompt changed since capture "
                            f"(stored {record.get('prompt_digest')}, now {current_prompt})")}
     result = engine.grade(eval_set, cid, record["response"])
-    result["status"] = "pass" if not result["failed"] else "fail"
+    if result["outcome"] == "clarify":
+        result["status"] = "clarify"
+    else:
+        result["status"] = "pass" if not result["failed"] else "fail"
     result["assertions_moved"] = (
         record.get("assertions_digest") != engine.assertions_digest(eval_set, cid))
     result["model"] = record.get("model")
@@ -93,11 +96,15 @@ def main(argv_in: list) -> int:
             stale.append(cid)
         results.append(result)
 
-    graded = [r for r in results if r["status"] != "stale"]
+    # Clarifications sit outside pass/fail: the skill declined to answer, so its
+    # plan quality was never exercised and folding it either way would lie.
+    clarified = [r for r in results if r["status"] == "clarify"]
+    graded = [r for r in results if r["status"] not in ("stale", "clarify")]
     failed = [r for r in graded if r["status"] == "fail"]
     summary = {
         "skill": eval_set["skill_name"],
         "graded": len(graded), "passed": len(graded) - len(failed), "failed": len(failed),
+        "clarified": [r["case_id"] for r in clarified],
         "missing_captures": missing, "stale_captures": stale, "results": results,
     }
 
@@ -108,12 +115,17 @@ def main(argv_in: list) -> int:
             if r["status"] == "stale":
                 print(f"  case {r['case_id']}: STALE — {r['reason']}")
                 continue
+            if r["status"] == "clarify":
+                print(f"  case {r['case_id']}: CLARIFY — asked instead of planning; not scored")
+                continue
             mark = "PASS" if r["status"] == "pass" else "FAIL"
             detail = f" (failed: {', '.join(r['failed'])})" if r["failed"] else ""
             moved = "  [assertions changed since capture]" if r["assertions_moved"] else ""
             print(f"  case {r['case_id']}: {mark} {r['passed']}/{r['total']}{detail}{moved}")
         if missing:
             print(f"  missing captures: {missing}")
+        if summary["clarified"]:
+            print(f"  clarified (unscored): {summary['clarified']}")
         print(f"{eval_set['skill_name']}: {summary['passed']}/{summary['graded']} passed")
 
     if stale:
