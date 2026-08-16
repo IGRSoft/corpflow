@@ -50,9 +50,19 @@ split (`evals-skills:validate-evaluator`), never on the few-shot examples.
 ## Skill eval sets
 
 Per-skill eval sets live next to their skill (e.g.
-`skills/request-plan/evals/evals.json`). Every case is graded by **binary,
-code-checked assertions** — no scales, no unvalidated judges. The assertion
-engine, grading, and the lint that keeps eval sets code-checkable live in
-`tests/python/test_skill_evals.py` and run offline as part of `./run-tests.sh`.
+`skills/request-plan/evals/evals.json`). Every case is *specified* to be graded
+by **binary, code-checked assertions** — no scales, no unvalidated judges.
 Criteria that genuinely need interpretation are parked in each case's `deferred`
 list rather than being graded badly.
+
+**No case has yet been graded against model output.** `grade()` scores a response
+the caller hands it, and no capture step exists: nothing dispatches these prompts
+and no responses are stored. What `./run-tests.sh` executes is
+`tests/python/test_skill_evals.py` — unit tests of the assertion engine against
+hand-built fixture plans, plus the lint that keeps every eval set binary and
+code-checkable. **A green run means the sets are well-formed and the engine is
+correct; it is not a measurement of any skill's output quality.**
+
+Capture is the missing step: dispatch each case `prompt`, store the response
+beside the eval set, grade it offline with the existing engine. Until that lands,
+these sets are a specification, not a result.
