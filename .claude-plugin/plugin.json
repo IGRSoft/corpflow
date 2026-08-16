@@ -1,7 +1,7 @@
 {
   "name": "corpflow",
   "description": "Comprehensive 11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with a durable state ledger, developer review, security review, release engineering, incident response, and ST-stage self-improvement retrospectives. Includes /megatask — dependency-DAG orchestration of many worktasks across a GitHub milestone or issue array.",
-  "version": "4.0.15",
+  "version": "4.0.16",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"

@@ -4,7 +4,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.15** — state-ledger cutover: `state.json` `tasks{}` replaces the retired Task System and the old `stages{}` map
+- Plugin version: **4.0.16** — fail-closed fixes from a 4-platform stress test: secrets scanner no longer exits 0 on an engine crash; `state-merge.sh` resolves the workspace instead of cwd; the test-execution denial names `--no-test`; tier matching no longer requires parentheses; `dv-tree-preflight.sh` reports split worktree parents
 - Claude Code min required: **2.1.233** (README.md is authoritative; pinned to the band top per the v3.35.0/v3.37.0 precedent — the ledger cutover itself no longer depends on any CC task tool)
 - Claude Code latest integrated band: **2.1.221→2.1.233**
 
@@ -39,6 +39,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-08-16: v4.0.16 — five fail-open/silent-default fixes surfaced by a 4-platform 11-stage stress test: `scan-secrets.sh` returned 0 on a crashed regex engine; `state-merge.sh` resolved `.context/` from cwd, so the Layer-2 net never worked inside a DV worktree; the test-execution denial never named `--no-test`; tier extraction required parentheses; preflight now reports split worktree parents.
 - 2026-08-15: v4.0.15 — CC 2.1.233 removed the Todo/task tools on every model the plugin dispatches; full cutover to a `state.json` `tasks{}` ledger, no mirror, no fallback.
 - 2026-08-15: v4.0.14 — megatask conflict-prevention tooling from a 9-issue parallel-batch post-mortem (#291): condition-first conflict recovery, worktree scratch exclusion, pbxproj union resolver.
 - 2026-08-13: v4.0.13 — plugin renamed `company-workflow` → `corpflow`; ids, env vars, and repo slug moved, vendor identity unchanged. BREAKING, no alias.

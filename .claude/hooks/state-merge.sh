@@ -38,7 +38,46 @@
 
 set -euo pipefail
 
-LOG_DIR=".context/logs"
+# ---------- Workspace resolution ----------
+# This hook fires on SubagentStop, and the subagent that just stopped is very
+# often a DV stream — the ONE stage for which worktree isolation is mandatory.
+# Its cwd is therefore a linked worktree, where `.context/` does not exist:
+# the directory is gitignored and never carried into a worktree checkout.
+#
+# Resolving `.context/` relative to cwd made this hook — documented as the
+# Layer 2 safety net that patches state.json when agents skip self-patching —
+# structurally unable to do that for the only stage that always needs it. It
+# failed silently: a `[WARN] no artifact resolved` line written into a shadow
+# `.context/logs/` inside the worktree, a directory deleted with the worktree.
+# Worse, had an artifact resolved, the completion patch would have merged into
+# a throwaway ledger instead of the real one.
+#
+# Resolve the real workspace instead, most-explicit first. The git arm is what
+# recovers the worktree case: in a linked worktree `--git-common-dir` points at
+# the MAIN checkout's .git, whose parent is the workspace that owns `.context/`.
+_resolve_workspace_root() {
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+    printf '%s' "$WORKSPACE_ROOT"; return
+  fi
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+    printf '%s' "$CLAUDE_PROJECT_DIR"; return
+  fi
+  local _common _parent
+  if _common=$(git rev-parse --git-common-dir 2> /dev/null) && [ -n "$_common" ]; then
+    _parent=$(cd "$(dirname "$_common")" 2> /dev/null && pwd) || _parent=""
+    if [ -n "$_parent" ] && [ -d "$_parent/.context" ]; then
+      printf '%s' "$_parent"; return
+    fi
+  fi
+  # Env vars win even when .context/ is absent yet — a first write must land in
+  # the declared workspace, not in whatever directory the hook happened to run.
+  if [ -n "${WORKSPACE_ROOT:-}" ]; then printf '%s' "$WORKSPACE_ROOT"; return; fi
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then printf '%s' "$CLAUDE_PROJECT_DIR"; return; fi
+  pwd
+}
+WORKSPACE_DIR=$(_resolve_workspace_root)
+
+LOG_DIR="$WORKSPACE_DIR/.context/logs"
 mkdir -p "$LOG_DIR" 2> /dev/null || true
 LOG="$LOG_DIR/state-merge.log"
 
@@ -122,7 +161,7 @@ fi
 # Invariant: the corrupt original is copied aside and verified byte-equal BEFORE anything
 # is written, and an unverifiable backup aborts the repair. A corrupt ledger is
 # recoverable; a destroyed one is not.
-STATE_FILE=".context/state.json"
+STATE_FILE="$WORKSPACE_DIR/.context/state.json"
 
 # First unused name in the base, base-1, base-2 … series.
 # `-L` as well as `-e`: `-e` is false for a DANGLING symlink, so a pre-planted broken
@@ -179,8 +218,10 @@ _repair_corrupt_state() {
   platform=$(_salvage_field "$STATE_FILE" platform)
   [[ -n "$platform" ]] || platform="all"
 
-  # Same directory as the target so the rename is atomic.
-  tmp=".context/.state.json.repair.$$.tmp"
+  # Same directory as the target so the rename is atomic — derived from
+  # STATE_FILE rather than re-spelled relative to cwd, so the two cannot drift
+  # onto different filesystems (a cross-device rename is not atomic).
+  tmp="$(dirname "$STATE_FILE")/.state.json.repair.$$.tmp"
   if ! jq -cn --arg id "$wt_id" --arg plat "$platform" --argjson n "$n" '
       { version: 2, worktask_id: $id,
         plan_file: (".context/planning-" + ($n | tostring) + ".md"),

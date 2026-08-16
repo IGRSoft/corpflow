@@ -839,7 +839,16 @@ run_gate() {
     # and tells the caller nothing about why now is the wrong time.
     _reason="No stage is in progress — this worktask is finished, or the loop is between stages, so nobody holds test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). Running a suite here gates no decision: the work it would verify is already committed or not yet dispatched. To proceed: (1) if a stage needs this, dispatch it and let DV (scoped) or QA (full) run it under its own authority, or (2) if you want evidence for work already merged, say so and ask a human first. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
   else
-  _reason="Stage '$_stage' has no test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). DV may run scoped tests only; QA is the sole full-suite authority. To proceed: (1) record requests_test_evidence: <what and why> in this stage's artifact so QA executes it, or (2) return verdict: blocked with error_escalated_to: \"DV\" if it blocks this stage's completion. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
+  # The --no-test remedy is named FIRST and explicitly: it is the one option
+  # that lets the caller get what it usually actually wants (a compile/build
+  # check) without any authority change, and it is spelled identically across
+  # every platform plugin's build-test command. Omitting it cost a real run two
+  # streams: both were denied, neither discovered the flag, both invented
+  # `--build-only` (which no build-test command accepts and the classifier
+  # therefore reads as a full test run), and both then fell back to raw
+  # toolchain calls — precisely what agents/developer.md forbids. A denial that
+  # does not name the supported escape hatch manufactures that workaround.
+  _reason="Stage '$_stage' has no test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). DV may run scoped tests only; QA is the sole full-suite authority. To proceed: (1) if you only need to BUILD, re-run the same build-test command with --no-test — build-only verification is permitted at every stage and is allowed by this gate (note: --build-only is not a real flag and will be denied again); (2) record requests_test_evidence: <what and why> in this stage's artifact so QA executes it; or (3) return verdict: blocked with error_escalated_to: \"DV\" if it blocks this stage's completion. Do NOT fall back to invoking the toolchain directly — agents/developer.md requires build/test to go through the platform's build-test command. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
   fi
   _deny=$(jq -cn --arg reason "$_reason" '
     {hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}

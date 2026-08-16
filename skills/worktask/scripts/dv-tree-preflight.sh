@@ -122,6 +122,53 @@ cmd_check() {
     return 1
   fi
 
+  # 1a. Worktree-parent ambiguity. Advisory — this stream is provably on the right
+  #     tree (check 1 passed), so blocking it would stop a correct stream over a
+  #     condition that harms a DIFFERENT one. But it is reported loudly, because it
+  #     is the latent cause of check 1 firing at all.
+  #
+  #     When linked worktrees live under more than one parent directory, anything
+  #     that reconstructs a worktree path BY CONVENTION — rather than reading the
+  #     task's own metadata.workspace_path — has to guess a prefix. It globs one,
+  #     and gets another stream's directory. Observed cost in one four-stream run:
+  #     a stream was assigned `.claude/worktrees/dv3-web` and handed
+  #     `.worktrees/dv0-service` at spawn on four consecutive dispatches, because
+  #     `.worktrees/` held exactly one entry for the glob to land on. Normalising
+  #     to a single parent fixed it on the next dispatch.
+  #
+  #     Cheap to check, and it names the condition before four streams pay for it.
+  local _main_common _main_checkout _wt_line _wt_path _wt_parent _parents _n_parents
+  _main_common=$(git rev-parse --git-common-dir 2> /dev/null || printf '')
+  _main_checkout=""
+  if [[ -n "$_main_common" ]]; then
+    _main_checkout=$(cd "$(dirname "$_main_common")" 2> /dev/null && pwd) || _main_checkout=""
+  fi
+  _parents=""
+  while IFS= read -r _wt_line; do
+    [[ "$_wt_line" == worktree\ * ]] || continue
+    _wt_path="${_wt_line#worktree }"
+    # The main checkout is not a linked worktree; its parent says nothing about
+    # where linked worktrees are placed.
+    [[ -n "$_main_checkout" && "$_wt_path" == "$_main_checkout" ]] && continue
+    _wt_parent=$(dirname "$_wt_path")
+    case "
+$_parents" in
+      *"
+$_wt_parent"*) : ;;
+      *) _parents="$_parents
+$_wt_parent" ;;
+    esac
+  done < <(git worktree list --porcelain 2> /dev/null)
+  _n_parents=$(printf '%s' "$_parents" | grep -c . || true)
+  if [[ "${_n_parents:-0}" -gt 1 ]]; then
+    printf >&2 'WARN: linked worktrees are split across %s parent directories:\n' "$_n_parents"
+    printf '%s\n' "$_parents" | grep . | while IFS= read -r _wt_parent; do
+      printf >&2 '  %s/\n' "$_wt_parent"
+    done
+    printf >&2 'A path rebuilt by convention instead of from metadata.workspace_path can resolve into the wrong parent and hand a stage another stream'"'"'s tree. Normalise every stage worktree under ONE parent (%s is where EnterWorktree can reach).\n' \
+      "${_main_checkout:+$_main_checkout/}.claude/worktrees"
+  fi
+
   # 2/3. Advisory only — a true statement about a tree that is nonetheless the right one.
   is_linked_worktree || warn "tree is not a linked worktree (D0.0 isolation): $root"
 
