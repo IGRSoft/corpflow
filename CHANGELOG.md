@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Fixed
 
+- **The comment-density gate blocked legitimate per-declaration DocC.** A 20-case enum
+  carrying exactly one on-budget `///` per one-line case measured 48% of added lines and
+  was blocked, because the aggregate ratio cannot tell an essay from a long list of
+  compliant one-liners — a list of short declarations is structurally near 1:1 while every
+  block is inside the standard's 1–3-line budget. Scoring now runs on two signals: the
+  **essay share** — comment lines inside a run longer than `CORPFLOW_COMMENT_BLOCK_MAX`
+  (3) — against the existing 40 ceiling, plus the aggregate kept as a looser secondary
+  ceiling (`CORPFLOW_COMMENT_DENSITY_HARD`, default `DENSITY_MAX + 20` = 60). Deriving the
+  secondary ceiling from `DENSITY_MAX` keeps one knob moving both, so raising the ceiling
+  still lets a dense file through.
+
+  The secondary ceiling is load-bearing, not belt-and-braces: without it, prose trimmed to
+  exactly 3 lines and repeated for every declaration would clear the block-length signal
+  with 72% of the file as comment. Two self-test fixtures pin both directions — the
+  compliant per-declaration case must pass, the essay-per-declaration case must block —
+  and every existing fixture keeps its prior verdict, verified case by case. Blank lines,
+  code lines, and hunk boundaries all end a run, so two hunks' comments never merge into
+  one phantom essay. The gate stays line- and regex-based; no parser was introduced.
+
 - **Change→test selection failed closed to FULL for `hooks/lib/` self-test bodies.** Moving those
   bodies out of the production hooks left them unmapped, so any change touching one selected the
   whole suite — a 5.6-minute run where a scoped one would do, and a silent loss of `--changed` for

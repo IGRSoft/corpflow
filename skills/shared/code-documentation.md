@@ -46,8 +46,11 @@ a copy drifts and lies the moment the source changes.
 | Inline `//` rationale | One short trailing line per non-obvious literal |
 | Longer discussion (multi-line) | Reserved strictly for a genuinely non-obvious **algorithm** — not for restating design, color, history, or callers |
 
-Target comment-to-code density well below 1:1, and ≤40% of a change's *added* lines
-(`dv-comment-density-gate.sh` gates this). A file that is ~half prose is over-documented.
+Target comment-to-code density well below 1:1. `dv-comment-density-gate.sh` gates a
+change's *added* lines on two signals: ≤40% of them may sit in comment blocks longer
+than the 3-line budget above, and ≤60% may be comment overall. One compliant one-line
+`///` per declaration never trips it — a list of short declarations is structurally
+near 1:1 while still on budget. A file that is ~half prose is over-documented.
 
 ## Doc block shape
 

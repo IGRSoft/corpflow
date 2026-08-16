@@ -13,9 +13,12 @@
 #   - Density is the comment share of a file's ADDED lines (whole body for a new
 #     file), so an agent is never blocked for inheriting existing bloat. Files
 #     under MIN_ADDED_LINES are skipped — bulk-authored files are the target.
-#   - Over CORPFLOW_COMMENT_DENSITY_MAX (default 40) -> decision "block" with
-#     remediation in additionalContext, plus a comment_density_block row. Under
-#     -> pass, warning in the row past ..._WARN (default 25) without blocking.
+#   - Two signals, either one blocks: the ESSAY share (comment lines sitting in
+#     runs longer than the per-declaration budget) over CORPFLOW_COMMENT_DENSITY_MAX
+#     (default 40), or the aggregate share over the looser ..._HARD ceiling.
+#     A block carries remediation in additionalContext plus a
+#     comment_density_block row. Under -> pass, warning in the row past
+#     ..._WARN (default 30) without blocking.
 #   - jq or git absent -> exit 0, like the sibling gates.
 #   - Exit is ALWAYS 0; a block travels in the decision JSON, never the code.
 #   - --self-test: bloated fixture blocks, lean fixture passes.
@@ -23,8 +26,17 @@ set -eu
 
 # Measured against a real offending branch: added-line density ran 26-67% per
 # file, and 40 catches every genuine offender while clearing the two files whose
-# documentation was proportionate.
+# documentation was proportionate. That ceiling scores the ESSAY share, not the
+# aggregate: a 20-case enum with one budget-compliant /// per one-line case is
+# structurally ~1:1 and measured 48% aggregate, so the aggregate alone cannot
+# separate an essay from a long list of compliant one-liners.
 DENSITY_MAX="${CORPFLOW_COMMENT_DENSITY_MAX:-40}"
+# Secondary ceiling on the aggregate, so budget-shaped prose repeated all the
+# way down still blocks. Derived from DENSITY_MAX so one knob moves both.
+DENSITY_HARD="${CORPFLOW_COMMENT_DENSITY_HARD:-$((DENSITY_MAX + 20))}"
+# A run longer than the standard's 1-3-line doc budget is an essay, whatever it
+# documents (skills/shared/code-documentation.md § Length budget).
+BLOCK_MAX="${CORPFLOW_COMMENT_BLOCK_MAX:-3}"
 DENSITY_WARN="${CORPFLOW_COMMENT_DENSITY_WARN:-30}"
 MIN_ADDED_LINES="${CORPFLOW_COMMENT_DENSITY_MIN_LINES:-40}"
 
@@ -80,9 +92,40 @@ rename_source_of() {
 }
 
 # ---------------------------------------------------------------------------
-# density_of <file>: integer comment percentage, or nothing when the file has no
-# countable body. Line-based on purpose — it must agree with the ratio a human
-# gets from grep, not with a language parser.
+# The scoring pass, shared by both arms via `mode`. Emits "<aggregate%> <lines>
+# <essay%>": the essay share counts only comment lines inside a run longer than
+# `budget`, which is what separates an essay from one compliant /// per
+# declaration.
+#
+# A blank line, a code line, and (in diff mode) any non-added line all end a
+# run: a doc block is contiguous, and hunks are not adjacent in the file.
+# ---------------------------------------------------------------------------
+# shellcheck disable=SC2016 # awk program text; $0/$1 are awk's, not the shell's
+DENSITY_AWK='
+  BEGIN { pat = (style == "hash") ? "^#" : "^(//|/\\*|\\*/|\\*)" }
+  function flush() { if (run > budget) { essay += run } ; run = 0 }
+  function feed(line) {
+    sub(/^[ \t]+/, "", line)
+    if (line == "") { flush(); return }
+    total++
+    if (line ~ pat) { comment++; run++; return }
+    flush()
+  }
+  mode == "diff" && /^\+\+\+/ { flush(); next }
+  mode == "diff" { if ($0 ~ /^\+/) { feed(substr($0, 2)) } else { flush() } ; next }
+  { feed($0) }
+  END {
+    flush()
+    if (total > 0) {
+      printf "%d %d %d", (comment * 100) / total, total, (essay * 100) / total
+    }
+  }
+'
+
+# ---------------------------------------------------------------------------
+# added_density_of <root> <file>: "<aggregate%> <added-lines> <essay%>", or
+# nothing when the file has no countable body. Line-based on purpose — it must
+# agree with the ratio a human gets from grep, not with a language parser.
 #
 # Python docstrings are NOT counted: the diff arm sees only added lines, so one
 # unpaired `"""` would score every later line as comment. Undercounting is the
@@ -110,30 +153,11 @@ added_density_of() {
   _pair=$(rename_source_of "$_root" "$_file")
   if git -C "$_root" ls-files --error-unmatch "$_file" >/dev/null 2>&1; then
     # shellcheck disable=SC2086 # $_pair is a git-emitted path, deliberately split
-    git -C "$_root" diff HEAD -M -- $_pair "$_file" 2>/dev/null | awk -v style="$_style" '
-      BEGIN { pat = (style == "hash") ? "^#" : "^(//|/\\*|\\*/|\\*)" }
-      /^\+\+\+/ { next }
-      /^\+/ {
-        line = substr($0, 2)
-        sub(/^[ \t]+/, "", line)
-        if (line == "") { next }
-        total++
-        if (line ~ pat) { comment++ }
-      }
-      END { if (total > 0) { printf "%d %d", (comment * 100) / total, total } }
-    '
+    git -C "$_root" diff HEAD -M -- $_pair "$_file" 2>/dev/null |
+      awk -v style="$_style" -v budget="$BLOCK_MAX" -v mode=diff "$DENSITY_AWK"
   else
-    awk -v style="$_style" '
-      BEGIN { pat = (style == "hash") ? "^#" : "^(//|/\\*|\\*/|\\*)" }
-      {
-        line = $0
-        sub(/^[ \t]+/, "", line)
-        if (line == "") { next }
-        total++
-        if (line ~ pat) { comment++ }
-      }
-      END { if (total > 0) { printf "%d %d", (comment * 100) / total, total } }
-    ' "$_root/$_file" 2>/dev/null
+    awk -v style="$_style" -v budget="$BLOCK_MAX" -v mode=file "$DENSITY_AWK" \
+      "$_root/$_file" 2>/dev/null
   fi
 }
 
@@ -166,6 +190,7 @@ run_gate() {
 
   _offenders=""
   _worst=0
+  _worst_essay=0
   _checked=0
   while IFS= read -r _f; do
     [ -n "$_f" ] || continue
@@ -183,14 +208,17 @@ run_gate() {
     _m=$(added_density_of "$_root" "$_f")
     [ -n "$_m" ] || continue
     _d=${_m%% *}
-    _added=${_m##* }
+    _rest=${_m#* }
+    _added=${_rest%% *}
+    _e=${_rest##* }
     # Small edits are not the failure mode; bulk-authored files are. Below the
     # floor a two-line doc on a three-line fix would read as 66% and block.
     [ "$_added" -ge "$MIN_ADDED_LINES" ] || continue
     _checked=$((_checked + 1))
     [ "$_d" -gt "$_worst" ] && _worst="$_d"
-    if [ "$_d" -gt "$DENSITY_MAX" ]; then
-      _offenders="${_offenders}${_offenders:+, }${_f} (${_d}% of ${_added} added)"
+    [ "$_e" -gt "$_worst_essay" ] && _worst_essay="$_e"
+    if [ "$_e" -gt "$DENSITY_MAX" ] || [ "$_d" -gt "$DENSITY_HARD" ]; then
+      _offenders="${_offenders}${_offenders:+, }${_f} (${_d}% of ${_added} added, ${_e}% in comment blocks over ${BLOCK_MAX} lines)"
     fi
   done <<EOF
 $_files
@@ -204,23 +232,33 @@ EOF
 
   if [ -z "$_offenders" ]; then
     _res="ok"
-    [ "$_worst" -gt "$DENSITY_WARN" ] && _res="warn"
+    # Warn on either signal, so a file drifting toward the secondary ceiling is
+    # visible before it blocks.
+    if [ "$_worst_essay" -gt "$DENSITY_WARN" ] || [ "$_worst" -gt "$((DENSITY_HARD - 10))" ]; then
+      _res="warn"
+    fi
     jq -cn --arg ts "$_ts" --arg agent "$_agent" --arg res "$_res" \
-      --argjson worst "$_worst" --argjson checked "$_checked" --argjson max "$DENSITY_MAX" '
+      --argjson worst "$_worst" --argjson essay "$_worst_essay" \
+      --argjson checked "$_checked" --argjson max "$DENSITY_MAX" \
+      --argjson hard "$DENSITY_HARD" --argjson block "$BLOCK_MAX" '
       {ts: $ts, actor: "hook:dv-comment-density-gate", action: "comment_density_pass",
        subject: $agent, result: $res,
-       metadata: {worst_pct: $worst, files_checked: $checked, threshold: $max}}' \
+       metadata: {worst_pct: $worst, worst_essay_pct: $essay, files_checked: $checked,
+                  threshold: $max, hard_threshold: $hard, block_max: $block}}' \
       >>"$_log_dir/audit.jsonl" 2>/dev/null || true
     return 0
   fi
 
-  _remedy="Comment-density gate: these changed files are over ${DENSITY_MAX}% comments — ${_offenders}. The corpflow standard (skill: corpflow:code-comment-standard) requires comment-to-code density well below 1:1; a file that is ~half prose is over-documented. Remove: multi-paragraph /// essays, defect/ticket history, before/after narration, AC-/REQ- IDs and issue tags as provenance, caller enumeration, QA runbooks and tuning instructions, prose restating the signature, and any justification written to answer a review finding. Keep: a one-line /// summary where the name is not self-evident, ONE terse WHY per non-obvious literal, and one-line invariants that prevent a regression. Rationale, threshold derivations and deviation justifications belong in .context/development-N.md and the PR — not in source. Re-run and return once every changed file is under the ceiling."
+  _remedy="Comment-density gate: these changed files are over-documented — ${_offenders}. A file trips this when more than ${DENSITY_MAX}% of its added lines sit in comment blocks longer than ${BLOCK_MAX} lines, or when its added lines are over ${DENSITY_HARD}% comment overall. One compliant one-line /// per declaration is fine and does not trip it; multi-line essays and budget-shaped prose repeated down the whole file do. The corpflow standard (skill: corpflow:code-comment-standard) requires comment-to-code density well below 1:1; a file that is ~half prose is over-documented. Remove: multi-paragraph /// essays, defect/ticket history, before/after narration, AC-/REQ- IDs and issue tags as provenance, caller enumeration, QA runbooks and tuning instructions, prose restating the signature, and any justification written to answer a review finding. Keep: a one-line /// summary where the name is not self-evident, ONE terse WHY per non-obvious literal, and one-line invariants that prevent a regression. Rationale, threshold derivations and deviation justifications belong in .context/development-N.md and the PR — not in source. Re-run and return once every changed file is under the ceiling."
 
   jq -cn --arg ts "$_ts" --arg agent "$_agent" --arg off "$_offenders" \
-    --argjson worst "$_worst" --argjson checked "$_checked" --argjson max "$DENSITY_MAX" '
+    --argjson worst "$_worst" --argjson essay "$_worst_essay" \
+    --argjson checked "$_checked" --argjson max "$DENSITY_MAX" \
+    --argjson hard "$DENSITY_HARD" --argjson block "$BLOCK_MAX" '
     {ts: $ts, actor: "hook:dv-comment-density-gate", action: "comment_density_block",
      subject: $agent, result: "blocked",
-     metadata: {worst_pct: $worst, files_checked: $checked, threshold: $max, offenders: $off}}' \
+     metadata: {worst_pct: $worst, worst_essay_pct: $essay, files_checked: $checked,
+                threshold: $max, hard_threshold: $hard, block_max: $block, offenders: $off}}' \
     >>"$_log_dir/audit.jsonl" 2>/dev/null || true
 
   jq -n --arg reason "$_remedy" '
