@@ -504,7 +504,7 @@ benchmark/
       bench-analyze              # frozen-argv entrypoint (links benchmarkkit only)
       bench-pair                # join two arm records (benchmarkkit only; 0/64/65)
       bench-live                # frozen-argv entrypoint (only live-world linker)
-    tests/                      # 344 test methods (schema/rotation/generators/report/
+    tests/                      # 350 test methods (schema/rotation/generators/report/
                                 #   history back-compat/import-isolation + live-gate/
                                 #   budget/credentials/prompt-assembly/SSOT/coverage/
                                 #   app-measure/without-arm/analysis)
@@ -657,15 +657,18 @@ committed to `benchmark/results/samples/analysis-paired-sample.md` demonstrating
 - `benchmark/ttt-template` — 48 Swift Testing fixture tests (engine/AI/
   leaderboard/settings/router/view-model), also run on iOS Simulator via
   `make test-ios` (SKIPs cleanly on hosts without an iOS runtime)
-- `benchmark/harness` — 344 Python harness self-tests (30 modules), zero real
+- `benchmark/harness` — 350 Python harness self-tests (30 modules), zero real
   LLM calls (all dispatchers injected with fakes/tripwires), incl. schema
   byte-compat (vendored real history.json), rotation, generators (real `swift test`
   on generated apps), deterministic/live pipelines, budget/credential gates,
   prompt assembly, stage attribution, app measurement, the paired ±agent arms,
   per-call token accounting, arm symmetry, and offline analysis
 
-**Total:** 48 Swift TTT artifact tests + 344 Python harness tests + 52 Python
-skill-script and skill-eval tests = 444 tests green.
+**Total:** 48 Swift TTT artifact tests + 350 Python harness tests + 52 Python
+skill-script and skill-eval-engine tests = 450 tests green. The skill-eval share
+covers the assertion engine and the eval-set lint only — no skill's output is
+dispatched or graded here, so this total says nothing about output quality
+(`evals/README.md § Skill eval sets`).
 
 **Reference:** `tests/COVERAGE.md` for the Swift/Python coverage story (Python
 opportunistic via coverage.py; Swift jq ≥85% line gate with `Sources/TicTacToeKit/Views/`
