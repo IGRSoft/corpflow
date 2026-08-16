@@ -73,6 +73,39 @@ FIX_AUDIT="${FIXTURES}/skills/audit-dedup.jsonl"
   [ "$first_action" = "approval_received" ]
 }
 
+# --- plugin-prefixed hook writers -----------------------------------------
+# Sibling plugins mirror the hook under their own prefix, so `startswith("hook:")`
+# alone stopped matching and hook authority silently degraded to first-by-index.
+FIX_PREFIX="${FIXTURES}/skills/audit-dedup-plugin-prefix.jsonl"
+
+@test "happy: canonical writer outranks the advisory plugin mirror" {
+  local out
+  out="$(bash "$PLUGIN_ROOT/$SCRIPT" "$FIX_PREFIX")"
+  run jq -rs '.[] | select(.metadata.dedupe_key=="sessB:ag1:stop") | .subject' <<< "$out"
+  assert_output "corpflow:developer"
+}
+
+@test "happy: prefixed hook row still beats an agent-emitted row" {
+  local out
+  out="$(bash "$PLUGIN_ROOT/$SCRIPT" "$FIX_PREFIX")"
+  run jq -rs '.[] | select(.metadata.dedupe_key=="sessB:ag2:stop") | .actor' <<< "$out"
+  assert_output "android-developer:hook:audit-subagent"
+}
+
+@test "edge: three writers for one key collapse to a single row" {
+  local out
+  out="$(bash "$PLUGIN_ROOT/$SCRIPT" "$FIX_PREFIX")"
+  run jq -rs 'length' <<< "$out"
+  assert_output "3"
+}
+
+@test "edge: cross-plugin agent keeps its plugin qualifier through dedup" {
+  local out
+  out="$(bash "$PLUGIN_ROOT/$SCRIPT" "$FIX_PREFIX")"
+  run jq -rs '.[] | select(.metadata.dedupe_key=="sessB:ag3:stop") | .subject' <<< "$out"
+  assert_output "apple-developer:ios-developer"
+}
+
 # --- failure / exit-code --------------------------------------------------
 @test "failure: unreadable source file exits 1" {
   run_script "$SCRIPT" "/no/such/file.jsonl"

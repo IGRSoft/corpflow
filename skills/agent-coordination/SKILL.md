@@ -253,6 +253,10 @@ call, so `hook:audit-tooluse` never sees it; other layers stay scraped to avoid 
 
 Rows emitted by plugin hooks carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action remain forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are downgraded to **advisory**. Readers (`/cost-report`, resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`. Dedupe-key shapes:
 
+#### Hook authority — canonical vs mirrored writers
+
+A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>`: every installed sibling plugin mirrors these hooks under its own prefix, so one completion produces one canonical row plus one row per sibling. The mirrors set `metadata.advisory: true` and carry thinner metadata — an empty `subject` in particular. Authority within a `dedupe_key` group is therefore three-tier: canonical hook row, then any hook row, then first-by-index. Readers MUST NOT match on `startswith("hook:")` alone; route through `scripts/audit-dedup.sh`, which implements the ladder.
+
 #### Dedupe-key shapes — tool & subagent
 
 - `tool_invoked`: `"<session_id>:<tool_use_id>"`
@@ -284,7 +288,8 @@ For `subagent_stopped` and `stage_completion_hook` rows written by plugin hooks,
 
 - `duration_ms` (subagent_stopped only): number
 - `effort`: `"low"|"medium"|"high"|"xhigh"|"max"|"unknown"`
-- `stage` (stage_completion_hook only): `"PL"|"FN"|"ST"`
+- `stage`: stage code — `"PL"|"FN"|"ST"` on stage_completion_hook, any stage code on subagent_stopped (from `CLAUDE_TASK_METADATA_STAGE`), `"unknown"` when unstamped
+- `agent_id` (subagent_stopped only): string — `"unknown"` when absent
 - `parent_agent_id`: string — defaults to `"none"` when not in hook stdin
 - `background_tasks_count`: integer ≥ 0
 - `background_task_ids`: string[] — may contain `"unknown"` entries; see `references/hook-monitoring.md § BG-Task ID Schema Watch`

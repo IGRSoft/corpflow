@@ -1,0 +1,6 @@
+{"ts":"2026-08-16T00:00:01Z","actor":"apple-developer:hook:audit-subagent","action":"subagent_stopped","subject":"","result":"ok","metadata":{"advisory":true,"dedupe_key":"sessB:ag1:stop"}}
+{"ts":"2026-08-16T00:00:01Z","actor":"hook:audit-subagent","action":"subagent_stopped","subject":"corpflow:developer","result":"ok","metadata":{"stage":"DV","dedupe_key":"sessB:ag1:stop"}}
+{"ts":"2026-08-16T00:00:01Z","actor":"frontend-developer:hook:audit-subagent","action":"subagent_stopped","subject":"","result":"ok","metadata":{"advisory":true,"dedupe_key":"sessB:ag1:stop"}}
+{"ts":"2026-08-16T00:00:02Z","actor":"developer","action":"subagent_stopped","subject":"corpflow:qa-engineer","result":"ok","metadata":{"stage":"QA","dedupe_key":"sessB:ag2:stop"}}
+{"ts":"2026-08-16T00:00:02Z","actor":"android-developer:hook:audit-subagent","action":"subagent_stopped","subject":"corpflow:qa-engineer","result":"ok","metadata":{"advisory":true,"stage":"QA","dedupe_key":"sessB:ag2:stop"}}
+{"ts":"2026-08-16T00:00:03Z","actor":"hook:audit-subagent","action":"subagent_stopped","subject":"apple-developer:ios-developer","result":"ok","metadata":{"stage":"DV","dedupe_key":"sessB:ag3:stop"}}

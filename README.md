@@ -302,6 +302,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/request-plan` | Turn a free-form request into a lightweight, context-aware plan |
 | `/improve-yourself` | Retrospective: propose agent/skill/command updates from user edits |
 | `/cost-report` | Worktask token-cost report |
+| `/agent-report` | Which agents actually executed, from the audit trail |
 | `/cc-update` | Update plugin agents/commands/skills for new Claude Code features |
 
 #### Design (`design-`)

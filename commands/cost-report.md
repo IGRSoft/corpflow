@@ -5,6 +5,7 @@ argument-hint: '[--worktask-id ID] [--json]'
 allowed-tools: Read, Write
 model: sonnet
 related:
+  - commands/agent-report.md
   - skills/cost-optimization/SKILL.md
   - skills/context-compression/SKILL.md
   - skills/csv-export-templates/SKILL.md
@@ -434,3 +435,6 @@ This command is used:
 - At stage transitions for optimization checks
 - At worktask completion for final analysis
 - By project-manager (FN stage) for budget reporting and timing recap
+
+Costs are grouped **by stage**; the agent identity behind each stage row lives in
+`/agent-report`, which reads the same audit trail per invocation.
