@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [4.0.19] — 2026-08-17
+
+### Fixed
+
+- **A DV brief built from the repo's own README ran the full suite and pre-empted QA's gate.** The
+  orchestrator had no rule about where a stage brief's test invocation comes from, so the most
+  reachable command — a full-suite `xcodebuild test` pasted out of a project `CLAUDE.md § Core
+  Commands` — reached DV four times on a `test_mode: scoped` plan. `testing-strategy.md §
+  Dispatch discipline` now sources the invocation from `<plan_file>` frontmatter (`test_mode`,
+  `always_required_tests`) and requires the brief to state the resolved mode **and** the exact
+  selector, with DV recording any identifier-grammar reconciliation in `development-N.md §
+  Decisions`. The mechanical deny (`hooks/test-execution-gate.sh`) already covered this shape,
+  including quoted multi-word `-destination` values; this closes the prose layer that produced the
+  command in the first place.
+
+### Changed
+
+- **`build-only` is now *selected* for a comment/doc-only diff, not merely available.** The mode
+  existed for exactly this case but was opt-in and never reached for, so doc work paid full
+  simulator cost. When every planned hunk is a comment, a prose file, or a non-executable string,
+  PL sets it and the marker-coverage precondition does not apply — nothing executable changed, so
+  no markers are standing in for a run. One executable hunk anywhere disqualifies the diff. The
+  downstream consequence is stated with it: a doc-only change landing after QA (typically DC,
+  which holds no execution authority at all) does not re-trigger QA, and FN commits on QA's
+  existing evidence.
+
+- **FN unwinds build-tool churn as the last action before staging.** Build tools mutate tracked
+  files nobody edited — auto-extracted localization keys, scheme and build-configuration rewrites,
+  lockfile touch-ups — and those edits reached commits because no stage owned removing them.
+  `project-manager.md § Pre-commit scope check` requires `git status --porcelain` to show only the
+  run's intended files, reverts the rest immediately before `git add`, and forbids running
+  anything that builds afterwards, since a build re-creates exactly what was just removed. FN
+  holds no build path, which is what makes it the right stage to own it. Reverted paths are listed
+  in `complete-summary-N.md`; one that recurs every run is a repo defect worth its own issue.
+
 ## [4.0.18] — 2026-08-17
 
 ### Fixed

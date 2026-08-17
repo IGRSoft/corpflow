@@ -4,7 +4,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.17** — `state-merge.sh` moved from `.claude/hooks/` to `hooks/` (source path only; the project-local install destination stays `.claude/hooks/`), fixing its `../..` state-patch resolution that the move would have silently broken; version parity restored across plugin.json/marketplace.json/README; skill-eval docs no longer read as measured
+- Plugin version: **4.0.19** — test-authority prose closed where the OV-184 run broke it: a stage brief's invocation now comes from plan frontmatter rather than a project README's full-suite command, `build-only` is selected (not opt-in) for comment/doc-only diffs, and FN owns unwinding build-tool churn before staging
 - Claude Code min required: **2.1.233** (README.md is authoritative; pinned to the band top per the v3.35.0/v3.37.0 precedent — the ledger cutover itself no longer depends on any CC task tool)
 - Claude Code latest integrated band: **2.1.221→2.1.233**
 
@@ -39,6 +39,8 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-08-17: v4.0.19 — the three plugin rules the OV-184 test-strategy violation exposed: brief invocations derive from `<plan_file>` frontmatter (never a project README's core-commands snippet, which is full-suite-shaped and pre-empts QA's gate), `build-only` is selected rather than opt-in when the planned diff is comment/doc-only (and a post-QA doc-only change never re-triggers QA), and FN reverts build-tool churn as its last action before `git add`. The mechanical gate needed no change — it already denied the incident's exact `xcodebuild test -destination '…'` shape.
+- 2026-08-17: v4.0.18 — local-path leaks in published PR/issue bodies from two directions, comment-density gate vs. per-declaration DocC, `hooks/lib/` self-test selection failing closed to FULL, duplicate-issue preflight scan, test-run dedupe keyed on the tree. (Row backfilled at 4.0.19 — the 4.0.18 cut did not update this file.)
 - 2026-08-16: v4.0.17 — `state-merge.sh` consolidated into `hooks/` with the rest; the relative `state-patch.sh` arm went from `../..` to `..`, without which the Layer-2 net would have exited 0 and merged nothing. Version parity (AC-4) was already red in HEAD and is now green. Docs: skill eval sets are a specification, not a result — no case has ever been graded against model output; test counts re-derived (1374).
 - 2026-08-16: v4.0.16 — five fail-open/silent-default fixes surfaced by a 4-platform 11-stage stress test: `scan-secrets.sh` returned 0 on a crashed regex engine; `state-merge.sh` resolved `.context/` from cwd, so the Layer-2 net never worked inside a DV worktree; the test-execution denial never named `--no-test`; tier extraction required parentheses; preflight now reports split worktree parents.
 - 2026-08-15: v4.0.15 — CC 2.1.233 removed the Todo/task tools on every model the plugin dispatches; full cutover to a `state.json` `tasks{}` ledger, no mirror, no fallback.
@@ -49,10 +51,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-08-07: v4.0.10 — eval audit (#279): held-out oracle grades each arm's binary against 30 cases.
 - 2026-08-06: v4.0.9 — opt-in change→test selection behind `./run-tests.sh --changed`.
 - 2026-08-06: v4.0.8 — `state-patch.sh` idempotency guard widened to compare the whole patch.
-- 2026-08-06: v4.0.7 — branch naming R1–R4: title-driven `--goal`, end-to-end once-only rename.
-- 2026-08-05: v4.0.6 — test-execution gate: runner-aware, quote-aware strip of non-selecting flags.
-- 2026-08-05: v4.0.5 — test-suite stringency hardening: 45 `.bats` / 501 `@test` → 53 / 680.
-- 2026-08-05: v4.0.4 — gate-revision semantics: plan-gate rejection is an in-place revision, not a new run.
 
 ## Token Baselines
 
