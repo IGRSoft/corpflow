@@ -47,7 +47,7 @@ Lead Session (workflow-engineer):
 You are working on Issue #{issue_number}: {issue_title}
 
 Worktree: .worktrees/milestone-{N}/{issue_number}
-Branch: feature/{issue_number}-{slug} (already checked out in worktree)
+Branch: <type>/{issue_number}-{slug} (already checked out in worktree)
 Base: {base_branch}
 
 IMPORTANT: All file operations must happen inside the worktree directory.

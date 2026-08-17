@@ -8,14 +8,14 @@
 ```bash
 # Workspace initialization (parallel — each issue gets own worktree)
 git fetch origin {base_branch}
-git worktree add -b feature/{issue#}-{slug} \
+git worktree add -b <type>/{issue#}-{slug} \
   .worktrees/milestone-{N}/{issue#} origin/{base_branch}
 mkdir -p .worktrees/milestone-{N}/{issue#}/.context
 
 # All git operations use -C flag for worktree path
 git -C .worktrees/milestone-{N}/{issue#} add -A
 git -C .worktrees/milestone-{N}/{issue#} commit -m "#{issue} feat: {title}"
-git -C .worktrees/milestone-{N}/{issue#} push -u origin feature/{issue#}-{slug}
+git -C .worktrees/milestone-{N}/{issue#} push -u origin <type>/{issue#}-{slug}
 gh pr create --base {base_branch} --body "Closes #{issue#}"
 
 # Cleanup after PR
@@ -27,7 +27,7 @@ git worktree prune
 
 | Stage | Workspace Actions |
 |-------|-------------------|
-| PL | Read issue from workspace.json, write `<plan_file>` (numbered `planning-N.md` per `agents/product-manager.md § Plan File Naming`) |
+| PL | Read issue from workspace.json, write `<plan_file>` (numbered `planning-N.md` per `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`) |
 | DV | Branch checked out, commit to workspace branch |
 | FN | Push branch, create PR, signal orchestrator |
 
@@ -110,9 +110,9 @@ git -C "$WT" rebase origin/{base_branch}         # 1. resolve conflicts locally
 git -C "$WT" rebase --continue                   # editor-driven: see the commentChar remedy below
 
 git -C "$WT" push -u origin \
-  HEAD:refs/heads/feature/{issue#}-{slug}-rebased # 2. NEW branch name — no force-push needed
+  HEAD:refs/heads/<type>/{issue#}-{slug}-rebased # 2. NEW branch name — no force-push needed
 gh pr create --base {base_branch} \
-  --head feature/{issue#}-{slug}-rebased \
+  --head <type>/{issue#}-{slug}-rebased \
   --body "Closes #{issue#}"                      # 3. replacement PR
 gh pr close {old_pr} \
   --comment "Superseded by #{new_pr} (rebased onto {base_branch})"   # 4. close the superseded PR

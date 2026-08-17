@@ -173,7 +173,11 @@ Each proposal block that modifies a file's frontmatter MUST instruct prompt-engi
 scripts/append-labels.sh --worktask-id=<id> --run-index=<n> --changes=<tsv>
 ```
 
-Appends to `evals/failure-labels.jsonl` (repo root, **committed**). Idempotent on a content hash of `(worktask_id, run_index, path, added, removed, summary)` — re-running the same worktask never duplicates rows, while the same edit recurring in a later worktask appends as a new label (recurrence is the frequency signal `label-stats.sh` aggregates). `scripts/label-stats.sh` aggregates per target and category.
+Appends to `evals/failure-labels.jsonl` (repo root, **committed**). Idempotent on a content hash of `(worktask_id, run_index, path, added, removed, summary)` — re-running the same worktask never duplicates rows, while the same edit recurring in a later worktask appends as a new label (recurrence is the frequency signal `label-stats.sh` aggregates). `scripts/label-stats.sh` aggregates per target and category, and flags targets/categories at or above `--min-count=<n>` (default 3) alongside progress toward the 100-row `failure-taxonomy.md` gate in `evals/README.md`.
+
+##### An empty context set is a silent no-op
+
+**The context set must be non-empty for any of this to happen.** `scripts/build-context-set.sh` returning zero paths makes Step 4 discard every change, so Step 5b writes nothing — a silent no-op that looks exactly like "the user made no edits". Report an empty context set rather than treating it as a clean run.
 
 #### Step 5b — privacy and opt-out
 

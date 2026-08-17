@@ -564,6 +564,34 @@ The v1 additive fields have **orchestrator-loop / hook writers**, not schema-map
 Only `tasks.<ID>.worktree` maps from a stage artifact — the DV handoff frontmatter
 `worktree_path`/`worktree_branch`, applied by `state-patch.sh` (rows above).
 
+#### #facts-union
+
+`facts.decisions[]`, `facts.open_questions[]`, `facts.files_modified` and `facts.tests_added`
+are written by `state-patch.sh --facts '<json>'`, passed on the same self-patch call that
+lands the stage's ledger row. It is the channel's ONLY scripted writer — the "(union)" in the
+maps above was prose until it existed, so a fact survived a handoff only when the orchestrator
+remembered to transcribe it.
+
+The merge is a union, never `. * $patch`: jq object-merge REPLACES arrays, which is precisely
+how a downstream stage silently dropped the entries an upstream stage recorded.
+
+| Array | Identity | Collision | Order |
+|---|---|---|---|
+| `decisions`, `open_questions` | `.id` | last writer wins | survivor moves to the TAIL |
+| `files_modified`, `tests_added` | the string itself | duplicate dropped | first-seen position kept |
+
+##### Ordering and idempotency
+
+Tail placement for the keyed arrays is load-bearing, not cosmetic: the B3 clamp keeps `.[-8:]`,
+so appending is what makes "newest 8 survive" true after a union as well as after an overwrite.
+Never sort (`unique_by` does) — that hands the clamp an arbitrary 8 instead of the newest 8.
+
+Both shapes are idempotent: re-merging an already-merged payload leaves `state.json`
+byte-identical, so a remediation loop may re-run its self-patch freely. A payload whose shape
+does not match the table is rejected before the merge lock is taken, leaving `state.json`
+unchanged. `--facts` applies ahead of the completion merge, so facts still land when the
+ledger row is already current and that merge short-circuits as idempotent.
+
 #### Additive-field writers — facts.branch
 
 `facts.branch` has **two** writers: the orchestrator at `commands/worktask.md § Step 3c`, and
@@ -1162,7 +1190,7 @@ handoff carriers.
 
 ### Run-index resolution
 
-The same N is shared across all stages within a worktask run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. See `agents/product-manager.md § Plan File & Run Index Naming` for the full resolver and propagation algorithm.
+The same N is shared across all stages within a worktask run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. See `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming` for the full resolver and propagation algorithm.
 
 ### Alias basenames (resolution-only)
 
@@ -1230,13 +1258,15 @@ Documented in `skills/cost-optimization/SKILL.md`. Without 1h flag, default 5-mi
 
 ### Lint
 
-`skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`. Runs in CI on PRs touching `skills/worktask/`, `skills/shared/`, or `agents/`.
+`skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`.
+
+**Not automated.** Prefix-lint is manual-only: it consumes a `prompt-log.jsonl` (`{worktask_id, stage, prompt}` per line) that nothing in this repo emits — the live harness assembles prompts in `benchmarklive/dispatch.py` but persists only stage stdout. The mode is exercised solely by `cache-lint.sh --self-test` fixtures. There is also no `.github/workflows/` in this repo, so no lint of any kind runs on PRs. Treat this section as the spec the assembler must satisfy, not as an enforced gate.
 
 ---
 
 ## #anchor-allow-list
 
-All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below. DR runs anchor-lint on every produced artifact; CI runs the same lint on PRs touching `skills/` or `agents/`.
+All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below. Anchor-lint runs twice: proactively via the managed `PostToolUse` hook (`hooks/anchor-preflight.sh`, shipped default-on in `.claude-plugin/plugin.json`) and again at the DR gate. Neither is a CI check — this repo has no `.github/workflows/`.
 
 ### Anchors — PL to DR
 
@@ -1286,7 +1316,7 @@ Anchor-lint also runs at the DR gate, but that is post-hoc — a missing anchor 
 
 #### Preflight behavior and cost
 
-`anchor-preflight.sh` matches only the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit is a no-op. When the lint fails (non-zero exit), the agent that produced the artifact sees the diagnostic and amends the file before continuing — no downstream stages incur the cost. `continueOnBlock` follows the same managed-hook discipline as the other entries (the diagnostic is surfaced; an unrelated write is never blocked). The DR-gate lint plus the CI lint (PRs touching `skills/` or `agents/`) remain as the safety net for non-hook environments.
+`anchor-preflight.sh` matches only the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit is a no-op. When the lint fails (non-zero exit), the agent that produced the artifact sees the diagnostic and amends the file before continuing — no downstream stages incur the cost. `continueOnBlock` follows the same managed-hook discipline as the other entries (the diagnostic is surfaced; an unrelated write is never blocked). The DR-gate lint is the only safety net for non-hook environments — there is no CI counterpart.
 
 **Cost**: lint runs in O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit; net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
 

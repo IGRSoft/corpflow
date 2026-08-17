@@ -2,9 +2,9 @@
 name: worktask
 description: Initialize a new worktask task with proper folder structure and state-ledger integration
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]]'
-version: 0.4.0
+version: 0.5.0
 model: opus
-allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Task(corpflow:product-manager)
+allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Task(corpflow:product-manager)
 ---
 
 > **EXECUTION MODEL (BINDING)** — two gates, two human checkpoints, plus an optional decision delegate.
@@ -87,6 +87,13 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 | `--emergency` | Run the incident pipeline (IR→DV→DR→QA→RE→FN) instead of the standard PL-first pipeline; IR stage owned by `incident-responder`. Replaces the former `emergency:` prefix. |
 | `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish step. Sets `metadata.no_gh_issue: true` on the PL0 task; `skills/worktask/scripts/publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues as normal. |
 
+### Replay flags
+
+| Option | Effect |
+|--------|--------|
+| `--resume <STAGE_ID>` | Replay one already-settled stage of the worktask in this `.context/` — see § Phase 0. Takes a ledger id (`DV1`), not a stage code. Creates no run: no new `planning-N.md`, no issue, no branch rename. Composes with none of the flags above. |
+| `--cascade` | Only with `--resume`. Also replays the dependents transitively reachable from the target through `blocked_by`. FN/RE **dependents** are traversed through but never reset. An FN/RE named as the *target* is still reset — an explicitly named id is your instruction — with a `side-effect-target` warning. |
+
 ## Examples
 
 ```bash
@@ -95,19 +102,142 @@ the value silently. Each value is independent (orthogonal carriers on PL0).
 # Multi-issue: /megatask 1   (milestone)   or   /megatask --issues 12,15,18   (array)
 ```
 
+## Phase 0: Replay one stage (`--resume <STAGE_ID>`)
+
+Entered ONLY by `/worktask --resume <STAGE_ID> [--cascade]`. This is the explicit half of
+recovery: automatic reattach continues from the first incomplete stage and honours the retry
+ceiling, while a replay is *given* one ledger id by a human and may override that ceiling. The
+two are distinguished in `skills/worktask/references/resume.md § Explicit-replay row`.
+
+Phase 0 replaces Phase 1 entirely and then re-enters the existing stage loop. It adds **no**
+dispatch route and **no** readiness rule: the replayed task becomes `pending` with its
+dependencies still `completed`, so it is the first unblocked task and every other stage stays
+settled.
+
+### Phase 0 — what it must NOT run
+
+**MUST SKIP** — all of Phase 1 (Step 2a issue dedup, Step 3 folders, Step 3a seed, Step 3c
+branch naming, Step 4 PL0 metadata, Steps 5–6 PL dispatch, Steps 7–8 plan presentation) and
+every pre-loop Phase 2 step (A.4 auto-decision, A.4b branch refinement, A.5 plan gate, Step A
+publish). `run_index` is frozen; no `planning-N.md` is written, no branch is renamed, no issue
+is published.
+
+**MUST RUN** — Step 3b hook-install verification (idempotent, and a resumed loop still needs
+SubagentStop), the `fn-preflight.sh branch-divergence` check from `resume.md § Branch-rename
+detection`, and the BINDING workspace-root cross-check before every `Task()`.
+
+### Phase 0 — procedure
+
+1. No `.context/state.json` in the working tree → error out: "no worktask here — use
+   `/worktask <task>`". Do not seed one.
+2. Present the **pre-replay confirmation and STOP**. It names: the target id with its current
+   status, `retry_count` and `error_escalated_to`; whether the escalation cap is being
+   overridden; any already-`completed` dependents, marked *these may now be stale* (warn only —
+   they are never auto-reset); a plan-unapproved warning if there is no `approval_received` row
+   for `PL<run_index>`; and under `--cascade` the full member list plus the FN/RE members that
+   will be skipped. There is no bypass flag — a replay always confirms.
+3. Run the primitive:
+
+       bash "$PLUGIN_ROOT/skills/worktask/scripts/state-patch.sh" --task-replay <ID> [--cascade]
+
+### Phase 0 — procedure, steps 4–6
+
+4. **Exit 4** means a guard refused (target live or parked, liveness indeterminate, planning
+   incomplete, or a blocked cascade member). `state.json` is byte-unchanged. Print the refusal
+   line verbatim and STOP — do NOT enter the stage loop. Exit 1 is an unknown id, exit 2 a
+   malformed one; both are typos, not states.
+5. Append the ordinary `resume` audit row (`resume.md` step 7). It complements the
+   `stage_replay` row the primitive wrote: one records session re-entry, the other records what
+   changed in the ledger.
+6. Re-enter `§ After Step A — run the stage loop`, unchanged.
+
+### Phase 0 — gates on a resumed run
+
+| Gate | Behaviour |
+|------|-----------|
+| `plan_gate` (Step A.5) | **Never re-fires.** It gates the Phase-1→Phase-2 transition; a replay reopens no planning and the `approval_received` row persists. Its absence is a warning at step 2, not a stop |
+| `fn_gate` | **Applies unchanged.** It is a property of the loop, not of the entry point — a resumed run must not slip a commit past the finalization checkpoint |
+
 ## Phase 1: Planning (execute immediately)
 
 > **BINDING CONSTRAINTS FOR PHASE 1**
-> 1. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/designs .context/images .context/errors` and `state-patch.sh` ledger writes are permitted. ALL file modifications belong to DV stage or later.
+> 1. **Pre-work Prohibition**: Do NOT create, edit, or modify ANY project files during Phase 1. This includes localization files, accessibility IDs, config files, and source files. Only `mkdir -p .context/designs .context/images .context/errors`, `state-patch.sh` ledger writes, and the Step 2a `.context/gh-issue.json` anchor (reuse path only) are permitted. ALL file modifications belong to DV stage or later.
 
 ### Phase 1 binding constraint 2 — Context-Interruption Recovery
 
 > 2. **Context-Interruption Recovery**: If worktask execution is interrupted (auth flows, tool failures), upon resumption MUST verify that the PL0 task exists with status `completed`. If not, restart from the appropriate phase — **except** when PL0 is `in_progress` with stage tasks present and the audit tail has a `plan_revision_dispatched` row with no later `approval_received` for `PL<run_index>`: that is a plan revision in flight, resumed per § Plan-revision re-dispatch (re-dispatch PM with `plan_revision: true`; never the fresh-run path). (There are two human checkpoints — the PL gate at Step A.5 and the FN gate before finalization; the FN gate check applies (STOP on `checkpoint`, proceed on `bypass`) — `skills/worktask/SKILL.md § FN Gate`.)
 
-### Steps 1–3 — Parse flags and create context folders
+### Steps 1–2 — Parse flags and detect embedded commands
 
 1. **Parse** task description and flags (`--secure`, `--auto=[plan, decision, finalization]`, `--emergency`, etc.). Resolve the `--auto` array per § Gate automation flag: strip optional brackets, split on commas, trim whitespace, reject unknown values. See **Embedded Command Detection** below.
 2. **Detect embedded commands**: If the task description contains `/plugin:command` or `/command` patterns (e.g., `/skill-creator`, `/apple-developer:fix-refactor`), extract them into `metadata.embedded_commands` as a comma-separated list. Remove the command prefix from the task description passed to PL0 but preserve the full arguments.
+
+### Step 2a — Duplicate-issue pre-flight (advisory)
+
+Runs once the request is known and **strictly before** Step 3 creates `.context/`. The
+`skills/gh-issue-dedup` anchor binds one issue per `.context/` and so guards *re-runs* only —
+a first run of work already filed under different wording still opens a second issue, and by
+the time `.context/` exists the duplicate is no longer preventable. This step surfaces the
+candidates while it still is.
+
+#### Step 2a snippet — invoke the scan, non-blocking
+
+    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
+    [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+    SCAN="$PLUGIN_ROOT/skills/worktask/scripts/preflight-issue-scan.sh"
+    scan_out=""
+    if [ -f "$SCAN" ]; then scan_out=$(bash "$SCAN" --goal "<task description>") || true; fi
+    scan_result=$(printf '%s\n' "$scan_out" | sed -n 's/^result=//p' | tail -n 1)
+
+Append `--no-gh-issue` to the invocation when that flag was supplied — a run that publishes no
+issue has no duplicate to prevent.
+
+#### Step 2a — the gate
+
+Anything other than `result=shown` proceeds to Step 3 unchanged, with no prompt. On
+`result=shown`, present each `candidate=<json>` line (number, title, url — at most three, most
+likely first) and call `AskUserQuestion` with exactly two outcomes:
+
+- **Start a new worktask** — proceed to Step 3 as normal. Nothing has been written yet, so
+  declining leaves no partial or orphaned state behind.
+- **Use one of the existing issues** — proceed to Step 3, then bind this context to the chosen
+  issue per § Step 2a — reusing an existing issue.
+
+#### Step 2a — reusing an existing issue
+
+Picking a candidate does not abort the worktask; planning still runs, bound to the issue that
+already exists. After Step 3a seeds `state.json`, write the dedup anchor for the chosen issue:
+
+    jq -cn --arg url "<chosen url>" --argjson num <chosen number> \
+       --arg wid "$(jq -r '.worktask_id // "unknown"' .context/state.json)" \
+       --arg ts "$(date -u +%FT%TZ)" \
+       '{version:1, url:$url, number:$num, created_run_index:-1, created_worktask_id:$wid,
+         created_at:$ts, last_commented_run_index:-1}' > .context/gh-issue.json
+
+`created_run_index: -1` is the "predates this context" value `publish-pl-issue.sh` already uses
+for a recovered search hit, so Step A posts a follow-up comment on that issue instead of opening
+a second one — the same end state as having resumed that worktask directly.
+
+#### Step 2a invariants
+
+- The trailing `|| true` is mandatory. The helper is **non-blocking by contract**: no network,
+  no `gh`, no auth, no remote, an API error, a rate limit, a timeout, a malformed response, or
+  zero hits each print `result=skipped`/`result=none` and Step 3 runs unchanged.
+- **Advisory only.** It never links, comments, closes, or writes anything, and it does NOT relax
+  the exact-title auto-bind in `publish-pl-issue.sh` (`skills/gh-issue-dedup § Resolution order`)
+  — an ambiguous match is still refused there rather than bound automatically.
+- It writes **no audit row** — the ledger it would append to does not exist yet at this point.
+
+#### Step 2a invariants — runs that skip the question
+
+- **Unattended runs never reach it.** The helper self-skips under `CORPFLOW_NONINTERACTIVE=1`,
+  under `/megatask` (`MILESTONE_MODE=1` or a `workspace.json`), and under `--emergency`
+  (`INCIDENT_MODE=1`). `PREFLIGHT_ISSUE_SCAN=0` disables it outright.
+- A `.context/` that already carries a `gh-issue.json` anchor is a resume, not a first run: the
+  helper skips with `reason=already_anchored` and the anchor answers the question authoritatively.
+
+### Step 3 — Create context folders
+
 3. **Create context folders**: `mkdir -p .context/designs .context/images .context/errors .context/logs`
 
 ### Step 3a — Initialize state.json (handoff-protocol)
@@ -342,15 +472,15 @@ Also stamp `plan_gate`: default `plan_gate: "checkpoint"` (the orchestrator STOP
 
 #### Step 4 — decision_gate stamping
 
-Also stamp `decision_gate`: default `decision_gate: "user"` (PL open questions surface to the user at the plan gate — existing behavior). Stamp `decision_gate: "auto"` ONLY when the resolved `--auto` array contains `decision`. The carrier is consumed by two readers: the PM agent (holds no gate round-trip for questions — returns them in `open_questions[]`; see `agents/product-manager.md § Plan-Gate Open-Question Batching`) and the orchestrator's Step A.4 auto-decision pre-pass below. `decision_gate` bypasses neither `plan_gate` nor `fn_gate` — it only changes WHO answers PL0's open questions. `--emergency` leaves it at `"user"` (the incident pipeline has no PL stage, so the carrier is inert there). (A batch orchestrator such as `/megatask` stamps `decision_gate: "auto"` directly on each per-issue PL0.)
+Also stamp `decision_gate`: default `decision_gate: "user"` (PL open questions surface to the user at the plan gate — existing behavior). Stamp `decision_gate: "auto"` ONLY when the resolved `--auto` array contains `decision`. The carrier is consumed by two readers: the PM agent (holds no gate round-trip for questions — returns them in `open_questions[]`; see `skills/worktask/references/pl0-procedure.md § Plan-Gate Open-Question Batching`) and the orchestrator's Step A.4 auto-decision pre-pass below. `decision_gate` bypasses neither `plan_gate` nor `fn_gate` — it only changes WHO answers PL0's open questions. `--emergency` leaves it at `"user"` (the incident pipeline has no PL stage, so the carrier is inert there). (A batch orchestrator such as `/megatask` stamps `decision_gate: "auto"` directly on each per-issue PL0.)
 
 ### Steps 5–6 — Dispatch the PL agent
 
 5. **PL0 → in_progress**: `state-patch.sh --task-status PL0 in_progress`
-6. **Delegate to PL agent**: `Task({ subagent_type: "corpflow:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `agents/product-manager.md § Plan File Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative. Glob+increment applies to a **new run** only: a plan-gate revision re-dispatches PM with `plan_revision: true` and reuses the frozen index (§ Plan-revision re-dispatch).
+6. **Delegate to PL agent**: `Task({ subagent_type: "corpflow:product-manager", prompt: "<planning prompt>" })` — PM computes the next free plan filename per `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming` (glob+increment: first run `.context/planning-0.md`; subsequent runs `planning-1.md`, `planning-2.md`, ...), writes it, assesses complexity, and creates stage tasks with `metadata.agent` AND `metadata.plan_file = "<plan_file>"`. The `plan_file`/`run_index` already in the seeded `state.json` (step 3a) are provisional — PM recomputes and is authoritative. Glob+increment applies to a **new run** only: a plan-gate revision re-dispatches PM with `plan_revision: true` and reuses the frozen index (§ Plan-revision re-dispatch).
 #### Step 6 — record dropped stages
 
-   - **Record dropped and added stages**: when PL0's dynamic sizing omits any of the full 9-stage pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PM stamps the PL0 task's `metadata.skipped_stages` (`{stage, reason}` list) so `state.json` self-documents the drops; when PL0 includes a stage beyond the tier default (AR0 forced at a low tier, TL0 at any tier), it stamps the symmetric `metadata.added_stages` with the identical `{stage, reason}` shape. See `agents/product-manager.md § Dynamic Worktask Sizing (PL0 Stage)`.
+   - **Record dropped and added stages**: when PL0's dynamic sizing omits any of the full 9-stage pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PM stamps the PL0 task's `metadata.skipped_stages` (`{stage, reason}` list) so `state.json` self-documents the drops; when PL0 includes a stage beyond the tier default (AR0 forced at a low tier, TL0 at any tier), it stamps the symmetric `metadata.added_stages` with the identical `{stage, reason}` shape. See `skills/worktask/references/pl0-procedure.md § Dynamic Worktask Sizing (PL0 Stage)`.
 ### Steps 7–8 — Complete PL0 and present the plan
 
 7. **PL0 → completed**: `state-patch.sh --task-status PL0 completed`
@@ -364,7 +494,7 @@ Phase 2 begins with the Auto-Decision Pre-Pass (Step A.4, no-op unless `decision
 
 Read `tasks.PL0.metadata.decision_gate` from the ledger (default `"user"` when absent) and PL0's
 `open_questions[]` (typed handoff / plan-frontmatter — the numbered elicitation list from
-`agents/product-manager.md § Plan-Gate Open-Question Batching`). This step is a **no-op** when
+`skills/worktask/references/pl0-procedure.md § Plan-Gate Open-Question Batching`). This step is a **no-op** when
 `decision_gate == "user"` or `open_questions[]` is empty/absent — fall through to Step A.5.
 
 #### Auto-decision dispatch (Fable delegate)
@@ -559,7 +689,7 @@ the old index, and splits the published-issue record. Re-dispatch product-manage
 | 4 | Leave the published GitHub issue as-is | Re-publish or re-anchor the issue |
 | 5 | Leave the refined `facts.branch` as-is | Re-run Step A.4b or re-refine — a revision is not a new naming window |
 
-PM's own arm of this contract: `agents/product-manager.md § Revision of the run in flight`.
+PM's own arm of this contract: `skills/worktask/references/pl0-procedure.md § Revision of the run in flight`.
 
 ##### Plan-revision bookkeeping
 

@@ -63,7 +63,7 @@ for each registry row R:
 
 ## Per-Frame Comparison
 
-When the registry contains **per-frame rows** — a container produces one `State: overview` row plus one row per child frame, each keyed on its own `Figma Node` id (see `agents/product-manager.md § Registry Generation`) — compare against **each persisted frame file individually**, state by state, NOT against a single combined screenshot:
+When the registry contains **per-frame rows** — a container produces one `State: overview` row plus one row per child frame, each keyed on its own `Figma Node` id (see `skills/shared/figma-capture.md § Registry Generation`) — compare against **each persisted frame file individually**, state by state, NOT against a single combined screenshot:
 
 1. Treat the `overview` row as the container reference. It is verified for layout completeness (all frames present) but is not a per-state target — **vision-only, no RMSE** (`rmse=None`).
 

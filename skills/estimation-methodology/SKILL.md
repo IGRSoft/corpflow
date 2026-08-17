@@ -151,14 +151,32 @@ Phase % Min = Phase Hours Min / Total Hours Min × 100  |  Phase % Max = Phase H
 
 Canonical tier-selection logic. `commands/estimate.md` cites this section instead of duplicating it.
 
-```
-size = T-shirt size from sizing table
+Tier is decided by *what the work touches* first, and only then by size. Size alone sent
+ordinary work into the security pipeline and left live incidents on the standard one.
 
-IF size == XL:
+```
+# 1. Surface check — beats size in both directions
+IF the work reads, writes, or exposes credentials, tokens, secrets, PII,
+   payments, authn/authz, or executes untrusted input:
+  → /worktask --secure     (regardless of size)
+ELIF the request describes something broken RIGHT NOW and still failing:
+  → /worktask --emergency  (regardless of size)
+
+# 2. Otherwise, size decides
+ELIF size == XL:
   → split into ≤ L sub-tasks first
 ELSE:
   → /worktask   (PL0 dynamic sizing selects which of the 9 stages run)
 ```
+
+### What the two escalations are not
+
+**--secure is not "security-adjacent".** Hardening a lint, adding a deny-list guard, or renaming a
+branch touches no protected asset — those are standard tier. The test is whether the work itself
+handles a secret or an untrusted input, not whether the word "security" appears nearby.
+
+**--emergency is not "urgent-sounding".** A wedged task or a runaway batch is standard work. The
+test is whether something is failing as you write the plan.
 
 Notes:
 - XL must be split into ≤ L sub-tasks before tier selection runs.
@@ -166,7 +184,7 @@ Notes:
 
 ## PL0 Stage-Set & Test-Mode by Complexity Score
 
-PL0 (`agents/product-manager.md § Dynamic Worktask Sizing` and `§ Test Selection Gate`) uses the 0–50 complexity score to pick the stage set and the default `test_mode`.
+PL0 (`skills/worktask/references/pl0-procedure.md § Dynamic Worktask Sizing (PL0 Stage)` and `§ Required Metadata: Test Selection Gate`) uses the 0–50 complexity score to pick the stage set and the default `test_mode`.
 
 **Stage set by score** — each created stage task carries `metadata.agent`; stamp `metadata.skipped_stages` (`{stage, reason}`) for every stage of the full `PL→AR→TL→DV→DR→QA→DC→FN→ST` pipeline the tier does NOT create, and the symmetric `metadata.added_stages` (same `{stage, reason}` shape) for every stage PL0 includes beyond the tier default. Both lists are measured against the full nine-stage reference pipeline, so a stage PL0 declines always appears in `skipped_stages` with a reason.
 

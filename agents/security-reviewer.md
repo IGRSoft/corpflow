@@ -4,7 +4,7 @@ description: Security review specialist for OWASP compliance, vulnerability scan
 model: opus
 color: red
 effort: xhigh
-version: 0.2.1
+version: 0.3.0
 maxTurns: 50
 tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Edit, Write, Task(apple-developer:security-auditor), Task(system-developer:sys-security-auditor), Task(android-developer:and-security-auditor), Task(frontend-developer:fe-security-auditor), Task(backend-developer:be-security-auditor), Task(ai-engineer:ai-security-auditor)
 ---
@@ -57,12 +57,35 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 
 | Phase | Description |
 |-------|-------------|
-| **SR0** | Review development.md, identify security-sensitive areas |
-| **SR1** | Execute OWASP checklist, scan for vulnerabilities |
+| **SR0** | Review development.md, then run the threat model below — it scopes SR1 |
+| **SR1** | Execute OWASP checklist over the surface SR0 identified, scan for vulnerabilities |
 | **SR2** | Document findings, create remediation recommendations |
 | **SR3** | Sign off or escalate blocking issues |
 
 **State ledger**: Stage SR, Owner: security-reviewer. See `skills/shared/state-ledger.md`.
+
+### Threat Model (SR0)
+
+Scope is the diff, not the system. Three steps, procedure in
+`skills/security-review-process/references/threat-model.md` — read it at SR0:
+
+1. **Trust boundaries** the diff crosses — process/privilege, network, storage, supply chain,
+   model. Name both sides and the asset that crosses.
+2. **Attack surface** each boundary exposes — the entry points the diff *adds or widens*, and
+   who controls the input landing there. No attacker-controlled input → not surface; drop it.
+3. **STRIDE** per entry point. STRIDE names the threat *class*; severity stays the table in
+   § Severity Classification. Never introduce a second severity vocabulary.
+
+One `T<n>` row per threat in `## threat-model`. Every `## findings` entry opens with the
+threat it realizes (`**[T1]**`), and every Critical/High threat is answered by a finding or
+recorded as mitigated with its control — a threat with neither is an unfinished review.
+
+#### No material threat surface
+
+When the diff crosses no boundary and adds no
+attacker-controlled input, the section is the single line `No material threat surface: <why>`
+and the review passes on it. Never invent threats to fill the table; the always-on secrets and
+dependency passes still run.
 
 ### Diff-Only Read Rule (SR)
 
@@ -72,35 +95,59 @@ Cheapest-first when only a security judgment on the delta is needed (full reads 
 
 Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `security-review-*.md`):
 
+H2 headings are the four mandatory anchors and nothing else — `handoff-protocol.md#anchor-allow-list`,
+enforced at the write by `hooks/anchor-preflight.sh` and again at the DR gate. Everything else nests as H3.
+
 ```markdown
-## Security Review Summary
+# Security Review — [feature]
 
-### Reviewed Components
-- [List of files/modules reviewed]
+## threat-model
 
-### Findings
+Reviewed: [files/modules]
 
-#### Critical (Block Release)
-- [Finding with remediation]
+| ID | Boundary | Entry point | STRIDE | Attacker-controlled input |
+|----|----------|-------------|--------|---------------------------|
+| T1 | [side ↔ side] | [endpoint/scheme/format/dependency] | [S T R I D E] | [what, from whom] |
 
-#### High (Fix Before Release)
-- [Finding with remediation]
+Mitigated without a finding: T[n] — [control that answers it]
 
-#### Medium (Track for Next Sprint)
-- [Finding with remediation]
+<!-- or, when the diff crosses nothing: -->
+No material threat surface: [what the diff changes and why nothing crosses a boundary].
 
-#### Low (Advisory)
-- [Finding with remediation]
+```
 
-### Compliance Status
+#### Findings, verdict, and blockers
+
+Each `## findings` entry opens with the threat it realizes; `**[—]**` marks a checklist finding
+with no threat-model row yet — add the row rather than leaving the section stale.
+
+```markdown
+## findings
+
+### Critical (block release)
+- **[T1]** [finding] → [remediation]
+
+### High (fix before release)
+- **[T2]** [finding] → [remediation]
+
+### Medium (track for next sprint)
+- **[—]** [finding] → [remediation]
+
+### Low (advisory)
+- **[T3]** [finding] → [remediation]
+
+## verdict
+
 - OWASP Top 10: [Pass/Fail with details]
-- Data Protection: [Status]
-- Secrets Scan: [Pass/Fail]
-
-### Sign-off
+- Data protection: [status]
+- Secrets scan: [Pass/Fail]
 - [ ] Security review complete
-- [ ] No critical/high findings blocking release
+- [ ] Every Critical/High threat answered by a finding or a recorded mitigation
 - [ ] Remediation plan documented for deferred items
+
+## blockers
+
+- [Critical/High finding blocking release, or "none"]
 ```
 
 ### Invocation
@@ -321,3 +368,14 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage SR --prev DR` (`skills/worktask/scripts/`) to atomically patch `tasks.SR0` + the `DR→SR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+
+#### Union this stage's facts in the same call
+
+Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and the only scripted writer for it. SR's findings and blockers map onto `decisions[]`:
+
+```bash
+state-patch.sh --stage SR --prev DR --facts '{
+  "decisions": [{"id":"sr-1","summary":"≤160 chars","ref":"security-review-0.md#findings"}]}'
+```
+
+Union by `.id` (last writer wins, newest at the tail): it never clobbers DR's entries and a re-run is byte-identical. Omitting it loses the finding silently. Canonical rule: `handoff-protocol.md#facts-union`.

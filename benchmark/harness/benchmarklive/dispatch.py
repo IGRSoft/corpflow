@@ -12,213 +12,77 @@ bytes, differing ONLY by ``--agent`` binding (WITH) vs bare (WITHOUT) and by cwd
 (``workdirs/<id>/{with,without}/``). ``without_arm="skip"`` (the mechanism default
 and every ``--stages`` subset) runs the WITH arm alone and keeps the WITHOUT
 placeholder byte-stable for every pre-existing caller.
+
+Orchestration only: the stage contract lives in stage_table, argv in settings_argv,
+telemetry in stage_usage, arm types and the dispatch seam in arm_exec, and record
+shapes in records. Every one of their names stays reachable as ``dispatch.<name>``.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import sys
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Callable, Optional, Protocol
+from typing import Callable, Optional
 
 from benchmarkkit import oracle
 from benchmarkkit.genlib import Subprocess, Timer
-from benchmarkkit.metrics import (
-    BenchmarkRecord,
-    PathMetrics,
-    StageAttribution,
-    StageCoverage,
-    Tokens,
-    make_arm_record,
-    make_record,
-    skip_placeholder_without,
-    write_record,
-)
+from benchmarkkit.metrics import BenchmarkRecord, write_record
 
 from . import baseline as baseline_mod
 from . import budget as budget_mod
-from . import capture, preamble
+from . import preamble
 
-# Per-stage dispatch table: stage -> (agent, model_id, effort).
-STAGE_TABLE = {
-    "PL": ("corpflow:product-manager", "claude-opus-5", "high"),
-    "AR": ("corpflow:software-architector", "claude-opus-5", "high"),
-    "TL": ("corpflow:team-lead", "claude-sonnet-5", "medium"),
-    "DV": ("corpflow:developer", "claude-opus-5", "high"),
-    "DR": ("corpflow:technical-lead", "claude-opus-5", "high"),
-    "SR": ("corpflow:security-reviewer", "claude-opus-5", "xhigh"),
-    "QA": ("corpflow:qa-engineer", "claude-sonnet-5", "medium"),
-    "DC": ("corpflow:technical-writer", "claude-haiku-4-5", "low"),
-    "FN": ("corpflow:project-manager", "claude-sonnet-5", "medium"),
-    "ST": ("corpflow:stakeholder", "claude-sonnet-5", "low"),
-}
+# Re-export shim: callers and tests address these as ``dispatch.<name>``.
+from .arm_exec import (  # noqa: F401
+    STAGE_TIMEOUT_S,
+    ArmResult,
+    ArmSpec,
+    DispatchFailure,
+    Dispatching,
+    SubprocessDispatcher,
+    _arm_tokens,
+    _sum_opt,
+    _tok_total,
+)
+from .records import (  # noqa: F401
+    PipelineResult,
+    _arm_verdict,
+    _oracle_conforms,
+    _stage_attributions,
+    build_arm_record,
+    build_live_record,
+)
+from .settings_argv import (  # noqa: F401
+    PERMISSION_MODE,
+    SETTINGS_RELPATH,
+    BenchmarkSettingsMissing,
+    _settings_argv,
+    build_arm_stage_argv,
+    build_stage_argv,
+    require_settings,
+    settings_path_for,
+)
+from .stage_table import (  # noqa: F401
+    CAPTURE_JSON,
+    CAPTURE_STREAM_JSON,
+    HARNESS_GENERATION,
+    PROMPT_CONTRACT,
+    STAGE_TABLE,
+    build_era,
+)
+from .stage_usage import (  # noqa: F401
+    NON_APP_DIRS,
+    StageUsage,
+    _audit_subagent_spawns,
+    capture_layer2,
+    capture_stage_usage,
+    dv_produced_swift,
+)
 
-CAPTURE_JSON = "json"
-CAPTURE_STREAM_JSON = "stream-json"
-
-# Bumped by hand whenever the graded task text changes; a workload change makes
-# token and quality figures incomparable just as surely as a model repin does.
-PROMPT_CONTRACT = "scripted-cli-v3"
-HARNESS_GENERATION = "python-1"
-
-
-def build_era() -> dict:
-    """Stamp what this run's numbers are comparable against.
-
-    Model pins are the axis that silently invalidated the stored baselines at
-    v3.37.1, so they travel with every record rather than living only in a README.
-    """
-    return {
-        "harness": HARNESS_GENERATION,
-        "prompt_contract": PROMPT_CONTRACT,
-        "model_pins": {stage: model for stage, (_agent, model, _effort) in STAGE_TABLE.items()},
-    }
-
-
-# Headless has no interactive prompt, so safety rides on the deny-list settings file,
-# not the mode. Mirrored verbatim in baseline.py (parity asserted by test, no import).
-PERMISSION_MODE = "bypassPermissions"
-
-SETTINGS_RELPATH = ("live", "settings", "benchmark-settings.json")
-
-# Raw stage stdout over this size is persisted truncated with a marker (A3).
+# Raw stage stdout over this size is persisted truncated with a marker (A3). Read
+# through this module's globals so a caller can lower the cap by rebinding it here.
 CAPTURE_TRUNCATE_BYTES = 25 * 1024 * 1024
-
-# *.swift under these dir names never counts as DV output (A5 tripwire, U2 measure).
-NON_APP_DIRS = {".build", ".swiftpm", ".context"}
-
-
-def settings_path_for(benchmark_dir: str) -> str:
-    """Absolute path to the deny-list settings file for this benchmark tree."""
-    return os.path.join(benchmark_dir, *SETTINGS_RELPATH)
-
-
-def _settings_argv(settings_path: Optional[str]) -> list:
-    # Low-level argv builder: byte-stable, no I/O policy. Fail-closed enforcement
-    # lives in require_settings() at the dispatch entry, NOT here, so the argv
-    # shape stays pure/injectable for tests that don't care about the deny-list.
-    if settings_path and os.path.exists(settings_path):
-        return ["--settings", settings_path]
-    return []
-
-
-class BenchmarkSettingsMissing(Exception):
-    """Raised when a bypassPermissions dispatch would otherwise run with no deny-list.
-
-    Headless ``claude -p`` has no interactive prompt, so under ``bypassPermissions``
-    the ONLY guardrail is the deny-list settings file. If it is absent we fail closed
-    rather than dispatch fail-open; the message names the expected path.
-    """
-
-
-def require_settings(settings_path: str, permission_mode: str = PERMISSION_MODE) -> None:
-    """Fail closed BEFORE any dispatch when the deny-list settings file is missing.
-
-    Enforced only under ``bypassPermissions`` (the sole headless mode); any other
-    mode carries its own interactive guardrail and is left untouched. Pure and
-    injectable — raises :class:`BenchmarkSettingsMissing` or returns ``None``.
-    """
-    if permission_mode == "bypassPermissions" and not os.path.exists(settings_path):
-        raise BenchmarkSettingsMissing(
-            "deny-list settings file is required under bypassPermissions but is "
-            f"missing: {settings_path} — create it (see benchmark/live/settings/) "
-            "before dispatching; refusing to run fail-open with no deny-list."
-        )
-
-
-# Production dispatcher per-stage ceiling (D5); a hung child never blocks a run forever.
-STAGE_TIMEOUT_S = 3600.0
-
-
-@dataclass
-class StageUsage:
-    input_tokens: Optional[int] = None
-    output_tokens: Optional[int] = None
-    cost_usd: Optional[float] = None
-    capture_layer: Optional[int] = None  # 1, 2, or None (Layer 3 = degraded)
-    cache_read: Optional[int] = None
-    cache_creation: Optional[int] = None
-    coverage: Optional[StageCoverage] = None
-    duration_s: float = 0.0  # wall-clock of this dispatch; not part of the on-disk schema
-
-
-@dataclass
-class ArmSpec:
-    """The sole legitimate A/B difference: ``bind_agent`` (→ --agent) and ``cwd``.
-    Everything else (prompts, budget, capture shape) is shared by construction."""
-
-    name: str            # "with" | "without"
-    bind_agent: bool
-    cwd: str
-    audit_path: str
-
-
-@dataclass
-class ArmResult:
-    name: str
-    usages: list = field(default_factory=list)   # [(stage, StageUsage)]
-    dispatched: int = 0
-    partial: bool = False
-    dv_gated: bool = False
-    app: Optional[baseline_mod.AppMeasure] = None
-
-
-class Dispatching(Protocol):
-    def run(self, argv: list, prompt_text: str) -> str:
-        ...
-
-
-class DispatchFailure(Exception):
-    pass
-
-
-class SubprocessDispatcher:
-    """Production dispatcher: shell out to headless `claude -p`, prompt on stdin."""
-
-    def __init__(self, workdir: Optional[str] = None, timeout: Optional[float] = STAGE_TIMEOUT_S) -> None:
-        self.workdir = workdir
-        self.timeout = timeout
-
-    def run(self, argv: list, prompt_text: str) -> str:
-        r = Subprocess.run(argv, cwd=self.workdir, input=prompt_text, timeout=self.timeout)
-        if r.exit_code != 0:
-            snippet = r.stderr.strip()[:400]
-            # Under --output-format json the CLI reports API failures on stdout, not
-            # stderr; without this the diagnostic is recoverable only from CLI transcripts.
-            out_snippet = r.stdout.strip()[:400]
-            raise DispatchFailure(
-                f"claude -p failed (rc={r.exit_code}) for argv {argv[:6]}…"
-                + (f" stderr: {snippet}" if snippet else "")
-                + (f" stdout: {out_snippet}" if out_snippet else "")
-            )
-        return r.stdout
-
-
-def build_arm_stage_argv(stage: str, bind_agent: bool = True, capture_mode: str = CAPTURE_JSON,
-                         settings_path: Optional[str] = None) -> list:
-    """Frozen headless argv for one arm's stage. Bound and bare argvs are identical
-    except the trailing ``--agent`` (AC-8 parity target); stream-json adds --verbose."""
-    entry = STAGE_TABLE.get(stage)
-    if entry is None:
-        return []
-    agent, model, effort = entry
-    argv = ["claude", "-p", "--model", model, "--effort", effort,
-            "--permission-mode", PERMISSION_MODE, "--output-format", capture_mode]
-    argv += _settings_argv(settings_path)
-    if bind_agent:
-        argv += ["--agent", agent]
-    if capture_mode == CAPTURE_STREAM_JSON:
-        argv.append("--verbose")
-    return argv
-
-
-def build_stage_argv(stage: str, capture_mode: str = CAPTURE_JSON,
-                     settings_path: Optional[str] = None) -> list:
-    """WITH-arm (agent-bound) argv — thin wrapper over the shared arm builder."""
-    return build_arm_stage_argv(stage, bind_agent=True, capture_mode=capture_mode,
-                                settings_path=settings_path)
 
 
 def persist_capture(captures_dir: Optional[str], arm: str, stage: str, stdout: str) -> None:
@@ -239,126 +103,6 @@ def persist_capture(captures_dir: Optional[str], arm: str, stage: str, stdout: s
                 f.write(f"\n<<<TRUNCATED at {CAPTURE_TRUNCATE_BYTES} bytes>>>\n")
     except OSError:
         pass
-
-
-def dv_produced_swift(arm_cwd: str) -> bool:
-    """True when at least one *.swift landed outside {.build,.swiftpm,.context} (A5)."""
-    for root, dirs, files in os.walk(arm_cwd):
-        dirs[:] = [d for d in dirs if d not in NON_APP_DIRS]
-        if any(f.endswith(".swift") for f in files):
-            return True
-    return False
-
-
-def _audit_subagent_spawns(audit_path: str, stage: str,
-                           now_fn: Optional[Callable[[], float]] = None) -> int:
-    """Count canonical nested ``subagent_stopped`` rows attributed to ``stage`` (A4).
-
-    Canonical only: rows with ``metadata.advisory`` truthy are mirror duplicates and
-    skipped; identical ``dedupe_key`` values collapse to one. ``now_fn`` is accepted
-    for symmetry with time-window callers but attribution here keys off the row's own
-    ``metadata.stage`` (per-arm audit path already scopes the window structurally).
-    """
-    try:
-        with open(audit_path, encoding="utf-8") as f:
-            text = f.read()
-    except OSError:
-        return 0
-    seen: set = set()
-    count = 0
-    for line in text.split("\n"):
-        if not line.strip():
-            continue
-        try:
-            rec = json.loads(line)
-        except (ValueError, TypeError):
-            continue
-        if not isinstance(rec, dict) or rec.get("action") != "subagent_stopped":
-            continue
-        meta = rec.get("metadata")
-        if not isinstance(meta, dict) or meta.get("stage") != stage:
-            continue
-        if meta.get("advisory"):
-            continue
-        key = meta.get("dedupe_key")
-        if key is not None:
-            if key in seen:
-                continue
-            seen.add(key)
-        count += 1
-    return count
-
-
-def capture_layer2(audit_path: str, stage: str) -> Optional[StageUsage]:
-    """Layer 2: scan audit.jsonl for this stage's last external_dispatch usage."""
-    try:
-        with open(audit_path, encoding="utf-8") as f:
-            text = f.read()
-    except OSError:
-        return None
-    found = None
-    for line in text.split("\n"):
-        if not line.strip():
-            continue
-        try:
-            rec = json.loads(line)
-        except (ValueError, TypeError):
-            continue
-        if not isinstance(rec, dict) or rec.get("action") != "external_dispatch":
-            continue
-        meta = rec.get("metadata")
-        if not isinstance(meta, dict) or meta.get("stage") != stage:
-            continue
-        usage = meta.get("usage") or {}
-        in_tok = usage.get("input_tokens")
-        out_tok = usage.get("output_tokens")
-        cr = usage.get("cache_read_input_tokens")
-        cc = usage.get("cache_creation_input_tokens")
-        cost = usage.get("cost_usd")
-        if cost is None:
-            cost = usage.get("total_cost_usd")
-        if in_tok is None and out_tok is None and cost is None and cr is None and cc is None:
-            continue
-        found = StageUsage(input_tokens=in_tok, output_tokens=out_tok, cost_usd=cost,
-                           capture_layer=2, cache_read=cr, cache_creation=cc)
-    return found
-
-
-def capture_stage_usage(stdout: str, audit_path: str, stage: str,
-                        now_fn: Optional[Callable[[], float]] = None) -> StageUsage:
-    """Layer 1 (stdout) → Layer 2 (audit.jsonl) → Layer 3 (all None). Never fabricates.
-
-    A4: coverage from stdout is augmented with nested background spawns read from the
-    per-arm audit (emitted only when >0, preserving the 4-key StageCoverage shape)."""
-    parsed = capture.parse(stdout)
-    coverage = parsed.coverage if parsed else None
-    nested = _audit_subagent_spawns(audit_path, stage, now_fn=now_fn)
-    if nested and coverage is None:
-        coverage = StageCoverage(agents=[], skills=[], commands=[], tool_calls=0)
-    if nested and coverage is not None:
-        coverage.nested_background = nested
-
-    if parsed is not None and parsed.has_usage:
-        return StageUsage(input_tokens=parsed.input_tokens, output_tokens=parsed.output_tokens,
-                          cost_usd=parsed.cost_usd, capture_layer=1,
-                          cache_read=parsed.cache_read, cache_creation=parsed.cache_creation,
-                          coverage=coverage)
-    layer2 = capture_layer2(audit_path, stage)
-    if layer2 is not None:
-        layer2.coverage = coverage
-        return layer2
-    return StageUsage(capture_layer=None, coverage=coverage)
-
-
-def _sum_opt(values: list):
-    real = [v for v in values if v is not None]
-    return sum(real) if real else None
-
-
-def _tok_total(input_tokens: Optional[int], output_tokens: Optional[int]) -> Optional[int]:
-    if input_tokens is None and output_tokens is None:
-        return None
-    return (input_tokens or 0) + (output_tokens or 0)
 
 
 def read_state_json_text(workdir_path: str) -> str:
@@ -382,13 +126,6 @@ def assemble_prompts(prompts_dir: str, stages: list, state_json_text: str,
             stage, worktask_id=worktask_id, plan_file=plan_file,
             state_json_text=state_json_text, task_text=task_text)
     return out
-
-
-@dataclass
-class PipelineResult:
-    usages: list
-    live_partial: bool
-    dispatched: int
 
 
 def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
@@ -433,138 +170,6 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
             result.partial = True
             break
     return result
-
-
-def _arm_tokens(usages: list) -> tuple:
-    su = [u for _, u in usages]
-    in_total = _sum_opt([u.input_tokens for u in su])
-    out_total = _sum_opt([u.output_tokens for u in su])
-    tok_total = None if (in_total is None and out_total is None) else (in_total or 0) + (out_total or 0)
-    cost_total = _sum_opt([u.cost_usd for u in su])
-    cr_total = _sum_opt([u.cache_read for u in su])
-    cc_total = _sum_opt([u.cache_creation for u in su])
-    wall = round(sum(u.duration_s for u in su) * 10000) / 10000
-    return in_total, out_total, tok_total, cost_total, cr_total, cc_total, wall
-
-
-def _stage_attributions(usages: list, arm: Optional[str]) -> list:
-    return [
-        StageAttribution(stage=name, fresh_in=u.input_tokens, cache_creation=u.cache_creation,
-                         cache_read=u.cache_read, out=u.output_tokens, cost_usd=u.cost_usd,
-                         coverage=u.coverage, arm=arm)
-        for name, u in usages
-    ]
-
-
-def _arm_verdict(app: Optional[baseline_mod.AppMeasure], partial: bool) -> tuple:
-    """Collapse one arm's measurement into ``(pass_fail, loc, tests, app_path, oracle)``.
-
-    Fail-closed on two counts: an unmeasured or degraded arm is never green, and
-    where the held-out oracle ran it — not the arm's self-written suite — decides
-    the verdict. The verdict reads the `specified` tier alone, which is the contract
-    the arm was actually handed; the `implied` tier is a quality signal reported
-    beside it, not something to fail an arm over. Full conformance is required to
-    pass; a partial score is a fail that still carries its rate for comparison.
-    """
-    if app is None:
-        return "fail", 0, 0, None, None
-
-    verdict = "fail"
-    if not partial:
-        if app.oracle is not None:
-            verdict = "pass" if _oracle_conforms(app.oracle) else "fail"
-        else:
-            verdict = app.pass_fail
-    return verdict, app.loc_produced, app.test_count, app.app_path, app.oracle
-
-
-def _oracle_conforms(oracle: dict) -> bool:
-    """True when the arm cleared every case it was told about."""
-    specified = (oracle.get("tiers") or {}).get("specified")
-    if specified is not None:
-        return specified.get("pass_rate") == 1.0
-    return oracle.get("pass_rate") == 1.0
-
-
-def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: float,
-                      usages: list, stages_dispatched: int, live_partial: bool,
-                      with_app: Optional[baseline_mod.AppMeasure] = None,
-                      without_app: Optional[baseline_mod.AppMeasure] = None,
-                      without_usages: Optional[list] = None,
-                      without_dispatched: int = 0,
-                      without_partial: bool = False,
-                      with_partial: Optional[bool] = None) -> BenchmarkRecord:
-    """Build the record. Skip mode (``without_usages=None``) keeps the WITHOUT
-    placeholder byte-identical; its WITH block reflects whatever measurement and grading
-    produced, which since AD-5 runs for every dispatched arm — so that block gains a real
-    ``app_path`` and an ``oracle`` key it did not carry before. Paired mode aggregates the
-    WITHOUT arm's own 10-stage tokens and tags every stage row with its arm (both
-    additive/emit-only)."""
-    paired = without_usages is not None
-    # Live coverage is never measured; None marks it absent so renderers tell it apart
-    # from a real 0.0. Skip mode keeps the byte-stable 0.0 placeholder (asserted by test).
-    with_coverage = None if paired else 0.0
-
-    in_total, out_total, tok_total, cost_total, cr_total, cc_total, with_wall = _arm_tokens(usages)
-
-    # Verdicts read per-arm degradation: record-level live_partial ORs both arms,
-    # and judging one arm by it would fail a complete arm for the other's breach.
-    if with_partial is None:
-        with_partial = live_partial
-    with_pass, with_loc, with_test, with_app_path, with_oracle = _arm_verdict(with_app, with_partial)
-
-    with_p = PathMetrics(
-        tokens=Tokens(input=in_total, output=out_total, total=tok_total,
-                      cache_read=cr_total, cache_creation=cc_total),
-        cost_usd=cost_total, wall_clock_s=with_wall, loc_produced=with_loc, test_count=with_test,
-        coverage_pct=with_coverage, estimate_complexity_score=0, stage_count=stages_dispatched,
-        pass_fail=with_pass, app_path=with_app_path, oracle=with_oracle)
-
-    if not paired:
-        without_p = skip_placeholder_without()
-        return make_record(run_id=run_id, timestamp_utc=timestamp_utc, mode="live",
-                           git_sha=git_sha, budget_usd=budget, with_pm=with_p,
-                           without_pm=without_p, live_partial=live_partial,
-                           stages=_stage_attributions(usages, arm=None), era=build_era())
-
-    (o_in, o_out, o_tok, o_cost, o_cr, o_cc, o_wall) = _arm_tokens(without_usages)
-    (without_pass, without_loc, without_test,
-     without_app_path, without_oracle) = _arm_verdict(without_app, without_partial)
-
-    without_p = PathMetrics(
-        tokens=Tokens(input=o_in, output=o_out, total=o_tok, cache_read=o_cr, cache_creation=o_cc),
-        cost_usd=o_cost, wall_clock_s=o_wall, loc_produced=without_loc, test_count=without_test,
-        coverage_pct=None, estimate_complexity_score=0, stage_count=without_dispatched,
-        pass_fail=without_pass, app_path=without_app_path, oracle=without_oracle)
-
-    stages_all = (_stage_attributions(usages, arm="with")
-                  + _stage_attributions(without_usages, arm="without"))
-    return make_record(run_id=run_id, timestamp_utc=timestamp_utc, mode="live",
-                       git_sha=git_sha, budget_usd=budget, with_pm=with_p,
-                       without_pm=without_p, live_partial=live_partial, stages=stages_all,
-                       era=build_era())
-
-
-def build_arm_record(run_id: str, timestamp_utc: str, git_sha: str, budget: float,
-                     arm: str, usages: list, stages_dispatched: int, arm_partial: bool,
-                     app: Optional[baseline_mod.AppMeasure] = None) -> BenchmarkRecord:
-    """Build a single-arm record carrying only the arm that ran.
-
-    A sibling of :func:`build_live_record`, which keeps both legacy byte shapes verbatim.
-    ``live_partial`` reflects this arm alone, since no other arm was dispatched.
-    """
-    in_total, out_total, tok_total, cost_total, cr_total, cc_total, wall = _arm_tokens(usages)
-    pass_fail, loc, tests, app_path, oracle_payload = _arm_verdict(app, arm_partial)
-    pm = PathMetrics(
-        tokens=Tokens(input=in_total, output=out_total, total=tok_total,
-                      cache_read=cr_total, cache_creation=cc_total),
-        cost_usd=cost_total, wall_clock_s=wall, loc_produced=loc, test_count=tests,
-        coverage_pct=None, estimate_complexity_score=0, stage_count=stages_dispatched,
-        pass_fail=pass_fail, app_path=app_path, oracle=oracle_payload)
-    return make_arm_record(
-        run_id=run_id, timestamp_utc=timestamp_utc, mode="live", git_sha=git_sha,
-        budget_usd=budget, arm=arm, pm=pm, live_partial=arm_partial,
-        stages=_stage_attributions(usages, arm=arm), era=build_era())
 
 
 def now_iso() -> str:
@@ -640,7 +245,9 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     require_settings(settings_path)
     captures_dir = os.path.join(workdir_path, "captures")
     if selection is None:
-        selection = baseline_mod.resolve_arm_selection(None, without_arm, None)
+        selection = baseline_mod.resolve_arm_selection(
+            None, without_arm,
+            baseline_mod.stages_subset(stages, budget_mod.PIPELINE_STAGES))
 
     with_spec = ArmSpec(name="with", bind_agent=True,
                         cwd=os.path.join(workdir_path, "with"),

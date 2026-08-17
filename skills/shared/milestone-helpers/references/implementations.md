@@ -10,20 +10,39 @@ Full TypeScript pseudocode implementations for all milestone helper functions.
 ## Branch Name Generation
 
 ```typescript
-function generateBranchName(issue: { number: number; title: string }): string {
-  const slug = issue.title
+// `type` is derived by branch-lib.sh's derive_type (sourced, never re-implemented);
+// the pseudocode below covers the slug only.
+function generateBranchName(issue: { number: number; title: string }, type: string): string {
+  const body = issue.title
+    .replace(/\n/g, ' ')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')  // Replace non-alphanumeric with hyphens
-    .replace(/^-|-$/g, '')         // Trim leading/trailing hyphens
-    .substring(0, 50);             // Max 50 chars for slug (canonical; see scripts/milestone-helpers.sh)
+    .replace(/^-+|-+$/g, '');      // Trim leading/trailing hyphens
 
-  return `feature/${issue.number}-${slug}`;
+  return capSlug(body, type, issue.number);
+}
+```
+
+### Slug capping
+
+```typescript
+function capSlug(body: string, type: string, number: number): string {
+  // Cap at 50, dropping the trailing PARTIAL word; one whole word always survives.
+  let slug = body;
+  if (body.length > 50) {
+    slug = body[50] === '-' ? body.slice(0, 50) : body.slice(0, 50).replace(/-[^-]*$/, '');
+    if (!slug.includes('-')) slug = body.split('-')[0];
+  }
+
+  return `${type}/${number}-${slug}`;
 }
 ```
 
 **Examples**:
 - `"Add login flow"` → `feature/42-add-login-flow`
-- `"Fix: crash on startup!!!"` → `feature/43-fix-crash-on-startup`
+- `"Fix: crash on startup!!!"` → `bugfix/43-fix-crash-on-startup`
+- `"Fix the reconstruction scan flow blinking before the first frame renders"` →
+  `bugfix/164-fix-the-reconstruction-scan-flow-blinking-before` (word boundary, not `…-before-t`)
 
 ## PR Detection
 

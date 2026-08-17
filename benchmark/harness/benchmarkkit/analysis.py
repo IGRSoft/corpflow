@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from .formatting import format_cost
+
 _OUTLIER_FACTOR = 1.5
 
 
@@ -444,9 +446,12 @@ def render_markdown(analysis: dict) -> str:
             lines.append(f"| {label} | — | — | — | — |")
             continue
         premium = f"{entry['premium_pct']:.1f}%" if entry["premium_pct"] is not None else "—"
+        # Money gets fixed 2dp; the generic formatter trims trailing zeros, which
+        # renders a dollar column at a different precision per row.
+        cell = format_cost if key == "cost_usd" else _fmt
         lines.append(
-            f"| {label} | {_fmt(entry['with'])} | {_fmt(entry['without'])} | "
-            f"{_fmt(entry['delta'])} | {premium} |")
+            f"| {label} | {cell(entry['with'])} | {cell(entry['without'])} | "
+            f"{cell(entry['delta'])} | {premium} |")
 
     lines += ["", "## per-stage", ""]
     if analysis["stages"]:
@@ -455,7 +460,7 @@ def render_markdown(analysis: dict) -> str:
         lines.append("|---|---|---|---|---|---|---|---|")
         for row in analysis["stages"]:
             lines.append(
-                f"| {row['stage']} | {_arm(row.get('arm'))} | {_fmt(row['cost_usd'])} | "
+                f"| {row['stage']} | {_arm(row.get('arm'))} | {format_cost(row['cost_usd'])} | "
                 f"{_pct(row['cost_share_pct'])} | {_fmt(row['out_tokens'])} | "
                 f"{_pct(row['out_token_share_pct'])} | {_pct(row['cache_hit_pct'])} | "
                 f"{_fmt(row.get('tool_calls'))} |")

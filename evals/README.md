@@ -24,7 +24,11 @@ One row per kept, classified change:
 - **No diff bodies are ever stored** — counts and a redacted one-line summary only
 - Opt out with `SELF_IMPROVE_LABELS=0`
 
-Aggregate with `skills/self-improvement/scripts/label-stats.sh`.
+Aggregate with `skills/self-improvement/scripts/label-stats.sh`. It reports
+per-target and per-category counts, flags targets and categories at or above
+`--min-count=<n>` (default 3), and prints progress toward the 100-row taxonomy
+gate below. It reports only — acting on a repeat still goes through the human
+approval gate on a Step 5 proposal.
 
 ## `failure-taxonomy.md` (not yet written)
 
@@ -55,14 +59,88 @@ by **binary, code-checked assertions** — no scales, no unvalidated judges.
 Criteria that genuinely need interpretation are parked in each case's `deferred`
 list rather than being graded badly.
 
-**No case has yet been graded against model output.** `grade()` scores a response
-the caller hands it, and no capture step exists: nothing dispatches these prompts
-and no responses are stored. What `./run-tests.sh` executes is
-`tests/python/test_skill_evals.py` — unit tests of the assertion engine against
-hand-built fixture plans, plus the lint that keeps every eval set binary and
-code-checkable. **A green run means the sets are well-formed and the engine is
-correct; it is not a measurement of any skill's output quality.**
+**No case has yet been graded against model output.** What `./run-tests.sh`
+executes is `tests/python/test_skill_evals.py` and
+`tests/python/test_eval_capture.py` — unit tests of the assertion engine and the
+capture tooling against injected dispatches, plus the lint that keeps every eval
+set binary and code-checkable. **A green run means the sets are well-formed and
+the tooling is correct; it is not a measurement of any skill's output quality.**
 
-Capture is the missing step: dispatch each case `prompt`, store the response
-beside the eval set, grade it offline with the existing engine. Until that lands,
-these sets are a specification, not a result.
+## Capture and grading
+
+`scripts/` holds the loop. Capture costs money and needs a credential; grading is
+free and offline.
+
+```sh
+evals/scripts/eval-capture.py --eval-set skills/request-plan/evals/evals.json --dry-run
+evals/scripts/eval-capture.py --eval-set skills/request-plan/evals/evals.json --budget 1.00
+evals/scripts/eval-grade.py   --eval-set skills/request-plan/evals/evals.json
+```
+
+- `eval-engine.py` — assertion engine + digests, shared by capture, grading, and
+  the test suite so two scores of one response can never disagree.
+- `eval-capture.py` — dispatches each case `prompt` through headless `claude -p`
+  and writes `<eval-set-dir>/responses/<case_id>.json`. A failed or empty
+  dispatch **raises and stores nothing**; a fabricated blank would be graded as a
+  genuine skill failure.
+- `eval-grade.py` — scores stored responses. Refuses (rc 2) when a record's
+  `prompt_digest` no longer matches the eval set, since that response answers a
+  question the set no longer asks. A moved `assertions_digest` is flagged, not
+  refused — the response stands, only its score went stale.
+
+`--mode` picks what is being measured: `command` (default) invokes the skill
+explicitly and grades its output; `natural` sends the bare request and so also
+grades whether the skill triggers at all.
+
+### Isolating a session from this repo
+
+`judge-traces.py` runs each judge in an **empty temp directory**, not in the repo.
+That is the only isolation that held. Denying the built-in file tools was not
+enough — an isolated probe reached the repo through a connected MCP server's own
+`read_file`, and after MCP was stripped too, a run still recited an exact tracked
+file census (`py=61 md=189`, both correct) with no tool call at all, because the
+CLI injects working-directory context. Deny-lists chase channels; an empty `cwd`
+removes the thing being read. A settings-file `permissions.deny` is weaker still:
+under `bypassPermissions` it did not apply at all.
+
+The regression test for this is a question whose answer can be checked — ask for
+a file census and compare it against `git ls-files`.
+
+### Asking is an answer, and it can be the wrong one
+
+A response that asks a clarifying question instead of planning is graded against
+the case's `expected_outcome`: a pass where the case wanted a question, a failure
+where it wanted a plan. Both are inside the denominator.
+
+An earlier version left every unexpected question **out** of the denominator, on
+the reasoning that the skill declined to answer so its plan quality was never
+exercised. That was wrong once cases carried `expected_outcome`, and it cost a
+whole defect class: 9 of 32 human-labelled failures were plans the skill should
+have written and didn't, and the grader reported all 9 as unscored. The headline
+was computed over 87 cases and read as healthier than the skill was. Failures
+that leave the denominator are worse than failures that stay in it — a metric
+cannot report what it has excused.
+
+### Case lints
+
+`tests/python/test_skill_evals.py` fails a set that would waste a capture:
+
+| Lint | Rejects |
+|---|---|
+| `grounding` paths resolve | A case describing a surface this repo lacks — it can only ever be refused |
+| No echoed assertion values | A value already in the case's own prompt, which rewards restatement over judgement |
+| ≥2 case-specific assertions | Cases that only re-measure the shared template checks and cannot tell each other apart |
+
+Captured responses are gitignored. A clone re-captures rather than inheriting
+them, so every grade cites the `plugin_sha`, `model` and `skill_version` of the
+run that actually produced it. The tradeoff is real: a grade is reproducible only
+by paying for the capture again (~$1/case), so record the numbers that matter in
+the commit or a findings doc rather than assuming the responses will be there.
+
+### Splits
+
+`evals/splits/<skill>.json` freezes tranche membership. A case **never** changes
+tranche: stratifying on a dimension that later gets re-derived once reshuffled dev
+and test after dev had been read, quietly moving examined cases into the held-out
+set. Generation reads the manifest and stratifies only genuinely new cases.
+Anything already examined stays in `dev` — something read cannot be un-read.

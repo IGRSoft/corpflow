@@ -6,7 +6,8 @@ Frozen seam argv (run-benchmark.sh --live):
   [--stages CODE[,CODE...]] [--capture json|stream-json] [--benchmark-dir D] [--prompts-dir D]
   [--without-arm real|skip] [--arm with|without|both]
 --without-arm overrides the default WITHOUT-baseline policy (real on a full run,
-skip on a --stages subset — see benchmarklive.baseline.resolve_arm_mode).
+skip on a genuine --stages subset; --stages naming every stage is a full run —
+see benchmarklive.baseline.resolve_arm_mode).
 --arm with|without records a single arm on its own; --arm both is the paired run.
 Left unset it defers to the --without-arm policy, which is what keeps the
 pre-existing default byte-stable.
@@ -95,7 +96,9 @@ def main(argv):
     # Refused here, before the credential probe and any dispatch, so a usage slip
     # never costs a run.
     try:
-        selection = baseline_mod.resolve_arm_selection(arm_arg, without_arm_arg, stages_arg)
+        selection = baseline_mod.resolve_arm_selection(
+            arm_arg, without_arm_arg,
+            baseline_mod.stages_subset(stages, budget_mod.PIPELINE_STAGES))
     except baseline_mod.ArmSelectionError as exc:
         die(f"bench-live: {exc}", 64)
 

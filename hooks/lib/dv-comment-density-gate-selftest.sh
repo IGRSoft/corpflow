@@ -159,6 +159,49 @@
   _out=$(run_gate "$(read_stdin)" "$_tmp/.context" "$_tmp")
   [ -z "$_out" ] || { echo "dv-comment-density-gate: self-test FAIL (vendored .sh blocked)"; _fail=1; }
 
+  # 10. One budget-compliant /// per one-line case: 48% aggregate, every comment
+  #     run one line long. The aggregate ratio alone blocked this.
+  # Clear every earlier fixture, so files_checked below is attributable.
+  rm -rf "$_tmp/vendor" "$_tmp/lean.py" "$_tmp/Lean.swift"
+  {
+    echo '/// Every state a request can occupy.'
+    echo 'enum RequestState {'
+    for _i in $(seq 1 20); do
+      echo "    /// Case ${_i}: parked awaiting stage ${_i}."
+      echo "    case state${_i}"
+    done
+    echo '}'
+  } >"$_tmp/RequestState.swift"
+  _out=$(run_gate "$(read_stdin)" "$_tmp/.context" "$_tmp")
+  [ -z "$_out" ] ||
+    { echo "dv-comment-density-gate: self-test FAIL (per-declaration one-liners blocked)"; _fail=1; }
+  # Silence must be a measured pass, not a file the filters skipped.
+  tail -n 1 "$_tmp/.context/logs/audit.jsonl" | jq -e '
+    .action == "comment_density_pass" and .metadata.files_checked == 1
+    and .metadata.worst_pct > 40 and .metadata.worst_essay_pct == 0
+  ' >/dev/null 2>&1 ||
+    { echo "dv-comment-density-gate: self-test FAIL (per-declaration case was never measured)"; _fail=1; }
+
+  # 11. The loophole the block-length signal opens: prose kept inside the 3-line
+  #     budget but repeated for every declaration. The secondary aggregate
+  #     ceiling is the only thing that still catches it.
+  rm -f "$_tmp/RequestState.swift"
+  {
+    echo 'enum Spread {'
+    for _i in $(seq 1 15); do
+      echo "    /// Case ${_i} narrates the history the standard bans."
+      echo "    /// It restates the signature across a second line."
+      echo "    /// AC-${_i}, REQ-${_i}: provenance kept inside the budget."
+      echo "    case state${_i}"
+    done
+    echo '}'
+  } >"$_tmp/Spread.swift"
+  _out=$(run_gate "$(read_stdin)" "$_tmp/.context" "$_tmp")
+  printf '%s' "$_out" | jq -e '
+    .decision == "block" and (.reason | test("Spread\\.swift"))
+  ' >/dev/null 2>&1 ||
+    { echo "dv-comment-density-gate: self-test FAIL (essay-per-declaration did not block)"; _fail=1; }
+
   [ "$_fail" -eq 0 ] || exit 1
   echo "dv-comment-density-gate: self-test OK"
   exit 0

@@ -12,6 +12,9 @@ For the full OWASP Top 10 checklist, see `${CLAUDE_SKILL_DIR}/references/owasp-c
 
 For the security review output template, see `${CLAUDE_SKILL_DIR}/references/review-template.md`
 
+For the SR0 threat-modeling procedure (trust boundaries, attack surface, STRIDE), see
+`${CLAUDE_SKILL_DIR}/references/threat-model.md`
+
 ## Secrets Scanner (canonical tool)
 
 **Script**: `scripts/scan-secrets.sh`

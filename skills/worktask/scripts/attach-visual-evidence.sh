@@ -9,7 +9,8 @@
 #   --emit pr [--force]
 #                 Print a ready-to-insert "## Visual evidence" markdown block to
 #                 stdout. The PR-body composer (FN agent / FN PR flow /
-#                 conductor-attachments skeleton) inserts it between ## Test plan
+#                 conductor-attachments skeleton, and adhoc-visual-evidence.sh for
+#                 a PR opened outside a worktask) inserts it between ## Test plan
 #                 and ## Notes. Empty stdout ⇒ insert nothing (flag false / no
 #                 captures). Callers invoke UNCONDITIONALLY; gating lives here.
 #                 Idempotent: a second run replays the first run's hosted URLs from

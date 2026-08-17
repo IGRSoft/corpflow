@@ -1,0 +1,145 @@
+{
+  "version": 2,
+  "worktask_id": "replay-cycle-fixture",
+  "plan_file": ".context/planning-0.md",
+  "platform": "all",
+  "run_index": 0,
+  "tasks": {
+    "PL0": {
+      "status": "completed",
+      "artifact": ".context/planning-0.md",
+      "verdict": "ok",
+      "completed_via": "hook",
+      "metadata": {
+        "stage": "PL",
+        "agent": "corpflow:product-manager"
+      }
+    },
+    "AR0": {
+      "status": "completed",
+      "artifact": ".context/architecture-0.md",
+      "verdict": "ok",
+      "completed_via": "hook",
+      "metadata": {
+        "stage": "AR",
+        "agent": "corpflow:software-architector"
+      }
+    },
+    "DV0": {
+      "status": "completed",
+      "artifact": ".context/development-0.md",
+      "verdict": "ok",
+      "completed_via": "hook",
+      "blocked_by": [
+        "AR0"
+      ],
+      "metadata": {
+        "stage": "DV",
+        "agent": "corpflow:developer"
+      }
+    },
+    "DV1": {
+      "status": "in_progress",
+      "artifact": ".context/development-1.md",
+      "verdict": "ok",
+      "completed_via": "step6_5",
+      "blocked_by": [
+        "AR0"
+      ],
+      "worktree": {
+        "path": "/tmp/wt/dv1",
+        "branch": "feature/replay"
+      },
+      "metadata": {
+        "stage": "DV",
+        "agent": "corpflow:developer",
+        "retry_count": 3,
+        "error_escalated_to": "AR"
+      }
+    },
+    "DR0": {
+      "status": "completed",
+      "artifact": ".context/developer-review-0.md",
+      "verdict": "ok",
+      "completed_via": "hook",
+      "blocked_by": [
+        "DV0",
+        "DV1",
+        "QA0"
+      ],
+      "metadata": {
+        "stage": "DR",
+        "agent": "corpflow:technical-lead"
+      }
+    },
+    "QA0": {
+      "status": "completed",
+      "artifact": ".context/testing-0.md",
+      "verdict": "go",
+      "completed_via": "hook",
+      "blocked_by": [
+        "DR0"
+      ],
+      "metadata": {
+        "stage": "QA",
+        "agent": "corpflow:qa-engineer"
+      }
+    },
+    "FN0": {
+      "status": "completed",
+      "artifact": ".context/complete-summary-0.md",
+      "verdict": "ok",
+      "completed_via": "hook",
+      "blocked_by": [
+        "QA0"
+      ],
+      "metadata": {
+        "stage": "FN",
+        "agent": "corpflow:project-manager"
+      }
+    },
+    "RE0": {
+      "status": "completed",
+      "artifact": ".context/release-0.md",
+      "verdict": "ok",
+      "completed_via": "hook",
+      "blocked_by": [
+        "FN0"
+      ],
+      "metadata": {
+        "stage": "RE",
+        "agent": "corpflow:release-engineer"
+      }
+    },
+    "ST0": {
+      "status": "pending",
+      "blocked_by": [
+        "FN0"
+      ],
+      "metadata": {
+        "stage": "ST",
+        "agent": "corpflow:stakeholder"
+      }
+    }
+  },
+  "facts": {
+    "files_modified": [],
+    "tests_added": [],
+    "decisions": [],
+    "open_questions": [],
+    "verdicts": {
+      "PL": "ok",
+      "AR": "ok"
+    },
+    "dispatched_agents": [
+      {
+        "stage": "DV",
+        "task_id": "DV1",
+        "subagent_type": "corpflow:developer",
+        "agent_id": "sess-dv1",
+        "status": "launched"
+      }
+    ]
+  },
+  "handoffs": {}
+}

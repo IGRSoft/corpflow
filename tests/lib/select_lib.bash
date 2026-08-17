@@ -25,6 +25,13 @@ sel_alias_for() {
   case "$1" in
     dv-comment-density-gate.sh) echo "comment-density-gate.bats" ;;
     audit-dedup.sh) echo "agent-coordination__audit-dedup.bats" ;;
+    # Sourced-only command bodies of fn-preflight.sh; the CLI they back is a black
+    # box to its suite, so the split has no .bats of its own and must not be able to
+    # fail the selection closed to FULL.
+    fn-preflight-cmds.sh) echo "fn-preflight.bats" ;;
+    # Sourced-only helper library of publish-pl-issue.sh, exercised entirely
+    # through that CLI's suite. Same shape as fn-preflight-cmds.sh above.
+    publish-pl-issue-lib.sh) echo "publish-pl-issue.bats" ;;
     # A self-test body under hooks/lib/ is exercised by its OWNING hook's .bats.
     # Resolved through this table rather than by stripping the suffix, because
     # the owner may itself be aliased — dv-comment-density-gate-selftest.sh has
@@ -42,7 +49,9 @@ sel_alias_for() {
 sel_alias_keys() {
   printf '%s\n' \
     dv-comment-density-gate.sh \
-    audit-dedup.sh | LC_ALL=C sort
+    audit-dedup.sh \
+    fn-preflight-cmds.sh \
+    publish-pl-issue-lib.sh | LC_ALL=C sort
 }
 
 # Candidate scripts under an arbitrary root, so callers can be pointed at a

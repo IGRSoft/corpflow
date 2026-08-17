@@ -26,7 +26,38 @@ Examples:
 1.2.3-beta.2+build.456
 ```
 
-### Version Bump Rules
+### Version Bump Determination
+
+**Canonical tool**: `scripts/version-bump-from-git.sh`
+
+```bash
+# Prints exactly one of: major|minor|patch|none
+bash "${CLAUDE_SKILL_DIR}/scripts/version-bump-from-git.sh" "v1.1.0..HEAD"
+
+# Per-commit breakdown on stderr; stdout stays a single token
+bash "${CLAUDE_SKILL_DIR}/scripts/version-bump-from-git.sh" "v1.1.0..HEAD" --explain
+
+# From a pre-fetched capture (offline / testable)
+bash "${CLAUDE_SKILL_DIR}/scripts/version-bump-from-git.sh" --file records.bin
+```
+
+#### Two rules the tables cannot express
+
+The script applies two rules the tables below cannot express:
+
+1. **Highest severity wins across the range.** A range of 3 × `fix:` and
+   1 × `feat:` is MINOR, not PATCH. Never bump per commit.
+2. **Breaking is independent of type.** `feat!:`, `fix!:`, and a
+   `BREAKING CHANGE:` footer on any type — `chore:` included — all yield MAJOR.
+
+`none` means the range holds nothing release-worthy. It exits 0; only a
+non-zero exit is an error.
+
+The script shares `conventional-commits-lib.sh` with `changelog-from-git.sh`,
+so the two cannot disagree about which commits are breaking. Pre-release and
+build-metadata suffixes are out of its scope — apply those by hand.
+
+### Version Bump Rules (reference)
 
 | Change Type | Bump | Before | After |
 |-------------|------|--------|-------|
@@ -37,7 +68,8 @@ Examples:
 
 ### Breaking Change Detection
 
-A change is BREAKING if it:
+Mark the commit itself — with a `!` after the type or a `BREAKING CHANGE:`
+footer — so the scripts can see it. A change is BREAKING if it:
 - Removes a public API
 - Changes return type of public method
 - Adds required parameter to public method
@@ -66,6 +98,9 @@ A change is BREAKING if it:
 ```
 
 ### Types and Changelog Mapping
+
+Per-commit impact only — the range's bump is the highest severity present, which
+`scripts/version-bump-from-git.sh` computes.
 
 | Type | Description | Changelog | Bump |
 |------|-------------|-----------|------|
@@ -99,7 +134,9 @@ One-line invocation contract:
 # From a git range (writes Keep-a-Changelog markdown to stdout)
 bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" "v1.1.0..HEAD" --version "1.2.0"
 
-# From a pre-fetched subjects file (untrusted / offline / testable)
+# From a pre-fetched capture (untrusted / offline / testable). A file with no
+# NUL byte is read one subject per line; otherwise records are NUL-separated
+# whole messages, as `git log -z --pretty=format:'%B'` writes them.
 bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" --file subjects.txt --version "1.2.0"
 
 # Against a specific repo directory
@@ -108,7 +145,7 @@ bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" "v1.1.0..HEAD" --repo /
 
 ### Script Classification Behavior
 
-The script classifies all 10 conventional-commit types (feat, fix, docs, style, refactor, perf, test, chore, ci, build) into Keep-a-Changelog sections (Added / Changed / Fixed / Other). Non-conventional commits are bucketed under "Other" — never dropped. Breaking changes (`!` suffix) are prefixed with `**BREAKING**` in Added. Silent types (docs, style, test, chore, ci, build) are suppressed. Output is always compact markdown — no large echoes.
+The script classifies all 10 conventional-commit types (feat, fix, docs, style, refactor, perf, test, chore, ci, build) into Keep-a-Changelog sections (Added / Changed / Fixed / Other). Non-conventional commits are bucketed under "Other" — never dropped. Breaking changes are prefixed with `**BREAKING**`, detected from a `!` suffix or a `BREAKING CHANGE:` footer via the shared `conventional-commits-lib.sh`. Silent types (docs, style, test, chore, ci, build) are suppressed **unless breaking** — a MAJOR release must never ship notes that omit the break. Output is always compact markdown — no large echoes.
 
 The spec below (Keep a Changelog Format + Commit-to-Section mapping) is retained as reference for the model and for human review; the happy path is the script above.
 

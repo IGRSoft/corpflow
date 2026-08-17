@@ -477,7 +477,7 @@ DV/QA enforce these even if PL set a tighter mode:
 - **Companion flags**:
   - `metadata.always_required_tests: [<test ID>...]` — explicit override, included in every Selected Tests list regardless of mode.
   - `metadata.ui_visual_check: <bool>` — default `false`. When `true` AND `.context/designs/` exists, QA performs Design Comparison. Independent of `test_mode`.
-- **Writer**: PL stage (`agents/product-manager.md` § Test Strategy Definition).
+- **Writer**: PL stage (`skills/worktask/references/pl0-procedure.md` § Test Strategy Definition).
 
 #### Readers
 

@@ -5,33 +5,48 @@
     "contains_all": "every literal substring must be present",
     "contains_none": "no listed literal substring may be present",
     "regex_all": "every pattern must match (multiline)",
-    "regex_any": "at least one pattern must match (multiline)"
+    "regex_any": "at least one pattern must match (multiline)",
+    "paths_resolve": "at least N cited repo paths must exist here; values carries the integer N, not a pattern. The one type that cannot be settled from the response text"
   },
   "shared_assertions": [
     {
       "id": "template-sections-present",
-      "why": "references/plan-template.md fixes the section order; a dropped header breaks the contract",
-      "type": "contains_all",
-      "values": ["## Context", "## Goal", "## Scope", "## Phases", "## Effort", "## Risks"]
+      "why": "references/plan-template.md fixes the section order; a dropped header breaks the contract. A bold pseudo-heading still names the section, so requiring ## exactly failed a plan that carried all eight",
+      "type": "regex_all",
+      "values": [
+        "(#+\\s*Context|\\*\\*Context)",
+        "(#+\\s*Goal|\\*\\*Goal)",
+        "(#+\\s*Scope|\\*\\*Scope)",
+        "(#+\\s*Phases|\\*\\*Phases)",
+        "(#+\\s*Effort|\\*\\*Effort)",
+        "(#+\\s*Risks|\\*\\*Risks)"
+      ]
     },
     {
       "id": "scope-names-in-and-out",
       "why": "Out-of-scope is what stops scope creep; a plan with only In is half a scope",
       "type": "contains_all",
-      "values": ["**In:**", "**Out:**"]
+      "values": [
+        "**In:**",
+        "**Out:**"
+      ]
     },
     {
       "id": "three-phase-model",
       "why": "P0/P1/P2 per skills/shared/three-stage-planning.md",
       "type": "regex_all",
-      "values": ["P0\\s*—\\s*Required", "P1\\s*—\\s*Nice-to-have", "P2\\s*—\\s*v1\\.1"]
+      "values": [
+        "P0\\s*—\\s*Required",
+        "P1\\s*—\\s*Nice-to-have",
+        "P2\\s*—\\s*v1\\.1"
+      ]
     },
     {
       "id": "effort-sized-with-complexity",
-      "why": "Effort is a T-shirt size AND a 0-25 complexity score together; a bare digit anywhere in the text is not evidence either was given",
+      "why": "Effort is a T-shirt size AND a 0-25 complexity score together; a bare digit anywhere in the text is not evidence either was given. The cell may carry an approximation marker or the 5-factor breakdown estimation-methodology asks for — rejecting either fails a plan for answering in more detail",
       "type": "regex_any",
       "values": [
-        "\\|\\s*(XS|S|M|L|XL)(\\s*[-—–]\\s*(XS|S|M|L|XL))?\\s*\\|\\s*([0-9]|1[0-9]|2[0-5])\\s*(/\\s*25)?\\s*\\|",
+        "\\|\\s*(XS|S|M|L|XL)(\\s*[-—–]\\s*(XS|S|M|L|XL))?\\s*\\|\\s*[~≈]?\\s*([0-9]|1[0-9]|2[0-5])\\b[^|]*\\|",
         "(XS|S|M|L|XL)[^\\n]*\\b([0-9]|1[0-9]|2[0-5])\\s*/\\s*25\\b"
       ]
     },
@@ -39,66 +54,3234 @@
       "id": "single-worktask-trigger",
       "why": "The handoff is one ready-to-paste command line",
       "type": "regex_all",
-      "values": ["/worktask(\\s+--\\w+)?\\s+\""]
+      "values": [
+        "/worktask(\\s+--\\w+)?\\s+\""
+      ]
     },
     {
       "id": "no-separate-test-phase",
       "why": "Tests live inside each phase's scope, never as a phase of their own",
       "type": "contains_none",
-      "values": ["P1 — Testing", "P2 — Testing", "Phase: Testing"]
+      "values": [
+        "P1 — Testing",
+        "P2 — Testing",
+        "Phase: Testing"
+      ]
     }
   ],
   "evals": [
     {
       "id": 1,
-      "prompt": "we keep getting duplicate push notifications on the macOS app when it wakes from sleep. help me plan a fix before i dive in.",
+      "prompt": "state-merge.sh is dropping keys when two stages patch at once. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "names-the-wake-surface",
-          "why": "A grounded plan must name the actual failure surface, not restate the request",
-          "type": "regex_any",
-          "values": ["wake", "sleep", "NSWorkspace", "didWake", "notification"]
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
         }
       ],
+      "grounding": [
+        "hooks/state-merge.sh"
+      ],
       "deferred": [
-        "Whether the Context section reflects THIS repo rather than a generic template — needs a validated judge."
-      ]
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
     },
     {
       "id": 2,
-      "prompt": "i want to add CSV export to the estimates feature. what's the plan?",
+      "prompt": "dispatch.py has grown past 30KB. how would you break it up?",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "reuses-existing-export-surface",
-          "why": "csv-export-templates and /estimate --export csv already exist; rebuilding them is the failure this case targets",
-          "type": "regex_any",
-          "values": ["csv-export-templates", "/estimate\\s+--export", "existing (CSV|export)"]
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
         }
       ],
+      "grounding": [
+        "benchmark/harness/benchmarklive/dispatch.py"
+      ],
       "deferred": [
-        "Whether the reuse is load-bearing in the phases or merely name-dropped — needs a validated judge."
-      ]
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
     },
     {
       "id": 3,
-      "prompt": "plan out migrating our settings storage from UserDefaults to Keychain",
+      "prompt": "fn-preflight.sh is 24KB in one file. plan an extraction.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
       "assertions": [
         {
-          "id": "flags-security-sensitive",
-          "why": "Credential storage is security-sensitive and must be called out explicitly",
-          "type": "regex_any",
-          "values": ["security-sensitive", "credential", "Keychain"]
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
         },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/fn-preflight.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 4,
+      "prompt": "CHANGELOG.md is 183KB and unreadable. what's the plan to split it?",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "CHANGELOG.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 5,
+      "prompt": "the comment density gate rejects DocC that looks fine to me. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/dv-comment-density-gate.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 6,
+      "prompt": "add a --dry-run mode to the megatask skill. what's the plan?",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/megatask/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 7,
+      "prompt": "genlib.py mixes a subprocess wrapper with tree copying. plan a split.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarkkit/genlib.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 8,
+      "prompt": "branch-name.sh renames a branch that already tracks a remote. plan the fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/branch-name.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 9,
+      "prompt": "add a machine-readable summary to cost-report. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/cost-report.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 10,
+      "prompt": "the analysis.py module has no module docs. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarkkit/analysis.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 11,
+      "prompt": "credentials.py still accepts an env key. plan dropping that path.",
+      "dimensions": {
+        "type": "migration",
+        "grounding": "obvious",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
         {
           "id": "routes-to-secure-tier",
           "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
           "type": "regex_all",
-          "values": ["/worktask\\s+--secure"]
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
         }
       ],
+      "grounding": [
+        "benchmark/harness/benchmarklive/credentials.py"
+      ],
       "deferred": [
-        "Whether the migration phasing is safe (dual-read window, rollback) — needs a validated judge."
-      ]
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 12,
+      "prompt": "add secret scanning to fn-preflight.sh before it opens a PR.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "obvious",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-secure-tier",
+          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/fn-preflight.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 13,
+      "prompt": "audit-tooluse.sh may be logging tool inputs verbatim. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/audit-tooluse.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 14,
+      "prompt": "megatask-monitor.sh is hanging mid-batch right now. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "obvious",
+        "route": "emerg"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-emergency-tier",
+          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--emergency"
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/megatask-monitor.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 15,
+      "prompt": "precompact-checkpoint.sh is failing and we're losing context. plan it.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "obvious",
+        "route": "emerg"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-emergency-tier",
+          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--emergency"
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/precompact-checkpoint.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 16,
+      "prompt": "i want the cost numbers exportable into a spreadsheet. what's the plan?",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "SKILL.md",
+            "csv-export-templates",
+            "skills/csv-export-templates/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/csv-export-templates/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 17,
+      "prompt": "our stage handoffs silently lose facts between stages. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "hooks/state-merge.sh",
+            "state-merge",
+            "state-merge.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/state-merge.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 18,
+      "prompt": "i want screenshots attached to the PR automatically. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "attach-visual-evidence",
+            "attach-visual-evidence.sh",
+            "skills/worktask/scripts/attach-visual-evidence.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/attach-visual-evidence.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 19,
+      "prompt": "PR descriptions keep leaking absolute paths from my machine. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "pr-body-lint",
+            "pr-body-lint.sh",
+            "skills/worktask/scripts/pr-body-lint.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/pr-body-lint.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 20,
+      "prompt": "i want the plugin to learn from my edits after a task ships. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "SKILL.md",
+            "self-improvement",
+            "skills/self-improvement/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/self-improvement/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 21,
+      "prompt": "branches come out with inconsistent names across runs. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "branch-lib",
+            "branch-lib.sh",
+            "skills/worktask/scripts/branch-lib.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/branch-lib.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 22,
+      "prompt": "i need to know which agents actually ran during a task. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "audit-subagent",
+            "audit-subagent.sh",
+            "hooks/audit-subagent.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/audit-subagent.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 23,
+      "prompt": "the doc anchors in stage artifacts drift from the templates. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "section-lint",
+            "section-lint.sh",
+            "skills/worktask/scripts/section-lint.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/section-lint.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 24,
+      "prompt": "i want an estimate broken down by phase and budget. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "SKILL.md",
+            "estimation-methodology",
+            "skills/estimation-methodology/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/estimation-methodology/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 25,
+      "prompt": "the prompt cache keeps missing between stages. plan an investigation.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "cache-lint",
+            "cache-lint.sh",
+            "skills/worktask/scripts/cache-lint.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/cache-lint.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 26,
+      "prompt": "we keep opening duplicate tickets for the same piece of work. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "SKILL.md",
+            "gh-issue-dedup",
+            "skills/gh-issue-dedup/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/gh-issue-dedup/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 27,
+      "prompt": "i want to compare two runs of the same task for cost. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "benchmark/harness/benchmarkkit/pairing.py",
+            "pairing.py"
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarkkit/pairing.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 28,
+      "prompt": "new contributors can't tell which agent owns which stage. plan the docs.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "SKILL.md",
+            "agent-coordination",
+            "skills/agent-coordination/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/agent-coordination/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 29,
+      "prompt": "the labels we write about user edits might contain their code. plan a fix.",
+      "dimensions": {
+        "type": "migration",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "SKILL.md",
+            "self-improvement",
+            "skills/self-improvement/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/self-improvement/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 30,
+      "prompt": "a task is wedged in_progress and nothing will pick it up. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "skills/worktask/scripts/state-patch.sh",
+            "state-patch",
+            "state-patch.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/state-patch.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 31,
+      "prompt": "the retry matrix loops forever when a stage keeps failing. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "handoff-protocol",
+            "handoff-protocol.md",
+            "skills/worktask/references/handoff-protocol.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/handoff-protocol.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 32,
+      "prompt": "put a spend ceiling on a task so it can't run away. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "/cost-report",
+            "commands/cost-report.md",
+            "cost-report",
+            "cost-report.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/cost-report.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 33,
+      "prompt": "i want a per-stage timeout so nothing hangs forever. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "hooks/megatask-monitor.sh",
+            "megatask-monitor",
+            "megatask-monitor.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/megatask-monitor.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 34,
+      "prompt": "move the audit trail into something encrypted at rest. plan it.",
+      "dimensions": {
+        "type": "migration",
+        "grounding": "adjacent",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-secure-tier",
+          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "audit-tooluse",
+            "audit-tooluse.sh",
+            "hooks/audit-tooluse.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/audit-tooluse.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 35,
+      "prompt": "the three planning tiers should be data, not prose. plan it.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "skills/shared/three-stage-planning.md",
+            "three-stage-planning",
+            "three-stage-planning.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/shared/three-stage-planning.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 36,
+      "prompt": "add a Slack notifier that posts when each stage completes. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 37,
+      "prompt": "the iOS build keeps failing on the signing step. help me plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 38,
+      "prompt": "add dark mode to the settings screen. what's the plan?",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 39,
+      "prompt": "plan migrating our Postgres schema off the legacy user table.",
+      "dimensions": {
+        "type": "migration",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 40,
+      "prompt": "the production API is returning 503s right now. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "absent",
+        "route": "emerg"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 41,
+      "prompt": "the checkout flow drops the cart on refresh. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 42,
+      "prompt": "add push notifications to the mobile app. what's the plan?",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 43,
+      "prompt": "our React components are a mess of prop drilling. plan a refactor.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 44,
+      "prompt": "state-patch.sh is 55KB. plan how to break it apart.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/state-patch.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 45,
+      "prompt": "publish-pl-issue.sh is enormous. plan an extraction.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/publish-pl-issue.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 46,
+      "prompt": "attachments-preseed.sh leaves temp files behind. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/attachments-preseed.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 47,
+      "prompt": "add a JSON output mode to desc-lint.sh. what's the plan?",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/desc-lint.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 48,
+      "prompt": "detect-ui-change.sh misses SwiftUI-only diffs. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/detect-ui-change.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 49,
+      "prompt": "metrics.py has grown to 14KB of mixed concerns. plan a split.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarkkit/metrics.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 50,
+      "prompt": "report.py rounds costs inconsistently. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarkkit/report.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 51,
+      "prompt": "add a resume flag to deterministic_run.py. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarkkit/deterministic_run.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 52,
+      "prompt": "rotation.py has no explanation of why it exists. plan the docs.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarkkit/rotation.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 53,
+      "prompt": "baseline.py picks the wrong arm on a subset run. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarklive/baseline.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 54,
+      "prompt": "let budget.py warn before the cap rather than after. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarklive/budget.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 55,
+      "prompt": "the developer agent file is 55KB. plan how to shrink it.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "agents/developer.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 56,
+      "prompt": "the product-manager agent is 52KB of prose. plan a trim.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "agents/product-manager.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 57,
+      "prompt": "the qa-engineer agent doesn't say who owns full suites. plan the docs.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "agents/qa-engineer.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 58,
+      "prompt": "add a machine-readable verdict to the technical-lead agent. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "agents/technical-lead.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 59,
+      "prompt": "the release-engineer agent emits the wrong version bump. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "agents/release-engineer.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 60,
+      "prompt": "add a threat-model section to the security-reviewer agent. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "agents/security-reviewer.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 61,
+      "prompt": "anchor-preflight.sh may execute untrusted anchor text. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "obvious",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-secure-tier",
+          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/anchor-preflight.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 62,
+      "prompt": "hook-install.sh writes settings without a backup. plan a safer path.",
+      "dimensions": {
+        "type": "migration",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/hook-install.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 63,
+      "prompt": "agent-stop.sh is killing live stages. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "obvious",
+        "route": "emerg"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-emergency-tier",
+          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--emergency"
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/agent-stop.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 64,
+      "prompt": "the dv screenshot gate is blocking every task right now. plan it.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "obvious",
+        "route": "emerg"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-emergency-tier",
+          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--emergency"
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/dv-screenshot-gate.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 65,
+      "prompt": "i want to know why one run cost triple another. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "analysis.py",
+            "benchmark/harness/benchmarkkit/analysis.py"
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarkkit/analysis.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 66,
+      "prompt": "the generated app passes its own tests but is still wrong. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "benchmark/harness/benchmarkkit/oracle.py",
+            "oracle.py"
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarkkit/oracle.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 67,
+      "prompt": "i want the same task run twice and compared fairly. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "benchmark/harness/benchmarkkit/rotation.py",
+            "rotation.py"
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarkkit/rotation.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 68,
+      "prompt": "our headless runs can reach the network when they shouldn't. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "benchmark-settings",
+            "benchmark-settings.json",
+            "benchmark/live/settings/benchmark-settings.json"
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/live/settings/benchmark-settings.json"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 69,
+      "prompt": "i want a written record of every architectural choice. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "/arch-decision",
+            "arch-decision",
+            "arch-decision.md",
+            "commands/arch-decision.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/arch-decision.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 70,
+      "prompt": "i need to rank a backlog objectively. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "/pm-prioritize",
+            "commands/pm-prioritize.md",
+            "pm-prioritize",
+            "pm-prioritize.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/pm-prioritize.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 71,
+      "prompt": "our docs drift out of sync with the code. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "/docs-audit",
+            "commands/docs-audit.md",
+            "docs-audit",
+            "docs-audit.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/docs-audit.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 72,
+      "prompt": "i want release notes written from what actually shipped. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "/docs-release-notes",
+            "commands/docs-release-notes.md",
+            "docs-release-notes",
+            "docs-release-notes.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/docs-release-notes.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 73,
+      "prompt": "i want to check a screen works for people using a reader. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "/design-accessibility",
+            "commands/design-accessibility.md",
+            "design-accessibility",
+            "design-accessibility.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/design-accessibility.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 74,
+      "prompt": "nobody can tell how much context is left before a compaction. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "/context-status",
+            "commands/context-status.md",
+            "context-status",
+            "context-status.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/context-status.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 75,
+      "prompt": "i want an outside opinion on whether a feature is worth building. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "/business-report",
+            "business-report",
+            "business-report.md",
+            "commands/business-report.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/business-report.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 76,
+      "prompt": "our agent definitions have drifted apart in structure. plan a cleanup.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "/prompt-audit",
+            "commands/prompt-audit.md",
+            "prompt-audit",
+            "prompt-audit.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/prompt-audit.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 77,
+      "prompt": "test coverage numbers look fine but bugs still ship. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "/test-coverage",
+            "commands/test-coverage.md",
+            "test-coverage",
+            "test-coverage.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/test-coverage.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 78,
+      "prompt": "i want to catch ethical problems before a feature ships. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "/ethics-review",
+            "commands/ethics-review.md",
+            "ethics-review",
+            "ethics-review.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/ethics-review.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 79,
+      "prompt": "there's no written rule for how comments should be written. plan the docs.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "SKILL.md",
+            "code-comment-standard",
+            "skills/code-comment-standard/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/code-comment-standard/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 80,
+      "prompt": "i want dependency risk checked before we ship. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "SKILL.md",
+            "security-review-process",
+            "skills/security-review-process/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/security-review-process/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 81,
+      "prompt": "our task descriptions end up in public branch names. plan a fix.",
+      "dimensions": {
+        "type": "migration",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "git-conventions",
+            "git-conventions.md",
+            "skills/shared/git-conventions.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/shared/git-conventions.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 82,
+      "prompt": "everything is failing and we need someone coordinating. plan it.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "buried",
+        "route": "emerg"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-emergency-tier",
+          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--emergency"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "SKILL.md",
+            "incident-response",
+            "skills/incident-response/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/incident-response/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 83,
+      "prompt": "a hotfix needs to ship now and skip the usual gates. plan it.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "agents/incident-responder.md",
+            "incident-responder",
+            "incident-responder.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "agents/incident-responder.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 84,
+      "prompt": "i want a dashboard showing every task's live status. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "hooks/megatask-monitor.sh",
+            "megatask-monitor",
+            "megatask-monitor.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/megatask-monitor.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 85,
+      "prompt": "let me replay a failed stage without rerunning the whole task. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "skills/worktask/scripts/state-patch.sh",
+            "state-patch",
+            "state-patch.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/state-patch.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 86,
+      "prompt": "move our estimates into a real database. plan it.",
+      "dimensions": {
+        "type": "migration",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "SKILL.md",
+            "estimation-methodology",
+            "skills/estimation-methodology/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/estimation-methodology/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 87,
+      "prompt": "the nesting depth limit silently drops a specialist. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "SKILL.md",
+            "agent-coordination",
+            "skills/agent-coordination/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/agent-coordination/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 88,
+      "prompt": "i want every credential the harness touches rotated. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "adjacent",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-secure-tier",
+          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "benchmark/harness/benchmarklive/credentials.py",
+            "credentials.py"
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarklive/credentials.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 89,
+      "prompt": "the plan template and the PRD template overlap. plan a merge.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "/pm-requirements",
+            "commands/pm-requirements.md",
+            "pm-requirements",
+            "pm-requirements.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "commands/pm-requirements.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 90,
+      "prompt": "a batch run is burning budget with no way to stop it. plan it.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "benchmark/harness/benchmarklive/budget.py",
+            "budget.py"
+          ]
+        }
+      ],
+      "grounding": [
+        "benchmark/harness/benchmarklive/budget.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 91,
+      "prompt": "add SSO with Okta to the admin console. what's the plan?",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 92,
+      "prompt": "our Kubernetes pods keep OOMing under load. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 93,
+      "prompt": "plan moving customer PII out of the analytics warehouse.",
+      "dimensions": {
+        "type": "migration",
+        "grounding": "absent",
+        "route": "secure"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 94,
+      "prompt": "the payment processor is rejecting every charge. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "absent",
+        "route": "emerg"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 95,
+      "prompt": "our public API reference is out of date. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 96,
+      "prompt": "add an offline mode to the desktop client. what's the plan?",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
     }
-  ]
+  ],
+  "dimensions": {
+    "type": [
+      "bug",
+      "docs",
+      "feature",
+      "incident",
+      "migration",
+      "refactor"
+    ],
+    "grounding": [
+      "absent",
+      "adjacent",
+      "buried",
+      "obvious"
+    ],
+    "route": [
+      "emerg",
+      "secure",
+      "std"
+    ]
+  }
 }

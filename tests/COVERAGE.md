@@ -101,14 +101,13 @@ scenario `@test`s (happy / edge / failure-exit) asserting its documented contrac
 
 #### Measured, not derived (this file's fifth correction this worktask)
 
-**879** `@test` assertions across **59** `.bats` files — the 45 script-dedicated files plus
-14 meta / repo-invariant files (Phase 4 of this worktask added `tests/shell/meta/test-selection.bats`,
-17 `@test`, to the meta set). **Min 3 / avg ~15 / max 90** per file; the ≥3 rule has no
-exceptions. Measured directly (`grep -c '^@test'` across `tests/shell/**`), not derived by
+**1022** `@test` assertions across **64** `.bats` files — the 50 script-dedicated files plus
+14 meta / repo-invariant files. **Min 3 / avg ~16 / max 90** per file; the ≥3 rule has no
+exceptions. Measured directly (`grep -c '^@test'` across `tests/**`), not derived by
 arithmetic on a prior claim — this file drifted repeatedly across the worktask (`680`→`683`,
 then a stale self-contradictory `683`/`53`, then `787`/`54` before the selection-matrix work
 landed its own test file; the `4.0.7` `### Fixed` entry documents the earlier repairs), and
-879/59 is re-derived directly from the tree, not incremented from any prior claim.
+1022/64 is re-derived directly from the tree, not incremented from any prior claim.
 
 R6 landed in `branch-name.sh.bats` (worktree rename, opt-out, ledger-based once-guard,
 disclosure) and `fn-preflight.bats` (the new `branch-divergence` subcommand). DV's final
@@ -118,7 +117,7 @@ those three files plus their test helpers.
 
 Highest-density targets: `branch-name.sh` 90, `test-execution-gate` 85, `fn-preflight` 58,
 `branch-lib` 54, `state-patch` 36, `refine-branch-target` 31, `attach-visual-evidence` 25,
-`test-helper` 23, `pr-body-lint` 19, `milestone-helpers` 18, `scan-secrets` 17,
+`test-helper` 23, `pr-body-lint` 19, `milestone-helpers` 26, `scan-secrets` 17,
 `test-selection` 17.
 
 #### Regeneration and enforcement
@@ -176,7 +175,10 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | Source file | Test file | Lines valid | Lines covered | % |
 |-------------|-----------|-------------|---------------|---|
 | `skills/worktask/scripts/publish-pl-issue.sh` | `tests/shell/worktask/publish-pl-issue.bats` | — | — | — |
+| `skills/worktask/scripts/publish-pl-issue-lib.sh` | `tests/shell/worktask/publish-pl-issue.bats` (alias; sourced-only helper library) | — | — | — |
+| `skills/worktask/scripts/publish-pl-issue-selftest.sh` | `tests/shell/worktask/publish-pl-issue.bats` (alias; the `--self-test` harness it drives) | — | — | — |
 | `skills/worktask/scripts/attach-visual-evidence.sh` | `tests/shell/worktask/attach-visual-evidence.bats` | — | — | — |
+| `skills/worktask/scripts/adhoc-visual-evidence.sh` | `tests/shell/worktask/adhoc-visual-evidence.bats` | — | — | — |
 | `skills/worktask/scripts/cache-lint.sh` | `tests/shell/worktask/cache-lint.bats` | — | — | — |
 | `skills/worktask/scripts/desc-lint.sh` | `tests/shell/worktask/desc-lint.bats` | — | — | — |
 | `skills/worktask/scripts/section-lint.sh` | `tests/shell/worktask/section-lint.bats` | — | — | — |
@@ -190,7 +192,9 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/branch-name.sh` | `tests/shell/worktask/branch-name.sh.bats` | — | — | — |
 | `skills/worktask/scripts/branch-lib.sh` | `tests/shell/worktask/branch-lib.bats` | — | — | — |
 | `skills/worktask/scripts/refine-branch-target.sh` | `tests/shell/worktask/refine-branch-target.bats` | — | — | — |
+| `skills/worktask/scripts/preflight-issue-scan.sh` | `tests/shell/worktask/preflight-issue-scan.bats` | — | — | — |
 | `skills/worktask/scripts/fn-preflight.sh` | `tests/shell/worktask/fn-preflight.bats` (incl. `branch-divergence`, `issue-close-required`) | — | — | — |
+| `skills/worktask/scripts/fn-preflight-cmds.sh` | `tests/shell/worktask/fn-preflight.bats` (alias; the CLI is a black box to its suite) | — | — | — |
 | `skills/worktask/scripts/dv-tree-preflight.sh` | `tests/shell/worktask/dv-tree-preflight.bats` | — | — | — |
 
 ### Shell scripts — other-skill (DV0b, kcov)
@@ -205,6 +209,8 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/self-improvement/scripts/build-context-set.sh` | `tests/shell/skills/build-context-set.bats` | — | — | — |
 | `skills/self-improvement/scripts/detect-user-changes.sh` | `tests/shell/skills/detect-user-changes.bats` | — | — | — |
 | `skills/release-engineering/scripts/changelog-from-git.sh` | `tests/shell/skills/changelog-from-git.bats` | — | — | — |
+| `skills/release-engineering/scripts/version-bump-from-git.sh` | `tests/shell/skills/version-bump-from-git.bats` | — | — | — |
+| `skills/release-engineering/scripts/conventional-commits-lib.sh` | `tests/shell/skills/version-bump-from-git.bats` + `changelog-from-git.bats` (sourced by both consumers) | — | — | — |
 | `skills/security-review-process/scripts/scan-secrets.sh` | `tests/shell/skills/scan-secrets.bats` | — | — | — |
 | `skills/context-compression/scripts/post-compact-recovery.sh` | `tests/shell/skills/post-compact-recovery.bats` | — | — | — |
 | `skills/agent-coordination/scripts/audit-dedup.sh` | `tests/shell/skills/agent-coordination__audit-dedup.bats` | — | — | — |
@@ -231,6 +237,7 @@ excluded from the 45/45 denominator. They are counted in the 59 `.bats` / 879 `@
 | `tests/shell/skills/plugin-root-refs.bats` | `${CLAUDE_PLUGIN_ROOT}` composed-token grammar (a **predicate**, not a frozen line count — see below) |
 | `tests/shell/worktask/artifact-map-parity.bats` | Stage↔artifact map matches `ARTIFACT_RE` |
 | `tests/shell/worktask/manifest-parity.bats` | `plugin.json` / `marketplace.json` / filesystem / README version + registration parity |
+| `tests/shell/worktask/local-path-regex-parity.bats` | The absolute-host-path strip rule is byte-identical in `publish-pl-issue-lib.sh` and `pr-body-lint.sh` |
 | `tests/shell/worktask/gh-issue-dedup.bats` | Issue dedupe-anchor contract |
 | `tests/shell/benchmark/run-benchmark.bats` | The paid-dispatch barrier — no `--live`, no spend |
 | `tests/shell/benchmark/canvas-e2e-guards.bats` | Canvas E2E audit-row gate |

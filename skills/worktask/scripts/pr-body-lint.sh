@@ -8,7 +8,9 @@
 #   sanitiser actually ran, rather than assuming it did.
 #
 #   Rules (each reports file line numbers):
-#     P1  local-path leak — .context/, /Users|home|tmp|var|opt|etc|root/, ~/,
+#     P1  local-path leak — .context/, an absolute host path under any mount
+#         convention (/Users, /home, /tmp, /var, /opt, /etc, /root, /Volumes,
+#         /mnt, /media, /private, /srv), a Windows drive letter (C:\), ~/,
 #         ../, conductor/workspaces/. Matched on a BACKTICK-NEUTRALISED copy of
 #         the line, because a code span used to defeat the sanitiser's own
 #         (^|[[:space:]]) anchors and that is precisely how a `.context/` path
@@ -109,7 +111,10 @@ scan_lines() {
       probe = $0; gsub(/`/, " ", probe)
 
       if (probe ~ /(^|[[:space:]])\.context\//)                                  emit("P1", $0)
-      else if (probe ~ /(^|[[:space:]])\/(Users|home|tmp|var|opt|etc|root)\//)   emit("P1", $0)
+      # MUST stay byte-identical to the L2,L3 copy in publish-pl-issue.sh
+      # sanitise_body — pinned by tests/shell/worktask/local-path-regex-parity.bats.
+      else if (probe ~ /(^|[[:space:]])\/(Users|home|tmp|var|opt|etc|root|Volumes|mnt|media|private|srv)\//) emit("P1", $0)
+      else if (probe ~ /(^|[[:space:]])[A-Za-z]:\\/)                             emit("P1", $0)
       else if (probe ~ /(^|[[:space:]])~\//)                                     emit("P1", $0)
       else if (probe ~ /(^|[[:space:]])\.\.\//)                                  emit("P1", $0)
       else if (probe ~ /conductor\/workspaces\/[A-Za-z0-9_-]+/)                  emit("P1", $0)
@@ -262,6 +267,21 @@ Closes #12
   _expect p1-abs-host-path      P1   "$CLEAN"'Ref `/Users/me/secret/x.md`
 '
   _expect p1-tilde              P1   "$CLEAN"'Ref `~/private/x.md`
+'
+  # One case per mount convention the P1 prefix list claims.
+  local p
+  for p in /Users/me /home/me /tmp/w /var/w /opt/w /etc/w /root/w \
+    /Volumes/internal/Projects /mnt/data /mnt/c/Users/me /media/usb \
+    /private/tmp/w /srv/www; do
+    _expect "p1-abs${p//\//-}" P1 "$CLEAN""Ref \`$p/x.md\`
+"
+  done
+  _expect p1-drive-letter       P1   "$CLEAN"'Ref `C:\Users\me\x.md`
+'
+  # Over-match guard: repo-relative paths and prose reusing those words stay clean.
+  _expect nomatch-relative-path ""   "$CLEAN"'Edit `skills/worktask/scripts/pr-body-lint.sh`
+'
+  _expect nomatch-prose         ""   "$CLEAN"'Deployed under srv and media naming; the var name is opt_in.
 '
   # A capture run whose images never reached the reader.
   _expect p2-no-images          P2   "$CLEAN"'## Visual evidence

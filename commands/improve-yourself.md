@@ -69,10 +69,24 @@ The skill owns the pipeline; this command wires flags around it:
 1. Parse flags; resolve baseline (`--since` if given and valid, else `skills/self-improvement/scripts/detect-user-changes.sh` default resolution).
 2. Build used-in-context set via `skills/self-improvement/scripts/build-context-set.sh`; `--no-scope-filter` marks it unbounded (mapper keeps every mapped proposal).
 3. Run the skill's classify → map → emit pipeline — writes `.context/learnings.md` when proposals survive, `.context/logs/self-improve-<ts>.log` always. Post-filter proposals by `--target`.
-4. Present `learnings.md` to the user: proposal count by confidence (high/medium), deferred count, out-of-context discard count.
-5. **Apply phase** — see below.
+4. **Step 5b — append labels** (see below).
+5. Present `learnings.md` to the user: proposal count by confidence (high/medium), deferred count, out-of-context discard count, labels appended.
+6. **Apply phase** — see below.
 
-### Step 5 — Apply Phase
+### Step 4 — Label Append
+
+Runs `skills/self-improvement/scripts/append-labels.sh` per `skills/self-improvement/SKILL.md § Step 5b`, appending one row per kept change to the committed `evals/failure-labels.jsonl`. This is the only durable output of the run — `learnings.md` lives under the gitignored `.context/` — so skipping it discards every label the pipeline just produced.
+
+- `--worktask-id` resolves from `.context/state.json` `worktask_id`; outside a worktask workspace, pass `--since` and the command uses `manual-<YYYYMMDD-HHMMSS>`.
+- Runs whether or not the user approves any proposal — a rejected proposal is still evidence the output needed changing.
+- **`--dry-run` does not append.** The dataset is committed, and `--dry-run` is documented as read-only; the run reports the row count it *would* have written instead. Re-run without `--dry-run` to record them.
+- `SELF_IMPROVE_LABELS=0` makes the step a no-op.
+
+#### Aggregating the dataset
+
+Aggregate the accumulated dataset with `skills/self-improvement/scripts/label-stats.sh` (`--min-count=<n>` flags repeatedly-corrected targets and categories).
+
+### Step 6 — Apply Phase
 
 Runs only with `--apply`, never under `--dry-run`: STOP for user box-checking (`- [ ]` → `- [x]`) + explicit approval message → re-read checked items → delegate to `corpflow:prompt-engineer` per `agents/prompt-engineer.md § Self-Improvement Patch Application` (one commit + `version:` bump per proposal) → append audit line:
 
@@ -94,6 +108,7 @@ Runs only with `--apply`, never under `--dry-run`: STOP for user box-checking (`
 - In-scope proposals: <N> (high: N, medium: N)
 - Deferred (low confidence): <N>
 - Out-of-context discards: <N>
+- Labels appended to `evals/failure-labels.jsonl`: <N> (dry-run: would append <N>)
 
 ## Next steps
 - Review `.context/learnings.md` (written at <timestamp>)
@@ -119,5 +134,6 @@ Same skill, same `.context/learnings.md`. The ST-stage invocation is the product
 | `--since <ref>` is invalid | Abort with clear message; do NOT fall back to HEAD silently. |
 | No `.context/` directory present AND no `--since` given | Abort; ask user to run from a worktask workspace or pass `--since`. |
 | Skill writes no `learnings.md` (no changes detected) | Print summary from log file; exit 0. |
+| Context set resolves empty (no `Agent:` provenance to scope against) | Report it explicitly — every change is discarded and zero labels are written, which is indistinguishable from "no edits" unless it is named. Suggest `--no-scope-filter` for a diagnostic pass. |
 | `--apply` given but user never checks any boxes | Log `applied_count: 0, skipped_count: <total>`; exit 0 without calling prompt-engineer. |
 | prompt-engineer fails mid-apply | Commit any successfully applied proposals; surface the failure for the remaining items; do NOT revert partial work. |

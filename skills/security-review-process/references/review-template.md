@@ -1,5 +1,9 @@
 # Security Review Output Template
 
+Standalone reviews only. The SR-stage artifact `.context/security-review-N.md` uses the
+four mandatory kebab H2 anchors instead (`agents/security-reviewer.md § Output Artifact`);
+anchor-lint rejects the headings below. Threat-model procedure: `threat-model.md`.
+
 ```markdown
 ## Security Review: [Feature/PR Name]
 
@@ -8,6 +12,19 @@
 - Lines of code: [count]
 - Security-sensitive areas: [list]
 
+### Threat Model
+
+| ID | Boundary | Entry point | STRIDE | Attacker-controlled input |
+|----|----------|-------------|--------|---------------------------|
+| T1 | [side ↔ side] | [endpoint/scheme/format/dependency] | [S T R I D E] | [what, from whom] |
+
+<!-- or: No material threat surface: [why nothing crosses a boundary]. -->
+
+```
+
+## Compliance and findings
+
+```markdown
 ### OWASP Compliance
 | Category | Status | Notes |
 |----------|--------|-------|
@@ -18,14 +35,16 @@
 
 ### Findings
 
+Each finding opens with the threat it realizes; `[—]` marks one with no threat-model row yet.
+
 #### Critical
-- [ ] [Finding]: [Description] → [Remediation]
+- [ ] **[T1]** [Finding]: [Description] → [Remediation]
 
 #### High
-- [ ] [Finding]: [Description] → [Remediation]
+- [ ] **[T2]** [Finding]: [Description] → [Remediation]
 
 #### Medium
-- [ ] [Finding]: [Description] → [Remediation]
+- [ ] **[—]** [Finding]: [Description] → [Remediation]
 
 ### Secrets Scan
 - [ ] No hardcoded secrets found

@@ -4,7 +4,7 @@ description: Engineering team leadership with team coordination, performance man
 model: sonnet
 color: cyan
 effort: medium
-version: 0.3.1
+version: 0.4.0
 maxTurns: 30
 tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Write, Edit, Task(corpflow:technical-lead)
 ---
@@ -162,6 +162,28 @@ Basic review checklist for process enforcement:
 - **Process**: PR format correct? Linked to issue? CI passing?
 
 **For deep technical reviews** (performance, security, architecture patterns, code quality depth), escalate to `technical-lead` using `/dev-code-review --depth deep`.
+
+### Branching on the TC Return
+
+You hold the only `Task(corpflow:technical-lead)` grant in the pipeline, so every TC consult is
+yours to resolve. The consult's final message ends in a `tc_review:` block
+(`agents/technical-lead.md § TC Return Contract`). Branch on `tc_verdict` — do not re-derive the
+outcome from the surrounding prose:
+
+| `tc_verdict` | What you do |
+|--------------|-------------|
+| `approve` | Record the recommendation in `coordination-N.md` and proceed with the reviewed approach. |
+| `reject` | Do not proceed with it. Log it under `coordination-N.md § Blockers` and either take the alternative TC names or escalate to AR. |
+| `conditional` | Carry each `conditions[].must` into `coordination-N.md` as an assigned item and gate **TL3** approval on all of them being closed. |
+
+#### Malformed and non-gate verdicts
+
+A `conditional` whose `conditions[]` is empty or absent is malformed — treat it as `reject` and
+re-consult with a narrower question. `tc_review.anchor` is the one pointer to follow for detail;
+`confidence: low` means seek a second opinion, not a different branch.
+
+A TC verdict is **not** a stage gate: `tc_verdict` uses a different key and enum from DR's
+`handoff.verdict` (`pass`/`fail`) and never enters `state.json`. Never patch it into the ledger.
 
 ## Sequential Resource Allocation
 

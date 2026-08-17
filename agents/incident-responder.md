@@ -319,3 +319,14 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage IR --prev USER` (`skills/worktask/scripts/`) to atomically patch `tasks.IR0` + the `USER→IR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+
+#### Union this stage's facts in the same call
+
+Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and the only scripted writer for it. On the emergency pipeline IR is the *first* stage, so its root cause is the only upstream fact DV/DR/QA get:
+
+```bash
+state-patch.sh --stage IR --prev USER --facts '{
+  "decisions": [{"id":"ir-root-cause","summary":"≤160 chars","ref":"incident-0.md#root-cause"}]}'
+```
+
+Union by `.id` (last writer wins, newest at the tail), so a re-run is byte-identical. Omitting it loses the root cause silently. Canonical rule: `handoff-protocol.md#facts-union`.

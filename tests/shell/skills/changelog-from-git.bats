@@ -6,7 +6,9 @@
 #   feat -> Added; fix -> Fixed; refactor/perf -> Changed.
 #   docs/style/test/chore/ci/build are SUPPRESSED.
 #   Non-conventional commits go into ### Other (never dropped).
-#   feat! -> BREAKING prefix in Added.
+#   feat! -> BREAKING prefix in Added; a BREAKING CHANGE footer does the same.
+#   A breaking commit of an otherwise-silent type is NOT suppressed.
+#   --file: NUL-separated whole messages, or one subject per line without NUL.
 #   Empty/whitespace-only lines are skipped silently.
 #   Empty range or file with no keepers -> "no changelog-worthy commits" notice.
 #   No git range and no --file -> exit 1.
@@ -137,6 +139,55 @@ _range_repo() {
   # Commits before the bound must not leak in.
   refute_output --partial "add OAuth2 login"
   refute_output --partial "resolve crash on empty input"
+}
+
+# --- breaking changes carried in the body, not the header --------------------
+# The generator used to read `--pretty=format:'%s'`, so a BREAKING CHANGE footer
+# was invisible: the release notes stayed silent about the break.
+
+@test "breaking: a BREAKING CHANGE footer marks the entry BREAKING" {
+  local repo base
+  repo="$(mk_git_fixture --branch main \
+        --file 'a.txt:1\n' --commit 'chore: scaffold' \
+        --file 'b.txt:1\n' --commit $'fix: drop the compat shim\n\nBREAKING CHANGE: callers must migrate.')"
+  base="$(git -C "$repo" rev-parse HEAD~1)"
+  run_script_env --cwd "$repo" -- "$SCRIPT" "${base}..HEAD"
+  assert_success
+  assert_output --partial "**BREAKING**: drop the compat shim"
+}
+
+@test "breaking: a breaking commit of a silent type is still reported" {
+  local repo base
+  repo="$(mk_git_fixture --branch main \
+        --file 'a.txt:1\n' --commit 'chore: scaffold' \
+        --file 'b.txt:1\n' --commit $'chore: retire the shim\n\nBREAKING CHANGE: callers must migrate.')"
+  base="$(git -C "$repo" rev-parse HEAD~1)"
+  run_script_env --cwd "$repo" -- "$SCRIPT" "${base}..HEAD"
+  assert_success
+  assert_output --partial "### Changed"
+  assert_output --partial "**BREAKING**: retire the shim"
+}
+
+@test "breaking: a commit body never leaks into the entry text" {
+  local repo base
+  repo="$(mk_git_fixture --branch main \
+        --file 'a.txt:1\n' --commit 'chore: scaffold' \
+        --file 'b.txt:1\n' --commit $'feat: add export\n\nSome explanatory prose that is not the subject.')"
+  base="$(git -C "$repo" rev-parse HEAD~1)"
+  run_script_env --cwd "$repo" -- "$SCRIPT" "${base}..HEAD"
+  assert_success
+  assert_output --partial "add export"
+  refute_output --partial "explanatory prose"
+}
+
+@test "edge: a NUL-separated --file carries multi-line messages" {
+  WD="$(mk_tmpworkdir)"
+  printf 'feat: first thing\0fix: second thing\n\nBREAKING CHANGE: migrate.\n\0' \
+    > "$WD/records.bin"
+  run_script "$SCRIPT" --file "$WD/records.bin"
+  assert_success
+  assert_output --partial "first thing"
+  assert_output --partial "**BREAKING**: second thing"
 }
 
 @test "git range: a range with no changelog-worthy commits emits the notice" {

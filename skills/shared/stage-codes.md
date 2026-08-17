@@ -33,7 +33,21 @@ Single source of truth for worktask stage codes.
 
 ### DV routing note
 
-> DV defaults to `developer` (platform app code). For plugin worktask-infrastructure scope (`skills/worktask/scripts/*.sh`, the stage state-machine, `hooks/**`), PL0 routes DV to `workflow-engineer` instead — see `agents/product-manager.md` § Dynamic Worktask Sizing → DV0 routing override. This table keeps the single unconditional default; the conditional rule lives there.
+> DV defaults to `developer` (platform app code). For plugin worktask-infrastructure scope (`skills/worktask/scripts/*.sh`, the stage state-machine, `hooks/**`), PL0 routes DV to `workflow-engineer` instead — see `skills/worktask/references/pl0-procedure.md` § DV0 routing override. This table keeps the single unconditional default; the conditional rule lives there.
+
+### Side-effect-bearing stages
+
+> Canonical list. These two stages act **outside** the ledger when they complete, so re-running
+> one is not a free retry: it can produce a second commit, PR or tag for one unit of work.
+> `state-patch.sh --task-replay --cascade` therefore traverses through them but never resets
+> them **as dependents**, and mirrors this list as one constant (bash cannot read the table; the
+> bats parity test asserts the two agree). A directly named `--task-replay FN0` is still reset —
+> an explicit id is the user's instruction, and with or without `--cascade` — but warns.
+
+| Code | External side effect on completion |
+|------|------------------------------------|
+| FN | Commits, pushes, and opens the pull request |
+| RE | Tags the release and publishes artifacts |
 
 ## Model Lookup
 
@@ -58,6 +72,10 @@ Support-agent model assignments live in the Support Agents table below.
 | WE | workflow-engineer | sonnet | Worktask troubleshooting |
 
 Support agents don't own worktask stages but can be invoked on-demand via Task tool.
+
+### Handoff Protocol exemption
+
+> Owning no stage artifact means owning no ledger write: `designer` and `prompt-engineer` therefore carry **no** `## Handoff Protocol` / `### State Patch` section, and that absence is correct, not drift. Two rows in this table are not exempt: `technical-lead` also owns DR, and `workflow-engineer` takes DV0 under the routing override above — both carry the section. `ethics-reviewer` is support-only but does write `ethics-review-N.md` (Stage Artifacts below), so it patches state like a stage owner. Canonical rule and the full exemption list: `commands/create-agent.md § Handoff Protocol`.
 
 ### Model alias notes
 
@@ -137,7 +155,7 @@ QA0: QA Testing        ← agents can split: QA0, QA1
 | Code | Artifact |
 |------|----------|
 | EX | exploration.md |
-| PL | planning-N.md (numbered per `agents/product-manager.md § Plan File & Run Index Naming`) |
+| PL | planning-N.md (numbered per `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`) |
 | AR | architecture-N.md |
 | TL | coordination-N.md |
 | DV | development-N.md |
@@ -151,4 +169,4 @@ QA0: QA Testing        ← agents can split: QA0, QA1
 | IR | incident-N.md |
 | ET | ethics-review-N.md |
 
-N inherits from PL0's `planning-N.md` (see `agents/product-manager.md § Plan File & Run Index Naming`).
+N inherits from PL0's `planning-N.md` (see `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`).

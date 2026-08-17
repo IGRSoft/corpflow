@@ -25,7 +25,7 @@ Patterns for coordinating agents across worktask stages, managing handoffs, and 
 ```
 1. Current agent completes work (output matches stage-contracts Required Outputs)
 2. Updates ledger: state-patch.sh --task-status <ID> completed
-3. Creates stage artifact (e.g., `planning-0.md` for the first PL run, `planning-1.md` for the next; see `agents/product-manager.md § Plan File Naming`) with required sections
+3. Creates stage artifact (e.g., `planning-0.md` for the first PL run, `planning-1.md` for the next; see `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`) with required sections
 4. Writes compressed handoff (50-100 tokens)
 5. Orchestrator validates against stage-contracts before transition
 6. Next agent starts: state-patch.sh --task-status <ID> in_progress
@@ -211,9 +211,12 @@ review, the audit tail is the single source of truth for what happened.
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `permission_mode_pinned`, `github_issue_created` |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11) |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run` |
+| Any agent whose nested `Task()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
+
+#### Test-run counter rows
 
 `full_test_run` / `scoped_test_run` are one row per test **invocation**, keyed on the invocation's
 shape rather than the plan's mode: ≥1 `-only-testing:` flag → scoped, zero selection flags → full.
@@ -253,6 +256,10 @@ call, so `hook:audit-tooluse` never sees it; other layers stay scraped to avoid 
 
 Rows emitted by plugin hooks carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action remain forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are downgraded to **advisory**. Readers (`/cost-report`, resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`. Dedupe-key shapes:
 
+#### Hook authority — canonical vs mirrored writers
+
+A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>`: every installed sibling plugin mirrors these hooks under its own prefix, so one completion produces one canonical row plus one row per sibling. The mirrors set `metadata.advisory: true` and carry thinner metadata — an empty `subject` in particular. Authority within a `dedupe_key` group is therefore three-tier: canonical hook row, then any hook row, then first-by-index. Readers MUST NOT match on `startswith("hook:")` alone; route through `scripts/audit-dedup.sh`, which implements the ladder.
+
 #### Dedupe-key shapes — tool & subagent
 
 - `tool_invoked`: `"<session_id>:<tool_use_id>"`
@@ -261,6 +268,7 @@ Rows emitted by plugin hooks carry `actor: "hook:<name>"` and `metadata.dedupe_k
 #### Dedupe-key shapes — stage & issue
 
 - `stage_completion_hook`: `"<session_id>:<agent_id>:stage:<PL|FN|ST>"`
+- `stage_replay`: `"<worktask_id>:<run_index>:<task_id>:replay:<ts>"` — the timestamp is deliberate: replay is repeatable by design, so two legitimate replays of one stage must NOT collapse. Written by `state-patch.sh --task-replay`, on success only; a refusal changed nothing and records nothing.
 - `github_issue_created`: `"<worktask_id>:<run_index>:gh_issue"` — collision on resume detects already-published; multi-track safety via `run_index` increment. Writer: orchestrator (via `skills/worktask/scripts/publish-pl-issue.sh` between PL approval and stage-loop entry).
 
 ### Schema
@@ -269,7 +277,7 @@ Rows emitted by plugin hooks carry `actor: "hook:<name>"` and `metadata.dedupe_k
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_delegation_observed|test_gate_disabled|test_dedupe_disabled",
+  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|dispatch_depth_projected|dispatch_flattened",
   "subject": "task ID or artifact path",
   "result": "ok|error|deferred|blocked",
   "task_id": "optional — ledger key, e.g. DV0",
@@ -284,7 +292,8 @@ For `subagent_stopped` and `stage_completion_hook` rows written by plugin hooks,
 
 - `duration_ms` (subagent_stopped only): number
 - `effort`: `"low"|"medium"|"high"|"xhigh"|"max"|"unknown"`
-- `stage` (stage_completion_hook only): `"PL"|"FN"|"ST"`
+- `stage`: stage code — `"PL"|"FN"|"ST"` on stage_completion_hook, any stage code on subagent_stopped (from `CLAUDE_TASK_METADATA_STAGE`), `"unknown"` when unstamped
+- `agent_id` (subagent_stopped only): string — `"unknown"` when absent
 - `parent_agent_id`: string — defaults to `"none"` when not in hook stdin
 - `background_tasks_count`: integer ≥ 0
 - `background_task_ids`: string[] — may contain `"unknown"` entries; see `references/hook-monitoring.md § BG-Task ID Schema Watch`
@@ -364,6 +373,29 @@ for full code patterns.
 
 > **Pre-launch spawn classification**: in auto mode the permission classifier evaluates a subagent spawn **before** it launches, so a dispatch can be denied up front (`PermissionDenied` hook fires). The orchestrator must handle a refused spawn — treat a denied dispatch like a failed stage and route per the retry/escalate matrix rather than assuming every `Task(...)` starts.
 
+#### Depth-refusal self-report
+
+> **When the depth cap refuses a nested `Task()`, the refused dispatcher MUST append one `dispatch_flattened` row to `.context/logs/audit.jsonl` BEFORE doing that work inline.** Emitting it afterwards is the exact failure this contract exists to prevent: an agent that finishes the specialist's job and then forgets leaves an artifact indistinguishable from one the specialist actually produced.
+
+##### No hook covers this refusal
+
+Unlike a refused *tool* (`PermissionDenied`) there is **no hook for this refusal type** — nothing in the plugin hook vocabulary (`references/hook-monitoring.md`) is depth-shaped, so the row is a self-report, downgraded to advisory only when a future hook supersedes it. A self-report closes the silence; it does not guarantee capture.
+
+| Field | Value |
+|---|---|
+| `actor` | the refused dispatcher (e.g. `apple-developer:apple-developer`), never `orchestrator` |
+| `action` | `dispatch_flattened` |
+| `subject` | the **specialist that would have been used** (e.g. `apple-developer:test-generator`) |
+| `result` | `deferred` — the dispatch did not happen; the work still did |
+| `metadata.attempted_depth` | the depth the refused child would have occupied |
+| `metadata.cap` | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` as resolved at refusal time |
+
+##### Required fields and pairing
+
+All three of `subject`, `attempted_depth`, and `cap` are required. A row saying only that flattening happened does not tell an operator **whose judgment is missing from the output**, which is the only question the row is written to answer.
+
+Pairs with the orchestrator's forward-looking `dispatch_depth_projected` (`skills/worktask/SKILL.md § Validation check 11`): the projection warns before the stage runs, this row records what the projection missed.
+
 #### Background-by-default dispatch
 
 > **Background-by-default dispatch**: subagents run in the **background by default** — the dispatching agent keeps its turn and receives the child's result as a completion notification. Two consequences for the worktask loop: (1) a `Task()` launch acknowledgement is NOT stage completion — advance a stage (Step 6.5, the `completed` patch) only on the completion notification or the `subagent_stopped` audit row (`skills/worktask/SKILL.md § Orchestrator Execution Loop`); (2) unblocked sibling stages (parallel DVN tracks, DC+QA) genuinely overlap with no extra orchestration.
@@ -440,7 +472,7 @@ Task({ subagent_type: "corpflow:developer", model: "opus" })
 
 #### Dispatch flags & /agents UI
 
-> `claude agents` dispatch flags (`--cwd`, `--add-dir`, `--settings`, `--mcp-config`, `--plugin-dir`, `--permission-mode`, `--model`, `--effort`, `--dangerously-skip-permissions`) are mapped to `task.metadata` fields per the **`references/headless-dispatch.md`** translation table. PL0 populates the optional fields per `agents/product-manager.md § Optional dispatch metadata`; external runners consume them via the canonical one-liner in `commands/worktask.md § Headless dispatch`.
+> `claude agents` dispatch flags (`--cwd`, `--add-dir`, `--settings`, `--mcp-config`, `--plugin-dir`, `--permission-mode`, `--model`, `--effort`, `--dangerously-skip-permissions`) are mapped to `task.metadata` fields per the **`references/headless-dispatch.md`** translation table. PL0 populates the optional fields per `skills/worktask/references/pl0-procedure.md § Optional dispatch metadata`; external runners consume them via the canonical one-liner in `commands/worktask.md § Headless dispatch`.
 
 > `/agents` displays a tabbed layout (Running/Library tabs) with a `* N running` indicator next to agent types with live instances.
 

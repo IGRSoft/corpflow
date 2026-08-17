@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.0.17 · Requires Claude Code 2.1.233+**
+**Plugin 4.0.18 · Requires Claude Code 2.1.233+**
 
 ## Features
 
@@ -302,6 +302,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/request-plan` | Turn a free-form request into a lightweight, context-aware plan |
 | `/improve-yourself` | Retrospective: propose agent/skill/command updates from user edits |
 | `/cost-report` | Worktask token-cost report |
+| `/agent-report` | Which agents actually executed, from the audit trail |
 | `/cc-update` | Update plugin agents/commands/skills for new Claude Code features |
 
 #### Design (`design-`)
@@ -472,7 +473,7 @@ make clean
 - [tests/README.md](tests/README.md) — suite organization, fixtures, coverage verdict
 - [benchmark/README.md](benchmark/README.md) — the WITH/WITHOUT Tic-Tac-Toe A/B harness
 - [skills/README.md](skills/README.md) — full skill index with effort levels
-- [CHANGELOG.md](CHANGELOG.md) — release history
+- [CHANGELOG.md](CHANGELOG.md) — release history (`4.0.0`+); earlier majors archived in [CHANGELOG-3.x.md](CHANGELOG-3.x.md), [CHANGELOG-2.x.md](CHANGELOG-2.x.md), and [CHANGELOG-1.x.md](CHANGELOG-1.x.md)
 
 ## License
 

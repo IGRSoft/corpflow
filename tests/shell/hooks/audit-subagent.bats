@@ -35,6 +35,36 @@ setup() {
   assert_success
 }
 
+@test "happy: stage is stamped from CLAUDE_TASK_METADATA_STAGE" {
+  run env CLAUDE_PROJECT_DIR="$WD" CLAUDE_TASK_METADATA_STAGE=DV \
+    bash "$PLUGIN_ROOT/$SCRIPT" < "$PAYLOAD"
+  assert_success
+  run jq -e '.metadata.stage == "DV" and .metadata.agent_id == "agt_dv"' \
+    "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "edge: empty agent_type falls back to CLAUDE_SUBAGENT_TYPE, qualifier intact" {
+  # The runtime sends "" (not null) for plugin agents, so `// "unknown"` alone
+  # left the row anonymous and the report could not name who ran.
+  run env CLAUDE_PROJECT_DIR="$WD" CLAUDE_SUBAGENT_TYPE="apple-developer:ios-developer" \
+    bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"agent_type":"","agent_id":"a1","session_id":"s1"}'
+  assert_success
+  run jq -e '.subject == "apple-developer:ios-developer"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "edge: empty agent_type with no env fallback yields unknown, not empty" {
+  # BSD env stops option parsing at the first NAME=VALUE operand, so -u must precede
+  # the assignment or it is taken as the command name (status 127 on macOS).
+  run env -u CLAUDE_SUBAGENT_TYPE -u CLAUDE_TASK_METADATA_STAGE CLAUDE_PROJECT_DIR="$WD" \
+    bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"agent_type":"","agent_id":"a1","session_id":"s1"}'
+  assert_success
+  run jq -e '.subject == "unknown" and .metadata.stage == "unknown"' \
+    "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
 @test "failure: malformed JSON exits 0 and writes no row" {
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< '{broken'
   assert_success

@@ -78,16 +78,30 @@ if [ -n "${BASELINE_SHA:-}" ]; then
     >> "$raw" || true
 fi
 
+# Plugin names whose `<plugin>:<name>` refs address files in THIS repo.
+# `igrsoft` is corpflow's pre-v3.39.0 name; classifying those trailers as
+# cross-plugin empties the context set, which silently disables the pipeline.
+# The manifest name is read so a future rename cannot reintroduce that.
+local_plugin_names() {
+  local current=""
+  if [ -f .claude-plugin/plugin.json ] && command -v jq >/dev/null 2>&1; then
+    current="$(jq -r '.name // empty' .claude-plugin/plugin.json 2>/dev/null || true)"
+  fi
+  printf '%s %s %s' "${current:-corpflow}" corpflow igrsoft \
+    | tr ' ' '\n' | awk 'NF && !seen[$0]++' | tr '\n' ' '
+}
+
 # Normalize qualified names → file paths.
 # Rules:
-#   corpflow:<name>              → agents/<name>.md
+#   <local-plugin>:<name>       → agents/<name>.md
 #   apple-developer:<name>      → (cross-plugin) — kept as raw ref; mapper drops if non-local
 #   <name>:<sub> as command     → commands/<name>.md  (best-effort)
 #
 # The normalizer only emits LOCAL paths that exist in this repo.
 normalize() {
-  awk -F: '
-    $1 == "corpflow" && NF == 2 {
+  awk -v plugins="$1" -F: '
+    BEGIN { n = split(plugins, parts, " "); for (i = 1; i <= n; i++) local_plugin[parts[i]] = 1 }
+    ($1 in local_plugin) && NF == 2 {
       print "agents/" $2 ".md"
       # also try as command
       print "commands/" $2 ".md"
@@ -103,7 +117,7 @@ normalize() {
   '
 }
 
-normalize < "$raw" \
+normalize "$(local_plugin_names)" < "$raw" \
   | awk '!seen[$0]++' \
   | while read -r path; do
       case "$path" in

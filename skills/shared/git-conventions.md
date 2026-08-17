@@ -138,7 +138,7 @@ Title: `<type>[scope][!]: <summary>`
 - [How this was verified]
 
 ## Visual evidence
-[UI runs only — inserted verbatim from `attach-visual-evidence.sh --emit pr`]
+[UI changes only — inserted verbatim; see Visual evidence below]
 
 ## Notes
 [Additional context, testing instructions, etc.]
@@ -154,6 +154,27 @@ so the three enforcement points and this spec agree on one shape.
 **Never paste a local path into a PR body** — `.context/`, `/Users/…`, `~/…` and `../…` are
 per-workspace and gitignored, so they are meaningless to a reviewer and leak host layout. This
 holds inside backticks too: a code span is not an escape hatch. `pr-body-lint.sh` checks it.
+
+### Visual evidence
+
+Both PR paths render the same block because both end in `attach-visual-evidence.sh
+--emit pr`. A worktask PR gets it from FN, automatically, on
+`metadata.requires_screenshots: true` (the default). An ad-hoc PR — `gh pr create`
+outside a worktask — gets it from:
+
+```bash
+bash skills/worktask/scripts/adhoc-visual-evidence.sh --emit pr
+```
+
+Run that **unconditionally** (gating lives inside it) and splice its stdout between
+`## Test plan` and `## Notes` **before** `gh pr create`, so no second API call patches
+the body afterwards. Empty stdout means insert nothing — the answer for a docs-only or
+backend-only change.
+
+It captures only when the diff touches the UI path classes owned by
+`detect-ui-change.sh --path-classes`, refuses to run in a worktask tree, and exits 0 on
+every failure: a missing screenshot must never become an unopened PR. `ADHOC_SKIP=1`
+suppresses a run the heuristic gets wrong; `--base <ref>` overrides the resolved target.
 
 ## Merge Strategy
 
@@ -208,6 +229,35 @@ supplies a key.
 segment rather than cutting mid-word — `bugfix/ov-164-…-blinking-before`, never
 `…-blinking-before-r`. At least one whole word always survives, even a word longer than
 the remaining budget, so a long issue key can never starve the slug to nothing.
+
+#### Batch (`/megatask`) branches — one convention, two entry points
+
+Milestone/batch runs name their branches through
+`skills/shared/milestone-helpers/scripts/milestone-helpers.sh branch-name`, not through
+`branch-lib.sh`, and the shape is `<type>/{issue#}-{slug}`. Exactly **one** property
+differs from a solo worktask:
+
+| | worktask (`branch-lib.sh`) | batch (`milestone-helpers.sh`) |
+|---|---|---|
+| Type | `derive_type` on the goal | `derive_type` on the issue title — same function, sourced |
+| Ticket segment | optional, from the goal text | always the issue number |
+| Slug budget | 48, shared with the ticket segment | 50, issue number sits outside it |
+
+##### One rule, not two
+
+The budgets differ deliberately and are not being unified; everything else is **one rule,
+not two**. The type vocabulary has a single machine-readable copy (`BRANCH_TYPES`), and
+`milestone-helpers.sh` sources `branch-lib.sh` for `derive_type` rather than keeping its own
+— an unreachable library stops the run (exit 2) instead of falling back to a plausible
+`feature/`. The kebab body, trimming, and whole-word truncation are the same rules described
+under § Slug budget above, pinned by cross-check tests in
+`tests/shell/skills/milestone-helpers.bats`: the same title must yield the same type and the
+same slug body from both entry points. Change one side and the cross-check fails until the
+other follows.
+
+Batch branches issued before this change carry a `feature/` prefix regardless of type. They
+are not renamed — this changes name *generation* only, and `branch_is_conventional` accepts
+them unchanged.
 
 ### Type vocabulary (13 tokens, accepted by the already-conventional check)
 

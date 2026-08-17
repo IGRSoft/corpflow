@@ -5,7 +5,8 @@
 # @usage       bash milestone-helpers.sh <subcommand> [args...]
 #
 # Subcommands:
-#   branch-name <issue-int> <title>      -> feature/{n}-{slug}  (slug max 50 chars)
+#   branch-name <issue-int> <title>      -> <type>/{n}-{slug}  (slug max 50 chars,
+#                                           truncated on a word boundary)
 #   priority-score <label...>            -> integer score (0=P0/critical … 99=none)
 #   base-branch [<issue-int>] [--file J] -> resolved base branch name
 #   has-pr <issue-int> [--file J]        -> yes | no
@@ -18,7 +19,7 @@
 # @arg  subcommand  string  One of the commands listed above
 # @exitcode 0  Success
 # @exitcode 1  Usage / logic error
-# @exitcode 2  Dependency missing (jq)
+# @exitcode 2  Dependency missing (jq, or branch-lib.sh for branch-name)
 #
 # Slug-length canon: 50 chars (resolves SKILL.md vs implementations.md drift;
 # megatask/SKILL.md §Branch Naming is the authority).
@@ -59,8 +60,71 @@ _require_jq() {
 }
 
 # ---------------------------------------------------------------------------
+# Utility: require branch-lib.sh (branch TYPE vocabulary)
+# `BRANCH_TYPES`/`derive_type` in branch-lib.sh are the repo's single
+# machine-readable type vocabulary (git-conventions.md § Type vocabulary), so it is
+# sourced rather than copied. Absence is fatal, never a silent `feature/` fallback:
+# a wrong-but-plausible branch name is worse than a loud stop.
+# ---------------------------------------------------------------------------
+_require_branch_lib() {
+  declare -F derive_type > /dev/null 2>&1 && return 0
+  local lib
+  lib="$(dirname -- "${BASH_SOURCE[0]}")/../../../worktask/scripts/branch-lib.sh"
+  [[ -r "$lib" ]] || {
+    printf >&2 'milestone-helpers: branch-lib.sh not readable at %s — cannot derive branch type\n' "$lib"
+    exit 2
+  }
+  # shellcheck source=/dev/null
+  . "$lib"
+}
+
+# ---------------------------------------------------------------------------
+# _slug_body <title>
+# Uncapped kebab body. `tr '\n' ' '` runs first — an embedded newline would
+# otherwise survive sed's and cut's line-oriented view into a two-line branch name
+# that `git worktree add` rejects. Must stay byte-identical to `slug_body` in
+# skills/worktask/scripts/branch-lib.sh (pinned by a cross-check test).
+# ---------------------------------------------------------------------------
+_slug_body() {
+  printf '%s' "${1:-}" \
+    | tr '\n' ' ' \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-*//' -e 's/-*$//'
+}
+
+# ---------------------------------------------------------------------------
+# _slug_cap <kebab-body> [budget]
+# Caps the body, dropping the trailing PARTIAL segment rather than cutting mid-word.
+# One whole word always survives — even one longer than the budget — because an
+# empty slug would emit the nameless `<type>/{n}-`. Mirrors `derive_slug` in
+# branch-lib.sh minus its ticket budget: the issue number sits outside this cap.
+# ---------------------------------------------------------------------------
+_slug_cap() {
+  local body="${1:-}" budget="${2:-$SLUG_MAX}" keep next
+
+  if [[ "${#body}" -le "$budget" ]]; then
+    printf '%s' "$body" | sed -e 's/-*$//'
+    return 0
+  fi
+
+  # A cut landing exactly on a separator already ends on a whole word; stripping
+  # back unconditionally would throw away a word that fit.
+  next=$(printf '%s' "$body" | cut -c$((budget + 1))-$((budget + 1)))
+  keep=$(printf '%s' "$body" | cut -c1-"$budget")
+  if [[ "$next" != "-" ]]; then
+    if [[ "${keep%-*}" == "$keep" ]]; then
+      keep=${body%%-*}
+    else
+      keep=${keep%-*}
+    fi
+  fi
+  printf '%s' "$keep" | sed -e 's/-*$//'
+}
+
+# ---------------------------------------------------------------------------
 # cmd_branch_name <issue-int> <title>
-# Emits:  feature/{n}-{slug}
+# Emits:  {type}/{n}-{slug} — type derived from the title, `feature` when nothing
+#         in it reads as a defect/refactor/chore (branch-lib.sh `derive_type`).
 # ---------------------------------------------------------------------------
 cmd_branch_name() {
   local issue_num="$1"
@@ -72,17 +136,13 @@ cmd_branch_name() {
     exit 1
   }
 
-  # Build slug: lowercase, collapse non-alnum to single hyphen, trim edges, truncate
-  local slug
-  slug=$(printf '%s' "$title" \
-    | tr '[:upper:]' '[:lower:]' \
-    | sed 's/[^a-z0-9]\{1,\}/-/g' \
-    | sed 's/^-//' \
-    | sed 's/-$//' \
-    | cut -c1-"${SLUG_MAX}" \
-    | sed 's/-$//')
+  _require_branch_lib
 
-  printf 'feature/%s-%s\n' "$issue_num" "$slug"
+  local type slug
+  type=$(derive_type "$title")
+  slug=$(_slug_cap "$(_slug_body "$title")" "$SLUG_MAX")
+
+  printf '%s/%s-%s\n' "$type" "$issue_num" "$slug"
 }
 
 # ---------------------------------------------------------------------------
@@ -391,7 +451,7 @@ cmd_orchestrator_update() {
 # ---------------------------------------------------------------------------
 # cmd_workspace_init <issue-int> <title>
 # Emits compact key=value lines (no side effects, no network):
-#   branch=feature/{n}-{slug}
+#   branch=<type>/{n}-{slug}
 #   worktree_path=.worktrees/{group}/{n}
 #   context_path=.worktrees/{group}/{n}/.context
 # Optional env vars: MEGATASK_GROUP (default milestone-0)
@@ -457,23 +517,43 @@ cmd_self_test() {
     "feature/42-add-login-flow" \
     "$(cmd_branch_name 42 "Add login flow")"
 
-  _st_check "branch special chars" \
-    "feature/43-fix-crash-on-startup" \
+  # Type is derived, not fixed: a defect title yields `bugfix/`.
+  _st_check "branch special chars + derived type" \
+    "bugfix/43-fix-crash-on-startup" \
     "$(cmd_branch_name 43 "Fix: crash on startup!!!")"
+
+  _st_check "branch derived type: refactor" \
+    "refactor/44-refactor-the-reconnect-backoff" \
+    "$(cmd_branch_name 44 "Refactor the reconnect backoff")"
 
   _st_check "branch leading hyphen stripped" \
     "feature/5-hello-world" \
     "$(cmd_branch_name 5 "---hello world---")"
 
-  # Verify slug is capped at 50 chars
+  # Over-budget titles truncate on a word boundary, never mid-word.
+  _st_check "branch truncation keeps whole words" \
+    "bugfix/164-fix-the-reconstruction-scan-flow-blinking-before" \
+    "$(cmd_branch_name 164 "Fix the reconstruction scan flow blinking before the first frame renders")"
+
   local long_slug slug_part
-  long_slug=$(cmd_branch_name 1 "$(printf 'a%.0s' {1..80})")
+  long_slug=$(cmd_branch_name 1 "This is a very long feature title that should be truncated because it exceeds fifty characters")
   slug_part="${long_slug#feature/1-}"
-  if [[ "${#slug_part}" -le 50 && "${#slug_part}" -gt 0 ]]; then
+  if [[ "${#slug_part}" -le 50 && "${#slug_part}" -gt 0 && "${slug_part}" != *- ]]; then
     _st_pass_if "branch slug length <= 50 (got ${#slug_part})" "true"
   else
     _st_pass_if "branch slug length <= 50 (got ${#slug_part})" "false"
   fi
+
+  # Documented exception: one whole word always survives, even over budget —
+  # the alternative is an empty slug, i.e. the nameless `feature/1-`.
+  _st_check "branch single over-budget word survives intact" \
+    "feature/1-$(printf 'a%.0s' {1..80})" \
+    "$(cmd_branch_name 1 "$(printf 'a%.0s' {1..80})")"
+
+  # A multi-line title must not yield a multi-line branch name.
+  _st_check "branch multi-line title collapses to one line" \
+    "feature/7-add-login-flow" \
+    "$(cmd_branch_name 7 "$(printf 'Add login\nflow')")"
 
   # --- priority-score ---
   _st_check "priority P0" "0" "$(cmd_priority_score P0)"

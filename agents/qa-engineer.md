@@ -4,8 +4,8 @@ description: Expert QA engineer for test validation, test creation, and quality 
 model: sonnet
 color: yellow
 effort: medium
-maxTurns: 40
 version: 0.5.1
+maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash, Task(apple-developer:test-generator), Task(system-developer:sys-test-generator), Task(android-developer:and-test-generator), Task(frontend-developer:fe-test-generator), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 

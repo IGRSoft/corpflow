@@ -4,6 +4,9 @@
 # Copies state-merge.sh from the plugin's hooks/ to the project's .claude/hooks/
 # and verifies the plugin.json registration. Safe to re-run.
 #
+# An existing but non-executable destination is overwritten, so it is first saved to
+# state-merge.sh.bak — a single slot rewritten on each overwrite, never accumulated.
+#
 # Usage:
 #   hook-install.sh                 # install hook
 #   hook-install.sh --self-test     # run self-test in a scratch dir
@@ -77,6 +80,12 @@ install_hook() {
     echo "install: $dst already installed (idempotent — no-op)"
   else
     mkdir -p .claude/hooks
+    # A non-executable $dst is typically a hand-customized copy or a partial write; the
+    # .bak (not .sh) suffix keeps the rescue out of the `.claude/hooks/*.sh` live-hook globs.
+    if [[ -e "$dst" ]]; then
+      cp "$dst" "$dst.bak"
+      echo "install: backed up existing $dst → $dst.bak"
+    fi
     cp "$src" "$dst"
     chmod +x "$dst"
     echo "install: copied $src → $dst"
@@ -142,6 +151,20 @@ JSON
     echo "self-test: check mode (missing): FAIL (should have failed)" >&2; exit 1
   else
     echo "self-test: check mode (missing): ok"
+  fi
+
+  # Test 5: a non-executable dst is backed up, not silently destroyed
+  if [[ -e ".claude/hooks/state-merge.sh.bak" ]]; then
+    echo "self-test: backup on overwrite: FAIL (fresh install left a stray .bak)" >&2; exit 1
+  fi
+  printf 'CUSTOMIZED\n' > .claude/hooks/state-merge.sh
+  chmod -x .claude/hooks/state-merge.sh
+  CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" >/dev/null 2>&1
+  if [[ -f ".claude/hooks/state-merge.sh.bak" ]] \
+     && [[ "$(cat .claude/hooks/state-merge.sh.bak)" == "CUSTOMIZED" ]]; then
+    echo "self-test: backup on overwrite: ok"
+  else
+    echo "self-test: backup on overwrite: FAIL" >&2; exit 1
   fi
 
   echo "self-test: ALL PASS"

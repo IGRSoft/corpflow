@@ -280,6 +280,32 @@ Capture **both** stdout key=value lines — `target_branch=<name>` (the name the
 
 **When `branch=` is empty or fails `--check` but `target_branch=` is non-empty, stamp the target** — the local name may be blocked from changing (upstream tracked, target exists) while the PR head is still ours to name. Then run the non-blocking post-check (`commands/worktask.md § Step 3c — post-check`): a stamped name failing `--check` emits one `branch_convention_check` warning row naming the actual and derived target, and never blocks planning. Invoking `/worktask` authorizes the rename against a host's no-rename session rule — never revert it, never re-ask (`references/workspace-modes.md § Host session authorization`).
 
+### Validation check 11
+
+11. **Dispatch-depth projection** (non-blocking): project the deepest dispatch chain the next stage will open and compare it against `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (default 3). This is `/megatask`'s R1 depth projection applied per-stage instead of once per batch — `skills/megatask/SKILL.md § Nesting-depth budget` holds the canonical level table both must agree with:
+
+```
+projected_depth = orchestrator_offset      # 1 under /megatask (it spends a level), else 0
+                + 1                        # the stage agent itself
+                + 1 if that agent routes through a platform router
+                + 1 if the router dispatches a Tier-2 specialist
+headroom = cap - projected_depth
+```
+
+Emit one `dispatch_depth_projected` audit row with `metadata: {projected_depth, cap, headroom, chain}` — `chain` naming the agents level by level, so a later `dispatch_flattened` row can be read against what was forecast.
+
+### Validation check 11 — what warns, and what stays quiet
+
+**Warn on the console only when `headroom < 0`.** At `headroom >= 0` the row is written and nothing is printed. That threshold is a deliberate choice, not an oversight: the canonical DV chain — session → `developer` (1) → platform router (2) → Tier-2 specialist (3) — lands on **exactly** the cap with zero headroom, so warning at `headroom == 0` would fire on every DV stage in the repo and teach the operator to skip the line that matters. The zero-headroom fact still reaches the ledger in `metadata.headroom`, which is where `/cost-report` and incident review look. A projection that does not compute `3` for that chain is wrong regardless of whether it prints.
+
+#### Never blocks
+
+A hard gate would fail that same canonical chain, which is legal and routine. Precedent: check 8's `artifact_path_resolved`, and `commands/megatask.md § R1 spawn-budget projections` ("warn-and-continue, never a hard gate"). When it does warn, name megatask's two remediations — raise the env var, or flatten Tier-2 dispatch (`skills/megatask/SKILL.md § Depth remediations`).
+
+#### A forecast, not an observation
+
+ An unanticipated hop lands past the cap without this check seeing it; that case is caught after the fact by the refused agent's own `dispatch_flattened` row (`agent-coordination § Depth-refusal self-report`). The two are complements — neither makes the other redundant.
+
 ### On validation failure
 
 If validation fails:
@@ -299,7 +325,7 @@ If validation fails:
 > via its narrowly-scoped `Bash(curl:*)` tool — `get_screenshot` returns a short-lived URL that must be
 > fetched while still valid, during the PL turn. The orchestrator MUST NOT add a post-PL0 download step
 > (it would collide with the Phase-1 Bash prohibition in `commands/worktask.md` and race the expiring URL).
-> See `agents/product-manager.md § Capture Workflow`.
+> See `skills/shared/figma-capture.md § Capture Workflow`.
 
 ### Cache-Friendly Prompt Layout & state.json (handoff-protocol)
 
@@ -430,7 +456,7 @@ function markDispatchStatus(state, taskId, status, modelResolved) {
 
 **Banner relocation (R3)**: stage-specific banners (DR Skill, FN Conductor, MCP fallback warning) are appended AFTER `full.description` (suffix), not prepended. Prefixes [1][2][3][4] stay byte-identical across stages so the cache prefix boundary stretches as far as possible.
 
-The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: timestamps, ENV expansions that vary per call, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. CI lint (`skills/worktask/scripts/cache-lint.sh`) asserts byte-stability across consecutive stages of the same `worktask_id`.
+The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: timestamps, ENV expansions that vary per call, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. `skills/worktask/scripts/cache-lint.sh` asserts byte-stability across consecutive stages of the same `worktask_id`, but only when run by hand against a captured prompt-log — it is not wired to CI.
 
 ### CRITICAL: Delegation-Only Rule
 
@@ -1359,7 +1385,7 @@ When the worktask runs under a `/megatask` batch (state.json `metadata.milestone
 
 #### Hard guarantee
 
-**HARD GUARANTEE** — the published GitHub issue contains **no local-file paths**, no `.context/` references, no `planning-N.md` or any other artifact filename, no absolute or relative source paths, no Conductor workspace IDs, and no `workspace_path`/`plan_file`/`run_index`/`artifact_path` literals are EVER written to the published GitHub issue body, under any circumstances. The sanitiser is defence-in-depth: PL0 authoring hygiene is the primary defence (see `agents/product-manager.md § Anchor-content hygiene`), the two-pass sanitiser is the runtime safety net, and the >50% strip-ratio abort is the final brake when both fail.
+**HARD GUARANTEE** — the published GitHub issue contains **no local-file paths**, no `.context/` references, no `planning-N.md` or any other artifact filename, no absolute or relative source paths, no Conductor workspace IDs, and no `workspace_path`/`plan_file`/`run_index`/`artifact_path` literals are EVER written to the published GitHub issue body, under any circumstances. The sanitiser is defence-in-depth: PL0 authoring hygiene is the primary defence (see `skills/worktask/references/pl0-procedure.md § Anchor-content hygiene`), the two-pass sanitiser is the runtime safety net, and the >50% strip-ratio abort is the final brake when both fail.
 
 #### Non-blocking guarantee
 

@@ -58,10 +58,9 @@ Balanced structure for most agents:
 - Capabilities (organized by category)
 - Worktask integration
 - State ledger integration
-- Model Usage Note
-- Constitutional Alignment (reference `skills/shared/constitutional-base.md`)
 - Response approach
 - Related agents/commands
+- Handoff Protocol + State Patch (stage owners only — see § Handoff Protocol)
 
 ### Comprehensive
 Full structure for complex agents:
@@ -72,12 +71,12 @@ Full structure for complex agents:
 - Behavioral traits
 - Knowledge base
 - Worktask integration with state-ledger format
-- Model Usage Note with rationale
-- Constitutional Alignment with agent-specific focus
 - Response approach (numbered steps)
 - Example interactions
 - Anti-patterns
 - Integration points
+- Completion Verification (only when the stage adds checks beyond `stage-contracts.md`)
+- Handoff Protocol + State Patch (stage owners only — see § Handoff Protocol)
 
 ## Output Format
 
@@ -155,14 +154,23 @@ Add Task delegation syntax to any preset: `--tools full,Task(apple-developer:ios
 ## Agent Structure Guidelines
 
 ### Frontmatter (Required)
+
+Canonical field order — every agent in `agents/` follows it, and a new agent that deviates is drift, not style:
+
 ```yaml
 ---
 name: agent-name
 description: Brief description for routing (1-2 sentences). Use PROACTIVELY for...
 model: haiku|sonnet|opus
+color: blue
+effort: medium
+version: 0.1.0
+maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit
 ---
 ```
+
+Optional fields keep fixed slots: `isolation:` between `maxTurns:` and `tools:`; `hooks:` last, after `tools:`. An explanatory comment for a narrowly-scoped grant (`# tools: Bash(curl:*) is scoped to curl because …`) sits immediately above the `tools:` line it explains and moves with it.
 
 ### Description Best Practices
 - Include "Use PROACTIVELY for..." to improve agent routing
@@ -188,13 +196,27 @@ tools: Read, Glob, Grep, Write, Edit
 - State ledger integration
 - Handoff protocols
 
-### Model Usage Note
-- Explain why the selected model is appropriate
-- Reference task complexity and reasoning requirements
+### Completion Verification (optional)
+- A **supplement** to `stage-contracts.md § Completion Verification`, never a restatement of it
+- Include it only when the stage adds checks the shared contract does not cover; omit it entirely otherwise
+- Sits immediately before § Handoff Protocol
 
-### Constitutional Alignment
-- Reference `skills/shared/constitutional-base.md`
-- Add agent-specific ethical focus areas
+### Handoff Protocol (stage owners only)
+- Last section of the file, followed only by its `### State Patch — REQUIRED before return` subsection
+- Names the `stage-contracts.md#tpl-<code>` frontmatter template and the `Prev→this` edge label; does not restate the shared contract
+- State Patch subsection gives the exact `state-patch.sh --stage <CODE> --prev <PREV>` call plus a `--facts` example
+
+#### Handoff Protocol exemptions
+
+**Do not add this section to a support agent.** It asserts a ledger-write responsibility, so an agent that owns no stage artifact must not carry it. Current exemptions, verified against `skills/shared/stage-codes.md`:
+
+| Agent | Why exempt |
+|---|---|
+| `designer` | Support agent (DS). Invoked by PL/AR/DV/QA, writes no `.context/` stage artifact. |
+| `prompt-engineer` | Support agent (PE). Agent-optimization work, outside the worktask ledger. |
+| `product-manager` | Owns PL, but its handoff and completion checklist are canonical in `skills/worktask/references/pl0-procedure.md`. Duplicating them here would create a second source of truth. |
+
+`workflow-engineer` is **not** exempt: it is a support agent by default, but PL0 routes DV0 to it for worktask-infrastructure changes, so it carries a DV-scoped Handoff Protocol gated on that mode.
 
 ## Integration
 

@@ -14,6 +14,9 @@ import os
 from typing import Optional
 
 from .analysis import scan_generated_project
+from .formatting import format_cost, format_cost_delta, group_int as _group_int
+
+_HTML_NIL = "&mdash;"
 
 # (accessor, label, is_delta_numeric)
 METRIC_ROWS = [
@@ -51,11 +54,6 @@ def _get(path_metrics: Optional[dict], accessor: str):
             return None
         cursor = cursor.get(part)
     return cursor
-
-
-def _group_int(i: int) -> str:
-    neg = i < 0
-    return ("-" if neg else "") + f"{abs(i):,}"
 
 
 def _group_decimal(s: str) -> str:
@@ -276,16 +274,21 @@ def _record_html(rec: dict, plugin_root: Optional[str] = None) -> str:
         # never renders as a real 0. A measured 0.0 (deterministic) still shows a 0 row.
         if accessor == "coverage_pct" and wv is None and ov is None:
             continue
+        # Money gets fixed 2dp; the generic formatter trims trailing zeros, which
+        # renders a dollar column at a different precision per row.
+        is_cost = accessor == "cost_usd"
         rows += (
             f"<tr><td class='metric'>{_escape(label)}</td>"
-            f"<td class='with'>{_fmt(wv)}</td>"
-            f"<td class='without'>{_fmt(ov)}</td>"
-            f"<td class='delta'>{_delta(wv, ov)}</td></tr>"
+            f"<td class='with'>{format_cost(wv, _HTML_NIL) if is_cost else _fmt(wv)}</td>"
+            f"<td class='without'>{format_cost(ov, _HTML_NIL) if is_cost else _fmt(ov)}</td>"
+            f"<td class='delta'>"
+            f"{format_cost_delta(wv, ov, _HTML_NIL) if is_cost else _delta(wv, ov)}"
+            "</td></tr>"
         )
 
     badges = f"<span class='badge mode-{mode}'>{mode}</span>"
     if budget is not None:
-        badges += f"<span class='badge budget'>budget ${_fmt(budget)}</span>"
+        badges += f"<span class='badge budget'>budget ${format_cost(budget, _HTML_NIL)}</span>"
     if partial:
         badges += "<span class='badge partial'>live_partial</span>"
 

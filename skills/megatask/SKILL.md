@@ -288,6 +288,10 @@ Recorded in `orchestrator.json → configuration.parallel_tracks`. Never a flag/
 >
 > The R1 gate reports the batch's projected max depth so the choice is made before any worktree exists.
 
+#### One formula, two callers
+
+> The level table above is canonical; `skills/worktask/SKILL.md § Validation check 11` applies it per-stage for standalone worktasks, differing only in `orchestrator_offset` (1 here, 0 standalone). Editing one column of the table without the other is how the two drift — the same chain must project **3** standalone and **4** under `/megatask`. What neither projection can see is an unanticipated hop; that is caught afterwards by `agent-coordination § Depth-refusal self-report`.
+
 ### Concurrency budget
 
 > Distinct from both the total-spawn and depth caps: **20 subagents may run concurrently** by default (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`). Because subagents are background-by-default, a megatask run's live population is roughly `parallel_tracks × (1 orchestrator + 1 stage agent + its nested children)` — at `parallel_tracks = 5` with routine Tier-2 delegation that approaches the cap. `parallel_tracks` derivation bounds itself against this ceiling; raise the env var only when the disk and rate budgets also allow it.
@@ -350,8 +354,9 @@ Per-issue fallback chain (stored in `workspace.json` as `base_branch_source`):
 
 ## Branch Naming
 
-`feature/{issue#}-{slug}` — slug = lowercase title, spaces→hyphens, no special chars, max 50 chars.
-Canonical definition: `../shared/milestone-helpers/SKILL.md`.
+`<type>/{issue#}-{slug}` — type derived from the issue title (`feature` by default, `bugfix`
+for a defect, …); slug = lowercase title, spaces→hyphens, no special chars, max 50 chars,
+truncated on a word boundary. Canonical definition: `../shared/milestone-helpers/SKILL.md`.
 
 ## Shared-Seam Registry
 

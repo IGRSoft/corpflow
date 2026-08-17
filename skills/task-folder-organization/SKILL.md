@@ -113,13 +113,13 @@ When PL0 reruns (e.g. scope change, re-plan), it increments the run index and wr
 
 #### Writers & Readers
 
-- **Writer**: `product-manager` (PL stage) persists Figma PNGs here in-turn via `Bash(curl:*)` and writes `figma-registry.md` (see `agents/product-manager.md § Figma Design Capture`).
+- **Writer**: `product-manager` (PL stage) persists Figma PNGs here in-turn via `Bash(curl:*)` and writes `figma-registry.md` (see `skills/worktask/references/pl0-procedure.md § Figma Design Capture`).
 - **Reader**: `qa-engineer` (QA stage) reads `figma-registry.md` and compares against each persisted frame file (see `agents/qa-engineer.md § Design Comparison`).
 - **`.context/images/` is a distinct directory** — it holds user-attached screenshots/diagrams and DV implementation screenshots (`screenshots.md` manifest), NOT Figma assets. There is no shared-location conflict between the two; do not write Figma screenshots to `images/`.
 
 #### Figma Filename Grammar
 
-Filename grammar for Figma assets: `figma-[screen]-[state]-[node-id].png` (per-frame children use the child name/id; the container overview uses the container name/id). See `agents/product-manager.md § Capture Workflow`.
+Filename grammar for Figma assets: `figma-[screen]-[state]-[node-id].png` (per-frame children use the child name/id; the container overview uses the container name/id). See `skills/shared/figma-capture.md § Capture Workflow`.
 
 ### Required Files
 

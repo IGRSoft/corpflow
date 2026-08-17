@@ -7,7 +7,7 @@ namespaced per track to prevent collisions.
 
 | Subdirectory              | Owner | Contents |
 |---------------------------|-------|----------|
-| `tests/fixtures/worktask/` | DV0a  | `state.sample.json`, plan frontmatter samples, sanitiser-input fixtures, `{{asset:…}}` resolution fixtures for `publish-pl-issue.sh` |
+| `tests/fixtures/worktask/` | DV0a  | `state.sample.json`, `state.multistage.json` + `state.cycle.json` (the replay/cascade chain and its cycle variant), plan frontmatter samples, sanitiser-input fixtures, `{{asset:…}}` resolution fixtures for `publish-pl-issue.sh` |
 | `tests/fixtures/skills/`   | DV0b  | Synthetic-secret fixtures for `scan-secrets.sh`, export samples, git-log samples, clean-input fixtures |
 | `tests/fixtures/hooks/`    | DV0c  | Hook stdin JSON payloads, estimate inputs, TTT spec stub |
 | `tests/fixtures/README.md` | DV0d  | THIS FILE (cross-cutting index; sole owner) |

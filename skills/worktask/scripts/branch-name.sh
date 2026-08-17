@@ -266,7 +266,7 @@ emit_branch() {
 #
 # Emitted BEFORE `branch=` on every rename-mode arm, never after: `branch=<name>` is
 # specified as the script's FINAL stdout line in four places (commands/worktask.md
-# § Step 3c, skills/worktask/SKILL.md, handoff-protocol.md, agents/product-manager.md)
+# § Step 3c, skills/worktask/SKILL.md, handoff-protocol.md, skills/worktask/references/pl0-procedure.md)
 # and consumers tail for it. A new line appended at the end would silently retarget
 # every one of those parses.
 emit_target() {

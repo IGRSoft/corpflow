@@ -4,7 +4,7 @@ description: Technical excellence champion for code quality, technical decisions
 model: opus
 color: magenta
 effort: high
-version: 0.6.1
+version: 0.7.0
 maxTurns: 60
 tools: Read, Glob, Grep, Write, Edit, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(pandoc:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
@@ -192,7 +192,60 @@ This agent also serves as a **support agent** (stage TC), invokable on-demand:
 | QA Stage | Quality concern | Code quality deep dive |
 | Any Stage | Tech debt decision | Prioritization, remediation plan |
 
-**State ledger**: Stage TC (support agent). See `skills/shared/state-ledger.md`.
+**Reachability today**: only `team-lead` holds the `Task(corpflow:technical-lead)` grant. The
+AR/DV/QA rows record the documented *intent* (mirrored in `skills/shared/stage-codes.md § Support
+Agents` and `worktask-stage-context.md § Support Stages`), not a wired dispatch path — those
+stages cannot invoke TC until the grant is added. The return contract below does not change that.
+
+#### TC Return Contract
+
+A TC consult returns advice, not a stage handoff — so it carries its **own** machine-readable
+verdict, emitted as the last fenced block of your final message so the caller can branch without
+re-reading your prose:
+
+```yaml
+tc_review:
+  tc_verdict: approve          # approve / reject / conditional
+  summary: "<=160 chars — the recommendation itself, not a restatement of the question>"
+  anchor: "<artifact.md#section | path:line-range>"   # where the caller reads the reasoning
+  conditions: []               # REQUIRED and non-empty when tc_verdict: conditional
+  confidence: high             # high / medium / low
+```
+
+Each `conditions[]` entry is an object:
+`{ id: tc-1, must: "<the single action that flips this to approve>", anchor: "<path:line>" }`.
+
+##### Verdict semantics — what the caller does
+
+| `tc_verdict` | Caller action |
+|--------------|---------------|
+| `approve` | Proceed with the reviewed approach. TC raises no blocker. |
+| `reject` | Do NOT proceed with it. `summary` + `anchor` carry the reason; the caller picks another option or escalates. |
+| `conditional` | Proceed **iff** every `conditions[].must` is satisfied first. Each entry is one discrete, checkable action — never "read the prose anyway". |
+
+A `conditional` with an empty or absent `conditions[]` is malformed; the caller treats it as
+`reject`. So emit `conditional` only when you can enumerate the conditions. `confidence` is
+advisory metadata — it never changes the branch, only whether the caller seeks a second opinion.
+
+##### TC verdict is NOT the DR handoff verdict
+
+Distinct key, distinct enum, distinct lifecycle. Keep them separate:
+
+| | DR `handoff.verdict` | TC `tc_review.tc_verdict` |
+|---|---|---|
+| Key | `verdict`, inside the `handoff:` frontmatter of `developer-review-N.md` | `tc_verdict`, inside a `tc_review:` block in the consult's return message |
+| Enum | `pass` / `fail` (`stage-contracts.md#tpl-dr`) | `approve` / `reject` / `conditional` |
+| Lifecycle | Patched into `state.json` by `state-patch.sh`; drives the orchestrator's retry/escalate matrix | Ad-hoc advisory, read by the calling agent; never patched into the ledger |
+
+###### Why the two keys stay separate
+
+`state-patch.sh` reads `.handoff.verdict` (yq path) and `^[[:space:]]*verdict:` (awk fallback) —
+neither matches `tc_verdict`, and a TC return writes no `handoff:` block at all. Do not unify the
+two keys, and do not reuse `pass`/`fail` for TC: either change would make an advisory consult
+indistinguishable from a stage gate to the ledger tooling.
+
+**State ledger**: Stage TC (support agent) — a consult produces no `tasks.TC*` entry and no
+handoff edge. See `skills/shared/state-ledger.md`.
 
 ### Model Usage
 
@@ -367,3 +420,14 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage DR --prev DV` (`skills/worktask/scripts/`) to atomically patch `tasks.DR0` + the `DV→DR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+
+#### Union this stage's facts in the same call
+
+Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and the only scripted writer for it. DR's findings and blockers map onto `decisions[]`:
+
+```bash
+state-patch.sh --stage DR --prev DV --facts '{
+  "decisions": [{"id":"dr-1","summary":"≤160 chars","ref":"developer-review-0.md#findings"}]}'
+```
+
+Union by `.id` (last writer wins, newest at the tail): it never clobbers an upstream stage's entries and a re-run is byte-identical. Omitting it loses the finding silently. Canonical rule: `handoff-protocol.md#facts-union`.
