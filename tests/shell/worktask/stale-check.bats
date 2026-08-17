@@ -308,7 +308,25 @@ $(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") || true)"
   done <<< "$sources"
 }
 
-@test "the script never writes: no redirection or patch call in its body" {
-  run grep -nE 'state-patch\.sh|SendMessage|> *"\$STATE|gh (pr|issue)' "$PLUGIN_ROOT/$SCRIPT"
+# The verdict strings name the recovery actions an operator should take, so they
+# contain the same vocabulary a write would — "Reattach via SendMessage", "Re-delegate".
+# Scanning for bare words therefore fails on the advice, not on a write. The guard
+# matches invocation syntax instead. `SendMessage` is gone from the pattern entirely:
+# it is an agent-side tool a bash/python script cannot call, so the word could only
+# ever have matched prose.
+@test "the script never writes: no execution, redirection, or write API in its body" {
+  run grep -nE '(bash|sh|source|exec) +[^ ]*state-patch\.sh|(^|[;&|] *)gh +(pr|issue)|> *"?\$(STATE|OUT)|open\([^)]*["'"'"'][wa]|\.write_text|subprocess|os\.system' \
+    "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
+}
+
+@test "the write guard catches a real call, not just prose" {
+  local probe="$BATS_TEST_TMPDIR/probe.sh"
+  printf '%s\n' 'echo "Reattach via SendMessage with the awaited answer"' > "$probe"
+  run grep -nE '(bash|sh|source|exec) +[^ ]*state-patch\.sh|(^|[;&|] *)gh +(pr|issue)|> *"?\$(STATE|OUT)|open\([^)]*["'"'"'][wa]|\.write_text|subprocess|os\.system' "$probe"
+  assert_failure   # advice prose is not a write
+
+  printf '%s\n' 'bash "$DIR/state-patch.sh" --set x=1' >> "$probe"
+  run grep -nE '(bash|sh|source|exec) +[^ ]*state-patch\.sh|(^|[;&|] *)gh +(pr|issue)|> *"?\$(STATE|OUT)|open\([^)]*["'"'"'][wa]|\.write_text|subprocess|os\.system' "$probe"
+  assert_success   # a real invocation still trips it
 }

@@ -55,7 +55,9 @@ setup() {
 }
 
 @test "edge: empty agent_type with no env fallback yields unknown, not empty" {
-  run env CLAUDE_PROJECT_DIR="$WD" -u CLAUDE_SUBAGENT_TYPE -u CLAUDE_TASK_METADATA_STAGE \
+  # BSD env stops option parsing at the first NAME=VALUE operand, so -u must precede
+  # the assignment or it is taken as the command name (status 127 on macOS).
+  run env -u CLAUDE_SUBAGENT_TYPE -u CLAUDE_TASK_METADATA_STAGE CLAUDE_PROJECT_DIR="$WD" \
     bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"agent_type":"","agent_id":"a1","session_id":"s1"}'
   assert_success
   run jq -e '.subject == "unknown" and .metadata.stage == "unknown"' \

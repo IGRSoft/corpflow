@@ -406,7 +406,12 @@ EOF
   cp body.md body.orig.md
   run env MILESTONE_MODE=1 bash "$WD/lonely/fn-preflight.sh" pr-body --body body.md
   assert_success
-  assert_output --partial "skipped (milestone_mode_env)"
+  # fe795df moved the batch exemption ahead of the sanitiser, so an unreachable
+  # library now returns from the warn branch and never reaches the composition
+  # gate's "skipped (...)" line. What F23 guards is that batch scope is decided
+  # first and does not block — the scope reason must be named either way.
+  assert_output --partial "milestone_mode_env"
+  refute_output --partial "BLOCKED"
   run diff body.md body.orig.md
   assert_success
 }

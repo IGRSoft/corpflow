@@ -46,6 +46,7 @@
       "category": "worktasks",
       "strict": true,
       "commands": [
+        "./commands/agent-report.md",
         "./commands/appstore-iap.md",
         "./commands/appstore-info.md",
         "./commands/appstore-screenshots.md",
