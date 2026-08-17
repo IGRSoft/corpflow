@@ -200,11 +200,24 @@ class OfflineGrading(_Fixture):
         self.assertEqual(result["status"], "stale")
         self.assertNotIn("failed", result)
 
-    def test_a_clarifying_question_is_not_scored_as_a_broken_plan(self):
-        asked = ("The current working directory has no macOS app to ground a plan against. "
-                 "Do you mean a different project directory?")
-        result = grader.grade_record(self.eval_set, self._record(asked))
-        self.assertEqual(result["status"], "clarify")
+    _ASKED = ("The current working directory has no macOS app to ground a plan against. "
+              "Do you mean a different project directory?")
+
+    def test_asking_when_the_case_wanted_a_plan_is_a_failure(self):
+        """Excusing this hid 9 of 32 human-labelled failures from the denominator —
+        the skill answered the wrong question, which is a wrong answer, not an
+        abstention. `expected_outcome` is what separates the two, and every case
+        declares it."""
+        result = grader.grade_record(self.eval_set, self._record(self._ASKED))
+        self.assertEqual(result["status"], "fail")
+        self.assertTrue(result["asked_instead"])
+        self.assertIn("asked-instead-of-planning", result["failed"])
+
+    def test_asking_when_the_case_wanted_a_question_passes(self):
+        engine.find_case(self.eval_set, 1)["expected_outcome"] = "clarify"
+        result = grader.grade_record(self.eval_set, self._record(self._ASKED))
+        self.assertEqual(result["status"], "pass")
+        self.assertFalse(result["asked_instead"])
 
     def test_a_plan_that_merely_lacks_sections_still_fails(self):
         """Absent sections plus no question is a bad plan, not a clarification."""

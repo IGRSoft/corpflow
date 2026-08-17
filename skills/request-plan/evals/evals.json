@@ -90,10 +90,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -125,10 +125,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -160,10 +160,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -195,10 +195,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -230,10 +230,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -265,10 +265,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -300,10 +300,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -335,10 +335,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -370,10 +370,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -405,10 +405,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -440,10 +440,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -475,10 +475,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -510,10 +510,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -545,10 +545,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -580,10 +580,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1483,10 +1483,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1518,10 +1518,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1553,10 +1553,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1588,10 +1588,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1623,10 +1623,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1658,10 +1658,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1693,10 +1693,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1728,10 +1728,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1763,10 +1763,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1798,10 +1798,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1833,10 +1833,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1868,10 +1868,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1903,10 +1903,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1938,10 +1938,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -1973,10 +1973,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -2008,10 +2008,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -2043,10 +2043,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -2078,10 +2078,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -2113,10 +2113,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -2148,10 +2148,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],
@@ -2183,10 +2183,10 @@
         },
         {
           "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites paths that resolve. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two, because the prompt supplies the first",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
           "type": "paths_resolve",
           "values": [
-            2
+            1
           ]
         }
       ],

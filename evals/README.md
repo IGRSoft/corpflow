@@ -106,12 +106,20 @@ under `bypassPermissions` it did not apply at all.
 The regression test for this is a question whose answer can be checked — ask for
 a file census and compare it against `git ls-files`.
 
-### Three outcomes, not two
+### Asking is an answer, and it can be the wrong one
 
-A response that asks a clarifying question instead of answering is reported as
-`CLARIFY` and left out of the pass/fail denominator. The skill declined to
-answer, so its output quality was never exercised — scoring that as a broken plan
-is what made a correct refusal read as 0/2 on the first live run.
+A response that asks a clarifying question instead of planning is graded against
+the case's `expected_outcome`: a pass where the case wanted a question, a failure
+where it wanted a plan. Both are inside the denominator.
+
+An earlier version left every unexpected question **out** of the denominator, on
+the reasoning that the skill declined to answer so its plan quality was never
+exercised. That was wrong once cases carried `expected_outcome`, and it cost a
+whole defect class: 9 of 32 human-labelled failures were plans the skill should
+have written and didn't, and the grader reported all 9 as unscored. The headline
+was computed over 87 cases and read as healthier than the skill was. Failures
+that leave the denominator are worse than failures that stay in it — a metric
+cannot report what it has excused.
 
 ### Case lints
 

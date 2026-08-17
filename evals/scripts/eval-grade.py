@@ -48,13 +48,13 @@ def grade_record(eval_set: dict, record: dict) -> dict:
                 "reason": (f"prompt changed since capture "
                            f"(stored {record.get('prompt_digest')}, now {current_prompt})")}
     result = engine.grade(eval_set, cid, record["response"], repo_resolver)
-    if result["expected_outcome"] == "clarify":
-        # A case that SHOULD draw a question is scored, not excused.
-        result["status"] = "pass" if not result["failed"] else "fail"
-    elif result["outcome"] == "clarify":
-        result["status"] = "clarify"
-    else:
-        result["status"] = "pass" if not result["failed"] else "fail"
+    # Every case declares which outcome it expects, so a question is scorable either
+    # way: excusing an unexpected one hid 9 of 32 human-labelled failures from the
+    # denominator — the exact defect (asked instead of planning) the ask-or-plan rule
+    # was written to fix, made unmeasurable by the grader.
+    result["status"] = "pass" if not result["failed"] else "fail"
+    result["asked_instead"] = (result["expected_outcome"] != "clarify"
+                               and result["outcome"] == "clarify")
     result["assertions_moved"] = (
         record.get("assertions_digest") != engine.assertions_digest(eval_set, cid))
     result["model"] = record.get("model")
@@ -112,16 +112,13 @@ def main(argv_in: list) -> int:
             stale.append(cid)
         results.append(result)
 
-    # Clarifications sit outside pass/fail: the skill declined to answer, so its
-    # plan quality was never exercised and folding it either way would lie.
-    clarified = [r for r in results if r["status"] == "clarify"]
-    graded = [r for r in results if r["status"] not in ("stale", "clarify")]
+    # Reported separately for visibility, but inside the denominator: asking when the
+    # case wanted a plan is a wrong answer, not an abstention.
+    clarified = [r for r in results if r.get("asked_instead")]
+    graded = [r for r in results if r["status"] != "stale"]
     failed = [r for r in graded if r["status"] == "fail"]
-    # Clarify-expected cases ARE scored, so they belong in the per-axis rates;
-    # an unexpected clarification is not, and would otherwise read as a pass.
-    scored = graded + [r for r in clarified if r.get("expected_outcome") == "clarify"]
     by_dimension: dict = {}
-    for result in scored:
+    for result in graded:
         for axis, value in result.get("dimensions", {}).items():
             passed, total = by_dimension.setdefault(axis, {}).get(value, (0, 0))
             by_dimension[axis][value] = (passed + (result["status"] == "pass"), total + 1)
@@ -141,8 +138,8 @@ def main(argv_in: list) -> int:
             if r["status"] == "stale":
                 print(f"  case {r['case_id']}: STALE — {r['reason']}")
                 continue
-            if r["status"] == "clarify":
-                print(f"  case {r['case_id']}: CLARIFY — asked instead of planning; not scored")
+            if r.get("asked_instead"):
+                print(f"  case {r['case_id']}: FAIL — asked instead of planning")
                 continue
             mark = "PASS" if r["status"] == "pass" else "FAIL"
             detail = f" (failed: {', '.join(r['failed'])})" if r["failed"] else ""
@@ -151,7 +148,7 @@ def main(argv_in: list) -> int:
         if missing:
             print(f"  missing captures: {missing}")
         if summary["clarified"]:
-            print(f"  clarified (unscored): {summary['clarified']}")
+            print(f"  asked instead of planning (scored as failures): {summary['clarified']}")
         for axis, rates in summary["by_dimension"].items():
             print(f"\n  by {axis}:")
             for value, (passed, total) in sorted(rates.items()):
