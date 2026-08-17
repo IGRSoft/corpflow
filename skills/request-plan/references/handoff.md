@@ -28,6 +28,8 @@ Emit exactly one of these, with the restated goal as the payload:
 | `/worktask` | `/worktask "<goal>"` | everything else — PL0 dynamic sizing picks the stage set |
 | split | *(no single command)* | XL — recommend splitting into ≤ L sub-tasks first, then re-plan |
 
+### Escalation beats size
+
 Check the two escalation rows before the size rule; both beat size in either direction. Escalating
 ordinary work burns the security pipeline, and leaving a live failure on the standard one delays it.
 Emit exactly one line — a plan that recommends running some other command *instead* of a worktask

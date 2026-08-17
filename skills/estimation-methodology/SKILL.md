@@ -169,6 +169,8 @@ ELSE:
   → /worktask   (PL0 dynamic sizing selects which of the 9 stages run)
 ```
 
+### What the two escalations are not
+
 **--secure is not "security-adjacent".** Hardening a lint, adding a deny-list guard, or renaming a
 branch touches no protected asset — those are standard tier. The test is whether the work itself
 handles a secret or an untrusted input, not whether the word "security" appears nearby.
