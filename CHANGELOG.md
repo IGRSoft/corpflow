@@ -4,153 +4,99 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [4.0.18] — 2026-08-17
+
 ### Fixed
 
-- **Absolute local paths leaked into published PR and issue bodies from two directions.**
-  The Pass-1 strip rule in `publish-pl-issue.sh` `sanitise_body` — and its byte-identical
-  read-back copy in `pr-body-lint.sh` — only knew the home-directory mount conventions
-  (`/Users`, `/home`, `/tmp`, `/var`, `/opt`, `/etc`, `/root`). A checkout under `/Volumes`,
-  `/mnt`, `/media`, `/private`, or `/srv`, or a Windows drive-letter path, walked straight
-  through both guards. The alternation now covers all of them plus a separate drive-letter
-  rule (WSL needs no arm — `/mnt/c/...` is already `/mnt/`), and
-  `tests/shell/worktask/local-path-regex-parity.bats` pins the two copies byte-identical so
-  a prefix can no longer be added to one guard alone.
+- **Absolute local paths leaked into published PR and issue bodies from two directions.** The
+  Pass-1 strip in `publish-pl-issue.sh` and its byte-identical copy in `pr-body-lint.sh` knew only
+  the home-directory mounts (`/Users`, `/home`, `/tmp`, `/var`, `/opt`, `/etc`, `/root`), so a
+  checkout under `/Volumes`, `/mnt`, `/media`, `/private`, `/srv`, or a Windows drive letter walked
+  through both. The alternation now covers all of them, and `local-path-regex-parity.bats` pins the
+  two copies identical. Separately, `fn-preflight.sh pr-body` skipped **all** work under batch and
+  incident routing, publishing unsanitised bodies; the strip now always runs and only the
+  *blocking* behaviour is dropped for those routes.
 
-  Separately, `fn-preflight.sh pr-body` skipped **all** of its work under batch (`/megatask`)
-  and incident (`--emergency`) routing, so those runs published unsanitised bodies. The
-  documented purpose of that exemption was narrower — an unreachable sanitiser library must
-  not wedge those pipelines — so the strip now always runs and only the *blocking* behaviour
-  is dropped for them: the composition requirements (`Test plan` heading, visual-evidence
-  row) are skipped and a missing sanitiser library degrades to a warning instead of exit 1.
-  Non-batch runs still fail closed, byte-for-byte as before.
+- **The comment-density gate blocked legitimate per-declaration DocC.** A 20-case enum with one
+  on-budget `///` per case measured 48% and was rejected. Runs of one-line comments no longer
+  count as a block; every existing fixture keeps its prior verdict.
 
-  `pr-body-lint.sh` stays warn-only by default; promoting `--strict` remains a separate call.
+- **Change→test selection failed closed to FULL for `hooks/lib/` self-test bodies.** `sel_alias_for`
+  now resolves `<name>-selftest.sh` to its owning hook's `.bats` by chaining through the alias
+  table, restoring scoped runs for hook work.
 
-- **The comment-density gate blocked legitimate per-declaration DocC.** A 20-case enum
-  carrying exactly one on-budget `///` per one-line case measured 48% of added lines and
-  was blocked, because the aggregate ratio cannot tell an essay from a long list of
-  compliant one-liners — a list of short declarations is structurally near 1:1 while every
-  block is inside the standard's 1–3-line budget. Scoring now runs on two signals: the
-  **essay share** — comment lines inside a run longer than `CORPFLOW_COMMENT_BLOCK_MAX`
-  (3) — against the existing 40 ceiling, plus the aggregate kept as a looser secondary
-  ceiling (`CORPFLOW_COMMENT_DENSITY_HARD`, default `DENSITY_MAX + 20` = 60). Deriving the
-  secondary ceiling from `DENSITY_MAX` keeps one knob moving both, so raising the ceiling
-  still lets a dense file through.
+- **`commands/agent-report.md` was never registered in `marketplace.json`**, leaving the command
+  invisible to the marketplace since it was added.
 
-  The secondary ceiling is load-bearing, not belt-and-braces: without it, prose trimmed to
-  exactly 3 lines and repeated for every declaration would clear the block-length signal
-  with 72% of the file as comment. Two self-test fixtures pin both directions — the
-  compliant per-declaration case must pass, the essay-per-declaration case must block —
-  and every existing fixture keeps its prior verdict, verified case by case. Blank lines,
-  code lines, and hunk boundaries all end a run, so two hunks' comments never merge into
-  one phantom essay. The gate stays line- and regex-based; no parser was introduced.
-
-- **Change→test selection failed closed to FULL for `hooks/lib/` self-test bodies.** Moving those
-  bodies out of the production hooks left them unmapped, so any change touching one selected the
-  whole suite — a 5.6-minute run where a scoped one would do, and a silent loss of `--changed` for
-  hook work. Failing closed on an unmapped path is correct; the missing mapping was the defect.
-  `sel_alias_for` now resolves `<name>-selftest.sh` to its owning hook's `.bats`, **chaining
-  through the alias table** rather than stripping the suffix — `dv-comment-density-gate.sh` is
-  itself aliased to `comment-density-gate.bats`, so a plain strip would have left one of the four
-  unmapped and failed closed again. Two tests pin the mapping, both verified to fail without it.
+- **Six red tests, all pre-existing.** `env -u` after a `NAME=VALUE` operand is a no-op on BSD
+  `env` (macOS took `-u` as the command name); the `stale-check.sh` write guard matched the word
+  `SendMessage` in its own advice prose rather than any call, and now matches invocation syntax
+  with a falsification test beside it; `fn-preflight` F23 asserted a message the batch exemption
+  stopped emitting when it moved ahead of the sanitiser.
 
 ### Added
 
-- **A duplicate GitHub issue is now caught before `.context/` exists.** `skills/gh-issue-dedup`
-  binds one issue per `.context/` through an anchor, or an exact-title single-hit search — both
-  reachable only *after* the context exists, so they guard re-runs and never the first run of
-  work already filed under different wording. A paraphrased request therefore opened a second
-  issue every time, at the one moment prevention was still possible.
+- **A duplicate GitHub issue is caught before `.context/` exists.** The existing anchor and
+  exact-title guards are reachable only *after* the context exists, so a paraphrased request opened
+  a second issue every time. `/worktask` Step 2a now scores keyword overlap against open-issue
+  titles locally and offers at most three candidates. Advisory and human-confirmed only: it never
+  links, comments, or writes on its own, and any failure — no `gh`, no auth, API error, timeout,
+  zero hits — proceeds to a new context. Batch, incident, and non-interactive runs skip it;
+  `PREFLIGHT_ISSUE_SCAN=0` disables it.
 
-  `/worktask` Step 2a now runs `skills/worktask/scripts/preflight-issue-scan.sh` after the
-  request is parsed and strictly before the context folders are created. It scores keyword
-  overlap against open-issue titles locally — GitHub's issue search ANDs free-text terms, so a
-  server-side query built from a whole request sentence returns nothing for exactly the
-  paraphrase this must catch — and offers at most three candidates through `AskUserQuestion`.
-  Choosing one seeds the dedup anchor with `created_run_index: -1`, the same "predates this
-  context" value a recovered search hit uses, so the publish step comments on that issue instead
-  of opening a second one.
+- **The test-execution gate denies a run that already happened.** Once an authorized invocation is
+  allowed, the identical invocation is denied while the tree is byte-identical, scoped to
+  `run_index`. The fingerprint is HEAD plus `git status --porcelain` **and** `git diff HEAD` — the
+  diff is load-bearing, since porcelain reports only names and status letters. Checked on the allow
+  path only, so suppression can never widen what the gate permits; every unresolvable input allows.
+  `CORPFLOW_TEST_DEDUPE=off` is the hatch.
 
-  The layer is **advisory and human-confirmed only**: it never links, comments, or writes on its
-  own, and the exact-match-only auto-bind in `publish-pl-issue.sh` is byte-unchanged — widening
-  *that* is what would let an unrelated same-worded issue capture a fresh context. It is also
-  non-blocking on the entry path of every worktask: no `gh`, no auth, no remote, an API error, a
-  rate limit, a timeout, a malformed response, or zero hits all proceed to a new context. Batch
-  (`/megatask`), incident (`--emergency`), and `CORPFLOW_NONINTERACTIVE=1` runs skip the question
-  entirely rather than hang on a prompt nobody can answer; `PREFLIGHT_ISSUE_SCAN=0` disables it.
-
-- **The test-execution gate now denies a run that already happened.** Authority answered *who*
-  may execute tests; nothing asked *again?*. A stage re-running a suite against a tree nobody
-  touched burns full wall-clock and, on live runs, real spend, to reproduce a result already on
-  record. Once an authorized invocation is allowed, the identical invocation is denied while the
-  tree is byte-identical, scoped to `run_index` so a run recorded by one stage covers a later
-  stage's identical run. The deny names the prior run's stage and timestamp so the caller cites
-  it rather than working around the gate.
-
-  Suppression is keyed on the **tree**, never on an outcome: the hook is `PreToolUse`, so whether
-  a run passed is unknowable to it. The fingerprint is HEAD plus `git status --porcelain` **and**
-  `git diff HEAD` — the diff is load-bearing, because porcelain reports only names and status
-  letters, so two successive edits to one file look identical to it and a porcelain-only
-  fingerprint would deny the retest after a real fix. Any edit re-enables the command with no
-  flag, which is what keeps test → fix → retest working.
-
-  Checked on the allow path only, so suppression can never widen what the gate permits: a banned
-  stage still gets the authority deny. Build-only verification is never suppressed. Every
-  unresolvable input — no git, no `shasum`, no `run_index` on the ledger — skips the check and
-  allows, matching the hook's fail-open contract. `CORPFLOW_TEST_DEDUPE=off` is the human-only
-  hatch, mirroring `CORPFLOW_TEST_GATE=off`.
-
-  The gate keeps its own sentinels under `.context/logs/.test-runs/` and does **not** read the
-  `full_test_run` / `scoped_test_run` audit rows, which `agent-coordination` binds as audit-only
-  and never a gate. That rule is preserved, not amended.
+- **Unit tests for `conventional-commits-lib.sh`**, which shipped without a dedicated `.bats` —
+  17 cases pinning breaking-change detection, section mapping, bump aggregation, and record
+  collection at the library rather than through its two consumers.
 
 ### Changed
 
-- **The gate no longer forks `sed`, and resolves the stage only for test commands.** It fires on
-  every Bash, Skill and Task call, and paid 3 `jq` forks on each one to resolve a stage that
-  classification never reads — so an ordinary `git status` bought an answer it then discarded.
-  Classification now runs first. `sed` is gone from the classify path entirely (5 forks to 0):
-  `_trim` assigns to a global because `x=$(f)` forks even for a shell function, `strip_assignments`
-  uses `[[ =~ ]]`, and the segment split uses literal `${var//x/y}` passes ordered so `&&` and `||`
-  are consumed before the single-pipe pass. `ledger_settled` reads both its counts in one `jq`.
-  Measured: benign call 13ms → 10ms, test command 36ms → 27ms.
+- **Every markdown section is back within the 1000-char cap** (38 were over, across 28 files).
+  Sections were **split, not cut**: leaf semantics mean a subheading turns one over-cap section
+  into two compliant ones without losing a word. The largest cluster was the nine copies of
+  `State Patch — REQUIRED before return`, each split at its `--facts` obligation.
 
-  The separator in `strip_assignments` is `[[:blank:]]`, not `[[:space:]]`, deliberately: `sed`
-  worked line-by-line, and a whole-string regex matching a newline would consume a first-line
-  assignment and promote the second line's runner into head position — changing which invocations
-  get a redacted `command_head`. The suite caught that as a real behaviour change, not a flaky test.
+- **The gate no longer forks `sed`, and resolves the stage only for test commands.** Classification
+  runs first; `sed` is gone from the classify path entirely (5 forks to 0). Measured: benign call
+  13ms → 10ms, test command 36ms → 27ms. `classify_segment` is 216 lines, down from 270.
 
-- **`classify_segment` is 216 lines, down from 270.** The gradle and xcodebuild action scans moved
-  into `_gradle_subcmd` / `_xcodebuild_subcmd`, which signal through a return code and a global
-  rather than an echoed value, so the split does not reintroduce the forks just removed.
+- **Hook comments compacted to `skills/code-comment-standard`**, and self-test bodies moved to
+  `hooks/lib/` — four hooks shed 660 lines of test code, `test-execution-gate.sh` 1280 → 1078.
+  Each dispatcher fails **closed**: a missing body reports a failure rather than "OK". Code lines
+  are byte-stable in every file.
 
-- **Hook comments compacted to `skills/code-comment-standard`.** The worst file ran 86%
-  comment-to-code against a standard asking for "well below 1:1". What came out was what the
-  standard names: incident history, issue IDs as provenance (`#295`, `OV-56`, `SR2-M1`),
-  verification logs ("measured, not guessed", "QA-confirmed live"), calibration data, and
-  drift-prone `file.md:184` references. Every contract and invariant stayed — exit-0-always, the
-  fail-open direction, `set -f` being load-bearing, the backup-before-write rule. Densities:
-  test-execution-gate 86% → 69%, anchor-preflight 71% → 42%, state-merge 69% → 60%, and four more.
-  Code lines are byte-stable in every file.
+- **`request-plan` v0.3.0**, from an open-coded error analysis of 96 human-labelled traces
+  (`skills/request-plan/evals/failure-taxonomy.md` — 9 categories, rates, and the case lists).
+  Five rules address the format and routing categories: decide once between asking and planning,
+  confirm a file owns the behaviour before planning against it, never assert absence you did not
+  check, always emit all three phase rows, and end with exactly one `/worktask` line.
+  `estimation-methodology` gains a surface check above the size logic, so `--secure` and
+  `--emergency` are decided by what the work touches rather than by how large it is.
 
-- **Self-test bodies moved to `hooks/lib/`.** Four hooks shed 660 lines of test code from
-  production files: `dv-comment-density-gate` (416 → 247), `dv-screenshot-gate` (283 → 206),
-  `comment-standard-context` (142 → 105), plus the gate below. Each dispatcher fails **closed** — a
-  missing body reports a failure rather than "OK". `anchor-preflight` and `precompact-checkpoint`
-  were left alone: an 8-line dispatcher against a 9-line body is churn, not simplification.
+  The analysis then found that **half of all failures were one root cause wearing two faces**:
+  16 of 32 were `buried`-grounding cases (50% failure rate, against 17–29% elsewhere) that either
+  planned against the wrong file or gave up and asked — both the same search stopping before it
+  reached the owning module. § 2 had licensed exactly that, telling the model to "stop gathering
+  once more reading wouldn't move scope, phases, or effort" — a condition unknowable from inside
+  the failure, since a search that has not found the right file cannot tell that more reading
+  would change the plan. It now stops on evidence (name the owning file and what you read in it),
+  searches by behaviour rather than filename, treats one hit as a hypothesis rather than a
+  finding, makes `Explore` mandatory rather than preferred, and gates the "no surface" branch on
+  the search having actually run.
 
-- **`hooks/test-execution-gate.sh` is 1078 lines, down from 1280.** Its 351-line `--self-test`
-  body moved to `hooks/lib/test-execution-gate-selftest.sh`, sourced only under `--self-test` and
-  never on the `PreToolUse` dispatch path — so the hot path resolves no sibling path at hook time,
-  the failure mode just fixed in `state-merge.sh`. That arm alone fails **closed**: a self-test
-  that cannot find its cases reports a failure rather than "OK". The classifier stayed inline
-  deliberately (it is the hot path), and the WHY-comments stayed (they encode incident history).
-  Net effect: smaller than before despite gaining a feature.
-
-- `hooks/test-execution-gate.sh` is now the documented writer of `test_execution_blocked`,
-  `test_execution_deduped`, `test_delegation_observed`, `test_gate_disabled` and
-  `test_dedupe_disabled`. The first three predate this change and were absent from
-  `agent-coordination`'s writers table and action enum entirely.
+- **The eval grader stopped excusing the failure it was built to catch.** An unexpected clarifying
+  question was reported as `CLARIFY` and dropped from the denominator, hiding 9 of 32 known
+  failures and computing the headline over 87 cases instead of 96; it is now scored against the
+  case's `expected_outcome`. The `cites-a-repo-path` threshold dropped from 2 resolving paths to 1:
+  at 2 it failed 8 plans a human passed, because a plan citing the handed file by full path and its
+  neighbours by bare name resolves exactly one. Together these move the harness from TPR 83% /
+  TNR 100% to **TPR 94% / TNR 100%** against the human labels.
 
 ## [4.0.17] — 2026-08-16
 
