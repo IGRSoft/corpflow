@@ -44,6 +44,10 @@ metadata:
 
 The complexity-score → default `test_mode` table lives in `skills/estimation-methodology/SKILL.md § PL0 Stage-Set & Test-Mode by Complexity Score`. When uncertain between `scoped` and `full`, choose `scoped` — the auto-promotion safety net (DV warns, QA promotes on an empty Selected list) catches under-selection.
 
+##### Comment/doc-only diffs
+
+When the planned diff is entirely comments, prose files, or non-executable strings, `build-only` is **selected, not merely available** — the marker-coverage precondition in the table above does not apply, since nothing executable changed. Record the reason in `§ Test Strategy`. Canonical rule (including the "no QA re-run for a post-QA doc-only change" consequence): `skills/shared/testing-strategy.md § Comment/doc-only diffs`.
+
 #### `always_required_tests` — explicit override
 
 Test IDs that must always run (every mode, every run). The ID grammar is per-platform and canonical in `skills/shared/test-selection-syntax.md § Platform handlers`: Apple uses `<TargetName>/<SuiteName>` (suite-terminal — per-function IDs are rejected by the runner), Android the JUnit `<package>.<ClassName>#<methodName>` form, web a file-path + test-name pattern. Platforms whose selective-test handler is still a stub auto-promote the run to module-scope at DV (never `full` — QA remains the sole full-suite authority per the Constraints pointer above), so entries are recorded but not used for DV's selection. Use sparingly for cross-cutting smoke tests not annotated with `@test-required` in source.

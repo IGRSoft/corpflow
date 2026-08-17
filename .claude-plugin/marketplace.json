@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Comprehensive 11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) for task management with developer review, security review, release engineering, incident response, and /megatask dependency-DAG batch orchestration",
-    "version": "4.0.18"
+    "version": "4.0.19"
   },
   "plugins": [
     {
       "name": "corpflow",
       "source": "./",
       "description": "11-stage worktask system (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) with a durable state ledger, developer review, security review, release engineering, incident response, cross-plugin handoffs, and /megatask dependency-DAG batch orchestration",
-      "version": "4.0.18",
+      "version": "4.0.19",
       "author": {
         "name": "igrsoft",
         "url": "https://github.com/igrsoft"

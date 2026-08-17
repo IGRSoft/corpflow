@@ -2,7 +2,7 @@
 name: testing-strategy
 description: Cross-platform testing reference — testing pyramid, AAA pattern, per-platform framework and naming map, DV/QA boundary, and the Test Selection Gate. Reference when planning or implementing tests on any platform (apple, android, web, systems, backend, ai).
 effort: low
-version: 0.2.0
+version: 0.3.0
 ---
 
 # Testing Strategy
@@ -355,6 +355,20 @@ Auto-promotion when no handler` — the cap is `module-scope`, an execution-only
 `development-N.md § Decisions`, never a `test_mode` value (that vocabulary stays exactly
 `build-only | scoped | full`, unchanged and PL0-owned).
 
+### Dispatch discipline — the brief carries the invocation
+
+The orchestrator derives a stage brief's test invocation from `<plan_file>` frontmatter
+(`test_mode`, `always_required_tests`) — never from a runner command pasted out of the repo's
+`CLAUDE.md` / README "core commands" section. Those snippets are full-suite-shaped by design and
+carry no selector, so a DV brief built from one makes DV pre-empt the regression gate. QA's run is
+a gate only because QA produces it.
+
+A DV or QA brief therefore states two things outright: the **resolved mode**, and the **exact
+selector** it implies (`-only-testing:…`, `--tests …`, a pytest nodeid — grammar in
+`skills/shared/test-selection-syntax.md`). Where `always_required_tests` is spelled in a different
+grammar than the platform's selector syntax, DV reconciles the two and records the resolved
+spelling in `development-N.md § Decisions`.
+
 ### Escalation path
 
 A banned stage that believes runtime evidence is needed never self-serves. Ordered:
@@ -463,6 +477,18 @@ Tests are slow (especially UI/simulator bundles). The gate decides — per workt
 #### Effective default
 
 When `<plan_file>` omits `metadata.test_mode`, agents resolve to `scoped` (not `build-only`). This preserves today's "DV runs scoped tests, QA runs the unit+integration suite" semantics for untagged repositories. To unlock `build-only` speedup, a plan must opt in by writing `test_mode: build-only` explicitly **and** the repo should have meaningful marker coverage (parser logs a warning if `< 50%` of test files lack any marker).
+
+#### Comment/doc-only diffs — PL *selects* `build-only`
+
+When every hunk of the planned diff is a comment, a prose file (`docs/`, `*.md`), or a
+non-executable string, no test outcome can change: PL sets `test_mode: build-only` and says why in
+`<plan_file> § Test Strategy`. This is the one case where the marker-coverage precondition above
+does not apply — the mode is chosen because nothing executable changed, not because markers stand
+in for a run. One executable hunk anywhere in the planned diff disqualifies it.
+
+Downstream consequence: a doc-only change landing **after** QA (typically DC, which holds no
+execution authority at all) does not re-trigger QA. FN commits on QA's existing evidence and
+records in `complete-summary-N.md` that the post-QA diff was doc-only.
 
 #### Auto-promotion safety nets
 

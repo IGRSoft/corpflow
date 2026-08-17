@@ -63,6 +63,18 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 - Create complete-summary-N.md summarizing the work (include Stage Timings recap)
 - Create release.md with release notes
 
+#### Pre-commit scope check (build-tool churn)
+
+Before staging, `git status --porcelain` must show only the files this run intended to change.
+Build tools mutate tracked files as a side effect — auto-extracted localization keys, scheme and
+build-configuration rewrites, generated-project or lockfile touch-ups — and those edits belong to
+no stage's diff. Revert them (`git checkout -- <path>`) as the **last** action before `git add`,
+and run nothing that builds afterwards: any build re-creates exactly the churn just removed. FN
+holds no build path, which is what makes it the right stage to own the unwind.
+
+List each reverted path in `complete-summary-N.md`. A path that churns on every run is a repo
+defect worth its own issue, not a per-run cleanup.
+
 #### Conductor attachments
 
 Write `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md` BEFORE `gh pr create`. Templates and data sources: `skills/worktask/references/conductor-attachments.md`. These two files prime Conductor's "Create PR" / "Request Review" actions in any later session and serve as the FN agent's own PR-creation script (read-then-execute, single source of truth).
