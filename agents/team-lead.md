@@ -176,6 +176,8 @@ outcome from the surrounding prose:
 | `reject` | Do not proceed with it. Log it under `coordination-N.md § Blockers` and either take the alternative TC names or escalate to AR. |
 | `conditional` | Carry each `conditions[].must` into `coordination-N.md` as an assigned item and gate **TL3** approval on all of them being closed. |
 
+#### Malformed and non-gate verdicts
+
 A `conditional` whose `conditions[]` is empty or absent is malformed — treat it as `reject` and
 re-consult with a narrower question. `tc_review.anchor` is the one pointer to follow for detail;
 `confidence: low` means seek a second opinion, not a different branch.

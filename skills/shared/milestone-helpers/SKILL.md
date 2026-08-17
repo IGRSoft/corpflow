@@ -52,6 +52,8 @@ This is the same rule as `derive_slug` in `skills/worktask/scripts/branch-lib.sh
 
 Batch branches created before this change keep their `feature/` prefix — generation changed, existing refs did not.
 
+#### Where each constant is canonical
+
 > **Constants are canonical in `megatask`** — with one exception: the branch **type** vocabulary and its derivation are canonical in `skills/shared/git-conventions.md § Branch Naming` (machine-readable copy: `BRANCH_TYPES` + `derive_type` in `branch-lib.sh`); `megatask` owns only the number-interpolation format (`<type>/{issue#}-{slug}`) and the slug cap. Priority labels (P0–P3 + none) and the base-branch resolution chain (issue body → develop → master) stay canonical here in `megatask`. This skill applies them via `scripts/milestone-helpers.sh`; do not redefine — reference the `megatask` skill (or `git-conventions.md` for the type vocabulary) to avoid drift.
 
 ## Function Index (pseudocode spec — implemented in scripts/milestone-helpers.sh)

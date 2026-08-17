@@ -19,6 +19,14 @@ function generateBranchName(issue: { number: number; title: string }, type: stri
     .replace(/[^a-z0-9]+/g, '-')  // Replace non-alphanumeric with hyphens
     .replace(/^-+|-+$/g, '');      // Trim leading/trailing hyphens
 
+  return capSlug(body, type, issue.number);
+}
+```
+
+### Slug capping
+
+```typescript
+function capSlug(body: string, type: string, number: number): string {
   // Cap at 50, dropping the trailing PARTIAL word; one whole word always survives.
   let slug = body;
   if (body.length > 50) {
@@ -26,7 +34,7 @@ function generateBranchName(issue: { number: number; title: string }, type: stri
     if (!slug.includes('-')) slug = body.split('-')[0];
   }
 
-  return `${type}/${issue.number}-${slug}`;
+  return `${type}/${number}-${slug}`;
 }
 ```
 

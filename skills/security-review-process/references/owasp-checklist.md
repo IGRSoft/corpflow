@@ -52,6 +52,11 @@ one. The sub-items below are its completion criteria; the procedure is what prod
 - [ ] Every threat carries a `T<n>` ID and every finding cites the threat it realizes
 - [ ] Every Critical/High threat answered by a finding or a recorded mitigation + control
 - [ ] "No material threat surface" recorded with a reason when the diff crosses nothing
+```
+
+### A04 design principles
+
+```markdown
 - [ ] Security requirements defined
 - [ ] Secure design patterns used
 - [ ] Defense in depth implemented

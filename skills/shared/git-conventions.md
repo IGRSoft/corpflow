@@ -243,6 +243,8 @@ differs from a solo worktask:
 | Ticket segment | optional, from the goal text | always the issue number |
 | Slug budget | 48, shared with the ticket segment | 50, issue number sits outside it |
 
+##### One rule, not two
+
 The budgets differ deliberately and are not being unified; everything else is **one rule,
 not two**. The type vocabulary has a single machine-readable copy (`BRANCH_TYPES`), and
 `milestone-helpers.sh` sources `branch-lib.sh` for `derive_type` rather than keeping its own

@@ -237,6 +237,8 @@ Distinct key, distinct enum, distinct lifecycle. Keep them separate:
 | Enum | `pass` / `fail` (`stage-contracts.md#tpl-dr`) | `approve` / `reject` / `conditional` |
 | Lifecycle | Patched into `state.json` by `state-patch.sh`; drives the orchestrator's retry/escalate matrix | Ad-hoc advisory, read by the calling agent; never patched into the ledger |
 
+###### Why the two keys stay separate
+
 `state-patch.sh` reads `.handoff.verdict` (yq path) and `^[[:space:]]*verdict:` (awk fallback) —
 neither matches `tc_verdict`, and a TC return writes no `handoff:` block at all. Do not unify the
 two keys, and do not reuse `pass`/`fail` for TC: either change would make an advisory consult
@@ -418,6 +420,8 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage DR --prev DV` (`skills/worktask/scripts/`) to atomically patch `tasks.DR0` + the `DV→DR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+
+#### Union this stage's facts in the same call
 
 Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and the only scripted writer for it. DR's findings and blockers map onto `decisions[]`:
 

@@ -41,6 +41,8 @@ bash "${CLAUDE_SKILL_DIR}/scripts/version-bump-from-git.sh" "v1.1.0..HEAD" --exp
 bash "${CLAUDE_SKILL_DIR}/scripts/version-bump-from-git.sh" --file records.bin
 ```
 
+#### Two rules the tables cannot express
+
 The script applies two rules the tables below cannot express:
 
 1. **Highest severity wins across the range.** A range of 3 × `fix:` and

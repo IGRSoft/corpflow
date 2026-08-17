@@ -288,7 +288,9 @@ Recorded in `orchestrator.json → configuration.parallel_tracks`. Never a flag/
 >
 > The R1 gate reports the batch's projected max depth so the choice is made before any worktree exists.
 
-> **One formula, two callers.** The level table above is canonical; `skills/worktask/SKILL.md § Validation check 11` applies it per-stage for standalone worktasks, differing only in `orchestrator_offset` (1 here, 0 standalone). Editing one column of the table without the other is how the two drift — the same chain must project **3** standalone and **4** under `/megatask`. What neither projection can see is an unanticipated hop; that is caught afterwards by `agent-coordination § Depth-refusal self-report`.
+#### One formula, two callers
+
+> The level table above is canonical; `skills/worktask/SKILL.md § Validation check 11` applies it per-stage for standalone worktasks, differing only in `orchestrator_offset` (1 here, 0 standalone). Editing one column of the table without the other is how the two drift — the same chain must project **3** standalone and **4** under `/megatask`. What neither projection can see is an unanticipated hop; that is caught afterwards by `agent-coordination § Depth-refusal self-report`.
 
 ### Concurrency budget
 

@@ -20,6 +20,11 @@ anchor-lint rejects the headings below. Threat-model procedure: `threat-model.md
 
 <!-- or: No material threat surface: [why nothing crosses a boundary]. -->
 
+```
+
+## Compliance and findings
+
+```markdown
 ### OWASP Compliance
 | Category | Status | Notes |
 |----------|--------|-------|

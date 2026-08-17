@@ -298,9 +298,13 @@ Emit one `dispatch_depth_projected` audit row with `metadata: {projected_depth, 
 
 **Warn on the console only when `headroom < 0`.** At `headroom >= 0` the row is written and nothing is printed. That threshold is a deliberate choice, not an oversight: the canonical DV chain — session → `developer` (1) → platform router (2) → Tier-2 specialist (3) — lands on **exactly** the cap with zero headroom, so warning at `headroom == 0` would fire on every DV stage in the repo and teach the operator to skip the line that matters. The zero-headroom fact still reaches the ledger in `metadata.headroom`, which is where `/cost-report` and incident review look. A projection that does not compute `3` for that chain is wrong regardless of whether it prints.
 
-**Never blocks.** A hard gate would fail that same canonical chain, which is legal and routine. Precedent: check 8's `artifact_path_resolved`, and `commands/megatask.md § R1 spawn-budget projections` ("warn-and-continue, never a hard gate"). When it does warn, name megatask's two remediations — raise the env var, or flatten Tier-2 dispatch (`skills/megatask/SKILL.md § Depth remediations`).
+#### Never blocks
 
-**A forecast, not an observation.** An unanticipated hop lands past the cap without this check seeing it; that case is caught after the fact by the refused agent's own `dispatch_flattened` row (`agent-coordination § Depth-refusal self-report`). The two are complements — neither makes the other redundant.
+A hard gate would fail that same canonical chain, which is legal and routine. Precedent: check 8's `artifact_path_resolved`, and `commands/megatask.md § R1 spawn-budget projections` ("warn-and-continue, never a hard gate"). When it does warn, name megatask's two remediations — raise the env var, or flatten Tier-2 dispatch (`skills/megatask/SKILL.md § Depth remediations`).
+
+#### A forecast, not an observation
+
+ An unanticipated hop lands past the cap without this check seeing it; that case is caught after the fact by the refused agent's own `dispatch_flattened` row (`agent-coordination § Depth-refusal self-report`). The two are complements — neither makes the other redundant.
 
 ### On validation failure
 

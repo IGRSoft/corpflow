@@ -175,6 +175,8 @@ and the `--json` object print. Neither output restates these rules.
 | % of total | `stage_tokens / total_tokens × 100` — a **token** share, not a cost share | integer percent, half-up |
 | Estimated remaining | Baseline cost of stages not yet run, from `skills/cost-optimization/references/token-baselines.md` | USD, 2 decimals, half-up |
 
+#### Stages without data
+
 Stages with no `cost-*.jsonl` rows have **no value**, not a zero: the markdown
 `### By Stage` table renders them as `-`, and `--json` omits them from `by_stage`.
 Alert levels come from § Alert Thresholds — not restated in either output.
@@ -190,6 +192,8 @@ Half-up on the exact decimal value, not on a binary float: `0.0555` rounds to
 JSON object to stdout — no markdown, no log lines, nothing else — carrying the same
 numbers as the default markdown summary, computed per § Derived Quantities, Units,
 Rounding.
+
+#### Example object
 
 ```json
 {
@@ -230,11 +234,18 @@ Rounding.
 | `budget_limit` | number | Budget envelope in USD; `null` when unset |
 | `budget_used_percent` | integer | Budget used; `null` when `budget_limit` is `null` |
 | `by_stage` | object | Stage code → `{tokens, model, cost, percent_of_total}`; stages without data are absent |
+
+##### `status` and `alerts`
+
+| Field | Type | Source |
+|-------|------|--------|
 | `status.current_stage` | string | Stage code, or `null` when the worktask is complete |
 | `status.current_stage_state` | string | Ledger stage state (`in_progress`, `blocked`, …) |
 | `status.stages_complete` | array of string | Stage codes, in execution order |
 | `status.estimated_remaining_cost` | number | Estimated remaining |
 | `alerts` | array of object | One entry per crossed threshold: `{threshold_percent, level, action}`, levels and actions verbatim from § Alert Thresholds; `[]` when none crossed |
+
+#### Flag composition
 
 `--json` is **summary-only**. It composes with `--budget-alert` (which shifts the
 `alerts[]` threshold) and with `--export` (the CSV is still written; the JSON still
@@ -393,10 +404,14 @@ prints a warning that the hook is not configured. If the JSONL exists but the
 cache columns are missing or zero, the Cache Performance table renders `n/a`
 and prints a note pointing at the Capture Script update.
 
+#### Fallback under `--json`
+
 Under `--json` the same fallback fires on the same condition, but the warning cannot
 go to stdout — it would break the single-object contract. Instead the command emits
 the **full** schema, populated from the baselines, plus a top-level `warning` string
-inside `cost_tracking`. It never fails, and never emits a partial or empty object:
+inside `cost_tracking`. It never fails, and never emits a partial or empty object.
+
+##### Fallback object
 
 ```json
 {

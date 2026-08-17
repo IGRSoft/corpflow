@@ -46,6 +46,8 @@ does **not** set severity — severity stays the existing table in `agents/secur
 | **D**enial of service | Availability | Can unbounded input, work, or cost be forced? |
 | **E**levation of privilege | Authorization | Can a caller reach an operation or object outside its grant? |
 
+### Applicability
+
 Not every category applies to every entry point. Record the ones with a plausible attacker
 and a reachable path; drop the rest silently.
 

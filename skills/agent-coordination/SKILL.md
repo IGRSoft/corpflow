@@ -216,6 +216,8 @@ review, the audit tail is the single source of truth for what happened.
 | Any agent whose nested `Task()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
 
+#### Test-run counter rows
+
 `full_test_run` / `scoped_test_run` are one row per test **invocation**, keyed on the invocation's
 shape rather than the plan's mode: ≥1 `-only-testing:` flag → scoped, zero selection flags → full.
 `build-only` runs invoke no tests and emit no row. `metadata: {stage, plan_mode, suites_selected,
@@ -375,6 +377,8 @@ for full code patterns.
 
 > **When the depth cap refuses a nested `Task()`, the refused dispatcher MUST append one `dispatch_flattened` row to `.context/logs/audit.jsonl` BEFORE doing that work inline.** Emitting it afterwards is the exact failure this contract exists to prevent: an agent that finishes the specialist's job and then forgets leaves an artifact indistinguishable from one the specialist actually produced.
 
+##### No hook covers this refusal
+
 Unlike a refused *tool* (`PermissionDenied`) there is **no hook for this refusal type** — nothing in the plugin hook vocabulary (`references/hook-monitoring.md`) is depth-shaped, so the row is a self-report, downgraded to advisory only when a future hook supersedes it. A self-report closes the silence; it does not guarantee capture.
 
 | Field | Value |
@@ -385,6 +389,8 @@ Unlike a refused *tool* (`PermissionDenied`) there is **no hook for this refusal
 | `result` | `deferred` — the dispatch did not happen; the work still did |
 | `metadata.attempted_depth` | the depth the refused child would have occupied |
 | `metadata.cap` | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` as resolved at refusal time |
+
+##### Required fields and pairing
 
 All three of `subject`, `attempted_depth`, and `cap` are required. A row saying only that flattening happened does not tell an operator **whose judgment is missing from the output**, which is the only question the row is written to answer.
 

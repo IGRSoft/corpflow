@@ -82,6 +82,8 @@ Runs `skills/self-improvement/scripts/append-labels.sh` per `skills/self-improve
 - **`--dry-run` does not append.** The dataset is committed, and `--dry-run` is documented as read-only; the run reports the row count it *would* have written instead. Re-run without `--dry-run` to record them.
 - `SELF_IMPROVE_LABELS=0` makes the step a no-op.
 
+#### Aggregating the dataset
+
 Aggregate the accumulated dataset with `skills/self-improvement/scripts/label-stats.sh` (`--min-count=<n>` flags repeatedly-corrected targets and categories).
 
 ### Step 6 — Apply Phase

@@ -580,6 +580,8 @@ how a downstream stage silently dropped the entries an upstream stage recorded.
 | `decisions`, `open_questions` | `.id` | last writer wins | survivor moves to the TAIL |
 | `files_modified`, `tests_added` | the string itself | duplicate dropped | first-seen position kept |
 
+##### Ordering and idempotency
+
 Tail placement for the keyed arrays is load-bearing, not cosmetic: the B3 clamp keeps `.[-8:]`,
 so appending is what makes "newest 8 survive" true after a union as well as after an overwrite.
 Never sort (`unique_by` does) — that hands the clamp an arbitrary 8 instead of the newest 8.
