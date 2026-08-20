@@ -14,7 +14,7 @@ Device specifications, layout patterns, typography tables, and Pencil MCP workta
 
 ## Layout Calculator (canonical — use this instead of reading reference files)
 
-`scripts/layout-calc.py` encodes the full 22-device matrix and all proportional/centering formulas from the two reference files below.  One call returns paste-ready JSON for `batch_design`; the model is responsible only for op-string assembly, copy, and color.
+`scripts/layout-calc.py` encodes the full 22-device matrix and every proportional/centering formula from the two reference files below. One call returns paste-ready JSON for `batch_design`; the model owns only op-string assembly, copy, and color.
 
 ### Invocation examples
 
@@ -34,7 +34,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/layout-calc.py appletv-4k-3840x2160 --layout
 
 ### Output schema
 
-Output schema (compact JSON, suitable for direct interpolation into batch_design params):
+Compact JSON, interpolate directly into `batch_design` params:
 ```
 {
   "device":     {"name": str, "w": int, "h": int},
@@ -47,21 +47,21 @@ Output schema (compact JSON, suitable for direct interpolation into batch_design
 
 ### Layouts and reference files
 
-Layouts available: **A** (text top / screenshot bottom-center hero), **B** (text top-left), **C** (screenshot top / text bottom), **D** (text top / large screenshot).  Op-string construction, copy, gradient stops, and color selection stay with the model.
+Layouts: **A** (text top / screenshot bottom-center hero), **B** (text top-left), **C** (screenshot top / text bottom), **D** (text top / large screenshot). Op-string construction, copy, gradient stops, and color stay with the model.
 
-Reference files (`references/device-specs.md`, `references/layout-patterns.md`) remain as the authoritative spec for the formulas encoded above — read them only when you need to verify a formula or extend the device matrix, not in the screenshot-generation happy path.
+`references/device-specs.md` and `references/layout-patterns.md` remain the authoritative spec for the formulas encoded above — read them only to verify a formula or extend the device matrix, never in the generation happy path.
 
 ---
 
 ## Philosophy: Screenshots Are Ads
 
-App store screenshots are the #1 conversion driver. They must sell the app in 2 seconds of scrolling.
+Screenshots are the #1 conversion driver; they must sell the app in 2 seconds of scrolling.
 
 - Lead with **emotional benefit**, not feature name ("Never miss a moment" > "Push notifications")
-- Each screenshot should tell a **micro-story** — a problem the user has and how this app solves it
-- The first screenshot conveys the app's core value proposition
+- Each screenshot tells a **micro-story** — a user problem and how the app solves it
+- The first screenshot conveys the core value proposition
 - Use **power words**: effortless, instant, beautiful, smart, secure, free
-- Vary compositions between screenshots to create visual rhythm
+- Vary compositions between screenshots for visual rhythm
 
 ### Copywriting — Good vs Bad
 
@@ -79,15 +79,11 @@ App store screenshots are the #1 conversion driver. They must sell the app in 2 
 
 ### Loading Tools
 
-All Pencil MCP tools are deferred and must be loaded first:
-
-```
-ToolSearch({ query: "+pencil" })
-```
+Pencil MCP tools are deferred — load them first with `ToolSearch({ query: "+pencil" })`.
 
 ### File Organization
 
-Each platform gets a separate `.pen` file. Each device size is a separate frame within the file. Each slide within a device is a child frame.
+One `.pen` file per platform; one frame per device size; each slide is a child frame of its device.
 
 ```
 AppStore/screenshots/
@@ -100,20 +96,7 @@ AppStore/screenshots/
 
 ### Frame Structure per Device
 
-```
-Document
-├── "iPhone 6.9 (1320x2868)"          # device frame (W×H)
-│   ├── "Slide 1 - Core Value"        # slide frame (W×H)
-│   │   ├── Background                # image (bg.png) or gradient shape
-│   │   ├── Screenshot                # image of app screen, centered with device-like proportions
-│   │   ├── Headline                  # text layer
-│   │   └── Subtitle                  # text layer
-│   ├── "Slide 2 - Find Instantly"    # slide frame
-│   │   └── ...
-│   └── ...
-├── "iPhone 6.9 (1290x2796)"          # next device
-│   └── ...
-```
+Document → device frame `"iPhone 6.9 (1320x2868)"` (W×H) → slide frames `"Slide 1 - Core Value"`, `"Slide 2 - Find Instantly"`, … (each W×H) → four layers per slide, in order: Background (bg.png image or gradient shape), Screenshot (app screen, centered at device-like proportions), Headline text, Subtitle text. Repeat the device frame per device size.
 
 ### Building with batch_design
 
@@ -141,7 +124,7 @@ G(bg, "file", "/absolute/path/to/AppStore/images/bg.png")
 
 #### Add screenshot image (centered, with padding for device-like look)
 
-Geometry values below come from `layout-calc.py iphone-6.9-1320x2868 --layout A` — use the script; do not hand-compute.
+Geometry below comes from `layout-calc.py iphone-6.9-1320x2868 --layout A` — use the script, never hand-compute.
 
 ```typescript
 mcp__pencil__batch_design({
@@ -180,7 +163,7 @@ G(ss, "file", "/absolute/path/to/AppStore/images/01-home.png")
 
 ### Gradient Background Fallback
 
-When no `bg.png` exists, use a gradient fill on the slide frame itself:
+With no `bg.png`, put a gradient fill on the slide frame itself:
 
 ```typescript
 mcp__pencil__batch_design({
@@ -194,22 +177,14 @@ Vary gradient angles per slide: 180°, 135°, 225°, 160°, 200°.
 
 ### Visual Validation
 
-After building each device, validate with a screenshot:
-
-```typescript
-mcp__pencil__get_screenshot({ nodeId: "slide1-node-id" })
-```
+Validate each built device with `mcp__pencil__get_screenshot({ nodeId: "slide1-node-id" })`.
 
 ## Batch Operation Limits
 
-Pencil MCP `batch_design` supports max 25 operations per call. For a typical slide (4 layers: bg, screenshot, headline, subtitle), you can build ~6 slides per batch call.
+Pencil MCP `batch_design` takes max 25 operations per call — at 4 layers per slide (bg, screenshot, headline, subtitle) that is ~6 slides per call.
 
-**Strategy for many devices**: Build one device at a time. For each device, batch all slides in 1-2 calls depending on slide count.
+**Strategy for many devices**: build one device at a time, batching all its slides in 1-2 calls.
 
 ## Export
 
-After generation, screenshots can be exported from Pencil:
-1. Open the `.pen` file in Pencil
-2. Select individual slide frames
-3. Export as PNG at the exact device resolution
-4. Upload to App Store Connect
+From Pencil: open the `.pen` file, select the slide frames, export as PNG at the exact device resolution, upload to App Store Connect.

@@ -20,68 +20,45 @@ Auto-add minimal `#Preview { TypeName(<mocked-args>) }` blocks to SwiftUI View f
 
 ```
 ensure_previews(
-  modified_files: [Path],         # absolute paths from git diff --diff-filter=AMR
-  options: {
-    auto_add: Bool,               # default true; false = dry-run (detect only)
-    write_mode: "in-source"       # OQ1 ratified; "staged-patch" not supported in v1
-  }
+  modified_files: [Path],              # absolute paths from git diff --diff-filter=AMR
+  options: { auto_add: Bool,           # default true; false = dry-run (detect only)
+             write_mode: "in-source" } # OQ1 ratified; "staged-patch" not supported in v1
 ) → {
-  views: [
-    {
-      file: Path,
-      type: String,               # e.g. "ContentView"
-      has_preview: Bool,
-      action: "found" | "added" | "skipped",
-      reason: String?,            # populated when action == "skipped"
-      mock_strategy: String?      # populated when action == "added"
-    }
-  ],
-  errors: [String]                # non-empty → caller throws missing_input
+  views: [{ file: Path,
+            type: String,              # e.g. "ContentView"
+            has_preview: Bool,
+            action: "found" | "added" | "skipped",
+            reason: String?,           # populated when action == "skipped"
+            mock_strategy: String? }], # populated when action == "added"
+  errors: [String]                     # non-empty → caller throws missing_input
 }
 ```
 
 ## Heuristics (planning-0.md alignment)
 
+Detail: `references/view-detection.md` (SwiftSyntax tree walks), `references/mock-data-strategy.md` (full mock derivation tree).
+
 ### H1 — View-file filter
 
-Only process files that are:
+Process a file only when it is path-filtered to a View location (`Sources/**/Views/*.swift`, `Sources/**/UI/*.swift`, `App/**/Views/*.swift`, …; configurable per project) AND declares a `SwiftUI.View` conformance detected via SwiftSyntax, NOT regex — extensions matter.
 
-- Path-filtered to common View locations (`Sources/**/Views/*.swift`, `Sources/**/UI/*.swift`, `App/**/Views/*.swift`, etc.). Configurable per project.
-- Contain at least one `struct X: View` / `class X: View` / extension declaration that conforms to `SwiftUI.View` (detected via SwiftSyntax, NOT regex — extensions matter).
-
-Skip files that:
-
-- Contain only test code (`*Tests.swift`, `*Test.swift`).
-- Are under `tools/SnapshotHost/` (don't bootstrap on our own scaffold).
-- Already contain `#Preview` OR `PreviewProvider` ANYWHERE (A4 invariant — pre-existing wins always).
+Skip: test files (`*Tests.swift`, `*Test.swift`); anything under `tools/SnapshotHost/` (don't bootstrap on our own scaffold); any file already containing `#Preview` OR `PreviewProvider` ANYWHERE (A4 invariant — pre-existing wins always).
 
 ### H2 — View-type detection
 
-Use SwiftSyntax to locate every declaration that:
-
-1. Is `struct` / `class` / `actor` declaration.
-2. Has an inheritance clause that includes `View` (qualified `SwiftUI.View` or bare `View`).
-3. OR an `extension X: View {...}` declaration where `X` is a type declared in the same file (resolve cross-file extension as out-of-scope v1).
+A `struct` / `class` / `actor` whose inheritance clause includes `View` (bare or qualified `SwiftUI.View`), OR an `extension X: View {...}` where `X` is declared in the same file (cross-file extension resolution is out of scope in v1).
 
 If a single file contains 3+ View-conforming types, mark `action: "skipped"`, `reason: "ambiguous_view_target"` — the caller's `args.view` must disambiguate.
 
 ### H3 — Existing-preview detection
 
-A file is treated as "has preview" if ANY of:
-
-- Contains `#Preview` macro invocation (`MacroExpansionExprSyntax` with identifier `Preview`).
-- Contains a type with `PreviewProvider` in its inheritance clause.
-- Contains `#Preview(...) {...}` with arguments (named previews).
+A file "has preview" if it contains a `#Preview` macro invocation (`MacroExpansionExprSyntax` with identifier `Preview`, with or without arguments) or a type with `PreviewProvider` in its inheritance clause.
 
 **Critical**: detection runs BEFORE any edit. If positive, action=`"found"`, no edit attempted, no rollback risk. A4 satisfied.
 
 ### H4 — Initializer-signature parsing
 
-For each target View type, locate the synthesized or explicit `init` SwiftSyntax declaration:
-
-- Walk `MemberDeclListSyntax` for `InitializerDeclSyntax`.
-- If no explicit init present, infer from `VariableDeclSyntax` members marked stored properties (Swift's synthesized memberwise init).
-- Each parameter has a name and type — record them in order.
+Walk `MemberDeclListSyntax` for the target View's `InitializerDeclSyntax`. With no explicit init, infer Swift's synthesized memberwise init from the stored-property `VariableDeclSyntax` members. Record each parameter's name and type in declaration order.
 
 ### H5 — Mock-arg derivation per parameter type
 
@@ -97,47 +74,29 @@ For each target View type, locate the synthesized or explicit `init` SwiftSyntax
 | Concrete struct/class with no-arg init | `TypeName()` | (treated as concrete-init) |
 | Closures / generics / complex / unknown | skip view; emit `// preview-tbd:` | `preview-tbd` |
 
-When a view is skipped: `action: "skipped"`, `reason: "no_mock_for_<P>"` or `"unsupported_init_signature"`. Emit a `// preview-tbd:` comment at the bottom of the file as a user-visible TODO.
+Skipped view: `action: "skipped"`, `reason: "no_mock_for_<P>"` or `"unsupported_init_signature"`, plus a `// preview-tbd:` comment at end of file as a user-visible TODO.
 
 ### H6 — Generation + verification + rollback
 
-1. Build `#Preview` block via SwiftSyntax `MacroExpansionExprSyntax` (NOT string concat) using `MemberDeclListSyntax` rewrite to append at end of file.
-2. Write the modified file.
-3. Run `swift -frontend -parse <file>` (or `swiftc -parse <file>` smoke).
-4. On non-zero: `git checkout -- <file>` to revert; append `errors[]` entry `parse_failed_after_preview_add: <file>`; do NOT re-attempt.
-5. On success: emit `preview_added` audit row + state.json fact update.
+1. Build the `#Preview` block via SwiftSyntax `MacroExpansionExprSyntax` (NOT string concat), appended at end of file through a `MemberDeclListSyntax` rewrite.
+2. Write the modified file, then smoke it: `swift -frontend -parse <file>` (or `swiftc -parse <file>`).
+3. Non-zero → `git checkout -- <file>` to revert; `errors[]` += `parse_failed_after_preview_add: <file>`; do NOT re-attempt.
+4. Zero → emit the `preview_added` audit row + state.json fact update.
 
 ## State.json registration
 
+`facts.previews_added[]` collects one entry per added preview:
+
 ```json
-{
-  "facts": {
-    "previews_added": [
-      { "file": "Sources/UI/ContentView.swift", "type": "ContentView",
-        "action": "added", "mock_strategy": "binding-constant" }
-    ]
-  }
-}
+{ "file": "Sources/UI/ContentView.swift", "type": "ContentView",
+  "action": "added", "mock_strategy": "binding-constant" }
 ```
 
 Array max bounded by `modified_files.length`. Eviction at worktask archival.
 
 ## Audit row
 
-```jsonc
-{
-  "actor": "preview-ensurer",
-  "action": "preview_added",
-  "subject": "<view_type>",
-  "result": "ok",
-  "metadata": {
-    "file": "Sources/UI/ContentView.swift",
-    "view_type": "ContentView",
-    "mock_strategy": "binding-constant",
-    "lines_added": 6
-  }
-}
-```
+One `preview_added` row per added preview: `{actor: "preview-ensurer", action: "preview_added", subject: "<view_type>", result: "ok", metadata: {file, view_type, mock_strategy, lines_added}}`. Field canon: `../dv-screenshot-capture/references/apple-canvas.md § Audit row schema`.
 
 ## Failure escalation
 
@@ -153,20 +112,16 @@ Array max bounded by `modified_files.length`. Eviction at worktask archival.
 
 ## Toolchain compatibility
 
-- swift-syntax pin: `.upToNextMajor(from: "510.0.0")` (ad2).
-- Covers Swift 5.10 (Xcode 15.4) and Swift 6.0+ (Xcode 16.x).
-- Upgrade procedure when Swift 6.x ships `602.x.x`:
-  1. Bump preview-ensurer `Package.swift` floor in a feature branch.
-  2. Run the fixture suite (`skills/preview-ensurer/tests/Fixtures/`).
-  3. If green: open PR with one-line CHANGELOG; otherwise file `apple-developer:ios-developer` triage task.
-- Drift detection: P6 fixture project pins to known-good in `Package.resolved`. CI smoke is the canary.
+swift-syntax pin `.upToNextMajor(from: "510.0.0")` (ad2) covers Swift 5.10 (Xcode 15.4) and Swift 6.0+ (Xcode 16.x). Drift canary: the P6 fixture project pins known-good in `Package.resolved` and CI smokes it.
+
+Upgrade when Swift 6.x ships `602.x.x`: bump the `Package.swift` floor on a feature branch → run the fixture suite (`skills/preview-ensurer/tests/Fixtures/`) → green means PR with a one-line CHANGELOG, red means an `apple-developer:ios-developer` triage task.
 
 ## v1 limitations / future work
 
 - Single-file scope: cross-file extension resolution out of scope (rare in practice; documented for v2).
 - No matrix renders (dark/light/Dynamic-Type) — single shot only. Future: `args.trait_collections`.
 - No `staged-patch` write mode (OQ1 was ratified as in-source only).
-- No support for SwiftUI `@Environment` or `@FocusState` parameters in mocked init (skipped with `preview-tbd:` if encountered).
+- SwiftUI `@Environment` / `@FocusState` parameters are not mocked — skipped with `preview-tbd:`.
 
 ## See also
 

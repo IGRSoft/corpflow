@@ -7,81 +7,31 @@
 
 ## PL0 state.json Initialization (Phase 1)
 
-PL0 (or `commands/worktask.md` Phase 1) creates `.context/state.json` immediately after `mkdir -p .context/`. This seeds the worktask ledger that every subsequent stage reads and patches. The seed is **re-run aware**: `run_index` (and the matching `plan_file`) is the next free planning index `N` computed from any pre-existing `.context/planning-*.md` (`0` on a fresh `.context/`). `run_index` is a **required** schema field (`handoff-protocol.md#state-json-schema`) — never omit it. The canonical executable snippet lives in `commands/worktask.md` Phase 1 step 3a.
+PL0 (or `commands/worktask.md` Phase 1) creates `.context/state.json` right after `mkdir -p .context/`, seeding the ledger every subsequent stage reads and patches. The seed is **re-run aware**: `run_index` (and the matching `plan_file`) is the next free planning index `N` from any pre-existing `.context/planning-*.md` (`0` on a fresh `.context/`). `run_index` is a **required** schema field (`handoff-protocol.md#state-json-schema`) — never omit it.
 
-### Seed snippet — next free planning index
-
-```bash
-mkdir -p .context/
-
-# Re-run aware: next free planning index (0 on a fresh .context/)
-# nullglob: empty glob expands to nothing instead of erroring under zsh
-# ("no matches found") or staying literal under bash.
-setopt null_glob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
-N=0
-for f in .context/planning-*.md; do
-  [ -e "$f" ] || continue
-  i="${f##*planning-}"; i="${i%.md}"
-  case "$i" in *[!0-9]*) continue ;; esac
-  [ "$i" -ge "$N" ] && N=$((i + 1))
-done
-```
+**The canonical executable snippet — `N` computation plus the atomic temp+fsync+rename write — lives in `commands/worktask.md` Phase 1 step 3a. Use it verbatim; do not re-derive it here.** It computes `N` with a nullglob-guarded loop over `.context/planning-*.md`, resolves `WORKSPACE_PATH` as `git rev-parse --show-toplevel` (else `pwd`), and writes the seed shape given in `handoff-protocol.md#pl0-seed` — plus `metadata.workspace_path` and `facts.goal`, both covered below.
 
 ### plan_file shape boundary
 
-Both shapes appear in this file: the state seed below writes the **path** shape
-(`.context/planning-N.md`); every seed snippet further down writes the **basename**
-shape (`planning-N.md`). Both are legal and every reader MUST accept either — the rule and
-its resolution order are canonical in `handoff-protocol.md § plan_file shape boundary`.
-
-### Seed snippet — atomic write
-
-```bash
-# …continued: atomic write of the seeded state.json (same shell session; uses $N)
-# See § Seeded workspace_path.
-WORKSPACE_PATH=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-
-# Atomic write: temp + fsync + rename
-tmp=".context/.state.json.$$.${RANDOM}.tmp"
-cat > "$tmp" <<EOF
-{
-  "version": 2,
-  "worktask_id": "${WORKTASK_ID}",
-  "plan_file": ".context/planning-${N}.md",
-  "platform": "${PLATFORM:-all}",
-  "run_index": ${N},
-  "metadata": { "workspace_path": "${WORKSPACE_PATH}" },
-  "tasks": { "PL0": { "status": "in_progress" } },
-  "facts": {
-    "goal": "${GOAL}",
-    "files_modified": [],
-    "tests_added": [],
-    "decisions": [],
-    "open_questions": [],
-    "verdicts": {},
-    "dispatched_agents": []
-  },
-  "handoffs": {}
-}
-EOF
-sync "$tmp" 2>/dev/null || true
-mv -f "$tmp" .context/state.json
-```
+Both shapes appear in this file: the state seed writes the **path** shape
+(`.context/planning-N.md`); every task-seed snippet below writes the **basename** shape
+(`planning-N.md`). Both are legal and every reader MUST accept either — rule and resolution
+order are canonical in `handoff-protocol.md § plan_file shape boundary`.
 
 ### Seeded goal
 
 `GOAL` is the task description, JSON-escaped and truncated to 240 chars
-(`handoff-protocol.md § facts.goal`). Seed it here rather than leaving it for PL0's state
-patch: nothing in the patch path actually writes the field, so a run where PL completes by
-any other route left it unset — and `publish-pl-issue.sh` then published a kebab-slug issue
-title with an empty Summary (issue #375). PM still refines it; the seed only guarantees it
-is never absent. On a `/megatask` per-issue run the issue title is the goal.
+(`handoff-protocol.md § facts.goal`). Seed it here rather than leaving it to PL0's state patch:
+nothing in the patch path writes the field, so a run where PL completed by any other route left it
+unset — and `publish-pl-issue.sh` then published a kebab-slug issue title with an empty Summary
+(issue #375). PM still refines it; the seed only guarantees it is never absent. Under `/megatask`
+the issue title is the goal.
 
 ### Seeded workspace_path
 
-`metadata.workspace_path` is the absolute root of the tree the worktask owns. It is seeded
-here, unconditionally, on every run — a `/megatask` per-issue run overwrites it with the
-per-issue worktree path, but no run may leave it unset.
+`metadata.workspace_path` is the absolute root of the tree the worktask owns, seeded
+unconditionally on every run — a `/megatask` per-issue run overwrites it with the per-issue
+worktree path, but no run may leave it unset.
 
 #### Readers that silently no-op without it
 
@@ -92,21 +42,21 @@ disables all three at once rather than failing loudly:
 |---|---|
 | `commands/worktask.md § Workspace-root cross-check` | compares the orchestrator root against itself → always equal |
 | `skills/worktask/scripts/dv-tree-preflight.sh` `resolve_assigned()` | resolves empty → warn, exit 0 (never blocks) |
-| `agents/developer.md § Worktree cwd discipline` path-prefix check | gated on "when set" → never runs |
+| `agents/developer.md § cwd discipline` path-prefix check | gated on "when set" → never runs |
 
-That is not hypothetical: a DV stage once pinned itself to a stale worktree of a *different*
-clone, wrote nothing, and passed all three checks. Isolation is not assignment — see
+Not hypothetical: a DV stage once pinned itself to a stale worktree of a *different* clone, wrote
+nothing, and passed all three checks. Isolation is not assignment —
 `workspace-modes.md § Sibling-worktree hazard`.
 
 ### Post-seed notes
 
-`facts.dispatched_agents: []` is seeded (additive) so the orchestrator loop appends per-`task_id` dispatch entries in place. The other additive fields (`tasks.<ID>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are written on demand — never seeded; their absence is meaningful. Schema: `handoff-protocol.md#state-json-schema`.
+`facts.dispatched_agents: []` is seeded (additive) so the orchestrator loop appends per-`task_id` entries in place. The other additive fields (`tasks.<ID>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are written on demand, never seeded — their absence is meaningful. Schema: `handoff-protocol.md#state-json-schema`.
 
-Subsequent stage agents read `.context/state.json` first. Its absence is a hard failure, not a fallback mode.
+Subsequent stage agents read `.context/state.json` first; its absence is a hard failure, not a fallback mode.
 
 ## Hook Installation
 
-PL0 (or `commands/worktask.md` Phase 1) MUST verify the `state-merge.sh` SubagentStop hook is installed before proceeding. This hook is the Layer 2 safety net — it patches `state.json` from artifact frontmatter when stage agents forget to self-patch (Layer 1) or when the orchestrator's Step 6.5 check is skipped.
+PL0 (or `commands/worktask.md` Phase 1) MUST verify the `state-merge.sh` SubagentStop hook is installed first. It is the Layer 2 safety net: it patches `state.json` from artifact frontmatter when a stage agent forgets to self-patch (Layer 1) or the orchestrator's Step 6.5 check is skipped.
 
 ### Install snippet
 
@@ -136,21 +86,6 @@ Before seeding the stage chain, verify:
 3. The plugin's `plugin.json` registers the SubagentStop hook (this is declarative — no project-local action needed)
 
 If hook source is not found (e.g. plugin root unresolved — the fallback line left unsubstituted), log a warning and continue — the plugin.json-registered hook will still fire via the plugin hook system. The project-local copy is a belt-and-suspenders fallback for environments where plugin hooks are not supported.
-
-### Sample seed using context_refs
-
-`planFile` is the **basename** shape — see § plan_file shape boundary.
-
-```bash
-state-patch.sh --task-create AR0 --metadata "$(jq -n \
-  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
-  '{stage:"AR", agent:"corpflow:software-architector", model:"opus",
-    description:"Design dark mode architecture with theme switching",
-    error_file:".context/errors/software-architector.md",
-    state_file:".context/state.json",
-    context_refs:(["\($plan)#requirements","\($plan)#scope","\($plan)#acceptance-criteria"]|tojson),
-    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
-```
 
 ## Multi-Issue Initialization → `/megatask`
 
@@ -263,52 +198,18 @@ For implementation details, use `file:line` references.
 
 ## PL Creates Subsequent Tasks
 
-After planning completes, PL0 creates stage tasks based on complexity score. Each task is self-describing with `metadata.agent` specifying the executor and `metadata.model` specifying the model alias. **Capture returned task IDs** to correctly set up dependency chains.
+After planning completes, PL0 creates stage tasks from the complexity score. Each task is self-describing: `metadata.agent` names the executor, `metadata.model` the model alias. The ledger key IS the id — nothing to capture from the call.
 
-### Setup — flags
+### Canonical seed call
 
-```typescript
-// Example: PL0 creates stages for a medium-complexity task
-const worktaskId = "dark-mode-2025";
-// requires_screenshots: the value PL0 stamped on the plan frontmatter, computed
-// by `skills/worktask/scripts/detect-ui-change.sh <plan> --platform <p>`
-// (true whenever the change set touches UI; fail-safe true on detector error).
-// Read it back from the plan frontmatter and propagate to DV + QA below.
-const requiresScreenshots = planMetadata.requires_screenshots; // boolean
-```
-
-### AR0 task
-
-AR0 is a tier default at score ≥11, not a mandate — PL0 resolves its inclusion against
-`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria (PL0 authority)` and records
-the outcome in `skipped_stages`/`added_stages`. The block below is the AR-included branch; when
-AR is excluded, skip this seed entirely and chain DV0 directly off PL0.
-
-#### AR0 seed
+Every stage seed is this one call with the per-stage values from the table below.
+`$PLAN_FILE` is the **basename** shape (§ plan_file shape boundary); `$REQUIRES_SCREENSHOTS` is
+the boolean PL0 stamped on the plan frontmatter via
+`skills/worktask/scripts/detect-ui-change.sh <plan> --platform <p>` (fail-safe `true` on detector
+error), read back and propagated so the capture skill and `dv-screenshot-gate` fire
+deterministically.
 
 ```bash
-# The ledger key IS the id — nothing to capture from the call.
-state-patch.sh --task-create AR0 --metadata "$(jq -n \
-  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
-  '{stage:"AR", agent:"corpflow:software-architector", model:"opus",
-    description:"Design dark mode architecture with theme switching",
-    error_file:".context/errors/software-architector.md",
-    context_refs:(["exploration.md#findings","\($plan)#requirements"]|tojson),
-    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
-```
-
-### DV0 task
-
-**context_refs seeding rule**: an `architecture-${N}.md` anchor appears in DV0's `context_refs` if
-and only if AR0 was included. When AR is excluded it MUST NOT appear in any downstream
-`context_refs`, and no `metadata.architecture_ref` is stamped on DV0/DR0/QA0.
-
-#### DV0 seed
-
-```bash
-# requires_screenshots is the value PL0 stamped on the plan frontmatter (set by
-# detect-ui-change.sh), propagated so the capture skill + dv-screenshot-gate fire
-# deterministically.
 state-patch.sh --task-create DV0 --metadata "$(jq -n \
   --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" --argjson shots "$REQUIRES_SCREENSHOTS" \
   '{stage:"DV", agent:"corpflow:developer", model:"opus",
@@ -318,31 +219,28 @@ state-patch.sh --task-create DV0 --metadata "$(jq -n \
     plan_file:$plan, requires_screenshots:$shots, worktask_id:$wid, priority:"medium"}')"
 ```
 
-### DR0 task
+### Per-stage values
 
-```bash
-state-patch.sh --task-create DR0 --metadata "$(jq -n \
-  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
-  '{stage:"DR", agent:"corpflow:technical-lead", model:"sonnet",
-    description:"Review code quality, patterns, and platform-specific best practices",
-    error_file:".context/errors/technical-lead.md",
-    context_refs:(["\($plan)#requirements","architecture-0.md#decisions","development-0.md#deviations"]|tojson),
-    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
-```
+`priority:"medium"`, `plan_file`, `worktask_id` and `error_file: ".context/errors/<agent>.md"` are
+the same on every row. Drop `--argjson shots` / `requires_screenshots` on rows that do not list it.
 
-### QA0 task
+| Task | stage / agent / model | `context_refs` | `requires_screenshots` |
+|---|---|---|---|
+| AR0 | `AR` / `corpflow:software-architector` / `opus` | `exploration.md#findings`, `<plan>#requirements` | — |
+| DV0 | `DV` / `corpflow:developer` / `opus` | `<plan>#requirements`, `architecture-0.md#decisions`, `coordination-0.md#fan-out` | yes |
+| DR0 | `DR` / `corpflow:technical-lead` / `sonnet` | `<plan>#requirements`, `architecture-0.md#decisions`, `development-0.md#deviations` | — |
+| QA0 | `QA` / `corpflow:qa-engineer` / `sonnet` | `<plan>#acceptance-criteria`, `developer-review-0.md#verdict` | yes (QA's Q1.5 manifest ingestion / advisory-skip reads it) |
 
-```bash
-# Same requires_screenshots flag PL0 stamped on the plan frontmatter — QA's Q1.5
-# manifest ingestion / advisory-skip reads it (agents/qa-engineer.md).
-state-patch.sh --task-create QA0 --metadata "$(jq -n \
-  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" --argjson shots "$REQUIRES_SCREENSHOTS" \
-  '{stage:"QA", agent:"corpflow:qa-engineer", model:"sonnet",
-    description:"Test theme switching, contrast ratios, persistence",
-    error_file:".context/errors/qa-engineer.md",
-    context_refs:(["\($plan)#acceptance-criteria","developer-review-0.md#verdict"]|tojson),
-    plan_file:$plan, requires_screenshots:$shots, worktask_id:$wid, priority:"medium"}')"
-```
+### AR0 task
+
+AR0 is a tier default at score ≥11, not a mandate — PL0 resolves inclusion against
+`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria (PL0 authority)` and records the
+outcome in `skipped_stages`/`added_stages`. When AR is excluded, skip its seed entirely and chain
+DV0 directly off PL0.
+
+**context_refs seeding rule**: an `architecture-${N}.md` anchor appears in DV0's `context_refs` if
+and only if AR0 was included. When AR is excluded it MUST NOT appear in any downstream
+`context_refs`, and no `metadata.architecture_ref` is stamped on DV0/DR0/QA0.
 
 ### Dependency chain
 
@@ -408,32 +306,25 @@ PL0 → AR0 → TL0 ─┤→ DV1 ─├→ DR0 → QA0
                   └→ DV2 ─┘
 ```
 
-#### Narrow scope & DV1 stream
+#### Narrow scope & seed the streams
+
+TL first narrows DV0 to the primary stream, then seeds DV1…DVN with the § Canonical seed call —
+same `stage`/`agent`/`model`/`context_refs` as the DV0 row, only `description` differs (each names
+the paths that stream owns). All DVN share `error_file: ".context/errors/developer.md"` with
+distinct section headers per sub-task (`## DV1 Retry N`, `## DV2 Retry N`).
+
+##### Stream seed calls
 
 ```bash
-# TL narrows DV0 scope to the primary stream.
 state-patch.sh --task-meta DV0 --set \
   '{"description":"Implement theme color tokens (owns: Source/Theme/Colors/)"}'
 
-# TL seeds parallel streams. All DVN share the same error_file (developer.md)
-# with distinct section headers per sub-task (## DV1 Retry N, ## DV2 Retry N).
+# DV1: "Add toggle and persistence (owns: Source/Settings/Theme/)"
+# DV2: "Create dark variants for all image assets (owns: Assets/Dark/)"
 state-patch.sh --task-create DV1 --metadata "$(jq -n \
   --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
   '{stage:"DV", agent:"corpflow:developer", model:"opus",
     description:"Add toggle and persistence (owns: Source/Settings/Theme/)",
-    error_file:".context/errors/developer.md",
-    context_refs:(["\($plan)#requirements","architecture-0.md#decisions","coordination-0.md#fan-out"]|tojson),
-    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
-```
-
-#### DV2 stream
-
-```bash
-# …continued: second parallel stream
-state-patch.sh --task-create DV2 --metadata "$(jq -n \
-  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
-  '{stage:"DV", agent:"corpflow:developer", model:"opus",
-    description:"Create dark variants for all image assets (owns: Assets/Dark/)",
     error_file:".context/errors/developer.md",
     context_refs:(["\($plan)#requirements","architecture-0.md#decisions","coordination-0.md#fan-out"]|tojson),
     plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
@@ -454,10 +345,13 @@ state-patch.sh --task-block DR0 --on DV1,DV2
 
 DV agent splits during its own execution. Sub-tasks are children of DV0 — sequential, not parallel.
 
-#### DV1 sub-task
+#### DV1/DV2 sub-tasks & sequencing
+
+Same § Canonical seed call, sharing `developer.md`; `context_refs` drops `coordination-0.md#fan-out`
+(no TL fan-out here) and only `description` differs — e.g. DV1 "Create semantic color tokens for
+light/dark themes", DV2 "Add toggle and persistence for theme preference".
 
 ```bash
-# Developer splits DV0 into focused sub-tasks, which share developer.md.
 state-patch.sh --task-create DV1 --metadata "$(jq -n \
   --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
   '{stage:"DV", agent:"corpflow:developer", model:"opus",
@@ -465,21 +359,8 @@ state-patch.sh --task-create DV1 --metadata "$(jq -n \
     error_file:".context/errors/developer.md",
     context_refs:(["\($plan)#requirements","architecture-0.md#decisions"]|tojson),
     plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
-```
 
-#### DV2 sub-task & sequencing
-
-```bash
-# …continued: second sub-task, then block both on DV0
-state-patch.sh --task-create DV2 --metadata "$(jq -n \
-  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
-  '{stage:"DV", agent:"corpflow:developer", model:"opus",
-    description:"Add toggle and persistence for theme preference",
-    error_file:".context/errors/developer.md",
-    context_refs:(["\($plan)#requirements","architecture-0.md#decisions"]|tojson),
-    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
-
-# Sequential: DV1 and DV2 blocked by DV0
+# Sequential, not parallel: both blocked by DV0 (contrast the TL split above).
 state-patch.sh --task-block DV1 --on DV0
 state-patch.sh --task-block DV2 --on DV0
 ```

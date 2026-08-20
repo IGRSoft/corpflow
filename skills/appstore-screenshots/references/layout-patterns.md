@@ -1,12 +1,13 @@
 # Layout Patterns (iOS/iPad/macOS)
 
-All values use proportional `W*ratio` and `H*ratio` formulas — they scale automatically to any device canvas.
+Proportional `W*ratio` / `H*ratio` formulas — they scale to any device canvas. Encoded in
+`../scripts/layout-calc.py`; read here only to verify a formula.
 
 **IMPORTANT: Never use the same layout twice in a row.** Rotate through patterns.
 
 ## Screenshot Centering (Phone-like proportions)
 
-The screenshot image is displayed with phone-like proportions inside the slide frame. Corner radius gives a device-like appearance.
+The screenshot sits at phone-like proportions inside the slide frame; corner radius gives the device-like look.
 
 ```python
 PHONE_ASPECT = 19.5 / 9  # ~2.167

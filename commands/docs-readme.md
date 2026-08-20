@@ -17,18 +17,18 @@ Update README files based on code changes, keeping documentation in sync with im
 ## Usage
 
 ```
-/docs-readme
-/docs-readme --path <directory>
-/docs-readme --section [installation|usage|api|contributing]
+/docs-readme [--path <dir>] [--section installation|usage|api|contributing] [--from-changes] [--validate] [--platform <target>]
 ```
 
 ## Options
 
-- `--path <dir>` - Update README in specific directory
-- `--section <name>` - Update specific section only
-- `--from-changes` - Generate from recent git changes
-- `--validate` - Check README accuracy without updating
-- `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all)
+| Option | Values | Purpose |
+|--------|--------|---------|
+| `--path <dir>` | any directory | Update the README in that directory (default: every README found) |
+| `--section <name>` | `installation`, `usage`, `api`, `contributing` | Update that section only |
+| `--from-changes` | — | Derive updates from recent git history instead of the current tree |
+| `--validate` | — | Report accuracy issues only; write nothing |
+| `--platform <target>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Platform context (default: `all`) |
 
 ## Examples
 
@@ -36,164 +36,37 @@ Update README files based on code changes, keeping documentation in sync with im
 /docs-readme
 /docs-readme --path packages/auth
 /docs-readme --section installation --from-changes
+/docs-readme --validate --platform apple
 ```
 
 ## Output Format
 
-### Update Report
-```markdown
-# README Update Report
+| Section | Shape |
+|---------|-------|
+| `## Files Updated` | `File \| Sections Changed \| Status` — ✅ Updated or ⏭️ Skipped (nothing to change) |
+| `## Changes Made` | Per file → per section: `**Before**` / `**After**` fenced snippets (or `**Added**` for new content), then a one-line `**Reason**` |
+| `## Validation Results` | `Check \| Status \| Details` for Links, Code Examples, Version Numbers, Dependencies |
+| `### Issues to Fix Manually` | Numbered list of what the command will not write itself, each carrying the corrected value |
 
-## Files Updated
+Every change carries a `**Reason**` naming the code change that caused it — never restate the diff.
 
-| File | Sections Changed | Status |
-|------|------------------|--------|
-| README.md | Installation, Usage | ✅ Updated |
-| packages/auth/README.md | API, Examples | ✅ Updated |
-| packages/ui/README.md | No changes | ⏭️ Skipped |
+## Generated README Structure
 
----
+Sections in this order, each regenerated from its source rather than hand-written.
 
-## Changes Made
-
-### README.md
-
-#### Installation Section
-**Before**:
-```bash
-npm install
-```
-
-**After**:
-```bash
-npm install
-
-# Required environment variables
-cp .env.example .env
-```
-
-**Reason**: New environment variables added in recent changes
-
-#### Usage Section
-**Added**: Dark mode configuration example
-```javascript
-// Enable dark mode
-app.configure({
-  theme: 'dark' // or 'light' or 'system'
-});
-```
-
-**Reason**: New feature added
-
----
-
-### packages/auth/README.md
-
-#### API Section
-**Added**: SSO endpoints documentation
-```markdown
-### SSO Authentication
-
-#### POST /auth/sso/callback
-Handle OAuth callback from identity provider.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| provider | string | OAuth provider (okta, azure) |
-| code | string | Authorization code |
-```
-
-**Reason**: New SSO feature implemented
-
----
-
-## Validation Results
-
-| Check | Status | Details |
-|-------|--------|---------|
-| Links | ⚠️ | 2 broken internal links |
-| Code Examples | ✅ | All examples valid |
-| Version Numbers | ✅ | Up to date |
-| Dependencies | ⚠️ | Missing new peer dep |
-
-### Issues to Fix Manually
-
-1. **Broken Link**: `docs/api.md` → should be `docs/api/README.md`
-2. **Missing Dependency**: Add `@auth/core` to peer dependencies list
-```
-
-### README Template
-```markdown
-# Package Name
-
-Brief description of the package.
-
-## Installation
-
-```bash
-npm install package-name
-```
-
-## Quick Start
-
-```javascript
-import { feature } from 'package-name';
-
-// Basic usage
-const result = feature.doSomething();
-```
-
-## Features
-
-- Feature 1
-- Feature 2
-- Feature 3
-
-## API Reference
-
-### `function(param)`
-
-Description of the function.
-
-**Parameters**
-| Name | Type | Default | Description |
-|------|------|---------|-------------|
-| param | string | - | Parameter description |
-
-**Returns**: `ReturnType` - Description
-
-**Example**
-```javascript
-const result = function('value');
-```
-
-## Configuration
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| option1 | string | 'default' | Option description |
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md)
-
-## License
-
-MIT
-```
-
-## Section Templates
-
-| Section | Auto-Generated From |
-|---------|---------------------|
-| Installation | package.json dependencies |
-| Usage | Code examples in tests |
-| API | JSDoc comments |
-| Configuration | Config schema/types |
+| Section | Generated from |
+|---------|----------------|
+| Title + one-line description | package.json, repo metadata |
+| Installation (command + required env setup) | package.json dependencies |
+| Quick Start / Usage (smallest runnable snippet) | Code examples in tests |
+| Features | Shipped capabilities |
+| API Reference — per symbol: description, `Name \| Type \| Default \| Description` table, **Returns**, example | JSDoc comments |
+| Configuration — `Option \| Type \| Default \| Description` | Config schema/types |
 | Contributing | CONTRIBUTING.md template |
+| License | LICENSE file |
 
 ## Integration
 
-This command works with:
-- `/docs-audit` - Find README issues
-- `/release-notes` - Update for releases
+- `/docs-audit` — find the README issues this command fixes
+- `/docs-release-notes` — release-time documentation pass
+- `agents/technical-writer.md` — owning agent

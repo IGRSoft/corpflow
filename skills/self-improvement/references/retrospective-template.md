@@ -15,7 +15,7 @@ Canonical shape of `.context/learnings.md`. The self-improvement skill fills in 
 
 ## Section 1 — What Worked (mandatory)
 
-Agents whose output survived user review unchanged. Positive signal (4Ls: "Liked").
+Agents whose output survived user review unchanged — positive signal (4Ls: "Liked"). One bullet per agent, naming the artifact it produced.
 
 ```markdown
 ## What Worked
@@ -28,21 +28,20 @@ If no agents fit → write `- (none — every in-scope artifact was edited)`.
 
 ## Section 2 — What the User Changed (mandatory if any diff)
 
-Flat bullet list, one bullet per diff hunk. Keep it short — detail belongs in the Proposals section.
+One bullet per diff hunk: path, line range, category, one-line summary. Detail belongs in Proposals.
 
 ```markdown
 ## What the User Changed
 
 - `.context/development-N.md` L42–55 — `tone` — reworded approach summary
-- `.context/development-N.md` L102 — `accuracy` — corrected API name
 - `src/Models/User.swift` L18 — `domain-knowledge` — added Sendable conformance
 ```
 
 ## Section 3 — Proposed Updates (mandatory if any in-scope change)
 
-Numbered checklist. **Each item is independently approvable.** The orchestrator reads which boxes the user ticked and passes only those to `prompt-engineer`.
+Numbered checklist. **Each item is independently approvable** — the orchestrator passes only the ticked boxes to `prompt-engineer`.
 
-**Ordering:** sort proposals by `confidence desc` then `category` then `target path asc`. High-confidence items appear first so the user approves the strongest signals quickly.
+**Ordering:** `confidence desc`, then `category`, then target path asc — high-confidence items first, so the user approves the strongest signals quickly.
 
 ### Proposed Updates Example
 
@@ -58,14 +57,9 @@ Numbered checklist. **Each item is independently approvable.** The orchestrator 
   - **Target location:** `agents/developer.md` line 18 (end of Constraints block)
   - **Version bump:** `version:` minor (new constraint)
   - **Rationale:** Swift 6 strict concurrency requires Sendable; repeated correction signals missing domain knowledge.
-
-- [ ] **#2 — skills/worktask/SKILL.md — `structure` — confidence: medium**
-  - **Observed:** user restructured the Orchestrator Execution Loop header hierarchy
-  - **Proposed edit:** (diff block showing new hierarchy)
-  - **Target location:** lines 44–72
-  - **Version bump:** patch
-  - **Rationale:** cleaner cognitive load; confirmed once.
 ~~~
+
+Every proposal repeats that shape — checkbox header, Observed, Proposed edit, Target location, Version bump, Rationale — only the content varies (a `structure`/medium item would carry a diff block as its edit and a patch bump).
 
 ## Section 4 — Deferred (Low Confidence)
 
@@ -77,11 +71,9 @@ Observational only. The user can skim but is not asked to act.
 - `.context/planning-0.md` L8 — single-word wording tweak (`approach` → `strategy`). Confidence: low. Park until N≥2 similar tweaks accumulate across worktasks.
 ```
 
-If cross-worktask accumulation ever ships (v2), items escalate from Deferred into Proposed when pattern count ≥ 2.
-
 ## Section 5 — Out-of-Context Discards
 
-Count only. The full list lives in `.context/logs/self-improve-<ts>.log` so `learnings.md` stays user-focused.
+Count only; the full list lives in `.context/logs/self-improve-<ts>.log`, keeping `learnings.md` user-focused.
 
 ```markdown
 ## Out-of-Context Discards
@@ -91,7 +83,7 @@ Count only. The full list lives in `.context/logs/self-improve-<ts>.log` so `lea
 
 ## Footer — Approval Flow
 
-Always include this block so the user knows what happens next.
+Always include this block; it is how the user learns what happens next.
 
 ```markdown
 ---

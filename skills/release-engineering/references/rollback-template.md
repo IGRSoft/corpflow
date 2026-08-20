@@ -29,10 +29,7 @@ Initiate rollback if:
 
 3. **Revert application**
    ```bash
-   # Example commands
-   kubectl rollout undo deployment/app
-   # or
-   git revert HEAD && git push
+   kubectl rollout undo deployment/app   # or: git revert HEAD && git push
    ```
 ~~~
 
@@ -43,8 +40,7 @@ Initiate rollback if:
 
 4. **Revert database** (if applicable)
    ```sql
-   -- Run rollback migration
-   -- Verify data integrity
+   -- Run rollback migration, then verify data integrity
    ```
 
 5. **Verify rollback**
@@ -58,8 +54,7 @@ Initiate rollback if:
    - Plan fix for next release
 
 ### Data Considerations
-- [Describe any data migration impacts]
-- [Describe data recovery steps if needed]
+- [Data migration impacts, and recovery steps if needed]
 
 ### Communication
 - [ ] Internal: [channel]

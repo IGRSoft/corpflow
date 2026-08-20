@@ -2,22 +2,13 @@
 
 ## Design Tokens via Pencil Variables
 
-Instead of hardcoded color values, use Pencil's variable system.
-
-### Reading Existing Tokens
-
-Always check for existing tokens first:
-```typescript
-mcp__pencil__get_variables({
-  filePath: `${designsPath}/mockup-feature-screen.pen`
-})
-```
-
-### Setting Up Project Tokens
+Use Pencil's variable system instead of hardcoded values, and always read the existing tokens before writing new ones:
 
 ```typescript
+mcp__pencil__get_variables({ filePath })
+
 mcp__pencil__set_variables({
-  filePath: `${designsPath}/mockup-feature-screen.pen`,
+  filePath,
   variables: {
     "color-background": { type: "color", value: "#FFFFFF" },
     "color-surface": { type: "color", value: "#F5F5F5" },
@@ -33,35 +24,17 @@ mcp__pencil__set_variables({
 
 ## Naming Convention
 
-**Pattern**: `mockup-[feature]-[screen]-[variant].pen`
+**Pattern**: `mockup-[feature]-[screen]-[variant].pen` — e.g. `mockup-login-screen.pen` (default login), `mockup-login-screen-error.pen` (validation errors, when kept as a separate file), `mockup-profile-edit-form.pen`, `mockup-dashboard-empty-state.pen`.
 
-Examples:
-- `mockup-login-screen.pen` -- Default login
-- `mockup-login-screen-error.pen` -- Login with validation errors (if separate file)
-- `mockup-profile-edit-form.pen` -- Profile editing
-- `mockup-dashboard-empty-state.pen` -- Dashboard with no data
-
-When a single .pen file contains multiple states as frames, use the base name without variant suffix.
+A single .pen file holding multiple states as frames uses the base name with no variant suffix.
 
 ## Storage
 
-Save to `.context/designs/` with workspace-aware path resolution:
-
-```typescript
-const task = state.tasks[currentTaskId];
-const workspacePath = task.metadata?.workspace_path;
-const designsPath = workspacePath
-  ? `${workspacePath}/.context/designs`
-  : `.context/designs`;
-
-mcp__pencil__open_document({
-  filePathOrTemplate: `${designsPath}/mockup-feature-screen.pen`
-})
-```
+Save to `.context/designs/` with workspace-aware path resolution — the `designsPath` / `filePath` snippet lives in `../SKILL.md § Step 2: Create Document` and every later call reuses `filePath`.
 
 ## Reference Format in Documentation
 
-When documenting mockups, use this format in the plan file (`<plan_file>` — `.context/planning-N.md`; e.g. `planning-0.md`):
+Document mockups in the plan file (`<plan_file>` — `.context/planning-N.md`; e.g. `planning-0.md`) in this format:
 
 ```markdown
 ## Visual Mockups

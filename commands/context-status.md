@@ -12,26 +12,26 @@ related:
 
 # Context Status
 
-Check context window utilization, analyze token distribution, and trigger compression when needed.
+Check context window utilization, analyze token distribution, and trigger
+compression when needed. Compression canon — principles, techniques, budgets:
+`skills/context-compression/SKILL.md`.
 
 ## Usage
 
 ```
-/context-status
-/context-status --compress
-/context-status --summary-only
-/context-status --recommend
-/context-status --threshold 60%
+/context-status [--compress] [--summary-only] [--recommend] [--threshold <percent>] [--dry-run] [--by-source]
 ```
 
 ## Options
 
-- `--compress` - Generate compressed context and apply compression
-- `--summary-only` - Show utilization metrics only (no recommendations)
-- `--recommend` - Show detailed compression recommendations
-- `--threshold <percent>` - Set warning threshold (default: 50%)
-- `--dry-run` - Show what compression would do without applying
-- `--by-source` - Break down by content source
+| Option | Default | Purpose |
+|---|---|---|
+| `--compress` | off | Generate compressed context and apply compression |
+| `--summary-only` | off | Utilization metrics only (no recommendations) |
+| `--recommend` | off | Detailed compression recommendations |
+| `--threshold <percent>` | 50% | Warning threshold |
+| `--dry-run` | off | Show what compression would do without applying |
+| `--by-source` | off | Break down by content source |
 
 ## Output Format
 
@@ -40,138 +40,58 @@ Check context window utilization, analyze token distribution, and trigger compre
 ```
 ## Context Status
 
-### Utilization
-| Metric | Value |
-|--------|-------|
-| Current Usage | 45,000 tokens |
-| Window Size | 200,000 tokens (or 1,000,000 on Opus 5, Sonnet 5, and Fable 5) |
-| Utilization | 45% |
-| Status | Normal |
-
-### Distribution
-| Source | Tokens | % |
-|--------|--------|---|
-| System prompt | 8,000 | 18% |
-| Conversation history | 12,000 | 27% |
-| Stage artifacts | 15,000 | 33% |
-| Current context | 10,000 | 22% |
-
-### Stage Artifacts
-| Stage | Artifact | Tokens |
-|-------|----------|--------|
-| PL | planning-0.md (or planning-N.md if multiple plans) | 3,500 |
-| AR | architecture.md | 6,000 |
-| TL | - | 0 |
-| DV | development.md (partial) | 5,500 |
-
-### Recommendations
-- Status: No compression needed
-- Next threshold: 50% (5,000 tokens away)
+### Utilization   (Metric | Value — Current Usage, Window Size, Utilization %, Status)
+### Distribution  (Source | Tokens | % — system prompt, conversation history,
+                   stage artifacts, current context)
+### Stage Artifacts (Stage | Artifact | Tokens — one row per stage reached;
+                   `-` artifact and 0 tokens for stages not yet run)
+### Recommendations (status line + next threshold with tokens remaining)
 ```
+
+Window Size is 200,000 tokens, or 1,000,000 on Opus 5, Sonnet 5, and Fable 5.
+Artifact names follow `skills/task-folder-organization/SKILL.md` (`planning-N.md`,
+`architecture.md`, `development.md`, …).
 
 ### Compression Report (`--compress`)
 
 ```
 ## Context Compression Applied
 
-### Before/After
-| Metric | Before | After | Reduction |
-|--------|--------|-------|-----------|
-| Total Context | 65,000 | 38,000 | 42% |
-| Stage Artifacts | 25,000 | 12,000 | 52% |
-| Conversation | 18,000 | 8,000 | 56% |
-
-### Compression Actions
-1. ✓ Summarized PL stage artifact (3,500 → 500 tokens)
-2. ✓ Summarized AR stage artifact (6,000 → 800 tokens)
-3. ✓ Compressed conversation history (18,000 → 8,000 tokens)
-4. ✓ Referenced code paths instead of inline content
-
-### Preserved Context
-- Current stage requirements (DV stage)
-- Open questions and decisions
-- Error context (if any)
-- User preferences
-
-### New Utilization
-| Metric | Value |
-|--------|-------|
-| Current Usage | 38,000 tokens |
-| Utilization | 38% |
-| Headroom | 62,000 tokens |
+### Before/After   (Metric | Before | After | Reduction — total context,
+                    stage artifacts, conversation)
+### Compression Actions (numbered ✓ lines: what was compressed, before → after tokens)
+### Preserved Context   (see § Preservation Rules)
+### New Utilization (Metric | Value — Current Usage, Utilization, Headroom)
 ```
+
+`--dry-run` renders the same report as a projection and applies nothing.
 
 ### Recommendations Report (`--recommend`)
 
-```
-## Compression Recommendations
-
-### High Priority (> 1,000 token savings)
-
-1. **Stage Artifacts: Summarize completed stages**
-   - PL stage: 3,500 → ~500 tokens (85% reduction)
-   - AR stage: 6,000 → ~800 tokens (87% reduction)
-   - Method: Replace with handoff summary format
-
-2. **Conversation History: Compress older turns**
-   - Current: 18,000 tokens (45 turns)
-   - After: ~8,000 tokens (summary + recent 10 turns)
-   - Method: Summarize turns older than current stage
-```
-
-#### Recommendations template — medium/low priority & action
+Recommendations are grouped by savings — High (> 1,000 tokens), Medium
+(500–1,000), Low (< 500) — most impactful first, each entry:
 
 ```
-<!-- …continued: medium/low priority -->
-### Medium Priority (500-1,000 token savings)
-
-3. **Code References: Replace inline code**
-   - Current: 5 inline code blocks (~2,500 tokens)
-   - After: File path references (~200 tokens)
-   - Method: Reference `file:line` instead of content
-
-### Low Priority (< 500 token savings)
-
-4. **Prose to Bullets**
-   - Identified: 3 paragraphs in current context
-   - Potential: ~300 token savings
-
-### Recommended Action
-Run `/context-status --compress` to apply high-priority compressions.
-Estimated new utilization: 38% (down from 65%)
+N. **[Source]: [Action]**
+   - Current: [tokens / count]
+   - After: [projected tokens]
+   - Method: [technique from skills/context-compression/SKILL.md]
 ```
+
+Close with a **Recommended Action** line naming the command to run
+(`/context-status --compress`) and the estimated new utilization.
 
 ### Source Breakdown (`--by-source`)
 
-```
-## Context by Source
+Four `Component | Tokens | Compressible` tables — Compressible is `No`, `Yes (to
+<target>)`, `Partially`, or `N/A`:
 
-### System Components
-| Component | Tokens | Compressible |
-|-----------|--------|--------------|
-| System prompt | 8,000 | No |
-| Tool definitions | 3,000 | No |
-| Rules/Skills | 5,000 | No |
-
-### Worktask Components
-| Component | Tokens | Compressible |
-|-----------|--------|--------------|
-| planning-N.md (each plan) | 3,500 | Yes (to 500) |
-| architecture.md | 6,000 | Yes (to 800) |
-| errors/*.md (per-agent) | 0 | N/A |
-
-### Conversation
-| Type | Tokens | Compressible |
-|------|--------|--------------|
-| Recent (last 5 turns) | 4,000 | No |
-| Older turns | 14,000 | Yes (to 4,000) |
-
-### Current Operation
-| Content | Tokens | Compressible |
-|---------|--------|--------------|
-| Active files | 8,000 | Partially |
-| In-flight queries | 2,000 | No |
-```
+| Group | Rows |
+|---|---|
+| System Components | System prompt, tool definitions, rules/skills (all `No`) |
+| Worktask Components | `planning-N.md`, `architecture.md`, `errors/*.md`, other stage artifacts |
+| Conversation | Recent (last 5 turns, `No`) vs older turns |
+| Current Operation | Active files (`Partially`), in-flight queries (`No`) |
 
 ## Compression Strategies
 
@@ -186,58 +106,29 @@ Estimated new utilization: 38% (down from 65%)
 
 ### Compression Techniques Applied
 
-1. **Stage Summarization**: Convert completed stage artifacts to handoff format
-2. **Conversation Trimming**: Keep recent turns, summarize older
-3. **Code References**: Replace inline code with file:line references
-4. **Prose Conversion**: Convert paragraphs to bullet lists
-5. **Decision Deduplication**: Remove repeated context
+Stage summarization (completed artifacts → handoff format), conversation
+trimming, code references in place of inline code, prose → bullets, decision
+deduplication. Per-technique method and expected reduction:
+`skills/context-compression/SKILL.md § Compression Techniques by Content Type`.
 
 ### Preservation Rules
 
-Always preserve:
-- Current stage requirements
-- Active error context
-- User-stated preferences
-- Last 5 conversation turns
-- In-progress work
+Always preserve: current stage requirements · active error context · user-stated
+preferences · last 5 conversation turns · in-progress work.
 
 ## Examples
 
-### Quick Status Check
 ```
-/context-status
+/context-status                            # utilization + basic recommendations
+/context-status --compress                 # apply, then show before/after metrics
+/context-status --compress --dry-run       # preview without applying
+/context-status --by-source --recommend    # full breakdown + actions
+/context-status --summary-only             # metrics only
+/context-status --threshold 40%            # warn earlier
 ```
-Shows current utilization and basic recommendations.
-
-### Apply Compression
-```
-/context-status --compress
-```
-Applies compression and shows before/after metrics.
-
-### Preview Compression
-```
-/context-status --compress --dry-run
-```
-Shows what compression would do without applying.
-
-### Detailed Analysis
-```
-/context-status --by-source --recommend
-```
-Full breakdown with actionable recommendations.
-
-### Custom Threshold
-```
-/context-status --threshold 40%
-```
-Warn earlier (at 40% utilization).
 
 ## Integration
 
-This command is used:
-- At stage transitions (before handoff)
-- When context exceeds threshold
-- Before error retries
-- When response quality degrades
-- By workflow-engineer for diagnostics
+Used at stage transitions (before handoff), when context exceeds threshold,
+before error retries, when response quality degrades, and by `workflow-engineer`
+for diagnostics.

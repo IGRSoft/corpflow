@@ -2,7 +2,7 @@
 name: agent-coordination
 description: Patterns for multi-agent coordination, handoffs, parallel execution, and error escalation. Use when coordinating agent handoffs, debugging multi-stage execution, or managing parallel agent workflows.
 effort: medium
-version: 0.2.0
+version: 0.3.0
 related:
   - worktask.md
   - claude-constitution.md
@@ -13,30 +13,27 @@ related:
 
 # Agent Coordination
 
-Patterns for coordinating agents across worktask stages, managing handoffs, and handling errors.
+Coordinating agents across worktask stages: handoffs, dispatch limits, errors.
 
-**Stage codes and agents**: See `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md`
-**State ledger**: See `${CLAUDE_SKILL_DIR}/../shared/state-ledger.md`
+- **Stage codes and agents**: `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md`
+- **State ledger**: `${CLAUDE_SKILL_DIR}/../shared/state-ledger.md`
+- **Per-stage I/O contracts**: `${CLAUDE_SKILL_DIR}/../shared/stage-contracts.md` — the Inputs → Outputs → Validation table every stage agent's Completion Verification references.
+- `references/hook-monitoring.md` — wiring or debugging hooks: event catalog (lifecycle, agent-teams, MCP elicitation), matchers, conditional `if`, PreToolUse defer/block, PostToolUse output replacement, gate-feedback contract, OTEL, agent-teams vs subagents.
+- `references/headless-dispatch.md` — dispatching from CI/cron/a shell: `task.metadata` → `claude agents` flag bridge, per-stage one-liners, live-session discovery, permission-mode pinning.
 
 ## Handoff Protocol
 
-**Per-stage I/O contracts**: See `${CLAUDE_SKILL_DIR}/../shared/stage-contracts.md` for the full Inputs → Outputs → Validation table that every stage agent's Completion Verification references.
-
-```
-1. Current agent completes work (output matches stage-contracts Required Outputs)
-2. Updates ledger: state-patch.sh --task-status <ID> completed
-3. Creates stage artifact (e.g., `planning-0.md` for the first PL run, `planning-1.md` for the next; see `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`) with required sections
-4. Writes compressed handoff (50-100 tokens)
-5. Orchestrator validates against stage-contracts before transition
-6. Next agent starts: state-patch.sh --task-status <ID> in_progress
-```
+1. Agent completes work matching the stage-contracts Required Outputs.
+2. Updates the ledger: `state-patch.sh --task-status <ID> completed`.
+3. Creates the stage artifact — `planning-0.md` for the first PL run, `planning-1.md` for the next (`skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`) — with its required sections.
+4. Writes a compressed handoff (50–100 tokens).
+5. Orchestrator validates against stage-contracts before transition.
+6. Next agent starts: `state-patch.sh --task-status <ID> in_progress`.
 
 ### Orchestrator → PL0 Handoff
 
-Before PL0, the orchestrator creates `.context/exploration.md` with pre-explored
-codebase facts. This eliminates PL0's need to re-explore the codebase.
+Before PL0 the orchestrator writes `.context/exploration.md` with pre-explored codebase facts, so PL0 never re-explores. Its prompt to PL0 MUST include:
 
-The orchestrator's prompt to PL0 MUST include:
 ```
 Read .context/exploration.md for codebase context.
 Do NOT re-read files listed there unless you need additional detail.
@@ -44,38 +41,24 @@ Do NOT re-read files listed there unless you need additional detail.
 
 #### `metadata.skip_exploration` Propagation
 
-When PL0 has produced `.context/exploration.md`, every downstream task it creates (AR0, TL0, DV0, …) MUST receive:
+Every task PL0 creates downstream (AR0, TL0, DV0, …) carries `skip_exploration: true` (boolean) and `exploration_anchors` (string[] of `<file>#<anchor>` pointers, e.g. `["exploration.md#facts", "planning-0.md#requirements"]`).
 
-| Metadata key | Type | Value |
-|---|---|---|
-| `skip_exploration` | boolean | `true` |
-| `exploration_anchors` | string[] | List of `<file>#<anchor>` pointers — e.g. `["exploration.md#facts", "exploration.md#refs", "planning-0.md#requirements"]` |
+AR/TL/DV/DR honour them: the anchors are the authoritative pre-explored set — no Glob/Grep over files they cover, read the anchor rather than the whole file. **Why**: re-exploration is the largest avoidable AR/TL token cost once the cache prefix exists.
 
-##### Downstream honouring
-
-Downstream agents (AR/TL/DV/DR) honour these by:
-
-- Treating `exploration_anchors` as the authoritative pre-explored set.
-- Not running Glob/Grep on the source tree for files already covered by the anchors.
-- Reading only the listed anchors instead of full files.
-
-##### Why & opt-out
-
-**Why**: avoids redundant Glob/Grep cycles in AR/TL that PL has already paid the token cost for. Re-exploration is the largest avoidable AR/TL token expense after the cache prefix has been established.
-
-**Opt-out**: an agent that needs to widen scope (e.g. AR detects an undeclared dependency) MAY ignore `skip_exploration` and explore further, but MUST log one `audit.jsonl` line `action: "exploration_extended"` with `metadata: {reason: "<why>"}` so reviewers can see the broadened scope.
+**Opt-out**: an agent that must widen scope (AR finds an undeclared dependency) MAY explore further, but MUST log one `audit.jsonl` line `action: "exploration_extended"`, `metadata: {reason: "<why>"}` so reviewers see the broadened scope.
 
 ### Stage Agent File Read Rules
 
-| Stage | Read exploration.md | Read source files | Reason |
-|-------|:------------------:|:-----------------:|--------|
-| PL | Yes | No | Requirements only, no code changes |
-| AR | Yes | Selective | Only files needing architectural analysis |
-| TL | Yes | No | Coordination only |
-| DV | Yes | Yes (modify targets) | Must read files it will modify |
-| DR | Yes | Yes (changed files) | Must review actual changes |
-| QA | Yes | Yes (changed files) | Must review actual changes |
-| DC | Yes | No | Documentation from artifacts |
+Every stage reads `exploration.md`; source-file access differs.
+
+| Stage | Source files | Reason |
+|-------|:------------:|--------|
+| PL | No | Requirements only, no code changes |
+| AR | Selective | Only files needing architectural analysis |
+| TL | No | Coordination only |
+| DV | Yes (modify targets) | Must read files it will modify |
+| DR / QA | Yes (changed files) | Must review actual changes |
+| DC | No | Documentation from artifacts |
 
 ### Handoff Checklist
 
@@ -87,53 +70,23 @@ Downstream agents (AR/TL/DV/DR) honour these by:
 
 ## Error Handling
 
-### Error Decision Tree
-
-```mermaid
-stateDiagram-v2
-  [*] --> Failure
-  Failure --> Classify
-  Classify --> Transient: 5xx / rate-limit / network
-  Classify --> Logic: bug / wrong approach
-  Classify --> MissingInput: required artifact absent
-  Classify --> Ambiguous: requirements unclear
-  Classify --> DesignFlaw: architecture blocks implementation
-  Classify --> HardConstraint: ethics / security / legal block
-  Transient --> RetrySame: retry_count++
-  Logic --> RetrySame: retry_count++ with corrective context
-  RetrySame --> Succeeded: fix works
-  RetrySame --> Exhausted: retry_count == 3
-  MissingInput --> EscalatePrev
-  Ambiguous --> EscalatePL
-  DesignFlaw --> EscalateAR
-  HardConstraint --> Abort
-  Exhausted --> EscalatePrev
-  EscalatePrev --> [*]: error_escalated_to set
-  EscalatePL --> [*]: error_escalated_to = "PL"
-  EscalateAR --> [*]: error_escalated_to = "AR"
-  Abort --> [*]: stage blocked
-  Succeeded --> [*]: retry_count reset
-```
-
 ### Retry / Escalate Matrix
 
-| Classification | Retry? | Max | Backoff | Escalation Target | Metadata Update |
-|----------------|--------|-----|---------|-------------------|-----------------|
-| `transient` | Yes | 3 | 2^n seconds | None (retry same agent) | `retry_count++` |
-| `logic` | Yes | 2 | None | Same agent (add corrective context on retry 2) | `retry_count++` |
-| `missing_input` | No | 0 | — | Previous stage per chain | `error_escalated_to` set |
-| `ambiguous_requirements` | No | 0 | — | PL stage | `error_escalated_to = "PL"` |
-| `design_flaw` | No | 0 | — | AR stage | `error_escalated_to = "AR"` |
-| `hard_constraint` (ethics/security) | No | 0 | — | Abort + block human intervention | `error_escalated_to = "ST"` |
-| `exhausted` (`retry_count == 3`) | No | — | — | Previous stage per chain | `error_escalated_to` set, `retry_count` reset on handoff |
+| Classification | Trigger | Retry | Escalate to |
+|---|---|---|---|
+| `transient` | 5xx / rate-limit / network | 3, backoff 2^n s | — (same agent) |
+| `logic` | bug / wrong approach | 2, corrective context on retry 2 | — (same agent) |
+| `missing_input` | required artifact absent | No | previous stage per chain |
+| `ambiguous_requirements` | requirements unclear | No | PL |
+| `design_flaw` | architecture blocks implementation | No | AR |
+| `hard_constraint` | ethics / security / legal block | No | abort + block for human (`"ST"`) |
+| `exhausted` | `retry_count == 3` | No | previous stage per chain |
+
+Metadata: `retry_count++` on each retry; on escalation set `error_escalated_to` to the target and reset `retry_count` at handoff.
 
 #### Retry / Escalate Matrix — environmental contention
 
-**QA-only** — DV's handful of executed tests cannot establish the trigger.
-
-| Classification | Retry? | Max | Backoff | Escalation Target | Metadata Update |
-|----------------|--------|-----|---------|-------------------|-----------------|
-| `environmental_contention` | No | 0 | — | None — re-baseline once on a quiet machine | None; note in `testing-N.md § Notes`, no defect, no escalation |
+**QA-only** — DV's handful of executed tests cannot establish the trigger. `environmental_contention` never retries and never escalates: re-baseline once on a quiet machine and note the outcome in `testing-N.md § Notes` — no defect, no `error_escalated_to`.
 
 **Trigger — all three, conjunctively:** failures confined to wall-clock/async-timing suites;
 failing-set **membership** differs between two consecutive runs; no source change between them.
@@ -153,7 +106,7 @@ Ethics: Any→ethics-reviewer→stakeholder→USER
 
 ### Error Documentation
 
-Append to `.context/errors/<agent>.md` (per-agent, one file per `metadata.agent` basename). Single file shared across retries and task splits (DV0/DV1/DV2 → `developer.md`):
+Append to `.context/errors/<agent>.md` — one file per `metadata.agent` basename, shared across retries and splits (DV0/DV1/DV2 → `developer.md`):
 
 ```markdown
 ## [STAGE][N] Retry [X/max] — [TIMESTAMP]
@@ -170,42 +123,17 @@ Raw captures (build/test/monitor stdout) go to `.context/logs/` per `logging-con
 
 ## Parallel Execution
 
-### Safe Combinations
+Every megatask issue and every DV stage runs in its own worktree and branch, so source-tree conflicts cannot arise: parallel issues, parallel DVN streams, QA ∥ DC, and agent-team members are all unconditionally safe to overlap. DC ∥ QA saves 30–40% wall clock; starting DC during DV gets docs ready sooner.
 
-| Pattern | Stages | Benefit |
-|---------|--------|---------|
-| Docs + QA | DC + QA | 30-40% time savings |
-| Early Docs | DC during DV | Docs ready sooner |
-
-### Worktree Parallelism
-
-All megatask issues run in isolated worktrees. Each issue has its own working directory and branch, making safe parallelism unconditional:
-
-| Pattern | Isolation | Safety |
-|---------|-----------|--------|
-| Parallel issues in megatask | Full source isolation per issue | Always safe |
-| QA + DC parallel | Each has own copy | Always safe |
-| Multiple DV stages across issues | Separate worktrees per issue | **SAFE** |
-| Agent teams + megatask issues | Each teammate's own worktree | **Recommended** |
-
-> Worktree isolation is always active — each DV stage and each megatask issue gets a separate working directory and branch, eliminating source-tree conflicts.
+**Never parallelize**: AR before PL (needs requirements), DV before TL (needs coordination), QA before DV (can't test unwritten code).
 
 ### Parallel Tool Call Safety
 
-Failed `Read`, `WebFetch`, or `Glob` calls don't cancel sibling parallel tool calls. Failing read-only `Bash` calls (`grep`, `git diff`, `ls`, etc.) likewise don't cancel siblings — only mutating `Bash` errors cascade. This makes parallel reads, searches, and shell probes more reliable within agents.
-
-### Never Parallelize
-
-- AR before PL (needs requirements)
-- DV before TL (needs coordination)
-- QA before DV (can't test unwritten code)
+A failed `Read`, `WebFetch`, `Glob`, or read-only `Bash` probe (`grep`, `git diff`, `ls`) does not cancel its sibling parallel calls — only mutating `Bash` errors cascade. Batch reads, searches, and shell probes freely.
 
 ## Audit Trail
 
-Every material worktask action writes one JSONL line to `.context/logs/audit.jsonl`
-(routed under the `logs/` folder per `logging-conventions` skill). The file is
-append-only and outlives individual stage artifacts — on resume or incident
-review, the audit tail is the single source of truth for what happened.
+Every material worktask action writes one JSONL line to `.context/logs/audit.jsonl` (folder per `logging-conventions`). The file is append-only and outlives individual stage artifacts — on resume or incident review, the audit tail is the single source of truth for what happened.
 
 ### Writers
 
@@ -218,12 +146,7 @@ review, the audit tail is the single source of truth for what happened.
 
 #### Test-run counter rows
 
-`full_test_run` / `scoped_test_run` are one row per test **invocation**, keyed on the invocation's
-shape rather than the plan's mode: ≥1 `-only-testing:` flag → scoped, zero selection flags → full.
-`build-only` runs invoke no tests and emit no row. `metadata: {stage, plan_mode, suites_selected,
-run_index}` — carrying `plan_mode` alongside the shape is what makes "how often did we actually run
-everything" answerable. **Audit-only, never a gate**: absence of a counter row must not block a
-stage and must not appear in any completion checklist.
+One row per test **invocation**, keyed on the invocation's shape rather than the plan's mode: ≥1 `-only-testing:` flag → `scoped_test_run`; zero selection flags → `full_test_run`; `build-only` runs emit none. `metadata: {stage, plan_mode, suites_selected, run_index}` — carrying `plan_mode` next to the shape is what makes "how often did we actually run everything" answerable. **Audit-only, never a gate**: a missing counter row must not block a stage and must not appear in any completion checklist.
 
 #### Writers — plugin hooks (authoritative)
 
@@ -238,10 +161,7 @@ stage and must not appear in any completion checklist.
 
 #### Plugin-hook row fields
 
-Every row above is **authoritative**. `audit-subagent` and `agent-stop` rows also carry
-`parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`.
-`stage_transition` is emitted ONLY on the hook path — a hook completion runs no Bash tool
-call, so `hook:audit-tooluse` never sees it; other layers stay scraped to avoid double counting.
+Every row above is **authoritative**. `audit-subagent` and `agent-stop` rows also carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`. `stage_transition` is emitted ONLY on the hook path — a hook completion runs no Bash tool call, so `hook:audit-tooluse` never sees it; other layers stay scraped to avoid double counting.
 
 #### Writers — external & adapters
 
@@ -249,16 +169,16 @@ call, so `hook:audit-tooluse` never sees it; other layers stay scraped to avoid 
 |-------|-----------------|
 | External dispatcher | `external_dispatch` (CI/cron/user-shell invoked a stage via `claude agents run` — see `references/headless-dispatch.md`) |
 | `apple-canvas` adapter (in `dv-screenshot-capture`) | `canvas_render` (one row per phase ∈ scaffold\|complete\|retry — see `skills/dv-screenshot-capture/references/apple-canvas.md § Audit row schema`) |
-| `preview-ensurer` skill | `preview_added` (one row per `#Preview` block written to source by SwiftSyntax driver — `metadata: {file, view_type, mock_strategy, lines_added}`) |
-| QA visual-diff wrapper (`skills/dv-screenshot-capture/scripts/visual-diff.sh`) | `visual_diff_run` (one row per RMSE diff invocation — `metadata: {reference, candidate, metric:"RMSE", value_percent, threshold_percent, verdict}`) |
+| `preview-ensurer` skill | `preview_added` (one row per `#Preview` block written to source — `metadata: {file, view_type, mock_strategy, lines_added}`) |
+| QA visual-diff wrapper (`skills/dv-screenshot-capture/scripts/visual-diff.sh`) | `visual_diff_run` (one row per RMSE diff — `metadata: {reference, candidate, metric:"RMSE", value_percent, threshold_percent, verdict}`) |
 
 #### Hook authority + dedupe rule
 
-Rows emitted by plugin hooks carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action remain forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are downgraded to **advisory**. Readers (`/cost-report`, resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`. Dedupe-key shapes:
+Hook-emitted rows carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action stay forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are **advisory**. Readers (`/cost-report`, resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`.
 
 #### Hook authority — canonical vs mirrored writers
 
-A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>`: every installed sibling plugin mirrors these hooks under its own prefix, so one completion produces one canonical row plus one row per sibling. The mirrors set `metadata.advisory: true` and carry thinner metadata — an empty `subject` in particular. Authority within a `dedupe_key` group is therefore three-tier: canonical hook row, then any hook row, then first-by-index. Readers MUST NOT match on `startswith("hook:")` alone; route through `scripts/audit-dedup.sh`, which implements the ladder.
+A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>` — every installed sibling plugin mirrors these hooks under its own prefix, so one completion yields one canonical row plus one per sibling. Mirrors set `metadata.advisory: true` and carry thinner metadata (an empty `subject` in particular). Authority within a `dedupe_key` group is therefore three-tier: canonical hook row, then any hook row, then first-by-index. Readers MUST NOT match on `startswith("hook:")` alone; route through `scripts/audit-dedup.sh`, which implements the ladder.
 
 #### Dedupe-key shapes — tool & subagent
 
@@ -288,17 +208,15 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>`: every install
 
 #### Hook-written metadata fields
 
-For `subagent_stopped` and `stage_completion_hook` rows written by plugin hooks, `metadata` carries these optional fields in addition to action-specific extras:
+Optional `metadata` fields on hook-written `subagent_stopped` / `stage_completion_hook` rows, in addition to action-specific extras:
 
 - `duration_ms` (subagent_stopped only): number
 - `effort`: `"low"|"medium"|"high"|"xhigh"|"max"|"unknown"`
-- `stage`: stage code — `"PL"|"FN"|"ST"` on stage_completion_hook, any stage code on subagent_stopped (from `CLAUDE_TASK_METADATA_STAGE`), `"unknown"` when unstamped
+- `stage`: `"PL"|"FN"|"ST"` on stage_completion_hook, any stage code on subagent_stopped (from `CLAUDE_TASK_METADATA_STAGE`), `"unknown"` when unstamped
 - `agent_id` (subagent_stopped only): string — `"unknown"` when absent
-- `parent_agent_id`: string — defaults to `"none"` when not in hook stdin
-- `background_tasks_count`: integer ≥ 0
-- `background_task_ids`: string[] — may contain `"unknown"` entries; see `references/hook-monitoring.md § BG-Task ID Schema Watch`
-- `session_crons_count`: integer ≥ 0
-- `session_cron_ids`: string[] — may contain `"unknown"` entries; see `references/hook-monitoring.md § BG-Task ID Schema Watch`
+- `parent_agent_id`: string — `"none"` when not in hook stdin
+- `background_tasks_count` / `session_crons_count`: integer ≥ 0
+- `background_task_ids` / `session_cron_ids`: string[] — a `"unknown"` entry means the ID field name shifted; see `references/hook-monitoring.md § BG-Task ID Schema Watch`
 - `dedupe_key`: string (always present)
 
 ### Append Pattern (Bash)
@@ -312,37 +230,29 @@ jq -c --arg ts "$(date -u +%FT%TZ)" \
 
 ### Retention
 
-Follows `.context/` hygiene — cleared on task archival (FN stage or `/worktask`
-completion). Do NOT rotate within a task; the full trail is required for
-PostCompact recovery and incident post-mortems.
+Follows `.context/` hygiene — cleared on task archival (FN stage or `/worktask` completion). Do NOT rotate within a task; the full trail is required for PostCompact recovery and incident post-mortems.
 
 ## Task Decomposition
 
-When should a stage split into sub-tasks? The decision depends on *who* initiates
-the split and *what* the dependency shape is. Pick one pattern — do not mix.
+Whether a stage splits depends on *who* initiates the split and *what* the dependency shape is. Pick one pattern — do not mix.
 
 ### Decision Table
 
 | Condition | Pattern | Effect | Example |
 |-----------|---------|--------|---------|
-| Independent sub-scopes, different owners | **TL-initiated (parallel)** | DVN tasks blocked by TL0; all run concurrently; DR0 blocked by all DVN | `theme colors` + `theme switcher` + `dark assets` |
-| Sequential discovery (later work depends on earlier) | **DV-initiated (sequential)** | DVN tasks blocked by DV0; run one after another | `implement auth` then `migrate existing users` then `deprecate old endpoints` |
-| Single cohesive scope with <3 files | **No split** | DV0 handles entirely | `fix null check in login validator` |
-#### Decision Table — refactor & retry rows
+| Independent sub-scopes, different owners | **TL-initiated (parallel)** | DVN blocked by TL0, all concurrent; DR0 blocked by all DVN | `theme colors` + `switcher` + `dark assets` |
+| Cross-cutting refactor across many modules | **TL-initiated (parallel)** + `track` metadata | Each stream gets its own worktree | `rename User → Account` |
+| Sequential discovery (later work depends on earlier) | **DV-initiated (sequential)** | DVN blocked by DV0, run in order | `implement auth` → `migrate users` |
+| Stage failed and the retry needs narrower scope | **DV-initiated (sequential)** | DV1 is the focused retry; `retry_count` resets | DV0 full feature → DV1 auth only |
+| Single cohesive scope, <3 files | **No split** | DV0 handles it | `fix null check in login validator` |
 
-| Condition | Pattern | Effect | Example |
-|-----------|---------|--------|---------|
-| Cross-cutting refactor spanning many modules | **TL-initiated (parallel)** with `track` metadata | Each stream gets own worktree | `rename User → Account across auth/api/db` |
-| Stage already failed and retry needs narrower scope | **DV-initiated (sequential)** | DV1 creates focused retry; retry_count resets | DV0 failed on full feature → DV1 focused on auth module only |
-
-See `worktask/references/initialization-patterns.md § Stage Sub-Task Splitting`
-for full code patterns.
+Full code patterns: `worktask/references/initialization-patterns.md § Stage Sub-Task Splitting`.
 
 ### When NOT to Split
 
-- **PL/FN/ST** — always singletons (PL0, FN0, ST0). Do not split.
-- **Trivial scope** — splitting a 5-file change into 3 sub-tasks adds orchestration cost without benefit.
-- **Shared mutable state** — if two streams need to edit the same file, serialize instead of parallelizing (merge conflicts cost more than the latency saved).
+- **PL/FN/ST** — always singletons (PL0, FN0, ST0).
+- **Trivial scope** — orchestration cost exceeds the benefit.
+- **Shared mutable state** — if two streams edit the same file, serialize; merge conflicts cost more than the latency saved.
 
 ## Agent Selection
 
@@ -357,21 +267,21 @@ for full code patterns.
 | Technical decision | technical-lead | opus |
 | Test design | qa-engineer | sonnet |
 
-> **Cross-plugin AR collaboration**: For platform projects, `software-architector` consults the platform's architect agent during AR stage for platform-specific architecture (pattern selection, DI, navigation, concurrency for Apple; the equivalent concerns per platform). See `agents/software-architector.md § Platform Architecture Collaboration` for the per-platform table and `cross-plugin-handoff` skill for the full protocol.
+> **Cross-plugin AR collaboration**: on platform projects `software-architector` consults that platform's architect during AR for platform-specific architecture (for Apple: pattern selection, DI, navigation, concurrency; equivalents elsewhere). Per-platform table: `agents/software-architector.md § Platform Architecture Collaboration`; protocol: `cross-plugin-handoff` skill.
 
 #### Nested delegation
 
-> **Nested delegation**: sub-agents spawn their own sub-agents, up to **3 levels deep** by default (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`; `=1` disables nesting entirely). Depth counts **from the session root**, so the main session is depth 0 and its directly-dispatched stage agent is depth 1. The canonical DV chain — session → `developer` (1) → `apple-developer:ios-developer` (2) → `apple-developer:test-generator` (3) — sits exactly on the default ceiling; the orchestrator does not flatten Tier-2 dispatch into its own loop.
+> Sub-agents spawn their own sub-agents, up to **3 levels deep** by default (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`; `=1` disables nesting entirely). Depth counts **from the session root**, so the main session is depth 0 and its directly-dispatched stage agent is depth 1. The canonical DV chain — session → `developer` (1) → `apple-developer:ios-developer` (2) → `apple-developer:test-generator` (3) — sits exactly on the default ceiling; the orchestrator does not flatten Tier-2 dispatch into its own loop.
 
 ##### Depth budget sharing
 
-> Foreground and background subagents share the same depth budget — a foreground chain plus a backgrounded child count against one cap. Budget accordingly: each level summarizes results upward, and `/cost-report`'s `dispatch_depth` column makes depth visible.
+> Foreground and background subagents share one depth budget — a foreground chain plus a backgrounded child count against the same cap. Each level summarizes upward, and `/cost-report`'s `dispatch_depth` column makes depth visible.
 
 > **`/megatask` consumes a level**: a batch run dispatches a per-issue `/worktask` orchestrator as its own sub-agent (depth 1), pushing that same DV chain to depth 4 — one past the default. Raise `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` before the batch, or accept a flattened Tier-2 dispatch. See `skills/megatask/SKILL.md § Nesting-depth budget`.
 
 #### Pre-launch spawn classification
 
-> **Pre-launch spawn classification**: in auto mode the permission classifier evaluates a subagent spawn **before** it launches, so a dispatch can be denied up front (`PermissionDenied` hook fires). The orchestrator must handle a refused spawn — treat a denied dispatch like a failed stage and route per the retry/escalate matrix rather than assuming every `Task(...)` starts.
+> In auto mode the permission classifier evaluates a subagent spawn **before** it launches, so a dispatch can be denied up front (`PermissionDenied` hook fires). Treat a refused spawn like a failed stage and route it per the retry/escalate matrix rather than assuming every `Task(...)` starts.
 
 #### Depth-refusal self-report
 
@@ -379,7 +289,7 @@ for full code patterns.
 
 ##### No hook covers this refusal
 
-Unlike a refused *tool* (`PermissionDenied`) there is **no hook for this refusal type** — nothing in the plugin hook vocabulary (`references/hook-monitoring.md`) is depth-shaped, so the row is a self-report, downgraded to advisory only when a future hook supersedes it. A self-report closes the silence; it does not guarantee capture.
+Unlike a refused *tool* (`PermissionDenied`), nothing in the plugin hook vocabulary (`references/hook-monitoring.md`) is depth-shaped, so this row is a self-report — advisory only once a future hook supersedes it. It closes the silence; it does not guarantee capture.
 
 | Field | Value |
 |---|---|
@@ -398,209 +308,129 @@ Pairs with the orchestrator's forward-looking `dispatch_depth_projected` (`skill
 
 #### Background-by-default dispatch
 
-> **Background-by-default dispatch**: subagents run in the **background by default** — the dispatching agent keeps its turn and receives the child's result as a completion notification. Two consequences for the worktask loop: (1) a `Task()` launch acknowledgement is NOT stage completion — advance a stage (Step 6.5, the `completed` patch) only on the completion notification or the `subagent_stopped` audit row (`skills/worktask/SKILL.md § Orchestrator Execution Loop`); (2) unblocked sibling stages (parallel DVN tracks, DC+QA) genuinely overlap with no extra orchestration.
+> Subagents run in the **background by default** — the dispatching agent keeps its turn and receives the child's result as a completion notification. Two consequences: (1) a `Task()` launch acknowledgement is NOT stage completion — advance a stage (Step 6.5, the `completed` patch) only on the completion notification or the `subagent_stopped` audit row (`skills/worktask/SKILL.md § Orchestrator Execution Loop`); (2) unblocked sibling stages (parallel DVN tracks, DC+QA) genuinely overlap with no extra orchestration.
 
 ##### Depth accounting & background permission prompts
 
-> Depth accounting stays correct across resume: resumed subagents restore their original spawn depth and forked subagents count toward the depth cap. A resumed background agent also restores its **own prompt and tool restrictions** rather than reverting to the default agent, so a reattached stage row is still that stage's agent — reattach is safe, re-dispatch is not required for identity reasons alone. Permission prompts from background subagents surface in the main session — dialog names the asking agent; Esc denies just that tool — instead of being auto-denied, so an unattended run parks on them (see the resume `waitingFor` branch table).
+> Depth accounting survives resume: resumed subagents restore their original spawn depth, forked ones count toward the cap, and a resumed background agent restores its **own prompt and tool restrictions** rather than reverting to the default agent — so reattach is safe and re-dispatch is never required for identity reasons alone. Permission prompts from background subagents surface in the main session (dialog names the asking agent; Esc denies just that tool) instead of being auto-denied, so an unattended run parks on them — see the resume `waitingFor` branch table.
 
 ##### Two independent ceilings
 
-> A dispatch can be refused by either of two caps; they are counted separately and raised separately. Check both before a wide fan-out, not just the one that bit last time.
+> A dispatch can be refused by either of two caps; they are counted and raised separately. Check both before a wide fan-out, not just the one that bit last time.
 
 | Ceiling | Default | Env override | Counts |
 |---------|---------|--------------|--------|
 | Nesting depth | 3 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` | Levels below the session root; `=1` disables nesting |
 | Concurrently running | 20 | `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` | Agents alive *right now*, at every depth |
 
+###### No total cap; concurrency is the one that bites
+
+> There is **no per-session total-spawn cap** — a long session never refuses on a running total, so `/megatask` batch size is bounded by concurrency, disk, and rate budget alone. Concurrency is the easy ceiling to hit: background-by-default dispatch keeps stage agents alive simultaneously that were once sequential, each nested Tier-2 specialist counts while it runs, and `/megatask` runs `parallel_tracks` orchestrators each with a live stage agent and its children. Project peak concurrency, not the total, at the R1 gate.
+
 ###### Bash memory ceiling (Linux)
 
-> `CLAUDE_CODE_TOOL_MEMORY_LIMIT` (opt-in, CC 2.1.233) puts Bash tool commands in a memory cgroup so a runaway build cannot stall the session. Linux only — on macOS runners a runaway build still has to be caught by the build timeout. Worth setting on CI runners that execute `/<plugin>:build-test`.
-
-###### The per-session total cap is gone
-
-> CC 2.1.224 **removed** the 200-spawn-per-session cap: a long-running session no longer refuses new agents on a running total. Only depth and concurrency still refuse. For `/megatask` this lifts the batch-size ceiling that used to force a split — batch size is now bounded by concurrency, disk, and rate budget alone.
-
-###### Concurrency is the easy one to hit
-
-> Background-by-default dispatch keeps stage agents alive simultaneously that would once have been sequential, and each nested Tier-2 specialist counts while it runs. `/megatask` is the worst case — `parallel_tracks` per-issue orchestrators, each with a live stage agent and its nested children. Project peak concurrency, not just the total, at the R1 gate.
+> `CLAUDE_CODE_TOOL_MEMORY_LIMIT` (opt-in, CC 2.1.233) puts Bash tool commands in a memory cgroup so a runaway build cannot stall the session. Linux only — on macOS runners a runaway build must still be caught by the build timeout. Worth setting on CI runners that execute `/<plugin>:build-test`.
 
 ###### Budget halts are not stage failures
 
-> When `--max-budget-usd` trips, new spawns are denied *and running background subagents are halted*. A stage that disappears mid-work under a budget stop must be re-dispatched after the budget is raised — it must **not** consume one of that stage's 3 retries, which are reserved for genuine stage failures (see `skills/worktask/references/resume.md`).
+> When `--max-budget-usd` trips, new spawns are denied *and running background subagents are halted*. A stage that disappears mid-work under a budget stop must be re-dispatched after the budget is raised — it must **not** consume one of that stage's 3 retries, which are reserved for genuine stage failures (`skills/worktask/references/resume.md`).
 
 ### Model Selection
 
-```
-Mechanical/rule-based → haiku
-Multi-step reasoning → sonnet
-Tradeoff analysis → opus
-Architectural implications → opus
-```
+Mechanical/rule-based → haiku; multi-step reasoning → sonnet; tradeoff analysis or architectural implications → opus. Tier detail: `skills/shared/model-selection.md`. **Rule**: prefer reading artifacts over invoking an agent.
 
-**Rule**: Prefer reading artifacts over agent invocation when possible.
+Per-invocation override: `Task({ subagent_type: "corpflow:developer", model: "opus" })`.
 
-### Per-Invocation Model Override
-
-The Task tool `model` parameter allows per-invocation overrides:
-
-```
-Task({ subagent_type: "corpflow:developer", model: "opus" })
-```
-
-> **Parameterized permission syntax**: permission rules accept a `Tool(param:value)` form with `*` wildcard support — e.g. `Agent(model:opus)` permits only opus-model spawns, `Agent(model:*)` permits any model override. Use this to constrain which dispatch overrides auto mode may take without hand-listing every agent. `Agent(type)` deny rules and `Agent(x,y)` allowed-types restrictions are enforced for **named** subagent spawns too.
+> **Parameterized permission syntax**: permission rules accept `Tool(param:value)` with `*` wildcards — `Agent(model:opus)` permits only opus-model spawns, `Agent(model:*)` any override — so auto mode's dispatch overrides can be constrained without hand-listing every agent. `Agent(type)` deny rules and `Agent(x,y)` allowed-types restrictions are enforced for **named** subagent spawns too.
 
 #### Model aliases, allowlists & @-mentions
 
-> Agent teams inherit the leader's model. Teammates use the parent session's model unless explicitly overridden. Model aliases (`fable`/`opus`/`sonnet`/`haiku`) work correctly across all providers (Anthropic, Bedrock, Vertex, Foundry). Allowlist caveat: a managed `availableModels` list constrains subagent model overrides too, and `enforceAvailableModels` constrains the Default model — a valid alias may silently resolve to a different model; see `skills/worktask/SKILL.md § Pre-Stage Validation` step 6.
+> Agent teams inherit the leader's model; teammates use the parent session's model unless overridden. Aliases (`fable`/`opus`/`sonnet`/`haiku`) work across all providers. **Allowlist caveat**: a managed `availableModels` list constrains subagent overrides too, and `enforceAvailableModels` constrains the Default model — a valid alias may silently resolve to a different model (`skills/worktask/SKILL.md § Pre-Stage Validation` step 6). Named subagents appear in `@`-mention typeahead; `@` also mentions another Claude *session*, and `SendMessage` delivers to a bare name matching exactly one live session.
 
-> Named subagents appear in `@`-mention typeahead suggestions, making it easier to reference and communicate with running agents via `SendMessage`. Typing `@` in the prompt also mentions another Claude *session* by name (CC 2.1.232), and `SendMessage` delivers to a bare name that matches exactly one live session.
+#### Cross-session reach & SendMessage authority
 
-#### Cross-session reach
+> `SendMessage` reaches sessions on **other machines**; `ListAgents` discovers them, labelling disconnected Remote Control rows `offline` and cloud rows `cloud`. `crossSessionInbound` (holds messages into a bypassed-permissions session for approval) and `dialogExpiry` govern inbound traffic.
 
-> `SendMessage` reaches sessions on **other machines** (macOS/Linux, CC 2.1.224–2.1.225); `ListAgents` discovers them and labels disconnected Remote Control rows `offline` and cloud rows `cloud` (CC 2.1.229). Interactive sessions on one machine are kept uniquely named, so a bare name is unambiguous. Two settings govern inbound traffic: `crossSessionInbound` (messages into a bypassed-permissions session are held for approval) and `dialogExpiry`. The authority rule below is unchanged and matters more across machines, not less.
-
-#### SendMessage authority hardening
-
-> **SendMessage authority hardening**: a relayed `SendMessage` does not carry the originating user's authority. Receivers **refuse relayed permission requests**, and auto mode blocks them outright. A reattach can *nudge* a parked agent (re-prompt, supply an awaited answer) but cannot *authorize* a permission escalation. Permission escalations remain operator-owned — never satisfy them via a relayed message. (The PL gate is operator-owned and cannot be satisfied by a relayed message; this caveat covers both permission escalations and the PL approval gate.)
+> **Authority does not relay** — and matters more across machines, not less. Receivers **refuse relayed permission requests**; auto mode blocks them outright. A reattach may *nudge* a parked agent (re-prompt, supply an awaited answer) but never *authorize*: permission escalations and the PL gate stay operator-owned.
 
 #### Skill discovery & subagent_type resolution
 
-> Subagents discover project + user + plugin skills natively. Orchestrators do not need to inline-load skill instructions before delegation — the child can resolve `Skill("name")` from any source the parent could. This holds at every nesting depth: a Level-3 child resolves skills the same way a Level-1 child does.
-
-> `subagent_type` matching is case- and separator-insensitive. `Task({ subagent_type: "Corpflow:Developer" })` resolves to the same agent as `corpflow:developer`. Bare-name → `corpflow:` prefix convention still applies for resolution priority, but typos in case/separator no longer fail-stop the call.
+> Subagents resolve project + user + plugin skills natively at every depth — a Level-3 child resolves `Skill("name")` like a Level-1 one — so never inline-load skill instructions before delegating. `subagent_type` matching is case- and separator-insensitive (`"Corpflow:Developer"` → `corpflow:developer`); the bare-name → `corpflow:` convention still sets resolution priority.
 
 #### Dispatch flags & /agents UI
 
-> `claude agents` dispatch flags (`--cwd`, `--add-dir`, `--settings`, `--mcp-config`, `--plugin-dir`, `--permission-mode`, `--model`, `--effort`, `--dangerously-skip-permissions`) are mapped to `task.metadata` fields per the **`references/headless-dispatch.md`** translation table. PL0 populates the optional fields per `skills/worktask/references/pl0-procedure.md § Optional dispatch metadata`; external runners consume them via the canonical one-liner in `commands/worktask.md § Headless dispatch`.
-
-> `/agents` displays a tabbed layout (Running/Library tabs) with a `* N running` indicator next to agent types with live instances.
+> `claude agents` dispatch flags (`--cwd`, `--add-dir`, `--settings`, `--mcp-config`, `--plugin-dir`, `--permission-mode`, `--model`, `--effort`, `--dangerously-skip-permissions`) map to `task.metadata` per the **`references/headless-dispatch.md`** translation table. PL0 populates the optional fields (`skills/worktask/references/pl0-procedure.md § Optional dispatch metadata`); external runners consume them via the one-liner in `commands/worktask.md § Headless dispatch`. `/agents` shows Running/Library tabs with a `* N running` indicator per type.
 
 ### Agent Naming & Collision Avoidance
 
-Claude Code keys installed agents by the YAML frontmatter `name`, so two plugins shipping the same agent name silently overwrite each other when installed together. Common collision-prone stems include `developer`, `qa-engineer`, `incident-responder`, `designer`, `technical-writer` — all generic across marketplaces. (Source: ai-research PR #554.)
-
-#### Naming mitigation & authoring audit
-
-For new agents, prefer **plugin-scoped names** (`<plugin>-<role>`, e.g. `corpflow-developer`) when the role is generic. For the 16 existing corpflow agents, the orchestrator disambiguates today via `corpflow:<name>` prefixes (every `subagent_type` is fully qualified, e.g. `apple-developer:ios-developer`), so no rename is forced — renaming would cascade into every `Task(subagent_type=…)` reference (high blast radius).
-
-When authoring new agents via `/create-agent` / `/optimize-agent`, audit the `name:` field against known marketplace stems (`apple-developer:`, `security-scanning:`, `debugging-toolkit:`) before merging. `/optimize-agent § Frontmatter Audit` flags this as P1.
+Claude Code keys installed agents by frontmatter `name`, so two plugins shipping one name silently overwrite each other; `developer`, `qa-engineer`, `incident-responder`, `designer`, and `technical-writer` are generic across marketplaces (source: ai-research PR #554). Prefer **plugin-scoped names** (`<plugin>-<role>`) for new generic-role agents. The 16 existing corpflow agents are disambiguated by fully-qualified `subagent_type` prefixes, so no rename is forced — renaming would cascade into every `Task(subagent_type=…)` reference. When authoring via `/create-agent` / `/optimize-agent`, audit `name:` against known marketplace stems (`apple-developer:`, `security-scanning:`, `debugging-toolkit:`); `/optimize-agent § Frontmatter Audit` flags this as P1.
 
 ### Monitor Tool for Background Events
 
-The `Monitor` tool streams events (stdout lines) from background scripts started
-via Bash with `run_in_background`. Event-driven — no polling loops. Tee the
-background stream into `.context/logs/monitor-<agent>-<timestamp>.log` so the
-capture persists after the Monitor session ends — see `logging-conventions` skill.
+`Monitor` streams stdout from background scripts started via Bash `run_in_background` — event-driven, no polling loops. Pattern: launch with `run_in_background: true`, tee into `.context/logs/` so the capture outlives the Monitor session (`logging-conventions`), note the returned shell ID, attach `Monitor` to it. After Monitor detaches (timeout, stage transition) the `.log` is still readable via `Read`.
+
+```bash
+<command> 2>&1 | tee .context/logs/<kind>-<slug>-<ts>.log
+```
 
 #### Per-Stage Monitor Usage
 
-| Stage | Scenario | Background Command | Monitor Purpose |
-|-------|----------|--------------------|-----------------|
-| DV | Build iteration during implementation | `xcodebuild … 2>&1 \| tee .context/logs/build-<slug>-<ts>.log` | Watch compile errors live; abort early on first failure |
-| DV | Swift Package resolution | `swift build 2>&1 \| tee .context/logs/build-spm-<ts>.log` | Detect dependency resolution issues |
-| QA | XCTest run | `xcodebuild test … 2>&1 \| tee .context/logs/test-<slug>-<ts>.log` | Stream pass/fail per test; stop on first red |
-| QA | Simulator app logs | `xcrun simctl spawn … log stream … \| tee .context/logs/sim-<dev>-<ts>.log` | Watch runtime behavior during manual test |
-
-##### Monitor usage — IR/DR/SR/RE/FN
-
-| Stage | Scenario | Background Command | Monitor Purpose |
-|-------|----------|--------------------|-----------------|
-| IR | Production log tail | `ssh prod tail -f /var/log/app.log \| tee .context/logs/incident-<ts>.log` | Identify recurring error pattern |
-| DR/SR | Static analysis | `swiftlint --reporter json 2>&1 \| tee .context/logs/monitor-lint-<ts>.log` | Stream warnings to triage severity in real time |
-| RE | Release build | `xcodebuild archive … 2>&1 \| tee .context/logs/build-release-<ts>.log` | Watch signing / archive steps; abort on signing failure |
-| FN | CI run after push | `gh run watch <run-id> \| tee .context/logs/monitor-ci-<ts>.log` | Watch PR checks progress |
-
-##### Common pattern
-
-Start background Bash with `run_in_background: true`, note
-the returned shell ID, then attach `Monitor` to that ID. When Monitor detaches
-(timeout, stage transition), the `.log` file is still readable via `Read`.
+| Stage | Background command → what Monitor watches |
+|-------|-------------------------------------------|
+| DV | `xcodebuild …` / `swift build` → compile + dependency-resolution errors; abort on first failure |
+| QA | `xcodebuild test …` → pass/fail per test, stop on first red; `xcrun simctl spawn … log stream` → runtime behavior |
+| IR | `ssh prod tail -f /var/log/app.log` → recurring error pattern |
+| DR/SR | `swiftlint --reporter json` → warnings streamed for severity triage |
+| RE | `xcodebuild archive …` → signing / archive steps; abort on signing failure |
+| FN | `gh run watch <run-id>` → PR check progress |
 
 #### Stall Timeout
 
-Subagents stalled for more than 10 minutes fail with a clear error rather
-than hanging indefinitely. Monitor sessions inherit this guard — if the
-background process stops producing output for >10min, treat as failure and
-escalate per `Error Handling § Retry / Escalate Matrix`.
-
-Idle background shells may additionally be reaped under memory pressure —
-set `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` on hosts
-where a long-lived monitor or `tee` pipe must survive; the `tee`'d
-`.context/logs/*.log` file remains the durable record either way.
-
-### MCP Large Result Handling
-
-MCP servers can annotate tool results with `_meta["anthropic/maxResultSizeChars"]` to allow results up to 500K characters without truncation. Useful for large outputs like database schemas or build logs from XcodeBuildMCP.
+A subagent stalled >10 minutes fails with a clear error rather than hanging, and Monitor sessions inherit the guard: no output for >10 min is a failure — escalate per `Error Handling § Retry / Escalate Matrix`. Idle background shells may also be reaped under memory pressure; set `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` where a long-lived monitor or `tee` pipe must survive. The tee'd `.context/logs/*.log` is the durable record either way.
 
 ### MCP Auto-Background
 
-Any MCP tool call running past the auto-background threshold (default **2 minutes**; tune or disable with `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` — per-dispatch scoping is only real for an external headless dispatch launched with its own environment; in-process `Task()` dispatches share the session's setting) is moved to the background by Claude Code itself — the calling agent gets back a background-task handle, not the terminal result. Handle it exactly like a backgrounded `Task()` dispatch (`§ Background-by-default dispatch` above):
+An MCP tool call past the auto-background threshold (default **2 minutes**, `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS`) is backgrounded by Claude Code itself: the caller gets a handle, not the result. Handle it exactly like a backgrounded `Task()` dispatch (§ Background-by-default dispatch).
 
-#### Handling a backgrounded MCP call
+- Do NOT read the handle as the build/test outcome — await the completion notification (or poll) first.
+- A completion gate reading an artifact the call produces (e.g. `developer § D1`'s `build-developer-*.log`) MUST wait for the real completion signal: a log still being written is not "done", and file presence proves nothing.
 
-- Do NOT parse the handle/acknowledgement as the build/test outcome — await the completion notification (or poll the task) before reading results.
-- Any completion gate that reads a log or artifact the MCP call produces (e.g., `developer § D1`'s `build-developer-*.log`) MUST wait for the real completion signal — a log still being written is not "done"; file presence alone proves nothing.
 #### MCP auto-background threshold tuning
 
-- XcodeBuildMCP `build_sim` / `build_run_sim` / `test_sim` routinely exceed 2 minutes — DV/DR/QA flows that chain on their results must await between steps.
-- Raise or disable the threshold only when a run genuinely needs a synchronous result within one turn (e.g., DV's edit-batch-build fix-up cycle diagnosing a full log in one pass) — practical only for external headless dispatches with their own environment; avoid raising it session-wide, since every other MCP call in that session loses the safety net.
+- XcodeBuildMCP `build_sim` / `build_run_sim` / `test_sim` routinely exceed 2 minutes — DV/DR/QA flows chaining on them must await between steps.
+- Raise or disable the threshold only when one turn genuinely needs a synchronous result (DV diagnosing a full log in one pass), and only on an external headless dispatch with its own environment: in-process `Task()` children share the session setting, so raising it session-wide costs every other MCP call its safety net.
 
 ### MCP Tool Inheritance
 
-Subagents inherit MCP tools from MCP servers that are **already running** in the parent session at delegation time. Cross-plugin MCP tools (XcodeBuildMCP, Pencil, etc.) are available to stage agents without explicit `tools:` frontmatter entries for each MCP tool — **provided the parent has already spawned the server**.
+Subagents inherit MCP tools from servers **already running** in the parent at delegation time, so cross-plugin tools (XcodeBuildMCP, Pencil, …) need no per-tool `tools:` entries — provided the parent already spawned the server.
 
 #### Lazy-spawn warmup requirement
 
-For lazy-spawned servers — anything registered as `npx -y …` over stdio (XcodeBuildMCP, Pencil, etc.) — Claude Code starts the process only on the first tool call in a given session. Subagents inherit the server reference but inheritance does NOT trigger a spawn. If the orchestrator delegates before any tool call, the child (especially under `isolation: worktree`) inherits an unstarted reference and the first `mcp__<server>__*` call fails with "tool not available".
-
-The orchestrator MUST issue one warmup call before delegating to a child that needs a lazy-spawned server. See `worktask § Pre-DV MCP warmup` for the canonical pattern (trigger conditions, retry budget, audit lines, fallback banner). The pattern generalises to any new lazy-spawn MCP — add a new trigger block when introducing one.
+Lazy-spawned servers (`npx -y …` over stdio) start only on the first tool call in a session, and inheriting the server *reference* does NOT trigger a spawn: delegate before any tool call and the child (especially under `isolation: worktree`) fails its first `mcp__<server>__*` call with "tool not available". The orchestrator MUST issue one warmup call before delegating to a child that needs one — canonical pattern (triggers, retry budget, audit lines, fallback banner) in `worktask § Pre-DV MCP warmup`; add a trigger block when introducing a new lazy-spawn MCP.
 
 ### MCP Unavailability Detection
 
-Both warmup sites (`worktask § Pre-DV MCP warmup`, `developer § MCP Build Verification`) classify warmup failures with one canonical regex. Match against the normalised error message — `String(err.message ?? err).slice(0, 500)`, case-insensitive:
+Both warmup sites (`worktask § Pre-DV MCP warmup`, `developer § MCP Build Verification`) classify failures with one regex over the normalised message — `String(err.message ?? err).slice(0, 500)`, case-insensitive:
 
 ```
 MCP_UNAVAILABLE_RE = /(tool not available|server (not reachable|unavailable)|connection refused|ECONNREFUSED|EPIPE|ETIMEDOUT|timed? ?out|spawn ENOENT|command not found|InputValidationError)/i
 ```
 
-This is a **closed list of known-transient outages**, not a catch-all. Errors outside the list (e.g., `TypeError`, schema-validation failures, assertion errors) are real bugs and MUST propagate — do not retry, do not fall back. New lazy-spawn MCPs that surface a new transient error string SHOULD extend this regex here rather than redefine the match locally.
+A **closed list of known-transient outages**, not a catch-all. Anything outside it (`TypeError`, schema-validation failures, assertion errors) is a real bug and MUST propagate — do not retry, do not fall back. A new lazy-spawn MCP with a new transient string SHOULD extend this regex here rather than match locally.
 
 ### Subagent Worktree Access
 
-Sub-agents in isolated worktrees automatically receive Read/Edit access to their own worktree directory. No explicit tool grant needed.
+Worktree-isolated sub-agents automatically get Read/Edit access to their own worktree — no explicit grant needed — and **cannot** redirect git at the shared checkout: `git -C <shared path>`, `--git-dir`, `GIT_DIR`, and `GIT_WORK_TREE` are blocked. Isolation is runtime-enforced, not a convention DV is trusted to honor, so an escape attempt fails loudly instead of silently polluting the parent tree. The inverse still works: a **parent** session may reach in with `git -C .worktrees/…` (`skills/shared/milestone-helpers/SKILL.md § Git Commands Reference`); inside a worktree use plain `git` against the inherited cwd.
 
-#### Git isolation is runtime-enforced
+### Subagent runtime guarantees
 
-> A worktree-isolated subagent **cannot** redirect git at the shared checkout — `git -C <shared path>`, `--git-dir`, `GIT_DIR`, and `GIT_WORK_TREE` are all blocked. Worktree isolation is an enforced boundary, not a convention the DV agent is trusted to honor, so an escape attempt fails loudly instead of silently polluting the parent tree.
->
-> The inverse direction is still allowed: a **parent** session may reach into a worktree with `git -C .worktrees/…` (that is what `skills/shared/milestone-helpers/SKILL.md § Git Commands Reference` documents). Inside a worktree, use plain `git` against the inherited cwd. A worktree session also no longer lands in another project's leftover worktree when the working directory does not match the selected project.
+- **Partial progress is trustworthy**: a background subagent cut off by a rate limit or server error returns its partial work; an API error (usage limit) is reported to the parent as an **error**, not a successful-looking result; a cutoff before any text fails cleanly. A teammate dying on an API error reports `failed` to the lead. Classify as `transient` (§ Retry / Escalate Matrix) — an errored return is never stage completion (`skills/worktask/SKILL.md` Step 6.5).
+- **Forking is on by default**: `subagent_type: "fork"` inherits the parent's conversation **and prompt cache** — the cheapest handoff there is, since a stage needing the orchestrator's whole context pays cache-read rates instead of a re-sent brief. Fork when a stage keeps asking for upstream detail; dispatch normally when a narrow context is the point (`skills/cost-optimization/`). (`/fork` copies the conversation into a new background session; the in-session behavior lives at `/subtask`.)
+#### Isolation, cwd & key order
 
-### Background Subagent Partial Progress
-
-Background subagents that fail report partial progress instead of returning nothing. Orchestrators can inspect partial results for recovery.
-
-Error propagation is trustworthy: a subagent cut off by a rate limit or server error returns its **partial work** to the parent; an API error (e.g. usage limit reached) is reported to the parent as an **error** rather than a successful-looking result; and a cutoff before any text fails cleanly instead of returning an empty result. A teammate that dies on an API error reports `failed` to the lead. Classify these as `transient` per § Retry / Escalate Matrix — never treat an errored return as stage completion (see `skills/worktask/SKILL.md` Step 6.5 completion-signal rule).
-
-### Forked Subagents
-
-Subagent forking is **on by default** as of CC 2.1.232 — `CLAUDE_CODE_FORK_SUBAGENT=1` is no longer needed. Dispatch `subagent_type: "fork"` and the child inherits the parent's full conversation **and its prompt cache**.
-
-That cache inheritance makes a fork the cheapest handoff available: a stage that genuinely needs the orchestrator's whole context pays cache-read rates instead of re-sending a compressed brief. Prefer it over widening `context_refs` when a stage keeps asking for more upstream detail; prefer a normal dispatch when a clean, narrow context is the point (see `skills/cost-optimization/`).
-
-> Command-surface note: the `/fork` slash command copies the conversation into a new **background session** (its own row in `claude agents`); the in-session forked-subagent behavior it used to launch lives at `/subtask`. Neither replaces the env-var mechanism above.
-
-### Subagent Worktree Isolation Reuse
-
-Agent tool with `isolation: "worktree"` never reuses **stale** worktrees from prior sessions — each delegation gets a fresh worktree. Removes the failure mode where a previous run's untracked files leaked into a new stage.
-
-### Subagent cwd Restoration on Resume
-
-Subagents resumed via `SendMessage` correctly restore the explicit `cwd` they were spawned with. Stages that resume mid-task do not fall back to the parent's cwd unexpectedly.
-
-### Ledger Key Order
-
-`tasks{}` keys sort lexically by stage id, so stage agents can rely on stable handoff math (e.g., "the latest DV task is the highest-numbered DVN").
+- **Fresh worktrees**: `isolation: "worktree"` never reuses a stale worktree from a prior session, so old untracked files cannot leak into a new stage.
+- **cwd survives resume**: subagents resumed via `SendMessage` restore the explicit `cwd` they were spawned with.
+- **Stable key order**: `tasks{}` keys sort lexically by stage id, so handoff math like "the latest DV task is the highest-numbered DVN" holds.
 
 ## Coordination Patterns
 
@@ -657,49 +487,20 @@ PL → DV → DR → QA
 
 ## Stage-Specific Handoffs
 
-### DV → SR (Security Review)
-```markdown
-**Security-Sensitive Areas**:
-- [Area]: [why relevant]
-**Recommended Focus**: Auth, data handling, APIs
-```
+Fields each handoff must carry, in addition to the standard format above:
 
-### SR → QA
-```markdown
-**Security Status**: [Approved|Blocked|Conditional]
-**Critical/High Findings**: [count]
-**Security Tests Recommended**: [list]
-```
-
-### DC → RE (Release Engineering)
-```markdown
-**Commit Summary**: [feat/fix list]
-**Recommended Version Bump**: [MAJOR|MINOR|PATCH]
-```
-
-### IR → DV (Emergency)
-```markdown
-**Incident ID**: INC-[N]
-**Severity**: P[0-3]
-**Required Fix**: [specific change]
-**Constraints**: Minimal change, no refactoring
-```
+| Handoff | Required fields |
+|---|---|
+| DV → SR | **Security-Sensitive Areas** (area: why relevant); **Recommended Focus**: auth, data handling, APIs |
+| SR → QA | **Security Status** [Approved\|Blocked\|Conditional]; **Critical/High Findings** count; **Security Tests Recommended** |
+| DC → RE | **Commit Summary** (feat/fix list); **Recommended Version Bump** [MAJOR\|MINOR\|PATCH] |
+| IR → DV | **Incident ID** INC-[N]; **Severity** P[0-3]; **Required Fix**; **Constraints**: minimal change, no refactoring |
 
 ## Constitutional Coordination
 
-Ethics-reviewer can be invoked at any stage:
-- Optional: `--ethics-review` flag
-- Mandatory: High-risk feature detected
-- Escalation: Agent flags concern
-- Hard constraint: Immediate stop
+Ethics-reviewer can be invoked at any stage: optional via `--ethics-review`, mandatory when a high-risk feature is detected, on any agent's flagged concern, and as an immediate stop on a hard constraint.
 
-### Honesty in Handoffs
-
-| Property | Requirement |
-|----------|-------------|
-| Truthful | Accurate status claims |
-| Calibrated | Appropriate uncertainty |
-| Transparent | No hidden issues |
+Handoffs must be **truthful** (accurate status claims), **calibrated** (appropriate uncertainty), and **transparent** (no hidden issues).
 
 ## Multi-Reviewer Coordination
 
@@ -713,22 +514,14 @@ Ethics-reviewer can be invoked at any stage:
 | **Testing** | Coverage, quality, edge cases | New functionality added |
 | **Accessibility** | WCAG, ARIA, keyboard nav | UI/frontend changes |
 
-### Recommended Review Combinations
-
-| Scenario | Dimensions |
-|----------|-----------|
-| API endpoint changes | Security, Performance, Architecture |
-| UI component changes | Architecture, Testing, Accessibility |
-| Data model changes | Security, Performance, Architecture |
-| New feature (full) | Security, Performance, Architecture, Testing |
+Combinations: API endpoint, data model → Security + Performance + Architecture. UI component → Architecture + Testing + Accessibility. New feature (full) → Security + Performance + Architecture + Testing.
 
 ### Finding Consolidation
 
-When multiple reviewers report findings:
-1. **Deduplicate**: Merge findings at same file:line
-2. **Resolve conflicts**: Use higher severity when reviewers disagree
-3. **Organize by severity**: Group as Critical > High > Medium > Low
-4. **Cross-reference**: Note findings appearing in multiple dimensions
+1. **Deduplicate**: merge findings at the same file:line.
+2. **Resolve conflicts**: take the higher severity when reviewers disagree.
+3. **Organize by severity**: Critical > High > Medium > Low.
+4. **Cross-reference**: note findings appearing in multiple dimensions.
 
 ### Severity Calibration
 
@@ -743,64 +536,44 @@ When multiple reviewers report findings:
 
 ### File Ownership Boundaries
 
-When decomposing work for parallel agents:
-1. Assign exclusive file ownership per agent — no overlap
-2. Define interface contracts at ownership boundaries
-3. Create shared types/interfaces before parallel execution
-4. Never modify files owned by another agent without team-lead approval
+1. Assign exclusive file ownership per agent — no overlap.
+2. Define interface contracts at ownership boundaries.
+3. Create shared types/interfaces before parallel execution starts.
+4. Never modify files owned by another agent without team-lead approval.
 
 ### TL-Initiated DV Splitting
 
-TL can split DV0 into parallel streams (DV0, DV1, DV2...) during coordination. Each stream runs in its own worktree after TL completes. The orchestrator picks up new tasks on its next ledger re-read — no loop changes needed.
+TL can split DV0 into parallel streams (DV0, DV1, DV2…) during coordination; each runs in its own worktree after TL completes, and the orchestrator picks up the new tasks on its next ledger re-read — no loop changes needed.
 
-**Split criteria**: 2+ independent file groups with cleanly separable ownership and small interface surface between streams.
+**Split criteria**: 2+ independent file groups with cleanly separable ownership and a small interface surface. **Artifact**: TL records the split in `.context/coordination-N.md § Parallel Streams` — per-stream scope, file ownership, interface contracts.
 
-**Anti-patterns**:
-- Splitting tightly coupled files across streams (causes merge conflicts)
-- Splitting small scope work (coordination overhead exceeds time saved)
-- Missing DR0 rewiring (DR0 must depend on ALL DVN tasks, not just DV0)
-
-**Coordination artifact**: TL documents the split in `.context/coordination-N.md` with a "Parallel Streams" section listing each stream's scope, file ownership, and interface contracts.
+**Anti-patterns**: splitting tightly coupled files across streams (merge conflicts); splitting small scope (coordination overhead exceeds time saved); missing DR0 rewiring (DR0 must depend on ALL DVN tasks, not just DV0).
 
 ### Hypothesis-Driven Debugging
 
-For complex bugs with multiple potential causes:
-1. Generate N hypotheses covering different failure categories
-2. Assign each hypothesis to an investigator agent
-3. Each investigator gathers confirming/falsifying evidence
-4. Arbitrate across findings, rank by confidence and evidence strength
-
-See references/ for hook-based monitoring (including PermissionDenied, StopFailure, CwdChanged, FileChanged, WorktreeCreate hooks, PreToolUse defer/blocking, conditional `if` field for hook filtering, PostToolUse format-on-save safety, MCP-tool-typed hooks, `duration_ms` in PostToolUse payload, and PostToolUse output replacement via `updatedToolOutput`), agent teams comparison, MCP elicitation patterns, and team communication protocols (message types, anti-patterns, deadlock resolution).
+For a bug with multiple candidate causes: generate N hypotheses spanning different failure categories, assign each to an investigator agent, have each gather confirming/falsifying evidence, then arbitrate ranked by confidence and evidence strength.
 
 ## Native Dynamic Workflows vs corpflow Staged Worktask
 
-Claude Code ships a native `/workflows` command and Workflow tool for **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. This is complementary to (not a replacement for) the corpflow 11-stage worktask system:
+Claude Code's native `/workflows` command and Workflow tool cover **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. Complementary to the staged worktask, not a replacement.
 
 ### Comparison
 
 | Dimension | Native dynamic workflows (`/workflows`) | corpflow staged worktask |
 |---|---|---|
 | **Scale** | Tens–hundreds of parallel agents | 11 governed sequential/parallel stages |
-| **Governance** | Ad-hoc, minimal overhead | Stage contracts, artifact audit trail, DR/SR/QA quality gates |
-| **Use case** | One-off fan-out (e.g. scan 500 files in parallel) | Full feature development with DR/SR/QA quality gates |
-| **State management** | Orchestrator-in-context | `.context/state.json`, audit.jsonl |
-| **Resume / rollback** | Manual | Resume Procedure, state.checkpoint-*.json |
+| **Governance** | Ad-hoc, minimal overhead | Stage contracts, artifact audit trail, DR/SR/QA gates |
+| **State / resume** | Orchestrator-in-context; manual resume | `.context/state.json` + audit.jsonl; Resume Procedure, checkpoints |
+| **Reach for it when** | Quick parallelism without governance (batch linting, parallel research, one-off transforms) | Work needing security review, QA sign-off, docs, or an audited multi-stage handoff |
 
-### When to reach for each
-
-- Reach for native dynamic workflows when you need quick parallelism without governance overhead (e.g., batch linting, parallel research, one-off data transforms).
-- Reach for the corpflow worktask when work requires security review, QA sign-off, documentation, or any multi-stage handoff contract with audit trail. Worktasks have two human checkpoints — the PL gate (plan approval after PL0) and the FN gate (finalization approval, which STOPs before commit/push/PR by default); both are bypassed by `--emergency`, the PL gate also by `--auto=[plan]` and the FN gate also by `--auto=[finalization]`; `--auto=[decision]` additionally delegates PL open questions to a Fable-model decision pass without bypassing any gate. A batch orchestrator (`/megatask`) stamps `plan_gate`/`fn_gate: "bypass"` directly on each per-issue PL0.
+The worktask's two human checkpoints — the PL plan gate and the FN finalization gate (STOPs before commit/push/PR) — and their `--auto=[plan|finalization|decision]` / `--emergency` bypasses are specified in `skills/worktask/SKILL.md`; a `/megatask` batch stamps `plan_gate`/`fn_gate: "bypass"` on each per-issue PL0.
 
 ### Composition & workflow sizing
 
-They can compose: a DV agent inside a corpflow worktask may itself spin up a native dynamic workflow to parallelize sub-tasks, then consolidate results before its DR handoff.
+They compose: a DV agent inside a worktask may spin up a native dynamic workflow to parallelize sub-tasks, then consolidate before its DR handoff. Workflow-spawned agents carry `workflow.run_id`/`workflow.name` OTel attributes, so a composed fan-out can be reconstructed alongside the audit trail.
 
-#### Workflow size guideline
-
-> Naming note: the `/config` **"Dynamic workflow size"** setting (advisory agent counts) governs **native dynamic workflows** only — it is unrelated to PL0 dynamic *sizing* (complexity-scored stage selection). It defaults to **medium** (aim for fewer than 15 agents), is settable from any settings file via `workflowSizeGuideline`, and the active default appears in the running-workflow status line. An 11-stage worktask is not "oversized" by this guideline — but a DV fan-out composed *on top of* a worktask is, and it spends from the same 20-concurrent budget.
-
-> Workflow-spawned agents carry `workflow.run_id`/`workflow.name` OpenTelemetry attributes, so a composed DV fan-out can be reconstructed from OTel data alongside the plugin's audit trail.
+> Naming note: the `/config` **"Dynamic workflow size"** setting (advisory agent counts, default **medium** = aim for <15 agents, settable anywhere via `workflowSizeGuideline`) governs **native dynamic workflows** only — it is unrelated to PL0 dynamic *sizing* (complexity-scored stage selection). An 11-stage worktask is not "oversized" by it, but a DV fan-out composed *on top of* one is, and that fan-out spends from the same 20-concurrent budget.
 
 ### Gate prompts (AskUserQuestion)
 
-> Claude reserves multiple-choice / AskUserQuestion prompts for genuine decisions that require user input. After the PL plan-approval gate, stage transitions are automatic — the PL gate itself is the one `AskUserQuestion` checkpoint; intra-loop transitions proceed without user confirmation. `AskUserQuestion` dialogs do not auto-continue on idle by default — a PL/FN gate park holds indefinitely until the operator answers; the idle-timeout auto-continue is an explicit `/config` opt-in and MUST stay off on hosts running gated worktasks.
+> `AskUserQuestion` prompts are reserved for genuine decisions needing user input: the PL plan-approval gate is the one such checkpoint; intra-loop transitions proceed without confirmation. These dialogs do not auto-continue on idle, so a PL/FN gate park holds indefinitely until the operator answers — the idle-timeout auto-continue is an explicit `/config` opt-in and MUST stay off on hosts running gated worktasks.

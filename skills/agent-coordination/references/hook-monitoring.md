@@ -17,9 +17,9 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 #### Workspace trust is a precondition for agent-frontmatter hooks
 
-> Hooks declared in an **agent file's own frontmatter** run only when that agent file's folder has accepted workspace trust. In an untrusted plugin folder they are **silently skipped** — no error, no audit row, the stage simply completes without its gate. Three corpflow agents declare frontmatter hooks and are affected: `agents/product-manager.md`, `agents/project-manager.md`, `agents/stakeholder.md`.
+> Hooks declared in an **agent file's own frontmatter** run only when that file's folder has accepted workspace trust. In an untrusted plugin folder they are **silently skipped** — no error, no audit row, the stage just completes without its gate. Affected: `agents/product-manager.md`, `agents/project-manager.md`, `agents/stakeholder.md`.
 >
-> Consequence for gate reasoning: absence of a hook-emitted audit row is **not** evidence the hook passed — it is equally consistent with the hook never having run. When a stage's completion depends on a frontmatter hook, confirm trust was granted for the plugin folder rather than inferring success from a clean run. Hooks installed via `plugin.json` (the `hooks` block) and the repo's own `hooks/` scripts are unaffected.
+> Consequence for gate reasoning: a missing hook-emitted audit row is **not** evidence the hook passed — it is equally consistent with the hook never running. When a stage's completion depends on a frontmatter hook, confirm trust was granted for the plugin folder instead of inferring success from a clean run. `plugin.json` hooks and the repo's own `hooks/` scripts are unaffected.
 
 ### Later lifecycle events
 
@@ -31,43 +31,27 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 ### Notification as resume wake-up
 
-> **`Notification` as resume wake-up**: background sessions in `claude agents` that need input or finish fire the `Notification` hook with `agent_needs_input` / `agent_completed`. For worktask resume this is the push complement to polling `claude agents --json` — wire a `Notification` hook to nudge the orchestrator (or the operator, via PushNotification) the moment a parked stage needs an answer. The `--json` pre-check remains the authoritative reconciliation (`skills/worktask/references/resume.md` step 0).
+> Background sessions that need input or finish fire `Notification` with `agent_needs_input` / `agent_completed` — the push complement to polling `claude agents --json` during resume. Wire it to nudge the orchestrator (or the operator, via PushNotification) the moment a stage parks; the `--json` pre-check stays the authoritative reconciliation (`skills/worktask/references/resume.md` step 0). It fires for permission prompts under Claude Desktop / VS Code too, so an unattended run surfaces a parked stage instead of stalling silently.
 
 > The Agent tool has no `resume` parameter. Use `SendMessage` to communicate with running agents instead.
 
-### Notification now covers permission prompts
+### SessionStart semantics
 
-> **CC 2.1.233** fixed `Notification` not firing for permission prompts under Claude Desktop and VS Code. An unattended run hosted there now surfaces a parked stage instead of stalling silently.
-
-### PreToolUse auto-allow cannot widen a grant list
-
-> **CC 2.1.222**: a `PreToolUse` hook returning an auto-allow decision inside a background agent task (summaries, compaction, renames) used to grant tools the agent's own `tools:` list denied. An agent's grant list is now the floor — a hook cannot widen it.
-
-### SessionStart reloadSkills
-
-> **SessionStart `reloadSkills:true`**: when a `SessionStart` hook fires with `reloadSkills: true`, plugin skills are reloaded mid-session (e.g., after a `/reload-skills` command). Hot-reload re-announces **only changed skills** (delta, not the full set) — hooks listening on `SessionStart` must re-apply skill-specific initialization idempotently and must not assume every skill re-announces. The `sessionTitle` field (allows the agent to set the session title visible in the UI) is available alongside `reloadSkills`.
-
-### SessionStart headless streaming
-
-> **SessionStart headless streaming**: `SessionStart` hook events stream in headless sessions — a headless run cannot idle-reap remote workers mid-hook before the `SessionStart` handler finishes. Plugin hooks use `${CLAUDE_PLUGIN_ROOT}` exec-form (`type: command` + `args`); `${user_config.*}` shell-form hook commands are rejected at load, which does not affect them.
+- `reloadSkills: true` reloads plugin skills mid-session (e.g. after `/reload-skills`), re-announcing **only changed skills** — listeners must re-apply skill-specific initialization idempotently, never assuming every skill re-announces. `sessionTitle` (UI session title) rides alongside it.
+- Events stream in headless sessions, so a headless run cannot idle-reap remote workers mid-hook before the handler finishes.
+- Plugin hooks use `${CLAUDE_PLUGIN_ROOT}` exec-form (`type: command` + `args`); `${user_config.*}` shell-form hook commands are rejected at load, which does not affect them.
+- A `PreToolUse` auto-allow inside a background agent task (summaries, compaction, renames) can no longer grant tools the agent's own `tools:` list denies — the grant list is the floor.
 
 ### Compaction recovery & hook-output guards
 
-> Parent agents reliably recover subagent results after context compaction. Background agents that are killed or interrupted preserve partial results in context, preventing total loss of intermediate work. The `PostCompact` hook can re-inject critical state after auto-compaction.
+- `PreCompact` fires **before** automatic compaction and blocks it by returning exit code 2 — useful for guarding critical stage handoffs from premature summarization (`context-compression` skill has the paired `PostCompact` recovery pattern). The managed hook `hooks/precompact-checkpoint.sh` (registered in `plugin.json`) snapshots `.context/state.json` to `.context/state.checkpoint-<ts>.json` on every compaction and **never blocks** (exit 0 always).
+- Parent agents reliably recover subagent results after compaction; background agents that are killed or interrupted preserve partial results in context. `PostCompact` can re-inject critical state.
+#### Payload, monitor & stall notes
 
-> Hook output exceeding 50K characters is saved to disk with a file path + preview injected into context instead of the full output. This prevents large hook results from consuming context window budget.
-
-> PreToolUse/PostToolUse hooks receive `file_path` as an absolute path for Write/Edit/Read tools, matching documented behavior.
-
-### PreCompact & plugin monitors
-
-> The `PreCompact` hook fires **before** automatic compaction and can block it by returning exit code 2 — useful for guarding critical stage handoffs from premature summarization. See `context-compression` skill for the paired `PostCompact` recovery pattern. **The managed hook `hooks/precompact-checkpoint.sh` (registered in `plugin.json`) snapshots `.context/state.json` to `.context/state.checkpoint-<ts>.json` on every compaction — never blocks (exit 0 always).**
-
-> Background monitor support for plugins via the `monitors` manifest key. Declare long-running monitors that stream events into the session without occupying a foreground tool call.
-
-### Stall timeout
-
-> Subagents that stall fail with a clear error after 10 minutes. Orchestrators should surface this error and either retry the stage or escalate rather than waiting indefinitely.
+- Hook output over 50K characters is saved to disk with a file path + preview injected instead of the full output, protecting the context budget.
+- PreToolUse/PostToolUse hooks receive `file_path` as an absolute path for Write/Edit/Read tools; `UserPromptSubmit` hooks receive `hookSpecificOutput.sessionTitle`, so a hook can react to or log the session title.
+- Plugins declare long-running background monitors via the `monitors` manifest key — they stream events into the session without occupying a foreground tool call.
+- Stalled subagents fail with a clear error after 10 minutes; surface it and retry or escalate rather than waiting (`skills/agent-coordination/SKILL.md § Stall Timeout`).
 
 ### Gate-feedback contract & Stop/SubagentStop additionalContext
 
@@ -86,7 +70,7 @@ Stop and SubagentStop hooks may return `hookSpecificOutput.additionalContext` to
 
 #### Gate-feedback contract (one contract, two surfaces)
 
-**Gate-feedback contract (one contract, two surfaces).** Every worktask gate — hook-enforced *or* orchestrator-mediated — must return **structured remediation** that flows into the *next attempt's context*:
+Every worktask gate — hook-enforced *or* orchestrator-mediated — must return **structured remediation** that flows into the *next attempt's context*:
 
 | Surface | Mechanism | Reference user |
 |---------|-----------|----------------|
@@ -95,46 +79,42 @@ Stop and SubagentStop hooks may return `hookSpecificOutput.additionalContext` to
 
 #### Surface symmetry & unchanged block-path schema
 
-The two surfaces are symmetric: the hook embeds remediation in the block JSON; the orchestrator embeds the upstream blocker list in the retry prompt. Keep them in sync when either changes. The block-path `decision:block` verb, the exit-0 discipline, and the `screenshot_gate_block` audit-row schema are unchanged — `hookSpecificOutput` is an additive stdout field only.
+The surfaces are symmetric — the hook embeds remediation in the block JSON, the orchestrator embeds the upstream blocker list in the retry prompt — so keep them in sync when either changes. The `decision:block` verb, the exit-0 discipline, and the `screenshot_gate_block` audit-row schema are unchanged; `hookSpecificOutput` is an additive stdout field only.
 
 ### OTEL Dispatch Tree Parenting
 
-`claude_code.tool` OTEL spans carry `agent_id` and `parent_agent_id` attributes; subagent spans correctly nest under the dispatching `Agent` tool span rather than appearing as orphan roots.
-
-**Plugin impact**: when an OTEL collector (Honeycomb/Datadog/Jaeger) is wired via `settings.json` → `otelExporter`, the PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST dispatch becomes a single nested trace tree. Diagnostic value: spot which stage spawned an orphan span (= subagent that escaped the dispatch chain).
+`claude_code.tool` spans carry `agent_id` and `parent_agent_id`, and subagent spans nest under the dispatching `Agent` tool span instead of orphaning. **Plugin impact**: with a collector wired via `settings.json` → `otelExporter`, the PL→…→ST dispatch becomes one nested trace tree, and an orphan span identifies a subagent that escaped the chain.
 
 #### Hook-stdin forward-compat
 
-`parent_agent_id` is OTEL-side and not confirmed in Stop/SubagentStop hook stdin, but `audit-subagent.sh` and `agent-stop.sh` defensively capture it with `(.parent_agent_id // "none")` — no-op until CC surfaces it in hook payloads, automatically populated the moment it does. It is recorded for observability only; dedupe keys do not use it.
+`parent_agent_id` is OTEL-side and not confirmed in Stop/SubagentStop hook stdin, but `audit-subagent.sh` and `agent-stop.sh` defensively capture it with `(.parent_agent_id // "none")` — a no-op until CC surfaces it, automatically populated the moment it does. Observability only; dedupe keys do not use it.
 
 ### Background Tasks & Crons Visibility
 
-Stop/SubagentStop hook stdin payloads include `background_tasks` and `session_crons` arrays. The plugin captures these into audit rows for `/cost-report` cross-correlation (which cron/bg task was active when a stage spiked).
+Stop/SubagentStop hook stdin includes `background_tasks` and `session_crons` arrays. The plugin captures them into audit rows for `/cost-report` cross-correlation (which cron/bg task was active when a stage spiked).
 
 #### Captured fields
 
-Captured fields (additive metadata on existing audit rows; written by `hooks/audit-subagent.sh` and `hooks/agent-stop.sh`):
+Additive metadata on existing audit rows, written by `hooks/audit-subagent.sh` and `hooks/agent-stop.sh`:
 
 - `background_tasks_count: ((.background_tasks // []) | length)`
 - `background_task_ids: ((.background_tasks // []) | map(.id // .task_id // "unknown"))`
 - `session_crons_count: ((.session_crons // []) | length)`
 - `session_cron_ids: ((.session_crons // []) | map(.id // .cron_id // "unknown"))`
 
-Dedupe unchanged: these are metadata-only; `dedupe_key` shape preserved. With nested sub-agent spawning, real `parent_agent_id` values flow in hook stdin and are recorded on the row.
+Dedupe unchanged: these are metadata-only, `dedupe_key` shape preserved. With nested spawning, real `parent_agent_id` values flow in hook stdin and are recorded on the row.
 
-### OTEL `tool_parameters`, resource-attribute labels & log-event correlation
+### OTEL attributes & log-event correlation
 
-- `tool_decision` telemetry events carry a `tool_parameters` field — the decision span records *which* tool args were classified, not just the tool name. Lets cost/audit dashboards distinguish e.g. a `Bash git push` decision from a `Bash ls`.
-- `OTEL_RESOURCE_ATTRIBUTES` values surface as **metric-datapoint labels**, not only on spans. Tag `worktask_id` / `stage` there to slice collector dashboards (Honeycomb/Datadog) per-stage without parsing span attributes.
-- `claude_code.lines_of_code.count` carries a `model` attribute — per-model LoC attribution lands in collector dashboards for free; pairs with the fable/opus/sonnet/haiku stage split in `skills/shared/stage-codes.md` to show which tier wrote the code.
-#### Log correlation & content limits
+- `tool_decision` events carry `tool_parameters` — the decision span records *which* tool args were classified, so dashboards can tell a `Bash git push` decision from a `Bash ls`.
+- `OTEL_RESOURCE_ATTRIBUTES` values surface as **metric-datapoint labels**, not only span attributes: tag `worktask_id` / `stage` there to slice collector dashboards per-stage without parsing spans.
+- `claude_code.lines_of_code.count` carries a `model` attribute — per-model LoC attribution pairs with the tier split in `skills/shared/stage-codes.md`.
+#### Log correlation, limits & trace nesting
 
-- OTEL log events carry `message.uuid`, `client_request_id`, and `tool_source` — message-level correlation and tool provenance across spans and audit rows without re-deriving IDs.
+- Log events carry `message.uuid`, `client_request_id`, and `tool_source` for message-level correlation and tool provenance across spans and audit rows.
 - `CLAUDE_CODE_OTEL_CONTENT_MAX_LENGTH` configures the 60 KB truncation limit on OTEL content attributes — set it alongside `OTEL_RESOURCE_ATTRIBUTES` when a collector enforces a payload ceiling.
-#### Trace nesting & effort attribution
-
-- Log events emitted outside the turn's async context (background/notification-triggered) carry the interaction span's trace context — a background-agent completion nests under the originating trace instead of appearing as an orphan.
-- Session transcripts record the reasoning effort level on each assistant message, and the `subagentStatusLine` payload includes reasoning effort — effort attribution without parsing model metadata (pairs with `§ Hook Effort Visibility`).
+- Log events emitted outside the turn's async context (background/notification-triggered) carry the interaction span's trace context, so a background-agent completion nests under the originating trace instead of orphaning.
+- Session transcripts record the reasoning effort level per assistant message and `subagentStatusLine` includes it — effort attribution without parsing model metadata (pairs with § Hook Effort Visibility).
 
 #### BG-Task ID Schema Watch
 
@@ -142,13 +122,11 @@ The ID extraction uses a defensive coalesce `(.id // .task_id // "unknown")` / `
 
 ### Managed (plugin) vs ad-hoc (user) hooks
 
-**Plugin-managed hooks** ship in `.claude-plugin/plugin.json` and survive `allowManagedHooksOnly: true` enforcement; see `plugin.json` for the current managed-hook set. The audit trail is a **plugin invariant** — these need to fire deterministically across every install.
-
-**Ad-hoc user hooks** go in project `settings.json` (or `~/.claude/settings.json`) and are for opt-in worktasks like dashboard webhooks or external SIEM forwarding. Examples below remain valid templates for that case.
+**Plugin-managed hooks** ship in `.claude-plugin/plugin.json` and survive `allowManagedHooksOnly: true` enforcement (which also runs hooks from force-enabled plugins); see `plugin.json` for the current managed-hook set. The audit trail is a **plugin invariant** — these must fire deterministically across every install. **Ad-hoc user hooks** go in project or `~/.claude/settings.json` and are for opt-in worktasks like dashboard webhooks or SIEM forwarding; the examples below are templates for that case.
 
 ### Project-Level Configuration
 
-Add to project `settings.json` for worktask-wide monitoring:
+One canonical `settings.json` block covering every hook shape — `matcher`, the conditional `if`, exec-form `command` + `args`, `http`, and `mcp_tool`:
 
 ```json
 {
@@ -157,14 +135,16 @@ Add to project `settings.json` for worktask-wide monitoring:
       {
         "matcher": "corpflow:.*",
         "hooks": [
-          { "type": "command", "command": "./tools/log-stage-start.sh" }
+          { "type": "command", "command": "./tools/log-stage-start.sh", "args": ["--stage", "DV", "--json"] }
         ]
       }
     ],
     "SubagentStop": [
       {
+        "if": "agent_type matches 'corpflow:.*'",
         "hooks": [
-          { "type": "command", "command": "./tools/log-stage-complete.sh" }
+          { "type": "http", "url": "https://dashboard.example.com/webhook/stage-complete" },
+          { "type": "mcp_tool", "server": "audit-mcp", "tool": "log_event", "continueOnBlock": true }
         ]
       }
     ]
@@ -172,205 +152,75 @@ Add to project `settings.json` for worktask-wide monitoring:
 }
 ```
 
-Hooks also support HTTP endpoints for external monitoring:
+#### Hook entry shapes
 
-```json
-{
-  "hooks": {
-    "SubagentStop": [
-      {
-        "hooks": [
-          { "type": "http", "url": "https://dashboard.example.com/webhook/stage-complete" }
-        ]
-      }
-    ]
-  }
-}
-```
+- `args: string[]` next to `command` avoids shell-string quoting issues for paths with spaces.
+- `type: "mcp_tool"` lets a hook call an MCP server action (elicitations, tool searches) without shelling out.
+- `continueOnBlock: true` keeps later hooks in the same matcher group running when an earlier one blocks — use it when independent observers (audit + cost) must both run.
 
 ## Conditional Hook Execution
 
-Hooks support an `if` field using permission rule syntax to avoid unnecessary process spawning. The `if` matcher correctly handles compound commands (`ls && git push`), commands with env-var prefixes (`FOO=bar git push`), and path-conditional `if` matchers on `Read`/`Edit`/`Write` tool calls match against the target file path. Path-glob anchoring: a single-segment `dir/**` in a hook `if:` condition matches only `<cwd>/dir` — write `**/dir/**` for any-depth matching.
+The `if` field uses permission-rule syntax to avoid unnecessary process spawning. It handles compound commands (`ls && git push`) and env-var prefixes (`FOO=bar git push`), and path-conditional matchers on `Read`/`Edit`/`Write` match the target file path. Path-glob anchoring: a single-segment `dir/**` matches only `<cwd>/dir` — write `**/dir/**` for any-depth matching.
 
-```json
-{
-  "hooks": {
-    "SubagentStop": [
-      {
-        "if": "agent_type matches 'corpflow:.*'",
-        "hooks": [
-          { "type": "command", "command": "./tools/log-stage-complete.sh" }
-        ]
-      }
-    ]
-  }
-}
-```
+### Matcher semantics
 
-### PreToolUse Hook Automation
+Hyphenated matchers **exact-match** rather than substring-match, so the Stop matcher is written with explicit wildcards (`.*corpflow:product-manager.*|.*corpflow:project-manager.*`, per the `mcp__server__.*` guidance) to keep firing regardless of how the runtime qualifies the agent name. Comma-separated matchers (`"Bash,PowerShell"`) do not fire — always use regex alternation (`Bash|PowerShell`), never commas.
 
-PreToolUse hooks can satisfy `AskUserQuestion` by returning `{ "updatedInput": "answer" }`, enabling automated responses in worktask pipelines without user interaction.
+### Stop → PushNotification hook
 
-### PreToolUse Defer Decision
+`plugin.json` registers an `mcp_tool` hook on `Stop` (matcher per § Matcher semantics) firing `conductor.PushNotification` at PL and FN completion — observability only, and a graceful no-op when the conductor MCP server is unavailable. Both stages are followed by human gates (PL plan approval, `fn_gate` before commit/push/PR); gate and bypass semantics live in `skills/worktask/SKILL.md`.
 
-PreToolUse hooks can return `"defer"` as the permission decision. This pauses headless (`-p`) sessions at the tool call, allowing later resumption with `-p --resume` to re-evaluate. Useful for CI/CD pipelines that need human approval at specific worktask gates.
+### PreToolUse decisions
 
-### PreToolUse Blocking via Exit Code
+- Returning `{ "updatedInput": "answer" }` satisfies an `AskUserQuestion`, enabling automated responses in worktask pipelines.
+- Returning `"defer"` pauses a headless (`-p`) session at the tool call for later `-p --resume` re-evaluation — the CI/CD approval-gate mechanism.
+- JSON on stdout with exit code 2 blocks the call, and the block holds even when that JSON fails schema validation: a malformed payload cannot silently downgrade an intended block to a pass.
+- `permissions.deny` rules override a hook's `permissionDecision: "ask"`; in the other direction auto mode cannot override an `ask` — a hook `ask` floors the decision at a prompt, even for unsandboxed Bash.
+- The `PermissionDenied` hook fires after auto-mode classifier denials; return `{retry: true}` to tell the model it may retry the call.
 
-PreToolUse hooks emitting JSON to stdout with exit code 2 block the tool call — and the block holds even when the hook's stdout JSON fails schema validation. A malformed payload cannot silently downgrade an intended block to a pass.
+### PostToolUse behaviors
 
-### PermissionDenied Hook
-
-The `PermissionDenied` hook fires after auto-mode classifier denials. Return `{retry: true}` to tell the model it can retry the tool call. This enables worktask agents to recover from permission denials automatically.
-
-### PostToolUse Format-on-Save
-
-PostToolUse format-on-save hooks do not cause "File content has changed" errors between consecutive Edit/Write calls. Safe to use PostToolUse hooks that rewrite files (linters, formatters) without breaking subsequent edits.
-
-### hookSpecificOutput.sessionTitle
-
-`UserPromptSubmit` hooks receive `hookSpecificOutput.sessionTitle` in their payload, enabling hooks to react to or log the session title.
-
-### Hook Error Stderr & failure semantics
-
-Hook errors include the first line of stderr in the transcript for self-diagnosis without `--debug`. `SessionStart`, `Setup`, and `SubagentStart` hooks exiting with code 2 do not hide their stderr either — the error shows in the transcript.
-
-A hook-callback timeout is reported as a timeout, and hook infrastructure errors are reported as such — neither is misreported as a user rejection. Do not treat a timed-out or crashed hook as an operator deny; route it as a transient failure, not a refusal.
-
-### Settings Resilience
-
-Unrecognized hook event names in `settings.json` do not break the entire settings file. Forward-compatible hook configurations survive CC downgrades gracefully.
-
-### permissions.deny Override & hook `ask` floor
-
-`permissions.deny` rules correctly override PreToolUse hook `permissionDecision: "ask"` decisions — a deny rule takes precedence over a hook that returns "ask". In the other direction, auto mode cannot override a PreToolUse hook's `ask`: a hook `ask` floors the decision at a prompt, even for unsandboxed Bash.
-
-### Plugin Hook allowManagedHooksOnly
-
-Plugin hooks from force-enabled plugins run when `allowManagedHooksOnly` is set, restricting execution to managed hook types only.
-
-### Main-Thread Agent Hooks
-
-Agent frontmatter `hooks:` fire when the agent runs as a main-thread agent via `--agent <name>`, not only for subagent invocations. Plugin agents that ship lifecycle hooks (e.g., audit-trail writers) apply consistently in both subagent and main-thread modes, for events beyond `Stop`/`SubagentStop` too.
-
-### Agent Frontmatter mcpServers
-
-Agent frontmatter `mcpServers` are loaded for main-thread agent sessions invoked via `--agent`. Plugin agents that declare MCP server requirements get the same server set in interactive `--agent` runs as in subagent delegations.
-
-### MCP Tool Hooks
-
-Hooks can invoke MCP tools directly via `type: "mcp_tool"` (alongside `command` and `http`). Useful for hooks that need to call MCP server actions (e.g., elicitations, tool searches) without shelling out:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "hooks": [
-          { "type": "mcp_tool", "server": "audit-mcp", "tool": "log_event" }
-        ]
-      }
-    ]
-  }
-}
-```
-
-#### Matcher semantics
-
-Hook matchers with hyphenated identifiers **exact-match** rather than substring-matching, so the Stop matcher is written with explicit wildcards (`.*corpflow:product-manager.*|.*corpflow:project-manager.*`, per the `mcp__server__.*` guidance) to keep firing regardless of how the runtime qualifies the agent name. Comma-separated matchers (`"Bash,PowerShell"`) do not fire — always use regex alternation (`Bash|PowerShell`), never commas.
-
-#### Stop → PushNotification hook
-
-`plugin.json` registers an `mcp_tool` hook on `Stop` (matcher per § Matcher semantics above) that fires `conductor.PushNotification` at PL and FN stage completion (observability only). The PL stage is followed by a human plan-approval gate (Step A.5); the FN stage is gated by a finalization checkpoint (`fn_gate`, default `"checkpoint"`) that STOPs before commit/push/PR unless bypassed by `--auto=[finalization]` / `--emergency` (a `/megatask` batch stamps `fn_gate: "bypass"` directly on each per-issue PL0). Gracefully no-ops if the conductor MCP server is unavailable.
-
-### PostToolUse duration_ms
-
-`PostToolUse` and `PostToolUseFailure` hook inputs include `duration_ms` — tool execution time excluding permission prompts and `PreToolUse` hooks. Useful for cost/perf telemetry and slow-tool alerting in worktask audit trails. The managed hook `hooks/audit-tooluse.sh` (registered in `plugin.json`) consumes `duration_ms` + `effort.level` and writes `metadata` of every `audit.jsonl` `tool_invoked` row.
-
-### PostToolUse Output Replacement
-
-`PostToolUse` hooks can replace tool output for **all tools** by setting `hookSpecificOutput.updatedToolOutput`. Worktask agents can use this to redact secrets, normalize line endings, or inject structured envelopes into tool results before they hit the model's context.
-
-```json
-{
-  "hookSpecificOutput": {
-    "updatedToolOutput": "<sanitized output>"
-  }
-}
-```
-
-> Async `PostToolUse` hooks that emit no response payload do not write empty entries to the session transcript.
+- Format-on-save hooks do not cause "File content has changed" errors between consecutive Edit/Write calls — linters and formatters that rewrite files are safe.
+- `PostToolUse` and `PostToolUseFailure` inputs include `duration_ms` (tool execution time excluding permission prompts and `PreToolUse` hooks). The managed `hooks/audit-tooluse.sh` consumes `duration_ms` + `effort.level` into the `metadata` of every `tool_invoked` audit row.
+- `hookSpecificOutput.updatedToolOutput` replaces tool output for **all tools** — `{"hookSpecificOutput": {"updatedToolOutput": "<sanitized output>"}}` — so agents can redact secrets, normalize line endings, or inject structured envelopes before results hit context.
+- Async hooks that emit no response payload write no empty transcript entries.
+- A hook's `{"continue": false}` halt holds even when the attached tool fails or completes mid-stream — a halt cannot be dropped by tool-lifecycle races.
 
 ### Hook Effort Visibility
 
-Hook payloads include `effort.level` (JSON field) and the `$CLAUDE_EFFORT` env var carries the active effort string (`low|medium|high|xhigh|max`). Audit/cost-tracking hooks can attribute spend to the effort tier without parsing model metadata. See `skills/shared/model-selection.md` for the tier model.
+Hook payloads include `effort.level` and the `$CLAUDE_EFFORT` env var carries the active effort string (`low|medium|high|xhigh|max`), so audit/cost hooks can attribute spend to the effort tier without parsing model metadata. Tier model: `skills/shared/model-selection.md`.
 
-### Exec-Form Hook Commands
+### Error, config & compatibility semantics
 
-Hooks accept an `args: string[]` array next to `command`, avoiding shell-string quoting issues for commands with paths/spaces:
+- Hook errors include the first line of stderr in the transcript, so `--debug` is not needed; `SessionStart`, `Setup`, and `SubagentStart` hooks exiting with code 2 also show their stderr.
+- A hook-callback timeout is reported as a timeout and infrastructure errors as such — never as a user rejection. Route them as transient failures, not refusals.
+- Unrecognized hook event names in `settings.json` do not break the file, so forward-compatible configs survive CC downgrades.
 
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "hooks": [
-          { "type": "command", "command": "./tools/log.sh", "args": ["--stage", "DV", "--json"] }
-        ]
-      }
-    ]
-  }
-}
-```
+#### Config-error hints & main-thread agents
 
-### PostToolUse `continueOnBlock` & mid-stream halt integrity
-
-PostToolUse hook entries support `continueOnBlock: true` so a blocking hook earlier in the chain does not short-circuit subsequent hooks in the same matcher group. Use when independent observers (audit + cost) must both run even if one signals block. A hook's `{"continue": false}` halt holds even when the tool it is attached to fails or completes mid-stream — a halt cannot be dropped by tool-lifecycle races.
+- Configuring a prompt-type or agent-type hook for `SessionStart`, `Setup`, or `SubagentStart` is rejected at load with a "use a command-type hook instead" message rather than a silent runtime no-op: stage-lifecycle hooks that must react before any session message exists MUST be `type: "command"` (or `type: "mcp_tool"`).
+- Agent frontmatter `hooks:` also fire when the agent runs main-thread via `--agent <name>` (for events beyond `Stop`/`SubagentStop`), and frontmatter `mcpServers` are loaded for those sessions too — plugin agents behave the same in `--agent` runs as in subagent delegations.
 
 ### Hook Terminal Sequences
 
-Hook JSON output accepts a `terminalSequence` field for emitting terminal control sequences — desktop notifications (OSC 9 / OSC 99), window-title updates (OSC 0/2), and bells (BEL `\x07`) — without the hook owning a controlling terminal. Useful for `SubagentStop`, `StopFailure`, and `Stop` hooks in headless or background sessions where the parent UI should still notify the user.
-
-```json
-{
-  "hookSpecificOutput": {
-    "terminalSequence": "\u001b]9;Stage QA complete\u0007"
-  }
-}
-```
-
-Pair with the `monitors` manifest key for plugin-level lifecycle notifications that survive the lack of a TTY (CI, `claude agents` background dispatch).
-
-### Hook Config Error Hints
-
-Configuring a prompt-type or agent-type hook for `SessionStart`, `Setup`, or `SubagentStart` is rejected at load with a clear "use a command-type hook instead" message rather than a silent runtime no-op. Stage-lifecycle hooks that need to react before any session message exists MUST be `type: "command"` (or `type: "mcp_tool"`).
+Hook JSON output accepts `terminalSequence` — `{"hookSpecificOutput": {"terminalSequence": "\u001b]9;Stage QA complete\u0007"}}` — emitting desktop notifications (OSC 9 / OSC 99), window-title updates (OSC 0/2), and bells (BEL `\x07`) without owning a controlling terminal. Use it on `SubagentStop`, `StopFailure`, and `Stop` in headless or background sessions where the parent UI should still notify; pair with the `monitors` manifest key for plugin-level notifications that survive a missing TTY (CI, `claude agents` dispatch).
 
 ## Agent Teams Lifecycle Hooks
 
-When agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), additional hook events are available:
+With agent teams enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), two more events support event-driven orchestration in megatask mode, where the lead reacts to teammate progress automatically:
 
 | Hook Event | Fires When | Payload Fields | Use Case |
 |------------|------------|----------------|----------|
 | `TeammateIdle` | Teammate finishes work and becomes idle | `agent_id`, `agent_type` | Assign next task, reassign work |
 | `TaskCompleted` | A task in the shared task list is completed | `agent_id`, `agent_type` | Trigger dependent stages, update orchestrator |
 
-These hooks enable event-driven orchestration in megatask mode, where the lead session can react to teammate progress automatically.
+### Stopping teammates programmatically
 
-### Stopping Teammates Programmatically
-
-`TeammateIdle` and `TaskCompleted` hook handlers can return a stop signal to terminate a teammate:
-
-```json
-{ "continue": false, "stopReason": "Issue completed — PR created" }
-```
-
-Use cases: stop teammate when its issue is complete, when megatask budget is exhausted, or when a blocking error requires lead intervention.
+Either handler can terminate a teammate by returning `{ "continue": false, "stopReason": "Issue completed — PR created" }` — used when the issue is done, the megatask budget is exhausted, or a blocking error needs lead intervention.
 
 > Background tasks a teammate launches survive the teammate finishing its turn — a `TeammateIdle` event does not imply the teammate's background work has stopped.
 
 ## Agent Teams vs Subagents
-
-### Comparison for corpflow Worktasks
 
 | Aspect | Subagents (Task tool) | Agent Teams (`Agent(name: …)`) |
 |--------|----------------------|------------------------|
@@ -395,27 +245,18 @@ Use cases: stop teammate when its issue is complete, when megatask budget is exh
 
 ### Limitations
 
-- Teammates cannot spawn their own teams (runtime-enforced). Foreground and background subagents share one nesting depth budget (default 3, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`); whether the teammate runtime inherits that nesting is unverified — treat teammate→sub-agent spawning as unsupported until observed
-- One implicit team per session — no create/teardown; spawn teammates with `Agent(name: …)` (`team_name` accepted but ignored)
-- No session resumption for in-process teammates
-- Higher token cost (~Nx for N teammates)
-- `/clear` does not kill background agents — safe to clear main session during long runs
-- Background bash processes spawned by subagents are properly cleaned up on exit
+- Teammates cannot spawn their own teams (runtime-enforced). Foreground and background subagents share one nesting depth budget (default 3, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`); whether the teammate runtime inherits that nesting is unverified — treat teammate→sub-agent spawning as unsupported until observed.
+- One implicit team per session — no create/teardown; spawn teammates with `Agent(name: …)` (`team_name` accepted but ignored).
+- No session resumption for in-process teammates; token cost is ~Nx for N teammates.
+- `/clear` does not kill background agents — safe to clear the main session during long runs; background bash processes spawned by subagents are cleaned up on exit.
 
 ## MCP Elicitation
 
-MCP servers can request structured input from users mid-task via interactive forms or browser URLs. Elicitation hooks enable worktask agents to intercept or customize these interactions.
-
-### Hook Events
+MCP servers can request structured input from users mid-task via interactive forms or browser URLs, which may pause agent execution (Xcode build, Figma, Chrome). Elicitation hooks let worktask agents intercept or customize these interactions.
 
 | Hook Event | Fires When | Use Case |
 |------------|------------|----------|
 | `Elicitation` | MCP server requests user input | Pre-fill defaults, validate requests, log elicitations |
 | `ElicitationResult` | User responds to elicitation | Audit responses, transform data, route to agents |
 
-### Worktask Integration
-
-When agents interact with MCP servers (e.g., Xcode build, Figma, Chrome), elicitation requests may pause agent execution. Configure hooks to:
-1. Log elicitation requests for audit trail
-2. Pre-fill known values from task metadata
-3. Route complex elicitations to the appropriate stage agent
+Configure them to (1) log elicitation requests for the audit trail, (2) pre-fill known values from task metadata, (3) route complex elicitations to the appropriate stage agent.

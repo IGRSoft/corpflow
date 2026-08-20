@@ -9,69 +9,69 @@ effort: low
 Single source of truth for **source-code** comments (inline `//` and doc `///`/docstrings).
 DV writes to it, DR flags violations against it, DC aligns its completion gate to it.
 
-> Scope: this governs comments **inside source files**. Documentation *artifacts*
-> (README, ADRs, API reference, DocC) follow `agents/technical-writer.md` — see Reconciliation.
+> Scope: comments **inside source files**. Documentation *artifacts* (README, ADRs, API
+> reference, DocC pages) follow `agents/technical-writer.md` — see Reconciliation.
 
 ## Principle
 
 Comment the **WHY** when it is non-obvious; never the **WHAT**. Document the **contract**
 (how to call it safely, units, invariants, gotchas), never the **history** of how the code
-got here. Self-documenting code is the artifact; if a comment merely echoes the code, delete it.
+got here. If a comment echoes the code, delete it.
 
-The single source of truth for a fact lives where the fact lives: a color in the asset
-catalog, a call-site list in the compiler/"find usages", a design in the design spec, a
-rationale in the PR / `.context/development-N.md`. Do not transcribe any of them into a comment —
-a copy drifts and lies the moment the source changes.
+A fact's single source of truth lives where the fact lives: a color in the asset catalog, a
+call-site list in "find usages", a design in the design spec, a rationale in the PR /
+`.context/development-N.md`. A comment that transcribes one is a copy that drifts and lies
+the moment the source changes.
 
-## Write vs. Do NOT write
+## Write in source
 
-| Write (in source) | Do NOT write (lives elsewhere) |
-|---|---|
-| One-line `///` summary stating the symbol's role/contract | Multi-paragraph `///` essays narrating the type |
-| A non-obvious unit, invariant, or caller constraint (≤1 extra line) | Restating the signature/name/body in prose ("Config for the given selected state" over `config(isSelected:)`) |
-| One short inline `//` on a genuinely non-obvious literal (the WHY) | Multi-line tutorials re-narrating each literal/stop the code already lists |
-| `- Parameters/Returns/Throws` only when the effect is non-obvious | Design history, before/after, "the previous X", "the fix is…" |
-| "shared material; do not duplicate" (centralization as one phrase) | Exhaustive call-site / caller enumeration (use "find usages") |
-| | External-design narration: Figma board names, design-tool URLs, raw rgba/hex from mockups |
-| | Verification / audit logs: "verified:", "resolves to", asset paths, per-channel byte dumps |
+- One-line `///` summary stating the symbol's role/contract.
+- A non-obvious unit, invariant, or caller constraint — ≤1 extra line.
+- One short inline `//` carrying the WHY of a genuinely non-obvious literal.
+- `- Parameters/Returns/Throws` only when the effect is non-obvious.
+- Centralization as one phrase: "shared material; do not duplicate".
+
+## DO NOT write
+
+Every entry is a review finding, not a preference.
+
+- Multi-paragraph `///` essays where a one-line summary suffices.
+- Restating the signature, name, or body in prose ("Config for the given selected state"
+  over `config(isSelected:)`).
+- Multi-line tutorials re-narrating each literal or stop the code already lists.
+- Design history, before/after, "the previous X", "the fix is…".
+- Call-site or caller enumeration — rely on the compiler and "find usages".
+- External design sources: Figma board names, design-tool URLs, raw rgba/hex from mockups.
+- Verification/audit logs: "verified:", "resolves to", asset paths, per-channel byte dumps.
+- Issue/ticket IDs as provenance — tag a function only where that issue materially changed
+  its business logic; the link belongs in the PR.
+- Acceptance-criteria or requirement IDs (`AC-2`, `REQ-5`).
+- Any comment on a preview/story block, in any framework, ever (see Length budget).
 
 ## Length budget
 
 | Element | Budget |
 |---|---|
 | Function doc block | 1–3-line info block; one line is the norm; only when the name/signature isn't already clear |
-| `- Parameters:` entries / Returns / Throws | One short-to-average sentence each; only when non-obvious — omit when the signature already says it |
-| Var / constant doc | One average sentence, only when the name alone isn't clear; otherwise nothing |
+| `- Parameters:` / Returns / Throws entries | One short sentence each; omit when the signature already says it |
+| Var / constant doc | One sentence, only when the name alone isn't clear; otherwise nothing |
 | Preview / story block — SwiftUI `#Preview`, Compose `@Preview`, Storybook story, snapshot fixture | Never commented — no doc line, no inline note, ever |
 | Inline `//` rationale | One short trailing line per non-obvious literal |
-| Longer discussion (multi-line) | Reserved strictly for a genuinely non-obvious **algorithm** — not for restating design, color, history, or callers |
+| Longer multi-line discussion | Strictly for a genuinely non-obvious **algorithm** — never for design, color, history, or callers |
 
 ### Density gate
 
 Target comment-to-code density well below 1:1. `dv-comment-density-gate.sh` gates a
-change's *added* lines on two signals: ≤40% of them may sit in comment blocks longer
-than the 3-line budget above, and ≤60% may be comment overall. One compliant one-line
-`///` per declaration never trips it — a list of short declarations is structurally
-near 1:1 while still on budget. A file that is ~half prose is over-documented.
+change's *added* lines on two signals: ≤40% may sit in comment blocks longer than the
+3-line budget above, and ≤60% may be comment overall. One compliant one-line `///` per
+declaration never trips it — a list of short declarations is structurally near 1:1 while
+still on budget. A file that is ~half prose is over-documented.
 
 ## Doc block shape
 
-Shapes below are DocC (`///`). The identical budget governs every other doc grammar —
-TSDoc/JSDoc `@param`, KDoc `@param`, Python docstring `Args:`, Doxygen `\param`: one short
-sentence per entry, omitted entirely when the signature already says it.
-
-### DocC (Swift)
-
-No parameters — summary lines only (1–3):
-
-```swift
-/// The announcement is only posted if VoiceOver is currently running.
-/// Second line only if needed.
-```
-
-With parameters — summary, one blank `///` line, then a grouped `- Parameters:` block with
-one short sentence per entry (wrap to a continuation line only when unavoidable). A single
-parameter may use `- Parameter x:` on one line instead:
+The budget is grammar-independent — DocC `///`, TSDoc/JSDoc `@param`, KDoc `@param`,
+Python docstring `Args:`, Doxygen `\param`: one short sentence per entry, omitted entirely
+when the signature already says it. DocC spells the canonical shape:
 
 ```swift
 /// The announcement is only posted if VoiceOver is currently running.
@@ -82,27 +82,15 @@ parameter may use `- Parameter x:` on one line instead:
 ///     after view transitions complete.
 ```
 
-### Other grammars
+Without parameters the summary lines alone (1–3) are the whole block; a single parameter
+may use one-line `- Parameter x:` instead of the grouped block.
 
-Same budget, different syntax. TSDoc, and a Python docstring documenting only the
-non-obvious unit:
+### Shell
 
-```ts
-/** Posts the announcement only while a screen reader is active.
- *  @param delay ms to wait so the announcement lands after the route transition. */
-```
-
-```python
-def retry_after(response: Response) -> float:
-    """Seconds to wait before retrying; clamps a hostile Retry-After to 60s."""
-```
-
-#### Shell
-
-Shell has no doc-comment syntax, so the budget lands on two blocks: a script header of
-one purpose line plus the invocation contract (prerequisites, exit behaviour, re-run
-safety), and a one-line WHY above a non-obvious literal. The header counts toward density
-like any other comment — keep it to the contract, not a changelog:
+Shell has no doc-comment syntax, so the budget lands on two blocks: a script header of one
+purpose line plus the invocation contract (prerequisites, exit behaviour, re-run safety),
+and a one-line WHY above a non-obvious literal. The header counts toward density like any
+other comment — keep it to the contract, not a changelog:
 
 ```bash
 #!/usr/bin/env bash
@@ -123,52 +111,14 @@ fetch_manifest() { curl --retry 2 -fsSL "$1"; }
 | Material/color/approach decision, rejected alternatives, DV verification evidence | **`.context/development-N.md` § Decisions** |
 | Durable architectural decision | **ADR** (`corpflow:arch-decision`) |
 | Design source (Figma board, rgba/hex) | **design spec / `.context/designs`** (`corpflow:design-specs`) |
-| `AC-n` / `REQ-n` requirement traceability | **PR description / `.context/` stage artifacts** — never source comments |
-| Resolved token value | **the asset catalog** (the single source of truth) — trust the semantic token |
+| `AC-n` / `REQ-n` traceability | **PR / `.context/` stage artifacts** — never source comments |
+| Resolved token value | **the asset catalog** — trust the semantic token |
 | Answer to a DR/SR finding; threshold derivation; calibration data | **`.context/development-N.md`** — source keeps a one-line WHY at most |
 | QA runbook ("if QA measures X, raise to Y") | **`docs/` runbook / QA checklist** |
 
-## DO NOT
+## Canonical example (BEFORE → AFTER)
 
-- DO NOT write multi-paragraph `///` essays where a one-line summary suffices.
-- DO NOT narrate design history, before/after comparisons, or "the previous X"/"the fix is" in source.
-- DO NOT reference external design sources (Figma board names, design-tool URLs, raw rgba/hex from mockups) in comments.
-- DO NOT add verification logs, audit trails, "verified:"/"resolves to", or per-channel byte dumps.
-- DO NOT enumerate call sites or callers — rely on the compiler and "find usages".
-- DO NOT sprinkle issue/ticket IDs as provenance — tag a function only where that issue materially changed its business logic; the issue link belongs in the PR.
-- DO NOT write acceptance-criteria or requirement IDs (`AC-2`, `REQ-5`) into source comments — traceability lives in the PR and `.context/` artifacts.
-- DO NOT comment preview/story blocks in any framework — ever (see Length budget).
-- DO NOT restate the symbol name, signature, or body in prose; if the comment echoes the code, delete it.
-
-## Examples (BEFORE → AFTER)
-
-### Property example
-
-BEFORE — a 7-line doc block on the gradient property:
-
-```swift
-/// Top-lit lavender gradient stroked on every over-camera control (OV-140).
-/// Stop 0 → Color.Border.stroke (#E6E2F3, Halo Stroke) at the top; stop 1 →
-/// fully transparent at y=1.42 (below the bottom edge), so the upper rim reads as a
-/// bright lavender specular and the lower edge fades out — matching the Figma's
-/// light-source-from-above glass look.
-/// The endPoint y: 1.42 deliberately extends past the unit rectangle so the fade is
-/// gradual rather than sharp at the midpoint.
-```
-
-AFTER — one doc line + one inline note; hex, Figma ref, and per-stop walkthrough dropped
-(the token and the code already carry them):
-
-```swift
-/// Top-lit halo gradient: Border.stroke at the rim, fading to clear past the bottom edge.
-…
-    .init(color: .clear, location: 1.0),
-] // endPoint y: 1.42 — >1.0: extend fade past bottom edge
-```
-
-### Function example
-
-BEFORE — a ~35-line `///` essay on a navigation helper (condensed here):
+BEFORE — a ~35-line `///` essay on a navigation helper (condensed):
 
 ```swift
 /// Opens `SkinAnalysisResultView` (the skin map) for the persisted analysis,
@@ -179,9 +129,8 @@ BEFORE — a ~35-line `///` essay on a navigation helper (condensed here):
 /// [… ~28 more lines: restart-hydration narrative, resolution order, guards]
 ```
 
-AFTER — a 2-line info block + one `- Parameter` field; the why-narrative moves to the
-PR / `development-N.md § Decisions`, and the issue tag goes (provenance, not a material
-logic change):
+AFTER — 2-line info block plus one `- Parameter`; the why-narrative moves to the PR /
+`development-N.md § Decisions`, and the issue tag goes (provenance, not a logic change):
 
 ```swift
 /// Opens the skin map for a persisted analysis without running a camera
@@ -190,48 +139,23 @@ logic change):
 func openPersistedSkinMap(analysisID: AnalysisID) { … }
 ```
 
-### Cross-language example
+### The same failure in other grammars
 
-The failure mode is identical outside Swift. BEFORE — history, provenance, and a restated
-signature on a TypeScript hook:
+Identical shape, identical fix — the bulk always moves to the PR or the run artifact:
 
-```ts
-/**
- * useCartTotal (added in PR #812, refactored from the old `getTotal` helper in v3).
- * Takes the cart items and returns the total. Previously this lived in the reducer.
- * @param items The cart items.
- */
-```
-
-AFTER — one line for the one thing the signature cannot say; the PR keeps the history:
-
-```ts
-/** Total in minor units; excludes shipping, which is quoted per-address at checkout. */
-```
-
-### Shell example
-
-BEFORE — an inline comment written to answer a review finding, carrying the finding's IDs:
-
-```bash
-# DR-3 / AC-6: reviewer asked why this is 3 and not 5. Measured against staging
-# over the course of PR #812 — retries past 3 never recovered, they only widened
-# the window in which a partial upload was visible to readers. Holding at 3 per
-# REQ-4; QA should re-measure if the bucket ever moves regions.
-readonly MAX_RETRIES=3
-```
-
-AFTER — one WHY line; the measurement, the reviewer exchange, and the IDs move to the run's
-`development-N.md` and the PR:
-
-```bash
-# Past 3 the retries never recovered — they only widened the partial-upload window.
-readonly MAX_RETRIES=3
-```
+- **Swift property**: a 7-line block narrating every gradient stop, its hex, and the Figma
+  look → one `///` line ("Top-lit halo gradient: Border.stroke at the rim, fading to clear
+  past the bottom edge") plus `// endPoint y: 1.42 — >1.0: extend fade past bottom edge`.
+- **TSDoc**: `useCartTotal (added in PR #812, refactored from the old getTotal helper)` +
+  `@param items The cart items.` → `/** Total in minor units; excludes shipping, quoted
+  per-address at checkout. */`.
+- **Shell**: 4 lines citing `DR-3 / AC-6`, the reviewer exchange, and the staging
+  measurement above `MAX_RETRIES=3` → `# Past 3 the retries never recovered — they only
+  widened the partial-upload window.`
 
 ## Reconciliation
 
-The `technical-writer` rules "always include examples / explain why, not just what" apply to
-**documentation artifacts** (README, ADR, API reference, DocC) — those must teach and show
-working examples. **This standard** governs **source-code inline + doc comments**, which stay
-compact and contract-only. No conflict: different surfaces, different rules.
+`technical-writer`'s "always include examples / explain why, not just what" governs
+**documentation artifacts** (README, ADR, API reference, DocC pages), which must teach and
+show working examples. This standard governs **source-code comments**, which stay compact
+and contract-only. Different surfaces, different rules — no conflict.

@@ -22,11 +22,10 @@ reviewable thread instead of scattering a new issue per re-plan.
 
 ## Why state.json alone can't enforce this
 
-`state.json:metadata.github_issue_url` alone is not a sufficient dedupe key:
-`commands/worktask.md` **re-seeds `state.json` from scratch on every fresh `/worktask`**, and the
-seed writes no `metadata` key — so that URL is wiped on each new `run_index`. The guard therefore
-only caught a *resume of the same run*; a second, separate worktask lost the URL and opened a
-duplicate issue. The fix is a persistent, run-independent anchor plus a comment path.
+`state.json:metadata.github_issue_url` is not a sufficient dedupe key: `commands/worktask.md`
+**re-seeds `state.json` from scratch on every fresh `/worktask`** and the seed writes no `metadata`,
+so that URL is wiped on each new `run_index` — it guards a *resume of the same run* only. Hence a
+persistent, run-independent anchor plus a comment path.
 
 ## The anchor: `.context/gh-issue.json`
 
@@ -50,17 +49,16 @@ a later run posts its follow-up comment.
 
 ## Two tiers: advisory pre-flight, then authoritative anchor
 
-The anchor below is only reachable once a `.context/` exists, so it protects **re-runs** — never
-the FIRST run of work someone already filed under different wording. That gap is covered one
-level up, at `/worktask` entry, by `skills/worktask/scripts/preflight-issue-scan.sh`
-(`commands/worktask.md § Step 2a`): before `.context/` is created it scores keyword overlap
-against open-issue titles and offers the candidates to the **user**, who may bind the new
-context to an existing issue.
+The anchor only exists once a `.context/` does, so it protects **re-runs** — never the FIRST run of
+work someone already filed under different wording. That gap is covered one level up at `/worktask`
+entry by `skills/worktask/scripts/preflight-issue-scan.sh` (`commands/worktask.md § Step 2a`):
+before `.context/` is created it scores keyword overlap against open-issue titles and offers the
+candidates to the **user**, who may bind the new context to an existing issue.
 
-The two tiers never blur. The pre-flight is advisory, human-confirmed, and writes nothing on
-its own; a user who reuses an issue gets an anchor with `created_run_index: -1` — the same
-"predates this context" value a recovered search hit uses — so the publish step comments rather
-than creating. Everything below stays exactly as specified: no fuzzy match ever auto-binds.
+The tiers never blur. The pre-flight is advisory, human-confirmed, and writes nothing itself; a
+user who reuses an issue gets an anchor with `created_run_index: -1` — the same "predates this
+context" value a recovered search hit uses — so the publish step comments rather than creating.
+No fuzzy match ever auto-binds.
 
 ## Resolution order (what counts as "already exists")
 
@@ -69,8 +67,8 @@ than creating. Everything below stays exactly as specified: no fuzzy match ever 
 1. **`.context/gh-issue.json` anchor** — authoritative, local, run-independent.
 2. **`state.json:metadata.github_issue_url`** — only present within the *same* run (resume).
 3. **GitHub-side search** — `gh issue list --state open --search "<title> in:title"`, accepted
-   **only on an exact normalized-title match with a single result**. Ambiguous / multi-hit results
-   are refused (a fresh context must never be captured by an unrelated same-worded issue). A hit
+   **only on an exact normalized-title match with a single result**; ambiguous / multi-hit results
+   are refused, so a fresh context is never captured by an unrelated same-worded issue. A hit
    backfills the anchor so later runs resolve locally. Disable with `GH_ISSUE_SEARCH=0`.
 
 ## The decision
@@ -95,10 +93,10 @@ comment.
 
 ## Enforcement lives in the helper
 
-This protocol is implemented in `skills/worktask/scripts/publish-pl-issue.sh` (functions
-`resolve_context_issue_local`, `resolve_context_issue_search`, `write_context_issue`,
-`bump_anchor_commented`; the create-vs-comment branch at the publish step). The skill is the
-canonical description; the helper is the single choke point the orchestrator invokes. Behavior is
-covered by `tests/shell/worktask/gh-issue-dedup.bats`, and the advisory tier by
-`tests/shell/worktask/preflight-issue-scan.bats`. Do not add a second `gh issue create` path
-elsewhere in the worktask flow — route through the helper so this invariant holds.
+Implemented in `skills/worktask/scripts/publish-pl-issue.sh` (`resolve_context_issue_local`,
+`resolve_context_issue_search`, `write_context_issue`, `bump_anchor_commented`, and the
+create-vs-comment branch at the publish step) — the single choke point the orchestrator invokes;
+this skill is its canonical description. Covered by `tests/shell/worktask/gh-issue-dedup.bats`, the
+advisory tier by `tests/shell/worktask/preflight-issue-scan.bats`. Do not add a second
+`gh issue create` path elsewhere in the worktask flow — route through the helper so the invariant
+holds.

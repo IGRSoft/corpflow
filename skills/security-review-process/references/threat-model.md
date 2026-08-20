@@ -1,7 +1,7 @@
 # Threat Model (SR0)
 
-Lightweight threat modeling for the SR stage. Scope is **the change under review**, not the
-whole system: model the boundaries the diff crosses, not every boundary that exists.
+Lightweight threat modeling for the SR stage. Scope is **the change under review**: model the
+boundaries the diff crosses, not every boundary that exists.
 
 Runs at SR0, before the OWASP checklist. Its output is the `## threat-model` section of
 `security-review-N.md`, and every finding in `## findings` cites a threat ID from it.
@@ -9,7 +9,7 @@ Runs at SR0, before the OWASP checklist. Its output is the `## threat-model` sec
 ## Step 1 — Trust boundaries
 
 A trust boundary is any point where data or control passes between parties with different
-privilege. Enumerate only the ones the diff touches.
+privilege. Enumerate only those the diff touches.
 
 | Boundary class | Typical instances |
 |----------------|-------------------|
@@ -23,10 +23,10 @@ For each: name the two sides, the asset that crosses, and who is trusted on each
 
 ## Step 2 — Attack surface
 
-For each boundary, enumerate the concrete **entry points the diff adds or widens** —
-an endpoint, an IPC/URL scheme, a parsed file format, a CLI flag, an exported component, a
-new dependency, a new tool granted to an agent. Record the input's origin (who controls it)
-and where it lands.
+Per boundary, enumerate the concrete **entry points the diff adds or widens** — an endpoint,
+an IPC/URL scheme, a parsed file format, a CLI flag, an exported component, a new dependency,
+a new tool granted to an agent — recording each input's origin (who controls it) and where it
+lands.
 
 An entry point with no attacker-controlled input is not attack surface; say so and drop it
 rather than listing it for completeness.
@@ -34,7 +34,7 @@ rather than listing it for completeness.
 ## Step 3 — STRIDE categorization
 
 Categorize each entry point's plausible threats. STRIDE says *what kind* of threat it is; it
-does **not** set severity — severity stays the existing table in `agents/security-reviewer.md
+does **not** set severity — severity stays the table in `agents/security-reviewer.md
 § Severity Classification`. Never introduce a second severity vocabulary.
 
 | STRIDE | Violates | Ask |
@@ -48,8 +48,8 @@ does **not** set severity — severity stays the existing table in `agents/secur
 
 ### Applicability
 
-Not every category applies to every entry point. Record the ones with a plausible attacker
-and a reachable path; drop the rest silently.
+Record only the categories with a plausible attacker and a reachable path; drop the rest
+silently.
 
 ## Output shape
 
@@ -63,11 +63,11 @@ One row per threat, in `## threat-model`:
 
 IDs are `T<n>`, stable within one artifact. Every `## findings` entry opens with the threat
 it realizes — `**[T1]** <finding> → <remediation>` — and every Critical/High threat is either
-answered by a finding or explicitly recorded as mitigated, with the control that mitigates it.
-A threat with neither is an unfinished review.
+answered by a finding or explicitly recorded as mitigated, naming the control. A threat with
+neither is an unfinished review.
 
-Findings may also arise from the checklist with no threat-model row behind them. Cite them
-`**[—]**` and add the missing row rather than leaving the section stale.
+Checklist findings with no threat-model row behind them are cited `**[—]**`; add the missing
+row rather than leaving the section stale.
 
 ## No material threat surface
 
@@ -78,12 +78,12 @@ boundary and adds no attacker-controlled input, the whole section is one line:
 No material threat surface: <what the diff changes and why nothing crosses a boundary>.
 ```
 
-That is a complete, passing threat model. Do not invent threats to fill the table — a
-speculative threat with no reachable path is noise that costs the next reviewer real time.
+That is a complete, passing threat model. Never invent threats to fill the table — a
+speculative threat with no reachable path costs the next reviewer real time.
 
 ## Relation to the OWASP checklist
 
-The threat model scopes the checklist; it does not replace it. `owasp-checklist.md § A04`
+The threat model scopes the checklist, it does not replace it; `owasp-checklist.md § A04`
 carries the checkbox this procedure satisfies. Run the checklist at SR1 against the surface
-this step identified, plus the always-on passes (secrets, dependencies) which run regardless
-of whether any boundary was crossed.
+identified here, plus the always-on passes (secrets, dependencies) which run whether or not a
+boundary was crossed.

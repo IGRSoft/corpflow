@@ -6,25 +6,16 @@ effort: high
 
 # Release Engineering
 
-Guidelines for version management, changelog generation, and deployment readiness.
+Version management, changelog generation, and deployment readiness for the RE stage.
 
-For deployment and platform-specific checklists, see `${CLAUDE_SKILL_DIR}/references/checklists.md`
-
-For rollback plan template, see `${CLAUDE_SKILL_DIR}/references/rollback-template.md`
+- Deployment and platform-specific checklists: `${CLAUDE_SKILL_DIR}/references/checklists.md`
+- Rollback plan template: `${CLAUDE_SKILL_DIR}/references/rollback-template.md`
 
 ## Semantic Versioning (SemVer)
 
 ### Version Format
 
-```
-MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
-
-Examples:
-1.0.0
-2.1.3
-3.0.0-alpha.1
-1.2.3-beta.2+build.456
-```
+`MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]` — e.g. `1.0.0`, `2.1.3`, `3.0.0-alpha.1`, `1.2.3-beta.2+build.456`.
 
 ### Version Bump Determination
 
@@ -43,19 +34,10 @@ bash "${CLAUDE_SKILL_DIR}/scripts/version-bump-from-git.sh" --file records.bin
 
 #### Two rules the tables cannot express
 
-The script applies two rules the tables below cannot express:
+1. **Highest severity wins across the range.** 3 × `fix:` plus 1 × `feat:` is MINOR, not PATCH. Never bump per commit.
+2. **Breaking is independent of type.** `feat!:`, `fix!:`, and a `BREAKING CHANGE:` footer on any type — `chore:` included — all yield MAJOR.
 
-1. **Highest severity wins across the range.** A range of 3 × `fix:` and
-   1 × `feat:` is MINOR, not PATCH. Never bump per commit.
-2. **Breaking is independent of type.** `feat!:`, `fix!:`, and a
-   `BREAKING CHANGE:` footer on any type — `chore:` included — all yield MAJOR.
-
-`none` means the range holds nothing release-worthy. It exits 0; only a
-non-zero exit is an error.
-
-The script shares `conventional-commits-lib.sh` with `changelog-from-git.sh`,
-so the two cannot disagree about which commits are breaking. Pre-release and
-build-metadata suffixes are out of its scope — apply those by hand.
+`none` means the range holds nothing release-worthy; it exits 0, and only a non-zero exit is an error. The script shares `conventional-commits-lib.sh` with `changelog-from-git.sh`, so the two cannot disagree about which commits are breaking. Pre-release and build-metadata suffixes are out of scope — apply those by hand.
 
 ### Version Bump Rules (reference)
 
@@ -68,14 +50,7 @@ build-metadata suffixes are out of its scope — apply those by hand.
 
 ### Breaking Change Detection
 
-Mark the commit itself — with a `!` after the type or a `BREAKING CHANGE:`
-footer — so the scripts can see it. A change is BREAKING if it:
-- Removes a public API
-- Changes return type of public method
-- Adds required parameter to public method
-- Changes behavior that clients depend on
-- Removes or renames configuration options
-- Changes database schema incompatibly
+Mark the commit itself — `!` after the type or a `BREAKING CHANGE:` footer — so the scripts can see it. A change is BREAKING if it removes a public API, changes a public method's return type, adds a required parameter, changes behavior clients depend on, removes or renames configuration options, or changes a database schema incompatibly.
 
 ### Pre-release Labels
 
@@ -97,25 +72,7 @@ footer — so the scripts can see it. A change is BREAKING if it:
 [optional footer(s)]
 ```
 
-### Types and Changelog Mapping
-
-Per-commit impact only — the range's bump is the highest severity present, which
-`scripts/version-bump-from-git.sh` computes.
-
-| Type | Description | Changelog | Bump |
-|------|-------------|-----------|------|
-| `feat` | New feature | Added | MINOR |
-| `fix` | Bug fix | Fixed | PATCH |
-| `docs` | Documentation | - | - |
-| `style` | Formatting | - | - |
-| `refactor` | Code change | Changed | PATCH |
-| `perf` | Performance | Changed | PATCH |
-| `test` | Tests | - | - |
-| `chore` | Maintenance | - | - |
-| `ci` | CI/CD | - | - |
-| `build` | Build system | - | - |
-
-### Breaking Changes
+Breaking example:
 
 ```
 feat!: remove deprecated login endpoint
@@ -124,11 +81,28 @@ BREAKING CHANGE: The /api/v1/login endpoint has been removed.
 Use /api/v2/auth instead.
 ```
 
+### Types and Changelog Mapping
+
+Per-commit impact only — the range's bump is the highest severity present, which `scripts/version-bump-from-git.sh` computes.
+
+| Type | Description | Changelog (KCL) | Bump |
+|------|-------------|-----------------|------|
+| `feat` | New feature | Added | MINOR |
+| `feat!` / any type with `BREAKING CHANGE` | Breaking change | Added, `**BREAKING**` prefix | MAJOR |
+| `fix` | Bug fix | Fixed | PATCH |
+| `refactor` | Code change | Changed | PATCH |
+| `perf` | Performance | Changed | PATCH |
+| `docs` | Documentation | — (suppressed) | — |
+| `style` | Formatting | — (suppressed) | — |
+| `test` | Tests | — (suppressed) | — |
+| `chore` | Maintenance | — (suppressed) | — |
+| `ci` | CI/CD | — (suppressed) | — |
+| `build` | Build system | — (suppressed) | — |
+| _(non-conventional)_ | — | Other | — |
+
 ## Changelog Generation
 
 **Canonical tool**: `scripts/changelog-from-git.sh`
-
-One-line invocation contract:
 
 ```bash
 # From a git range (writes Keep-a-Changelog markdown to stdout)
@@ -145,9 +119,9 @@ bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" "v1.1.0..HEAD" --repo /
 
 ### Script Classification Behavior
 
-The script classifies all 10 conventional-commit types (feat, fix, docs, style, refactor, perf, test, chore, ci, build) into Keep-a-Changelog sections (Added / Changed / Fixed / Other). Non-conventional commits are bucketed under "Other" — never dropped. Breaking changes are prefixed with `**BREAKING**`, detected from a `!` suffix or a `BREAKING CHANGE:` footer via the shared `conventional-commits-lib.sh`. Silent types (docs, style, test, chore, ci, build) are suppressed **unless breaking** — a MAJOR release must never ship notes that omit the break. Output is always compact markdown — no large echoes.
+The script classifies all 10 conventional-commit types into the Keep-a-Changelog sections of `§ Types and Changelog Mapping` above. Non-conventional commits are bucketed under "Other" — never dropped. Breaking changes are prefixed with `**BREAKING**`, detected from a `!` suffix or a `BREAKING CHANGE:` footer via the shared `conventional-commits-lib.sh`. Silent types (docs, style, test, chore, ci, build) are suppressed **unless breaking** — a MAJOR release must never ship notes that omit the break. Output is always compact markdown — no large echoes.
 
-The spec below (Keep a Changelog Format + Commit-to-Section mapping) is retained as reference for the model and for human review; the happy path is the script above.
+The format spec below is retained for the model and for human review; the happy path is the script.
 
 ### Keep a Changelog Format (spec / reference)
 
@@ -162,11 +136,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - New user dashboard with analytics (#123)
-- Dark mode support (#145)
 
 ### Changed
 - Updated login flow for better security (#156)
-- Improved error messages (#167)
 
 ### Deprecated
 - Legacy API endpoints (removed in 2.0.0)
@@ -176,7 +148,6 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Crash on large file uploads (#189)
-- Memory leak in image processing (#190)
 
 ### Security
 - Fixed XSS vulnerability in comments (#200)
@@ -184,23 +155,6 @@ All notable changes to this project will be documented in this file.
 ## [1.1.0] - 2024-01-01
 ...
 ```
-
-### Commit-to-Section Mapping (spec / reference)
-
-| Type | KCL Section | Notes |
-|------|-------------|-------|
-| `feat` | Added | MINOR bump |
-| `feat!` / `BREAKING CHANGE` | Added (BREAKING prefix) | MAJOR bump |
-| `fix` | Fixed | PATCH bump |
-| `refactor` | Changed | PATCH bump |
-| `perf` | Changed | PATCH bump |
-| `docs` | — (suppressed) | no bump |
-| `style` | — (suppressed) | no bump |
-| `test` | — (suppressed) | no bump |
-| `chore` | — (suppressed) | no bump |
-| `ci` | — (suppressed) | no bump |
-| `build` | — (suppressed) | no bump |
-| _(non-conventional)_ | Other | never dropped |
 
 ## Integration Points
 

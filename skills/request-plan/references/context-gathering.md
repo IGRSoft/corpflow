@@ -1,46 +1,43 @@
 # Context Gathering
 
-The plan is only as good as the context behind it. The goal here is **grounding, not exhaustiveness**:
-read enough that the plan reflects this repo's reality, then stop. Over-reading burns budget and
-rarely changes the recommendation.
+The plan is only as good as the context behind it. Aim for **grounding, not exhaustiveness**: read
+enough that the plan reflects this repo's reality, then stop. Over-reading burns budget and rarely
+changes the recommendation.
 
 ## Sources, in priority order
 
-Read top-down and stop early once the picture is clear enough to scope, phase, and size the work.
+Read top-down; stop early once the picture supports scoping, phasing, and sizing.
 
 ### Sources 1–3 — state, memory, git
 
-1. **In-flight worktask state** — `.context/state.json` and the latest `.context/planning-*.md`
-   (highest N). Tells you whether this request overlaps active work, and what was already decided.
-   Skip if `.context/` doesn't exist.
-2. **Project memory** — `MEMORY.md` at the repo root, and the cross-conversation memory index if
-   present. Surfaces constraints, conventions, and recent decisions not visible in code.
-3. **Recent git activity** — `git status` (uncommitted work in progress) and `git log --oneline -15`
-   (direction of travel, naming conventions, what shipped lately).
+1. **In-flight worktask state** — `.context/state.json` and the highest-N `.context/planning-*.md`:
+   whether this request overlaps active work, and what was already decided. Skip if no `.context/`.
+2. **Project memory** — root `MEMORY.md` plus the cross-conversation memory index if present:
+   constraints, conventions, and decisions not visible in code.
+3. **Recent git activity** — `git status` (work in progress) and `git log --oneline -15` (direction
+   of travel, naming conventions, what shipped lately).
 
 ### Sources 4–5 — code and existing capabilities
 
 4. **The code the request touches** — use the `Explore` agent for "where does X live / how is Y done
-   here" questions. Ask for the conclusion (files, patterns, existing utilities to reuse), not a file
-   dump. Only read individual files directly when you already know the path and need specifics.
+   here". Ask for the conclusion (files, patterns, reusable utilities), not a file dump. Read files
+   directly only when you know the path and need specifics.
 5. **Relevant skills/commands** — if the request resembles existing functionality, note the command
-   or skill that already covers part of it so the plan can reuse rather than rebuild.
+   or skill already covering part of it so the plan reuses rather than rebuilds.
 
 ## When to stop
 
-Stop gathering when the next read wouldn't change **scope, phases, or effort**. Concretely:
+Stop when the next read wouldn't change **scope, phases, or effort** — concretely, when you can name
+the files/areas that change and roughly how much, know whether an existing utility or command
+already does part of the work, and can place the work on the T-shirt + complexity scale with a
+defensible range.
 
-- You can name the files/areas that change and roughly how much.
-- You know whether an existing utility or command already does part of the work.
-- You can place the work on the T-shirt + complexity scale with a defensible range.
-
-If after a reasonable pass the request is still ambiguous on outcome, that's a signal to ask the
-user a clarifying question — not to keep reading.
+If the request is still ambiguous on outcome after a reasonable pass, that is a signal to ask a
+clarifying question — not to keep reading.
 
 ## Anti-patterns
 
-- **Grep sweeps in place of Explore** — open-ended discovery is what the `Explore` agent is for; it
-  reads excerpts and returns the conclusion, which is cheaper than pulling whole files into context.
-- **Reading for completeness** — you are not auditing the codebase, you are scoping one request.
-- **Planning before reading** — if you find yourself writing scope before looking at `.context/` or
-  git, you're guessing. Look first.
+- **Grep sweeps in place of Explore** — open-ended discovery is what `Explore` is for; it reads
+  excerpts and returns the conclusion instead of pulling whole files into context.
+- **Reading for completeness** — you are scoping one request, not auditing the codebase.
+- **Planning before reading** — writing scope before looking at `.context/` or git is guessing.

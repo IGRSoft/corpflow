@@ -19,11 +19,11 @@ dispatch parent, model, duration, effort, result — sourced from the audit trai
 ## Assignment Is Not Execution
 
 `.context/state.json` records the agent each stage was **assigned**
-(`metadata.agent`). Retries, escalations and cross-plugin routing mean a
-different agent frequently **ran**. This command never reads `metadata.agent` as
-its Agent column; doing so would look correct in the common case and be silently
-wrong in exactly the cases the report exists for. `--vs-assigned` puts the two
-side by side, and a divergence there is a finding, not a defect.
+(`metadata.agent`); retries, escalations and cross-plugin routing mean a
+different agent frequently **ran**. Never render `metadata.agent` as the Agent
+column — it looks correct in the common case and is silently wrong in exactly
+the cases this report exists for. `--vs-assigned` puts the two side by side; a
+divergence there is a finding, not a defect.
 
 `/cost-report` answers *what did it cost*, grouped by stage. This answers *who
 ran*, per invocation. Neither restates the other.
@@ -31,10 +31,7 @@ ran*, per invocation. Neither restates the other.
 ## Usage
 
 ```
-/agent-report
-/agent-report --worktask-id 20260816-agent-report
-/agent-report --vs-assigned
-/agent-report --json
+/agent-report [--worktask-id <id>] [--vs-assigned] [--json]
 ```
 
 ## Options
@@ -51,14 +48,10 @@ ran*, per invocation. Neither restates the other.
 | # | Stage: Agent | agent_id | Parent | Model | Duration | Effort | Result |
 |---|--------------|----------|--------|-------|----------|--------|--------|
 | 1 | PL: corpflow:product-manager | agt_pl | none | opus | 42.1s | high | ok |
-| 2 | AR: corpflow:software-architector | agt_ar | none | opus | 1m 08s | high | ok |
-| 3 | DV: corpflow:developer | agt_dv | none | sonnet | 3m 22s | high | ok |
-| 4 | DV: apple-developer:ios-developer | agt_ios | agt_dv | sonnet | 2m 51s | high | ok |
-| 5 | QA: corpflow:qa-engineer | agt_qa | none | sonnet | 55.3s | medium | ok |
+| 2 | DV: apple-developer:ios-developer | agt_ios | agt_dv | sonnet | 2m 51s | high | ok |
 
 ### Distinct Agents
-5 agents ran: corpflow:product-manager, corpflow:software-architector,
-corpflow:developer, apple-developer:ios-developer, corpflow:qa-engineer
+<count> agents ran: <comma-separated agent list>
 ```
 
 ### Row Rendering
@@ -75,17 +68,9 @@ corpflow:developer, apple-developer:ios-developer, corpflow:qa-engineer
 
 #### Ordering, Qualifiers, Counts
 
-Rows are ordered by `ts`, ascending — execution order, not stage order, so a
-retry appears after the run it retried.
-
-**A cross-plugin agent keeps its plugin qualifier.** `DV: apple-developer:ios-developer`
-never collapses to `DV: ios-developer`: the qualifier distinguishes the routed
-specialist from a same-named local agent, and the two are distinguishable in the
-source data.
-
-The distinct-agent count is `unique(subject)` over the rendered rows, so it is
-always ≤ the row count. One agent invoked at three stages is one distinct agent
-and three rows.
+- Ordered by `ts` ascending — execution order, not stage order, so a retry appears after the run it retried.
+- **A cross-plugin agent keeps its plugin qualifier.** `DV: apple-developer:ios-developer` never collapses to `DV: ios-developer`: the qualifier distinguishes the routed specialist from a same-named local agent, and the source data distinguishes them.
+- Distinct count is `unique(subject)` over rendered rows, so always ≤ the row count. One agent invoked at three stages is one distinct agent and three rows.
 
 ### Assignment Comparison (`--vs-assigned`)
 
@@ -112,21 +97,19 @@ skills/agent-coordination/scripts/audit-dedup.sh .context/logs/audit.jsonl \
   | jq -c 'select(.action == "subagent_stopped" or .action == "stage_completion_hook")'
 ```
 
-Dedup is keyed on `metadata.dedupe_key`, and within a key the canonical writer
-outranks an `advisory: true` plugin mirror. The mirrors carry thinner metadata,
-so taking the wrong one silently blanks the agent name. See
-`skills/agent-coordination/SKILL.md § Writers`.
+Dedup is keyed on `metadata.dedupe_key`; within a key the canonical writer
+outranks an `advisory: true` plugin mirror, whose thinner metadata would silently
+blank the agent name. See `skills/agent-coordination/SKILL.md § Writers`.
 
 ### Cost Enrichment (Optional, Never Gating)
 
-`audit.jsonl` and `cost-*.jsonl` share **no invocation id**. The join is
+`audit.jsonl` and `cost-*.jsonl` share **no invocation id**; the join is
 best-effort on `(metadata.stage, subject)` ↔ `(stage, agent_type)`, disambiguated
-by nearest `ts` when a stage ran the same agent more than once.
+by nearest `ts` when a stage ran the same agent twice.
 
-The audit log is authoritative; cost data is enrichment. **An audit row with no
-cost match still renders**, with `Model` and any token columns blank. A cost row
-with no audit match is not a row in this report — nothing executed that the
-audit trail did not see.
+The audit log is authoritative, cost data is enrichment: **an audit row with no
+cost match still renders**, `Model` and token columns blank. A cost row with no
+audit match is not a row here — nothing executed that the audit trail did not see.
 
 ### Missing-Data Fallback
 
@@ -136,21 +119,21 @@ The command **degrades, never errors**. Ladder, most severe first:
 |-----------|----------|
 | No `.context/logs/audit.jsonl` | No table. Warning: `SubagentStop hook not configured — no execution record`. Exit 0. |
 | File present, no matching rows | No table. Same warning, noting the file exists but holds only tool rows. |
-| Rows present, `subject == "unknown"` | Row still renders as `<stage>: unknown`. Footnote counts them: identity was unrecoverable at capture time, or the row predates the identity fix in `hooks/audit-subagent.sh`. |
+| Rows present, `subject == "unknown"` | Row still renders as `<stage>: unknown`, footnoted with the count — identity was unrecoverable at capture time. |
 | No `cost-*.jsonl` | Table renders; `Model` blank. Note points at `skills/cost-optimization/SKILL.md § Capture Script` — that hook is operator-installed, so its absence is expected, not a fault. |
 | No worktask anchored | Report the error and write nothing. There is nothing to scope the log to. |
 
 #### Filter Exit Codes
 
 Test for `audit.jsonl` **before** invoking the filter: `audit-dedup.sh` exits 1
-on an unreadable source, and that exit code must not surface as a command
-failure — the top row of the ladder above is a warning, not an error.
+on an unreadable source, and that must not surface as a command failure — the top
+row of the ladder is a warning, not an error.
 
 #### Unknown Agent Names
 
-An `unknown` agent name is reported as a **capture gap**, never silently dropped
-and never back-filled from `state.json` — a back-filled name is an assignment
-wearing an execution's clothes.
+Report an `unknown` agent as a **capture gap**; never drop it, and never back-fill
+it from `state.json` — a back-filled name is an assignment wearing an execution's
+clothes.
 
 ## Budget Tracking JSON
 
@@ -203,10 +186,9 @@ empty `invocations` array plus `warning`.
 
 ## Deferred
 
-- `--stage <code>` filter and a `--tree` view over `parent_agent_id`. The tree
-  needs a populated chain; `parent_agent_id` is `"none"` on every row the current
-  runtime writes, so the view would render a flat list with extra ceremony.
-- `--compare <task-id>` across worktasks.
+- `--stage <code>` filter; `--compare <task-id>` across worktasks.
+- `--tree` over `parent_agent_id` — blocked until the runtime writes a real chain
+  (`parent_agent_id` is `"none"` on every row today).
 
 ## Integration
 

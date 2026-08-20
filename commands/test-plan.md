@@ -33,8 +33,9 @@ Generate a comprehensive test plan from requirements or code changes. Creates st
 
 ```
 /test-plan "User authentication with OAuth"
-/test-plan --from-pr 123
+/test-plan --from-pr 123 --automation
 /test-plan --from-file .context/planning-0.md --coverage    # or any planning-N.md the PL produced
+/test-plan "Payment refund flow" --platform backend
 ```
 
 ## Output Format
@@ -60,10 +61,11 @@ Generate a comprehensive test plan from requirements or code changes. Creates st
 
 ### Template — testing framework
 
-Fill the table with the **detected platform's** row only — one framework column per plan, not a
-survey. Detect the platform per `skills/shared/platform-detection.md`, then take the row from
-`skills/shared/testing-strategy.md § Framework by platform`. If the repo already uses a
-different framework than the row suggests, the repo wins; note the deviation.
+Fill the table with the **detected platform's row only** — one framework column per plan, not a
+survey. Detect the platform per `skills/shared/platform-detection.md`, take the row from
+`skills/shared/testing-strategy.md § Framework by platform` (which also carries the Apple-only
+XCTest/XCUITest split). If the repo already uses a different framework, the repo wins; note the
+deviation.
 
 ```markdown
 <!-- …continued: testing framework -->
@@ -76,46 +78,18 @@ different framework than the row suggests, the repo wins; note the deviation.
 | UI / E2E Tests | <project UI framework, or "n/a — no UI layer"> | <canonical syntax> |
 ```
 
-#### Framework rows by platform
+### Template — test cases
+
+Every case carries selection metadata so DV's parser can place it in the right Selected Tests
+list — grammar in `skills/shared/test-selection-syntax.md`: `@test-required` (smoke /
+critical-path), `@depends-on: <Symbol>` (one symbol per marker, cross-file coverage),
+`@test-tag:` (`smoke`, `regression`, `perf`, `ui`, `flaky`). Emit the `Required?` and
+`Dependencies` fields on every case — empty when not applicable, never omitted.
 
 ```markdown
-<!-- …continued: framework rows to choose from -->
-| Platform | Unit | Integration | UI / E2E |
-|----------|------|-------------|----------|
-| apple | Swift Testing (`@Suite`, `@Test`, `#expect`) | Swift Testing + in-memory doubles | XCTest (`XCUIApplication`) |
-| android | JUnit 5 + MockK, Turbine | Robolectric, in-memory Room | Espresso / Compose UI test |
-| web | Vitest or Jest | Testing Library + MSW | Playwright |
-| systems | GoogleTest/Catch2, Unity/CMocka, pytest, bats | `ctest` targets | n/a |
-| backend | Go `testing`+testify, JUnit 5, Vitest, pytest | Testcontainers | Contract tests, k6 |
-| ai | pytest | pytest + recorded fixtures | Eval harness with thresholds |
-```
-
-**Note (Apple only)**: XCUITest requires the XCTest framework, so UI tests stay on XCTest while
-unit tests use Swift Testing. No other platform has this split.
-
-### Template — test cases and selection markers
-
-```markdown
-<!-- …continued: test cases, selection markers -->
+<!-- …continued: test cases -->
 ## Test Cases
 
-### Selection Markers (required for new test cases)
-
-Each generated test case MUST include selection metadata so DV's parser can include the test in the right Selected Tests list. See `skills/shared/test-selection-syntax.md`.
-
-| Field | Example | When |
-|-------|---------|------|
-| `@test-required` | comment marker on the test | Smoke / critical-path tests |
-| `@depends-on:` | one symbol per marker, e.g. `@depends-on: TokenService` | Cross-file behavior coverage |
-| `@test-tag:` | `smoke`, `regression`, `perf`, `ui`, `flaky` | Categorization |
-
-The output table for each test case (below) gains two columns: `Required?` and `Dependencies`. Columns may be empty if not applicable, but should not be omitted.
-```
-
-#### Test case examples — unit
-
-```markdown
-<!-- …continued: unit test cases -->
 ### Unit Tests
 
 #### UT-001: Token Validation
@@ -124,60 +98,22 @@ The output table for each test case (below) gains two columns: `Required?` and `
 - **Dependencies**: `TokenService`, `JWTValidator` (`@depends-on:`)
 - **Tag**: `smoke`
 - **Preconditions**: Valid JWT token available
-- **Steps**:
-  1. Call `validateToken()` with valid token
-  2. Verify token claims are extracted
-  3. Verify expiration is checked
+- **Steps**: 1. Call `validateToken()` 2. Verify claims extracted 3. Verify expiry checked
 - **Expected**: Token validated, claims returned
 - **Automation**: Yes
-
-#### UT-002: Token Refresh
-- **Priority**: High
-- **Preconditions**: Expired access token, valid refresh token
-- **Steps**:
-  1. Call `refreshToken()` with expired access token
-  2. Verify new token is requested
-  3. Verify new token is stored
-- **Expected**: New access token returned
-- **Automation**: Yes
 ```
 
-#### Test case examples — integration and E2E
+#### Test case pattern
+
+Repeat that field set under `### Integration Tests` (`IT-NNN`) and `### E2E Tests` (`E2E-NNN`).
+Those cases also name the environment in **Preconditions** (mock OAuth provider, seeded test
+user) and the driver in **Automation** (`Yes (mock provider)`, `Yes (Playwright)`). Critical user
+journeys are `Priority: Critical`.
+
+### Template — edge cases, security, test data
 
 ```markdown
-<!-- …continued: integration, E2E test cases -->
-### Integration Tests
-
-#### IT-001: OAuth Login Flow
-- **Priority**: Critical
-- **Preconditions**: OAuth provider configured
-- **Steps**:
-  1. Initiate OAuth login
-  2. Complete provider authentication
-  3. Verify callback handling
-  4. Verify user session created
-- **Expected**: User logged in, session active
-- **Automation**: Yes (mock provider)
-
-### E2E Tests
-
-#### E2E-001: Complete Login Journey
-- **Priority**: Critical
-- **Preconditions**: Test user account exists
-- **Steps**:
-  1. Navigate to login page
-  2. Click OAuth login button
-  3. Complete authentication
-  4. Verify redirect to dashboard
-  5. Verify user info displayed
-- **Expected**: User sees personalized dashboard
-- **Automation**: Yes (Playwright)
-```
-
-### Template — edge cases and security tests
-
-```markdown
-<!-- …continued: edge cases, security test cases -->
+<!-- …continued: edge cases, security, test data, dependencies -->
 ## Edge Cases
 
 | ID | Scenario | Expected Behavior |
@@ -185,7 +121,6 @@ The output table for each test case (below) gains two columns: `Required?` and `
 | EC-001 | Expired token on protected route | Redirect to login |
 | EC-002 | OAuth provider unavailable | Show error, offer retry |
 | EC-003 | Invalid callback state | Reject, log security event |
-| EC-004 | Concurrent login attempts | Handle gracefully |
 
 ## Security Test Cases
 
@@ -193,13 +128,7 @@ The output table for each test case (below) gains two columns: `Required?` and `
 |----|------|---------------|
 | SEC-001 | Token stored securely | Not in localStorage/cookies |
 | SEC-002 | CSRF protection | State parameter validated |
-| SEC-003 | XSS in OAuth flow | No script injection possible |
-```
 
-### Template — test data and dependencies
-
-```markdown
-<!-- …continued: test data, dependencies -->
 ## Test Data Requirements
 
 | Data | Source | Notes |
@@ -209,9 +138,7 @@ The output table for each test case (below) gains two columns: `Required?` and `
 
 ## Dependencies
 
-- Mock OAuth provider for CI
-- Test database with seed data
-- E2E browser automation setup
+- Mock OAuth provider for CI, test database with seed data, E2E automation setup
 ```
 
 ## Integration

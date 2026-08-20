@@ -1,5 +1,9 @@
 # Device Specifications
 
+Encoded in `../scripts/layout-calc.py` — read here only to verify a value or extend the matrix.
+tvOS and watchOS are full-bleed: no device frame, no text layers, background + screenshot
+filling the canvas.
+
 ## iOS Phones (7 devices)
 
 | Device name | W | H | Headline fontSize | Subtitle fontSize |
@@ -39,8 +43,6 @@
 | Apple TV 4K (3840x2160) | 3840 | 2160 | full-bleed image |
 | Apple TV (1920x1080) | 1920 | 1080 | full-bleed image |
 
-tvOS uses full-bleed image layout — no device frame, no text layers. Background + screenshot filling the canvas.
-
 ## watchOS (3 devices)
 
 | Device name | W | H | Layout |
@@ -48,5 +50,3 @@ tvOS uses full-bleed image layout — no device frame, no text layers. Backgroun
 | Apple Watch Ultra 3 (422x514) | 422 | 514 | full-bleed image |
 | Apple Watch Ultra (410x502) | 410 | 502 | full-bleed image |
 | Apple Watch Series 10 (416x496) | 416 | 496 | full-bleed image |
-
-watchOS uses full-bleed image layout — no device frame, no text layers. Background + screenshot filling the canvas.

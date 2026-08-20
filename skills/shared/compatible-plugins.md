@@ -1,10 +1,10 @@
 # Compatible Dev-Plugin Registry
 
-Canonical for **plugin-level** compatibility metadata: which dev plugins the orchestrator may
-route to, their entry agents, functional-role agents, command-set tier, and handoff defaults.
-
-**Not** canonical for agent routing. Marker→platform detection and platform→specialist tables
-live in `skills/shared/platform-detection.md`; this file references that map and never copies it.
+Canonical for **plugin-level** compatibility metadata: which dev plugins the orchestrator
+may route to, their entry agents, functional-role agents, command-set tier, and handoff
+defaults. **Not** canonical for agent routing — marker→platform detection and
+platform→specialist tables live in `skills/shared/platform-detection.md`, referenced here
+and never copied.
 
 ## Registry
 
@@ -35,7 +35,7 @@ Apple extras: `analyze-issue`, `analyze-localization`, `gen-mock-api`, `fix-secu
 
 ## Functional-role agents
 
-Used by the stage agents that consult a dev plugin outside DV: AR (`software-architector`),
+Used by stage agents consulting a dev plugin outside DV: AR (`software-architector`),
 SR (`security-reviewer`), QA (`qa-engineer`), DR remediation.
 
 ### Architect and security auditor
@@ -79,10 +79,10 @@ generation · bare verbs for lifecycle (`deps`, `debug`, `build-test`, `develop-
 ### ai-engineer exception
 
 Keeps its domain set — `review-code`, `analyze-security`, `data-audit`, `deploy-check`,
-`eval-run`, `finetune-plan`, `prompt-optimize`, `rag-audit` — plus `build-test`, the one core
-command the orchestrator structurally requires for a platform to be routable at all (DV/DR/QA
-delegate their build gate to it). Only the two names overlapping the standard were renamed.
-A wider core-parity pass is optional, not required.
+`eval-run`, `finetune-plan`, `prompt-optimize`, `rag-audit` — plus `build-test`, the one
+core command structurally required for a platform to be routable at all (DV/DR/QA delegate
+their build gate to it). Only the two names overlapping the standard were renamed; a wider
+core-parity pass is optional.
 
 ## Handoff defaults
 
@@ -99,24 +99,22 @@ A wider core-parity pass is optional, not required.
 
 `corpflow`, `debugging-toolkit`, `security-scanning`, `skill-creator`, `conductor`, `claude-in-chrome`.
 
-The plugin-prefix regex in `skills/worktask/scripts/publish-pl-issue.sh` MUST equal this list
-united with the Plugin column of § Registry. Changing either without the other lets internal
-agent identifiers leak into published GitHub issues.
+The plugin-prefix regex in `skills/worktask/scripts/publish-pl-issue.sh` MUST equal this
+list united with the Plugin column of § Registry. Changing either alone lets internal agent
+identifiers leak into published GitHub issues.
 
 ## § Naming — plugin-unique agent prefixes
 
 Functional-role agents MUST carry a plugin-unique prefix: `sys-`, `and-`, `fe-`, `be-`, `ai-`.
-Every registered plugin now complies except `apple-developer`, which predates the convention and
+Every registered plugin complies except `apple-developer`, which predates the convention and
 keeps the bare names `security-auditor`, `test-generator`, `code-fixer`, `dependency-manager`.
 
-Two things break when two plugins ship the same bare name. Claude Code keys installed agents by
-frontmatter `name`, so one silently overwrites the other. And `error_file` derives from the agent
-basename, so both would write to the same `.context/errors/test-generator.md` inside one worktask.
-
-`android-developer` held exactly that collision with `apple-developer` and was renamed to the
-`and-` prefix in its 1.4.0 release. Since apple-developer is now the only plugin using bare names,
-no collision remains — but a *new* plugin using them would re-create one, which is why the prefix
-rule is binding for anything added from here.
+Two things break when two plugins ship the same bare name: Claude Code keys installed agents
+by frontmatter `name`, so one silently overwrites the other; and `error_file` derives from
+the agent basename, so both write to the same `.context/errors/test-generator.md` inside one
+worktask. `android-developer` held exactly that collision and took the `and-` prefix in its
+1.4.0 release. No collision remains today, but a *new* plugin using bare names would
+re-create one — which is why the prefix rule binds anything added from here.
 
 ## Adding or replacing a dev plugin
 

@@ -2,24 +2,15 @@
 
 Reference for the `apple-canvas` adapter in `dv-screenshot-capture`. Renders SwiftUI `#Preview` views to PNG via `ImageRenderer` in a host-side SPM executable target (`tools/SnapshotHost/`), without booting the simulator.
 
-> Companion: `preview-ensurer.md` (heuristics summary). Canonical contract for the cross-skill boundary lives in **this** file.
+> Companion: `preview-ensurer.md` (heuristics summary). The canonical contract for the cross-skill boundary lives in **this** file.
 
 ## When this adapter runs
 
-Selected when `state.platform == "apple"` and the Apple adapter's degraded-mode predicate fires. The dispatcher only calls `ADAPTERS["apple"]["degraded_if"]`; the conditions below are this adapter's own, not the dispatcher's. See `SKILL.md § Adapter selection rule` and `§ apple degraded-mode predicate`.
-
-Trigger inputs:
-
-| Source | Field | Effect |
-|---|---|---|
-| Plan metadata | `metadata.requires_canvas_screenshot: true` | Force canvas for the whole worktask |
-| Skill call args | `args.force_canvas: true` | Force canvas for this specific invocation |
-| State inference | sim-unavailable clauses of `degraded()` | Auto-route to canvas (xcframework-without-sim-slice, etc.) |
-| Plan metadata | `metadata.canvas_destination ∈ {"macos-host","ios-sim"}` | Pick render destination (default `macos-host`, ad5) |
+Selected when `state.platform == "apple"` and this adapter's degraded-mode predicate fires — plan-level `metadata.requires_canvas_screenshot`, per-call `args.force_canvas`, or a sim-unavailable inference (xcframework-without-sim-slice, etc.). The dispatcher only calls `ADAPTERS["apple"]["degraded_if"]`; the clauses are the adapter's own and canonical in `../SKILL.md § apple degraded-mode predicate`. Render destination comes from `metadata.canvas_destination ∈ {"macos-host","ios-sim"}` (default `macos-host`, ad5).
 
 ## Cross-skill contract with preview-ensurer
 
-**preview-ensurer runs BEFORE SnapshotHost.** The apple-canvas adapter is the sole orchestrator; preview-ensurer is never invoked directly from DV outside this adapter in v1 (ad8 — single chokepoint).
+**preview-ensurer runs BEFORE SnapshotHost**, and the apple-canvas adapter is its sole caller — never invoked directly from DV in v1 (ad8, single chokepoint).
 
 ### Function signature (canonical)
 
@@ -28,7 +19,7 @@ ensure_previews(
   modified_files: [Path],         # absolute paths from git diff --diff-filter=AMR
   options: {
     auto_add: Bool,               # default true; false = dry-run (detect only)
-    write_mode: "in-source"       # OQ1 ratified; "staged-patch" not supported in v1
+    write_mode: "in-source"       # OQ1 ratified; "staged-patch" unsupported in v1
   }
 ) → {
   views: [
@@ -47,32 +38,11 @@ ensure_previews(
 
 ### Invocation sequence
 
-```
-DV → Skill("dv-screenshot-capture", platform="apple", args.force_canvas=true)
-     → adapter selection → apple-canvas
-       → Skill("preview-ensurer", modified_files, auto_add=true)
-         ↳ result.errors empty → continue
-         ↳ result.errors non-empty → throw missing_input → DV completion gate catches,
-                                     appends to .context/errors/developer.md
-       → swift run --package-path tools/SnapshotHost SnapshotHost ...
-       → PNG → screenshots.md manifest row + state.json facts.screenshots
-```
+`Skill("dv-screenshot-capture", platform="apple", args.force_canvas=true)` → adapter selection picks apple-canvas → `Skill("preview-ensurer", modified_files, auto_add=true)` → empty `errors` continues, non-empty throws `missing_input` (the DV completion gate appends it to `.context/errors/developer.md`) → `swift run --package-path tools/SnapshotHost SnapshotHost …` → PNG → screenshots.md manifest row + `state.json` `facts.screenshots`.
 
 ### State sharing
 
-preview-ensurer writes to `state.json → facts.previews_added[]`:
-
-```json
-{
-  "facts": {
-    "previews_added": [
-      { "file": "Sources/UI/ContentView.swift", "type": "ContentView", "action": "added", "mock_strategy": "binding-constant" }
-    ]
-  }
-}
-```
-
-DV summary surfaces this array — single `git checkout -- <file>` reverts the auto-added `#Preview`.
+preview-ensurer appends to `state.json → facts.previews_added[]` — `{file, type, action, mock_strategy}` per view, e.g. `{"file": "Sources/UI/ContentView.swift", "type": "ContentView", "action": "added", "mock_strategy": "binding-constant"}`. The DV summary surfaces the array, so a single `git checkout -- <file>` reverts an auto-added `#Preview`.
 
 ## Adapter inputs / outputs / audit schemas
 
@@ -84,23 +54,14 @@ DV summary surfaces this array — single `git checkout -- <file>` reverts the a
 | `args.view` | `metadata.canvas_view` or auto-derived (first View under modified_files) | No |
 | `args.force_canvas` | `metadata.requires_canvas_screenshot` or explicit | No |
 | `args.canvas_destination` | `metadata.canvas_destination`, default `"macos-host"` | No |
-| `args.size` | `metadata.canvas_size`, default `393x852` (iPhone artboard, planning risk row 3) | No |
+| `args.size` | `metadata.canvas_size`, default `393x852` (iPhone artboard) | No |
 | `args.scheme` | `metadata.canvas_scheme ∈ {"light","dark"}`, default `light` | No |
 
 ### Outputs
 
-Returns the standard `dv-screenshot-capture` adapter shape:
+The standard adapter shape (`../SKILL.md § Adapters`); `error` here is one of `null`, `"capture_failed"`, `"tool_missing"`, `"oversize_unquantizable"`.
 
-```
-{
-  path:  ".context/images/<worktask_id>/dv-NN-<slug>.png",
-  bytes: <integer>,
-  ok:    Bool,
-  error: null | "capture_failed" | "tool_missing" | "oversize_unquantizable"
-}
-```
-
-### Audit rows
+### Audit row schema
 
 | `action` | `phase` (when applicable) | Required `metadata` |
 |---|---|---|
@@ -110,83 +71,46 @@ Returns the standard `dv-screenshot-capture` adapter shape:
 | `preview_added` | — | `file`, `view_type`, `mock_strategy`, `lines_added` |
 | `visual_diff_run` | — | `reference`, `candidate`, `metric: "RMSE"`, `value_percent`, `threshold_percent`, `verdict` |
 
-`screenshot_platform_fallback` rows continue to be emitted on cascade transitions (`canvas_host_build_failed`, `canvas_sim_unavailable`, etc.).
+`screenshot_platform_fallback` rows are still emitted on cascade transitions (`canvas_host_build_failed`, `canvas_sim_unavailable`, etc.).
 
 ## Failure cascade ladder
 
-Three-tier cascade per ad6. Each transition emits its own audit row.
+Four tiers (ad6), additive to the existing `dv-screenshot-capture` failure-mode vocabulary — apple-canvas never replaces that chain. Each transition emits its own audit row.
 
-```
-[1] SnapshotHost missing on disk
-      → scaffold from skills/dv-screenshot-capture/templates/SnapshotHost-template/
-      → write tools/SnapshotHost/.canvas-scaffold-version marker
-      → retry render step
-      → emit canvas_render, phase: "scaffold"
-      → success | proceed to [4]
+### Tiers
 
-[2] Host build fails (swift build non-zero, OR exit code = module_graph_sim_required)
-      → escalate to `apple` (sim) adapter
-      → emit screenshot_platform_fallback, reason: "canvas_host_build_failed"
-      → success | proceed to [3]
-```
-
-### Cascade tiers 3–4
-
-```
-# …continued: failure cascade ladder
-[3] `apple` (sim) adapter unavailable (sim_unavailable(state) == true)
-      → cli/fallback (existing skill behavior)
-      → emit screenshot_platform_fallback, reason: "canvas_sim_unavailable"
-
-[4] preview-ensurer returns errors
-      → bubble as missing_input to DV completion gate
-      → append to .context/errors/developer.md
-      → do NOT render; do NOT silently skip (ad8)
-```
-
-### Cascade additivity
-
-The cascade is additive to the existing `dv-screenshot-capture` failure-mode vocabulary — apple-canvas never replaces the existing chain.
+1. **SnapshotHost missing on disk** → scaffold from `templates/SnapshotHost-template/`, write the `tools/SnapshotHost/.canvas-scaffold-version` marker, retry the render, emit `canvas_render` `phase: "scaffold"`.
+2. **Host build fails** (`swift build` non-zero, or exit `module_graph_sim_required`) → escalate to the `apple` (sim) adapter; `screenshot_platform_fallback`, `reason: "canvas_host_build_failed"`.
+3. **Sim adapter unavailable** (`sim_unavailable(state) == true`) → `cli/fallback`; `reason: "canvas_sim_unavailable"`.
+4. **preview-ensurer returned errors** → bubble as `missing_input` to the DV completion gate, append to `.context/errors/developer.md`. Do NOT render; do NOT silently skip (ad8).
 
 ## macOS host vs ios-sim destination selection (ad5)
 
 | Destination | When to use | `Package.swift` platforms | Speed | Determinism | Font fidelity |
 |---|---|---|---|---|---|
-| `macos-host` (default) | All cases unless pixel-perfect Figma diff required | `.macOS(.v13)` only | <10s cold, <2s warm | High (no sim cache, no simctl state) | Sub-pixel drift on SF Pro vs XCPreviewAgent |
-| `ios-sim` (opt-in) | Pixel-perfect Figma comparison; project where macOS Catalyst build path is broken | `.macOS(.v13)` + `.iOS(.v16)` | 30-90s cold (sim boot + build) | Lower (carries sim cache) | Matches XCPreviewAgent exactly |
+| `macos-host` (default) | All cases unless pixel-perfect Figma diff required | `.macOS(.v13)` only | <10s cold, <2s warm | High (no sim cache or simctl state) | Sub-pixel drift on SF Pro vs XCPreviewAgent |
+| `ios-sim` (opt-in) | Pixel-perfect Figma comparison; project whose macOS Catalyst build path is broken | `.macOS(.v13)` + `.iOS(.v16)` | 30–90s cold (sim boot + build) | Lower (carries sim cache) | Matches XCPreviewAgent exactly |
 
-Switch via `metadata.canvas_destination: "ios-sim"`. The scaffolder uncomments the `.iOS(.v16)` line in `Package.swift` on opt-in.
+Switch via `metadata.canvas_destination: "ios-sim"`; the scaffolder uncomments the `.iOS(.v16)` line in `Package.swift` on opt-in.
 
 ## Fidelity caveats (ImageRenderer ≠ XCPreviewAgent)
 
-`ImageRenderer` on the macOS host does not perfectly match `XCPreviewAgent`'s rasterization. Known divergences:
+Host-side `ImageRenderer` does not match `XCPreviewAgent`'s rasterization: font metrics differ by 1–2 px on some SF Pro weights; system materials (`.ultraThinMaterial` and friends) rasterize differently; there is NO device chrome — status bar, dynamic island, bezel are absent from the clipped content rect (C5); and only a single-shot snapshot is produced (trait matrices await a future `args.trait_collections` flag).
 
-1. **Font metrics** — kerning, baseline shift, and dynamic-type rendering can differ by 1–2 px on certain SF Pro weights (ultralight, heavy).
-2. **System background materials** — `.ultraThinMaterial` and friends rasterize differently on host vs simulator runtime.
-3. **Status bar / dynamic island / device chrome** — `ImageRenderer` produces a clipped content rect; canvas snapshots have NO device chrome (constraint C5).
-4. **Dynamic Type / dark-mode matrices** — single-shot snapshot only; matrix rendering deferred to a future `args.trait_collections` flag.
-
-### Mitigations
-
-- Pin `proposedSize = CGSize(width: 393, height: 852)` (iPhone artboard) so layout is deterministic across host/sim (risk row 3).
-- Default RMSE threshold 8% absorbs sub-pixel font drift while still catching real visual regressions.
-- Pixel-perfect escape hatch: `metadata.canvas_destination: "ios-sim"`.
-- For whole-screen Figma comparisons that include status bar / dynamic island, document an inset wrapper in your project's preview file rather than embedding chrome rendering in this adapter (C5).
+Mitigations: pin `proposedSize = CGSize(width: 393, height: 852)` so layout is deterministic across host and sim; rely on the default 8% RMSE threshold to absorb sub-pixel drift while still catching real regressions; escape to `metadata.canvas_destination: "ios-sim"` when pixel-perfect; and for whole-screen Figma comparisons including chrome, document an inset wrapper in the project's own preview file rather than rendering chrome here (C5).
 
 ## tools/SnapshotHost/ on-disk shape
 
-After scaffolding (and committed afterward for CI reproducibility):
+Scaffolded from the template, then committed for CI reproducibility:
 
 ```
 tools/SnapshotHost/
-  Package.swift                 # template from templates/SnapshotHost-template/Package.swift
+  Package.swift                 # from templates/SnapshotHost-template/Package.swift
   Sources/SnapshotHost/
     main.swift                  # CLI: --view --output --size --scheme
     PreviewBridge.swift         # @testable import of leaf View modules; rewritten idempotently
-  .canvas-scaffold-version      # plain text "1" — bumped on backward-incompatible template changes
+  .canvas-scaffold-version      # plain text "1"; bumped on backward-incompatible template changes
 ```
-
-The `.canvas-scaffold-version` marker addresses the open-item from AR0 § Open Items for Downstream Stages.
 
 ## CLI contract — `swift run SnapshotHost`
 
@@ -198,39 +122,25 @@ swift run SnapshotHost
   [--scheme light|dark]                 # default light; affects ColorScheme env
 ```
 
-Exit codes:
+### Exit codes
 
 | Code | Meaning | Adapter handling |
 |---|---|---|
 | `0` | success | proceed to size budget step |
-| `2` | view-key not found in PreviewBridge.viewRegistry | `ok: false, error: "capture_failed"`; surface key + available registry keys in DV summary |
-| `3` | ImageRenderer returned nil | `ok: false, error: "capture_failed"`; check the render log for SwiftUI runtime exception |
-| `4` | PNG write failed (disk full / permission denied) | `ok: false, error: "capture_failed"`; surface filesystem error |
+| `2` | view-key not found in `PreviewBridge.viewRegistry` | `ok: false, error: "capture_failed"`; surface key + available registry keys in the DV summary |
+| `3` | `ImageRenderer` returned nil | `ok: false, error: "capture_failed"`; check the render log for a SwiftUI runtime exception |
+| `4` | PNG write failed (disk full / permission denied) | `ok: false, error: "capture_failed"`; surface the filesystem error |
 | Any other non-zero | unexpected | treat as `3`; log full stderr |
 
 ## Driver script
 
-`scripts/apple-canvas.sh` is the bash driver. Inputs:
+`scripts/apple-canvas.sh` is the bash driver; its flags are listed in `../SKILL.md § Script usage`. Steps, matching the cascade above:
 
-```
---worktask-id <id>            # state.json.worktask_id
---modified-files <path>       # newline-separated file paths (typically from git diff)
---view <ModuleType>           # optional; if omitted, derived from modified_files
---destination <macos-host|ios-sim>   # optional; default macos-host
---size <WxH>                  # optional; default 393x852
---scheme <light|dark>         # optional; default light
-```
-
-### Driver steps
-
-Steps (matches the failure cascade above):
-
-1. Resolve outputs path: `.context/images/<worktask_id>/dv-NN-canvas-<slug>.png` (NN per existing storage layout rules).
-2. Scaffold-if-missing: copy `templates/SnapshotHost-template/` if `tools/SnapshotHost/Package.swift` absent.
+1. Resolve the output path `.context/images/<worktask_id>/dv-NN-canvas-<slug>.png` (`NN` per the storage-layout rules).
+2. Copy `templates/SnapshotHost-template/` when `tools/SnapshotHost/Package.swift` is absent.
 3. Invoke preview-ensurer; abort on errors with `missing_input`.
-4. Update `PreviewBridge.swift` viewRegistry (idempotent).
+4. Update the `PreviewBridge.swift` viewRegistry (idempotent).
 5. `swift run --package-path tools/SnapshotHost SnapshotHost --view <…> --output <…> --size <…> --scheme <…>`.
-6. Apply 500 KB size budget (pngquant fallback → oversize/) — reuse parent skill logic.
-7. Emit manifest row + audit JSON.
+6. Apply the parent skill's 500 KB size budget (pngquant → `oversize/`), then emit the manifest row + audit JSON.
 
 Logs land in `.context/logs/build-developer-<ts>.log` and `.context/logs/canvas-render-<ts>.log` (per logging-conventions).

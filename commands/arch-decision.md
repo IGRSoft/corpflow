@@ -13,13 +13,9 @@ related:
 
 # Architecture / Technology Decision Record Command
 
-Create or update decision records. Two record types are supported via `--type`:
-
-- `--type adr` (default) — **Architecture Decision Records (ADRs)**: system design,
-  structure, and architectural choices. Output to `docs/adr/ADR-XXX-title.md`.
-- `--type tdr` — **Technology Decision Records (TDRs)**: implementation-level
-  technology choices such as libraries, frameworks, tools, and patterns. Output to
-  `docs/tdr/TDR-XXX-title.md`.
+Create or update decision records: Architecture Decision Records (`--type adr`, default) and
+Technology Decision Records (`--type tdr`); they differ in scope, owner, and output path — see
+§ TDR vs ADR.
 
 ## Usage
 
@@ -33,16 +29,15 @@ Create or update decision records. Two record types are supported via `--type`:
 
 ## Options
 
-- `--type [adr|tdr]` - Record type (default `adr`). `tdr` targets `docs/tdr/TDR-XXX`.
-- `--list` - List all existing records (of the selected type)
-- `--update <number>` - Update existing record
-- `--supersede <number>` - Create record that supersedes another
-- `--status [proposed|accepted|deprecated|superseded]` - Set record status
-- `--evaluate "name"` - Run the evaluation framework for a technology (TDR-oriented)
-- `--compare "tech1" "tech2"` - Compare two technologies (TDR-oriented)
-
-`--evaluate` and `--compare` drive the weighted Evaluation Framework (see below)
-and are primarily used with `--type tdr` technology assessments.
+| Option | Values | Effect |
+|---|---|---|
+| `--type` | `adr` \| `tdr` (default `adr`) | Record type and output directory |
+| `--list` | flag | List existing records of that type |
+| `--update <number>` | record number | Update an existing record |
+| `--supersede <number>` | record number | Create a record superseding another |
+| `--status` | `proposed` \| `accepted` \| `deprecated` \| `superseded` | Set record status |
+| `--evaluate "name"` | technology name | Run the § Evaluation Framework (TDR-oriented) |
+| `--compare "t1" "t2"` | two technology names | Compare two technologies (TDR-oriented) |
 
 ## Examples
 
@@ -58,7 +53,7 @@ and are primarily used with `--type tdr` technology assessments.
 
 ## Output Format (ADR — `--type adr`)
 
-Creates file: `docs/adr/ADR-XXX-title.md`
+Creates `docs/adr/ADR-XXX-title.md`, sections in order:
 
 ~~~markdown
 # ADR-015: Use PostgreSQL for Primary Database
@@ -70,228 +65,90 @@ Accepted
 [Date]
 
 ## Context
+Why the decision is needed; requirements it must satisfy (bulleted).
 
-We need to select a primary database for storing user data, transactions, and application state. The system requires:
-- ACID compliance for financial transactions
-- Complex querying capabilities
-- Proven scalability to millions of records
-- Strong ecosystem and tooling support
+## Options Considered
+### Option N: <name>
+- **Pros**: <strengths against those requirements>
+- **Cons**: <costs, risks, gaps>
 ~~~
 
-### Output Format (ADR) — Options Considered
+### Output Format (ADR) — Decision through References
 
 ~~~markdown
-<!-- …continued: Options Considered -->
-### Options Considered
-
-#### Option 1: PostgreSQL
-- **Pros**: ACID compliant, mature, excellent tooling, JSON support, strong community
-- **Cons**: Requires more ops expertise than managed solutions
-
-#### Option 2: MySQL
-- **Pros**: Widely used, good performance, many managed options
-- **Cons**: Less advanced features, weaker JSON support
-
-#### Option 3: MongoDB
-- **Pros**: Flexible schema, horizontal scaling
-- **Cons**: Not ACID by default, eventual consistency concerns
-~~~
-
-### Output Format (ADR) — Decision & Rationale
-
-~~~markdown
-<!-- …continued: Decision -->
 ## Decision
-
-We will use **PostgreSQL** as our primary database.
+We will use **<selected option>**.
 
 ### Rationale
-1. **ACID compliance** is critical for our financial transactions
-2. **JSON support** allows flexible schema where needed
-3. **Strong ecosystem** with excellent ORMs and migration tools
-4. **Proven at scale** by companies with similar requirements
-5. **Team expertise** - team has PostgreSQL experience
-~~~
+Numbered reasons, each tied to a Context requirement.
 
-### Output Format (ADR) — Consequences
-
-~~~markdown
-<!-- …continued: Consequences -->
 ## Consequences
-
 ### Positive
-- Strong data integrity guarantees
-- Powerful query capabilities with CTEs, window functions
-- Excellent migration and schema management tools
-- Good performance with proper indexing
-
 ### Negative
-- Requires database administration expertise
-- Horizontal scaling more complex than NoSQL options
-- Need to manage connection pooling
-
 ### Neutral
-- Will use Prisma as ORM for type safety
-- Need to set up backup and replication strategy
-~~~
+Outcomes per class — gains, costs, commitments.
 
-### Output Format (ADR) — Implementation & References
-
-~~~markdown
-<!-- …continued: Implementation Notes -->
 ## Implementation Notes
-
-- Use connection pooling (PgBouncer or built-in)
-- Implement read replicas for reporting queries
-- Set up automated backups with point-in-time recovery
-- Use database migrations for all schema changes
+Follow-up actions the decision requires.
 
 ## Related Decisions
-
-- ADR-010: API authentication strategy (uses PostgreSQL for user storage)
-- ADR-012: Caching strategy (Redis for caching, PostgreSQL for persistence)
+- ADR-0NN: <title> (<how it relates>)
 
 ## References
-
-- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
-- [Prisma with PostgreSQL](https://www.prisma.io/docs/concepts/database-connectors/postgresql)
+- <authoritative docs the decision rests on>
 ~~~
 
 ## Output Format (TDR — `--type tdr`)
 
-Creates file: `docs/tdr/TDR-XXX-title.md`
+Creates `docs/tdr/TDR-XXX-title.md`. Same Status/Date frame as an ADR, plus `## Category`
+(see TDR Categories):
 
 ~~~markdown
-# TDR-012: Use Zod for Runtime Validation
-
-## Status
-Accepted
-
-## Date
-[Date]
-
-## Category
-Library - Validation
-
 ## Context
+Requirements for the technology, then a `### Problem Statement` naming the gap being closed.
 
-We need a runtime validation library for validating API inputs, form data, and configuration. Requirements:
-- TypeScript-first with excellent type inference
-- Composable schema definitions
-- Good error messages
-- Active maintenance and community
-
-### Problem Statement
-
-Current validation is inconsistent across the codebase:
-- Manual checks in some handlers
-- Joi in legacy modules
-- No validation in newer code
-~~~
-
-### Output Format (TDR) — Evaluation
-
-~~~markdown
-<!-- …continued: Evaluation -->
 ## Evaluation
-
 ### Candidates Assessed
 
 | Criterion | Weight | Zod | Yup | Joi |
 |-----------|--------|-----|-----|-----|
 | Team expertise | 20% | 3 | 4 | 5 |
 | TypeScript integration | 20% | 5 | 3 | 2 |
-| Community support | 15% | 5 | 4 | 4 |
-| Long-term viability | 15% | 5 | 4 | 3 |
-| Performance | 15% | 4 | 4 | 3 |
-| Bundle size | 10% | 4 | 3 | 2 |
-| Error messages | 5% | 5 | 4 | 4 |
 | **Weighted Score** | | **4.3** | **3.7** | **3.4** |
+
+Rows = Evaluation Framework criteria; scores 1–5.
 ~~~
 
-### Output Format (TDR) — Detailed Analysis
+### Output Format (TDR) — Analysis through References
 
 ~~~markdown
-<!-- …continued: Detailed Analysis -->
 ### Detailed Analysis
+#### <Candidate> (Selected | Considered)
+- **Pros**: … / - **Cons**: …
 
-#### Zod (Selected)
-- **Pros**:
-  - First-class TypeScript support with type inference
-  - Zero dependencies
-  - Excellent composability
-  - Growing ecosystem (trpc, react-hook-form)
-  - Active development
-- **Cons**:
-  - Team needs to learn new syntax
-  - Less battle-tested than Joi
-
-#### Yup (Considered)
-- **Pros**: Familiar syntax, good ecosystem
-- **Cons**: TypeScript support is bolted on, larger bundle
-
-#### Joi (Considered)
-- **Pros**: Very mature, comprehensive validation
-- **Cons**: Poor TypeScript support, large bundle, Node-focused
-~~~
-
-### Output Format (TDR) — Decision & Implementation Plan
-
-~~~markdown
-<!-- …continued: Decision -->
 ## Decision
-
-We will use **Zod** for runtime validation across the codebase.
+We will use **<selected>**.
 
 ### Rationale
-
-1. **TypeScript-first design** provides excellent DX and type safety
-2. **Type inference** eliminates duplicate type definitions
-3. **Composability** enables building complex schemas from simple ones
-4. **Growing ecosystem** with integrations we already use (trpc)
-5. **Zero dependencies** keeps bundle size manageable
+Numbered reasons referencing the weighted scores.
 
 ## Implementation Plan
-
 ### Phase 1: New Code (Week 1-2)
-- Use Zod for all new validation
-- Create shared schema library in `src/schemas/`
-- Document patterns and examples
-
 ### Phase 2: Migration (Week 3-4)
-- Replace Joi in legacy modules
-- Add validation to unvalidated endpoints
-- Remove Joi dependency
-~~~
+Steps per phase, ending in removal of the superseded dependency.
 
-### Output Format (TDR) — Consequences & References
-
-~~~markdown
-<!-- …continued: Consequences -->
 ## Consequences
-
 ### Positive
-- Single source of truth for types and validation
-- Consistent validation across codebase
-- Better error messages for API consumers
-- Reduced bundle size vs Joi
-
 ### Negative
-- Learning curve for team members unfamiliar with Zod
-- Migration effort for existing Joi schemas
 
 ## References
-
-- [Zod Documentation](https://zod.dev/)
-- [Zod GitHub](https://github.com/colinhacks/zod)
+- <upstream docs and repository links>
 ~~~
 
 ## Record Numbering
 
-Records are automatically numbered sequentially per type:
-- ADRs: `ADR-001`, `ADR-002`, … · TDRs: `TDR-001`, `TDR-002`, …
-- Numbers are never reused
-- Superseded records keep their number
+Sequential per type (`ADR-001`, `TDR-001`, …). Numbers are never reused; superseded records
+keep theirs.
 
 ## Lifecycle (ADR and TDR)
 
@@ -329,58 +186,42 @@ Proposed → Accepted → [Deprecated | Superseded]
 
 ## Evaluation Framework
 
-When evaluating technologies (`--evaluate` / `--compare`, TDR-oriented), assess
-these weighted criteria:
+Weighted criteria for `--evaluate` / `--compare` (TDR-oriented):
 
 | Criterion | Weight | Description |
 |-----------|--------|-------------|
-| Team expertise | 20% | Current team knowledge and learning curve |
-| Community support | 15% | Documentation, tutorials, Stack Overflow |
+| Team expertise | 20% | Current knowledge and learning curve |
+| Community support | 15% | Docs, tutorials, Stack Overflow |
 | Long-term viability | 15% | Maintenance status, adoption trends |
 | Performance | 15% | Runtime performance, bundle size |
 | Security posture | 15% | Known vulnerabilities, security updates |
 | Integration ease | 10% | Compatibility with existing stack |
 | Cost | 10% | Licensing, infrastructure requirements |
 
-## Template Sections (ADR)
-
-| Section | Purpose |
-|---------|---------|
-| Status | Current lifecycle state |
-| Date | When decision was made |
-| Context | Why this decision is needed |
-| Decision | What was decided |
-| Consequences | Positive, negative, neutral outcomes |
-| Implementation | How to implement |
-| Related | Connected decisions |
-
 ## Platform Architect Consultation
 
-When an ADR turns on a platform-level architecture decision — app architecture pattern,
-navigation strategy, state management, concurrency model, module or service boundaries —
-consult the detected platform's architect for options evaluation. Detect the platform with
-`skills/shared/platform-detection.md § Detection Rules`; resolve the agent from
-`skills/shared/compatible-plugins.md § Functional-role agents` (`apple-architector`,
+When an ADR turns on a platform-level decision — app architecture pattern, navigation, state
+management, concurrency model, module or service boundaries — consult the detected platform's
+architect for options evaluation. Detect the platform with
+`skills/shared/platform-detection.md § Detection Rules`; resolve the agent and its plugin prefix
+from `skills/shared/compatible-plugins.md § Functional-role agents` (`apple-architector`,
 `kotlin-architector`, `frontend-architector`, `system-architector`, `backend-architector`,
-`ai-architector`), taking the plugin prefix from that table.
+`ai-architector`).
 
 ### What the architect contributes
 
-- Platform-specific pros and cons for each option
-- Pattern compatibility for the specific use case (e.g. TCA vs. MVVM on Apple, Clean vs.
-  MVI on Android, CSR/SSR/ISR on web, layered vs. hexagonal on systems)
-- Implementation complexity relative to the team's expertise in that stack
+- Platform-specific pros and cons per option
+- Pattern fit for the use case (TCA vs. MVVM on Apple, Clean vs. MVI on Android, CSR/SSR/ISR
+  on web, layered vs. hexagonal on systems)
+- Implementation complexity relative to team expertise in that stack
 
-Include the architect's analysis in the ADR's "Options Considered" section alongside the
-system-level evaluation from `software-architector`. If the platform is ambiguous or its
-plugin is not installed, record the ADR with the system-level evaluation only and note the
-missing consultation.
+Fold that analysis into "Options Considered" alongside the system-level evaluation from
+`software-architector`. If the platform is ambiguous or its plugin is not installed, record the
+ADR with the system-level evaluation only and note the missing consultation.
 
 ## Integration
 
-This command is used:
-- During AR stage - Document architecture decisions (ADR)
-- During DV stage / technical-debt discussions - Document implementation choices (TDR)
-- When introducing new patterns, technologies, libraries, or tools
-- For significant technical choices
-- For platform architecture pattern selection (with the platform architect consulted)
+- **AR stage** — architecture decisions (ADR)
+- **DV stage / technical-debt discussions** — implementation choices (TDR)
+- New patterns, technologies, libraries, or tools; any significant technical choice
+- Platform architecture pattern selection (architect consulted)

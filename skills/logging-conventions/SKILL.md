@@ -38,17 +38,15 @@ The kind names what the log **is**, not which tool made it.
 | `cost` | `SubagentStop` hook JSONL | `cost-dv-20260420-141522.jsonl` |
 | `audit` | Orchestrator/agent audit trail (append-only, no timestamp) | `audit.jsonl` |
 
-### Scope
+### Scope and timestamp
 
-Free-form short tag identifying the owner or target. Prefer: agent name (`developer`, `qa-engineer`), simulator id (`iphone15`), stage code (`qa`, `dv`), or feature slug (`auth`, `checkout`). Keep ≤ 24 chars, kebab-case.
+**Scope**: free-form short tag for the owner or target — agent name (`developer`, `qa-engineer`), simulator id (`iphone15`), stage code (`qa`, `dv`), or feature slug (`auth`, `checkout`). ≤ 24 chars, kebab-case.
 
-### Timestamp
-
-`YYYYMMDD-HHMMSS` in UTC (or host local if agent is human-facing). Generate via `date -u +%Y%m%d-%H%M%S` in Bash.
+**Timestamp**: `YYYYMMDD-HHMMSS` in UTC (host local if the agent is human-facing), from `date -u +%Y%m%d-%H%M%S`.
 
 ## Bash Pattern
 
-The shape is the same on every platform — make the directory, name the file, tee the merged stream. Only the build command changes.
+Same shape on every platform — make the directory, name the file, tee the merged stream. Only `<build-command>` changes (`xcodebuild … build`, `./gradlew :app:assembleDebug`, `go build ./...`, …).
 
 ```bash
 # Ensure .context/logs/ exists, then pipe background stdout+stderr.
@@ -57,33 +55,21 @@ LOG=".context/logs/build-<scope>-$(date -u +%Y%m%d-%H%M%S).log"
 <build-command> 2>&1 | tee "$LOG"
 ```
 
-Filled in for a few stacks:
-
-```bash
-# Apple
-xcodebuild -scheme App -destination 'platform=iOS Simulator,name=iPhone 15' build 2>&1 | tee "$LOG"
-# Android
-./gradlew :app:assembleDebug 2>&1 | tee "$LOG"
-# Go
-go build ./... 2>&1 | tee "$LOG"
-```
-
-When called from Claude Code's `Bash` tool with `run_in_background: true`, use the same `tee` so the stream persists even if the session closes.
+Use the same `tee` under Claude Code's `Bash` tool with `run_in_background: true`, so the stream persists even if the session closes.
 
 ## Monitor-Tool Pattern
 
 1. Start background Bash writing to `.context/logs/monitor-<agent>-<ts>.log` (via `tee`).
 2. Attach `Monitor` to the running background id for live events.
-3. When `Monitor` detaches, the file remains readable via `Read`.
-4. Reference the file path in downstream stage docs (`testing.md`, `incident-report.md`, `release-prep.md`).
+3. On detach the file stays readable via `Read`; reference its path in downstream stage docs (`testing.md`, `incident-report.md`, `release-prep.md`).
 
-> **MCP auto-background**: the tee pattern above covers Bash-invoked builds/tests. When an MCP tool call itself (`build_sim`, `test_sim`, …) exceeds ~2 min it is auto-backgrounded at the CC layer — no tee'd log exists until the agent reads the completion result. Treat the completion notification, not a `.context/logs/*.log` file's mere presence, as the readiness signal. See `agent-coordination § MCP Auto-Background`.
+> **MCP auto-background**: the tee pattern covers Bash-invoked builds/tests only. An MCP tool call (`build_sim`, `test_sim`, …) past ~2 min is auto-backgrounded at the CC layer, and no tee'd log exists until the agent reads the completion result — treat the completion notification, never a `.context/logs/*.log` file's mere presence, as the readiness signal. See `agent-coordination § MCP Auto-Background`.
 
 ## Cleanup & Retention
 
-- **Per-task hygiene**: `.context/logs/` is cleared together with the rest of `.context/` when the task archives (worktask FN stage or `/worktask` completion).
-- **Size guard**: Each filename has a unique timestamp, so no rotation. Large logs remain readable; agents should stream or truncate on disk if needed.
-- **Secrets**: Do not log secrets, tokens, or keychain data. If a tool prints them, redact before `tee` (e.g., `sed -E 's/(authorization|api[_-]?key|password|token|secret|bearer)[=:]\s*\S+/\1=REDACTED/'`). This pattern is starter-level; review the output to ensure no credentials leaked.
+- **Per-task hygiene**: `.context/logs/` clears with the rest of `.context/` when the task archives (worktask FN stage or `/worktask` completion).
+- **Size guard**: unique timestamps mean no rotation; large logs stay readable — stream or truncate on disk if needed.
+- **Secrets**: never log secrets, tokens, or keychain data. If a tool prints them, redact before `tee` (e.g. `sed -E 's/(authorization|api[_-]?key|password|token|secret|bearer)[=:]\s*\S+/\1=REDACTED/'`) — a starter pattern, so review the output for leaks.
 - **Git**: `.context/` follows the project's existing ignore policy — no special handling.
 
 ## Cross References
@@ -95,9 +81,9 @@ When called from Claude Code's `Bash` tool with `run_in_background: true`, use t
 
 ## Common Mistakes
 
-1. **Writing runtime output into `errors/<agent>.md`** — those files are for narrative escalation; raw captures belong in `logs/`.
-2. **Writing to `.context/error.md`** — retired path. Use `.context/errors/<agent>.md` (per-agent) instead.
-3. **Missing timestamp** — without it, re-runs clobber prior evidence. Always include `$(date -u +%Y%m%d-%H%M%S)`.
-4. **Scattering to `/tmp`** — logs outside `.context/` are invisible to downstream stages and get lost on workspace reset.
-5. **Logging secrets** — redact before `tee`; never commit logs that might contain credentials.
-6. **Creating a sibling `log/` folder** — canonical name is `logs/` (plural). One folder per project.
+1. **Runtime output in `errors/<agent>.md`** — those are narrative escalation; raw captures belong in `logs/`.
+2. **Writing to `.context/error.md`** — retired path; use `.context/errors/<agent>.md` (per-agent).
+3. **Missing timestamp** — re-runs then clobber prior evidence. Always `$(date -u +%Y%m%d-%H%M%S)`.
+4. **Scattering to `/tmp`** — invisible to downstream stages, lost on workspace reset.
+5. **Logging secrets** — redact before `tee`; never commit logs that may hold credentials.
+6. **A sibling `log/` folder** — canonical name is `logs/` (plural), one per project.

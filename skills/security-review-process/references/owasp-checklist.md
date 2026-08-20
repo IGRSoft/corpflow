@@ -21,6 +21,7 @@
 - [ ] Strong encryption algorithms (AES-256, RSA-2048+)
 - [ ] Passwords hashed with bcrypt/Argon2 (not MD5/SHA1)
 - [ ] Cryptographic keys stored securely
+- [ ] No hardcoded secrets; API keys scoped and rotatable
 - [ ] No deprecated crypto functions
 - [ ] PII encrypted at rest
 - [ ] Proper key rotation supported
@@ -30,7 +31,8 @@
 
 ```markdown
 - [ ] Parameterized queries for all database access
-- [ ] Input validation with allowlists
+- [ ] Input validation with allowlists, length limits, and correct character encoding
+- [ ] File uploads validated (type, size, content)
 - [ ] Output encoding for context (HTML, JS, URL)
 - [ ] No dynamic SQL construction
 - [ ] Command injection prevention
@@ -42,7 +44,7 @@
 ## A04: Insecure Design
 
 Threat modeling is the SR0 procedure in `threat-model.md` — one methodology, not a second
-one. The sub-items below are its completion criteria; the procedure is what produces them.
+one. The sub-items below are its completion criteria, not a separate method.
 
 ```markdown
 - [ ] Trust boundaries the diff crosses enumerated (both sides + asset named)
@@ -81,11 +83,10 @@ one. The sub-items below are its completion criteria; the procedure is what prod
 
 ## A06: Vulnerable & Outdated Components
 
-Audits find **known advisories**; they do not prove trustworthiness or reachability.
-Triage findings against the paths that actually execute rather than treating any hit as a
-blocker. State commands package-manager-agnostically — the SwiftPM `Package.resolved`
-lockfile is the local analog (`npm audit`/`npm ci` are npm-project examples, not the sole
-directive).
+Audits find **known advisories**; they prove neither trustworthiness nor reachability.
+Triage against the paths that actually execute instead of treating any hit as a blocker.
+State commands package-manager-agnostically — SwiftPM's `Package.resolved` is the local
+lockfile analog (`npm audit`/`npm ci` are npm-project examples, not the directive).
 
 ### Checklist
 
@@ -98,11 +99,17 @@ directive).
 - [ ] Automated vulnerability scanning enabled
 - [ ] Update process documented
 - [ ] SBOM (Software Bill of Materials) maintained
-- [ ] Exactly one authoritative lockfile per installation boundary (SwiftPM: Package.resolved), committed and never rewritten by CI
+```
+
+### Supply-chain checklist
+
+```markdown
+- [ ] Exactly one authoritative lockfile per install boundary (SwiftPM: Package.resolved), committed, never rewritten by CI
 - [ ] Critical/high advisories triaged for reachability (runtime, build, test, deploy) — deferrals carry a reason and review date
 - [ ] Forced audit remediation is never automatic; remediation diffs and changelogs are reviewed
 - [ ] Dependency lifecycle / build-tool scripts blocked before first execution, approved narrowly
 - [ ] Registry signatures / provenance verified where the ecosystem supports it
+- [ ] No typosquatting risk in package names; new dependencies reviewed for ownership, maintenance, release age, and transitive graph
 ```
 
 ## A07: Authentication Failures

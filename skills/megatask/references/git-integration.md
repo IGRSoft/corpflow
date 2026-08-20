@@ -31,44 +31,30 @@ git worktree prune
 | DV | Branch checked out, commit to workspace branch |
 | FN | Push branch, create PR, signal orchestrator |
 
-## Context Lifecycle
-
-| Event | Action |
-|-------|--------|
-| PR Created | Archive `.context/` to `.context.archive/{timestamp}/` |
-| Issue Complete | Preserve workspace.json and handoff.md |
-| Milestone Complete | `git worktree prune` to remove all stale worktree entries |
-
-Fresh agent context per issue - orchestrator delegates via Task tool, each subagent starts clean.
+Fresh agent context per issue — the orchestrator delegates via Task, each subagent starts clean.
 
 ## Worktree Lifecycle
 
 ### Creation
 
-| Event | Action |
+| Order | Action |
 |-------|--------|
-| Before `worktree add` | Append `/workspace.json` and `/.worktrees/` to the git **common dir**'s `info/exclude` (idempotent, exact-line matched) |
-| Issue starts (PL) | `git worktree add -b {branch} {path} origin/{base}` |
-| Context setup | `mkdir -p {worktree_path}/.context` |
-| Metadata | Write `workspace.json` with `isolation: "worktree"`, `version: "2.0"` |
+| 1 — before `worktree add` | Append `/workspace.json` and `/.worktrees/` to the git **common dir**'s `info/exclude` (idempotent, exact-line matched) |
+| 2 — issue starts (PL) | `worktree add -b {branch}` → `mkdir -p {path}/.context` → write `workspace.json` (`isolation: "worktree"`, `version: "2.0"`) per § Workspace Setup |
 
-The exclusion runs **first** so the scratch file is never visible to a `git add -A`, and it goes
-in the common dir because git does not consult a per-worktree `info/exclude`. Consequence, stated
-rather than hidden: the rule covers every worktree of the checkout. It cannot mask a *tracked*
-file, so a repo that legitimately tracks a root `workspace.json` still sees its diffs. The
-repository's own `.gitignore` is deliberately not touched — editing it would commit the exclusion
-to every future branch, the exact mistake this prevents.
+The exclusion runs **first** so the scratch file is never visible to a `git add -A`, and it goes in
+the common dir because git does not consult a per-worktree `info/exclude` — so, stated rather than
+hidden, it covers every worktree of the checkout. It cannot mask a *tracked* file, so a repo that
+legitimately tracks a root `workspace.json` still sees its diffs. The repository's own `.gitignore`
+is deliberately not touched: that would commit the exclusion to every future branch, the exact
+mistake this prevents.
 
 ### During Execution
 
-| Event | Action |
-|-------|--------|
-| Stage work | All file operations happen inside worktree path |
-| Git operations | Use `git -C {worktree_path}` prefix |
-| Context path | `{worktree_path}/.context/` |
-| Builds/tests | Run from worktree directory |
-| Commits | Committed to the worktree's branch automatically |
-| Resume from background | SendMessage restores cwd to correct worktree |
+Everything happens inside the worktree: file operations, `.context/` artifacts, builds and tests
+(run from that directory), commits (landing on its branch automatically). Git commands issued from
+elsewhere take a `git -C {worktree_path}` prefix; `SendMessage` restores the cwd to the correct
+worktree when resuming from background.
 
 ### Cleanup
 
@@ -78,25 +64,24 @@ to every future branch, the exact mistake this prevents.
 | Uncommitted changes | Warn user, preserve worktree |
 | Failed issue | Preserve worktree for debugging |
 | Milestone complete | `git worktree prune` to remove all stale entries |
+| PR created (context) | Archive `.context/` to `.context.archive/{timestamp}/`; keep workspace.json + handoff.md |
 
 ### Edge Cases
 
-1. **Uncommitted changes**: `removeIssueWorktree()` checks `git status --porcelain` and refuses removal by default. Pass `force=true` to override.
-2. **Failed issues**: Worktree preserved with `status: "failed"` in orchestrator. User can inspect and retry.
-3. **Stale worktrees**: Worktrees from interrupted parallel runs are auto-cleaned on startup. Manual fallback: `git worktree prune`.
-4. **Disk space**: Each worktree duplicates the working tree. For large repos, monitor with `du -sh .worktrees/`.
+1. **Uncommitted changes**: `removeIssueWorktree()` checks `git status --porcelain` and refuses removal by default; `force=true` overrides.
+2. **Failed issues**: worktree preserved with `status: "failed"` in orchestrator — inspect and retry.
+3. **Stale worktrees**: interrupted parallel runs are auto-cleaned on startup; manual fallback `git worktree prune`.
+4. **Disk space**: each worktree duplicates the working tree — on large repos monitor `du -sh .worktrees/`.
 
 ## Conflict Recovery
 
 ### Precondition — read this first
 
-This playbook applies **only when the environment refuses destructive git**. Some hosts refuse
-`git merge`, `git reset --hard` and `git push --force`: auto-mode guards (see
-`../../shared/git-conventions.md § Auto-mode Git Safety`), a sandbox permission policy, or a CI
-runner's own restrictions. **This plugin ships no deny list of its own** — the refusal belongs to
-whatever host the batch runs on, so confirm you are actually being refused before taking this
-path. Under a permissive host, resolve in place on the existing branch; the steps below are the
-recovery for when you cannot, not the preferred route.
+This playbook applies **only when the environment refuses destructive git** — auto-mode guards
+(`../../shared/git-conventions.md § Auto-mode Git Safety`), a sandbox policy, or a CI runner can
+refuse `git merge`, `git reset --hard` and `git push --force`. **This plugin ships no deny list of
+its own**, so confirm you are actually being refused first: under a permissive host, resolve in
+place on the existing branch.
 
 ### The recovery — five ordered steps
 
@@ -121,17 +106,16 @@ gh pr merge {new_pr} --merge                     # 5. merge the replacement
 
 #### Why a new branch name
 
-Step 2 is the whole point: pushing a rebased branch under its **original** name requires
-`--force`, which is exactly what the host refuses. A new name is an ordinary fast-forward push.
+Step 2 is the whole point: pushing a rebased branch under its **original** name requires `--force`,
+which is exactly what the host refuses. A new name is an ordinary fast-forward push.
 
 ### Why this does not contradict the merge strategy
 
-`../../shared/git-conventions.md § Merge Strategy` requires integration by **merge commit** —
-never `--squash`, never `--rebase`. Step 5 obeys it verbatim. The rebase in step 1 is a *local*
-history operation on an unmerged feature branch, performed before review; the merge-strategy rule
-governs how a PR is integrated into the base, not whether a branch may be rebased beforehand.
-Per-commit boundaries survive the rebase, so the per-stage history the rule protects arrives
-intact on the base branch.
+`../../shared/git-conventions.md § Merge Strategy` requires integration by **merge commit** — never
+`--squash`, never `--rebase` — and step 5 obeys it verbatim. Step 1's rebase is a *local* history
+operation on an unmerged feature branch before review; the rule governs how a PR is integrated into
+the base, not whether a branch may be rebased beforehand. Per-commit boundaries survive the rebase,
+so the per-stage history the rule protects arrives intact.
 
 ### Two hard rules that apply during step 1
 
@@ -140,7 +124,6 @@ intact on the base branch.
 2. **Build and test after any conflict resolution, before pushing.** A mis-joined argument list
    compiles in the reviewer's head and nowhere else.
 
-`rebase --continue` opens an editor, so an issue-prefixed subject (`#{issue#} feat: …`) is
-silently destroyed by git's comment-character default. The trap and its per-invocation remedy are
-stated once, in `../../shared/git-conventions.md § Comment-character trap`; do not restate them
-here.
+`rebase --continue` opens an editor, so an issue-prefixed subject (`#{issue#} feat: …`) is silently
+destroyed by git's comment-character default — trap and per-invocation remedy stated once in
+`../../shared/git-conventions.md § Comment-character trap`; do not restate them here.

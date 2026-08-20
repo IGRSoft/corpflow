@@ -1,6 +1,6 @@
 # Resume After Interruption — full procedure
 
-Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (stub). The orchestrator loop is restartable. On reattach (PostCompact, session crash, `--resume` flag), diagnose state via `.context/state.json` `tasks{}` + the `.context/logs/audit.jsonl` tail before resuming.
+Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (stub). The orchestrator loop is restartable: on reattach (PostCompact, session crash, `--resume`), diagnose state from `.context/state.json` `tasks{}` + the `.context/logs/audit.jsonl` tail before resuming.
 
 ## State → Action Table
 
@@ -15,11 +15,10 @@ Read on reattach from `skills/worktask/SKILL.md § Resume After Interruption` (s
 
 ### Branch-rename detection (run once on re-entry)
 
-Before acting on the ledger, a resumed orchestrator runs
-`bash skills/worktask/scripts/fn-preflight.sh branch-divergence` once. Read-only, exit 0
-always, never blocks. A `third_party` class means something outside the pipeline renamed the
-local branch while the run was interrupted — surface it before continuing; `expected` needs no
-action. The check compares against the `to` of the last `branch_renamed / ok` row, so an R4
+Before acting on the ledger, run `bash skills/worktask/scripts/fn-preflight.sh branch-divergence`
+once. Read-only, always exit 0, never blocks. `third_party` means something outside the pipeline
+renamed the local branch while the run was interrupted — surface it before continuing; `expected`
+needs no action. It compares against the `to` of the last `branch_renamed / ok` row, so an R4
 refinement of `facts.branch` never registers as an external rename.
 
 ### Branch-target refinement row
@@ -89,22 +88,22 @@ A revision leaves the refined `facts.branch` as-is and never re-refines: the onc
 
 #### Explicit replay vs automatic reattach — the three discriminators
 
-1. **Trigger.** Automatic reattach is entered by the orchestrator on re-entry (PostCompact, crash, session resume). Explicit replay is entered only by a human typing `--resume <STAGE_ID>`.
-2. **Target selection.** Reattach *derives* its target — the first incomplete stage. Replay is *given* its target — one named ledger id, which may be `completed`.
-3. **Retry ceiling.** Reattach honours it (exhausted ⇒ escalate, never re-run). Replay overrides it and records the override in a `stage_replay` audit row.
+1. **Trigger.** Reattach is entered by the orchestrator on re-entry (PostCompact, crash, session resume); replay only by a human typing `--resume <STAGE_ID>`.
+2. **Target selection.** Reattach *derives* its target (first incomplete stage). Replay is *given* one named ledger id, which may be `completed`.
+3. **Retry ceiling.** Reattach honours it (exhausted ⇒ escalate). Replay overrides it and records a `stage_replay` audit row.
 
-The non-overlap is structural, not stylistic: this row's Ledger Shape carries a **non-ledger** condition (a human instruction), so a diagnostic scan of the ledger can never *match* it — it is reachable only by invocation.
+The non-overlap is structural: this row's Ledger Shape carries a **non-ledger** condition (a human instruction), so a diagnostic ledger scan can never *match* it — it is reachable only by invocation.
 
 #### Explicit replay — the guarded primitive
 
-`/worktask --resume` calls `state-patch.sh --task-replay <ID> [--cascade]`, which refuses (exit 4, ledger byte-unchanged) when the target's agent is live or parked, when liveness cannot be determined at all, when `PL0` is not `completed`, or when any cascade member is blocked. Liveness comes from this runbook's own detector (`stale-check.sh`) — there is deliberately no second implementation to drift from these tables. Full procedure and the pre-replay confirmation: `commands/worktask.md § Phase 0`.
+`/worktask --resume` calls `state-patch.sh --task-replay <ID> [--cascade]`, which refuses (exit 4, ledger byte-unchanged) when the target's agent is live or parked, when liveness is indeterminate, when `PL0` is not `completed`, or when any cascade member is blocked. Liveness comes from this runbook's own detector (`stale-check.sh`) — deliberately no second implementation to drift from these tables. Full procedure and pre-replay confirmation: `commands/worktask.md § Phase 0`.
 
 #### Parked-or-gone rows — the retry ceiling still binds
 
-Neither row above, and neither of the automatic rows in § Mid-stage & FN-gate rows, may override
-`metadata.retry_count`: a re-delegate is still subject to the ceiling, and a stage that already
-exhausted it escalates rather than re-running. Overriding the ceiling is reachable only through
-§ Explicit-replay row, which a human enters by name.
+Neither row above, nor the automatic rows in § Mid-stage & FN-gate rows, may override
+`metadata.retry_count`: a re-delegate is still subject to the ceiling, and an exhausted stage
+escalates rather than re-running. The ceiling is overridable only through § Explicit-replay row,
+which a human enters by name.
 
 ### Mid-stage yield
 
@@ -112,12 +111,12 @@ exhausted it escalates rather than re-running. Overriding the ceiling is reachab
 |----------------|------------|--------|
 | Stage returned (not live, not errored) but the artifact is absent, or present with no `handoff.verdict` | `stage_returned_incomplete` | Reattach via `SendMessage`; never re-delegate |
 
-The agent ended its turn with budget remaining and no finished handoff. As far as the runtime is
-concerned that is an ordinary return, which is why 6.5a's errored-return arm never fires.
+The agent ended its turn with budget remaining and no finished handoff. To the runtime that is an
+ordinary return, which is why 6.5a's errored-return arm never fires.
 
-Reattach via `SendMessage` to finish the same work. Do **not** re-delegate — a fresh dispatch
-redoes work against a tree the yielded agent already edited — and do **not** increment
-`retry_count`: nothing failed. Detector: `skills/worktask/SKILL.md § Step 6.5a2`.
+Reattach via `SendMessage` to finish the same work. Do **not** re-delegate (a fresh dispatch redoes
+work against a tree the yielded agent already edited) and do **not** increment `retry_count`:
+nothing failed. Detector: `skills/worktask/SKILL.md § Step 6.5a2`.
 
 ## Resume Procedure
 
@@ -130,69 +129,69 @@ redoes work against a tree the yielded agent already edited — and do **not** i
 
 ### Step 0 notes — observed CLI field set
 
-   The field names above are the contract; the shipping CLI does not yet expose all of them. An
-   observed `--json --all` row carries `id`, `sessionId`, `name`, `kind`, `cwd`, `pid`,
-   `startedAt`, and **either** `state` (background) **or** `status` (interactive) — no `agent_id`,
-   no `waitingFor`, no `parent_agent_id`. Read identity from `agent_id // id // sessionId` (`id` is
-   a prefix of `sessionId`, so match on prefix too) and liveness from `waitingFor` when present,
-   else `state`/`status`. An unrecognised token is **unknown, not absent** — never re-delegate off
-   one. `skills/worktask/scripts/stale-check.sh` implements exactly this tolerance.
+   The field names above are the contract; the shipping CLI exposes fewer. An observed
+   `--json --all` row carries `id`, `sessionId`, `name`, `kind`, `cwd`, `pid`, `startedAt`, and
+   **either** `state` (background) **or** `status` (interactive) — no `agent_id`, no `waitingFor`,
+   no `parent_agent_id`. Read identity from `agent_id // id // sessionId` (`id` is a prefix of
+   `sessionId`, so match on prefix too) and liveness from `waitingFor` when present, else
+   `state`/`status`. An unrecognised token is **unknown, not absent** — never re-delegate off one.
+   `skills/worktask/scripts/stale-check.sh` implements exactly this tolerance.
 
 ### Step 0 notes — proactive detection
 
-   The rows above fire only once someone resumes the session. To ask "is anything wedged?" without
-   resuming, run `skills/worktask/scripts/stale-check.sh` — it reconciles the same inputs and
-   prints the verdict from these tables. Read-only; it recovers nothing.
+   These rows fire only once someone resumes. To ask "is anything wedged?" without resuming, run
+   `skills/worktask/scripts/stale-check.sh` — it reconciles the same inputs and prints the verdict
+   from these tables. Read-only; it recovers nothing.
 
 ### Step 0 notes — why the pre-check
 
-   This single pre-check eliminates three waste classes: blind respawn of an already-working subagent, redundant nudging of a busy one, and blind re-dispatch of an invisible blocked one. If the `claude agents` command is unavailable in the environment (runtime/tool fallback), skip the pre-check and re-delegate from the first incomplete stage. See `skills/agent-coordination/references/headless-dispatch.md § Live Session Discovery`.
+   One pre-check eliminates three waste classes: blind respawn of a working subagent, redundant nudging of a busy one, blind re-dispatch of an invisible blocked one. When `claude agents` is unavailable, skip the pre-check and re-delegate from the first incomplete stage. See `skills/agent-coordination/references/headless-dispatch.md § Live Session Discovery`.
 
 ### Step 0 notes — dispatched_agents matching
 
-   The orchestrator loop writes one `dispatched_agents[]` entry per `task_id` (`{stage, task_id, subagent_type, agent_id?, name?, model_requested?, model_resolved?, status}`), so this pre-check has real rows to match against. **Degrade rules for imperfect rows:**
+   The orchestrator loop writes one `dispatched_agents[]` entry per `task_id` (`{stage, task_id, subagent_type, agent_id?, name?, model_requested?, model_resolved?, status}`), so this pre-check has real rows to match. **Degrade rules for imperfect rows:**
    - **`agent_id` present** → match the `claude agents --json --all` row by id; branch per the table above.
 #### Degrade rules — absent or terminal rows
 
-   - **`agent_id` absent** (runtime surfaced no launch-ack) → best-effort match by `subagent_type` among the **non-interactive** rows (skip rows with `waitingFor = approval/input` — those are parked on us and matched by their own park signal). If exactly one candidate, adopt it; if ambiguous or none, **degrade to today's skip-precheck path** (re-delegate from the first incomplete stage).
-   - **entry `status: completed|failed`** (terminal) → the stage already resolved; do not reattach — advance to the next incomplete stage. (Terminal entries are eviction candidates and may be absent after compaction; treat absence as "no live agent".)
+   - **`agent_id` absent** (no launch-ack) → best-effort match by `subagent_type` among the **non-interactive** rows (skip `waitingFor = approval/input` rows — parked on us, matched by their own park signal). Exactly one candidate ⇒ adopt it; ambiguous or none ⇒ **degrade to the skip-precheck path** (re-delegate from the first incomplete stage).
+   - **entry `status: completed|failed`** → the stage already resolved; do not reattach, advance to the next incomplete stage. (Terminal entries are eviction candidates and may be absent after compaction; absence = "no live agent".)
 #### Worktree re-entry
 
-   - **`tasks.<ID>.worktree.path` recorded** → re-enter the exact worktree with `EnterWorktree(path)` before resuming that stage (mid-session worktree switching), so DR/QA/DV-retry run in the right directory rather than the shared checkout. The recorded `worktree.branch` gives the branch without shelling `git rev-parse`.
+   - **`tasks.<ID>.worktree.path` recorded** → `EnterWorktree(path)` before resuming that stage (mid-session switching), so DR/QA/DV-retry run in the right directory rather than the shared checkout. The recorded `worktree.branch` gives the branch without shelling `git rev-parse`.
 
 ### Step 0 notes — state-signal reliability
 
-   The `state` signal is trustworthy — a background sub-agent no longer sticks as `active` after a nested child it spawned was stopped. With nested spawning (3 levels by default), only match **top-level** dispatched agents from `facts.dispatched_agents[]`; rows whose `parent_agent_id` points at another live row are the stage agent's own children — never reattach or re-delegate those directly.
+   The `state` signal is trustworthy — a background sub-agent no longer sticks as `active` after a nested child is stopped. With nested spawning (3 levels by default), match only **top-level** agents from `facts.dispatched_agents[]`; rows whose `parent_agent_id` points at another live row are the stage agent's own children — never reattach or re-delegate those directly.
 
-   A resumed background agent restores its **own prompt and tool restrictions** instead of reverting to the default agent, so a live row matched to a stage is still that stage's agent. Prefer reattach over defensive re-dispatch: identity is no longer a reason to re-delegate.
+   A resumed background agent restores its **own prompt and tool restrictions** rather than reverting to the default agent, so a live row matched to a stage is still that stage's agent. Identity is no longer a reason to re-delegate: prefer reattach.
 
 ### Step 0 notes — authority caveat
 
-   **Authority caveat**: a `SendMessage` reattach may *nudge* a parked agent (supply an awaited answer, re-prompt) but **cannot authorize** anything — a relayed `SendMessage` does not carry the operator's permission authority (the receiver refuses relayed permission requests; auto mode blocks them). Permission escalations remain operator-owned and cannot be satisfied via a relayed message. (Note: the PL gate is operator-owned and cannot be satisfied by a relayed message either; this caveat covers both permission escalations and the PL approval gate.)
+   A `SendMessage` reattach may *nudge* a parked agent (supply an awaited answer, re-prompt) but **cannot authorize** anything: a relayed message carries no operator permission authority (the receiver refuses relayed permission requests; auto mode blocks them). Both permission escalations and the PL approval gate stay operator-owned and unsatisfiable by relay.
 
 ### Step 0 notes — trigger delivery & reattach
 
-   **Trigger-delivery caveat**: scheduled-task and webhook trigger deliveries are classified as **task notifications** — in auto mode they cannot approve a pending action or set a session title. A trigger-delivered event therefore does **not** satisfy a `waitingFor = approval` park (treat it like a relayed message, not operator authority): keep the stage parked and resolve the approval through the operator-owned path. This extends the SendMessage-authority caveat above to trigger deliveries.
+   **Trigger-delivery caveat**: scheduled-task and webhook deliveries are **task notifications** — in auto mode they cannot approve a pending action or set a session title, so they do **not** satisfy a `waitingFor = approval` park. Treat one like a relayed message: keep the stage parked and resolve the approval through the operator-owned path.
 
-   **Reattach reliability**: subagent messages sent while the subagent is finishing its turn are not dropped, and `ctrl+b` does not restart the session on reattach — a mid-turn reattach is reliable and will not lose the awaited answer.
+   **Reattach reliability**: messages sent while a subagent is finishing its turn are not dropped, and `ctrl+b` does not restart the session — a mid-turn reattach will not lose the awaited answer.
 
 ### Step 0 notes — background-agent guarantees
 
-   Runtime-assured at the plugin's min CC — the resume loop may rely on all of these unconditionally:
+   Runtime-assured at the plugin's min CC — the resume loop may rely on these unconditionally:
 
 #### Push & honest completion
 
-   - **Push signals**: sessions that finish or need input fire the `Notification` hook (`agent_completed` / `agent_needs_input`) — prefer these as the resume wake-up; the `claude agents --json` pre-check above stays the authoritative reconciliation.
-   - **Honest completion**: an errored subagent surfaces as an **error with partial work preserved**, never an empty success — trust `subagent_stopped` `result: error` rows. Result reporting waits for real completion instead of fabricating a done status for a still-running agent (a behavioral improvement, not a hard invariant — keep the fn-gate cross-check in `references/fn-gate.md`, "BG notification ≠ approval").
+   - **Push signals**: finish/needs-input fires the `Notification` hook (`agent_completed` / `agent_needs_input`) — prefer it as the wake-up; the `claude agents --json` pre-check stays the authoritative reconciliation.
+   - **Honest completion**: an errored subagent surfaces as an **error with partial work preserved**, never an empty success — trust `subagent_stopped` `result: error` rows. Reporting waits for real completion rather than fabricating done (behavioral improvement, not a hard invariant — keep the `references/fn-gate.md` cross-check, "BG notification ≠ approval").
 #### Stopped & work preservation
 
-   - **Stopped means stopped**: a stopped background agent stays stopped; an agent killed by the operator never auto-respawns or re-runs a stale prompt; a worker killed by a daemon restart auto-resumes from where it left off when the agents view next opens — re-delegate only when the pre-check shows the agent truly absent.
-   - **Work preservation**: waking a background job cannot delete its transcript or re-run the original prompt; returning to `claude agents` carries a running subagent's work over instead of restarting; long-running background commands survive the session process being stopped/restarted/updated; locked `.git/worktrees/` entries from killed agents are released by a periodic sweep once the owning process is gone — stale-worktree cleanup is not a resume chore.
+   - **Stopped means stopped**: stopped stays stopped; an operator-killed agent never auto-respawns or re-runs a stale prompt; a daemon-restart-killed worker auto-resumes when the agents view next opens. Re-delegate only when the pre-check shows the agent truly absent.
+   - **Work preservation**: waking a background job never deletes its transcript or re-runs the prompt; returning to `claude agents` carries running work over; long-running commands survive session restarts; locked `.git/worktrees/` entries are swept once the owning process is gone — stale-worktree cleanup is not a resume chore.
 #### Reattach, cross-spawn & inspection
 
-   - **Reattach fidelity**: `SendMessage` detects a re-spawned agent reusing a previous agent's name and asks the caller to retarget; a background agent resumed via `SendMessage` does not stick as `failed`/`completed`; an explicit per-stage model override survives resume and follow-up `SendMessage` (see `skills/shared/model-selection.md § Per-Invocation Override`); session `/rename` persists across background restarts.
+   - **Reattach fidelity**: `SendMessage` asks the caller to retarget when a re-spawned agent reuses a previous name; a `SendMessage`-resumed agent does not stick as `failed`/`completed`; a per-stage model override survives resume and follow-up messages (`skills/shared/model-selection.md § Per-Invocation Override`); `/rename` persists across restarts.
    - **Cross-spawn targeting**: `TaskStop`/`TaskOutput` find agents spawned by **another** agent and list them by id/description on error — resume can target a cross-spawned stage agent.
-   - **Inspection**: completed background agents stay in `/tasks` until cleanup, and attaching shows the transcript immediately — a just-finished stage is still inspectable during resume. Reopening a stopped background session resumes it or reports why it cannot — treat a resume refusal as a signal to re-delegate, not a reason to retry blindly.
+   - **Inspection**: completed agents stay in `/tasks` until cleanup and attaching shows the transcript immediately, so a just-finished stage is still inspectable. Reopening a stopped session resumes it or reports why it cannot — a refusal means re-delegate, not retry blindly.
 
 ### Steps 1–7 — replay & audit
 

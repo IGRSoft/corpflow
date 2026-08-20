@@ -1,28 +1,13 @@
 # Compression Examples & Anti-Patterns
 
+Worked pairs, formats, and anti-patterns backing `../SKILL.md § Core Principles`, `§ Handoff Template`, and `§ Compression Techniques by Content Type`.
+
 ## Before/After: Requirements Handoff
 
-**Before (850 tokens)**:
-```markdown
-# Feature Requirements
-
-## Background
-Over the past several months, we have received numerous user requests
-for a dark mode feature. Analysis of our user feedback indicates that
-approximately 40% of users have explicitly requested this feature...
-
-## User Stories
-### Story 1: Enable Dark Mode
-As a user who prefers dark interfaces, I want to be able to enable
-dark mode in the application settings so that I can reduce eye strain
-when using the app at night...
-
-[continues for 3 more paragraphs per story]
-```
-
-### After: compressed requirements handoff
+**Before (850 tokens)**: background paragraphs on user demand, then each requirement as a 3-paragraph prose user story ("As a user who prefers dark interfaces, I want… so that…").
 
 **After (180 tokens)**:
+
 ```markdown
 ## PL0: Planning Complete
 
@@ -45,36 +30,10 @@ Details: .context/<plan_file> (e.g. planning-0.md)
 
 ## Before/After: Architecture Handoff
 
-**Before (1,200 tokens)**:
-```markdown
-# Architecture Decision
-
-## Options Considered
-
-### Option 1: CSS Variables Approach
-We could use CSS variables to define all colors...
-[200 words explaining approach]
-
-### Option 2: Theme Protocol
-We could define a ThemeProtocol...
-[200 words explaining approach]
-
-### Option 3: Color Palette Abstraction
-We could create a ColorPalette class...
-[200 words explaining approach]
-
-## Analysis
-Comparing these options across several dimensions...
-[300 words of analysis]
-
-## Decision
-After careful consideration, we have decided to go with Option 3...
-[150 words of rationale]
-```
-
-### After: compressed architecture handoff
+**Before (1,200 tokens)**: three options (CSS variables, theme protocol, palette abstraction) at ~200 words each, 300 words of cross-dimension analysis, 150 words of rationale for the winner.
 
 **After (200 tokens)**:
+
 ```markdown
 ## AR3: Architecture Complete
 
@@ -121,23 +80,16 @@ Before handoff:
 ### Reference Formats
 
 ```
-Code:     path/file.swift:functionName()
-Decision: "[What] because [why in <10 words]"
-Artifact: .context/[stage].md#section
-ADR:      ADR-NNN: [title] - [status]
-Pattern:  "[Pattern Name]" - see architecture.md
+Code:         src/auth/AuthManager.swift — validateToken(), refreshToken() modified; +45/−12;
+              key change: token expiry validation; tests: AuthManagerTests.swift (3 new cases)
+Planning:     REQ-1..REQ-N one-liners; acceptance: <plan_file>#acceptance; risks: N — #risks
+Architecture: Pattern: MVVM with Coordinator; components: ThemeManager (new), ColorPalette
+              (modified); deps: none added; ADR-001 ACCEPTED
+Decision:     "[What] because [why in <10 words]"
+Artifact:     .context/[stage].md#section
+ADR:          ADR-NNN: [title] - [status]
 ```
 
 ### Token Estimation
 
-```
-Content Type          | Est. Tokens
-----------------------|------------
-One-line reference    | 10-20
-Bullet point          | 15-30
-Short paragraph       | 50-100
-Full function         | 100-500
-Full file             | 500-2000
-Complete ADR          | 300-500
-Handoff summary       | 50-100 (target)
-```
+One-line reference 10-20 · bullet point 15-30 · short paragraph 50-100 · full function 100-500 · full file 500-2000 · complete ADR 300-500 · handoff summary 50-100 (the target).

@@ -5,11 +5,9 @@ description: Canonical worktask pipeline diagrams (9-stage, 11-stage, emergency)
 
 # Worktask Stage Context
 
-Canonical source for the worktask pipeline shape and the role each stage plays.
-Each agent restates only its own 1-line `**Stage**:` marker inline; the full
-pipeline narrative lives here and is Read on demand (not in any steady-path stage flow).
-
-For stage codes, agents, and model assignments see `skills/shared/stage-codes.md`.
+Canonical source for the pipeline shape and each stage's role. Agents restate only their own
+1-line `**Stage**:` marker inline and Read this on demand (never in a steady-path stage flow).
+Stage codes, agents, and model assignments: `skills/shared/stage-codes.md`.
 
 ## Pipelines
 
@@ -19,12 +17,11 @@ For stage codes, agents, and model assignments see `skills/shared/stage-codes.md
 Emergency: IR → DV → DR → QA → RE → FN
 ```
 
-The 11-stage (full/secure) set adds **SR** after DR and **RE** before FN. PL0 dynamically
-sizes which stages run by complexity score. **AR** is optional — a tier default at score ≥11
-that PL0 may override in either direction per the Stage Inclusion Criteria. **TL** has no tier
-default at all: it runs only when PL0 splits the work across ≥2 developers. DC remains
-tier-driven. Criteria canon: `skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria
-(PL0 authority)`.
+The 11-stage (full/secure) set adds **SR** after DR and **RE** before FN. PL0 sizes which stages
+run by complexity score: **AR** is a tier default at score ≥11 that PL0 may override in either
+direction, **TL** has no tier default and runs only when PL0 splits the work across ≥2 developers,
+**DC** stays tier-driven. Criteria canon: `skills/estimation-methodology/SKILL.md § Stage Inclusion
+Criteria (PL0 authority)`.
 
 ## Stage Roles
 

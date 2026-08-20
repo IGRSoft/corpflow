@@ -27,7 +27,7 @@ Analyze and optimize existing command definitions for usability, consistency, an
 ## Options
 
 - `--all` - Optimize all commands in the commands directory
-- `--focus <area>` - Focus area: usage, options, examples, output, integration
+- `--focus <area>` - Focus area: usage, options, examples, output, integration, frontmatter
 - `--dry-run` - Show recommendations without making changes
 - `--report` - Generate detailed optimization report
 
@@ -42,184 +42,52 @@ Analyze and optimize existing command definitions for usability, consistency, an
 
 ## Output Format
 
+Report skeleton — sections in this order:
+
 ~~~markdown
-# Command Optimization Report
+# Command Optimization Report — /<name>
 
-## Command: /estimate
+## Frontmatter Findings
+| Field | Observed | Required | Severity | Suggested edit |
 
-### Current State
-
+## Current State
 | Metric | Score | Status |
-|--------|-------|--------|
-| Usage Clarity | 7/10 | ⚠️ Improvable |
-| Options | 8/10 | ✅ Good |
-| Examples | 5/10 | 🔴 Insufficient |
-| Output Format | 9/10 | ✅ Excellent |
-| Integration | 6/10 | ⚠️ Improvable |
+Rows: Usage Clarity, Options, Examples, Output Format, Integration. **Overall Score**: mean.
 
-**Overall Score**: 7.0/10
-~~~
+## <Area> Improvements        (one per scored area, Current → Recommended + **Changes** list)
+Options / Output Format use `| Option | Status | Issue | Recommendation |`.
 
-### Output Format — Usage & Options
+## Recommendations
+Must Apply / Should Apply / Consider — numbered, most impactful first.
 
-~~~markdown
-<!-- …continued: Usage Improvements -->
-### Usage Improvements
-
-#### Current
-```
-/estimate
-/estimate --scope full
-```
-
-#### Recommended
-```
-/estimate [feature-description]
-/estimate --scope <quick|full|detailed> [feature-description]
-/estimate --format <table|json|markdown>
-```
-
-**Changes**:
-- Added positional argument for feature description
-- Clarified scope options with valid values
-- Added format option for flexibility
-
-### Options Analysis
-
-| Option | Status | Issue | Recommendation |
-|--------|--------|-------|----------------|
-| --scope | ⚠️ | Missing valid values | Add `<quick\|full\|detailed>` |
-| --platform | ✅ | Well documented | None |
-| --format | ❌ | Missing | Add output format option |
-| --output | ❌ | Missing | Add file output option |
-~~~
-
-### Output Format — Examples & Output Review
-
-~~~markdown
-<!-- …continued: Examples Improvements -->
-### Examples Improvements
-
-**Before**: 2 examples (insufficient coverage)
-**After**: 5 examples (good coverage)
-
-#### Added Examples
-```
-# Quick estimate for small feature
-/estimate --scope quick "add logout button"
-
-# Detailed estimate with platform context
-/estimate --scope detailed --platform apple "implement push notifications"
-
-# Export estimate to file
-/estimate --format markdown --output estimates/feature-x.md "user authentication"
-```
-
-### Output Format Review
-
-| Element | Status |
-|---------|--------|
-| Summary table | ✅ Present |
-| Time breakdown | ✅ Present |
-| Risk factors | ✅ Present |
-| Assumptions | ⚠️ Could be more prominent |
-| Confidence level | ❌ Missing |
-
-**Recommendation**: Add confidence level indicator (Low/Medium/High)
-~~~
-
-### Output Format — Integration & Recommendations
-
-~~~markdown
-<!-- …continued: Integration Improvements -->
-### Integration Improvements
-
-#### Missing Links
-- Related command: `/estimate --export csv`
-- Related agent: `project-manager`
-
-#### Worktask Integration
-**Current**: Not documented
-**Recommended**: Add PL stage usage note
-
-### Recommendations
-
-#### Must Apply
-1. Add missing option values to documentation
-2. Add 3 more diverse examples
-3. Link to related commands
-
-#### Should Apply
-1. Add format and output options
-2. Include confidence level in output
-3. Document worktask integration
-
-#### Consider
-1. Add JSON schema for output
-2. Add validation for scope values
-~~~
-
-### Output Format — Changes & Summary
-
-~~~markdown
-<!-- …continued: Changes Applied -->
-### Changes Applied
-
+## Changes Applied
 | Section | Change | Impact |
-|---------|--------|--------|
-| Usage | Added positional arg | Clearer interface |
-| Options | Added format, output | More flexibility |
-| Examples | Added 3 examples | Better coverage |
-| Related | Added links | Discoverability |
 
 ## Summary
-
 | Metric | Before | After | Change |
-|--------|--------|-------|--------|
-| Usage Clarity | 7/10 | 9/10 | +2 |
-| Examples | 5/10 | 8/10 | +3 |
-| Integration | 6/10 | 8/10 | +2 |
-| Overall | 7.0/10 | 8.4/10 | +1.4 |
 ~~~
+
+### Output Format — content rules
+
+- Score every area even when `--focus` narrows the edits; the reader needs the baseline.
+- Scoring scale is n/10 with a status glyph: ✅ Good/Excellent (≥8), ⚠️ Improvable (6–7), 🔴 Insufficient (≤5).
+- Quote the command's exact current text before the recommended replacement — never paraphrase it.
+- Frontmatter findings come first and are blocking (Must Apply tier).
+- `--dry-run` omits `## Changes Applied` and the Summary "After" column.
 
 ## Focus Areas
 
-- **usage**: Command syntax, positional arguments, clarity
-- **options**: Option completeness, types, defaults, documentation
-- **examples**: Coverage, diversity, practical scenarios
-- **output**: Format specification, clarity, completeness
-- **integration**: Related commands, agents, worktask stages
-- **frontmatter**: frontmatter audit (description length, model fit, allowed-tools precision, argument-hint alignment) — see § Frontmatter Audit
+`--focus` values `usage`, `options`, `examples`, `output`, and `integration` each narrow the pass to the matching row of § Optimization Criteria. `--focus frontmatter` runs only § Frontmatter Audit (description length, model fit, allowed-tools precision, argument-hint alignment).
 
 ## Optimization Criteria
 
-### Usage
-- Clear syntax with all arguments shown
-- Optional vs required clearly indicated
-- Sensible defaults documented
-
-### Options
-- All options documented with types
-- Valid values specified for enums
-- Defaults stated explicitly
-- Purpose clear from description
-
-### Examples
-- Minimum 3 diverse examples
-- Cover common use cases
-- Show option combinations
-- Include realistic values
-
-### Output Format
-- Structured, parseable format
-- All fields documented
-- Status indicators consistent
-- Actionable information
-
-### Integration
-- Related commands linked
-- Agent relationships documented
-- Worktask stage usage noted
+| Area (`--focus`) | Criteria |
+|------|----------|
+| `usage` | Clear syntax with all arguments shown; optional vs required indicated; sensible defaults documented |
+| `options` | All options documented with types; valid values specified for enums; defaults stated explicitly; purpose clear from description |
+| `examples` | Minimum 3 diverse examples; cover common use cases; show option combinations; realistic values |
+| `output` | Output format structured and parseable; all fields documented; status indicators consistent; actionable information |
+| `integration` | Related commands linked; agent relationships documented; worktask stage usage noted |
 
 ### Frontmatter Audit
 
@@ -236,35 +104,28 @@ Run on every command regardless of focus area. Treat findings here as blocking o
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `allowed-tools` | Explicit list. Bash subcommand scoping required: `Bash(git:*)`, `Bash(gh:*)`, `Bash(swift test:*)` — never bare `Bash` unless the command's purpose is general shell access. Flag commands that declare `Write` without `Read` (likely incomplete). | P1 |
-| `argument-hint` | Must align with the Usage section's actual positional/optional surface. Count `--<flag>` mentions in `## Usage` vs hint; flag mismatch (e.g., hint says `<command name>` but Usage shows `--all`, `--focus`, `--dry-run` — hint missing the flag landscape). Use square brackets for optional positional, angle brackets for required. | P1 |
+| `allowed-tools` | Explicit list. Bash subcommand scoping required: `Bash(git:*)`, `Bash(gh:*)`, `Bash(swift test:*)` — never bare `Bash` unless the command's purpose is general shell access. Flag `Write` declared without `Read` (likely incomplete). | P1 |
+| `argument-hint` | Must align with the `## Usage` positional/optional surface: count `--<flag>` mentions in Usage vs the hint and flag mismatch (hint says `<command name>` but Usage shows `--all`, `--focus`, `--dry-run`). Square brackets for optional positional, angle brackets for required. | P1 |
+
+#### Frontmatter Audit — P1 description trigger phrase
+
+| Field | Audit Rule | Severity |
+|-------|------------|----------|
+| `description` trigger phrase | MUST include a recognised trigger phrase (`Use when …`, `Use after …`, `Use PROACTIVELY when …`, `Auto-loads when …`, `Reference when …`, `Apply for …`) so the model can decide whether to invoke. EXEMPT: `disable-model-invocation: true` (slash-only) or `paths:` frontmatter (path-triggered) — these bypass description-trigger auto-invocation and MUST NOT be flagged. | P1 |
 
 #### Frontmatter Audit — P2 consistency checks
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `$ARGUMENTS` substitution | If the command body references `$ARGUMENTS`, the frontmatter `argument-hint` MUST be non-empty. If the body has no `$ARGUMENTS` but `argument-hint` is set, suggest removing the hint. Unmatched `$1`/`$2` positional placeholders are preserved verbatim in skill/command bodies (not silently stripped), so positional forms are safe to audit literally. | P2 |
-| Option-to-example coverage | Every documented `--option` in `## Options` should appear at least once in `## Examples`. Compute: `set(options) − set(options-used-in-examples)`. Flag the diff with one-line "missing example for `--<flag>`". | P2 |
-#### Frontmatter Audit — P2 (output & links)
-
-| Field | Audit Rule | Severity |
-|-------|------------|----------|
-| Output-format consistency | Output samples should match the schema declared in prose. If the command claims "JSON output via `--format json`", flag if the Output Format section shows only Markdown samples. | P2 |
+| `$ARGUMENTS` substitution | Body references `$ARGUMENTS` → `argument-hint` MUST be non-empty. Body has no `$ARGUMENTS` but hint is set → suggest removing the hint. Unmatched `$1`/`$2` placeholders survive verbatim in bodies (not silently stripped), so positional forms are safe to audit literally. | P2 |
+| Option-to-example coverage | Every `--option` in `## Options` should appear at least once in `## Examples`. Compute `set(options) − set(options-used-in-examples)`; flag each diff as "missing example for `--<flag>`". | P2 |
+| Output-format consistency | Output samples must match the schema declared in prose — e.g. flag a command claiming "JSON output via `--format json`" whose Output Format shows only Markdown. | P2 |
 | Related links | Cross-reference targets (`./create-agent.md`, `../agents/prompt-engineer.md`) must resolve. Flag dead links. | P2 |
-
-#### Frontmatter Audit — description trigger phrase (P1)
-
-| Field | Audit Rule | Severity |
-|-------|------------|----------|
-| `description` trigger phrase | MUST include a recognised trigger phrase (`Use when …`, `Use after …`, `Use PROACTIVELY when …`, `Auto-loads when …`, `Reference when …`, `Apply for …`) so the model can decide whether to invoke. EXEMPT: commands/skills with `disable-model-invocation: true` (slash-only) or `paths:` frontmatter (path-triggered) — these bypass description-trigger auto-invocation and MUST NOT be flagged. Source: ai-research PR #531 (MISSING_TRIGGER lint + exemption pattern). | P1 |
 
 #### Frontmatter Audit — reporting
 
-Failures here are reported as a `## Frontmatter Findings` table before the existing scoring tables in § Output Format. Row schema mirrors `/optimize-agent`: `| Field | Observed | Required | Severity | Suggested edit |`.
+Report failures as a `## Frontmatter Findings` table before the scoring tables in § Output Format. Row schema mirrors `/optimize-agent`: `| Field | Observed | Required | Severity | Suggested edit |`.
 
 ## Integration
 
-This command is used by:
-- prompt-engineer agent for command optimization
-- During command ecosystem maintenance
-- After worktask changes require command updates
+Used by the `prompt-engineer` agent for command optimization, during command ecosystem maintenance, and after worktask changes that require command updates.

@@ -16,20 +16,15 @@ effort: low
 
 ## Sequential Rules
 
-1. **No parallel development** between stages
-2. Each stage starts only after previous stage completes
-3. Gates must pass before stage transition
-4. Buffer calculated per stage (10%)
-5. Track calendar months for AI billing — minimize month overlap
+1. **No parallel development** between stages — each starts only after the previous completes
+2. Gates must pass before a stage transition
+3. Buffer is calculated per stage (10%)
+4. Track calendar months for AI billing — minimize month overlap
 
 ## Calendar Month Billing (AI Agents)
 
-| Rule | Description |
-|------|-------------|
-| Rate | $200 per calendar month |
-| Trigger | Any AI agent usage in month |
-| Billing | Full $200 charged for partial month |
-| Example | 1 day in May = $200 for May |
+$200 per calendar month, triggered by any AI agent usage in that month; a partial month
+bills the full $200 (1 day in May = $200 for May).
 
 ## Stage Budget Template
 

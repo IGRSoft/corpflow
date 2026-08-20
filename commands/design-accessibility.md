@@ -12,7 +12,7 @@ related:
 
 # Accessibility Audit Command
 
-Conduct an accessibility audit for screens, components, or the entire application.
+Accessibility audit of a screen, component, or the entire application against WCAG plus platform guidelines.
 
 ## Usage
 
@@ -22,9 +22,11 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 
 ## Options
 
-- `--level [A|AA|AAA]` - WCAG conformance level (default: AA)
-- `--platform <apple|android|web|all>` - Target platform (default: all)
-- `--scope [quick|standard|comprehensive]` - Audit scope (default: standard)
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--level` | `A`, `AA`, `AAA` | WCAG conformance level (default: AA) |
+| `--platform` | `apple`, `android`, `web`, `all` | Target platform (default: all) |
+| `--scope` | `quick`, `standard`, `comprehensive` | Audit scope (default: standard) |
 
 ## Examples
 
@@ -34,62 +36,30 @@ Conduct an accessibility audit for screens, components, or the entire applicatio
 /design-accessibility --scope comprehensive --platform apple
 ```
 
-## What This Command Does
+## Procedure
 
-1. **Analyzes Accessibility**
-   - Reviews WCAG success criteria
-   - Checks platform-specific guidelines
-   - Evaluates assistive technology support
-
-2. **Identifies Issues**
-   - Categorizes by severity
-   - Maps to WCAG criteria
-   - Provides remediation guidance
-
-3. **Generates Report**
-   - Compliance status
-   - Issue inventory
-   - Prioritized fixes
+1. **Analyze** — WCAG success criteria at `--level`, platform-specific guidelines, assistive-technology support.
+2. **Identify issues** — severity, WCAG criterion, and remediation guidance per issue.
+3. **Report** — per Output Format below.
 
 ## Audit Categories
 
-### Perceivable
-- Text alternatives for images
-- Captions and transcripts
-- Color contrast ratios
-- Resize and reflow support
-
-### Operable
-- Keyboard accessibility
-- Touch target sizes (platform minimum — see Common Issues Reference)
-- Focus management
-- Navigation consistency
-
-### Understandable
-- Readable content
-- Predictable behavior
-- Input assistance
-- Error identification
-
-### Robust
-- Assistive technology compatibility
-- Valid markup/implementation
-- Status messages
+| Category | Checks |
+|----------|--------|
+| Perceivable | Text alternatives for images; captions and transcripts; color contrast ratios; resize and reflow support |
+| Operable | Keyboard accessibility; touch target sizes (platform minimum — see Common Issues Reference); focus management; navigation consistency |
+| Understandable | Readable content; predictable behavior; input assistance; error identification |
+| Robust | Assistive technology compatibility; valid markup/implementation; status messages |
 
 ## Platform-Specific Checks
 
-Run only the sections selected by `--platform`; `all` runs every section. This command
-covers the three UI platforms — `systems`, `backend`, and `ai` work has no user-facing
-surface to audit and is out of scope.
+Run only the platforms selected by `--platform`; `all` runs every row. This command covers the
+three UI platforms — `systems`, `backend`, and `ai` work has no user-facing surface to audit and
+is out of scope.
 
 ### Apple
 
-- VoiceOver support
-- Dynamic Type support
-- Reduce Motion respect
-- Bold Text support
-- Increase Contrast support
-- Switch Control compatibility
+VoiceOver support; Dynamic Type; Reduce Motion; Bold Text; Increase Contrast; Switch Control compatibility.
 
 ### Android
 
@@ -102,10 +72,7 @@ surface to audit and is out of scope.
 
 ### Web
 
-- Screen reader compatibility
-- Keyboard navigation
-- ARIA implementation
-- Focus indicators
+Screen reader compatibility; keyboard navigation; ARIA implementation; focus indicators.
 
 ## Output Format
 
@@ -141,17 +108,7 @@ surface to audit and is out of scope.
 - **Remediation**: [How to fix]
 - **Effort**: [Low/Medium/High]
 
-## High Priority Issues (P1)
-
-<!-- repeat per priority: P1..P3, same issue shape as P0 (P1..P3 omit Effort) -->
-
-## Medium Priority Issues (P2)
-
-[Similar format]
-
-## Low Priority Issues (P3)
-
-[Similar format]
+<!-- repeat per priority: High (P1), Medium (P2), Low (P3) — same issue shape, minus Effort -->
 ```
 
 ### Template — findings and next steps
@@ -163,26 +120,16 @@ surface to audit and is out of scope.
 <!-- one subsection per platform in scope; emit nothing for platforms --platform excluded -->
 ### [Platform in scope]
 - [Finding]
-- [Finding]
 
 ## Recommendations
 
+<!-- numbered list under each horizon; Immediate Actions name an owner -->
 ### Immediate Actions
-1. [Action with owner]
-2. [Action with owner]
-
 ### Short-term Improvements
-1. [Improvement]
-2. [Improvement]
-
 ### Long-term Enhancements
-1. [Enhancement]
-2. [Enhancement]
 
 ## Testing Methodology
-- Tools used: [List]
-- Manual testing performed: [Yes/No]
-- Assistive technologies tested: [List]
+- Tools used / assistive technologies tested: [List] · Manual testing performed: [Yes/No]
 
 ## Next Steps
 - [ ] Address critical issues
@@ -192,9 +139,11 @@ surface to audit and is out of scope.
 
 ## Common Issues Reference
 
-### Color Contrast
-- Text: 4.5:1 (normal), 3:1 (large)
-- UI components: 3:1
+- **Color contrast**: text 4.5:1 (normal), 3:1 (large); UI components 3:1.
+- **Focus management**: visible focus indicator, logical focus order, focus trap in modals.
+- **Text scaling** — Dynamic Type on Apple, font scale / display size on Android, browser zoom and
+  `rem`-based type on web. Same three checks everywhere: support the full user-selectable size
+  range; layout adapts gracefully (reflow, no clipping); no truncation of critical content.
 
 ### Touch Targets
 
@@ -204,26 +153,8 @@ surface to audit and is out of scope.
 | Android | 48x48dp | 48x48dp plus 8dp spacing |
 | Web | 24x24 CSS px (WCAG 2.2 AA) | 44x44 CSS px (AAA) |
 
-### Focus Management
-- Visible focus indicator
-- Logical focus order
-- Focus trap in modals
-
-### Text Scaling
-
-Dynamic Type on Apple, font scale / display size on Android, browser zoom and `rem`-based
-type on web. Same three checks everywhere:
-
-- Support the full user-selectable size range
-- Layout adapts gracefully (reflow, no clipping)
-- No truncation of critical content
-
 ## Worktask Integration
 
-Use this command:
-- During PL stage for accessibility requirements
-- During DV stage for implementation checks
-- During QA stage for compliance verification
-- Standalone for periodic audits
+PL — accessibility requirements · DV — implementation checks · QA — compliance verification · standalone — periodic audits.
 
 Target: $ARGUMENTS

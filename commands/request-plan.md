@@ -12,13 +12,11 @@ related:
 
 # Request Plan Command
 
-Produce a **lightweight, grounded plan** from a free-form request plus the current repository
-context, then hand off to the worktask system. The bridge between "I have an idea" and committing to
-a full worktask — lighter than a PRD (`/pm-requirements`), broader than a sizing estimate
-(`/estimate`).
+Produce a **lightweight, grounded plan** from a free-form request plus current repository
+context, then hand off to the worktask system — lighter than a PRD (`/pm-requirements`),
+broader than a sizing estimate (`/estimate`).
 
-This command is a thin entry point to the **`request-plan` skill**, which holds the full workflow and
-templates. Invoke the skill and follow its steps.
+Thin entry point to the **`request-plan` skill**, which holds the full workflow and templates.
 
 ## Usage
 
@@ -44,19 +42,9 @@ templates. Invoke the skill and follow its steps.
 
 ## Output Format
 
-The plan follows `skills/request-plan/references/plan-template.md`:
-
-```markdown
-# Plan: <one-line goal>
-
-## Context
-## Goal
-## Scope
-## Phases
-## Effort (rough)
-## Risks & Dependencies
-## Recommended next step   ← single `/worktask` command line
-```
+`skills/request-plan/references/plan-template.md` — `# Plan: <one-line goal>` then
+Context · Goal · Scope · Phases · Effort (rough) · Risks & Dependencies ·
+Recommended next step (the single `/worktask` command line).
 
 ## Integration
 
