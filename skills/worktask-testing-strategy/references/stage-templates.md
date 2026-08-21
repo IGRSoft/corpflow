@@ -4,7 +4,7 @@
 
 ### What to Include in `<plan_file>` (e.g. `planning-0.md`)
 
-Concatenate the three template parts below into the plan file's `## Test Strategy` block.
+Concatenate the two template parts below into the plan file's `## Test Strategy` block.
 
 #### Plan Template — Scope & Framework
 
@@ -28,7 +28,7 @@ platform`; if the repo already uses another framework, the repo wins — note th
   (Apple only: XCUITest requires XCTest, so UI tests stay on XCTest.)
 ```
 
-#### Plan Template — Acceptance Criteria
+#### Plan Template — Criteria, Existing Tests & Effort
 
 ```markdown
 ### Test Acceptance Criteria
@@ -36,17 +36,12 @@ Derived from acceptance criteria - each should be testable:
 - [ ] Given [precondition], when [action], then [expected result]
 - [ ] [Edge case]: [Expected behavior]
 - [ ] [Error case]: [Expected error handling]
-```
 
-#### Plan Template — Existing Tests & Effort
-
-```markdown
 ### Existing Tests to Update
 When changing existing logic, identify affected tests:
 | Test File | Reason for Update | Impact |
 |-----------|-------------------|--------|
 | tests/UserServiceTests.swift | Login logic changed | Update mocks |
-| src/auth/authFlow.test.ts | New OAuth parameter | Add test case |
 
 ### Test Effort Estimate
 | Type | Hours |
@@ -89,20 +84,10 @@ Concatenate the two template parts below into the `## Test Architecture` block.
 ~~~markdown
 ### Test Data Management
 - Fixtures location: `Tests/Fixtures/`
-- Factory pattern for test objects
-- Shared test data builders
+- Factory pattern for test objects, shared test data builders
 
 ### Test Organization
-```
-Tests/
-├── UnitTests/
-│   ├── Domain/
-│   └── Services/
-├── IntegrationTests/
-│   ├── API/
-│   └── Storage/
-└── Fixtures/
-```
+`Tests/` → `UnitTests/{Domain,Services}`, `IntegrationTests/{API,Storage}`, `Fixtures/`
 ~~~
 
 ## DV Stage: Test Implementation
@@ -113,10 +98,9 @@ The developer MUST implement unit tests alongside production code during the DV 
 
 1. **Read test specs** from `.context/<plan_file> § Test Strategy` (resolve `<plan_file>` via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`)
 2. **Read test architecture** from `.context/architecture-N.md § Test Architecture` (when AR ran — AR is optional per PL0's Stage Inclusion Criteria; N from `task.metadata.run_index`)
-3. **Create test files** using the specified testing framework
-4. **Follow test patterns** defined in the architecture (DI, mocking strategy, etc.)
-5. **Run tests scoped to changed code** (the new/updated tests plus any tests covering modified production files) and verify they pass before completing DV stage. Full project-suite regression is deferred to QA.
-6. **Document test files** in `.context/development-N.md`
+3. **Create test files** in the specified framework, following the architecture's patterns (DI, mocking strategy)
+4. **Run tests scoped to changed code** (the new/updated tests plus any tests covering modified production files) and verify they pass before completing DV stage. Full project-suite regression is deferred to QA.
+5. **Document test files** in `.context/development-N.md`
 
 ### Handoff Requirements (DV → DR → QA)
 
@@ -127,13 +111,7 @@ The developer MUST implement unit tests alongside production code during the DV 
 
 ### What DV Writes vs What QA Adds
 
-| DV Stage (Developer) | QA Stage (QA Engineer) |
-|----------------------|------------------------|
-| Unit tests per `<plan_file>` specs | Additional edge case tests |
-| Mock implementations | Coverage gap analysis |
-| Happy path + known error cases | Boundary and stress tests |
-| Test data builders/fixtures | Integration and E2E tests |
-| Tests for acceptance criteria | Test quality review and metrics |
+See `skills/shared/testing-strategy.md § DV vs QA Boundary` — canonical, not restated here.
 
 ### Footer Marker Examples (DV Output)
 
@@ -142,25 +120,13 @@ After implementing tests at D1.5, DV appends footer blocks to modified files. Gr
 **Production source file** (`Sources/Services/PaymentService.swift`):
 
 ```swift
-// ... existing code ...
-
 // MARK: - Test Info
 // @test-file: Tests/Services/PaymentServiceTests.swift
 // @related-tests: Tests/Integration/PaymentFlowTests.swift, Tests/Services/NetworkClientTests.swift
 // @test-coverage: Unit tests for charge(), refund(), and validateCard(). Integration tests for end-to-end payment flow.
 ```
 
-#### Footer Marker Examples — test file
-
-**Test file** (`Tests/UnitTests/Services/PaymentServiceTests.swift`):
-
-```swift
-// ... existing tests ...
-
-// MARK: - Source Info
-// @source-file: Sources/Services/PaymentService.swift
-// @doc-refs: https://developer.apple.com/documentation/storekit
-```
+The mirror block in the **test file** carries `// MARK: - Source Info` with `@source-file:` (the production path) and optional `@doc-refs:` (upstream documentation URLs).
 
 ### Development.md Test Documentation Template
 

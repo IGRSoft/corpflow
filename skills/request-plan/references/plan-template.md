@@ -1,7 +1,7 @@
 # Plan Template
 
 Fill these sections in this exact order. Keep it tight — a scannable one-screen plan beats an
-exhaustive document. Cut any section to a single line if the request is small; never drop a section
+exhaustive document. Cut a section to one line when the request is small; never drop a section
 header, so the shape stays predictable.
 
 #### Template — context, goal, scope, phases
@@ -10,16 +10,16 @@ header, so the shape stays predictable.
 # Plan: <one-line goal>
 
 ## Context
-Why this is being asked now and what's already true in the repo (1–3 sentences grounded in what you
-read — name the in-flight work, file, or constraint you found). If nothing relevant exists, say so.
+Why this is asked now and what's already true in the repo (1–3 sentences grounded in what you read —
+name the in-flight work, file, or constraint you found). If nothing relevant exists, say so.
 
 ## Goal
 The outcome in one or two sentences. What "done" looks like.
 
 ## Scope
 **In:** the concrete things this work includes.
-**Out:** what is deliberately excluded (prevents scope creep; cite the heavier command if the user
-later wants the excluded part).
+**Out:** what is deliberately excluded (prevents scope creep; cite the heavier command for the
+excluded part).
 
 ## Phases
 P0 / P1 / P2 per `skills/shared/three-stage-planning.md`. Each phase independently deliverable;
@@ -57,9 +57,9 @@ A single ready-to-paste worktask trigger line + one sentence of rationale. See `
 
 ## Notes on filling it
 
-- **Context must be grounded.** A generic "this improves the product" line means you skipped the
-  context-gathering step. Reference something real from the repo.
-- **Phases are about sequencing risk and value**, not just chopping the work into thirds. P0 is the
-  smallest thing that delivers the core outcome; P1/P2 are genuinely deferrable.
-- **Effort is a rough cut.** If the user needs hours, budget, or CSV export, that's `/estimate`'s
-  job — say so in the Recommended next step rather than over-computing here.
+- **Context must be grounded.** A generic "this improves the product" line means the
+  context-gathering step was skipped. Reference something real from the repo.
+- **Phases sequence risk and value**, they don't chop the work into thirds. P0 is the smallest thing
+  delivering the core outcome; P1/P2 are genuinely deferrable.
+- **Effort is a rough cut.** Hours, budget, or CSV export are `/estimate`'s job — say so in the
+  Recommended next step rather than over-computing here.

@@ -1,28 +1,14 @@
 # Handoff Protocol — Inter-Stage Communication Reference
 
-Canonical specification for worktask inter-stage communication. Defines the `state.json` ledger, the YAML `handoff:` frontmatter contract, the cache-friendly preamble layout, and four documented backward-compat fallback paths.
-
-## Referenced by
-
-This file is the single source of truth referenced by:
-
-- `skills/shared/stage-contracts.md` — Required Inputs / Required Outputs vocabulary
-- `skills/shared/state-ledger.md` — `metadata.context_refs` + `metadata.state_file` semantics
-- `skills/worktask/SKILL.md` — Orchestrator Execution Loop reads ledger + builds preamble
-- `skills/worktask/references/initialization-patterns.md` — PL0 seeds state.json
-- `skills/context-compression/SKILL.md` — frontmatter as canonical compression form
-- `skills/cross-plugin-handoff/SKILL.md` — cross-plugin agents adopt full schema
-- `skills/cost-optimization/SKILL.md` — `ENABLE_PROMPT_CACHING_1H` + hook
-- `agents/{product-manager,software-architector,team-lead,developer,technical-lead,security-reviewer,qa-engineer,technical-writer,release-engineer,project-manager,stakeholder,incident-responder}.md` — Required Inputs / Completion Verification
-- `commands/worktask.md` — Phase 1 ledger seed
+Canonical specification for worktask inter-stage communication: the `state.json` ledger, the YAML `handoff:` frontmatter contract, the typed-return schemas, the cache-friendly preamble layout, and the documented fallback paths. Single source of truth for every agent, skill and command that cites it — grep `handoff-protocol.md` for the consumers.
 
 ---
 
 ## #atomic-write
 
-Atomic state.json write: **lock → read → merge → temp → fsync → rename → unlock**. The
-read-merge-rename window is serialized by an mkdir-spinlock (macOS has no `flock(1)`), so
-legal sibling overlap (parallel DVN tracks, DC+QA) cannot drop a patch to last-rename-wins.
+Atomic state.json write: **lock → read → merge → temp → fsync → rename → unlock**. An
+mkdir-spinlock serializes the read-merge-rename window (macOS has no `flock(1)`), so legal
+sibling overlap (parallel DVN tracks, DC+QA) cannot drop a patch to last-rename-wins.
 POSIX-shell pseudocode:
 
 ### Lock acquisition (step 0)
@@ -46,62 +32,45 @@ trap 'rmdir "$lockdir" 2>/dev/null' EXIT   # release on process end/failure
 
 ```bash
 # …continued: same script, after lock acquisition
-# 1. Read current state (last-known-good)
-cur=$(cat .context/state.json)
-
-# 2. Merge in-memory (jq * patch is idempotent on identical patches)
-new=$(echo "$cur" | jq --argjson patch "$PATCH_JSON" '. * $patch')
-
-# 3. Write to temp file in same directory (same filesystem → atomic rename guaranteed)
-tmp=".context/.state.json.$$.${RANDOM}.tmp"
+cur=$(cat .context/state.json)                                   # 1. last-known-good
+new=$(echo "$cur" | jq --argjson patch "$PATCH_JSON" '. * $patch')  # 2. merge in-memory (idempotent)
+tmp=".context/.state.json.$$.${RANDOM}.tmp"                      # 3. temp in same dir ⇒ same FS
 printf '%s' "$new" > "$tmp"
-
-# 4. fsync the temp file (best-effort)
-sync "$tmp" 2>/dev/null || sync || true
-
-# 5. Atomic rename — POSIX guarantees same-FS rename is atomic
-mv -f "$tmp" .context/state.json
-
-# 6. Release the lock (also released by the EXIT trap above).
-rmdir "$lockdir" 2>/dev/null
+sync "$tmp" 2>/dev/null || sync || true                          # 4. fsync (best-effort)
+mv -f "$tmp" .context/state.json                                 # 5. POSIX-atomic rename
+rmdir "$lockdir" 2>/dev/null                                     # 6. release (also on EXIT trap)
 ```
+
+`$RANDOM` in the temp name guards against PID reuse inside Task subagents (CR-7).
 
 ### Failure semantics
 
 - Crash before step 3 — state.json untouched (last-known-good preserved).
-- Crash between 3 and 5 — temp file orphaned in `.context/`. Cleanup on next worktask start: `rm -f .context/.state.json.*.tmp`. state.json untouched.
-- Crash after 5 — state.json contains new value. Idempotent (re-running merge with same patch is a no-op).
-- Crash while holding the lock — the EXIT trap releases it; a crash that skips the trap leaves a lock dir that the next writer breaks once it is older than `STATE_LOCK_STALE_S`.
+- Crash between 3 and 5 — temp file orphaned. Cleanup on next worktask start: `rm -f .context/.state.json.*.tmp`. state.json untouched.
+- Crash after 5 — state.json holds the new value; idempotent, so re-running the same patch is a no-op.
+- Crash while holding the lock — the EXIT trap releases it; if the trap is skipped, the next writer breaks the dir once it is older than `STATE_LOCK_STALE_S`.
 
 ### Single-writer invariant
 
-Single-writer invariant (revised): **one writer per stage KEY**. Sibling overlap is legal —
-two stages (or two parallel DVN tracks writing distinct keys) may merge concurrently; the
-mkdir-spinlock serializes their read-merge-rename windows so neither patch is lost. There is
-no global "exactly one agent `in_progress`" requirement. **Timeout ⇒ proceed unlocked + WARN**,
-which is never worse than the pre-lock lockless path (an exit-0 no-op would instead let a
-leaked lock silently swallow merges). The lock lives only in `state-patch.sh`'s `atomic_merge()`;
-the SubagentStop hook inherits it by delegation. `state-patch.sh` is the single merge
-implementation — when it is absent `state-merge.sh` logs a warning and exits 0 without merging.
+**One writer per stage KEY** — not one writer globally. Sibling overlap is legal (two stages,
+or two DVN tracks writing distinct keys, may merge concurrently); the spinlock serializes their
+windows so neither patch is lost. There is no "exactly one agent `in_progress`" requirement.
+**Timeout ⇒ proceed unlocked + WARN**, never a silent exit-0 no-op.
 
 ### Lock implementation
 
-The lock implementation is `skills/worktask/scripts/state-patch.sh` (`_lock_acquire` /
-`_lock_release` / `_lock_break_if_stale`); the two env knobs mirror the `DISK_MIN_GB` pattern.
-
-`$RANDOM` suffix on the temp filename guards against hypothetical PID reuse inside Task subagents (CR-7).
+`skills/worktask/scripts/state-patch.sh` — `atomic_merge()` plus `_lock_acquire` /
+`_lock_release` / `_lock_break_if_stale`; the env knobs mirror the `DISK_MIN_GB` pattern. It is
+the single merge implementation, inherited by the SubagentStop hook via delegation; when it is
+absent `state-merge.sh` warns and exits 0 without merging.
 
 ---
 
 ## #frontmatter-schema
 
-Every stage artifact (planning-N.md, architecture-N.md, coordination-N.md, development-N.md, …) MUST start with a YAML block between `^---$` markers. Token budget ≤200. Line budget ≤30.
+Every stage artifact (planning-N.md, architecture-N.md, …) MUST start with a YAML block between `^---$` markers. Token budget ≤200. Line budget ≤30.
 
-Not every stage runs on every worktask: **AR** and **TL** are optional (AR is a tier default PL0
-may override in either direction; TL runs only when PL0 splits the work across ≥2 developers —
-`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`), so `architecture-N.md` and
-`coordination-N.md` may legitimately be absent. Frontmatter fields that reference an absent
-stage's artifact MUST be omitted rather than written with a dangling path.
+**AR** and **TL** are optional (`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`), so `architecture-N.md` / `coordination-N.md` may legitimately be absent. A frontmatter field referencing an absent stage's artifact MUST be omitted, never written as a dangling path.
 
 JSON-Schema-style spec:
 
@@ -182,9 +151,9 @@ constraints:
         maxItems: 5
         description: >
           OPTIONAL (B2). Sub-agents this stage dispatched, so DR/orchestrator see the
-          fan-out without walking audit.jsonl. The cap of 5 is a policy tripwire: a stage
-          needing more should re-split (TL), not fan out unbounded. Nested spawns downshift
-          a model tier by default and never run background-nested in a headless run.
+          fan-out without walking audit.jsonl. The cap of 5 is a policy tripwire — a
+          stage needing more should re-split (TL). Nested spawns downshift a model tier
+          and never run background-nested in a headless run.
         items:
           type: object
           required: [agent, task]
@@ -200,10 +169,9 @@ constraints:
       deep_reads:
         type: array
         description: >
-          OPTIONAL (B4). Artifacts a fan-in stage (FN primarily) read IN FULL beyond their
-          ≤200-token frontmatter, each with why the frontmatter was insufficient. Empty/
-          absent is healthy (frontmatter-first sufficed); a long list is the tripwire that
-          a producing stage's frontmatter is under-informative.
+          OPTIONAL (B4). Artifacts a fan-in stage (FN primarily) read IN FULL beyond
+          their ≤200-token frontmatter, with why. Empty/absent is healthy; a long list
+          is the tripwire that a producing stage's frontmatter is under-informative.
         items:
           type: object
           required: [artifact, reason]
@@ -239,19 +207,19 @@ constraints:
 
 ### Token budget
 
-Frontmatter is the canonical compression form: every downstream stage reads this block instead of the full upstream artifact when it only needs the verdict, decisions, or refs. Keep ≤200 tokens or downstream stages incur unnecessary cost.
+Frontmatter is the canonical compression form: downstream stages read this block instead of the full upstream artifact whenever they only need the verdict, decisions, or refs. Over ≤200 tokens, every downstream stage pays.
 
 ---
 
 ## Handoff Schemas {#handoff-schemas}
 
-Canonical typed-return schemas. These are the single source of truth for the structured object a stage agent returns from its `Task()` dispatch in the manual orchestrator loop (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6).
+Canonical typed-return schemas — the single source of truth for the structured object a stage agent returns from its `Task()` dispatch (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6).
 
-Typed `schema` returns replace prose-frontmatter scraping **on the typed path**, but each stage STILL mirrors its result to `state.json facts` and writes its `.context/<stage>-N.md` artifact with `handoff:` frontmatter (durability, human readability, F4 regeneration — see `#frontmatter-schema`, `#fallback-paths`). The typed return is a *parallel, validated* channel; the frontmatter is the *cache-friendly compressed on-disk* channel. Neither replaces the other.
+Two parallel channels, neither replacing the other: the typed return is *validated*, the `handoff:` frontmatter is the *cache-friendly on-disk* form. So even on the typed path every stage still mirrors to `state.json facts` and writes its `.context/<stage>-N.md` artifact with frontmatter (durability, human readability, F4 regeneration — `#frontmatter-schema`, `#fallback-paths`).
 
 ### Schema conventions
 
-Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST match that stage's row in `#frontmatter-schema § Per-stage required-field matrix`** — the typed return and the frontmatter share one verdict vocabulary per stage. The `required` field set is the typed superset of that stage's frontmatter required fields (e.g. DR's `key_decisions (= findings)` becomes the typed `findings`/`blockers` arrays).
+JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's row in `#frontmatter-schema § Per-stage required-field matrix`** — one verdict vocabulary per stage across both channels. The `required` set is the typed superset of that stage's frontmatter required fields (DR's `key_decisions (= findings)` becomes the typed `findings`/`blockers` arrays).
 
 > **Cache-prefix note (binding, PRESERVE §4.1).** The schema is passed as a `Task()`/`agent()` **argument**, never inserted into preamble sections [1][2][4]. Adding schema dispatch therefore does NOT touch cache-prefix byte-identity (`#cache-prefix`).
 
@@ -338,16 +306,14 @@ Schemas are JSON Schema (draft 2020-12). **Each stage's `verdict` enum MUST matc
 #### DVHandoff — architecture field notes
 
 `architecture` is optional at the schema level but **required whenever `state.json` has a
-`tasks.AR0` entry**, together with `refs.decisions` — both are written when AR ran and both are
-omitted when it did not (`stage-contracts.md#tpl-dv § Architecture reference contract`). The gate
-resolves the reference in one precedence shared by the harness, this schema and the DR rule:
-`refs.decisions`, then `architecture.ref`. `handoff-harness.sh --validate-frontmatter <artifact>
---state <state.json>` enforces it (warn-only in 3.42.0, blocking under `--strict`). When AR was
-excluded the object MUST be omitted;
-the harness's inverse guard warns if an `architecture-*` reference appears without a `tasks.AR0`
-entry. `applied` is DV's truthful statement that AR's recorded decisions were followed;
-deviations are declared in `development-N.md ## decisions` with rationale, and DR fails an
-undeclared one.
+`tasks.AR0` entry**, together with `refs.decisions`; both are omitted when AR did not run
+(`stage-contracts.md#tpl-dv § Architecture reference contract`). Reference-resolution precedence,
+shared by the harness, this schema and the DR rule: `refs.decisions`, then `architecture.ref`.
+`handoff-harness.sh --validate-frontmatter <artifact> --state <state.json>` enforces it (warn-only
+in 3.42.0, blocking under `--strict`) and its inverse guard warns when an `architecture-*`
+reference appears without a `tasks.AR0` entry. `applied` is DV's truthful statement that AR's
+decisions were followed; deviations go in `development-N.md ## decisions` with rationale, and DR
+fails an undeclared one.
 
 ### DRHandoff
 
@@ -502,10 +468,10 @@ undeclared one.
 
 ### #schema-to-state-map
 
-Each schema field maps onto the canonical `state.json` ledger (`#state-json-schema`) and the
-artifact anchor (`#anchor-allow-list`). The orchestrator applies this map when a typed return is
-present (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6). When no typed return is present, the same targets are
-populated from the artifact's `handoff:` frontmatter instead (F2/F3) — the map is channel-agnostic.
+Each schema field maps onto the ledger (`#state-json-schema`) and the artifact anchor
+(`#anchor-allow-list`). The map is channel-agnostic: the orchestrator applies it to a typed return
+(`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6), and populates the same targets
+from the artifact's `handoff:` frontmatter when there is none (F2/F3).
 
 #### Map — PL, AR, TL
 
@@ -560,20 +526,18 @@ populated from the artifact's `handoff:` frontmatter instead (F2/F3) — the map
 
 The v1 additive fields have **orchestrator-loop / hook writers**, not schema-mapped stage returns
 (`facts.dispatched_agents[]`, `tasks.<ID>.last_error`, `tasks.<ID>.completed_via`,
-`facts.capabilities` — see `skills/worktask/SKILL.md § Orchestrator Execution Loop` steps 6/6.5).
+`facts.capabilities` — `skills/worktask/SKILL.md § Orchestrator Execution Loop` steps 6/6.5).
 Only `tasks.<ID>.worktree` maps from a stage artifact — the DV handoff frontmatter
 `worktree_path`/`worktree_branch`, applied by `state-patch.sh` (rows above).
 
 #### #facts-union
 
-`facts.decisions[]`, `facts.open_questions[]`, `facts.files_modified` and `facts.tests_added`
-are written by `state-patch.sh --facts '<json>'`, passed on the same self-patch call that
-lands the stage's ledger row. It is the channel's ONLY scripted writer — the "(union)" in the
-maps above was prose until it existed, so a fact survived a handoff only when the orchestrator
-remembered to transcribe it.
+`facts.decisions[]`, `facts.open_questions[]`, `facts.files_modified` and `facts.tests_added` are
+written by `state-patch.sh --facts '<json>'`, passed on the same self-patch call that lands the
+stage's ledger row. It is the channel's ONLY scripted writer.
 
-The merge is a union, never `. * $patch`: jq object-merge REPLACES arrays, which is precisely
-how a downstream stage silently dropped the entries an upstream stage recorded.
+The merge is a union, never `. * $patch`: jq object-merge REPLACES arrays, which is exactly how a
+downstream stage silently dropped an upstream stage's entries.
 
 | Array | Identity | Collision | Order |
 |---|---|---|---|
@@ -582,29 +546,27 @@ how a downstream stage silently dropped the entries an upstream stage recorded.
 
 ##### Ordering and idempotency
 
-Tail placement for the keyed arrays is load-bearing, not cosmetic: the B3 clamp keeps `.[-8:]`,
-so appending is what makes "newest 8 survive" true after a union as well as after an overwrite.
-Never sort (`unique_by` does) — that hands the clamp an arbitrary 8 instead of the newest 8.
+Tail placement for the keyed arrays is load-bearing: the B3 clamp keeps `.[-8:]`, so appending is
+what makes "newest 8 survive" true after a union. Never sort (`unique_by` does) — that hands the
+clamp an arbitrary 8.
 
 Both shapes are idempotent: re-merging an already-merged payload leaves `state.json`
-byte-identical, so a remediation loop may re-run its self-patch freely. A payload whose shape
-does not match the table is rejected before the merge lock is taken, leaving `state.json`
-unchanged. `--facts` applies ahead of the completion merge, so facts still land when the
-ledger row is already current and that merge short-circuits as idempotent.
+byte-identical, so a remediation loop may re-run its self-patch freely. A payload whose shape does
+not match the table is rejected before the merge lock is taken. `--facts` applies ahead of the
+completion merge, so facts still land when that merge short-circuits as idempotent.
 
 #### Additive-field writers — facts.branch
 
-`facts.branch` has **two** writers: the orchestrator at `commands/worktask.md § Step 3c`, and
+Two writers, no stage agent among them: the orchestrator at `commands/worktask.md § Step 3c`, and
 `refine-branch-target.sh` at § Step A.4b (at most once per run, pre-commit, ledger-only, no git
-mutation). No stage agent ever writes it.
+mutation).
 
-The orchestrator's write is an orchestrator-loop write, not a schema-mapped stage return: it
-parses the final `branch=<name>` stdout line of `branch-name.sh`
-(`commands/worktask.md § Step 3c`) and stamps it directly — `branch-name.sh` itself never
-writes state.json (single write chokepoint, `#atomic-write`). When that line is empty or
-non-conventional and the script's `target_branch=<name>` line is not, the **target** is what
-gets stamped: the local rename can be blocked (upstream tracked, target exists, host
-workspace) while the PR head is still the pipeline's to name. See field notes — branch above.
+The orchestrator's is an orchestrator-loop write: it parses the final `branch=<name>` stdout line
+of `branch-name.sh` and stamps it directly — `branch-name.sh` never writes state.json (single
+write chokepoint, `#atomic-write`). When that line is empty or non-conventional and
+`target_branch=<name>` is not, the **target** is what gets stamped: the local rename can be
+blocked (upstream tracked, target exists, host workspace) while the PR head is still the
+pipeline's to name. See field notes — branch above.
 
 ---
 
@@ -631,14 +593,11 @@ properties:
 
 #### plan_file shape boundary
 
-**`plan_file` shape boundary** — `state.json.plan_file` holds a **workspace-relative
-path** (`.context/planning-N.md`); `task.metadata.plan_file` holds a **bare
-basename** (`planning-N.md`). Both shapes are legal. Every reader MUST accept
-either: try the value as given, then its basename resolved against the directory
-holding `state.json`.
-
-This paragraph is the canonical statement; every other writer and reader site
-points here rather than restating the rule.
+**`plan_file` shape boundary** (canonical statement; every other writer and reader site points
+here) — `state.json.plan_file` holds a **workspace-relative path** (`.context/planning-N.md`);
+`task.metadata.plan_file` holds a **bare basename** (`planning-N.md`). Both are legal. Every
+reader MUST accept either: try the value as given, then its basename resolved against the
+directory holding `state.json`.
 
 #### metadata
 
@@ -658,34 +617,28 @@ points here rather than restating the rule.
 #### metadata.workspace_path
 
 The absolute root of the tree this worktask is **assigned** to, seeded by
-`commands/worktask.md` Step 3a on every run (`git rev-parse --show-toplevel`, else
-`pwd`) and overwritten per-issue under `/megatask`. `dv-tree-preflight.sh`
-`resolve_assigned()` reads it as rank 2 (after `--assigned`, before
-`$WORKSPACE_ROOT`).
+`commands/worktask.md` Step 3a on every run (`git rev-parse --show-toplevel`, else `pwd`) and
+overwritten per-issue under `/megatask`. `dv-tree-preflight.sh` `resolve_assigned()` reads it as
+rank 2 (after `--assigned`, before `$WORKSPACE_ROOT`).
 
-Its absence is a defect, not a mode: every reader of this field warns-and-proceeds
-when it is empty, so an unstamped ledger silently disables the whole assigned-tree
-guard set at once. Rationale and the failure that motivated it:
+Its absence is a defect, not a mode: every reader warns-and-proceeds on empty, so an unstamped
+ledger disables the whole assigned-tree guard set at once. Rationale and the motivating failure:
 `initialization-patterns.md § Seeded workspace_path`.
 
 #### metadata.base_ref
 
-The integration branch, mirrored by PL0 from `task.metadata.base_ref` so shell
-helpers (which cannot read Task-System metadata) can reach it. Resolution order for
-any reader, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`,
-`workspace.json .git.base_branch`,
-`git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. There is no literal
-fallback: readers report unresolved and degrade non-blocking. Implemented in
+The integration branch, mirrored by PL0 from `task.metadata.base_ref` so shell helpers (which
+cannot read Task-System metadata) can reach it. Reader resolution order, highest first:
+`$FN_BASE_REF`, `state.json .metadata.base_ref`, `workspace.json .git.base_branch`,
+`git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved** — there is no literal fallback;
+readers report unresolved and degrade non-blocking. Implemented in
 `skills/worktask/scripts/fn-preflight.sh` `resolve_base_ref`.
 
 #### tasks
 
-The **sole** stage ledger, keyed by numbered stage id (`[STAGE][N]` — `PL0`, `DV0`, `DV1`):
-the same identity used in artifact names and handoff edges. Replaces the bare-stage-code
-map that could not represent parallel DVN tracks, and the retired Task System — see
-`skills/shared/state-ledger.md`.
-
-Handoff edges keep bare **stage codes** (`PL→AR`); only the ledger key is numbered.
+The **sole** stage ledger, keyed by numbered stage id (`[STAGE][N]` — `PL0`, `DV0`, `DV1`), the
+same identity used in artifact names and handoff edges (`skills/shared/state-ledger.md`). Handoff
+edges keep bare **stage codes** (`PL→AR`); only the ledger key is numbered.
 
 ```yaml
 # …continued: WorktaskStateLedger.properties.tasks
@@ -834,7 +787,7 @@ Handoff edges keep bare **stage codes** (`PL→AR`); only the ledger key is numb
       dispatched_agents:
         type: array
         maxItems: 6
-        description: "OPTIONAL (additive); writer: the orchestrator loop ONLY — see field notes. Bounded (B3): 6 survive, launched-survive-first (live agents resume needs are kept ahead of terminal rows). Clamped in state-patch.sh atomic_merge() (AD-7)."
+        description: "OPTIONAL (additive) — see field notes. Bounded (B3): 6 survive, launched-survive-first. Clamped in state-patch.sh atomic_merge() (AD-7)."
         items:
           type: object
           required: [stage, task_id, subagent_type, status]
@@ -879,15 +832,14 @@ Handoff edges keep bare **stage codes** (`PL→AR`); only the ledger key is numb
 
 #### Field notes — handoffs (edge registry)
 
-Keys are `FROM→TO` stage-code pairs. Because PL0 sizes the stage set, several stages have more
-than one possible predecessor — the edge that gets written is the one whose when-clause holds, so
-a stage that never ran never appears in an edge label. Writing an edge for an absent stage
-(a "phantom edge") is a ledger defect.
+Keys are `FROM→TO` stage-code pairs. PL0 sizes the stage set, so several stages have more than one
+possible predecessor — the edge written is the one whose when-clause holds. A stage that never ran
+never appears in an edge label; a "phantom edge" for an absent stage is a ledger defect.
 
-The table below is **exhaustive across all three pipelines** — standard, secure/full, and
-emergency. The emergency pipeline (`IR→DV→DR→QA→RE→FN`) has **no PL, AR or TL stage at all**, so
-DV's predecessor there is `IR`, and RE's is `QA` rather than `DC`. Any predecessor not listed here
-is not a legal edge; add a row before writing one.
+The tables below are **exhaustive across all three pipelines** (standard, secure/full,
+emergency). The emergency pipeline (`IR→DV→DR→QA→RE→FN`) has **no PL, AR or TL stage**, so DV's
+predecessor there is `IR` and RE's is `QA`. Any predecessor not listed is not a legal edge; add a
+row before writing one.
 
 ##### Edge table — standard and secure pipelines
 
@@ -918,8 +870,8 @@ is not a legal edge; add a row before writing one.
 | `<invoker>→ET` | the ethics gate fired; `<invoker>` is whichever stage triggered it | ET |
 
 The writer passes its predecessor to `state-patch.sh --stage <CODE> --prev <PREV>`; the script
-composes the key mechanically and does not itself know the when-clauses. `USER` is accepted as a
-predecessor **only** — it owns no artifact and is never a valid `--stage`.
+composes the key mechanically and knows none of the when-clauses. `USER` is a predecessor
+**only** — it owns no artifact and is never a valid `--stage`.
 
 #### #layer-1-fallback
 
@@ -928,65 +880,64 @@ Every stage agent's State Patch section points here. Three outcomes, in order.
 1. **Exit 3** — `--prev` given, `--via` absent, no artifact resolved: the self-patch signature.
    The stage claims an artifact that is not on disk. Write it and re-run. If you cannot, use
    item 2 — `--allow-missing-artifact` only silences the error and patches **nothing**.
-2. **The tool cannot run at all** — not granted, denied, or not found. Do **NOT** skip silently.
-   Patch `.context/state.json` with `Edit`: write both the `tasks.<ID>` completion entry and
-   the `handoffs["<PREV>→<CODE>"]` edge, then record the failure under
-   `metadata.pl_tooling_gaps`. The SubagentStop hook is **not** a substitute — it builds its
-   args without `--prev`, so it repairs the stage entry and drops the edge.
+2. **The tool cannot run at all** (not granted, denied, not found). Do **NOT** skip silently.
+   `Edit` `.context/state.json` directly: write both the `tasks.<ID>` completion entry and the
+   `handoffs["<PREV>→<CODE>"]` edge, then record the failure under `metadata.pl_tooling_gaps`.
+   The SubagentStop hook is **not** a substitute — it builds its args without `--prev`, so it
+   repairs the stage entry and drops the edge.
 3. **`jq` or `.context/state.json` genuinely absent** — skipping is correct here, and only here
 
 #### Field notes — progress
 
-OPTIONAL. Budget-aware checkpoint for multi-batch stages (currently DV). Written after each sub-batch commit so a budget-exhausted agent leaves a resumable record instead of a progress narration. The orchestrator reads `next_batch` to resume the stage from where it stopped (see `agents/developer.md § Budget-Aware Checkpointing` and `skills/worktask/SKILL.md § Orchestrator Execution Loop` step 4.7). Stores batch ids only — never diffs, file contents, or test output.
+OPTIONAL. Budget-aware checkpoint for multi-batch stages (currently DV), written after each sub-batch commit so a budget-exhausted agent leaves a resumable record instead of a progress narration. The orchestrator reads `next_batch` to resume where the stage stopped (`agents/developer.md § Budget-Aware Checkpointing`; `skills/worktask/SKILL.md § Orchestrator Execution Loop` step 4.7). Batch ids only — never diffs, file contents, or test output.
 
 #### Field notes — completed_via
 
-OPTIONAL (additive). Which enforcement layer stamped this stage `completed`. `hook` = SubagentStop delegation (Layer 2, `state-merge.sh` default); `step6_5` = orchestrator synchronous Step-6.5 (`STATE_MERGE_VIA=step6_5`); `f3` = orchestrator F3 minimal-patch fallback. **Absence encodes a Layer-1 agent self-patch** — the hook's idempotency check exits before writing when Layer 1 already landed, so no value is stamped. Observability only; no consumer behavior branches on it.
+OPTIONAL (additive). Which enforcement layer stamped this stage `completed`: `hook` = SubagentStop delegation (Layer 2, `state-merge.sh` default); `step6_5` = orchestrator synchronous Step-6.5 (`STATE_MERGE_VIA=step6_5`); `f3` = orchestrator F3 minimal-patch fallback. **Absence encodes a Layer-1 agent self-patch** — the hook's idempotency check exits before writing when Layer 1 already landed. Observability only; no consumer branches on it.
 
 #### Field notes — last_error
 
-OPTIONAL (additive). Written by the orchestrator Step-6.5 errored-return branch (errors propagate with partial work) BEFORE routing to the retry matrix. `class` reuses the EXISTING taxonomy from `agent-coordination § Retry / Escalate Matrix` — no new vocabulary. Dropped once the stage reaches `status: completed` (see eviction rules).
+OPTIONAL (additive). Written by the orchestrator Step-6.5 errored-return branch (errors propagate with partial work) BEFORE routing to the retry matrix. `class` reuses the taxonomy in `agent-coordination § Retry / Escalate Matrix` — no new vocabulary. Dropped once the stage reaches `status: completed` (eviction rules).
 
 #### Field notes — worktree
 
-OPTIONAL (additive; DV primarily). Records WHICH worktree the stage ran in — not just `worktree: true` semantics. Written by mapping the DV handoff frontmatter `worktree_path`/`worktree_branch` (`state-patch.sh`). Lets resume re-enter the exact worktree via `EnterWorktree(path)` and DR/QA run in the right dir, and FN carry PR context. The PR *head* comes from `facts.branch`, not from here — see the disambiguation note below. Kept through FN for PR context; dropped at archival.
+OPTIONAL (additive; DV primarily). Records WHICH worktree the stage ran in, not just `worktree: true`. Written by mapping the DV handoff frontmatter `worktree_path`/`worktree_branch` (`state-patch.sh`). Lets resume re-enter the exact worktree via `EnterWorktree(path)`, DR/QA run in the right dir, and FN carry PR context. The PR *head* comes from `facts.branch`, not here (disambiguation below). Kept through FN; dropped at archival.
 
 #### Field notes — branch
 
-OPTIONAL (additive). The worktask's **planned** working-branch name — the
-host-session branch as `branch-name.sh` left it at the start of PL, whether it renamed the
-branch or found it already conventional. Written at PL start and rewritten at most once, at
-`commands/worktask.md § Step A.4b`, before any commit exists — never rewritten by a **stage**
-(the once-only rule — `skills/shared/git-conventions.md § Once-only rule`). **This is the field FN uses as the
-pull-request head.** Reading the ledger instead of shelling `git rev-parse` at FN time is
-what makes an external mid-run rename unable to silently retarget the PR: the PR opens
-against the name the worktask committed to, and divergence surfaces as a mismatch rather
-than as a differently-named PR. Not the same field as `tasks.DV0.worktree.branch` — see the
-disambiguation note below. Kept through FN; dropped at archival.
+OPTIONAL (additive). The worktask's **planned** working-branch name — the host-session branch as
+`branch-name.sh` left it at the start of PL, whether it renamed it or found it already
+conventional. Written at PL start, rewritten at most once at `commands/worktask.md § Step A.4b`
+before any commit exists, and never by a **stage** (`skills/shared/git-conventions.md § Once-only
+rule`). **This is the field FN uses as the pull-request head.** Reading the ledger rather than
+shelling `git rev-parse` at FN time is what stops an external mid-run rename from silently
+retargeting the PR: divergence surfaces as a mismatch instead of a differently-named PR. Not the
+same field as `tasks.DV0.worktree.branch` (disambiguation below). Kept through FN; dropped at
+archival.
 
 ##### Field notes — branch, divergence from the local branch name
 
 `facts.branch` may legitimately differ from `git rev-parse --abbrev-ref HEAD` on the
-`upstream_tracked` and `target_exists` arms, and inside a linked worktree when
-`BRANCH_NAME_WORKTREE_RENAME=0` is set — there `branch-name.sh` keeps the host's local name
-and returns the derived `target_branch=` for the PR head instead, so the host's
-branch↔workspace mapping survives (`workspace-modes.md § Host mapping — updated, not
-preserved`). On the **default** worktree path the branch is renamed and the two agree.
+`upstream_tracked` and `target_exists` arms, and inside a linked worktree under
+`BRANCH_NAME_WORKTREE_RENAME=0` — there `branch-name.sh` keeps the host's local name and returns
+the derived `target_branch=` for the PR head, so the host's branch↔workspace mapping survives
+(`workspace-modes.md § Host mapping — updated, not preserved`). On the **default** worktree path
+the branch is renamed and the two agree.
 
-Divergence is now **observed, not merely tolerated**: `fn-preflight.sh branch-divergence`
-classes it `expected` or `third_party` and surfaces only `third_party` at the FN gate. Its
-comparison base is the `to` of the last `branch_renamed / ok` row, not this field. No reader may "repair" it by re-deriving from the local branch — the ledger value is
-the planned name and the PR head is what it plans.
+Divergence is **observed, not merely tolerated**: `fn-preflight.sh branch-divergence` classes it
+`expected` or `third_party` and surfaces only `third_party` at the FN gate; its comparison base is
+the `to` of the last `branch_renamed / ok` row, not this field. No reader may "repair" it by
+re-deriving from the local branch — the ledger value is the planned name, and the PR head is what
+it plans.
 
 ##### Field notes — branch, empty value
 
-`branch-name.sh` prints `branch=` (empty) for a detached HEAD or a not-a-git-repo outcome —
-never the literal token `HEAD`, which is not a branch. FN MUST treat an empty `facts.branch`
-as "no planned name to push under" and skip the `git push -u origin
-HEAD:refs/heads/<facts.branch>` refspec entirely, falling back to a plain
-`git push -u origin HEAD` (or the current branch's own name) instead. **On a detached HEAD,
-this fallback fails loudly** with "The destination you provided is not a full refname" —
-an acceptable failure (no wrong target, no silent error).
+`branch-name.sh` prints `branch=` (empty) for a detached HEAD or not-a-git-repo — never the
+literal `HEAD`, which is not a branch. FN MUST treat an empty `facts.branch` as "no planned name
+to push under": skip the `git push -u origin HEAD:refs/heads/<facts.branch>` refspec entirely and
+fall back to a plain `git push -u origin HEAD`. **On a detached HEAD that fallback fails loudly**
+("The destination you provided is not a full refname") — an acceptable failure: no wrong target,
+no silent error.
 
 ##### Disambiguation — `facts.branch` vs `tasks.DV0.worktree.branch`
 
@@ -1004,26 +955,26 @@ Two fields, disjoint definitions, neither derived from the other:
 
 They are equal in the common topology where the session's workspace **is** the worktree
 (`agents/developer.md § worktree_branch`), and differ when DV created a fresh
-`.claude/worktrees/` worktree whose branch the tool named itself. **A mismatch is
-information, not an error** — it tells FN the commits live somewhere other than the
-planned branch, exactly the condition `fn-preflight.sh continuity` handles. No writer may
-copy one into the other; that copy is what would make them a silent duplicate.
+`.claude/worktrees/` worktree whose branch the tool named itself. **A mismatch is information,
+not an error** — it tells FN the commits live somewhere other than the planned branch, exactly
+what `fn-preflight.sh continuity` handles. No writer may copy one into the other; that copy is
+what would make them a silent duplicate.
 
 #### Field notes — goal
 
-One-sentence statement of the worktask's intent, populated by PL0 from the user-supplied task description (or the issue title under a `/megatask` per-issue run). Read by stage agents that need the original intent without re-reading the plan file (e.g. AR sanity-checking architecture against requirements, FN composing the PR title). It is the single surface for this value — do not introduce a parallel one.
+One-sentence worktask intent, populated by PL0 from the task description (or the issue title under `/megatask`). Read by stages needing the original intent without re-reading the plan file (AR sanity-checking architecture against requirements, FN composing the PR title). Single surface for this value — do not introduce a parallel one.
 
 #### Field notes — files_read
 
-Source files read by prior stages. Populated by DV; consumed by DR/QA to prefer `git diff` over full re-reads. When a file appears here, downstream stages SHOULD use `git diff <base>..HEAD -- <path>` instead of `Read <path>`. Full reads are still permitted when the diff is insufficient (e.g., reviewing surrounding context of a complex change). If absent, downstream stages fall back to normal reads (backward-compat).
+Source files read by prior stages. Populated by DV; consumed by DR/QA, which SHOULD use `git diff <base>..HEAD -- <path>` instead of `Read <path>` for any file listed. Full reads stay permitted when the diff is insufficient. Absent ⇒ normal reads (backward-compat).
 
 #### Field notes — dispatched_agents
 
-OPTIONAL (additive). Writer: the orchestrator loop ONLY. One entry per `task_id` (NOT per stage — parallel DVN tracks share the stage code), replaced on re-dispatch; dispatch history stays in `audit.jsonl`. Read by resume (`resume.md` step 0) to reconcile against `claude agents --json --all` under background-default dispatch. No dispatch-timestamp field is stored (no consumer; `claude agents` rows carry their own start time). Terminal entries (`status: completed|failed`) are eviction candidates.
+OPTIONAL (additive). Writer: the orchestrator loop ONLY. One entry per `task_id` (NOT per stage — parallel DVN tracks share the stage code), replaced on re-dispatch; dispatch history stays in `audit.jsonl`. Read by resume (`resume.md` step 0) to reconcile against `claude agents --json --all`. No dispatch timestamp is stored (`claude agents` rows carry their own). Terminal entries (`status: completed|failed`) are eviction candidates.
 
 #### Field notes — capabilities
 
-OPTIONAL (additive). Probe cache for account-level hard-fails so every later stage does not re-hit the same error. Written by the orchestrator on first observed failure; model resolution consults it before any fable-tier dispatch. Example: `{ "fable_dispatch": "credit_blocked", "checked_at": "<ISO>" }` — Fable 5 is 1M-by-default but *dispatch* fails hard without 1M credits (observed live per model-selection.md).
+OPTIONAL (additive). Probe cache for account-level hard-fails, so later stages do not re-hit the same error. Written by the orchestrator on first observed failure; model resolution consults it before any fable-tier dispatch. Example: `{ "fable_dispatch": "credit_blocked", "checked_at": "<ISO>" }` — Fable 5 is 1M-by-default but *dispatch* fails hard without 1M credits (model-selection.md).
 
 ### Eviction order on overflow
 
@@ -1036,20 +987,18 @@ When state.json approaches the 500-token cap:
 
 #### Eviction steps 5–8
 
-5. Drop `facts.dispatched_agents[]` entries in a terminal state (`status: completed|failed`) — the live-agent reconciliation they exist for no longer applies; audit history persists in `audit.jsonl`.
-6. Drop `tasks.<ID>.last_error` and `tasks.<ID>.completed_via` for stages that have reached `status: completed` (the error is resolved; provenance was observability-only).
-7. Keep `tasks.<ID>.worktree` through FN (PR context needs the branch); drop it only at archival.
+5. Drop terminal `facts.dispatched_agents[]` entries (`status: completed|failed`) — live-agent reconciliation no longer applies; history persists in `audit.jsonl`.
+6. Drop `tasks.<ID>.last_error` + `completed_via` once the stage is `completed` (error resolved; provenance was observability-only).
+7. Keep `tasks.<ID>.worktree` through FN (PR context needs the branch); drop at archival.
 8. NEVER store diffs, file contents, or test output. Fetch from git/disk on demand.
 
 ### PL0 seed (initial state) {#pl0-seed}
 
-PL0 (or `commands/worktask.md` Phase 1) writes the initial ledger. The seed is
-**re-run aware** — `plan_file` and `run_index` use the next free planning index
-`N` computed from any pre-existing `.context/planning-*.md` (`0` on a fresh
-`.context/`). Hard-coding `0` would pin an old plan on a re-run and cause PL0 to
-overwrite `planning-0.md`. The canonical executable snippet (with the bash `N`
-computation) lives in `commands/worktask.md` Phase 1 step 3a — use it verbatim;
-the JSON below shows the resulting shape:
+PL0 (or `commands/worktask.md` Phase 1) writes the initial ledger. The seed is **re-run aware**:
+`plan_file` and `run_index` take the next free planning index `N` computed from any pre-existing
+`.context/planning-*.md` (`0` on a fresh `.context/`) — hard-coding `0` would pin an old plan and
+make PL0 overwrite `planning-0.md`. Use the canonical executable snippet in
+`commands/worktask.md` Phase 1 step 3a verbatim; the JSON below shows only the resulting shape.
 
 #### Seed shape (resulting JSON)
 
@@ -1082,15 +1031,14 @@ the `plan_file` shape boundary under § state.json schema.
 #### Additive-field seeding
 
 The seed includes `facts.dispatched_agents: []` (additive) so the orchestrator loop
-appends/replaces per-`task_id` dispatch entries in place rather than lazily creating the array on
-first dispatch. The other additive fields (`tasks.<ID>.completed_via`/`last_error`/`worktree`,
-`facts.capabilities`) are written on demand by their writers and MUST NOT be seeded — their absence
-is meaningful (Layer-1 self-patch, no error, no worktree record, no observed capability hard-fail).
+appends/replaces per-`task_id` entries in place instead of lazily creating the array. The other
+additive fields (`tasks.<ID>.completed_via`/`last_error`/`worktree`, `facts.capabilities`) are
+written on demand and MUST NOT be seeded — their absence is meaningful (Layer-1 self-patch, no
+error, no worktree record, no observed capability hard-fail).
 
-**On a new PL run in an existing `.context/`**: the seed sets `run_index = N`
-(next free index) up front; PL0 then atomically resets `stages` to
-`{PL: in_progress}` and resets `facts.*` to empty arrays/objects. Historical run
-data lives in the on-disk `<stage>-N.md` artifacts, not in state.json.
+**On a new PL run in an existing `.context/`**: the seed sets `run_index = N` up front; PL0 then
+atomically resets `stages` to `{PL: in_progress}` and `facts.*` to empty. Historical run data
+lives in the on-disk `<stage>-N.md` artifacts, not in state.json.
 
 ---
 
@@ -1112,29 +1060,25 @@ mandatory, and its absence is a hard failure rather than a recoverable mode.
 
 #### F4 — partial recovery, by design {#f4-partial}
 
-This table previously described a fuller contract than the hook implements. The divergences are the
-shipped behaviour, upheld on review rather than treated as defects.
+Three shipped behaviours, upheld on review rather than treated as defects:
 
-- **Backup is `.context/state.json.corrupt.<iso-ts>`**, not `.bad.<unix-ts>` — sorting by name sorts
-  by time, and the suffix says what happened.
+- **Backup is `.context/state.json.corrupt.<iso-ts>`**, not `.bad.<unix-ts>` — sorting by name
+  sorts by time, and the suffix says what happened.
 - **The audit trail is a `state_repair` row in `.context/logs/audit.jsonl`**, not a separate
-  `state-recovery.log`. One audit surface, not two.
+  `state-recovery.log`. One audit surface.
 - **There is no completed-stage frontmatter walk.** The hook rebuilds the skeleton (including an
-  empty `tasks: {}`) and recovers only the stage whose patch triggered the repair.
+  empty `tasks: {}`) and recovers only the stage whose patch triggered the repair. A full walk was
+  declined: it would be a second, divergent artifact parser alongside `state-patch.sh`'s.
 
 #### F4 — consequences for readers {#f4-consequences}
 
-A repaired ledger can legitimately show **fewer completed stages** than `.context/` contains, since
-earlier stages are not replayed from their artifacts. When reconstructing history after a repair,
-read the artifacts, not the ledger.
+A repaired ledger can legitimately show **fewer completed stages** than `.context/` contains —
+earlier stages are not replayed. Reconstruct history from the artifacts, not the ledger.
 
-The full walk was considered and declined: it would make the hook a second, divergent implementation
-of the artifact parser that `state-patch.sh` already owns.
-
-**Fail-safe.** If the backup itself cannot be written (e.g. unwritable `.context/`), the repair
-aborts, `state.json` is left **byte-identical**, no backup and no audit row are written, and the hook
-still exits 0. Corrupt-and-untouched is the designed outcome; the repair never destroys the original.
-An unchanged ledger is therefore not evidence the hook failed to run.
+**Fail-safe.** If the backup cannot be written (unwritable `.context/`), the repair aborts,
+`state.json` is left **byte-identical**, no backup and no audit row are written, and the hook still
+exits 0. Corrupt-and-untouched is the designed outcome; an unchanged ledger is not evidence the
+hook failed to run.
 
 #### The ledger is mandatory {#f1-fallback}
 
@@ -1142,17 +1086,19 @@ The handoff mode is anchor-based: a stage reads `.context/state.json` plus the a
 `metadata.context_refs` (≥30% input-token reduction, cache-friendly preamble).
 
 There is no whole-file fallback list. If `state.json` cannot be read, the stage stops and reports
-rather than guessing at its inputs — a silently degraded run that loses both the cache benefit and
-the dependency graph is worse than a loud one. A read-only or unwritable `.context/` is an
-environment defect to fix, not a mode to accommodate.
+rather than guessing at its inputs — silently losing both the cache benefit and the dependency
+graph is worse than failing loudly. A read-only or unwritable `.context/` is an environment defect
+to fix, not a mode to accommodate.
 
 ### F4 regeneration walk
 
-1. Glob `.context/{planning-*,architecture-*,coordination-*,development-*,developer-review-*,security-review-*,testing-*,documentation-*,release-*,complete-summary-*,retrospective-*,incident-*,ethics-review-*}.md`.
-2. For each file, extract `handoff:` frontmatter (yq or fallback parser).
+Manual rebuild only — the hook never walks (`#f4-partial`). Runbook: `agents/workflow-engineer.md`.
+
+1. Glob every canonical artifact basename (`#stage-artifact-map`) as `<basename>-*.md`.
+2. Extract `handoff:` frontmatter from each (yq or fallback parser).
 3. Sort by stage order: PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET.
-4. Build state.json from PL0's frontmatter as seed.
-5. For each subsequent stage, merge `tasks.<ID>` from its frontmatter + add to `handoffs[FROM→TO]`.
+4. Seed state.json from PL0's frontmatter.
+5. Per subsequent stage, merge `tasks.<ID>` and add `handoffs[FROM→TO]`.
 6. Atomic-write per `#atomic-write`.
 
 ---
@@ -1181,33 +1127,31 @@ All stage artifacts are numbered; N is allocated by PL0 (same value as `planning
 
 ### Per-stream DV artifacts
 
-Under TL fan-out the DV entry agent spawns one sub-agent per
-workstream; each writes only `development-N-<stream>.md`, where `<stream>` is the kebab slug the
-coordination plan assigned. The entry agent alone merges them into the canonical
-`development-N.md` at fan-in. `development-N.md` remains the documented DR/QA input and the file
-the DV0 handoff and state patch describe — the per-stream files are inputs to the merge, not
-handoff carriers.
+Under TL fan-out the DV entry agent spawns one sub-agent per workstream; each writes only
+`development-N-<stream>.md`, `<stream>` being the kebab slug the coordination plan assigned. The
+entry agent alone merges them into the canonical `development-N.md` at fan-in. That merged file
+stays the documented DR/QA input and the one the DV0 handoff and state patch describe — the
+per-stream files are merge inputs, not handoff carriers.
 
 ### Run-index resolution
 
-The same N is shared across all stages within a worktask run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. See `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming` for the full resolver and propagation algorithm.
+The same N is shared across all stages within a worktask run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. Full resolver and propagation algorithm: `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`.
 
 ### Alias basenames (resolution-only)
 
-`state-patch.sh` accepts a second, search-only basename for three stages — DR `review`, QA
-`qa`, FN `finalization` — living in a sibling function so `#stage-artifact-map` above stays the
-single canonical name per stage. Aliases are accepted, never written: the canonical name is
-always what gets emitted, and a canonical match outranks an alias match at the same run index.
-Resolution order: primary@run_index → primary highest-N → alias@run_index → alias highest-N.
-`AR` has no alias — `analyzing` is deliberately excluded (a prior naming generation used it; an
-alias would let a stale file answer for the current one). `USER` is a valid `--prev` value only
-— no artifact, never a `--stage` or basename (edge table above: `USER→PL`, `USER→IR`).
+`state-patch.sh` accepts a second, search-only basename for three stages — DR `review`, QA `qa`,
+FN `finalization` — in a sibling function, so `#stage-artifact-map` stays the single canonical name
+per stage. Aliases are accepted, never written, and a canonical match outranks an alias match at
+the same run index. Resolution order: primary@run_index → primary highest-N → alias@run_index →
+alias highest-N. `AR` has no alias: `analyzing` (a prior naming generation) is deliberately
+excluded so a stale file cannot answer for the current one. `USER` is a `--prev` value only — no
+artifact, never a `--stage` or basename (edge tables: `USER→PL`, `USER→IR`).
 
 ---
 
 ## #cache-prefix
 
-Anthropic prompt cache matches by **prefix-prefix equality**, not full-block equality. The orchestrator builds the preamble in this order to maximize the byte-identical prefix shared across consecutive `Task()` calls within the same `worktask_id`.
+Anthropic prompt cache matches by **prefix-prefix equality**, not full-block equality, so the orchestrator builds the preamble in this order to maximize the byte-identical prefix shared across consecutive `Task()` calls within one `worktask_id`.
 
 ### Preamble layout (binding)
 
@@ -1254,13 +1198,13 @@ Anything below collapses cache-hit rate:
 { "env": { "ENABLE_PROMPT_CACHING_1H": "1" } }
 ```
 
-Documented in `skills/cost-optimization/SKILL.md`. Without 1h flag, default 5-min TTL applies; users still see savings on retries inside the same stage but lose cross-stage cache between long-running stages.
+Documented in `skills/cost-optimization/SKILL.md`. Without the 1h flag the default 5-min TTL applies: retries inside a stage still save, cross-stage cache is lost between long-running stages.
 
 ### Lint
 
 `skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`.
 
-**Not automated.** Prefix-lint is manual-only: it consumes a `prompt-log.jsonl` (`{worktask_id, stage, prompt}` per line) that nothing in this repo emits — the live harness assembles prompts in `benchmarklive/dispatch.py` but persists only stage stdout. The mode is exercised solely by `cache-lint.sh --self-test` fixtures. There is also no `.github/workflows/` in this repo, so no lint of any kind runs on PRs. Treat this section as the spec the assembler must satisfy, not as an enforced gate.
+**Not automated.** Prefix-lint is manual-only: it consumes a `prompt-log.jsonl` (`{worktask_id, stage, prompt}` per line) that nothing here emits — the live harness assembles prompts in `benchmarklive/dispatch.py` but persists only stage stdout — and is exercised solely by `cache-lint.sh --self-test` fixtures. This repo has no `.github/workflows/`, so no lint runs on PRs. Treat this section as the spec the assembler must satisfy, not an enforced gate.
 
 ---
 
@@ -1293,14 +1237,14 @@ All stage artifacts MUST contain exactly the H2 headings (kebab-case, no undersc
 
 ### Convention rules
 
-1. H2 only. H1 is reserved for the artifact's title (exempt from anchor lint).
+1. H2 only. H1 is the artifact's title (exempt from anchor lint).
 2. Kebab-case. No spaces, no underscores, no camelCase.
-3. Anchor IDs are derived by GitHub-style slugify (lowercase, spaces→hyphens, strip punctuation). The H2 title MUST be the kebab-case form already; we don't rely on slugify.
-4. `key_decisions[].anchor` and `refs.*` MUST resolve to a real `## <slug>` heading in the target file. Enforcement is narrower than the rule: the handoff harness validates cross-file resolution **only for the AR→DV edge** (`--validate-frontmatter <development-N.md> --state <state.json>` checks the architecture reference's pattern and that the file exists next to the artifact). Every other `refs.*` entry is checked for key presence only — a dangling target elsewhere is a contract violation the harness will not catch, so authors remain responsible for it.
+3. Anchor IDs come from GitHub-style slugify, but the H2 title MUST already be the kebab-case form — do not rely on slugify.
+4. `key_decisions[].anchor` and `refs.*` MUST resolve to a real `## <slug>` heading in the target file. Enforcement is narrower than the rule: the handoff harness validates cross-file resolution **only for the AR→DV edge** (`--validate-frontmatter <development-N.md> --state <state.json>` checks the architecture reference's pattern and that the file exists next to the artifact). Every other `refs.*` entry is checked for key presence only, so a dangling target elsewhere is an author-owned contract violation the harness will not catch.
 
 ### Anchor Pre-Flight (PostToolUse hook)
 
-Anchor-lint also runs at the DR gate, but that is post-hoc — a missing anchor in `planning-N.md` only surfaces after AR/TL/DV have already paid the full-file re-read cost. To catch omissions at the producing stage, anchor-lint runs as a **managed plugin hook (shipped in `.claude-plugin/plugin.json`, default-on)** — it is no longer an optional, opt-in registration. The managed PostToolUse `Write|Edit` entry invokes `${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh`, which gates on the `.context/*-N.md` artifact regex below and delegates matching writes to `skills/worktask/scripts/cache-lint.sh --anchor-lint`:
+The DR-gate lint is post-hoc — a missing anchor in `planning-N.md` surfaces only after AR/TL/DV have paid the full-file re-read cost. To catch omissions at the producing stage, anchor-lint also runs as a **managed plugin hook (shipped in `.claude-plugin/plugin.json`, default-on)**, not an opt-in registration. The managed PostToolUse `Write|Edit` entry invokes `${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh`, which gates on the artifact regex below and delegates matching writes to `skills/worktask/scripts/cache-lint.sh --anchor-lint`:
 
 #### Managed hook entry (plugin.json)
 
@@ -1316,15 +1260,12 @@ Anchor-lint also runs at the DR gate, but that is post-hoc — a missing anchor 
 
 #### Preflight behavior and cost
 
-`anchor-preflight.sh` matches only the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit is a no-op. When the lint fails (non-zero exit), the agent that produced the artifact sees the diagnostic and amends the file before continuing — no downstream stages incur the cost. `continueOnBlock` follows the same managed-hook discipline as the other entries (the diagnostic is surfaced; an unrelated write is never blocked). The DR-gate lint is the only safety net for non-hook environments — there is no CI counterpart.
+`anchor-preflight.sh` matches only the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit is a no-op. On a non-zero exit the producing agent sees the diagnostic and amends the file, so no downstream stage pays. `continueOnBlock` follows the same managed-hook discipline as the other entries (diagnostic surfaced; an unrelated write never blocked). In non-hook environments the DR-gate lint is the only safety net — there is no CI counterpart.
 
-**Cost**: lint runs in O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit; net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
+**Cost**: O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit; net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
 
 ---
 
 ## Future work (out of scope for v1)
 
-- `version` is the migration hook (currently `2` — the `tasks{}` ledger). Future schema additions ship behind that field.
-- A relaxed-profile schema for cross-plugin agents (apple-developer:*) is documented as a stub in `skills/cross-plugin-handoff/SKILL.md` for future negotiation.
-- Compression of `.context/logs/audit.jsonl` is out of scope.
-- Migration of historical `.context/` artifacts is out of scope.
+`version` is the migration hook (currently `2` — the `tasks{}` ledger); future schema additions ship behind it. A relaxed-profile schema for cross-plugin agents is stubbed in `skills/cross-plugin-handoff/SKILL.md`. Compressing `.context/logs/audit.jsonl` and migrating historical `.context/` artifacts are both out of scope.

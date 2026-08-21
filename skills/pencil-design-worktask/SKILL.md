@@ -14,31 +14,23 @@ related:
 
 Design mockup generation worktask using Pencil MCP tools for the Designer agent.
 
-For design token setup, naming conventions, and storage patterns, see `${CLAUDE_SKILL_DIR}/references/design-tokens.md`
+Token setup, naming conventions, and doc-reference format: `${CLAUDE_SKILL_DIR}/references/design-tokens.md`
 
 ## When to Generate
 
-**Generate mockups when:**
-- Task triggers design detection (score >= 5)
-- New UI screens or components are being created
-- Existing UI is being redesigned or significantly modified
+**Generate** when the task triggers design detection (score >= 5), creates new UI screens or components, or redesigns existing UI significantly.
 
-**Do NOT generate mockups for:**
-- Backend-only tasks (APIs, databases, infrastructure)
-- Minor copy or styling tweaks
-- Tasks explicitly marked as "no UI"
+**Do NOT generate** for backend-only tasks (APIs, databases, infrastructure), minor copy or styling tweaks, or tasks explicitly marked "no UI".
 
 ## Prerequisites
 
 ### Loading Pencil Tools
 
-All Pencil MCP tools are deferred and must be loaded before use:
+Every `mcp__pencil__*` tool is deferred — load them once at the start of a design session:
 
 ```
 ToolSearch({ query: "+pencil" })
 ```
-
-This loads all `mcp__pencil__*` tools. Do this once at the start of any design session.
 
 ### Available Tools
 
@@ -71,43 +63,35 @@ This loads all `mcp__pencil__*` tools. Do this once at the start of any design s
 ### Step 1: Preparation
 
 ```typescript
-// 1. Load Pencil tools (once per session)
-ToolSearch({ query: "+pencil" })
+ToolSearch({ query: "+pencil" })                                   // once per session
 
-// 2. Get design guidelines for the task type
+// Guidelines for the task type — topics: design-system, landing-page, table, code, tailwind
 mcp__pencil__get_guidelines({ topic: "design-system" })
-// Available topics: design-system, landing-page, table, code, tailwind
 
-// 3. Get style guide for design inspiration
+// Style guide for inspiration: list tags, then pick 5-10 relevant ones
 mcp__pencil__get_style_guide_tags()
-// Then pick 5-10 relevant tags:
 mcp__pencil__get_style_guide({ tags: ["mobile", "clean", "minimal", ...] })
 ```
 
 ### Step 2: Create Document
 
 ```typescript
-// Determine workspace-aware path
+// Workspace-aware path — worktrees keep their designs beside their own .context/
 const task = state.tasks[currentTaskId];
 const workspacePath = task.metadata?.workspace_path;
-const designsPath = workspacePath
-  ? `${workspacePath}/.context/designs`
-  : `.context/designs`;
+const designsPath = workspacePath ? `${workspacePath}/.context/designs` : `.context/designs`;
+const filePath = `${designsPath}/mockup-feature-screen.pen`;
 
-// Create the .pen file
-mcp__pencil__open_document({
-  filePathOrTemplate: `${designsPath}/mockup-feature-screen.pen`
-})
+mcp__pencil__open_document({ filePathOrTemplate: filePath })
 ```
 
 ### Step 3: Build Design
 
-Use `batch_design` with operation strings. Max 25 operations per call.
+`batch_design` takes operation strings, max 25 operations per call. For complex designs split into logical sections — structure first, then content, then details.
 
 ```typescript
-// Create screen structure
 mcp__pencil__batch_design({
-  filePath: `${designsPath}/mockup-feature-screen.pen`,
+  filePath,
   operations: `
 screen=I(document, {type: "frame", name: "Login Screen", width: 375, height: 667, fill: "#FFFFFF", layout: "vertical"})
 header=I(screen, {type: "frame", name: "Header", width: "fill_container", height: 88, layout: "horizontal", alignItems: "center", padding: 16})
@@ -117,76 +101,37 @@ content=I(screen, {type: "frame", name: "Content", width: "fill_container", layo
 })
 ```
 
-#### Step 3 continued: content elements
-
-```typescript
-// Add form elements in subsequent calls
-mcp__pencil__batch_design({
-  filePath: `${designsPath}/mockup-feature-screen.pen`,
-  operations: `
-emailLabel=I("content-id", {type: "text", content: "Email", fontSize: 14, fontWeight: "600", fill: "#333333"})
-emailInput=I("content-id", {type: "frame", name: "Email Input", width: "fill_container", height: 48, cornerRadius: 8, fill: "#F5F5F5", stroke: "#CCCCCC"})
-`
-})
-```
-
-For complex designs, split into logical sections (structure first, then content, then details).
+Later calls address already-created nodes by id, same operation syntax: `emailInput=I("content-id", {type: "frame", name: "Email Input", width: "fill_container", height: 48, cornerRadius: 8, fill: "#F5F5F5", stroke: "#CCCCCC"})`.
 
 ### Step 4: Visual Validation
 
+Always validate visually after building: screenshot, analyze, adjust with `U(...)` update operations, re-screenshot.
+
 ```typescript
-// Always validate visually after building
-mcp__pencil__get_screenshot({
-  filePath: `${designsPath}/mockup-feature-screen.pen`,
-  nodeId: "screen-node-id"
-})
-
-// Analyze the screenshot for correctness
-// If adjustments needed, use batch_design with Update operations:
-mcp__pencil__batch_design({
-  filePath: `${designsPath}/mockup-feature-screen.pen`,
-  operations: `U("node-id", {padding: 24, gap: 16})`
-})
-
-// Re-validate
-mcp__pencil__get_screenshot({
-  filePath: `${designsPath}/mockup-feature-screen.pen`,
-  nodeId: "screen-node-id"
-})
+mcp__pencil__get_screenshot({ filePath, nodeId: "screen-node-id" })
+mcp__pencil__batch_design({ filePath, operations: `U("node-id", {padding: 24, gap: 16})` })
+mcp__pencil__get_screenshot({ filePath, nodeId: "screen-node-id" })
 ```
 
 ### Step 5: Handoff Preparation
 
 ```typescript
-// Capture layout structure for developers
-mcp__pencil__snapshot_layout({
-  filePath: `${designsPath}/mockup-feature-screen.pen`,
-  maxDepth: 3
-})
+// Layout structure for developers
+mcp__pencil__snapshot_layout({ filePath, maxDepth: 3 })
 
-// Read specific component details if needed
-mcp__pencil__batch_get({
-  filePath: `${designsPath}/mockup-feature-screen.pen`,
-  patterns: [{ type: "frame" }],
-  readDepth: 2
-})
+// Specific component details, if needed
+mcp__pencil__batch_get({ filePath, patterns: [{ type: "frame" }], readDepth: 2 })
 ```
 
 ## Multiple States in One Document
 
-Multiple UI states can be represented as separate frames within a single .pen file:
+Represent multiple UI states as separate frames in a single .pen file, positioning each with `find_empty_space_on_canvas`:
 
 ```typescript
-// Default state
 defaultScreen=I(document, {type: "frame", name: "Login - Default", width: 375, height: 667, ...})
-
-// Error state (positioned to the right)
 errorScreen=I(document, {type: "frame", name: "Login - Error", width: 375, height: 667, ...})
-// Or use find_empty_space_on_canvas to position:
-mcp__pencil__find_empty_space_on_canvas({
-  filePath: filePath,
-  width: 375, height: 667, padding: 100, direction: "right"
-})
+
+mcp__pencil__find_empty_space_on_canvas({ filePath, width: 375, height: 667, padding: 100, direction: "right" })
 ```
 
 ## Quality Checklist
@@ -205,8 +150,4 @@ Before completing design work:
 
 ## Fallback: Pencil Unavailable
 
-If Pencil MCP tools fail to load or calls error (e.g., Pencil.app not running):
-1. Document the design specifications in text form only
-2. Include detailed layout descriptions and measurements
-3. Note in documentation that visual mockups were not generated
-4. Report the issue so it can be resolved for future tasks
+If Pencil MCP tools fail to load or calls error (e.g. Pencil.app not running): document the design in text only — detailed layout descriptions and measurements — note in the documentation that visual mockups were not generated, and report the issue so it can be fixed for future tasks.

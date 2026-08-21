@@ -9,15 +9,10 @@ const task = state.tasks[currentTaskId];
 const workspacePath = task.metadata?.workspace_path;
 const isolation = task.metadata?.isolation;  // always 'worktree' for file-writing stages
 
-if (isolation === 'worktree') {
-  // WORKTREE MODE: workspace_path IS the worktree directory
-  // All git operations happen inside the worktree
-  // .context/ lives inside the worktree alongside source files
-  const contextPath = `${workspacePath}/.context`;
-} else {
-  // STANDARD MODE: main checkout — orchestrator and non-isolated stages
-  const contextPath = '.context';
-}
+// WORKTREE MODE: workspace_path IS the worktree directory — git operations and
+// .context/ both live inside it. STANDARD MODE: main checkout (orchestrator and
+// non-isolated stages), .context/ at the repo root.
+const contextPath = isolation === 'worktree' ? `${workspacePath}/.context` : '.context';
 ```
 
 ## Path Resolution
@@ -39,20 +34,11 @@ of the current session, NOT paths under the canonical plugin source.
 
 ### Sibling-worktree hazard
 
-The rule above defends against a sibling **clone** and is silent about a sibling **worktree** —
-and that gap is not academic. When the harness pins the session to a stale linked worktree of a
-*different* clone, `git rev-parse --show-toplevel` answers with that worktree. The agent then
-obeys the rule perfectly, writes every edit under the resolved root, and lands the entire stage in
-a tree nobody is watching: `git diff` in the real workspace shows nothing, and the stage reports
-success.
+That rule defends against a sibling **clone** and is silent about a sibling **worktree**. When the harness pins the session to a stale linked worktree of a *different* clone, `git rev-parse --show-toplevel` answers with that worktree: the agent obeys the rule perfectly, writes every edit under the resolved root, and lands the whole stage in a tree nobody is watching — `git diff` in the real workspace shows nothing and the stage reports success.
 
 #### Why every existing check passes on the wrong tree
 
-| Check | Why it passes |
-|---|---|
-| D0 workspace-root self-check | `--show-toplevel` returns the stale tree, so the recorded root and the prompt paths agree |
-| D0.0 worktree isolation | a stale worktree **is** a linked worktree — genuinely isolated |
-| the rule above | edits do target the resolved toplevel |
+Every check is satisfied by the stale tree: D0's workspace-root self-check reads the same `--show-toplevel`, so root and prompt paths agree; D0.0's isolation check is true because a stale worktree genuinely *is* a linked worktree; and the rule above holds because edits do target the resolved toplevel.
 
 The missing predicate is *assignment*: the resolved root must equal the root the stage was
 **dispatched against** (`task.metadata.workspace_path`). That is what
@@ -65,58 +51,23 @@ The missing predicate is *assignment*: the resolved root must equal the root the
 2. Inject `WORKSPACE_ROOT=<path>` as the FIRST LINE of the stage prompt banner (section [7]).
 3. Never allow absolute paths from outside `WORKSPACE_ROOT` in stage prompts — rewrite them as `$WORKSPACE_ROOT/<relative>`.
 
-Failure mode: edits in the sibling repo land on the wrong branch, are not visible to `git diff` in the workspace, require manual `cp` surgery, and corrupt the source repo's working tree.
+Failure mode: edits land in the sibling repo on the wrong branch, invisible to `git diff` in the workspace, requiring manual `cp` surgery and corrupting the source repo's working tree.
 
 ### Branch naming under a host workspace
 
-A host that provisions the workspace also names its branch, and that name carries no
-ticket and no type (Conductor uses `<city>-v<n>` — `amman-v1`, `perth-v2`). Such a
-branch reaching `gh pr create` unchanged produces a PR whose head says nothing about
-the work.
+A host that provisions the workspace also names its branch, and that name carries no ticket and no type (Conductor uses `<city>-v<n>` — `amman-v1`, `perth-v2`). Such a branch reaching `gh pr create` unchanged produces a PR whose head says nothing about the work.
 
 #### Host session authorization
 
-Conductor additionally injects a session rule: *"Do not rename the current branch
-unless the user explicitly tells you to do so."* **Invoking `/worktask` satisfies that
-condition.** A conventionally-named branch and a ticket-referencing PR are part of what
-the pipeline was asked to deliver, so the PL-stage naming step
-(`skills/worktask/scripts/branch-name.sh`, run once at the very start of planning — see
-`skills/shared/git-conventions.md § Branch Naming`) is authorized work rather than an
-unprompted change. Neither the orchestrator nor PL should suspend the pipeline to
-re-ask. This runs at PL start now, not immediately before FN's push — see
-`agents/project-manager.md § Branch naming is a PL-stage concern` for how FN reads the
-resulting name (`facts.branch`) instead of re-deriving or re-renaming it.
+Conductor injects a session rule: *"Do not rename the current branch unless the user explicitly tells you to do so."* **Invoking `/worktask` satisfies that condition** — a conventional branch and a ticket-referencing PR are part of what the pipeline was asked to deliver, so the PL-stage naming step (`skills/worktask/scripts/branch-name.sh`, once at the very start of planning — `skills/shared/git-conventions.md § Branch Naming`) is authorized work, not an unprompted change. Never suspend the pipeline to re-ask. FN reads the resulting `facts.branch` rather than re-deriving or re-renaming it (`agents/project-manager.md § Branch naming is a PL-stage concern`).
 
 #### Scope of the authorization
 
-It covers exactly the rename `branch-name.sh` performs, and nothing further — never
-deleting branches, force-pushing, or rewriting history. **Caveat, stated plainly rather
-than promised as enforced:** the only discriminator the step has is
-`branch_is_conventional` (does the name already match `<type>/[<ticket>-]<slug>`?). A human-chosen
-name that happens not to match — e.g. `spike-oauth-poc` — is indistinguishable from a
-host-provisioned one and **will** be renamed; there is no mechanism that detects "the
-user named this deliberately" versus "the host assigned this by default". If that
-matters in your workflow, rename to a conventional form yourself before invoking
-`/worktask`, or accept the rename as part of what the pipeline does.
-
-#### Scope of the authorization — R6 widens the caveat
-
-Since R6 the host-workspace arm **widens** this caveat rather than narrowing it: a linked worktree is
-renamed too, so a deliberate name is indistinguishable from a host-assigned one in *every*
-checkout, not just plain ones. `BRANCH_NAME_WORKTREE_RENAME=0` restores the previous
-defer-to-host behaviour inside worktrees.
+It covers exactly the rename `branch-name.sh` performs — never branch deletion, force-push, or history rewrite. **Caveat, stated plainly rather than promised as enforced:** the step's only discriminator is `branch_is_conventional` (does the name match `<type>/[<ticket>-]<slug>`?), so a deliberate human name that does not match — `spike-oauth-poc` — is indistinguishable from a host placeholder and **will** be renamed. Since R6 the caveat is *wider*, not narrower: linked worktrees are renamed too, so it applies in every checkout. Mitigations: rename to a conventional form before invoking `/worktask`, or set `BRANCH_NAME_WORKTREE_RENAME=0` (restores defer-to-host inside worktrees).
 
 #### Timing
 
-The rename runs at the very start of planning — before PL0 exists, and therefore before
-the plan-approval gate, the pipeline's only human checkpoint. If the operator later
-declines the plan, the branch has already been renamed and nothing renames it back
-automatically. `--auto=[plan]`, `--emergency`, and `/megatask` remove the approval gate
-entirely, so this rename is the only pre-approval action any of them take. R6 widens *which
-runs* take it: the rename now fires inside linked worktrees too, so the set is every checkout
-with a non-conventional name rather than plain checkouts only. `/megatask` and `--emergency`
-are unaffected (they self-disable at the first ladder position); `--auto=[plan]` is the exposed
-combination, and `BRANCH_NAME_WORKTREE_RENAME=0` is the mitigation.
+The rename runs at the very start of planning — before PL0 exists, therefore before the plan-approval gate, the pipeline's only human checkpoint — and nothing renames it back if the operator later declines the plan. `--auto=[plan]`, `--emergency` and `/megatask` remove that gate, making this the only pre-approval action any of them take; `/megatask` and `--emergency` self-disable at the first ladder position, so `--auto=[plan]` is the exposed combination and `BRANCH_NAME_WORKTREE_RENAME=0` the mitigation.
 
 #### Rollback
 
@@ -125,108 +76,57 @@ restores it manually if a declined plan needs the old name back.
 
 #### Guard ladder — two names, one per decision
 
-Every arm exits 0 and returns two names: `branch=<name>` is the LOCAL branch after the run
-(the final stdout line), `target_branch=` is what the **remote** branch — the PR head —
-should carry. Blocking the rename never blocks the target.
-
-| Guard | Local branch | `target_branch=` |
-|---|---|---|
-| Already conventional | no-op — a deliberate name is never churned | empty — `branch=` is the answer |
-| Upstream tracked | no-op — a rename orphans the remote ref | derived |
-| On the integration branch | refuses | empty — never a PR head |
-| Target name exists | no-op | derived |
-| **Host workspace (linked worktree)** | **renamed (default) — `BRANCH_NAME_WORKTREE_RENAME=0` keeps the host's name** | **derived** |
-| jq unavailable | no-op — batch scope unknowable | derived if `--goal` passed |
-| Detached HEAD / no repo / batch routing | skipped | empty |
+Canonical ladder and the two-name contract — `branch=<name>` is the LOCAL branch after the run (final stdout line), `target_branch=` is what the **remote** branch (the PR head) should carry, and blocking the rename never blocks the target: `skills/shared/git-conventions.md § Guard ladder (every arm is a no-op or a refusal, never a failure)`. Every arm exits 0. Two further no-op arms matter in batch/worktree runs: **jq unavailable** (batch scope unknowable — `target_branch=` derived only if `--goal` was passed) and **batch routing** (skipped, `target_branch=` empty).
 
 Running at PL start retires the hazard the upstream guards catch — no push yet to orphan.
 
 #### Host mapping — updated, not preserved
 
-Inside a linked worktree the naming step **renames the local branch**, like any other
-checkout, so `branch=` and `target_branch=` agree. The host's branch↔workspace mapping is
-updated by that rename — deliberately: a host-assigned placeholder is not a name worth
-preserving, and a host may rename the branch again mid-run without telling the pipeline
-(observed: Conductor renamed a branch from `cape-town` to a chat-topic slug mid-run, with no
-notification and no audit row). Set `BRANCH_NAME_WORKTREE_RENAME=0` to restore the previous
-defer-to-host behaviour, in which the local name is kept and only `target_branch=` is derived,
-auditing `branch_renamed / skipped` with `reason: host_workspace_worktree`.
+Inside a linked worktree the naming step **renames the local branch**, like any other checkout, so `branch=` and `target_branch=` agree. That rename updates the host's branch↔workspace mapping — deliberately: a host-assigned placeholder is not worth preserving, and a host may rename again mid-run without telling the pipeline (observed: Conductor renamed `cape-town` to a chat-topic slug mid-run, no notification, no audit row). `BRANCH_NAME_WORKTREE_RENAME=0` restores defer-to-host: local name kept, only `target_branch=` derived, auditing `branch_renamed / skipped` with `reason: host_workspace_worktree`.
 
 #### Host mapping — detection is unchanged, only what it gates
 
-The detection is unchanged — only what it gates. A linked worktree is the shape every
-worktree-based host provisions, detected as `git rev-parse --git-dir != --git-common-dir`,
-which is the only signal a host workspace reliably leaves (Conductor writes no
-`workspace.json` in `$PWD`, so none of `fn_batch_scope`'s five signals fire).
-
-The rename is disclosed on stdout at the moment it happens, naming both the re-sync
-consequence and the opt-out, and repeated in the Step A.5 plan-gate summary.
+A linked worktree is the shape every worktree-based host provisions, detected as `git rev-parse --git-dir != --git-common-dir` — the only signal a host workspace reliably leaves (Conductor writes no `workspace.json` in `$PWD`, so none of `fn_batch_scope`'s five signals fire). The rename is disclosed on stdout as it happens, naming both the re-sync consequence and the opt-out, and repeated in the Step A.5 plan-gate summary.
 
 #### Host mapping — where the target lands
 
-The orchestrator stamps that target into `facts.branch` (`commands/worktask.md § Step 3c —
-which of the two names gets stamped`) and FN's existing
-`git push -u origin HEAD:refs/heads/<facts.branch>` gives the PR a conventional head
-(`agents/project-manager.md § Final FN steps`).
+The orchestrator stamps the target into `facts.branch` (`commands/worktask.md § Step 3c — which of the two names gets stamped`) and FN's `git push -u origin HEAD:refs/heads/<facts.branch>` gives the PR a conventional head (`agents/project-manager.md § Final FN steps`).
 
-On the **default** worktree path the two names now agree, so there is no divergence left to
-reconcile. Divergence remains designed on the **opt-out** path and on the `upstream_tracked`,
-`target_exists` and `jq_unavailable` arms — that is where this mechanism still applies.
-
-#### Host mapping — divergence is now observed
-
-Divergence is now *observed* rather than merely tolerated: `fn-preflight.sh branch-divergence`
-classes it `expected` (any of the arms above, or an R4 refinement) or `third_party` (something
-outside the pipeline renamed the branch after the naming step). Only `third_party` is surfaced
-at the FN gate. The comparison base is the `to` of the last `branch_renamed / ok` row — not
-`facts.branch` — which is what keeps an R4 refinement from ever looking like an external rename.
+On the **default** worktree path the two names agree, leaving no divergence to reconcile. Divergence stays designed on the **opt-out** path and on the `upstream_tracked`, `target_exists` and `jq_unavailable` arms, where `fn-preflight.sh branch-divergence` observes and classes it (`expected` vs `third_party`, only the latter surfaced at the FN gate) — semantics in `handoff-protocol.md § Field notes — branch, divergence from the local branch name`.
 
 ## Task ID Namespacing
 
-The ledger key is `<STAGE>0` in every track — the worktree supplies the namespace, so the key
-never has to.
+The ledger key is `<STAGE>0` in every track (`PL0`, `AR0`, `DV0`, …) — the worktree supplies the namespace, so the key never has to. Each track holds its own `.context/state.json` inside its own worktree, so identical ids across tracks address different ledgers and cannot collide.
 
-| Track | Task IDs |
-|-------|----------|
-| Track 1 | `PL0`, `AR0`, `DV0`, ... |
-| Track N | `PL0`, `AR0`, `DV0`, ... |
-
-Each track holds its own `.context/state.json` inside its own worktree, so identical ids across
-tracks address different ledgers and cannot collide.
-
-See `../../megatask/SKILL.md` (§ Workspace Architecture) for full workspace documentation.
+Full workspace documentation: `../../megatask/SKILL.md § Workspace Architecture`.
 
 ## DV Worktree Mechanics
 
-Base-ref, background, and lifecycle rules for the DV stage worktree, extracted from `agents/developer.md § Worktree Mode` (Phase-4 diet). The developer agent keeps the D0.0 isolation gate + cwd-discipline path check inline and points here for the mechanics.
+Base-ref, background, and lifecycle rules for the DV stage worktree. `agents/developer.md` keeps the D0.0 isolation gate + cwd-discipline path check inline and points here for the mechanics.
 
 ### Worktree Mode (DV)
 
-All DV operations use worktree path prefix — isolation is always active. Use `EnterWorktree`/`ExitWorktree` tools to programmatically enter/leave worktree contexts. `EnterWorktree` accepts a `path` parameter to target a specific worktree directory when multiple exist; it can also **switch between Claude-managed worktrees mid-session** (re-target without `ExitWorktree` first). Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. For large repos, `worktree.sparsePaths` reduces checkout size. See `skills/megatask/SKILL.md`.
+All DV operations use the worktree path prefix — isolation is always active. `EnterWorktree`/`ExitWorktree` enter and leave worktree contexts; `EnterWorktree` takes a `path` to target a specific worktree and can **switch between Claude-managed worktrees mid-session** (re-target without `ExitWorktree` first). Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. For large repos, `worktree.sparsePaths` reduces checkout size. See `skills/megatask/SKILL.md`.
 
 ##### Do not rely on auto-cleanup
 
-This document previously stated that stale worktrees are auto-cleaned and that each delegation
-gets a fresh one with no reuse of prior-session worktrees. A run disproved it: a DV stage was
-pinned to a prior session's worktree, of a different clone, and wrote nothing for a full stage
-cycle. Treat a fresh worktree as the *intent* and assert it — run `dv-tree-preflight.sh
---assigned` (D0.0a) rather than assuming the lifecycle held.
+A fresh worktree per delegation is the *intent*, not a guarantee: one run pinned a DV stage to a prior session's worktree, of a different clone, and wrote nothing for a full stage cycle. Assert it — run `dv-tree-preflight.sh --assigned` (D0.0a).
 
 ##### Base-ref resolution
 
-Base-branch resolution is controlled by the `worktree.baseRef` setting: `head` (default — branch from local HEAD) or `fresh` (branch from base ref, drops unpushed work). The plugin assumes `head` semantics; do not set `fresh` without coordinating with workflow-engineer. `worktree.baseRef:"head"` resolves the *current* linked worktree's HEAD (not the main checkout's HEAD) when spawning subagents or `EnterWorktree` from inside a worktree — no diverged bases in nested-worktree flows.
+`worktree.baseRef` controls base-branch resolution: `head` (default — branch from local HEAD) or `fresh` (branch from base ref, drops unpushed work). The plugin assumes `head`; do not set `fresh` without coordinating with workflow-engineer. `head` resolves the *current* linked worktree's HEAD (not the main checkout's) when spawning subagents or entering a worktree from inside one — no diverged bases in nested-worktree flows.
 
 ##### Per-task base override
 
-When the merge target is not the worktask default (e.g. shipping into `origin/release/v2` instead of `origin/master`), PL0 sets `task.metadata.base_ref: "origin/release/v2"`. The DV agent honours `task.metadata.base_ref` (when present) over the session-level `worktree.baseRef` for both `git diff` ranges in test selection (D2) and `EnterWorktree` base resolution; the orchestrator passes `--base-ref` to `EnterWorktree` when invoked from a higher-level dispatcher (see `skills/agent-coordination/references/headless-dispatch.md`). When neither is set, the `worktree.baseRef` setting governs.
+When the merge target is not the worktask default (e.g. `origin/release/v2` instead of `origin/master`), PL0 sets `task.metadata.base_ref`. DV honours it over the session-level `worktree.baseRef` for both `git diff` ranges in test selection (D2) and `EnterWorktree` base resolution; a higher-level dispatcher passes `--base-ref` to `EnterWorktree` (`skills/agent-coordination/references/headless-dispatch.md`). Neither set → `worktree.baseRef` governs.
 
 ##### Base-ref resolution order
 
-PL0 also mirrors the detected branch to `state.json .metadata.base_ref` unconditionally, because shell helpers cannot read Task-System metadata. Every reader — DV, `fn-preflight.sh continuity`, `branch-name.sh` (via `branch-lib.sh resolve_base_ref`) — resolves through one order, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`, `workspace.json .git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. There is no hardcoded literal at the end of that chain; an unresolved base is reported and the caller degrades non-blocking. Canonical statement: `handoff-protocol.md § metadata.base_ref`.
+PL0 also mirrors the detected branch to `state.json .metadata.base_ref` unconditionally, because shell helpers cannot read Task-System metadata. Every reader — DV, `fn-preflight.sh continuity`, `branch-name.sh` (via `branch-lib.sh resolve_base_ref`) — resolves through one order, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`, `workspace.json .git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. No hardcoded literal ends that chain; an unresolved base is reported and the caller degrades non-blocking. Canonical: `handoff-protocol.md § metadata.base_ref`.
 
 ##### Background & shared-checkout rules
 
-Background subagents spawned via `claude agents` cannot escape their assigned worktree scope (the worktree-isolation guard covers them). Background-session dispatch recognises pre-existing git worktrees (e.g., Conductor `.context` workspaces, externally-managed worktree shells) instead of refusing to spawn with a duplicate-creation error — `Edit` is not blocked when `EnterWorktree` would have collided. A background session on a *shared* checkout (no isolated worktree of its own) is told upfront that edits are blocked until it runs `EnterWorktree` — the worktree contract is enforced at the start of the session rather than surfacing as a rejected edit mid-work.
+Background subagents spawned via `claude agents` cannot escape their assigned worktree scope (the worktree-isolation guard covers them). Background dispatch recognises pre-existing git worktrees (Conductor `.context` workspaces, externally-managed worktree shells) instead of refusing to spawn with a duplicate-creation error, so `Edit` is not blocked where `EnterWorktree` would have collided. A background session on a *shared* checkout (no isolated worktree) is told upfront that edits are blocked until it runs `EnterWorktree` — contract at session start, not a rejected edit mid-work.
 
 ##### Out-of-tree confirmation guard
 
@@ -234,4 +134,4 @@ Background subagents spawned via `claude agents` cannot escape their assigned wo
 
 ##### Background session lifecycle
 
-Background agents launched via `/bg` or `←←` preserve the active permission mode across retire/wake — a permissive `bypassPermissions` parent does not revert to `default` after the daemon hibernates. Sub-agents in isolated worktrees automatically get Read/Edit access to their own worktree. Stalled subagents fail with a clear error after 10 minutes — surface and retry rather than waiting. Subagents resumed via `SendMessage` restore their explicit spawn `cwd` correctly. "Always allow" permission rules save at the repository root and persist across every worktree of that repo — a rule approved in one background/worktree session is not re-prompted in a sibling worktree.
+Background agents launched via `/bg` or `←←` preserve the active permission mode across retire/wake — a `bypassPermissions` parent does not revert to `default` after the daemon hibernates. Sub-agents in isolated worktrees get Read/Edit access to their own worktree automatically. Stalled subagents fail with a clear error after 10 minutes — surface and retry rather than waiting. Subagents resumed via `SendMessage` restore their explicit spawn `cwd`. "Always allow" rules save at the repository root and persist across every worktree of that repo, so a rule approved in one background/worktree session is not re-prompted in a sibling worktree.

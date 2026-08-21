@@ -8,27 +8,15 @@ effort: low
 
 Use the `pandoc` CLI to read rich document formats (docx, odt, rtf, epub, html, latex) and document URLs as clean markdown. Pandoc is optional — always preflight and degrade gracefully.
 
-## Preflight
-
-Never assume pandoc is installed:
+## Usage
 
 ```bash
-command -v pandoc >/dev/null   # non-zero exit → use the Fallback order below
-```
-
-## Local files
-
-```bash
-pandoc -t gfm <path>   # auto-detects docx/odt/rtf/epub/html/latex/…
+command -v pandoc >/dev/null   # preflight; non-zero exit → use the Fallback order below
+pandoc -t gfm <path>           # local file; auto-detects docx/odt/rtf/epub/html/latex/…
+pandoc -f html -t gfm <url>    # fetch + convert an HTML/document URL
 ```
 
 Use over `Read` **only** when the file is NOT already plaintext/markdown.
-
-## Remote URLs
-
-```bash
-pandoc -f html -t gfm <url>   # fetch + convert an HTML/document URL to markdown
-```
 
 ## When NOT to use
 

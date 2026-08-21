@@ -1,31 +1,33 @@
 # Target Mapping Rules
 
-Every classified diff hunk must be mapped to exactly one owning file (the "target"). After mapping, the target is **filtered** against the used-in-context set from `SKILL.md § Step 1`. Out-of-context targets are discarded.
+Every classified diff hunk maps to exactly one owning file (the "target"). The target is then **filtered** against the used-in-context set from `SKILL.md § Step 1`; out-of-context targets are discarded.
 
 ## Mapping Rules (apply first match)
+
+Row numbers are the `rule_num` emitted by `scripts/map-and-filter.sh`, so a proposal traces back to the rule that produced it. Artifact patterns match the glob, not one filename: every numbered `<artifact>-N.md` belongs to the stage that produces it.
 
 ### Prompt & early-stage artifacts (rules 1–5)
 
 | # | Pattern of changed file | Target | Notes |
 |---|--------------------------|--------|-------|
-| 1 | `agents/<name>.md`, `skills/**/SKILL.md`, `commands/<name>.md` | The file itself | User edited the prompt directly — self-signal. Map to that file. |
-| 2 | `.context/planning-*.md` (numbered, e.g. `planning-0.md`, `planning-1.md`) | `agents/product-manager.md` | Producer lookup via stage-contracts. Match the glob — every numbered plan is owned by PM. |
-| 3 | `.context/architecture-*.md` | `agents/software-architector.md` | Match the glob — every numbered artifact owned by AR. |
+| 1 | `agents/<name>.md`, `skills/**/SKILL.md`, `commands/<name>.md` | The file itself | Direct prompt edit — self-signal. |
+| 2 | `.context/planning-*.md` | `agents/product-manager.md` | |
+| 3 | `.context/architecture-*.md` | `agents/software-architector.md` | |
 | 4 | `.context/coordination-*.md` | `agents/team-lead.md` | |
+| 5 | `.context/development-*.md` | `metadata.agent` of the DV task (resolve from the ledger) | Platform-aware: `corpflow:developer`, `apple-developer:ios-developer`, etc. |
 
 ### Mid-stage artifacts (rules 6–11)
 
-| # | Pattern of changed file | Target | Notes |
-|---|--------------------------|--------|-------|
-| 5 | `.context/development-*.md` | `metadata.agent` of the DV task (resolve from the ledger) | Platform-aware: could be `corpflow:developer`, `apple-developer:ios-developer`, etc. |
-| 6 | `.context/developer-review-*.md` | `agents/technical-lead.md` | |
-| 7 | `.context/security-review-*.md` | `agents/security-reviewer.md` | |
-| 8 | `.context/testing-*.md` | `agents/qa-engineer.md` | |
-| 9 | `.context/documentation-*.md` | `agents/technical-writer.md` | |
-| 10 | `.context/release-*.md` | `agents/release-engineer.md` | |
-| 11 | `.context/complete-summary-*.md` | `agents/project-manager.md` | |
+| # | Pattern of changed file | Target |
+|---|--------------------------|--------|
+| 6 | `.context/developer-review-*.md` | `agents/technical-lead.md` |
+| 7 | `.context/security-review-*.md` | `agents/security-reviewer.md` |
+| 8 | `.context/testing-*.md` | `agents/qa-engineer.md` |
+| 9 | `.context/documentation-*.md` | `agents/technical-writer.md` |
+| 10 | `.context/release-*.md` | `agents/release-engineer.md` |
+| 11 | `.context/complete-summary-*.md` | `agents/project-manager.md` |
 
-### Late-stage artifacts (rules 12–14)
+### Late-stage artifacts, source, tests & config (rules 12–17)
 
 | # | Pattern of changed file | Target | Notes |
 |---|--------------------------|--------|-------|
@@ -34,35 +36,21 @@ Every classified diff hunk must be mapped to exactly one owning file (the "targe
 | 14 | `README.md`, `docs/**`, `*.md` at repo root | `agents/technical-writer.md` | Only if DC stage ran in this worktask. |
 | 15 | Tests (`tests/**`, `**/*Tests.swift`, `**/*_test.py`, `spec/**`) | `agents/qa-engineer.md` | Only if QA stage ran. |
 | 16 | Config (`*.json`, `*.toml`, `*.yml`, `*.yaml`, `Makefile`, `Package.swift`) | Resolved DV agent (row 5) | Exception: `plugin.json` → `agents/workflow-engineer.md`. |
-
-### Source, tests & config (rules 15–17)
-
-| # | Pattern of changed file | Target | Notes |
-|---|--------------------------|--------|-------|
-| 17 | No rule matched | Discard (logged) | Log under `## Out-of-Context Discards` in the run log. |
+| 17 | No rule matched | Discard | Log under `## Out-of-Context Discards` in the run log. |
 
 ## In-Context Filter (mandatory)
 
-After mapping, compare the target path against the used-in-context set:
+Keep the proposal only if the mapped target path is in the used-in-context set; otherwise log it under "Out-of-Context Discards" and leave it out of `learnings.md`.
 
-```
-if target_path in used_in_context_set:
-    keep the proposal
-else:
-    log under "Out-of-Context Discards"; do NOT include in learnings.md
-```
-
-**Why:** if the user edited an artifact produced by an agent that did not participate in this worktask (e.g., user tweaked `.context/security-review-N.md` from a previous run while running a non-secure worktask), we must not propose updates to `agents/security-reviewer.md` — SR did not participate, so the edit belongs to a different feedback loop.
+**Why:** an artifact produced by an agent that never ran here belongs to a different feedback loop. If the user tweaks `.context/security-review-N.md` left over from an earlier run during a non-secure worktask, updating `agents/security-reviewer.md` would mean learning from a stage that did not participate.
 
 ## Platform-Aware Resolution
 
-When a stage was delegated to a cross-plugin agent (e.g., `apple-developer:ios-developer`):
+When a stage was delegated to a cross-plugin agent (e.g. `apple-developer:ios-developer`), the target path is `plugins/<plugin>/agents/<basename>.md`, with the plugin taken from the qualified agent name. If that plugin lives outside this repo, discard the proposal and log:
 
-- Target path = `plugins/<plugin>/agents/<basename>.md` where plugin comes from the qualified agent name.
-- If the target plugin is outside this repo (external), discard the proposal and log:
-  ```
-  Cross-plugin target skipped: <qualified-agent> lives in <plugin>, not editable from this worktask.
-  ```
+```
+Cross-plugin target skipped: <qualified-agent> lives in <plugin>, not editable from this worktask.
+```
 
 ## Edge Cases
 
@@ -70,47 +58,29 @@ When a stage was delegated to a cross-plugin agent (e.g., `apple-developer:ios-d
 |-----------|------|
 | Hunk touches multiple files | Split into per-file hunks before mapping. |
 | File moved/renamed in diff | Use the NEW path for mapping. |
-| Binary file edited | Discard; log under `Discards` with reason `binary`. |
+| Binary file edited | Discard; log with reason `binary`. |
 | File in `.context/logs/` edited | Discard; logs are ephemeral, not a learning signal. |
 | File in `.context/errors/` edited | Discard; error narratives are already captured. |
-| File matches `skills/self-improvement/**` | Discard; self-edits to this skill go through normal code review, not self-improvement loop (avoid recursion). |
+| File matches `skills/self-improvement/**` | Discard; self-edits to this skill go through normal code review (avoid recursion). |
 
 ## Data Sources for "Used-in-Context Set"
 
-`SKILL.md § Step 1` defines precedence; this section lists the exact query shape.
+`SKILL.md § Step 1` defines precedence; these are the exact query shapes.
 
-### From the ledger
+- **Ledger:** for each task with `status == "completed"`, add `metadata.agent` (normalize `corpflow:<name>` → `agents/<name>.md`) and comma-split `metadata.embedded_commands` → `commands/<name>.md` paths.
+- **`.context/*.md` metadata:** parse the trailer block where present and add its entries:
 
-```
-For each task where status == "completed":
-  add metadata.agent  (normalize `corpflow:<name>` → agents/<name>.md path)
-  add metadata.embedded_commands (comma-split → commands/<name>.md paths)
-```
+  ```
+  ---
+  metadata:
+    agent: corpflow:developer
+    embedded_commands: apple-developer:fix-refactor
+  ---
+  ```
 
-### From `.context/*.md` metadata
+- **Git trailers:** where project policy uses them, scan `git log <agent_sha>..HEAD --format=%B` for `Agent:` / `Stage:` lines.
 
-Each stage artifact may include a trailer like:
-```
----
-metadata:
-  agent: corpflow:developer
-  embedded_commands: apple-developer:fix-refactor
----
-```
-
-Parse this block (if present) and add to the set.
-
-### From git trailers
-
-If the project policy uses `Agent:` / `Stage:` git trailers, scan `git log <agent_sha>..HEAD --format=%B` for trailer lines:
-```
-Agent: corpflow:developer
-Stage: DV
-```
-
-### Normalization
-
-All sources produce file paths. Deduplicate. Drop paths that don't exist on disk.
+All sources produce file paths: deduplicate, then drop paths that don't exist on disk.
 
 ## Cross References
 

@@ -5,13 +5,11 @@ description: Canonical, provider-agnostic rule for resolving the corpflow plugin
 
 # Plugin-Root Resolution (provider-agnostic)
 
-**Definition**: the plugin root is the directory containing `.claude-plugin/plugin.json`
-for the corpflow plugin. Known layouts:
-
-- Claude Code cache: `~/.claude/plugins/cache/igrsoft/corpflow/<version>/` — **version-keyed;
-  never hardcode** a versioned path.
-- Plain git clone: the repository root.
-- Any other harness: wherever it installed the plugin directory.
+**Definition**: the directory containing `.claude-plugin/plugin.json` for the corpflow
+plugin. Known layouts: the Claude Code cache
+`~/.claude/plugins/cache/igrsoft/corpflow/<version>/` — **version-keyed, never hardcode
+it**; a plain git clone, where it is the repository root; or wherever another harness
+installed the plugin directory.
 
 ## Why `CLAUDE_PLUGIN_ROOT` alone is not enough
 
@@ -24,28 +22,24 @@ for the corpflow plugin. Known layouts:
    set in the model's Bash tool environment.
 
 So the token resolves only when Claude Code itself loads or launches the file. It is
-literal (and dead) whenever a subagent `Read`s a plugin file from disk, when a snippet
-is copy-pasted into another prompt, or when any non-Claude-Code harness consumes these
-skills. Every path convention below must therefore work in all three states:
-substituted, expanded-to-empty, and literal prose.
+literal and dead whenever a subagent `Read`s a plugin file from disk, when a snippet is
+copy-pasted into another prompt, or when a non-Claude-Code harness consumes these skills.
+Every path convention below must work in all three states: substituted, expanded-to-empty,
+and literal prose.
 
 ## Resolution ladder
 
-Resolve the plugin root by trying, in order:
-
-1. **`$CLAUDE_PLUGIN_ROOT` when actually set in the executing shell** — true for Claude
-   Code hook subprocesses and for tests that export it. An explicitly set value always
-   wins (tests rely on this override contract).
-2. **Skill base directory, minus `/skills/<name>`** — every agent-skills harness
-   (Claude Code included) announces "Base directory for this skill: `<path>`" when a
-   skill loads. For any corpflow skill that path is `<plugin-root>/skills/<name>`, so the
-   plugin root is two directory levels up.
+1. **`$CLAUDE_PLUGIN_ROOT` when actually set in the executing shell** — true for hook
+   subprocesses and for tests that export it. An explicitly set value always wins (tests
+   rely on this override contract).
+2. **Skill base directory, minus `/skills/<name>`** — every agent-skills harness announces
+   "Base directory for this skill: `<path>`" on load. For any corpflow skill that path is
+   `<plugin-root>/skills/<name>`, so the root is two levels up.
 
 ### Rungs 3–4 and validation
 
-3. **Read-path derivation** — if you `Read` any plugin file from disk you know its
-   absolute path: walk up to the nearest ancestor directory containing
-   `.claude-plugin/plugin.json`.
+3. **Read-path derivation** — a file you `Read` from disk gives you its absolute path: walk
+   up to the nearest ancestor containing `.claude-plugin/plugin.json`.
 4. **Claude Code cache last resort** (CC installs only):
    `ls -d ~/.claude/plugins/cache/igrsoft/corpflow/*/ 2>/dev/null | sort -V | tail -1`
    — may be stale if an older version is pinned, so validate before trusting.
@@ -54,8 +48,8 @@ Resolve the plugin root by trying, in order:
 
 ## Canonical executable-snippet shape (markdown)
 
-Fenced snippets in skills/commands that call bundled helpers use this preamble, keeping
-their existing `-f` guard and audit-deferral bodies unchanged:
+Fenced snippets that call bundled helpers use this preamble, keeping their existing `-f`
+guard and audit-deferral bodies unchanged:
 
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
@@ -67,12 +61,12 @@ HELPER="$PLUGIN_ROOT/skills/<skill>/scripts/<helper>.sh"
 
 ### Why this shape
 
-Under Claude Code the first line is substituted at load time and the
-fallback is dead code; everywhere else the unset variable expands to empty, the `-d`
-test fails, and the executor substitutes `<plugin-root>` using the ladder above (it
-knows the skill base directory or the path it read the file from). If the placeholder
-is pasted verbatim, the downstream `-f` guard fails exactly like today's unresolved
-paths — graceful deferral, never a hard error.
+Under Claude Code the first line is substituted at load time and the fallback is dead code.
+Everywhere else the unset variable expands to empty, the `-d` test fails, and the executor
+substitutes `<plugin-root>` via the ladder above (it knows either the skill base directory
+or the path it read the file from). If the placeholder is pasted verbatim, the downstream
+`-f` guard fails exactly like today's unresolved paths — graceful deferral, never a hard
+error.
 
 ## Author rules
 
@@ -80,20 +74,18 @@ paths — graceful deferral, never a hard error.
 
 - **Markdown may contain the token only in its exact bare dollar-brace form** — never
   compose a longer path by appending a slash and segments after the closing brace, and
-  never use the shell default-value form (colon-dash) inside the braces. Composition
-  breaks the moment the token is not substituted; the default-value form both forfeits
-  Claude Code's load-time substitution and risks mangled output from partial matchers.
-  Whitelisted exceptions (they are Claude Code-native config, parsed only by Claude
-  Code): the `hooks` block of `.claude-plugin/plugin.json`, `hooks:` entries in agent
-  frontmatter, and verbatim documentation of those entries
-  (`skills/worktask/references/handoff-protocol.md`).
+  never use the shell default-value (colon-dash) form inside the braces. Composition breaks
+  the moment the token is not substituted; the default-value form forfeits load-time
+  substitution and risks mangled output from partial matchers. Whitelisted exceptions, all
+  Claude Code-native config parsed only by Claude Code: the `hooks` block of
+  `.claude-plugin/plugin.json`, `hooks:` entries in agent frontmatter, and verbatim
+  documentation of those entries (`skills/worktask/references/handoff-protocol.md`).
 
 ### Prose and shell-script paths
 
 - **Prose instructions** write helper paths plugin-root-relative (e.g.
-  `hooks/megatask-monitor.sh`) followed by:
-  "(plugin root: `${CLAUDE_PLUGIN_ROOT}` if available, else resolve per
-  `skills/shared/plugin-root-resolution.md`)".
+  `hooks/megatask-monitor.sh`) followed by: "(plugin root: `${CLAUDE_PLUGIN_ROOT}` if
+  available, else resolve per `skills/shared/plugin-root-resolution.md`)".
 - **Shell scripts** (never load-substituted, only executed) use env-first with a
   self-location fallback validated against the `.claude-plugin/plugin.json` marker.
   Reference implementations: `find_plugin_root()` in

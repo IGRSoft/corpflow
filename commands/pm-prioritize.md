@@ -35,16 +35,28 @@ Apply RICE, WSJF, or other prioritization frameworks to rank features and tasks.
 /pm-prioritize "Add dark mode support"
 /pm-prioritize --framework wsjf "Implement SSO"
 /pm-prioritize --batch backlog.md --compare
+/pm-prioritize --batch backlog.md --framework ice --export
 ```
+
+## Frameworks
+
+| Framework | Score | Best for |
+|-----------|-------|----------|
+| RICE (default) | `(Reach × Impact × Confidence) / Effort` | Data-driven teams, measurable reach |
+| WSJF | `Cost of Delay / Job Duration`, Cost of Delay = user/business value + time criticality + risk reduction (each 1-10) | SAFe teams, time-sensitive features |
+| ICE | `Impact × Confidence × Ease` (each 1-10) | Quick prioritization, early stage |
+| MoSCoW | Must / Should / Could / Won't-this-quarter buckets | Fixed scope, release planning |
+
+RICE inputs: Reach in users per quarter, Impact on the 0.25-3 scale (2 = High), Confidence as a percentage, Effort in person-months.
 
 ## Output Format
 
-### RICE Framework (Default)
+### Single item — RICE (default)
+
 ~~~markdown
 # RICE Prioritization: Add Dark Mode Support
 
 ## Scores
-
 | Factor | Value | Rationale |
 |--------|-------|-----------|
 | **Reach** | 5,000 users/quarter | 50% of active users requested |
@@ -53,114 +65,32 @@ Apply RICE, WSJF, or other prioritization frameworks to rank features and tasks.
 | **Effort** | 2 person-months | Frontend + design work |
 
 ## RICE Score Calculation
-
 ```
 RICE = (Reach × Impact × Confidence) / Effort
-RICE = (5000 × 2 × 0.8) / 2
-RICE = 4,000
+RICE = (5000 × 2 × 0.8) / 2 = 4,000
 ```
-~~~
 
-#### RICE — priority, ranking, recommendation
-
-```markdown
-<!-- …continued: RICE output -->
 ## Priority: **High**
 
 ### Ranking Context
 | Item | RICE Score | Rank |
 |------|------------|------|
-| Dark Mode | 4,000 | #2 |
 | SSO Integration | 6,500 | #1 |
-| Export Feature | 2,100 | #3 |
+| Dark Mode | 4,000 | #2 |
 
 ## Recommendation
+Target quarter and why (demand, effort, metric moved), then **Dependencies**
+and **Risks** with mitigations.
+~~~
 
-Prioritize for **Q1 [Year]** based on:
-- High user demand (50% of feedback mentions this)
-- Reasonable effort with clear scope
-- Improves retention metrics
+### Other frameworks
 
-### Dependencies
-- Design system color tokens (in progress)
-- User preference storage (complete)
+Same shape — swap the Scores table for that framework's factors and the calculation for its formula. WSJF and ICE close on the same `## Priority: **{level}**` line (WSJF 4.6 → Critical; ICE 6 × 9 × 7 = 378 → Medium). MoSCoW drops scoring entirely and lists items under `## Must Have`, `## Should Have`, `## Could Have`, `## Won't Have (this quarter)`.
 
-### Risks
-- Testing across all screens (mitigate with component-based approach)
-```
+### Batch mode
 
-### WSJF Framework
-```markdown
-# WSJF Prioritization: Implement SSO
+`--batch <file>` reads a markdown list of one item per line and returns the ranked table:
 
-## Scores
-
-| Factor | Value (1-10) | Rationale |
-|--------|--------------|-----------|
-| **User/Business Value** | 8 | Enterprise customers require it |
-| **Time Criticality** | 9 | Losing deals without it |
-| **Risk Reduction** | 6 | Reduces security burden |
-| **Cost of Delay** | 23 | Sum of above |
-| **Job Duration** | 5 | 2 sprints estimated |
-
-## WSJF Score
-
-```
-WSJF = Cost of Delay / Job Duration
-WSJF = 23 / 5
-WSJF = 4.6
-```
-
-## Priority: **Critical**
-```
-
-### ICE Framework
-```markdown
-# ICE Prioritization: Export Feature
-
-| Factor | Score (1-10) | Rationale |
-|--------|--------------|-----------|
-| **Impact** | 6 | Useful but not critical |
-| **Confidence** | 9 | Well-understood feature |
-| **Ease** | 7 | Straightforward implementation |
-
-## ICE Score: 6 × 9 × 7 = 378
-
-## Priority: **Medium**
-```
-
-### MoSCoW Classification
-```markdown
-# MoSCoW: Q1 Features
-
-## Must Have
-- User authentication (SSO)
-- Data export (compliance requirement)
-
-## Should Have
-- Dark mode
-- Performance improvements
-
-## Could Have
-- Advanced filtering
-- Bulk operations
-
-## Won't Have (this quarter)
-- Mobile app
-- AI features
-```
-
-## Batch Prioritization
-
-Input file format:
-```markdown
-- Add dark mode support
-- Implement SSO
-- Data export feature
-- Performance optimization
-```
-
-Output:
 ```markdown
 # Prioritized Backlog
 
@@ -168,18 +98,7 @@ Output:
 |------|---------|------------|----------------|
 | 1 | SSO Integration | 6,500 | Q1 Sprint 1-2 |
 | 2 | Dark Mode | 4,000 | Q1 Sprint 3-4 |
-| 3 | Data Export | 2,100 | Q1 Sprint 5 |
-| 4 | Performance | 1,800 | Q2 |
 ```
-
-## Framework Selection Guide
-
-| Framework | Best For |
-|-----------|----------|
-| RICE | Data-driven teams, measurable reach |
-| WSJF | SAFe teams, time-sensitive features |
-| ICE | Quick prioritization, early stage |
-| MoSCoW | Fixed scope, release planning |
 
 ## Integration
 

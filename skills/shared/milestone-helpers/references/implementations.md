@@ -2,23 +2,19 @@
 
 > **This file is a specification.** The executable implementation lives in
 > `scripts/milestone-helpers.sh`. Invoke that script; do not re-implement from this pseudocode.
-> Slug max length is **50 characters** (was incorrectly stated as 30 here; resolved in favour of
-> `megatask/SKILL.md §Branch Naming` which states 50).
-
-Full TypeScript pseudocode implementations for all milestone helper functions.
+> Slug max length is **50 characters**.
 
 ## Branch Name Generation
 
+`type` is derived by `branch-lib.sh`'s `derive_type` (sourced, never re-implemented); the
+pseudocode covers the slug only.
+
 ```typescript
-// `type` is derived by branch-lib.sh's derive_type (sourced, never re-implemented);
-// the pseudocode below covers the slug only.
 function generateBranchName(issue: { number: number; title: string }, type: string): string {
   const body = issue.title
-    .replace(/\n/g, ' ')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')  // Replace non-alphanumeric with hyphens
-    .replace(/^-+|-+$/g, '');      // Trim leading/trailing hyphens
-
+    .replace(/\n/g, ' ').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')   // non-alphanumeric → hyphen
+    .replace(/^-+|-+$/g, '');      // trim leading/trailing hyphens
   return capSlug(body, type, issue.number);
 }
 ```
@@ -33,55 +29,37 @@ function capSlug(body: string, type: string, number: number): string {
     slug = body[50] === '-' ? body.slice(0, 50) : body.slice(0, 50).replace(/-[^-]*$/, '');
     if (!slug.includes('-')) slug = body.split('-')[0];
   }
-
   return `${type}/${number}-${slug}`;
 }
 ```
 
-**Examples**:
-- `"Add login flow"` → `feature/42-add-login-flow`
-- `"Fix: crash on startup!!!"` → `bugfix/43-fix-crash-on-startup`
-- `"Fix the reconstruction scan flow blinking before the first frame renders"` →
-  `bugfix/164-fix-the-reconstruction-scan-flow-blinking-before` (word boundary, not `…-before-t`)
+**Examples**: `"Add login flow"` → `feature/42-add-login-flow`; `"Fix: crash on startup!!!"` →
+`bugfix/43-fix-crash-on-startup`; `"Fix the reconstruction scan flow blinking before the first
+frame renders"` → `bugfix/164-fix-the-reconstruction-scan-flow-blinking-before` (word boundary,
+not `…-before-t`).
 
 ## PR Detection
 
-Check if an issue already has a linked PR:
-
 ```typescript
 function hasExistingPR(issueNumber: number): boolean {
-  // Use: gh api /repos/:owner/:repo/issues/{issueNumber}/timeline
-  // Filter for cross-referenced events with pull_request source
-  const timeline = getIssueTimeline(issueNumber);
-
-  const linkedPRs = timeline.filter(event =>
-    event.event === 'cross-referenced' &&
-    event.source?.issue?.pull_request
-  );
-
-  return linkedPRs.length > 0;
+  // gh api /repos/:owner/:repo/issues/{issueNumber}/timeline
+  return getIssueTimeline(issueNumber).some(event =>
+    event.event === 'cross-referenced' && event.source?.issue?.pull_request);
 }
 
-function filterIssuesWithPRs(issues: Issue[]): {
-  toProcess: Issue[];
-  skipped: Issue[];
-} {
-  const toProcess: Issue[] = [];
-  const skipped: Issue[] = [];
-
-  for (const issue of issues) {
-    if (hasExistingPR(issue.number)) {
-      skipped.push({ ...issue, status: 'skipped_has_pr' });
-    } else {
-      toProcess.push(issue);
-    }
-  }
-
-  return { toProcess, skipped };
+// Partition: issues with a linked PR are skipped, tagged status 'skipped_has_pr'.
+function filterIssuesWithPRs(issues: Issue[]): { toProcess: Issue[]; skipped: Issue[] } {
+  return {
+    toProcess: issues.filter(i => !hasExistingPR(i.number)),
+    skipped: issues.filter(i => hasExistingPR(i.number))
+                   .map(i => ({ ...i, status: 'skipped_has_pr' }))
+  };
 }
 ```
 
 ## Priority Sorting
+
+Sort ascending by score; no priority label scores 99 (last).
 
 ```typescript
 const PRIORITY_ORDER = {
@@ -93,18 +71,8 @@ const PRIORITY_ORDER = {
 };
 
 function getPriorityScore(labels: string[]): number {
-  for (const label of labels) {
-    if (label in PRIORITY_ORDER) {
-      return PRIORITY_ORDER[label];
-    }
-  }
-  return 99;  // No priority label = lowest
-}
-
-function sortByPriority(issues: Issue[]): Issue[] {
-  return issues.sort((a, b) =>
-    getPriorityScore(a.labels) - getPriorityScore(b.labels)
-  );
+  for (const label of labels) if (label in PRIORITY_ORDER) return PRIORITY_ORDER[label];
+  return 99;
 }
 ```
 
@@ -112,25 +80,20 @@ function sortByPriority(issues: Issue[]): Issue[] {
 
 ```typescript
 function updateOrchestratorIssue(
-  orchestratorPath: string,
-  issueNumber: number,
-  updates: Partial<IssueState>
+  orchestratorPath: string, issueNumber: number, updates: Partial<IssueState>
 ): void {
   const orchestrator = JSON.parse(readFile(orchestratorPath));
   const issue = orchestrator.issues.find(i => i.number === issueNumber);
-
   if (!issue) throw new Error(`Issue ${issueNumber} not found in orchestrator`);
-
   Object.assign(issue, updates);
 
-  // Update progress counts
+  const count = (s) => orchestrator.issues.filter(i => i.status === s).length;
   orchestrator.progress = {
     total: orchestrator.issues.length,
-    completed: orchestrator.issues.filter(i => i.status === 'completed').length,
-    in_progress: orchestrator.issues.filter(i => i.status === 'in_progress').length,
-    pending: orchestrator.issues.filter(i => i.status === 'pending').length
+    completed: count('completed'),
+    in_progress: count('in_progress'),
+    pending: count('pending')
   };
-
   writeFile(orchestratorPath, JSON.stringify(orchestrator, null, 2));
 }
 ```
@@ -139,311 +102,102 @@ function updateOrchestratorIssue(
 
 ```typescript
 function resolveBaseBranch(issueBody: string): { branch: string; source: string } {
-  // 1. Check issue body for explicit base branch
+  // 1. Explicit base branch in the issue body
   const match = issueBody.match(/base_branch:\s*(\S+)/);
-  if (match) {
-    return { branch: match[1], source: 'issue_body' };
-  }
-
-  // 2. Check if develop exists on remote
-  // Use: git ls-remote --heads origin develop
-  const developExists = checkRemoteBranchExists('develop');
-  if (developExists) {
-    return { branch: 'develop', source: 'develop_fallback' };
-  }
-
-  // 3. Default to master
+  if (match) return { branch: match[1], source: 'issue_body' };
+  // 2. develop, if it exists on the remote (git ls-remote --heads origin develop)
+  if (checkRemoteBranchExists('develop')) return { branch: 'develop', source: 'develop_fallback' };
+  // 3. Default
   return { branch: 'master', source: 'master_default' };
-}
-```
-
-## Workspace Initialization Pattern
-
-```typescript
-function initializeWorkspace(
-  milestoneNumber: number,
-  issue: Issue
-): WorkspaceState {
-  const worktreePath = `.worktrees/milestone-${milestoneNumber}/${issue.number}`;
-  const branchName = generateBranchName(issue);
-  const baseBranch = resolveBaseBranch(issue.body);
-
-  // 1. Create worktree with new branch
-  // git worktree add -b ${branchName} ${worktreePath} origin/${baseBranch.branch}
-
-  // 2. Create .context/ inside the worktree
-  // mkdir -p ${worktreePath}/.context
-```
-
-### initializeWorkspace — workspace.json write
-
-```typescript
-  // …continued: initializeWorkspace body
-  // 3. Write workspace.json inside the worktree
-  const workspace = {
-    version: '2.0',
-    isolation: 'worktree',
-    issue: { number: issue.number, title: issue.title, labels: issue.labels },
-    git: {
-      branch_name: branchName,
-      base_branch: baseBranch.branch,
-      worktree_path: worktreePath
-    },
-    worktask: { track: null },
-    execution: { current_stage: null, retry_count: 0 }
-  };
-
-  writeFile(`${worktreePath}/workspace.json`, JSON.stringify(workspace, null, 2));
-
-  return workspace;
-}
-```
-
-## Issue Completion Pattern
-
-```typescript
-function completeIssue(
-  milestoneNumber: number,
-  issueNumber: number
-): void {
-  const worktreePath = `.worktrees/milestone-${milestoneNumber}/${issueNumber}`;
-  const workspace = JSON.parse(readFile(`${worktreePath}/workspace.json`));
-
-  // 1. Commit all changes (from inside worktree)
-  // git -C ${worktreePath} add -A
-  // git -C ${worktreePath} commit -m "#${issueNumber} feat: ${workspace.issue.title}"
-
-  // 2. Push branch
-  // git -C ${worktreePath} push -u origin ${workspace.git.branch_name}
-
-  // 3. Create PR
-  // gh pr create --base ${workspace.git.base_branch} \
-  //   --title "#${issueNumber} ${workspace.issue.title}" \
-  //   --body "Closes #${issueNumber}"
-
-  // 4. Update orchestrator
-  updateOrchestratorIssue('.worktrees/orchestrator.json', issueNumber, {
-    status: 'completed',
-    track: null
-  });
 }
 ```
 
 ## Worktree Operations
 
-Git worktree isolation for milestone worktasks.
+Git worktree isolation for milestone worktasks. `worktreePath` is always
+`.worktrees/milestone-${milestoneNumber}/${issueNumber}`.
 
-> **Shared configuration**: Project configs and auto-memory are automatically shared across all git worktrees of the same repo. No per-worktree configuration duplication needed.
+> **Shared configuration**: project configs and auto-memory are automatically shared across all git
+> worktrees of the same repo. No per-worktree configuration duplication needed.
 
-### createIssueWorktree
+### workspace.json — canonical shape
 
-```typescript
-function createIssueWorktree(
-  milestoneNumber: number,
-  issue: Issue,
-  baseBranch: string
-): WorkspaceState {
-  const branchName = generateBranchName(issue);
-  const worktreePath = `.worktrees/milestone-${milestoneNumber}/${issue.number}`;
-
-  // 1. Fetch latest base
-  // git fetch origin ${baseBranch}
-
-  // 2. Create worktree with new branch
-  // git worktree add -b ${branchName} ${worktreePath} origin/${baseBranch}
-
-  // 3. Create .context/ inside the worktree
-  // mkdir -p ${worktreePath}/.context
-```
-
-#### createIssueWorktree — workspace.json write
+Written inside the worktree by every create path; `sparse_paths` is present only for sparse
+checkouts.
 
 ```typescript
-  // …continued: createIssueWorktree body
-  // 4. Write workspace.json inside the worktree
-  const workspace = {
-    version: '2.0',
-    isolation: 'worktree',
-    issue: { number: issue.number, title: issue.title, labels: issue.labels },
-    git: {
-      branch_name: branchName,
-      base_branch: baseBranch,
-      worktree_path: worktreePath
-    },
-    worktask: { track: null },
-    execution: { current_stage: null, retry_count: 0 }
-  };
-
-  writeFile(`${worktreePath}/workspace.json`, JSON.stringify(workspace, null, 2));
-  return workspace;
-}
+const workspace = {
+  version: '2.0',
+  isolation: 'worktree',
+  sparse_paths: sparsePaths,   // createSparseWorktree only
+  issue: { number: issue.number, title: issue.title, labels: issue.labels },
+  git: { branch_name: branchName, base_branch: baseBranch, worktree_path: worktreePath },
+  worktask: { track: null },
+  execution: { current_stage: null, retry_count: 0 }
+};
+writeFile(`${worktreePath}/workspace.json`, JSON.stringify(workspace, null, 2));
 ```
+
+### initializeWorkspace / createIssueWorktree
+
+Same procedure — `initializeWorkspace` resolves the base branch itself via
+`resolveBaseBranch(issue.body)`, `createIssueWorktree` takes it as an argument. Both return the
+`workspace` object.
+
+1. `git fetch origin ${baseBranch}`
+2. `git worktree add -b ${branchName} ${worktreePath} origin/${baseBranch}` (branch from
+   `generateBranchName(issue)`)
+3. `mkdir -p ${worktreePath}/.context`
+4. Write `workspace.json` (shape above)
+
+### createSparseWorktree
+
+For large monorepos, reduce worktree size with a sparse checkout: the steps above plus, between
+worktree creation and `.context/`, `git -C ${worktreePath} sparse-checkout init --cone` and
+`sparse-checkout set ${sparsePaths.join(' ')}` (e.g. `["src/", "tests/", "Package.swift"]`), and
+record `sparse_paths` in `workspace.json`.
 
 ### removeIssueWorktree
 
 ```typescript
 function removeIssueWorktree(
-  milestoneNumber: number,
-  issueNumber: number,
-  force: boolean = false
+  milestoneNumber: number, issueNumber: number, force: boolean = false
 ): { removed: boolean; reason?: string } {
-  const worktreePath = `.worktrees/milestone-${milestoneNumber}/${issueNumber}`;
-
-  // 1. Check for uncommitted changes
-  // git -C ${worktreePath} status --porcelain
+  // 1. Refuse on uncommitted changes unless forced
   const status = execFileNoThrow('git', ['-C', worktreePath, 'status', '--porcelain']);
   if (status.stdout.trim() && !force) {
-    return {
-      removed: false,
-      reason: 'Worktree has uncommitted changes. Use force=true to remove.'
-    };
+    return { removed: false, reason: 'Worktree has uncommitted changes. Use force=true to remove.' };
   }
-
-  // 2. Remove the worktree
-  const args = ['worktree', 'remove'];
-  if (force) args.push('--force');
-  args.push(worktreePath);
-  // git worktree remove [--force] ${worktreePath}
+  // 2. git worktree remove [--force] ${worktreePath}
+  const args = ['worktree', 'remove', ...(force ? ['--force'] : []), worktreePath];
   execFileNoThrow('git', args);
-```
-
-#### removeIssueWorktree — prune and return
-
-```typescript
-  // …continued: removeIssueWorktree body
-  // 3. Prune stale worktree entries
-  // Note: Stale worktrees from interrupted runs are auto-cleaned on startup
-  // Manual prune as fallback:
-  // git worktree prune
+  // 3. Prune stale entries (interrupted runs are also auto-cleaned on startup)
   execFileNoThrow('git', ['worktree', 'prune']);
-
   return { removed: true };
-}
-```
-
-### createSparseWorktree
-
-For large monorepos, use sparse checkout to reduce worktree size:
-
-```typescript
-function createSparseWorktree(
-  milestoneNumber: number,
-  issue: Issue,
-  baseBranch: string,
-  sparsePaths: string[]  // e.g., ["src/", "tests/", "Package.swift"]
-): WorkspaceState {
-  const branchName = generateBranchName(issue);
-  const worktreePath = `.worktrees/milestone-${milestoneNumber}/${issue.number}`;
-
-  // 1. Create worktree
-  // git worktree add -b ${branchName} ${worktreePath} origin/${baseBranch}
-
-  // 2. Enable sparse checkout
-  // git -C ${worktreePath} sparse-checkout init --cone
-  // git -C ${worktreePath} sparse-checkout set ${sparsePaths.join(' ')}
-
-  // 3. Create .context/ inside worktree
-  // mkdir -p ${worktreePath}/.context
-```
-
-#### createSparseWorktree — workspace.json write
-
-```typescript
-  // …continued: createSparseWorktree body
-  // 4. Write workspace.json (same as createIssueWorktree)
-  const workspace = {
-    version: '2.0',
-    isolation: 'worktree',
-    sparse_paths: sparsePaths,
-    issue: { number: issue.number, title: issue.title, labels: issue.labels },
-    git: { branch_name: branchName, base_branch: baseBranch, worktree_path: worktreePath },
-    worktask: { track: null },
-    execution: { current_stage: null, retry_count: 0 }
-  };
-
-  writeFile(`${worktreePath}/workspace.json`, JSON.stringify(workspace, null, 2));
-  return workspace;
 }
 ```
 
 ### listMilestoneWorktrees
 
-```typescript
-function listMilestoneWorktrees(milestoneNumber: number): WorktreeInfo[] {
-  // git worktree list --porcelain
-  const output = execFileNoThrow('git', ['worktree', 'list', '--porcelain']);
-  return parseWorktreeList(output.stdout)
-    .filter(wt => wt.path.includes(`.worktrees/milestone-${milestoneNumber}/`));
-}
-```
+Parse `git worktree list --porcelain` and keep entries whose path contains
+`.worktrees/milestone-${milestoneNumber}/`.
 
 ### resolveIssueWorkdir
 
-Key abstraction that allows all code to work transparently in both modes.
+Returns `{ workdir, contextPath, isWorktree }` — `workdir` is `worktreePath`, `contextPath` is
+that path plus `/.context`, `isWorktree` is always `true`. Isolation is always `'worktree'`, so
+the non-worktree branch is unreachable and is treated as a worktree for safety.
 
-```typescript
-function resolveIssueWorkdir(
-  milestoneNumber: number,
-  issueNumber: number,
-  options: WorktaskOptions
-): { workdir: string; contextPath: string; isWorktree: boolean } {
-  if (options.worktree) {
-    const workdir = `.worktrees/milestone-${milestoneNumber}/${issueNumber}`;
-    return {
-      workdir,
-      contextPath: `${workdir}/.context`,
-      isWorktree: true
-    };
-  }
-  // Fallback: should not be reached — isolation is always 'worktree'.
-  // Treat as worktree at repo root for safety.
-  const worktreePath = `.worktrees/milestone-${milestoneNumber}/${issueNumber}`;
-  return {
-    workdir: worktreePath,
-    contextPath: `${worktreePath}/.context`,
-    isWorktree: true
-  };
-}
-```
+### completeIssue / completeIssueWorktree
 
-### completeIssueWorktree
+Reads `${worktreePath}/workspace.json`, then:
 
-```typescript
-function completeIssueWorktree(
-  milestoneNumber: number,
-  issueNumber: number
-): void {
-  const worktreePath = `.worktrees/milestone-${milestoneNumber}/${issueNumber}`;
-  const workspace = JSON.parse(readFile(`${worktreePath}/workspace.json`));
-
-  // 1. Commit all changes (inside worktree)
-  // git -C ${worktreePath} add -A
-  // git -C ${worktreePath} commit -m "#${issueNumber} feat: ${workspace.issue.title}"
-
-  // 2. Push branch (from worktree)
-  // git -C ${worktreePath} push -u origin ${workspace.git.branch_name}
-
-  // 3. Create PR
-  // gh pr create --base ${workspace.git.base_branch} \
-  //   --title "#${issueNumber} ${workspace.issue.title}" \
-  //   --body "Closes #${issueNumber}"
-```
-
-#### completeIssueWorktree — orchestrator update and cleanup
-
-```typescript
-  // …continued: completeIssueWorktree body
-  // 4. Update orchestrator (in main repo root)
-  updateOrchestratorIssue('.worktrees/orchestrator.json', issueNumber, {
-    status: 'completed',
-    track: null
-  });
-
-  // 5. Exit worktree context
-  // If EnterWorktree was used, call ExitWorktree tool before removal
-
-  // 6. Remove worktree (branch persists on remote)
-  // Note: Stale worktrees from interrupted runs are auto-cleaned on startup
-  removeIssueWorktree(milestoneNumber, issueNumber);
-}
-```
+1. `git -C ${worktreePath} add -A` and
+   `commit -m "#${issueNumber} feat: ${workspace.issue.title}"`
+2. `git -C ${worktreePath} push -u origin ${workspace.git.branch_name}`
+3. `gh pr create --base ${workspace.git.base_branch} --title "#${issueNumber}
+   ${workspace.issue.title}" --body "Closes #${issueNumber}"`
+4. `updateOrchestratorIssue('.worktrees/orchestrator.json', issueNumber, { status: 'completed',
+   track: null })` — the orchestrator file lives in the main repo root
+5. Exit the worktree context (`ExitWorktree` if `EnterWorktree` was used), then
+   `removeIssueWorktree(milestoneNumber, issueNumber)` — the branch persists on the remote

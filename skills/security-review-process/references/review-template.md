@@ -14,11 +14,8 @@ anchor-lint rejects the headings below. Threat-model procedure: `threat-model.md
 
 ### Threat Model
 
-| ID | Boundary | Entry point | STRIDE | Attacker-controlled input |
-|----|----------|-------------|--------|---------------------------|
-| T1 | [side ↔ side] | [endpoint/scheme/format/dependency] | [S T R I D E] | [what, from whom] |
-
-<!-- or: No material threat surface: [why nothing crosses a boundary]. -->
+One row per threat, columns per `threat-model.md § Output shape`; or the single line
+`No material threat surface: [why nothing crosses a boundary].`
 
 ```
 

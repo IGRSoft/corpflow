@@ -1,7 +1,7 @@
 # Dependency Graph (DAG) Construction & Scheduling
 
-Megatask executes issues as a directed acyclic graph, not a flat priority list. This reference
-specifies how the graph is built, validated, and scheduled.
+How megatask builds, validates, and schedules the issue graph. `scripts/build-orchestrator.sh` is
+the executable implementation of everything below.
 
 > **Note**: Code below is pseudocode for conceptual clarity. In production, use secure command
 > execution (e.g. `execFile`, not shell string interpolation) — issue bodies are untrusted input.
@@ -9,24 +9,9 @@ specifies how the graph is built, validated, and scheduled.
 
 ## 1. Edge Extraction
 
-Each issue body carries a `## Dependencies` section (the format `/pm-milestone` writes):
-
-```markdown
-## Dependencies
-
-- Depends on: #41 (if applicable)
-- Blocks: #57 (if applicable)
-```
-
-Parse, case-insensitively, two relationship keywords. Accept comma- or space-separated lists and
-multiple lines:
-
-| Keyword (regex, case-insensitive) | Produces |
-|-----------------------------------|----------|
-| `Depends on:` / `Depends-on:` / `Blocked by:` `#(\d+)` | edge `thisIssue.blocked_by += N` |
-| `Blocks:` / `Blocked:` `#(\d+)` | edge `N.blocked_by += thisIssue` (reverse) |
-
-### Extraction pseudocode
+Each issue body carries a `## Dependencies` section (the format `/pm-milestone` writes:
+`- Depends on: #41` / `- Blocks: #57`). Parse both keywords case-insensitively, accepting comma- or
+space-separated lists across multiple lines.
 
 ```
 extractEdges(issue):
@@ -42,18 +27,9 @@ An edge `from=A, to=B` means **A must complete before B starts** (B `blocked_by`
 
 - `A Blocks B` and `B Depends on A` are the same edge `A→B` — collapse duplicates.
 - Self-edges (`A depends on A`) are dropped with a warning.
-- Edges whose endpoint is **outside the resolved issue set** become `external_dependency` entries:
-  recorded on the issue, surfaced in the R1 summary, but they do **not** gate scheduling (the batch
-  cannot run an issue it was not asked to run). If you want them enforced, include that issue in the set.
-
-```
-normalize(edges, resolvedSet):
-  edges = dedupe(edges)
-  edges = drop(e where e.from == e.to)              # warn on self-edge
-  external = [e for e in edges if e.from ∉ resolvedSet or e.to ∉ resolvedSet]
-  internal = [e for e in edges if e.from ∈ resolvedSet and e.to ∈ resolvedSet]
-  return internal, external
-```
+- Edges with an endpoint **outside the resolved issue set** become `external_dependency` entries:
+  recorded on the issue and surfaced in the R1 summary, but never gating (the batch cannot run an
+  issue it was not asked to run). To enforce one, include that issue in the set.
 
 ## 3. Cycle Detection (Kahn's algorithm)
 
@@ -62,70 +38,47 @@ Compute in-degrees, repeatedly remove zero-in-degree nodes. If any node remains,
 
 ```
 kahn(nodes, edges):
-  indeg = { n: 0 for n in nodes }
-  for e in edges: indeg[e.to] += 1
-  queue = sortByPriorityThenNumber([n for n in nodes if indeg[n] == 0])
-  order = []
+  indeg[n] = number of edges into n
+  queue    = sortByPriorityThenNumber(nodes with indeg == 0);  order = []
   while queue:
-    n = queue.popFront()
-    order.append(n)
+    n = queue.popFront(); order.append(n)
     for m in successors(n):
-      indeg[m] -= 1
-      if indeg[m] == 0: queue.insertByPriorityThenNumber(m)
-  if len(order) != len(nodes):
-    cycle = [n for n in nodes if n not in order]
-    FAIL("dependency cycle among issues: " + cycle)   # megatask STOPs
+      if (indeg[m] -= 1) == 0: queue.insertByPriorityThenNumber(m)
+  if len(order) != len(nodes):                        # the leftovers ARE the cycle
+    FAIL("dependency cycle among issues: " + [n for n in nodes if n not in order])
   return order
 ```
 
-### Queue ordering
-
-> The queue is a **priority queue keyed by (priority tier, issue number)** so that, among issues
-> that become eligible at the same time, P0 precedes P1 … and lower issue numbers precede higher
-> within a tier. This yields a deterministic, priority-respecting topological order.
+> The queue is a **priority queue keyed by (priority tier, issue number)**: among issues eligible at
+> the same time, P0 precedes P1 … and lower issue numbers precede higher within a tier. This yields
+> a deterministic, priority-respecting topological order.
 
 ## 4. Levelled Schedule
 
-For parallel execution, group the topological order into **levels** (a.k.a. waves):
+Group the topological order into **levels** (waves): level 0 = issues with empty `blocked_by`;
+level k = issues whose blockers all sit in levels `< k`, i.e.
+`level[n] = 0 if blocked_by(n) empty else 1 + max(level[b] for b in blocked_by(n))`.
 
-- **Level 0**: issues with empty `blocked_by` — start immediately.
-- **Level k**: issues all of whose blockers are in levels `< k`.
-
-```
-levels(nodes, edges):
-  level = {}
-  for n in topoOrder:
-    level[n] = 0 if blocked_by(n) is empty
-               else 1 + max(level[b] for b in blocked_by(n))
-  return groupBy(level)
-```
-
-Levels are an **upper bound on parallelism**, not a barrier: megatask does NOT wait for a whole level
+Levels are an **upper bound on parallelism, not a barrier**: megatask does NOT wait for a whole level
 to finish. The moment any single blocker merges, its now-unblocked dependents become `ready` and can
-take a free track — even while siblings in the same level are still running. (Track count still caps
-concurrency at `parallel_tracks`.)
+take a free track — even while siblings in the same level still run. (`parallel_tracks` still caps
+concurrency.)
 
 ## 5. Readiness & Unblocking (runtime)
 
 An issue is **ready** ⇔ every entry in its `blocked_by[]` has orchestrator `status == "completed"`.
 
-The monitor hook (`hooks/megatask-monitor.sh`) performs the runtime unblock on each per-issue
-completion:
+`hooks/megatask-monitor.sh` performs the runtime unblock on each per-issue completion: mark the
+completed issue, remove its number from every other issue's `blocked_by[]`, promote any issue left
+with an empty `blocked_by[]` from `blocked` to `ready`, free its track, and atomically rewrite
+`orchestrator.json`. It then audits:
 
 ```
-onIssueCompleted(group, completedNumber):
-  orch = readJson(.worktrees/<group>/orchestrator.json)
-  mark(orch, completedNumber, status="completed")
-  for issue in orch.issues:
-    issue.blocked_by = remove(issue.blocked_by, completedNumber)
-    if issue.status == "blocked" and issue.blocked_by is empty:
-      issue.status = "ready"
-  freeTrackOf(orch, completedNumber)
-  writeJsonAtomic(orch)
-  // remaining = total - completed - failed  (settled issues are done; matches hooks/megatask-monitor.sh)
-  audit("megatask_progress", subject=group, completed=completedNumber,
-        newly_ready=[…], remaining=(total - completed - failed))
+audit("megatask_progress", subject=group, completed=completedNumber,
+      newly_ready=[…], remaining=(total - completed - failed))
 ```
+
+`remaining` subtracts both completed and failed — settled issues are done (matches the hook).
 
 ### Failed blockers
 
@@ -145,15 +98,10 @@ Levels: L0 = {41}            (P0)
 Topo order (priority queue): 41, 42, 57, 60
 ```
 
-Execution with `parallel_tracks = 2`:
-1. `#41` starts (only ready issue) → 1 track used.
-2. `#41` merges → `#42`, `#57` become ready → both take tracks (2/2).
-3. `#42` merges → `#60` still blocked by `#57`; track freed but no ready issue except after `#57`.
-4. `#57` merges → `#60` ready → takes a track.
-5. `#60` merges → done.
+With `parallel_tracks = 2`: `#41` starts alone; on its merge `#42` and `#57` both take tracks (2/2);
+`#42` merging frees a track but `#60` is still blocked by `#57`; `#57` merging makes `#60` ready.
 
 ## 7. orchestrator.json DAG fields
 
-The DAG is persisted on each issue and at the top level — see `schemas.md` (orchestrator v3.1) for
-`issues[].blocked_by`, `issues[].blocks`, `issues[].level`, `issues[].external_dependencies`,
-`topological_order`, and `dependency_warnings`.
+Persisted per-issue (`blocked_by`, `blocks`, `level`, `external_dependencies`) and at the top level
+(`topological_order`, `dependency_warnings`) — field contract in `schemas.md` (orchestrator v3.1).

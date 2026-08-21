@@ -1,19 +1,12 @@
 # Platform Specialization Routing (long-tail)
 
-Read this on platform ambiguity or when the inline common rows in `agents/developer.md`
-(§ Detection Rules) do not cover the specialist you need. The primary marker → platform map
-and the 3–4 most-common specialization rows stay inline in `agents/developer.md`; the full
-per-platform specialist tables live here.
-
-Routing target = the qualified agent ID in the **Agent** column, passed as the Task
-`subagent_type`. Do not maintain a second copy of the platform→agent map elsewhere.
-
-Plugin-level metadata — version floors, entry agents, command sets, and the procedure for adding
-or replacing a dev plugin — lives in `skills/shared/compatible-plugins.md`.
+Read this on platform ambiguity, or when the common rows inline in `agents/developer.md`
+(§ Detection Rules) do not cover the specialist you need. Routing target = the qualified
+agent ID in the **Agent** column, passed as the Task `subagent_type`. Never keep a second
+copy of this map elsewhere. Plugin-level metadata — version floors, entry agents, command
+sets, handoff defaults — lives in `skills/shared/compatible-plugins.md`.
 
 ## Apple Platform Specialization
-
-When platform is `apple`, further route based on context:
 
 | Context | Agent | Use Case |
 |---------|-------|----------|
@@ -26,23 +19,18 @@ When platform is `apple`, further route based on context:
 
 ## Android Platform Specialization
 
-When platform is `android`, further route based on context:
-
 | Context | Agent | Use Case |
 |---------|-------|----------|
-| General Android, Kotlin, app-layer, ambiguous android | `android-developer:android-developer` | Index/router; routes internally to phone/architecture/test specialists |
-| Phone/tablet app, Jetpack Compose UI, lifecycle, Activities/Fragments | `android-developer:android-phone-developer` | Compose screens, navigation, ViewModel/StateFlow, Material 3 |
-| Architecture, modularization, Hilt DI, Clean Architecture, data layer | `android-developer:kotlin-architector` | Pattern selection, module graph, repository/offline-first design |
+| General Android, Kotlin, app-layer, ambiguous android | `android-developer:android-developer` | Index/router; routes to phone/architecture/test specialists |
+| Phone/tablet app, Compose UI, lifecycle, Activities/Fragments | `android-developer:android-phone-developer` | Compose screens, navigation, ViewModel/StateFlow, Material 3 |
+| Architecture, modularization, Hilt DI, data layer | `android-developer:kotlin-architector` | Pattern selection, module graph, repository/offline-first design |
 | Test generation | `android-developer:and-test-generator` | JUnit4/5, MockK, Turbine, Roborazzi screenshot tests |
 | Code fixes | `android-developer:and-code-fixer` | ktlint/detekt remediation, minimal-diff fixes |
 
-### Android DV evidence and review specialists
-
-Android work is UI by default: set/forward `metadata.requires_screenshots: true` on DV tasks (captured via the `android_adapter` → `adb exec-out screencap -p`); the screenshot manifest at `.context/images/<worktask_id>/screenshots.md` plus Gradle build/test transcripts under `.context/logs/` are the Build Evidence. There is no Android build MCP — builds and device interaction run through scoped `Bash(gradle:*|./gradlew|adb:*|ktlint:*|detekt:*)`. Review-only specialists (`android-developer:and-security-auditor`, `android-developer:and-dependency-manager`) are reached through the stage flow (DR/SR/QA), not as direct DV `Task(...)` targets.
+There is no Android build MCP — builds and device interaction run through scoped
+`Bash(gradle:*|./gradlew|adb:*|ktlint:*|detekt:*)`.
 
 ## Systems Platform Specialization
-
-When platform is `systems`, further route based on context:
 
 | Context | Agent | Use Case |
 |---------|-------|----------|
@@ -52,13 +40,7 @@ When platform is `systems`, further route based on context:
 | Python | `system-developer:python-developer` | Python 3.14, uv/ruff toolchain, asyncio |
 | Shell scripting | `system-developer:bash-developer` | Bash 5.x, POSIX sh, CI scripts |
 
-### Systems DV evidence
-
-Systems and backend work are non-UI by default: set/forward `metadata.requires_screenshots: false` on DV tasks (or rely on the `cli_fallback_adapter`); build/test transcripts under `.context/logs/` are the Build Evidence. For backend, the cli-fallback evidence is API request/response transcripts (curl/httpie), test output, k6 load reports, and migration logs.
-
 ## Web Platform Specialization
-
-When platform is `web`, further route based on context:
 
 | Context | Agent | Use Case |
 |---------|-------|----------|
@@ -77,13 +59,7 @@ When platform is `web`, further route based on context:
 | Rendering strategy / micro-frontends / state + design-system architecture | `frontend-developer:frontend-architector` | CSR/SSR/SSG/ISR, module federation |
 | Component/unit/e2e tests | `frontend-developer:fe-test-generator` | Vitest/Jest, Playwright, Testing Library |
 
-### Web DV evidence and review specialists
-
-Web work is UI by default: set/forward `metadata.requires_screenshots: true` on DV tasks (captured via the `web_adapter` → Playwright `npx playwright screenshot` / Chrome MCP); the screenshot manifest at `.context/images/<worktask_id>/screenshots.md` plus Lighthouse/axe reports are the Build Evidence. Review-only specialists (`frontend-developer:fe-performance-engineer`, `frontend-developer:fe-accessibility-auditor`, `frontend-developer:fe-security-auditor`) are reached through the stage flow (DR/SR/QA), not as direct DV `Task(...)` targets.
-
 ## AI/ML Platform Specialization
-
-When platform is `ai`, further route based on context:
 
 | Context | Agent | Use Case |
 |---------|-------|----------|
@@ -92,13 +68,28 @@ When platform is `ai`, further route based on context:
 | Model training, data pipelines | `ai-engineer:ml-engineer` | Feature engineering, training loops, fine-tuning |
 | Deployment, serving, pipelines | `ai-engineer:mlops-engineer` | Model registries, inference infra, CI for models |
 
-### AI/ML DV evidence and review specialists
+## DV Evidence and Review-Only Specialists
 
-AI/ML work is non-UI by default: set/forward `metadata.requires_screenshots: false` on DV tasks (or rely on the `cli_fallback_adapter`); eval reports, metric tables, and training transcripts under `.context/logs/` are the Build Evidence. Review-only specialists (`ai-engineer:ai-security-auditor`, `ai-engineer:ai-performance-engineer`, `ai-engineer:ai-dependency-manager`, `ai-engineer:ai-prompt-engineer`) are reached through the stage flow (DR/SR/QA), not as direct DV `Task(...)` targets.
+Per-platform `requires_screenshots` defaults and evidence adapters are canonical in
+`skills/shared/compatible-plugins.md § Handoff defaults` — set or forward that value on DV
+tasks. UI platforms (apple, android, web) also write the screenshot manifest at
+`.context/images/<worktask_id>/screenshots.md`; non-UI platforms (systems, backend, ai)
+rely on build/test transcripts under `.context/logs/`.
+
+### Review-only specialists
+
+Reached **through the stage flow** (DR/SR/QA), never as direct DV `Task(...)` targets:
+
+| Platform | Review-only specialists |
+|----------|-------------------------|
+| android | `android-developer:and-security-auditor`, `android-developer:and-dependency-manager` |
+| web | `frontend-developer:fe-performance-engineer`, `frontend-developer:fe-accessibility-auditor`, `frontend-developer:fe-security-auditor` |
+| ai | `ai-engineer:ai-security-auditor`, `ai-engineer:ai-performance-engineer`, `ai-engineer:ai-dependency-manager`, `ai-engineer:ai-prompt-engineer` |
 
 ## Detection Rules (markers → platform)
 
-Canonical marker→platform routing tables, extracted from `agents/developer.md § Platform Detection` (Phase-4 Worktask-Integration diet). The developer agent keeps the Priority Order + common-rows table inline and points here for the long tail.
+Canonical marker→platform routing. `agents/developer.md` keeps the Priority Order plus the
+common rows inline and points here for the long tail.
 
 #### App platforms (apple / android / web)
 
@@ -150,18 +141,35 @@ Canonical marker→platform routing tables, extracted from `agents/developer.md 
 
 #### Mixed-repo precedence
 
-Precedence on mixed repos: apple/android/web (UI) markers win over systems/backend markers when both are present and the task targets the app layer; systems markers win for native libraries, build tooling, or scripts; backend markers win when the task targets HTTP/RPC services, API contracts, or the persistence layer. Ambiguous → ask (Priority Order rule 4).
+UI markers (apple/android/web) win when the task targets the app layer; systems markers win
+for native libraries, build tooling, or scripts; backend markers win for HTTP/RPC services,
+API contracts, or persistence. Ambiguous → ask (Priority Order rule 4). Three notes resolve
+the only non-trivial collisions.
 
-Three precedence notes resolve the only non-trivial collisions.
+#### Precedence — Python: language vs web vs ML
 
-#### Precedence — Python language vs web vs ML
-
-Pure Python *language* depth (typing, asyncio internals, free-threading, packaging) → `system-developer:python-developer`. The Python *web* layer (FastAPI/Django/Flask + persistence) → `backend-developer:python-backend-developer`. The Python *ML* stack (training, inference, LLM orchestration, eval harnesses) → `ai-engineer:*`. The backend agent itself delegates language depth back to system-developer, so this is a routing entry point, not a fork. A FastAPI service that merely *calls* a model API is backend; a service whose substance is the model, retrieval, or eval pipeline is ai.
+Language depth (typing, asyncio internals, free-threading, packaging) →
+`system-developer:python-developer`. Web layer (FastAPI/Django/Flask + persistence) →
+`backend-developer:python-backend-developer`. ML stack (training, inference, LLM
+orchestration, evals) → `ai-engineer:*`. Backend delegates language depth back to
+system-developer, so this is an entry point, not a fork. A FastAPI service that merely
+*calls* a model API is backend; one whose substance is the model, retrieval, or eval
+pipeline is ai.
 
 #### Precedence — front-end vs back-end `package.json`
 
-- **Front-end vs back-end `package.json`** (inspect dependencies, not just the extension). A UI framework (react/vue/svelte/angular) → web/`frontend-developer:*`; a server framework (express/nest/fastify/hono) → `backend-developer:node-developer`; **both present → ask** (Priority Order rule 4). The same rule is documented in `skills/_shared/language-detection.md` of the backend-developer (and frontend-developer) plugin — keep them in sync. JVM Kotlin has the analogous collision: `AndroidManifest.xml` present → android; otherwise `build.gradle(.kts)`/`*.kt` → `backend-developer:jvm-backend-developer`.
+Inspect dependencies, not the extension: a UI framework (react/vue/svelte/angular) →
+`frontend-developer:*`; a server framework (express/nest/fastify/hono) →
+`backend-developer:node-developer`; **both present → ask** (Priority Order rule 4). The
+same rule lives in `skills/_shared/language-detection.md` of the backend-developer and
+frontend-developer plugins — keep them in sync. JVM Kotlin has the analogous collision:
+`AndroidManifest.xml` present → android, otherwise → `backend-developer:jvm-backend-developer`.
 
 #### Precedence — web UI vs native (Apple)
 
-- **Web UI vs native (Apple).** When web markers (`.ts`/`.tsx`/`.jsx`/`package.json`/framework configs) and native markers (`.swift`/`.xcodeproj`/`Package.swift`/native module dirs) co-occur, the deciding question is *which layer the change targets*: UI/component/state/styling/build-tooling work → `frontend-developer:frontend-developer` (front-end wins); a native module, bridging header, or platform-API binding → `apple-developer:*` (Apple wins). React Native / Expo splits the same way — the JS/TS surface goes to the (optional) `react-native-developer`, native modules deferred to `apple-developer:*`. Default to `frontend-developer` for ambiguous pure-JS/TS web work.
+When web and native markers co-occur, the deciding question is which layer the change
+targets: UI/component/state/styling/build-tooling → `frontend-developer:frontend-developer`;
+a native module, bridging header, or platform-API binding → `apple-developer:*`. React
+Native / Expo splits the same way — JS/TS surface to the (optional) `react-native-developer`,
+native modules to `apple-developer:*`. Ambiguous pure-JS/TS web work defaults to
+`frontend-developer`.

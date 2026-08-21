@@ -68,7 +68,8 @@
 
 ## Post-Mortem Template
 
-Concatenate the three parts below, in order, into a single `post-mortem.md`.
+Concatenate the three parts below, in order, into one `post-mortem.md`. Triggers and the
+blameless-culture table: `SKILL.md § Post-Mortem Triggers`.
 
 ### Template Part 1 — Header, Impact & Timeline
 
@@ -158,23 +159,9 @@ Concatenate the three parts below, in order, into a single `post-mortem.md`.
 
 ## Blameless Post-Mortem Principles
 
-### Core Principles
-
-1. **Focus on systems, not individuals**
-   - Ask "What failed?" not "Who failed?"
-   - Identify process gaps, not blame targets
-
-2. **Assume best intentions**
-   - Everyone made decisions with available information
-   - Hindsight bias distorts judgment
-
-3. **Learn, don't punish**
-   - Goal is prevention, not punishment
-   - Fear inhibits honest reporting
-
-4. **Share broadly**
-   - Lessons benefit entire organization
-   - Transparency builds trust
+Systems over individuals, assume best intentions (everyone decided on the information they
+had; hindsight distorts), prevention over punishment (fear suppresses honest reporting), and
+share lessons broadly. Blame-vs-blameless phrasing: `SKILL.md § Blameless Culture Principles`.
 
 ### Facilitation Tips
 
@@ -196,55 +183,8 @@ DON'T:
 
 ## Runbook: Common Incident Patterns
 
-### Database Connection Exhaustion
-
-```markdown
-## Symptoms
-- Timeouts on database operations
-- "Too many connections" errors
-- Service degradation
-
-## Diagnosis
-1. Check connection pool metrics
-2. Identify queries holding connections
-3. Look for connection leaks
-
-## Mitigation
-1. Scale connection pool (short-term)
-2. Identify and fix leaking code
-3. Add connection timeout/recycling
-```
-
-### Memory Leak
-
-```markdown
-## Symptoms
-- Increasing memory usage over time
-- OOM kills
-- Performance degradation
-
-## Diagnosis
-1. Check memory metrics trend
-2. Identify memory-heavy processes
-3. Analyze heap dumps
-
-## Mitigation
-1. Restart affected services (short-term)
-2. Identify leak source
-3. Deploy fix
-```
-
-### External API Failure
-
-```markdown
-## Symptoms
-- Timeouts to external service
-- Increased error rates
-- Degraded functionality
-
-## Mitigation
-1. Activate circuit breaker
-2. Enable fallback/cache
-3. Notify external provider
-4. Monitor for recovery
-```
+| Pattern | Symptoms | Diagnosis | Mitigation |
+|---------|----------|-----------|------------|
+| Database connection exhaustion | Timeouts on DB operations, "too many connections", service degradation | Connection-pool metrics; queries holding connections; connection leaks | Scale the pool (short-term), fix the leaking code, add connection timeout/recycling |
+| Memory leak | Memory climbing over time, OOM kills, performance degradation | Memory-metric trend; memory-heavy processes; heap dumps | Restart affected services (short-term), find the leak source, deploy the fix |
+| External API failure | Timeouts to the external service, raised error rates, degraded functionality | Provider status; error mix and retry behaviour | Activate the circuit breaker, enable fallback/cache, notify the provider, monitor for recovery |

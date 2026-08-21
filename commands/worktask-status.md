@@ -36,17 +36,15 @@ status-view: .context/state.json — worktask wt-demo   megatask groups: 1
 
 TASK  STAGE  STATUS       AGENT                 BLOCKED BY  SOURCE
 ------------------------------------------------------------------
-AR0   AR     completed    software-architector  —           state
 DV0   DV     in_progress  developer             —           state
 QA0   QA     pending      —                     DV0         state
-#41   DV     in_progress  developer             —           milestone-9
 #42   —      blocked      —                     #41         milestone-9
 
 read 2026-08-16T19:26:51Z · point-in-time snapshot, not live
 ```
 
 `--watch` replaces the footer with the refresh time and poll interval and redraws
-until Ctrl-C. Because nothing pushes state changes, that footer is the only signal
+until Ctrl-C. Nothing pushes state changes, so that footer is the only signal
 separating a live board from a frozen one — always leave it visible.
 
 ## Notes

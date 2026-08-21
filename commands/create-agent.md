@@ -27,7 +27,7 @@ Create new agent definitions with proper structure, model selection, and best pr
 - `--purpose <description>` - Agent purpose (required)
 - `--model <haiku|sonnet|opus>` - Model selection (default: auto-select)
 - `--template <minimal|standard|comprehensive>` - Template style (default: standard)
-- `--tools <preset|list>` - Tool access preset or comma-separated list (see Tool Presets)
+- `--tools <preset|list>` - Tool access preset or comma-separated list (see § Tool Presets)
 - `--stage <code>` - Worktask stage integration: PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR
 - `--output <path>` - Output path (default: agents/<name>.md)
 
@@ -42,93 +42,31 @@ Create new agent definitions with proper structure, model selection, and best pr
 
 ## Templates
 
-### Minimal
-Basic structure for simple, focused agents:
-- Frontmatter (name, description, model)
-- Constraints (DO NOT) section (3 items)
-- Purpose section
-- Core capabilities (3-5 items)
-- Basic response approach
-
-### Standard (Default)
-Balanced structure for most agents:
-- Frontmatter (name, description, model, tools)
-- Constraints (DO NOT) section (3-5 items)
-- Purpose section
-- Capabilities (organized by category)
-- Worktask integration
-- State ledger integration
-- Response approach
-- Related agents/commands
-- Handoff Protocol + State Patch (stage owners only — see § Handoff Protocol)
-
-### Comprehensive
-Full structure for complex agents:
-- Frontmatter (name, description, model, tools)
-- Constraints (DO NOT) section (5-7 items)
-- Expert purpose
-- Detailed capabilities (multiple subsections)
-- Behavioral traits
-- Knowledge base
-- Worktask integration with state-ledger format
-- Response approach (numbered steps)
-- Example interactions
-- Anti-patterns
-- Integration points
-- Completion Verification (only when the stage adds checks beyond `stage-contracts.md`)
-- Handoff Protocol + State Patch (stage owners only — see § Handoff Protocol)
+| Section | minimal | standard (default) | comprehensive |
+|---|---|---|---|
+| Frontmatter | name, description, model | + tools | + tools |
+| Constraints (DO NOT) | 3 items | 3-5 items | 5-7 items |
+| Purpose | basic | basic | expert purpose |
+| Capabilities | 3-5 items | by category | detailed subsections |
+| Behavioral traits, knowledge base | — | — | ✅ |
+| Worktask + state-ledger integration | — | ✅ | ✅ |
+| Response approach | basic | ✅ | numbered steps |
+| Related agents/commands | — | ✅ | ✅ + integration points |
+| Example interactions, anti-patterns | — | — | ✅ |
+| Completion Verification | — | — | optional (see § Completion Verification) |
+| Handoff Protocol + State Patch | — | stage owners only | stage owners only |
 
 ## Output Format
 
-```markdown
-# Agent Created: database-admin
+~~~markdown
+# Agent Created: <name>
 
-## Generated File
-`agents/database-admin.md`
-
-## Configuration
-
-| Setting | Value |
-|---------|-------|
-| Name | database-admin |
-| Model | sonnet |
-| Template | standard |
-| Tools | read, bash |
-| Stage | DV |
-
-## Preview
-
----
-name: database-admin
-description: Database specialist for schema design, query optimization, and migration management. Handles PostgreSQL, MySQL, and SQLite with focus on performance and data integrity.
-model: sonnet
----
-
-You are a database administration specialist focused on schema design, query optimization, and migration management...
-
-[Preview of first 500 characters]
-```
-
-### Output template — model rationale & next steps
-
-```markdown
-<!-- …continued: model rationale -->
-## Model Selection Rationale
-
-**Selected**: sonnet
-**Reason**: Task involves moderate analysis (query optimization) and implementation (schema design) requiring balanced reasoning capabilities.
-
-**Alternatives Considered**:
-- haiku: Too limited for query optimization analysis
-- opus: Overkill for standard database operations
-
-## Next Steps
-
-1. Review generated agent at `agents/database-admin.md`
-2. Customize capabilities for your specific database stack
-3. Add domain-specific examples
-4. Test with `/optimize-agent agents/database-admin.md --dry-run`
-```
+## Generated File — `agents/<name>.md`
+## Configuration — | Setting | Value | (Name, Model, Template, Tools, Stage)
+## Preview — generated frontmatter block + first 500 characters of the body
+## Model Selection Rationale — **Selected** + one-line reason; **Alternatives Considered**, one line per rejected tier
+## Next Steps — review the file, customize capabilities for the stack, add domain examples, then `/optimize-agent agents/<name>.md --dry-run`
+~~~
 
 ## Model Auto-Selection
 
@@ -149,6 +87,7 @@ When using `--tools`, specify a preset name or a comma-separated tool list:
 | design | Read, Glob, Grep, Write, ToolSearch |
 
 ### Cross-Plugin Delegation
+
 Add Task delegation syntax to any preset: `--tools full,Task(apple-developer:ios-developer)`
 
 ## Agent Structure Guidelines
@@ -172,36 +111,22 @@ tools: Read, Glob, Grep, Write, Edit
 
 Optional fields keep fixed slots: `isolation:` between `maxTurns:` and `tools:`; `hooks:` last, after `tools:`. An explanatory comment for a narrowly-scoped grant (`# tools: Bash(curl:*) is scoped to curl because …`) sits immediately above the `tools:` line it explains and moves with it.
 
-### Description Best Practices
-- Include "Use PROACTIVELY for..." to improve agent routing
-- Example: "Database specialist for schema design. Use PROACTIVELY for query optimization, migration planning, or database architecture decisions."
+### Body sections
 
-### Constraints (DO NOT) Section
-- First section after frontmatter identity sentence
-- 3-7 specific prohibitions defining agent boundaries
-- Example: "DO NOT modify production code directly" for QA agents
-
-### Purpose Section
-- Clear statement of agent's role
-- Specific domain and boundaries
-- Integration context
-
-### Capabilities
-- Organized by category
-- Actionable, specific items
-- No overlap with other agents
-
-### Worktask Integration
-- Stage codes (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR)
-- State ledger integration
-- Handoff protocols
+| Section | Rule |
+|---|---|
+| `description` | Include "Use PROACTIVELY for..." to improve routing — e.g. "Database specialist for schema design. Use PROACTIVELY for query optimization or migration planning." |
+| Constraints (DO NOT) | First section after the frontmatter identity sentence. 3-7 specific prohibitions defining boundaries ("DO NOT modify production code directly" for QA agents). |
+| Purpose | Role, domain and boundaries, integration context. |
+| Capabilities | By category; actionable and specific; no overlap with other agents. |
+| Worktask Integration | Stage code, state ledger integration, handoff protocols. |
 
 ### Completion Verification (optional)
-- A **supplement** to `stage-contracts.md § Completion Verification`, never a restatement of it
-- Include it only when the stage adds checks the shared contract does not cover; omit it entirely otherwise
-- Sits immediately before § Handoff Protocol
+
+A **supplement** to `skills/shared/stage-contracts.md § Completion Verification`, never a restatement of it. Include it only when the stage adds checks the shared contract does not cover; omit it entirely otherwise. Sits immediately before § Handoff Protocol.
 
 ### Handoff Protocol (stage owners only)
+
 - Last section of the file, followed only by its `### State Patch — REQUIRED before return` subsection
 - Names the `stage-contracts.md#tpl-<code>` frontmatter template and the `Prev→this` edge label; does not restate the shared contract
 - State Patch subsection gives the exact `state-patch.sh --stage <CODE> --prev <PREV>` call plus a `--facts` example
@@ -220,7 +145,4 @@ Optional fields keep fixed slots: `isolation:` between `maxTurns:` and `tools:`;
 
 ## Integration
 
-This command is used by:
-- prompt-engineer agent for creating new agents
-- When expanding the agent ecosystem
-- For specialized domain agents
+Used by the `prompt-engineer` agent to create new agents, when expanding the agent ecosystem, and for specialized domain agents.

@@ -6,52 +6,43 @@ effort: medium
 
 ## Orchestrator Implementation Gate (BINDING)
 
-When the orchestrator receives results from ANY external plugin command (apple-developer:debug, apple-developer:review-code, debugging-toolkit:smart-debug, security-scanning:*, etc.) that include fix suggestions, code changes, or implementation recommendations:
+When ANY external plugin command (apple-developer:debug, apple-developer:review-code, debugging-toolkit:smart-debug, security-scanning:*, …) returns fix suggestions, code changes, or implementation recommendations:
 
-1. **PRESENT** the analysis results and proposed fix to the user
+1. **PRESENT** the analysis and the proposed fix to the user
 2. **DO NOT** call Write, Edit, or any file-modifying Bash command
-3. **WAIT** for explicit user approval before implementing any changes
+3. **WAIT** for explicit user approval before implementing any change
 
-**Exception**: If the user's original request explicitly includes implementation intent (e.g., "fix this and apply the changes", "auto-fix", "just fix it"), the approval gate is satisfied by the original request.
+**Exception**: the original request already carried implementation intent ("just fix it", "auto-fix") — that satisfies the gate.
 
 # Cross-Plugin Handoff Protocol
 
-Defines the handoff protocol between corpflow worktask stages and external plugin agents.
+corpflow's playbook for delegating worktask stages to external plugin agents.
 
-> **The normative contract is `${CLAUDE_SKILL_DIR}/references/plugin-contract.md`.** It is the single
-> source for what an integrating plugin must satisfy and what corpflow guarantees in return. This
-> skill is corpflow's own delegation playbook; where the two disagree, the contract wins.
-
-For plugin-specific protocol tables and error handling, see `${CLAUDE_SKILL_DIR}/references/plugin-protocols.md`
+- **Normative contract**: `${CLAUDE_SKILL_DIR}/references/plugin-contract.md` — what an integrating plugin must satisfy and what corpflow guarantees back. Where it and this file disagree, the contract wins.
+- **Per-plugin stage→agent tables, error handling, model configuration**: `${CLAUDE_SKILL_DIR}/references/plugin-protocols.md`.
+- **Plugin-side template**: `${CLAUDE_SKILL_DIR}/templates/CORPFLOW.md`, copied to an integrating plugin's root.
 
 ## Dispatch Injection (BINDING)
 
-The plugin-facing seam is **one file per plugin**: `CORPFLOW.md` at that plugin's repository root,
-copied from `${CLAUDE_SKILL_DIR}/templates/CORPFLOW.md`. Nothing else in a sibling names corpflow, so
-every delegation to an external plugin agent MUST open its prompt with:
+The plugin-facing seam is **one file per plugin**: `CORPFLOW.md` at that plugin's repository root. Nothing else in a sibling names corpflow, so every delegation to an external plugin agent MUST open its prompt with:
 
 ```
 Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.
 ```
 
-Omit it and the target has no way to learn the stage contract — it carries no corpflow instructions
-of its own. This is the one thing corpflow owes every compatible plugin.
+Omit it and the target cannot learn the stage contract — it carries no corpflow instructions of its own.
 
 ## Frontmatter Schema (BINDING for cross-plugin agents)
 
-The canonical schema lives at `skills/worktask/references/handoff-protocol.md` (frontmatter + state.json + cache layout). Cross-plugin agents (e.g. `apple-developer:ios-developer`, `apple-developer:macos-developer`, `system-developer:c-developer`, `system-developer:cpp-developer`, `system-developer:python-developer`, `system-developer:bash-developer`, `android-developer:android-phone-developer`, `android-developer:kotlin-architector`, `frontend-developer:react-developer`, `frontend-developer:fe-test-generator`, `backend-developer:go-developer`, `backend-developer:database-engineer`, `ai-engineer:llm-engineer`, `debugging-toolkit:*`, `security-scanning:*`) MUST adopt the **full schema** when they take over a worktask stage. The registry of compatible plugins and their functional-role agents is `skills/shared/compatible-plugins.md`:
+Cross-plugin agents MUST adopt the **full** schema when they take over a stage — canonical at `skills/worktask/references/handoff-protocol.md` (frontmatter + state.json + cache layout). It binds every dev plugin in the registry `skills/shared/compatible-plugins.md` plus the support plugins (`debugging-toolkit:*`, `security-scanning:*`).
 
 ### Required schema elements
 
-- Artifact starts with `---\nhandoff:\n` YAML block per `handoff-protocol.md#frontmatter-schema`.
-- Per-stage required fields per `handoff-protocol.md#frontmatter-schema § Per-stage required-field matrix`.
-- state.json patched per `handoff-protocol.md#atomic-write` (or omitted — orchestrator's SubagentStop hook will repair).
+- Artifact starts with `---\nhandoff:\n` per `handoff-protocol.md#frontmatter-schema`.
+- Per-stage required fields per `handoff-protocol.md#frontmatter-schema § Per-stage required-field matrix` — DV `files_touched`; DR/SR `key_decisions`; PL/AR `key_decisions + next_stage_focus`.
+- state.json patched per `handoff-protocol.md#atomic-write`, or omitted — the SubagentStop hook repairs from the frontmatter.
 
-Copy-paste templates for the 12 stages live in `coordination.md#shared-snippets § Snippet C` (snippets C-1 … C-12). Cross-plugin agents copy the appropriate stage template and substitute placeholders.
-
-### Why full schema (not relaxed subset)
-
-One parser is simpler than two. The required fields per stage are minimal (DV needs `files_touched`; DR/SR need `key_decisions`; PL/AR need `key_decisions + next_stage_focus`). A relaxed subset would require a separate parser path in the orchestrator and harness — not worth the cost.
+Copy-paste stage templates: `coordination.md#shared-snippets § Snippet C` (C-1 … C-12). No relaxed subset is offered — one parser is simpler than two and the fields above are already minimal.
 
 ### Worked example: apple-developer:ios-developer takes over DV
 
@@ -63,7 +54,6 @@ handoff:
   summary: "Implemented dark-mode token in iOS app. 6 Swift files modified, 4 tests added."
   files_touched:
     - Sources/Theme/ThemeManager.swift
-    - Sources/Settings/ThemeToggleViewModel.swift
     - Tests/ThemeManagerTests.swift
   next_stage_focus: "DR reviews ThemeManager DI; QA runs UI snapshot regression"
   refs:
@@ -74,41 +64,25 @@ handoff:
 
 #### error_file derivation
 
-The `error_file` for an apple-developer agent is `.context/errors/ios-developer.md` (last segment of qualified name) per `state-ledger.md § error_file derivation`. The same rule applies to every other dev plugin: `.context/errors/c-developer.md`, `.context/errors/kotlin-architector.md`, `.context/errors/react-developer.md`, `.context/errors/be-test-generator.md`, `.context/errors/llm-engineer.md`.
-
-##### Basename collisions
-
-Because the basename is the whole key, two plugins shipping the same bare agent name write to the same error file. `apple-developer` and `android-developer` both ship `security-auditor`, `test-generator`, and `code-fixer` — see `skills/shared/compatible-plugins.md § Naming` before routing both in one worktask.
+`.context/errors/<basename>.md`, where basename is the last `:`-separated segment of the qualified agent name (`apple-developer:ios-developer` → `ios-developer.md`, likewise `c-developer.md`, `kotlin-architector.md`, `react-developer.md`, `be-test-generator.md`, `llm-engineer.md`). Collision join rule: `state-ledger.md § error_file derivation`; the prefix policy that prevents collisions: `skills/shared/compatible-plugins.md § Naming`.
 
 #### Build evidence defaults
 
-system-developer DV takeovers follow the identical frontmatter shape; note that systems work defaults `metadata.requires_screenshots: false` and supplies Build Evidence (terminal transcripts under `.context/logs/`) via the `cli_fallback_adapter` instead of UI screenshots. android-developer DV takeovers default `metadata.requires_screenshots: true` and supply Build Evidence via the `android_adapter` (`adb exec-out screencap -p`) plus Gradle build/test transcripts under `.context/logs/`; there is no Android build MCP, so builds run through scoped `Bash(gradle:*|./gradlew|adb:*)`.
-
-##### Web, back-end and AI evidence
-
-frontend-developer DV takeovers default `metadata.requires_screenshots: true` via the `web_adapter` (Playwright / Chrome MCP) plus Lighthouse and axe reports. backend-developer and ai-engineer DV takeovers default `false`: back-end evidence is API request/response transcripts, test output, k6 reports, and migration logs; AI evidence is eval reports, metric tables, and training transcripts — all under `.context/logs/`. Full table: `skills/shared/compatible-plugins.md § Handoff defaults`.
+Per-plugin `requires_screenshots` defaults and Build Evidence adapters: `skills/shared/compatible-plugins.md § Handoff defaults`. UI platforms default `true` with a capture adapter; non-UI platforms default `false` and supply transcripts, eval/k6/Lighthouse reports and build logs under `.context/logs/` via `cli_fallback_adapter`.
 
 ## #relaxed-profile
 
-Reserved subsection for a future relaxed-profile schema in case the apple-developer team formally objects to full-schema adoption.
-
-**Status**: deferred. Full schema is mandated by current TL/DV decision (see TL coordination.md#open-questions q6).
-
-If/when relaxed profile is negotiated, this section will define the minimum fields (likely `stage + verdict + summary + refs`) and the parser switch logic (e.g. presence of `profile: relaxed` flag in the frontmatter). Until then, cross-plugin agents follow the full schema above.
+**Status**: deferred — the full schema is mandated by the current TL/DV decision (TL `coordination.md#open-questions` q6). If a relaxed profile is ever negotiated, this section defines its minimum fields (likely `stage + verdict + summary + refs`) and the parser switch (a `profile: relaxed` flag). Until then: full schema.
 
 ## When AR Stage Collaborates with Platform Architectors
 
-Unlike DV stage delegation where task ownership transfers, the AR stage uses a **consultation model** — `software-architector` retains task ownership and merges results.
+AR uses a **consultation model** — unlike DV, ownership does not transfer: `software-architector` keeps the stage and merges the result.
 
-The protocol below is written against `apple-developer:apple-architector` as the worked example. It applies unchanged to `system-developer:system-architector`, `android-developer:kotlin-architector`, `frontend-developer:frontend-architector`, `backend-developer:backend-architector`, and `ai-engineer:ai-architector`, substituting the agent and its `.context/<platform>-architecture.md` artifact (per-platform table in `agents/software-architector.md § Platform Architecture Collaboration`).
+Written below against `apple-developer:apple-architector`; applies unchanged to `system-developer:system-architector`, `android-developer:kotlin-architector`, `frontend-developer:frontend-architector`, `backend-developer:backend-architector`, and `ai-engineer:ai-architector`, substituting the agent and its `.context/<platform>-architecture.md` artifact (per-platform table: `agents/software-architector.md § Platform Architecture Collaboration`).
 
 ### Collaboration Protocol
 
-1. `software-architector` detects Apple platform context during AR0
-2. Completes system-level architecture first (API, backend, infra, data)
-3. Delegates Swift app architecture to `apple-developer:apple-architector`
-4. Receives compressed summary + reads `.context/swift-architecture.md`
-5. Merges into unified `architecture.md`
+`software-architector` detects platform context during AR0 → completes system-level architecture first (API, backend, infra, data) → delegates app architecture to the platform architect → reads the compressed summary plus `.context/swift-architecture.md` → merges into the unified `architecture.md`.
 
 ### Delegation Prompt Template
 
@@ -127,67 +101,39 @@ Provide Swift app architecture for the corpflow worktask AR stage:
 - Concurrency constraints: {system-level async requirements}
 
 ## Expected Output
-1. Select architecture pattern (MVVM/TCA/MVI/Clean/etc.) with rationale
-2. Define module structure and dependency boundaries
-3. Define state management and DI strategy
-4. Define concurrency strategy (actors, async/await patterns)
-5. Define navigation pattern
-6. Define Swift test architecture (unit, integration, UI)
+1. Architecture pattern (MVVM/TCA/MVI/Clean/etc.) with rationale
+2. Module structure and dependency boundaries
+3. State management and DI strategy
+4. Concurrency strategy (actors, async/await patterns)
+5. Navigation pattern
+6. Swift test architecture (unit, integration, UI)
 7. Write full output to .context/swift-architecture.md
 8. Return compressed summary (max 500 tokens)
 ```
 
-### Return Protocol
+### Return and Merge Protocol
 
-`apple-architector` writes `.context/swift-architecture.md` with full detail and returns a compressed summary (max 500 tokens). `software-architector` reads the full file when merging into `architecture.md`.
-
-### architecture.md Merge Template
-
-When Apple platform is detected, `architecture.md` gains these sections:
-
-```markdown
-## Swift App Architecture
-### Pattern: [MVVM/TCA/MVI/etc.]
-**Rationale**: [from apple-architector]
-### Module Structure
-[file/target structure from apple-architector]
-### State & Dependency Boundaries
-[DI strategy, state management]
-### Concurrency Strategy
-[async/await, actors, Sendable patterns]
-### Navigation Pattern
-[coordinator/NavigationStack approach]
-```
-
-The `## Test Architecture` section splits into system tests (from `software-architector`) and Swift app tests (from `apple-architector`).
+`apple-architector` writes `.context/swift-architecture.md` in full and returns a ≤500-token summary; `software-architector` reads the file when merging. On a detected Apple platform `architecture.md` gains `## Swift App Architecture` with `### Pattern` (+ rationale), `### Module Structure`, `### State & Dependency Boundaries`, `### Concurrency Strategy`, and `### Navigation Pattern`; its `## Test Architecture` splits into system tests (`software-architector`) and Swift app tests (`apple-architector`).
 
 ### Conflict Resolution
 
-System constraints override app-level preferences. If apple-architector's pattern choice conflicts with system architecture (e.g., TCA's unidirectional flow vs. required bidirectional API streaming), `software-architector` documents the trade-off in an ADR and chooses the compatible option.
+System constraints override app-level preferences. Where the architect's pattern conflicts with system architecture (e.g. TCA's unidirectional flow vs. required bidirectional API streaming), `software-architector` records the trade-off in an ADR and takes the compatible option.
 
 ## When DV Stage Delegates to apple-developer
 
 ### 1. Context Preparation
 
-Before delegating, prepare context from worktask artifacts:
+Compress the worktask artifacts before delegating:
 
 ```markdown
 ## Compressed Planning Context (from .context/<plan_file>)
-- Feature: {feature_name}
-- User stories: {count} stories
-- Acceptance criteria: {key_criteria}
-- Constraints: {platform, performance, etc.}
+- Feature, user-story count, key acceptance criteria, constraints (platform, performance)
 
 ## Compressed Architecture Context (from .context/architecture-N.md)
-- Approach: {technical_approach}
-- Patterns: {architecture_patterns}
-- Key decisions: {decisions}
-- Data models: {summary}
+- Technical approach, architecture patterns, key decisions, data-model summary
 ```
 
 ### 2. Task Ownership Transfer
-
-Transfer task to external plugin agent:
 
 ```bash
 # workspace_path + isolation signal worktree mode to the external agent.
@@ -198,11 +144,7 @@ state-patch.sh --task-meta "$TASK_ID" --set '{
 state-patch.sh --task-status "$TASK_ID" in_progress
 ```
 
-External agents receiving worktree-isolated tasks should:
-1. Read `workspace_path` from task metadata
-2. Operate on files inside the worktree path
-3. Use `git -C {workspace_path}` for any git commands
-4. Write artifacts to `{workspace_path}/.context/`
+An external agent receiving a worktree-isolated task reads `workspace_path` from task metadata, operates on files inside it, runs git as `git -C {workspace_path}`, and writes artifacts to `{workspace_path}/.context/`.
 
 ### 3. Delegation Prompt Template
 
@@ -234,14 +176,13 @@ Implement the following for the corpflow worktask DV stage:
 
 ### 4. Return Protocol
 
-External agent should:
-1. Update task status to completed
-2. Write to `.context/development-N.md`
-3. Return compressed summary for next stage
+The external agent updates task status to completed, writes `.context/development-N.md`, and returns a compressed summary for the next stage.
 
 ## Direct Orchestrator Dispatch
 
-The orchestrator loop dispatches `metadata.agent` directly. **Convention**: always emit fully-qualified `plugin:agent` form (e.g., `corpflow:developer`, `apple-developer:ios-developer`). This convention enables PL0 to route stages to any plugin agent — `corpflow:`, `apple-developer:`, or any other installed plugin — using identical syntax at every call site.
+The orchestrator loop dispatches `metadata.agent` directly. **Convention**: always emit the fully-qualified `plugin:agent` form (`corpflow:developer`, `apple-developer:ios-developer`) — identical syntax routes a stage to any installed plugin.
+
+Use it when the task sits entirely within one external plugin's domain and PL0 can determine at planning time that no corpflow routing is needed; stage continuity then rides on the handoff schema above.
 
 ### Direct dispatch example
 
@@ -261,28 +202,19 @@ state-patch.sh --task-create DV0 --metadata "$(jq -n \
     plan_file:$plan, worktask_id:$wid}')"
 ```
 
-### When to use direct dispatch
-
-Use direct dispatch when:
-- The task is entirely within one external plugin's domain (e.g., pure Swift/Apple work)
-- PL0 can determine at planning time that no corpflow routing is needed
-- The external agent's handoff format (see below) is used for stage continuity
-
-Every `metadata.agent` value carries its plugin prefix.
-
 ### Skill Name Resolution
 
-Plugin skills use the frontmatter `name` field for invocation instead of directory basename. Cross-plugin skill references must use the `name:` value, not the directory path.
+Plugin skills are invoked by their frontmatter `name`, not the directory basename — cross-plugin skill references must use the `name:` value.
 
 ### /reload-plugins
 
-`/reload-plugins` picks up new skills without requiring a full restart. Since CC 2.1.221 a plugin installed via `/plugin` activates immediately when safe, so `/reload-plugins` is the fallback rather than the routine step; `/plugin install` also refreshes a stale marketplace catalog and retries before reporting a plugin not found.
+Since CC 2.1.221 a plugin installed via `/plugin` activates immediately when safe, so `/reload-plugins` is the fallback, not the routine step (`/plugin install` also refreshes a stale marketplace catalog and retries before reporting a plugin not found). Skills and commands changed during a session appear in the slash menu without a restart.
 
-> Skills and commands **changed during a session** now appear in the slash menu without a restart, and a plugin skill carrying a frontmatter `name` keeps its plugin prefix in autocomplete. This eases local plugin development, but it does **not** relax the version-keyed cache rule: the installed-marketplace path still resolves under `~/.claude/plugins/cache/<owner>/<plugin>/<version>/`, so renaming or adding a skill/command/agent still requires a version bump for installed consumers (`skills/shared/plugin-root-resolution.md`). Verify against the cache path before relying on in-session pickup.
+> In-session pickup does **not** relax the version-keyed cache rule: the installed-marketplace path resolves under `~/.claude/plugins/cache/<owner>/<plugin>/<version>/`, so renaming or adding a skill/command/agent still needs a version bump for installed consumers (`skills/shared/plugin-root-resolution.md`). Verify against the cache path first.
 
 ### MCP Dynamic Server Inheritance
 
-Subagents inherit MCP tools from dynamically-injected servers. Cross-plugin handoffs to external agents that rely on MCP tools (e.g., XcodeBuildMCP) work without explicit MCP tool grants in the subagent's `tools:` list, as long as the parent session has the MCP server connected.
+Subagents inherit MCP tools from dynamically-injected servers, so a handoff to an agent relying on MCP tools (e.g. XcodeBuildMCP) needs no explicit MCP grant in its `tools:` list, provided the parent session has the server connected.
 
 ## Handoff to QA Stage (QA)
 
@@ -303,16 +235,13 @@ IMPLEMENTATION:
 - Tests added: {list}
 
 KEY_DECISIONS:
-- {decision_1}
-- {decision_2}
+- {decision}
 
 QA_SCENARIOS:
-- {scenario_1}: {expected_result}
-- {scenario_2}: {expected_result}
+- {scenario}: {expected_result}
 
 EDGE_CASES:
-- {edge_case_1}
-- {edge_case_2}
+- {edge_case}
 
 KNOWN_ISSUES:
 - {any_issues}
@@ -321,8 +250,7 @@ KNOWN_ISSUES:
 ### qa-engineer Processing
 
 ```bash
-# qa-engineer receives the handoff.
-# Reads development.md, then seeds the QA stage task.
+# qa-engineer reads development.md, then seeds the QA stage task.
 state-patch.sh --task-create QA0 --metadata '{
   "stage":"QA","agent":"corpflow:qa-engineer","model":"sonnet",
   "description":"Verify implementation per development handoff"}'
@@ -330,11 +258,7 @@ state-patch.sh --task-create QA0 --metadata '{
 
 ## Context Compression Guidelines
 
-### Token Budgets
-
-See `${CLAUDE_SKILL_DIR}/../context-compression/SKILL.md` for authoritative inter-stage budgets.
-
-For cross-plugin compressed summaries specifically:
+Inter-stage budgets and the corpflow-side handoff shape: `${CLAUDE_SKILL_DIR}/../context-compression/SKILL.md` (§ Context Budget by Handoff, § Handoff Template). Plugin-side return shape: `templates/CORPFLOW.md § Return summary`. Cross-plugin summaries specifically:
 
 | Context Type | Max Tokens |
 |--------------|------------|
@@ -343,32 +267,6 @@ For cross-plugin compressed summaries specifically:
 | Development handoff to external agent | 500 |
 | Full stage output (inline reference) | 1000 |
 
-### Compression Template
-
-```
-STAGE: {stage_name}
-STATUS: {complete|partial|blocked}
-DURATION: {time}
-TOKEN_USAGE: {tokens}
-
-CRITICAL_ITEMS:
-- [P0] {critical_item}
-- [P1] {important_item}
-
-KEY_METRICS:
-- {metric}: {value}
-
-CONTEXT_FOR_NEXT_STAGE:
-- {relevant_context}
-
-FULL_OUTPUT_REF: .context/{stage}.md
-```
-
 ## Best Practices
 
-1. **Always compress context**: Don't pass full documents between plugins
-2. **Reference files**: Use `.context/` paths for detailed data
-3. **Update tasks**: Keep task ownership current
-4. **Document failures**: Log partial completions clearly
-5. **Validate handoffs**: Ensure critical info isn't lost in compression
-6. **Version context**: Include timestamp in handoff summaries
+Compress rather than paste — summaries plus `.context/` paths, never whole documents. Patch task owner/status at transfer and on return. Log partial completions and what was achieved. Check that compression dropped nothing critical, and stamp each summary with stage + run index so it stays attributable.

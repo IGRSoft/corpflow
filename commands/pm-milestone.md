@@ -14,15 +14,15 @@ related:
 
 # PM Milestone Tickets
 
-Generate GitHub milestone tickets with agent assignments for implementation, test, and review. Focuses solely on ticket creation — no implementation.
+Generate GitHub milestone tickets with agent assignments for implementation, test, and review. Ticket creation only — never implementation.
 
 ## Usage
 
 ```
 /pm-milestone "Feature description" --milestone N
-/pm-milestone --from-prd .context/planning-0.md --milestone N    # or any planning-N.md the PL produced
-/pm-milestone "Feature description"                          # Creates new milestone
-/pm-milestone "Feature description" --milestone N --dry-run  # Preview only
+/pm-milestone --from-prd .context/planning-0.md --milestone N   # any planning-N.md the PL produced
+/pm-milestone "Feature description"                             # creates the milestone too
+/pm-milestone "Feature description" --milestone N --dry-run     # preview only
 ```
 
 ## Options
@@ -30,18 +30,16 @@ Generate GitHub milestone tickets with agent assignments for implementation, tes
 | Option | Effect |
 |--------|--------|
 | `<description>` | Feature description to decompose into tickets |
-| `--milestone N` | Assign to existing milestone N. If omitted, create new milestone from feature title |
-| `--from-prd <path>` | Read PRD file (output of `/pm-requirements`) as input |
-| `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Route implementation agent (default: infer from codebase) |
-| `--dry-run` | Preview tickets as markdown without creating GitHub issues |
-| `--secure` | Add `security-reviewer` to Review assignment on all tickets |
-| `--labels <extra>` | Additional labels beyond auto-assigned priority |
+| `--milestone N` | Use existing milestone N; omitted → create one from the feature title |
+| `--from-prd <path>` | Read a PRD (`/pm-requirements` output) as input |
+| `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Route the implementation agent (default: infer from codebase) |
+| `--dry-run` | Preview tickets as markdown, create nothing |
+| `--secure` | Add `security-reviewer` to Review on every ticket |
+| `--labels <extra>` | Extra labels beyond the auto-assigned priority |
 
-## Execution Flow
+## Step 1 — Parse input
 
-### Step 1: Parse Input
-
-Read the feature description or PRD file. If `--from-prd`, extract functional requirements, user stories, and acceptance criteria sections.
+With `--from-prd`, extract the functional requirements, user stories, and acceptance criteria sections.
 
 ```bash
 # Validate milestone exists (if --milestone provided)
@@ -51,111 +49,47 @@ gh api repos/:owner/:repo/milestones/{N} --jq '.title'
 gh issue list --milestone "{title}" --json number,title
 ```
 
-### Step 2: Decompose into Tickets
+## Step 2 — Decompose into tickets
 
-Analyze input for discrete, independently actionable work units:
+Split the input into discrete units along logical boundaries (separate concerns, features, layers); assign P0–P3 from dependency order and criticality; map inter-ticket dependencies; then pick agents. Each ticket must be actionable without reading the others.
 
-1. Identify logical boundaries (separate concerns, features, layers)
-2. Assign priority (P0–P3) based on dependency order and criticality
-3. Map inter-ticket dependencies
-4. Determine agent assignments per ticket (see Agent Selection)
+## Step 3 — Implementation agent
 
-Each ticket should be self-contained — actionable without reading other tickets.
+| `--platform` | Agent |
+|---|---|
+| `apple` | `apple-developer:ios-developer` |
+| `android` | `android-developer:android-developer` |
+| `web` | `frontend-developer:frontend-developer` |
+| `systems` | `system-developer:system-developer` |
+| `backend` | `backend-developer:backend-developer` |
+| `ai` | `ai-engineer:ai-engineer` |
+| `all` / omitted | `corpflow:developer` — auto-routes to specialists at runtime, so it is the safe default whenever the platform is ambiguous |
 
-### Step 3: Determine Agent Assignments
+Always dispatch the qualified `plugin:agent` id: bare role names collide across plugins (`skills/shared/compatible-plugins.md § Naming`).
 
-Select agents for each ticket based on content, flags, and ticket type.
+### Content-based overrides
 
-#### Implementation Agent
+When a ticket names a specific target inside a platform — macOS/watchOS/tvOS/visionOS, Swift concurrency, Compose UI, React/Vue/Svelte/Angular, CSS, C/C++/Python/Bash, API contracts, schema/query work, RAG/prompt/eval, training pipelines — assign the specialist from the marker→specialist tables in `skills/shared/platform-detection.md` instead of the platform entry agent. Automated batch fixes take that platform's code fixer (`skills/shared/compatible-plugins.md § Test generator and code fixer`), never unconditionally Apple.
 
-Select based on `--platform` flag and ticket content:
+Platform-neutral roles stay in corpflow: documentation-only → `technical-writer`; agent/command/skill → `prompt-engineer`; design system or UI design → `designer`.
 
-| Platform / Content | Agent | Plugin |
-|--------------------|-------|--------|
-| `--platform apple` | `ios-developer` | apple-developer |
-| `--platform android` | `android-developer` | android-developer |
-| `--platform web` | `frontend-developer` | frontend-developer |
-| `--platform systems` | `system-developer` | system-developer |
-| `--platform backend` | `backend-developer` | backend-developer |
-| `--platform ai` | `ai-engineer` | ai-engineer |
-| `all` / omitted | `developer` | corpflow |
+### Test and review agents
 
-##### Content-Based Routing — platform-neutral roles
+Test agent: `corpflow:qa-engineer` by default; for a platform-specific ticket, that platform's test generator from `skills/shared/compatible-plugins.md § Test generator and code fixer` — the prefixes differ per plugin, so read the table rather than assuming the bare name.
 
-| Content | Agent | Plugin |
-|---------|-------|--------|
-| Automated batch fix | the detected platform's code-fixer | resolves per platform |
-| Documentation-only ticket | `technical-writer` | corpflow |
-| Agent/command/skill ticket | `prompt-engineer` | corpflow |
-| Design system / UI design | `designer` | corpflow |
+| Review trigger | Agent (corpflow) |
+|---|---|
+| Default | `technical-lead` |
+| `--secure` or security content | `security-reviewer` |
+| Architecture-level change | `software-architector` |
+| `--ethics-review` or high risk | `ethics-reviewer` |
+| Agent/prompt change | `prompt-engineer` |
 
-Batch fix resolves through `skills/shared/compatible-plugins.md § Test generator and code
-fixer` — never unconditionally Apple. When the platform is ambiguous, assign `developer`
-(corpflow) and let it route at runtime.
+Security auto-detection: if the description contains keywords like "auth", "encryption", "credentials", "token", "API key", "certificate", "permission", "keychain", add `security-reviewer` even without `--secure`.
 
-##### Content-Based Routing — app-platform specialization
+## Steps 4–6 — Generate, create, summarize
 
-When a ticket names a specific target inside a platform, assign the specialist rather than
-the platform entry agent. Canonical marker→specialist tables live in
-`skills/shared/platform-detection.md`; these are the rows milestone tickets hit most.
-
-| Content | Agent | Plugin |
-|---------|-------|--------|
-| macOS / watchOS / tvOS / visionOS ticket | `macos-` / `watchos-` / `tvos-` / `visionos-developer` | apple-developer |
-| Swift concurrency / language | `apple-developer` | apple-developer |
-| Compose UI / phone-tablet ticket | `android-phone-developer` | android-developer |
-| React / Vue / Svelte / Angular ticket | `react-` / `vue-` / `svelte-` / `angular-developer` | frontend-developer |
-| CSS / styling / design-token ticket | `css-developer` | frontend-developer |
-
-##### Content-Based Routing — backend, systems, and AI specialization
-
-| Content | Agent | Plugin |
-|---------|-------|--------|
-| API contract (OpenAPI, gRPC) ticket | `api-designer` | backend-developer |
-| Schema / migration / query ticket | `database-engineer` | backend-developer |
-| C / C++ / Python / Bash ticket | `c-` / `cpp-` / `python-` / `bash-developer` | system-developer |
-| RAG / prompt / eval ticket | `llm-engineer` | ai-engineer |
-| Training / data-pipeline ticket | `ml-engineer` | ai-engineer |
-
-The `developer` agent auto-routes to platform specialists at runtime, so it's the safe default when platform is ambiguous.
-
-#### Test Agent
-
-| Ticket Type | Agent | Plugin |
-|-------------|-------|--------|
-| Default | `qa-engineer` | corpflow |
-| Apple platform tests | `test-generator` | apple-developer |
-| Android tests | `test-generator` | android-developer |
-| Web tests | `fe-test-generator` | frontend-developer |
-| Systems tests | `sys-test-generator` | system-developer |
-| Back-end tests | `be-test-generator` | backend-developer |
-| AI evals | `ai-test-generator` | ai-engineer |
-
-The Plugin column is load-bearing: `apple-developer` and `android-developer` both ship an agent
-named `test-generator`, so the bare name alone is ambiguous. Always dispatch the qualified
-`plugin:agent` ID (`skills/shared/compatible-plugins.md § Naming`).
-
-#### Review Agent
-
-| Ticket Type | Agent | Plugin |
-|-------------|-------|--------|
-| Default | `technical-lead` | corpflow |
-| `--secure` or security content | `security-reviewer` | corpflow |
-| Architecture-level changes | `software-architector` | corpflow |
-| `--ethics-review` or high-risk | `ethics-reviewer` | corpflow |
-| Agent/prompt changes | `prompt-engineer` | corpflow |
-
-Security auto-detection: if ticket description contains keywords like "auth", "encryption", "credentials", "token", "API key", "certificate", "permission", "keychain", auto-add `security-reviewer` as review agent even without `--secure`.
-
-### Step 4: Generate Ticket Bodies
-
-Apply the ticket body template for each ticket.
-
-### Step 5: Create or Preview
-
-**If `--dry-run`**: output all tickets as markdown preview.
-
-**If live**:
+Apply the ticket body template per ticket. With `--dry-run`, print the preview and stop; otherwise:
 
 ```bash
 # Create milestone if needed (no --milestone flag)
@@ -170,13 +104,9 @@ gh issue create \
   --label "P{n}"
 ```
 
-### Step 6: Output Summary
-
-Print summary table and suggested next step.
+Finish with the summary table and the suggested next step.
 
 ## Ticket Body Template
-
-Each created issue follows this structure:
 
 ```markdown
 ## Description
@@ -204,8 +134,7 @@ Then [expected result]
 
 ## Dependencies
 
-- Depends on: #{N} (if applicable)
-- Blocks: #{M} (if applicable)
+- Depends on: #{N} · Blocks: #{M} (when applicable)
 
 ## Metadata
 
@@ -214,20 +143,19 @@ Then [expected result]
 - Estimated stages: {e.g., PL → DV → DR → QA → FN}
 ```
 
-The `Agent Assignments` table uses pipe-delimited markdown — parseable by the `megatask` skill with regex `/\| Implementation \| `(.+?)` \|/`.
+### Template — machine-read sections
 
-The `Metadata` section uses `key: value` format consistent with existing `base_branch: <branch>` parsing.
+Both trailing sections are parsed, not just read: `Agent Assignments` by the `megatask` skill via `/\| Implementation \| `(.+?)` \|/`, and `Metadata` via the `key: value` form existing `base_branch: <branch>` parsing expects.
 
 ## Output Format
 
-### Dry-Run Output
+### Dry-run
 
 ```markdown
 # Milestone Tickets Preview: {Feature Title}
 
 ## Ticket 1: {title}
-**Priority**: P0
-**Labels**: P0, feature
+**Priority**: P0 · **Labels**: P0, feature
 **Agents**: Implementation: `ios-developer` | Test: `qa-engineer` | Review: `technical-lead`
 
 ### Body
@@ -244,51 +172,22 @@ The `Metadata` section uses `key: value` format consistent with existing `base_b
 Ready to create? Run without --dry-run.
 ```
 
-### Live Output
+### Live
 
-```markdown
-# Created Milestone Tickets: {Feature Title}
-Milestone: #{N} "{title}"
-
-| Issue | Title | Priority | Implementation | Test | Review |
-|-------|-------|----------|----------------|------|--------|
-| #42 | Core theme system | P0 | ios-developer | qa-engineer | technical-lead |
-| #43 | Settings toggle | P1 | ios-developer | qa-engineer | technical-lead |
-
-Dependencies: #43 → #42
-
-Next: `/megatask {N}` to execute all tickets
-```
+Same summary table keyed by issue number (`#42`) instead of ticket index and without the Dependencies column, headed by `Milestone: #{N} "{title}"`, with dependencies listed below as `#43 → #42` and closing on `Next: /megatask {N}` to execute all tickets.
 
 ## Examples
 
 ```bash
-# Create tickets for a new feature in existing milestone
 /pm-milestone "Add dark mode support" --milestone 3 --platform apple
-
-# Preview tickets from a PRD without creating
 /pm-milestone --from-prd .context/planning-0.md --milestone 5 --dry-run
-
-# Create secure tickets (adds security-reviewer)
 /pm-milestone "Implement OAuth2 flow" --milestone 2 --secure
-
-# Auto-create milestone from description
-/pm-milestone "User profile management"
-
-# Add extra labels
+/pm-milestone "User profile management"                       # auto-creates the milestone
 /pm-milestone "API rate limiting" --milestone 4 --labels "backend,performance"
 ```
 
 ## Integration
 
-### Upstream (feeds into pm-milestone)
+Upstream: `/pm-requirements` (PRD via `--from-prd`), `/pm-prioritize` (same P0–P3 labels), `/pm-roadmap` (roadmap features to decompose).
 
-- `/pm-requirements` — PRD output via `--from-prd`
-- `/pm-prioritize` — priority assignments follow same P0–P3 labels
-- `/pm-roadmap` — roadmap features decomposed into milestone tickets
-
-### Downstream (pm-milestone feeds into)
-
-- `/megatask N` — executes created tickets
-- `skills/megatask` — reads ticket body for agent assignments and metadata
-- Priority labels (`P0`–`P3`) parsed by megatask priority sorting
+Downstream: `/megatask N` executes the created tickets; `skills/megatask` parses ticket bodies for agent assignments and metadata, and sorts on the `P0`–`P3` labels.

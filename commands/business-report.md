@@ -14,106 +14,75 @@ related:
 
 # Business Report Command
 
-Generate business reporting for features or initiatives. The report type is
-selected with `--type`:
-
-- `--type case` (default) — full **business case**: problem, solution, financial
-  analysis, strategic alignment, risk, recommendation.
-- `--type roi` — focused **ROI analysis**: NPV, IRR, payback, sensitivity, and
-  risk-adjusted returns.
-- `--type summary` — **executive summary** for stakeholder communication.
+Generate business reporting for features or initiatives; `--type` selects the
+report, and each type's sections are specified under § Output Format below.
 
 ## Usage
 
 ```
-/business-report "Initiative description"                     # business case (default)
-/business-report --type roi "Initiative" --investment 150000
-/business-report --type summary "Q1 Release" --audience board
+/business-report <initiative> [--type case|roi|summary] [shared + per-type options]
 ```
 
 ## Options
 
 ### Shared (all types)
 
-- `--type <case|roi|summary>` - Report type (default: `case`)
-- `--compare` - Compare multiple options / scenarios
-- `--export` - Export to presentation format
+| Option | Values | Default | Purpose |
+|---|---|---|---|
+| `--type` | `case`, `roi`, `summary` | `case` | Report type |
+| `--compare` | flag | off | Compare multiple options / scenarios |
+| `--export` | flag | off | Export to presentation format |
 
-### `--type case` options
+### Per type
 
-- `--template <full|executive|lean>` - Business case template (default: full)
-- `--include-financials` - Add detailed financial analysis
-
-### `--type roi` options
-
-- `--investment <amount>` - Initial investment amount
-- `--period <years>` - Analysis period (default: 3)
-- `--discount-rate <rate>` - Discount rate for NPV (default: 10%)
-
-### `--type summary` options
-
-- `--format <brief|detailed|presentation>` - Summary format (default: brief)
-- `--audience <c-suite|board|investors|team>` - Target audience
-- `--include <metrics|timeline|risks|financials>` - Include specific sections
+| Option | Type | Values | Default |
+|---|---|---|---|
+| `--template` | case | `full`, `executive`, `lean` | `full` |
+| `--include-financials` | case | flag | off |
+| `--investment` | roi | amount | — |
+| `--period` | roi | years | `3` |
+| `--discount-rate` | roi | rate | `10%` |
+| `--format` | summary | `brief`, `detailed`, `presentation` | `brief` |
+| `--audience` | summary | `c-suite`, `board`, `investors`, `team` | — |
+| `--include` | summary | `metrics`, `timeline`, `risks`, `financials` | all |
 
 ## Examples
 
 ```
 /business-report "Implement enterprise SSO"
 /business-report "Mobile app development" --template full --include-financials
-/business-report "Cloud migration" --compare
-/business-report --type roi "SSO Implementation" --investment 150000 --period 5
-/business-report --type roi "Mobile App" --compare
+/business-report "Cloud migration" --compare --export
+/business-report --type roi "SSO Implementation" --investment 150000 --period 5 --discount-rate 8%
 /business-report --type summary "Q1 Product Release" --format presentation --audience board
+/business-report --type summary "Q1 Release" --format detailed --include risks
 ```
 
 ## Output Format — `--type case` (default)
 
-### Case template — sections 1–3
+### Case template — sections 1–5
 
 ```markdown
 # Business Case: [Initiative Name]
 
-## Executive Summary (table: Attribute | Value — Initiative, Sponsor, Investment, ROI, Payback, Recommendation)
+## Executive Summary (Attribute | Value — Initiative, Sponsor, Investment, ROI, Payback, Recommendation)
 ### One-Line Summary
-
-## 1. Problem Statement
-### Current Situation
-### Impact of Inaction
-
-## 2. Proposed Solution
-### Overview
-### Scope (table: In Scope | Out of Scope)
-### Success Criteria
-
-## 3. Financial Analysis
-### Investment Required (table: Category | One-Time | Recurring)
-### Expected Benefits (table: Benefit | Year 1 | Year 2 | Year 3)
-### ROI Calculation (table: Metric | Value — NPV, IRR, Payback)
+## 1. Problem Statement — Current Situation · Impact of Inaction
+## 2. Proposed Solution — Overview · Scope (In Scope | Out of Scope) · Success Criteria
+## 3. Financial Analysis — Investment Required (Category | One-Time | Recurring) ·
+   Expected Benefits (Benefit | Year 1..N) · ROI Calculation (Metric | Value: NPV, IRR, Payback)
+## 4. Strategic Alignment — Company Objectives (Objective | Alignment | Contribution) ·
+   Competitive Analysis (Competitor | Support | Our Position)
+## 5. Risk Assessment (Risk | Probability | Impact | Mitigation | Residual) · Risk-Adjusted ROI
 ```
 
-### Case template — sections 4–10
+### Case template — sections 6–10
 
 ```markdown
-<!-- …continued: business case sections 4–10 -->
-## 4. Strategic Alignment
-### Company Objectives (table: Objective | Alignment | Contribution)
-### Competitive Analysis (table: Competitor | Support | Our Position)
-
-## 5. Risk Assessment (table: Risk | Probability | Impact | Mitigation | Residual)
-### Risk-Adjusted ROI
-
 ## 6. Implementation Timeline (month-by-month phases)
-
-## 7. Resource Requirements (table: Role | Allocation | Duration)
-
-## 8. Alternatives Considered (Option A/B/C with pros/cons/cost)
-
-## 9. Success Metrics (table: Metric | Baseline | Target | Timeline)
-
-## 10. Recommendation
-### Requested Decision (checklist)
-### Next Steps (if approved)
+## 7. Resource Requirements (Role | Allocation | Duration)
+## 8. Alternatives Considered (Option A/B/C — pros, cons, cost)
+## 9. Success Metrics (Metric | Baseline | Target | Timeline)
+## 10. Recommendation — Requested Decision (checklist) · Next Steps (if approved)
 ```
 
 ### Business Case Template Types
@@ -126,166 +95,75 @@ selected with `--type`:
 
 ## Output Format — `--type roi`
 
-Calculate Return on Investment with NPV, IRR, and payback period.
+### ROI template — investment & metrics
 
-### ROI template — investment & cash flow
-
-```markdown
-# ROI Analysis: SSO Implementation
-
-## Investment Summary
-
-| Category | Amount |
-|----------|--------|
-| Initial Investment | $150,000 |
-| Annual Operating Cost | $36,000 |
-| Analysis Period | 3 years |
-| Discount Rate | 10% |
-
-## Cash Flow Projection
-
-| Year | Investment | Benefits | Net Cash Flow | Cumulative |
-|------|------------|----------|---------------|------------|
-| 0 | -$150,000 | $0 | -$150,000 | -$150,000 |
-| 1 | -$36,000 | $898,000 | $862,000 | $712,000 |
-| 2 | -$36,000 | $1,327,000 | $1,291,000 | $2,003,000 |
-| 3 | -$36,000 | $1,756,000 | $1,720,000 | $3,723,000 |
-```
-
-### ROI template — financial metrics
+Every figure derives from `--investment`, `--period`, and `--discount-rate`.
 
 ```markdown
-<!-- …continued: financial metrics -->
+# ROI Analysis: [Initiative]
+
+## Investment Summary (Category | Amount — Initial Investment, Annual Operating Cost,
+   Analysis Period, Discount Rate)
+## Cash Flow Projection (Year | Investment | Benefits | Net Cash Flow | Cumulative; year 0..N)
 ## Financial Metrics
-
-### Primary Metrics
-
-| Metric | Value | Status |
-|--------|-------|--------|
-| **ROI** | 1,443% | ✅ Excellent |
-| **NPV** | $2,891,000 | ✅ Positive |
-| **IRR** | 485% | ✅ Exceeds hurdle |
-| **Payback Period** | 8 months | ✅ Within target |
-
-### Detailed Calculations
-
-#### ROI (Return on Investment)
-    ROI = (Total Benefits - Total Costs) / Total Costs × 100
-
-#### NPV (Net Present Value)
-    NPV = Σ (Cash Flow / (1 + r)^t)
-
-#### IRR (Internal Rate of Return)
-    IRR: The discount rate at which NPV = 0
-
-#### Payback Period
-    Payback = Time to recover initial investment
+### Primary Metrics (Metric | Value | Status — ROI, NPV, IRR, Payback Period;
+   status glyph ✅ / ⚠️ / ❌ against the hurdle rate and target payback)
 ```
 
-### ROI template — sensitivity & break-even
+### ROI template — sensitivity, risk, comparison
 
 ```markdown
-<!-- …continued: sensitivity analysis -->
-## Sensitivity Analysis
-
-### Optimistic Scenario (+20% benefits) / Pessimistic Scenario (-30% benefits)
-
-| Metric | Base | Optimistic | Pessimistic |
-|--------|------|------------|-------------|
-| ROI | 1,443% | 1,792% | 981% |
-| NPV | $2,891,000 | $3,589,000 | $1,896,000 |
-| Payback | 8 months | 6 months | 11 months |
-
-### Break-Even Analysis
-
-| Scenario | Benefits Required | % of Base |
-|----------|-------------------|-----------|
-| Break-even | $258,000 | 6% |
-| 100% ROI | $516,000 | 13% |
-| Target ROI (200%) | $774,000 | 19% |
-```
-
-### ROI template — risk-adjusted returns & comparison
-
-```markdown
-<!-- …continued: risk-adjusted returns -->
-## Risk-Adjusted Returns
-
-| Risk Factor | Probability | Impact on NPV |
-|-------------|-------------|---------------|
-| Development delays | 30% | -$200,000 |
-| Lower adoption | 20% | -$500,000 |
-| Competition response | 10% | -$300,000 |
-
-**Risk-Adjusted NPV**: $2,541,000 · **Risk-Adjusted ROI**: 885%
-
-## Comparison (`--compare`)
-
-| Metric | Option A: Build | Option B: Buy | Option C: Delay |
-|--------|-----------------|---------------|-----------------|
-| Investment | $150,000 | $50,000 | $0 |
-| 3-Year TCO | $258,000 | $410,000 | $0 |
-| NPV | $2,891,000 | $2,743,000 | -$1,200,000 |
-| ROI | 1,443% | 870% | N/A |
-| **Recommendation** | ✅ Best | Good | ❌ Avoid |
+## Sensitivity Analysis (Metric | Base | Optimistic +20% benefits | Pessimistic −30% benefits)
+## Break-Even Analysis (Scenario | Benefits Required | % of Base — break-even, 100% ROI, target ROI)
+## Risk-Adjusted Returns (Risk Factor | Probability | Impact on NPV), then
+   **Risk-Adjusted NPV** and **Risk-Adjusted ROI**
+## Comparison (`--compare` only: Metric | Option A: Build | Option B: Buy | Option C: Delay,
+   ending in a **Recommendation** row)
 ```
 
 ### ROI Calculation Methods
 
 | Metric | Formula | Use |
 |--------|---------|-----|
-| ROI | (Benefits - Costs) / Costs | Simple return |
+| ROI | (Benefits − Costs) / Costs × 100 | Simple return |
 | NPV | Σ CF/(1+r)^t | Time value of money |
 | IRR | Rate where NPV = 0 | Compare to hurdle rate |
 | Payback | Time to recover investment | Liquidity risk |
 
 ## Output Format — `--type summary`
 
-Executive-level summary of projects, initiatives, or completed work for
-stakeholder communication.
+Format per `--format`; depth and tone per `--audience` (see § Audience Customization).
 
 ### Brief Format (Default)
+
 ```markdown
 # Executive Summary: [Project/Release]
 
 ## TL;DR (one sentence: what delivered, key outcome)
-
-## Key Outcomes (table: Metric | Target | Actual | Status)
-
-## Highlights
-### Delivered (checklist)
-### Business Impact (bullet metrics)
-### Next Quarter Focus (bullet list)
-
+## Key Outcomes (Metric | Target | Actual | Status)
+## Highlights — Delivered (checklist) · Business Impact (bullet metrics) · Next Quarter Focus
 ## Action Required (checklist)
 ```
 
 ### Detailed Format
+
 ```markdown
 # Executive Summary: [Project/Release]
 
 ## Executive Overview (Mission, Outcome, Recommendation)
-
-## Strategic Alignment (table: Goal | Contribution | Impact)
-
-## Delivery Summary
-### Features Delivered (table: Feature | Status | Business Value)
-### Quality Metrics (table: Metric | Target | Actual | Trend)
-
-## Financial Summary (table: Category | Budget | Actual | Variance + ROI update)
-
-## Risk Status (table: Risk | Status | Mitigation)
-
+## Strategic Alignment (Goal | Contribution | Impact)
+## Delivery Summary — Features Delivered (Feature | Status | Business Value) ·
+   Quality Metrics (Metric | Target | Actual | Trend)
+## Financial Summary (Category | Budget | Actual | Variance + ROI update)
+## Risk Status (Risk | Status | Mitigation)
 ## Customer Impact (quotes + metrics table)
-
-## Q2/Next Period Outlook (initiatives, resources, risks)
-
-## Decisions Requested (table: Decision | Deadline | Owner)
-
+## Next Period Outlook (initiatives, resources, risks)
+## Decisions Requested (Decision | Deadline | Owner)
 ## Appendix (links)
 ```
 
 ### Presentation Format
+
 Three slides: Key Wins, Business Impact, Next Focus + Ask.
 
 ### Audience Customization
@@ -299,7 +177,6 @@ Three slides: Key Wins, Business Impact, Next Focus + Ask.
 
 ## Integration
 
-This command supports:
-- `/pm-prioritize` - Business value scoring / input
-- `/docs-release-notes` - Technical details source for `--type summary`
-- `/estimate` - Investment and effort inputs for `--type case` / `--type roi`
+- `/pm-prioritize` — business value scoring / input
+- `/docs-release-notes` — technical details source for `--type summary`
+- `/estimate` — investment and effort inputs for `--type case` / `--type roi`

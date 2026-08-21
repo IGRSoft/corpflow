@@ -2,7 +2,7 @@
 name: megatask
 description: Meta-orchestration of many worktasks across a GitHub milestone or explicit issue array — dependency/blocker DAG, priority ordering, isolated per-issue worktrees. Use for /megatask, multi-issue batches, or any dependency-ordered fan-out of worktasks.
 effort: high
-version: 0.4.0
+version: 0.5.0
 related:
   - ../../commands/megatask.md
   - references/dependency-graph.md
@@ -22,91 +22,72 @@ scripts:
 
 # Megatask
 
-Meta-orchestration layer that executes a **batch** of single-issue worktasks. Megatask owns the
-issue set (a GitHub milestone or an explicit `--issues` array), builds a **dependency/blocker DAG**,
-executes issues in **topological + priority order**, and isolates each issue in its own git worktree.
-It launches one `/worktask` per issue; it never runs stages itself.
+Executes a **batch** of single-issue worktasks: owns the issue set (a GitHub milestone or an
+explicit `--issues` array), builds a **dependency/blocker DAG**, runs issues in **topological +
+priority order**, each isolated in its own git worktree. One `/worktask` per issue; megatask never
+runs stages itself.
 
 > **Separation of concerns.** `/worktask` runs ONE issue's staged pipeline (PL→…→ST) and is
-> milestone-agnostic. `/megatask` sequences many worktasks. All milestone/array/DAG/track logic
-> lives here — not in `worktask.md`.
+> milestone-agnostic. All milestone/array/DAG/track logic lives here — not in `worktask.md`.
 
 ## Canonical Scripts
 
-Two executable INIT scripts in `scripts/` drive the two heavy init operations, and one resolver
-handles the single merge-conflict class that needs no interpretation. Invoke them instead of
-reading the reference files when doing real work — the references remain the authoritative spec
-but are no longer needed in the happy path.
+Invoke these instead of reading the reference files in the happy path; the references stay the
+authoritative spec. Each takes `--self-test` (no network, no side effects).
 
 ### `scripts/build-orchestrator.sh` — DAG builder
 
-Reads pre-fetched issue JSON, extracts dependency edges, runs Kahn cycle detection, assigns
-levels, computes `parallel_tracks`, and emits `orchestrator.json v3.1`.
+Reads pre-fetched issue JSON, extracts dependency edges, runs Kahn cycle detection, assigns levels,
+computes `parallel_tracks`, emits `orchestrator.json v3.1` — the executable implementation of
+`references/dependency-graph.md`. On a cycle: exit 1 naming the participating issues on stderr,
+never an invented order.
 
 #### Invocation — build-orchestrator
 
 ```bash
-# One-line contract (no network required — pass pre-fetched JSON):
 bash scripts/build-orchestrator.sh \
   --file issues.json \
   --out  .worktrees/milestone-1/orchestrator.json \
   --group milestone-1 --milestone-num 1 --milestone-title "Sprint 1" \
   --base-branch develop
 
-# Self-test (no network, no side effects):
 bash scripts/build-orchestrator.sh --self-test
 ```
 
 Input schema: `[{ "issue": <int>, "title": "<str>", "labels": ["P0",...], "body": "<str>" }]`
-Output: `orchestrator.json v3.1` — see `references/schemas.md` for the full field contract.
-
-The reference file `references/dependency-graph.md` is the algorithm spec; this script is its
-executable implementation. On cycle detection the script exits 1 and names the participating
-issues on stderr — never silently invents an order.
+Output: `orchestrator.json v3.1` — field contract in `references/schemas.md`.
 
 ### `scripts/init-worktree.sh` — per-issue worktree initialiser
 
-For one issue: resolves base branch (delegates to `milestone-helpers.sh`), creates the git
-worktree at `.worktrees/<group>/<issue#>`, makes `.context/`, and stamps `workspace.json v2.0`.
+For one issue: resolves the base branch, creates the worktree at `.worktrees/<group>/<issue#>`,
+makes `.context/`, stamps `workspace.json v2.0` — the executable implementation of
+`references/git-integration.md`. Branch naming and base-branch resolution are fully delegated to
+`../shared/milestone-helpers/scripts/milestone-helpers.sh`; no slug or branch logic lives here.
 
 #### Invocation — init-worktree
 
 ```bash
-# One-line contract:
 bash scripts/init-worktree.sh \
   --issue 42 --title "Add login flow" --group milestone-1 \
   --track 1 --blocked-by 41 --blocks 60 --labels "P1,feature" \
-  [--file issue-42.json]   # pre-fetched JSON for base-branch + labels
+  [--file issue-42.json]   # pre-fetched `gh issue view … --json body,labels`
 
-# Dry-run (prints planned actions, no mutations):
 bash scripts/init-worktree.sh --issue 42 --title "..." --group milestone-1 --dry-run
-
-# Self-test (spins up a temp git repo, no network beyond local git):
 bash scripts/init-worktree.sh --self-test
 ```
 
 #### Behavior — init-worktree
 
-`--file` accepts pre-fetched `gh issue view … --json body,labels` output for offline/testable
-use. Without `--file`, base-branch resolution calls git ls-remote (thin, optional). Idempotent:
-re-running on an existing worktree path is a no-op (safe on retry).
-
-Before creating the worktree it excludes the batch's scratch metadata (`/workspace.json`,
-`/.worktrees/`) via the git common dir's `info/exclude`, so `git status` in a fresh worktree is
-empty and an unscoped `git add -A` cannot stage it. The exclusion is checkout-wide and never
-masks a tracked file — `references/git-integration.md § Creation`.
-
-The reference file `references/git-integration.md` is the lifecycle spec; this script is its
-executable implementation. Branch naming and base-branch resolution are fully delegated to
-`../shared/milestone-helpers/scripts/milestone-helpers.sh` — no slug or branch logic is
-duplicated here.
+Without `--file`, base-branch resolution calls git ls-remote (thin, optional). Idempotent:
+re-running on an existing worktree path is a no-op. It excludes the batch's scratch metadata
+(`/workspace.json`, `/.worktrees/`) via the git common dir's `info/exclude` *before* creating the
+worktree, so an unscoped `git add -A` cannot stage it (`references/git-integration.md § Creation`).
 
 #### Runtime twin
 
-> **Runtime twin.** `hooks/megatask-monitor.sh` (the SubagentStop/Stop hook) handles the
-> *completion* side of the lifecycle — reconciling workspace.json outcomes back into
-> orchestrator.json. These INIT scripts handle the *creation* side only. The two sides agree on
-> the same `workspace.json v2.0` schema and `orchestrator.json v3.1` schema defined in
+> `hooks/megatask-monitor.sh` (SubagentStop/Stop) owns the *completion* side — reconciling
+> workspace.json outcomes back into orchestrator.json; these INIT scripts own *creation* only. Both
+> sides agree on the `workspace.json v2.0` / `orchestrator.json v3.1` schemas in
 > `references/schemas.md`.
 
 ### `scripts/resolve-pbxproj-membership.sh` — membershipExceptions conflict resolver
@@ -125,134 +106,96 @@ bash scripts/resolve-pbxproj-membership.sh --self-test
 
 #### Behavior — resolve-pbxproj-membership
 
-This is the one exception to § Conflict Resolution's hand-resolve rule, and only because it
-**refuses everything it does not recognise**. A conflict elsewhere in the file, a comment or blank
-line inside a side, nested or unterminated markers, a diff3 `|||||||` base section (an entry may
-have been deliberately deleted — a union would resurrect it), or a hunk spanning the list's `);`
-all refuse the **whole file**: exit 1 with a `refusing: <reason>` message, the file byte-identical.
-Byte-identity is structural, not asserted — the parse writes a `mktemp` buffer and `mv -f`s only on
-accept, so there is no in-place edit path. Exit codes: 0 union written / no conflict / dry-run /
-self-test passed; 1 refusal or usage error; 2 `awk` missing.
-
-Rule 2 of § Conflict Resolution still applies: build and test before pushing.
+The one exception to § Conflict Resolution's hand-resolve rule, and only because it **refuses
+everything it does not recognise**. Any of these refuses the **whole file** — exit 1 with
+`refusing: <reason>`, file byte-identical (structurally: the parse writes a `mktemp` buffer and
+`mv -f`s only on accept): a conflict elsewhere in the file; a comment or blank line inside a side;
+nested or unterminated markers; a diff3 `|||||||` base section (an entry may have been deliberately
+deleted — a union would resurrect it); a hunk spanning the list's `);`. Exit codes: 0 union written
+/ no conflict / dry-run / self-test passed; 1 refusal or usage error; 2 `awk` missing. Rule 2 of
+§ Conflict Resolution still applies: build and test before pushing.
 
 ## Inputs
 
-```
-/megatask N                  # all open issues in GitHub milestone N
-/megatask N --issues 12,15   # subset of milestone N
-/megatask --issues 12,15,18  # explicit issue array (milestone optional)
-```
-
-`N` (bare integer) ⇒ milestone. `--issues` ⇒ explicit set. At least one required; together,
-`--issues` filters within milestone `N`.
-
-> Cross-issue concurrency (`parallel_tracks`) is orchestrator-derived, not a flag (see § Track
-> Derivation). Intra-issue async (DV0 splitting into DV0/DV1/…) is owned by each issue's TL stage.
+`N` (bare integer) ⇒ milestone; `--issues 12,15,18` ⇒ explicit set (may span milestones); together,
+`--issues` filters within milestone `N`. At least one is required. Full flag surface:
+`../../commands/megatask.md § Usage`. Cross-issue concurrency is orchestrator-derived (§ Track
+Derivation); intra-issue async (DV0 splitting into DV0/DV1/…) belongs to each issue's TL stage.
 
 ## Dependency & Blocker Resolution (DAG)
 
-Megatask's core addition over plain priority batching: it reads **inter-issue relationships** and
-executes a directed acyclic graph rather than a flat priority list.
-
-### Edge sources
+Megatask's core addition over plain priority batching: **inter-issue relationships** executed as a
+directed acyclic graph rather than a flat priority list.
 
 | Edge | Parsed from issue body | Meaning |
 |------|------------------------|---------|
 | `A blocked_by B` | `Depends on: #B` on issue A | A cannot start until B is `completed` |
 | `A blocks B` | `Blocks: #B` on issue A | reverse of `B Depends on A` |
 
-Both formats are what `/pm-milestone` emits in the `## Dependencies` section. Megatask **normalizes**
-the two directions into a single edge set: `A blocks B` ⇔ `B blocked_by A`. Duplicate edges collapse.
-Edges pointing outside the resolved issue set become `external_dependency` warnings (surfaced, but
-they do **not** gate execution — they are out of batch scope).
+Both formats are what `/pm-milestone` emits under `## Dependencies`. The two directions **normalize**
+into one edge set (`A blocks B` ⇔ `B blocked_by A`); duplicates collapse. Edges leaving the resolved
+issue set become `external_dependency` warnings — surfaced, never gating (out of batch scope).
 
 ### Ordering
 
 1. **Cycle detection** (Kahn's algorithm). Any cycle ⇒ STOP and report the participating issues. Never guess an order.
 2. **Topological sort** — issues with empty `blocked_by` form level 0; removing them exposes level 1; etc.
-3. **Priority tiebreak** within a level: `P0` → `P1` → `P2` → `P3` → unlabeled; FIFO by issue number within a tier.
+3. **Priority tiebreak** within a level: `P0`/`priority:critical` → `P1`/`high` → `P2`/`medium` → `P3`/`low` → unlabeled; FIFO by issue number within a tier.
 
-An issue becomes **ready** only when every entry in its `blocked_by[]` is `completed` (PR merged, or
-created when the project closes via PR). Megatask **never starts an issue whose blockers are unmerged.**
-
-Full algorithm, worked examples, and the levelled-schedule schema:
-`references/dependency-graph.md`.
-
-## Priority Sorting
-
-Within a topological tier, issues are sorted by priority label (highest first):
-1. `P0` / `priority:critical`
-2. `P1` / `priority:high`
-3. `P2` / `priority:medium`
-4. `P3` / `priority:low`
-5. No priority label
+An issue is **ready** only when every `blocked_by[]` entry is `completed` (PR merged, or created
+when the project closes via PR): megatask **never starts an issue whose blockers are unmerged.**
+Algorithm, worked example, levelled schedule: `references/dependency-graph.md`.
 
 ## Workspace Architecture
 
-Each issue executes in its own isolated git worktree. `<group>` is `milestone-{N}` (milestone mode)
-or `issues-{shortid}` (array mode).
+Each issue executes in its own git worktree with its own branch checked out — no `git checkout`
+switching, so issues run truly in parallel. `<group>` is `milestone-{N}` or `issues-{shortid}`
+(array mode).
 
 ```
-.worktrees/
-├── <group>/
-│   ├── orchestrator.json             # Root orchestrator state (DAG + tracks + progress)
-│   └── {issue#}/                     # Git worktree root (full source copy)
-│       ├── .git                      # Worktree git link file
-│       ├── .context/                 # Per-issue worktask artifacts (inside the worktree)
-│       ├── workspace.json            # Workspace metadata (isolation: "worktree")
-│       ├── handoff.md                # Compressed context
-│       └── ...                       # Full source tree
+.worktrees/<group>/orchestrator.json   # root orchestrator state (DAG + tracks + progress)
+.worktrees/<group>/{issue#}/           # worktree root: full source copy + .git link file
+    .context/                          # per-issue worktask artifacts
+    workspace.json                     # workspace metadata (isolation: "worktree")
+    handoff.md                         # compressed context
 ```
 
-Each worktree has its own branch checked out independently — no `git checkout` switching. Multiple
-issues execute truly in parallel.
-
-> Add `.worktrees/` to `.gitignore` so worktree contents do not appear as untracked files.
+> Add `.worktrees/` to `.gitignore` so worktree contents do not appear as untracked. Sub-agents in
+> an isolated worktree get Read/Edit access to it with no explicit `tools:` grant.
 
 #### Sparse Checkout
 
 For large monorepos, configure `worktree.sparsePaths` in project `settings.json` to check out only
-relevant directories — reduces per-worktree disk and speeds initialization:
+relevant directories — less per-worktree disk, faster init:
 
 ```json
 { "worktree": { "sparsePaths": ["src/", "tests/", "Package.swift"] } }
 ```
 
-> Megatask startup reads git refs directly and skips a redundant fetch — significantly faster on
-> repos with many branches. Sub-agents in isolated worktrees automatically get Read/Edit access to
-> their own worktree — no explicit `tools:` grant needed.
-
 ### Unattended Execution
 
-Megatask processes issues without intervening per-issue input. It **deliberately bypasses both
-human gates** on every per-issue `PL0`: `plan_gate = "bypass"` and `fn_gate = "bypass"` (both default
-`"checkpoint"`), because a batch cannot stop for per-issue plan or finalization approval. The single
-human checkpoint is megatask's own **R1 batch confirmation** (before any worktree is created).
-Per-issue changes are reviewable as per-issue PRs.
-
-### Unattended open questions
-
-For the same reason megatask also stamps `decision_gate: "auto"` (default `"user"`) on every
-per-issue `PL0`: that issue's `open_questions[]` route through the Fable-model decision pass
-(`commands/worktask.md § Step A.4`) instead of parking the batch on a human. Escalate-class
-questions are never auto-decided here either — they **PARK that single issue** while the batch
-continues with the remaining unblocked issues.
+A batch cannot stop for one issue's approvals, so every per-issue `PL0` is stamped
+`plan_gate: "bypass"`, `fn_gate: "bypass"` (both default `"checkpoint"`) and `decision_gate: "auto"`
+(default `"user"`) — that issue's `open_questions[]` route through the Fable decision pass
+(`commands/worktask.md § Step A.4`). The single human checkpoint is megatask's own **R1 batch
+confirmation**, before any worktree exists; per-issue changes are reviewable as per-issue PRs.
 
 #### Parking an escalate-class question
 
-Parking rides the existing failure path: the
-per-issue worktask settles `execution.status: "failed"` + `execution.reason: "parked_escalation"`
-with an `escalation_parked` audit row (`commands/worktask.md § Step A.4 Escalation guard`), so the
-monitor frees the track and keeps dependents `blocked`; the batch summary lists each parked issue
-with its unanswered questions.
+Escalate-class questions are never auto-decided — they **PARK that single issue** while the batch
+continues with the remaining unblocked issues. Parking needs no new state: it settles
+`execution.status: "failed"` + `execution.reason: "parked_escalation"` with an `escalation_parked`
+audit row, so the monitor frees the track and dependents stay `blocked`, and the batch summary lists
+each parked issue with its unanswered questions. Mechanics:
+`../../commands/megatask.md § Step 3 — parking mechanics`.
 
 > For headless `-p` runs, set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait;
 > with `--mcp-config`, server connections are bounded at 5s rather than blocking on the slowest.
 
 ## Track Derivation
 
-`parallel_tracks` is computed at init and re-derived as blockers merge:
+`parallel_tracks` is computed at init and re-derived as blockers merge, into
+`orchestrator.json → configuration.parallel_tracks`. Never a flag/default.
 
 ```
 parallel_tracks = min( count(currently-ready issues), 5 )
@@ -261,15 +204,17 @@ parallel_tracks = reduce_by_concurrency_cap(parallel_tracks) # CLAUDE_CODE_MAX_C
 # single explicit issue ( /megatask --issues 12 ) ⇒ 1
 ```
 
-Recorded in `orchestrator.json → configuration.parallel_tracks`. Never a flag/default.
-
 ### Subagent spawn budget
 
-> **Subagent spawn budget**: each issue dispatches ~9–11 stage subagents (9-stage default, 11-stage `--secure`) from the single megatask orchestrator session, plus nested delegation (DV routing to platform agents and Tier-2 specialists, QA spawning `test-generator`). CC 2.1.224 removed the per-session total-spawn cap, so batch size is **no longer bounded by a running count** — there is no ~18/~22-issue ceiling to plan around and no env var to raise. What still refuses a dispatch is **concurrency** (`agent-coordination § Two independent ceilings`) and, below it, disk for the per-issue worktrees and your rate budget. Size batches against peak concurrency, not a total.
+> Each issue dispatches ~9–11 stage subagents (9-stage default, 11-stage `--secure`) plus nested delegation (DV → platform agent → Tier-2 specialist, QA → `test-generator`). CC 2.1.224 removed the per-session total-spawn cap: batch size is **no longer bounded by a running count** — no ~18/~22-issue ceiling, no env var to raise. What still refuses a dispatch is **concurrency** (`agent-coordination § Two independent ceilings`) and, below it, disk for the worktrees and your rate budget. Size batches against peak concurrency, not a total.
+
+### Concurrency budget
+
+> **20 subagents may run concurrently** by default (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`) — a cap distinct from spawn total and depth. Subagents are background-by-default, so live population ≈ `parallel_tracks × (1 orchestrator + 1 stage agent + its nested children)`; at `parallel_tracks = 5` with routine Tier-2 delegation that approaches the cap. Track derivation bounds itself against this ceiling; raise the env var only when disk and rate budgets also allow it.
 
 ### Nesting-depth budget
 
-> **`/megatask` spends one depth level before any stage runs.** Phase 2 Step 3 delegates a per-issue `/worktask` orchestrator as its own sub-agent, so the chain is one level deeper than a standalone worktask at every point:
+> **`/megatask` spends one depth level before any stage runs.** Phase 2 Step 3 delegates a per-issue `/worktask` orchestrator as its own sub-agent, so the chain sits one level deeper than a standalone worktask at every point:
 
 | Level | Standalone `/worktask` | Under `/megatask` |
 |-------|------------------------|-------------------|
@@ -281,20 +226,16 @@ Recorded in `orchestrator.json → configuration.parallel_tracks`. Never a flag/
 
 #### Depth remediations
 
-> The default depth cap is **3** (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`). A batch whose DV stages route through a platform router to a Tier-2 specialist loses that last delegation — the specialist is never spawned, and the platform agent completes the work itself. Two remediations:
+> Default cap **3** (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`). A batch whose DV stages route through a platform router to a Tier-2 specialist loses that last delegation — the specialist is never spawned and the platform agent does the work itself. Two remediations:
 >
-> 1. **Raise the cap** (preferred — preserves routing): export `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=4` (or higher for `--secure` batches that also nest under SR) before starting the batch.
-> 2. **Flatten Tier-2** (no config required): have DV dispatch the platform specialist directly (`apple-developer:ios-developer`) instead of the router, reclaiming one level at the cost of the router's platform-detection step.
+> 1. **Raise the cap** (preferred — preserves routing): export `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=4` (higher for `--secure` batches that also nest under SR) before starting the batch.
+> 2. **Flatten Tier-2** (no config required): DV dispatches the platform specialist directly (`apple-developer:ios-developer`) instead of the router, reclaiming one level at the cost of the router's platform-detection step.
 >
-> The R1 gate reports the batch's projected max depth so the choice is made before any worktree exists.
+> The R1 gate reports the batch's projected max depth, so the choice precedes any worktree.
 
 #### One formula, two callers
 
-> The level table above is canonical; `skills/worktask/SKILL.md § Validation check 11` applies it per-stage for standalone worktasks, differing only in `orchestrator_offset` (1 here, 0 standalone). Editing one column of the table without the other is how the two drift — the same chain must project **3** standalone and **4** under `/megatask`. What neither projection can see is an unanticipated hop; that is caught afterwards by `agent-coordination § Depth-refusal self-report`.
-
-### Concurrency budget
-
-> Distinct from both the total-spawn and depth caps: **20 subagents may run concurrently** by default (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`). Because subagents are background-by-default, a megatask run's live population is roughly `parallel_tracks × (1 orchestrator + 1 stage agent + its nested children)` — at `parallel_tracks = 5` with routine Tier-2 delegation that approaches the cap. `parallel_tracks` derivation bounds itself against this ceiling; raise the env var only when the disk and rate budgets also allow it.
+> The level table above is canonical; `skills/worktask/SKILL.md § Validation check 11` applies it per-stage for standalone worktasks, differing only in `orchestrator_offset` (1 here, 0 standalone). The same chain must project **3** standalone and **4** under `/megatask` — editing one column without the other is how the two drift. An unanticipated hop, which neither projection can see, is caught afterwards by `agent-coordination § Depth-refusal self-report`.
 
 ## Status Transitions
 
@@ -305,27 +246,36 @@ pending → ready → in_progress → completed
         → skipped / skipped_has_pr
 ```
 
-**Starting an issue**: set `in_progress`, assign `track`, create worktree + branch, begin the
-per-issue worktask (PL→…→ST) with gates pre-bypassed.
+### Issue status values
 
-**Completing an issue**: per-issue FN pushes the branch, opens a PR with `Closes #{issue}`, and writes
-`execution.status: "completed"` + `execution.pr` into `workspace.json` (the completion contract in
+| Status | Meaning |
+|--------|---------|
+| `pending` | resolved, not yet scheduled |
+| `blocked` | `blocked_by` not all completed |
+| `ready` | all blockers completed; eligible for a track |
+| `in_progress` | worktree active |
+| `completed` | PR created |
+| `skipped` / `skipped_has_pr` | manually skipped / already has a linked PR (auto-detected) |
+| `failed` | max retries exceeded, or parked on unanswered escalate-class questions (`workspace.json.execution.reason: "parked_escalation"`) |
+
+### Starting and completing an issue
+
+**Starting**: set `in_progress`, assign `track`, create worktree + branch, begin the per-issue
+worktask (PL→…→ST) with gates pre-bypassed.
+
+**Completing**: per-issue FN pushes the branch, opens a PR with `Closes #{issue}`, and writes
+`execution.status: "completed"` + `execution.pr` into `workspace.json` (completion contract:
 `references/schemas.md`). The monitor hook reads that, marks the issue `completed` in
 `orchestrator.json`, **unblocks dependents**, and frees the track. A `failed` issue writes
 `execution.status: "failed"` — its dependents stay `blocked`.
 
 ## Per-Track Task IDs
 
-Every track uses the same plain `<STAGE>0` ledger keys. The namespace is the **worktree**, not
-the key: each track has its own `.context/state.json` under its own worktree, so two tracks both
-writing `PL0` never share a ledger and cannot collide. Track-offset ids would additionally break
-every hardcoded `PL0`/`AR0`/`FN0` reader and the `PL is always PL0 only` rule in
+Every track uses the same plain `<STAGE>0` ledger keys (`PL0`, `AR0`, `DV0`, `DR0`, `QA0`). The
+namespace is the **worktree**, not the key: each track has its own `.context/state.json` under its
+own worktree, so two tracks both writing `PL0` cannot collide. Track-offset ids would additionally
+break every hardcoded `PL0`/`AR0`/`FN0` reader and the `PL is always PL0 only` rule in
 `../shared/state-ledger.md`.
-
-```
-Track 1: PL0, AR0, DV0, DR0, QA0
-Track 2: PL0, AR0, DV0, DR0, QA0   ← own worktree, own ledger
-```
 
 ### Seeding a track's PL
 
@@ -360,39 +310,37 @@ truncated on a word boundary. Canonical definition: `../shared/milestone-helpers
 
 ## Shared-Seam Registry
 
-A **seam** is a code surface more than one issue in the batch touches by name: a shared protocol,
-a dependency-injection extension point, a coordinator, or a shared test assertion. Parallel
-tickets cannot see each other's work in progress, so two of them will independently invent the
-same abstraction under different names unless one place tells them it already exists. A
-dependency graph built from issue-body cross-references cannot see this class at all — the
-tickets are genuinely independent; only their *seams* collide.
+A **seam** is a code surface more than one issue in the batch touches by name: a shared protocol, a
+dependency-injection extension point, a coordinator, or a shared test assertion. Parallel tickets
+cannot see each other's work in progress, so two of them independently invent the same abstraction
+under different names unless one place tells them it already exists. The dependency graph cannot
+catch this class — the tickets are genuinely independent; only their *seams* collide.
 
 ### Registry location
 
-**Exactly one registry per batch**, in an issue body under a `## Shared Seams` H2. An issue body
-already exists, is already fetched at dispatch, and needs no lifecycle. Which issue hosts it is a
-rule, not a judgement call — two hosts would reproduce the very failure this prevents, with two
-tickets each reading a different registry and each concluding no seam exists:
+**Exactly one registry per batch**, in an issue body under a `## Shared Seams` H2 — an issue body
+already exists, is already fetched at dispatch, and needs no lifecycle. The host is a rule, not a
+judgement call: two hosts reproduce the very failure this prevents, each ticket reading a different
+registry and concluding no seam exists.
 
 | Batch shape | Registry host |
 |---|---|
-| Exactly one level-0 issue (no `blocked_by`) — the **foundation issue** | that issue's body |
+| Exactly one level-0 issue (no `blocked_by`) — the **foundation issue**, the one every other issue transitively depends on | that issue's body |
 | More than one level-0 issue, or none | the **milestone issue** (milestone mode) or the **orchestrator issue** (`--issues` array mode) |
 
-#### What "foundation issue" means
-
-The first row: the batch's *sole* level-0 issue, the one every other issue transitively depends
-on. A batch without one has no foundation issue, and its registry is at the batch level.
-
-**Convention, not a gate.** Nothing validates the registry this release. Its force comes from the
+**Convention, not a gate.** Nothing validates the registry this release; its force comes from the
 per-issue prompt directing every issue to read it before introducing a shared abstraction
 (`../../commands/megatask.md § Phase 2 loop · Step 3`).
 
 ### Registry schema
 
-One block per seam. `declaration` carries the **verbatim** signature with every parameter label
-in order — a name-only entry would not catch two issues agreeing on a concept but reversing an
-argument order, which is the failure that motivated this.
+One block per seam. `declaration` carries the **verbatim** signature with every parameter label in
+order — a name-only entry would not catch two issues agreeing on a concept but reversing an argument
+order. `consumers:` plus `change-protocol:` are what make an additive change safe: adding a member
+to a shared protocol silently breaks every test double conforming to it, and the adder is the only
+party positioned to know.
+
+#### Registry entry — canonical shape
 
 ````markdown
 ## Shared Seams
@@ -413,26 +361,20 @@ argument order, which is the failure that motivated this.
   and naming every issue in `consumers:` in that PR's description.
 ````
 
-#### Why consumers and change-protocol are mandatory
-
-`consumers:` plus `change-protocol:` are what make an additive change safe: adding a member to a
-shared protocol silently breaks every test double conforming to it, and the adder is the only
-party positioned to know.
-
 ## Orchestrator Pattern
 
 ### Initialization
 
-1. Create `.worktrees/<group>/` directory.
-2. Resolve the issue set (milestone fetch or per-issue `gh issue view`); drop closed / `skipped_has_pr`.
-3. Build the DAG (`references/dependency-graph.md`); detect cycles; compute topological + priority order.
-4. **Derive** `parallel_tracks` = `min(count(ready issues), 5)`, disk-reduced; single explicit issue ⇒ 1.
-5. Write `orchestrator.json` (schema v3.1) with the DAG, order, and tracks.
-6. Run the **R1 batch confirmation gate**, then create worktrees and start the first ready issues.
+1. Create `.worktrees/<group>/`; resolve the issue set (milestone fetch or per-issue
+   `gh issue view`), dropping closed / `skipped_has_pr` ones.
+2. Build the DAG (`references/dependency-graph.md`) — cycles STOP; compute topological + priority
+   order; **derive** `parallel_tracks` (§ Track Derivation).
+3. Write `orchestrator.json` (schema v3.1) with the DAG, order, and tracks.
+4. Run the **R1 batch confirmation gate**, then create worktrees and start the first ready issues.
 
 ### Monitoring Loop
 
-The loop is **completion-driven** via `hooks/megatask-monitor.sh` (registered SubagentStop/Stop):
+**Completion-driven** via `hooks/megatask-monitor.sh` (registered SubagentStop/Stop):
 
 1. **On per-issue completion** — the hook marks the issue `completed` in `orchestrator.json`,
    removes it from every dependent's `blocked_by[]`, promotes now-unblocked dependents to `ready`,
@@ -445,38 +387,20 @@ The loop is **completion-driven** via `hooks/megatask-monitor.sh` (registered Su
 
 #### Hook properties
 
-The hook is **non-blocking** (always exits 0) and **self-skips** when no `orchestrator.json` is
-present (i.e. plain single-issue worktasks are untouched). See `references/agent-teams.md` for the
-optional agent-teams event model (`TeammateIdle` / `TaskCompleted`).
+Non-blocking (always exits 0) and **self-skips** when no `orchestrator.json` is present, so plain
+single-issue worktasks are untouched. Optional agent-teams event model (`TeammateIdle` /
+`TaskCompleted`): `references/agent-teams.md`.
 
 ## Execution Flow
 
-### Milestone: `/megatask N`
+The three modes differ only in issue-set resolution — milestone fetch, `gh issue view` per issue
+(group `issues-{shortid}`), or milestone ∩ explicit set. All then execute identically: build the DAG
+and sort → R1 gate → init `parallel_tracks` worktrees → each runs independently → on completion open
+the PR, unblock dependents, assign the next ready issue. Phase-by-phase procedure and the resolution
+commands: `../../commands/megatask.md § Phase 1`, `§ Phase 2`.
 
-1. Fetch milestone + issues. 2. Build DAG, sort. 3. R1 gate. 4. Init `parallel_tracks` worktrees.
-5. Each worktree runs independently. 6. On completion: PR, unblock dependents, assign next ready.
-
-### Array: `/megatask --issues 12,15,18`
-
-1. `gh issue view` each issue. 2. Build DAG across the set (cross-milestone allowed).
-3. R1 gate. 4. Execute identically to milestone mode under group `issues-{shortid}`.
-
-### Subset: `/megatask N --issues 12,15`
-
-Resolve milestone N, then intersect with the explicit set before building the DAG.
-
-### Multi-Issue Parallelism
-
-Track count is orchestrator-derived (max 5), gated by the DAG (only ready issues consume tracks).
-
-| Tracks | 5 independent issues | Time | Savings |
-|--------|----------------------|------|---------|
-| 1 | 5 × 1h | 5h | — |
-| 2 | 3 × 1h | 3h | 40% |
-| 5 | 1 × 1h | 1h | 80% |
-
-A deep dependency chain (A→B→C→D→E) runs effectively serially regardless of track count — the DAG,
-not the track cap, bounds it.
+Track count is orchestrator-derived (max 5) and gated by the DAG — only ready issues consume tracks,
+so a deep chain (A→B→C→D→E) runs effectively serially however many tracks exist.
 
 ## Conflict Resolution
 
@@ -488,13 +412,12 @@ a batch produces.
 **Dependency-injection containers and coordinator-shaped files are hand-resolved by a human;
 never script-merge them.** Any "keep both sides" automation is forbidden on these shapes: a
 registration list, a DI container extension, a coordinator's argument list, or a switch over
-destinations. Observed failure: a scripted keep-both-sides join dropped an argument separator
-(the other side's block opened with a comment line) and duplicated a closing brace twice. Both
-survived review and were caught only by a later build.
+destinations. Observed failure: a scripted keep-both-sides join dropped an argument separator and
+duplicated a closing brace twice; both survived review and were caught only by a later build.
 
-A script is allowed only where its conflict class needs no interpretation *and* the script
-refuses everything it does not recognise; § Canonical Scripts names any such tool the batch
-ships. Absent that, this rule stands.
+A script is allowed only where its conflict class needs no interpretation *and* the script refuses
+everything it does not recognise (§ Canonical Scripts names any such tool the batch ships). Absent
+that, this rule stands.
 
 ### Rule 2 — build and test before pushing
 
@@ -516,25 +439,3 @@ Rebase, push under a new name, open a replacement PR, close the superseded one:
 | Dependency cycle | — | STOP at init; report participating issues |
 
 **Global errors**: milestone not found, issue not in milestone/set, rate limit, dependency cycle.
-
-## Issue Status Values
-
-- `pending` — resolved, not yet scheduled
-- `blocked` — `blocked_by` not all completed
-- `ready` — all blockers completed; eligible for a track
-- `in_progress` — worktree active
-- `completed` — PR created
-- `skipped` — manually skipped
-- `skipped_has_pr` — already has a linked PR (auto-detected)
-- `failed` — max retries exceeded, or parked on unanswered escalate-class questions (`workspace.json.execution.reason: "parked_escalation"`)
-
-## GitHub CLI
-
-```bash
-gh api /repos/{owner}/{repo}/milestones/{N}
-gh api "/repos/{owner}/{repo}/issues?milestone={N}&state=open" --paginate
-gh issue view {ISSUE} --json number,title,labels,body,state
-```
-
-See `references/` for the DAG algorithm, orchestrator/workspace schemas, git integration, and the
-agent-teams pattern.

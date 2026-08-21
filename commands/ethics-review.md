@@ -14,23 +14,18 @@ related:
 
 # /ethics-review
 
-Review tasks, features, or code for alignment with Claude's constitutional principles including safety, honesty, harm avoidance, and ethical guidelines.
+Review tasks, features, or code for alignment with Claude's constitutional principles including safety, honesty, harm avoidance, and ethical guidelines. Principles canon: `skills/claude-constitution/SKILL.md`; analysis is performed by `agents/ethics-reviewer.md`.
 
 ## Lenses
 
-`ethics-review` runs under one of two lenses (`--lens`):
+| `--lens` | Mode |
+|---|---|
+| `full` (default) | Standard constitutional review across Safety, Honesty, Harm, Autonomy |
+| `harm` | Harm-avoidance deep-dive: cost-benefit, stakeholder impact, harm matrix, mitigations |
 
-- `--lens full` (default) — standard constitutional review across Safety, Honesty,
-  Harm, and Autonomy categories.
-- `--lens harm` — a comprehensive harm-avoidance deep-dive: cost-benefit analysis,
-  stakeholder impact, harm-category matrix, and mitigation recommendations.
-
-> **`--lens harm` vs `--focus harm` — do not confuse the two:**
-> `--lens harm` selects the *full harm-avoidance deep-dive mode* (the ported
-> harm-avoidance framework below). `--focus harm` (a `--lens full` option) merely
-> *scopes the standard review to the Harm category* — a much lighter pass. Use
-> `--lens harm` when you want the stakeholder/probability/severity analysis; use
-> `--focus harm` to narrow a standard review.
+> **`--lens harm` ≠ `--focus harm`.** `--lens harm` selects the deep-dive mode
+> (stakeholder / probability / severity analysis). `--focus harm` merely scopes a
+> standard `--lens full` review to the Harm category — a much lighter pass.
 
 ## Usage
 
@@ -52,7 +47,7 @@ Review tasks, features, or code for alignment with Claude's constitutional princ
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | --lens | enum | full | Review lens: `full` (constitutional) or `harm` (harm-avoidance deep-dive) |
-| --output | enum | summary | Output format: `summary`, `detailed`, `checklist`, `matrix`, `report` |
+| --output | enum | summary | Output format: `summary`, `detailed`, `checklist`, `matrix`, `report` (`matrix` is harm-lens only) |
 
 ### `--lens full` options
 
@@ -69,8 +64,6 @@ Review tasks, features, or code for alignment with Claude's constitutional princ
 | --stakeholders | enum | all | Impact scope: `users`, `operators`, `society`, `all` |
 | --include-benefits | bool | true | Include benefits in the cost-benefit analysis |
 | --mitigation | bool | true | Include mitigation recommendations |
-
-(`matrix` is the harm-lens-specific value of `--output`.)
 
 ## Output (`--lens full`)
 
@@ -90,81 +83,30 @@ Hard Violations: [count]
 
 Recommendations:
 1. [recommendation]
-2. [recommendation]
 ```
 
 ### Detailed Format
-Includes:
-- Full analysis by category
-- Evidence from code/documentation
-- Specific line references
-- Mitigation suggestions
-- Related constitutional principles
+
+Adds per-category analysis, evidence from code/documentation with line references,
+mitigation suggestions, and the related constitutional principles.
 
 ### Checklist Format
-```
-Constitutional Compliance Checklist
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-SAFETY
-[ ] No physical harm potential
-[ ] No information security risks
-[ ] No dual-use concerns
-[ ] Appropriate safeguards in place
-
-HONESTY
-[ ] Outputs are truthful
-[ ] Uncertainty properly calibrated
-[ ] No deceptive patterns
-[ ] Transparent about limitations
-
-HARM AVOIDANCE
-[ ] User wellbeing prioritized
-[ ] No manipulative patterns
-[ ] Vulnerable populations considered
-[ ] Privacy protected
-
-USER AUTONOMY
-[ ] Informed consent supported
-[ ] User control preserved
-[ ] No autonomy undermining
-[ ] Fair choice presentation
-```
+One `[ ]` line per dimension in § Review Categories, grouped under
+`SAFETY` / `HONESTY` / `HARM AVOIDANCE` / `USER AUTONOMY`.
 
 ## Review Categories (`--lens full`)
 
-### Safety Assessment
-- Physical harm potential
-- Information security risks
-- Dual-use concerns
-- Safeguard adequacy
-- Hard constraint violations
+Assessed dimensions per category — also the source of the checklist rows above:
 
-### Honesty Assessment
-- Truthfulness of outputs
-- Calibration of uncertainty
-- Transparency about limitations
-- Deception potential
-- Forthright information sharing
-
-### Harm Assessment
-- Direct harm potential
-- Indirect harm risks
-- Cumulative impacts
-- Vulnerable population effects
-- Privacy implications
-
-### Autonomy Assessment
-- User control preservation
-- Informed consent support
-- Manipulation avoidance
-- Fair choice presentation
-- Dependency creation risks
+| Category | Dimensions |
+|---|---|
+| Safety | Physical harm potential · information security risks · dual-use concerns · safeguard adequacy · hard constraint violations |
+| Honesty | Truthfulness of outputs · calibration of uncertainty · transparency about limitations · deception potential · forthright information sharing |
+| Harm avoidance | Direct and indirect harm · cumulative impacts · vulnerable populations · privacy implications · user wellbeing |
+| User autonomy | User control preservation · informed consent · manipulation avoidance · fair choice presentation · dependency creation risks |
 
 ## Output (`--lens harm`)
-
-Comprehensive harm-avoidance evaluation: cost-benefit analysis, stakeholder impact,
-and mitigation recommendations.
 
 ### Summary Format (default)
 ```
@@ -174,64 +116,42 @@ Harm Assessment: [target]
 Risk Level: [Low|Medium|High|Critical]
 
 Potential Harms:
-• [harm 1] - [probability] / [severity]
-• [harm 2] - [probability] / [severity]
+• [harm] - [probability] / [severity]
 
 Affected Stakeholders:
-• Users: [impact summary]
-• Operators: [impact summary]
-• Society: [impact summary]
+• Users / Operators / Society: [impact summary each, per --stakeholders]
 
-Benefits (if any):
-• [benefit 1]
-• [benefit 2]
+Benefits (--include-benefits):
+• [benefit]
 
 Cost-Benefit: [favorable|unfavorable|requires mitigation]
 
-Top Mitigations:
+Top Mitigations (--mitigation):
 1. [mitigation]
-2. [mitigation]
 ```
 
 ### Matrix Format (`--output matrix`)
-```
-Harm Assessment Matrix
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+Plot each harm as `[Hn]` in the probability × severity cell, then legend the
+`[Hn]` labels beneath.
+
+```
                     │ Low    │ Medium │ High   │ Critical
 ─────────────────────────────────────────────────────────
 Unlikely (< 10%)    │        │ [H1]   │        │
 Possible (10-40%)   │        │        │ [H2]   │
 Likely (40-70%)     │ [H3]   │        │        │
 Very Likely (> 70%) │        │        │        │
-
-Legend:
-[H1] Privacy data exposure
-[H2] Manipulation potential
-[H3] Minor usability harm
 ```
 
 ### Harm Categories
 
-#### Direct Harms
-Physical, psychological, financial, or reputational harm directly caused by the feature or action.
-
-**Considerations:** immediate negative impacts, health and safety effects, financial losses, reputation damage, emotional distress.
-
-#### Indirect Harms
-Downstream effects that may occur as a consequence of the primary action.
-
-**Considerations:** second-order effects, long-term consequences, cascading impacts, ecosystem effects.
-
-#### Facilitated Harms
-Harms that the feature could enable others to cause.
-
-**Considerations:** misuse potential, weaponization risk, amplification of bad actors, dual-use concerns.
-
-#### Autonomy Harms
-Harms to user agency, informed consent, and self-determination.
-
-**Considerations:** manipulation potential, choice architecture fairness, dependency creation, information asymmetry.
+| Category | Definition | Considerations |
+|---|---|---|
+| Direct | Physical, psychological, financial, or reputational harm caused by the feature itself | Immediate negative impacts, health and safety, financial loss, reputation damage, emotional distress |
+| Indirect | Downstream consequences of the primary action | Second-order effects, long-term consequences, cascading impacts, ecosystem effects |
+| Facilitated | Harm the feature enables others to cause | Misuse potential, weaponization risk, amplification of bad actors, dual-use concerns |
+| Autonomy | Harm to agency, informed consent, self-determination | Manipulation potential, choice-architecture fairness, dependency creation, information asymmetry |
 
 ### Probability Assessment
 
@@ -253,9 +173,10 @@ Harms to user agency, informed consent, and self-determination.
 
 ### Cost-Benefit Framework
 
-**Factors Increasing Acceptable Risk:** strong benefit to users/society, user consent and awareness, harm is reversible, good mitigation options exist, alternative would cause greater harm.
-
-**Factors Decreasing Acceptable Risk:** vulnerable populations affected, harm is irreversible, no user consent or awareness, disproportionate impact on disadvantaged, alternative exists with less harm.
+| Direction | Factors |
+|---|---|
+| Increases acceptable risk | Strong benefit to users/society · user consent and awareness · harm is reversible · good mitigations exist · the alternative causes greater harm |
+| Decreases acceptable risk | Vulnerable populations affected · harm is irreversible · no consent or awareness · disproportionate impact on the disadvantaged · a less harmful alternative exists |
 
 ### Mitigation Strategies
 
@@ -266,30 +187,13 @@ Harms to user agency, informed consent, and self-determination.
 
 ## Examples
 
-### Quick Review of Current Task
 ```
-/ethics-review --depth quick
-```
-
-### Comprehensive Feature Review
-```
+/ethics-review --depth quick                                                  # current task
 /ethics-review "user authentication system" --scope feature --depth comprehensive
-```
-
-### Safety-Focused Code Review
-```
-/ethics-review src/payment.ts --scope code --focus safety
-```
-
-### Standard Review Scoped to the Harm Category
-```
-/ethics-review "recommendation algorithm" --focus harm --depth comprehensive
-```
-
-### Full Harm-Avoidance Deep-Dive
-```
+/ethics-review src/payment.ts --scope code --focus safety --output checklist
+/ethics-review "recommendation algorithm" --focus harm --depth comprehensive  # scoped standard pass
 /ethics-review "AI-powered content recommendation" --lens harm
-/ethics-review "auto-save feature" --lens harm --stakeholders users
+/ethics-review "auto-save feature" --lens harm --stakeholders users --mitigation false
 /ethics-review "data collection expansion" --lens harm --output matrix --stakeholders all
 /ethics-review "targeted advertising" --lens harm --include-benefits false
 ```
@@ -317,18 +221,11 @@ The following always result in ❌ Violation (never acceptable regardless of ben
 
 ## Integration
 
-### Worktask Integration
-Can be invoked at any worktask stage:
-- **PL Stage**: Review planned features for ethical concerns / assess harms before design
-- **AR Stage**: Review architecture for safety and harm implications
-- **DV Stage**: Review implementation for harm potential
-- **QA Stage**: Include ethics in quality criteria
-- **ST Stage**: Stakeholder review of harm assessment (`--lens harm`)
+Invokable at any worktask stage — PL: planned features / harms before design ·
+AR: architecture safety and harm implications · DV: implementation harm potential ·
+QA: ethics in quality criteria · ST: stakeholder review of the harm assessment
+(`--lens harm`).
 
-### Related Commands
-- `/pm-risk` - Technical risk assessment
-
-### Agent Coordination
-- Uses `ethics-reviewer` agent for analysis
-- Can escalate to human/stakeholder review for complex or critical cases
-- Integrates with risk assessment and security worktasks
+- `/pm-risk` — technical risk assessment
+- Analysis runs through the `ethics-reviewer` agent; complex or critical cases
+  escalate to human/stakeholder review.

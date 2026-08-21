@@ -35,7 +35,8 @@ Generate a comprehensive QA summary report for completed work, including test re
 ```
 /test-report
 /test-report --format html --include-screenshots
-/test-report --summary-only
+/test-report --summary-only --platform web
+/test-report --format json --verbose
 ```
 
 ## Output Format
@@ -55,6 +56,8 @@ Generate a comprehensive QA summary report for completed work, including test re
 ```
 
 ### Template — test execution summary
+
+Selection-mode fields follow `skills/shared/testing-strategy.md § Test Selection Gate`.
 
 ```markdown
 <!-- …continued: test execution summary -->
@@ -89,11 +92,11 @@ Generate a comprehensive QA summary report for completed work, including test re
 |--------|-------|----------|
 | `@test-required` | N | AppLaunchTests.testLaunchSucceeds |
 | `metadata.always_required_tests` | N | test_auth_smoke.py::test_login_roundtrip |
-| `@depends-on:` matches | N | PaymentRefundTests.testRefundFlow ← `PaymentService` |
+| `@depends-on:` matches | N | PaymentRefundTests ← `PaymentService` |
 | `covers-changed-files` | N | userRepository.test.ts ← `userRepository.ts` |
 | Module-level (scoped only) | N | All `:core:networking` tests |
 | QA additions | N | <new edge-case tests> |
-| **Excluded** | N | <reason summary; e.g., "no marker, mode=build-only"> |
+| **Excluded** | N | <reason; "no marker, mode=build-only"> |
 ```
 
 #### Execution — selection warnings and by priority
@@ -109,11 +112,12 @@ Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty s
 |----------|-------|--------|--------|
 | Critical | 8 | 8 | 0 |
 | High | 15 | 14 | 1 |
-| Medium | 20 | 18 | 2 |
-| Low | 7 | 7 | 0 |
+| Medium / Low | 27 | 25 | 2 |
 ```
 
 ### Template — failed tests
+
+One entry per failure, same field set each time; `Status` states whether it blocks release.
 
 ```markdown
 <!-- …continued: failed tests -->
@@ -126,17 +130,12 @@ Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty s
 - **Root Cause**: Race condition in token refresh
 - **Status**: Known issue, non-blocking
 - **Ticket**: #456
-
-### E2E-003: Login with Slow Network
-- **Type**: E2E
-- **Priority**: Medium
-- **Error**: Element not found within timeout
-- **Root Cause**: Flaky test, needs retry logic
-- **Status**: Test improvement needed
-- **Ticket**: #457
 ```
 
 ### Template — coverage and quality metrics
+
+Coverage rows come from `/test-coverage § Coverage by Module`, plus a bolded **Total** row scored
+against the threshold.
 
 ```markdown
 <!-- …continued: coverage report, quality metrics -->
@@ -145,8 +144,6 @@ Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty s
 | Module | Line | Branch | Target | Status |
 |--------|------|--------|--------|--------|
 | auth | 85% | 78% | 80% | ✅ |
-| api | 88% | 82% | 80% | ✅ |
-| ui | 72% | 65% | 70% | ✅ |
 | **Total** | **82%** | **75%** | **80%** | ✅ |
 
 ## Quality Metrics
@@ -156,7 +153,6 @@ Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty s
 | Defect Density | 0.5/KLOC | ↓ | Improved from 0.8 |
 | Test Stability | 94% | ↑ | 3 flaky tests remaining |
 | Avg Test Time | 2.3s | → | Stable |
-| Code Complexity | 12 avg | → | Within limits |
 ```
 
 ### Template — bugs and regression
@@ -168,7 +164,6 @@ Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty s
 | ID | Severity | Summary | Status |
 |----|----------|---------|--------|
 | BUG-123 | Medium | Token not cleared on logout | Fixed |
-| BUG-124 | Low | Typo in error message | Fixed |
 | BUG-125 | Medium | Race condition in refresh | Open |
 
 ## Regression Testing
@@ -176,7 +171,6 @@ Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty s
 | Area | Tests | Status |
 |------|-------|--------|
 | Existing Auth | 15 | ✅ All pass |
-| User Management | 8 | ✅ All pass |
 | API Endpoints | 12 | ✅ All pass |
 ```
 
@@ -191,11 +185,9 @@ Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty s
 
 ### Pre-Release Actions
 1. Fix flaky E2E test (E2E-003)
-2. Monitor token refresh in staging
 
 ### Post-Release Monitoring
 - Watch for token refresh errors in logs
-- Monitor authentication latency
 
 ## Sign-Off
 
@@ -209,7 +201,6 @@ Quote any `WARN:` lines from `.context/logs/test-selection-warnings.md`. Empty s
 
 - [Full Test Results](./test-results.json)
 - [Coverage Report](./coverage/index.html)
-- [Performance Metrics](./performance.md)
 ```
 
 ## Integration

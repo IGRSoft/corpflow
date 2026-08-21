@@ -1,7 +1,7 @@
 ---
 name: state-ledger
 description: State ledger reference — the state.json tasks{} map, its metadata schema, status values, and write operations. Use when creating, reading, or updating worktask stage state.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # State Ledger Reference
@@ -10,38 +10,34 @@ Single source of truth for worktask stage state.
 
 ## The ledger is `state.json`
 
-`.context/state.json` `tasks{}` is the **only** stage ledger. It is authoritative for stage
-status, dependencies, routing metadata, and results. Full schema:
+`.context/state.json` `tasks{}` is the **only** stage ledger — authoritative for stage status,
+dependencies, routing metadata, and results. It lives in the worktask folder, so it survives session
+end, compaction, and resume with no configuration. Full schema:
 `skills/worktask/references/handoff-protocol.md#state-json-schema`.
 
 corpflow does **not** use Claude Code's Task System (`TaskCreate` / `TaskUpdate` / `TaskGet` /
 `TaskList`) — not even where those tools are available.
 
-> **Why, so nobody re-adds them**: CC 2.1.233 removed the Todo/task-tracking tools on Opus 4.8,
-> Sonnet 5, Fable 5, Mythos 5, and newer models. Every model this plugin dispatches is on that
-> list, so an orchestrator built on those tools cannot run at all. `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`
-> restores them, but the plugin deliberately does not depend on it — one ledger, one code path.
-> `CLAUDE_CODE_ENABLE_TASKS` is **not** that switch; do not mistake one for the other.
+> **Why, so nobody re-adds them**: CC 2.1.233 removed the Todo/task-tracking tools on every model
+> this plugin dispatches (Opus 4.8, Sonnet 5, Fable 5, Mythos 5, newer), so an orchestrator built on
+> them cannot run at all. `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` restores them; the plugin deliberately
+> does not depend on it — one ledger, one code path. `CLAUDE_CODE_ENABLE_TASKS` is **not** that
+> switch.
 
 ## Ledger Keys
 
-```
-[STAGE][N]
-```
+`[STAGE][N]`, N 0-based and sequential per stage code: first `DV` created → `DV0`, second → `DV1`
+(`PL0`, `AR0`, `DV0`, `DV1`). The human-readable label lives in `tasks.<ID>.metadata.description`.
 
-N is 0-based, sequential per stage code. First `DV` created → `DV0`, second → `DV1`.
-
-Examples: `PL0`, `AR0`, `DV0`, `DV1`. The human-readable label lives in `tasks.<ID>.metadata.description`.
-
-**PL is always `PL0` only** (singleton — no splitting). Other stages can split into sub-tasks,
-which is exactly what the numbered key exists to express: parallel DVN tracks are distinct keys.
-
-Handoff edges (`handoffs["PL→AR"]`) stay keyed by bare **stage code**, not by ledger id.
+**PL is always `PL0` only** (singleton — no splitting); other stages split into sub-tasks, which is
+what the numbered key exists to express: parallel DVN tracks are distinct keys. Handoff edges
+(`handoffs["PL→AR"]`) stay keyed by bare **stage code**, not by ledger id.
 
 ## Write Operations
 
-All writes go through `skills/worktask/scripts/state-patch.sh` — never edit `state.json`
-directly. It owns the merge lock, the atomic tmp→fsync→rename, and the disk guard.
+Never edit `state.json` directly — every write goes through
+`skills/worktask/scripts/state-patch.sh`, which owns the merge lock, the atomic
+tmp→fsync→rename, and the disk guard.
 
 | Operation | Command |
 |-----------|---------|
@@ -55,35 +51,38 @@ directly. It owns the merge lock, the atomic tmp→fsync→rename, and the disk 
 
 ### Idempotency and key creation
 
-`--task-create` is idempotent (an existing key is left untouched); `--task-block` unions and
-`--task-unblock` subtracts, so re-running a seed or a teardown is safe. `--task-create` is also
-the ONLY op that may introduce a key — status, block, unblock, and meta all refuse an id that
-does not exist yet, so create the task before wiring or annotating it.
+`--task-create` is idempotent (an existing key is left untouched), `--task-block` unions and
+`--task-unblock` subtracts — re-running a seed or a teardown is safe. `--task-create` is the ONLY
+op that may introduce a key; status, block, unblock and meta refuse an id that does not exist yet,
+so create the task before wiring or annotating it.
 
 ## Metadata Fields
+
+Types, ranges, defaults and the required-field rule live in § JSON Schema below — these tables add
+only purpose and normative use.
 
 ### Routing fields
 
 | Field | Purpose |
 |-------|---------|
-| `stage` | Stage code unnumbered (PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET). The enum is the full vocabulary, not the per-run set — AR and TL tasks exist only when PL0 included them |
-| `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (e.g., `corpflow:software-architector`, `apple-developer:ios-developer`). Bare names are not accepted |
-| `model` | Model alias for this stage (fable, opus, sonnet, haiku). Always pass explicitly to `Task()` — do not rely on frontmatter inheritance. Under a managed `availableModels`/`enforceAvailableModels` allowlist a valid alias may silently resolve to a different model — see `skills/worktask/SKILL.md § Pre-Stage Validation` step 6 |
+| `stage` | Stage code, unnumbered. The schema enum is the full vocabulary, not the per-run set — AR and TL tasks exist only when PL0 included them |
+| `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (`corpflow:software-architector`, `apple-developer:ios-developer`); bare names are not accepted |
+| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Task()` — never rely on frontmatter inheritance. A managed `availableModels`/`enforceAvailableModels` allowlist can silently resolve a valid alias to a different model (`skills/worktask/SKILL.md § Pre-Stage Validation` step 6) |
 
 ### Run & context fields
 
 | Field | Purpose |
 |-------|---------|
-| `run_index` | Integer ≥ 0; PL0 stamps this on every downstream task (same N as `planning-N.md`). Default 0. Orchestrator uses it to resolve `<stage>-N.md` paths. See `skills/worktask/references/pl0-procedure.md § Stage Artifact Naming`. |
-| `context_refs` | JSON-encoded array of anchor refs (e.g. `["architecture-N.md#decisions","planning-N.md#requirements"]`) the stage agent should grep instead of reading whole files. The stage agent reads `state.json` + only these anchors |
-| `state_file` | Path to the worktask state ledger. Default `.context/state.json`. Read by the stage agent before delegation (per `skills/worktask/references/handoff-protocol.md#state-json-schema`). The ledger is mandatory — an absent `state.json` is a hard failure, not a degraded mode |
+| `run_index` | PL0-stamped on every downstream task (same N as `planning-N.md`); resolves `<stage>-N.md` paths (`skills/worktask/references/pl0-procedure.md § Stage Artifact Naming`) |
+| `context_refs` | Anchor refs the stage agent greps instead of reading whole files — § Context delivery |
+| `state_file` | Path to the ledger, read by the stage agent before delegation. Mandatory — an absent `state.json` is a hard failure, not a degraded mode |
 
 ### Error & retry fields
 
 | Field | Purpose |
 |-------|---------|
-| `error_file` | Path `.context/errors/<agent-basename>.md`. Auto-derived from `agent` if absent. Basename = last `:`-separated segment; collisions joined with `-`. The stage agent reads it to see its own prior retry narrative |
-| `retry_count` | Integer 0–3. Incremented on retry; resets on escalation or success |
+| `error_file` | Auto-derived from `agent` when absent (§ error_file derivation). The stage agent reads it to see its own prior retry narrative |
+| `retry_count` | Incremented on retry; resets on escalation or success |
 | `error_escalated_to` | Stage code the failure escalated to when `retry_count` reached 3 |
 
 ### Worktask & workspace fields
@@ -91,41 +90,37 @@ does not exist yet, so create the task before wiring or annotating it.
 | Field | Purpose |
 |-------|---------|
 | `worktask_id` | Links task to worktask instance |
-| `priority` | high, medium, low |
+| `priority` | Task priority |
 | `milestone_number` | GitHub milestone (megatask mode) |
 | `issue_number` | GitHub issue being worked |
+| `track` | Parallel track number |
 | `workspace_path` | Absolute root of the tree this task is **assigned** to — see § workspace_path below |
-| `track` | Parallel track number 1–5 |
-| `isolation` | Always `"worktree"` on file-writing tasks (DV and megatask per-issue AR/DR/QA). PL0 stamps this unconditionally; developer.md § D0.0, technical-lead.md DR check, SKILL.md 4.8, and workspace-modes.md all treat it as always `"worktree"`. |
-| `worktree_branch` | Branch name in worktree (convenience field). ≠ `facts.branch` (the planned host-session branch, named once at PL start and refinable at most once more pre-commit) — see `skills/worktask/references/handoff-protocol.md § branch` for the disambiguation |
+| `isolation` | Always `"worktree"` on file-writing tasks (DV, and megatask per-issue AR/DR/QA); PL0 stamps it unconditionally and every reader treats it that way |
+| `worktree_branch` | Branch name in the worktree. ≠ `facts.branch`, the planned host-session branch — `skills/worktask/references/handoff-protocol.md § branch` |
 
 #### workspace_path
 
-Stamped on **every** run — `/worktask` steps 3a/4 as well as `/megatask` — and mirrored into
-`state.json .metadata.workspace_path`. Under `/megatask` it is the per-issue worktree; otherwise
-it is `git rev-parse --show-toplevel` at init. Never leave it unset: three assigned-tree guards
-read it and each degrades to a silent pass when it is absent. See
-`skills/worktask/references/initialization-patterns.md § Seeded workspace_path`.
+Writers: `/worktask` steps 3a/4 and `/megatask`. Under `/megatask` it is the per-issue worktree,
+otherwise `git rev-parse --show-toplevel` at init
+(`skills/worktask/references/initialization-patterns.md § Seeded workspace_path`). Never leave it
+unset: three assigned-tree guards read it and each degrades to a silent pass when it is absent.
 
 ### Dispatch metadata (optional)
 
-These fields map to `claude agents run` CLI flags per `skills/agent-coordination/references/headless-dispatch.md`. All are optional and additive — the in-process orchestrator honours `model` (always) and `permission_mode` (audits per `skills/worktask/SKILL.md § Permission-Mode Pinning`); the rest are advisory in-process and consumed only by external CLI dispatchers.
-
-#### Dispatch field table
-
-| Field | Purpose | Honoured in-process? |
-|-------|---------|----------------------|
-| `effort` | Effort tier (`low\|medium\|high\|xhigh\|max`) for this dispatch. Falls back to agent frontmatter when absent | Advisory |
-| `permission_mode` | Permission boundary (`default\|acceptEdits\|plan\|bypassPermissions`). PL0 SHOULD set `default` on SR/FN tasks under `--secure`/`--full` | **Yes — audited** |
-| `add_dirs` | Array of extra directories to expose to the dispatched session (`--add-dir`) | Advisory |
-| `mcp_config_path` | Path to a scoped MCP config (`--mcp-config`) for this dispatch | Advisory |
-| `plugin_dir_overrides` | Array of `--plugin-dir` paths (local plugin development) | Advisory |
-| `dangerously_skip_permissions` | Boolean. CI batch only; PL0 MUST NOT set this on PL/SR/FN tasks | Advisory; orchestrator MAY refuse |
-| `settings_path` | Path to alternative `settings.json` (`--settings`) for provider/org swap | Advisory |
+Optional, additive fields — `effort`, `permission_mode`, `add_dirs`, `mcp_config_path`,
+`plugin_dir_overrides`, `dangerously_skip_permissions`, `settings_path` — each mapping 1:1 to a
+`claude agents run` flag; canonical per-field table (flag, type, in-process honouring, usage):
+`skills/agent-coordination/references/headless-dispatch.md § Translation table`. In-process the
+orchestrator honours `model` (always) and `permission_mode` (audited per `skills/worktask/SKILL.md
+§ Permission-Mode Pinning`); the rest are advisory, consumed only by external CLI dispatchers,
+except `dangerously_skip_permissions`, which the orchestrator MAY refuse.
 
 #### Dispatch writer rules
 
-PL0's writer rules for these fields live in `skills/worktask/references/pl0-procedure.md § Optional dispatch metadata`. The `workspace_path` field (already documented above — always stamped, not dispatch-optional) doubles as the `--cwd` source for headless dispatchers.
+PL0 SHOULD set `permission_mode: default` on SR/FN tasks under `--secure`/`--full` and MUST NOT set
+`dangerously_skip_permissions` (CI batch only) on PL/SR/FN tasks; full rules:
+`skills/worktask/references/pl0-procedure.md § Optional dispatch metadata`. `workspace_path` (always
+stamped, not dispatch-optional) doubles as the `--cwd` source for headless dispatchers.
 
 ### JSON Schema
 
@@ -241,53 +236,38 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
 
 #### error_file derivation
 
-Orchestrator populates if absent:
-- `agent: "corpflow:developer"` → `error_file: ".context/errors/developer.md"` (last segment)
-- `agent: "apple-developer:ios-developer"` → `error_file: ".context/errors/ios-developer.md"` (last segment)
+Orchestrator populates if absent — basename = last `:`-separated segment of `agent`:
+- `corpflow:developer` → `.context/errors/developer.md`; `apple-developer:ios-developer` → `.context/errors/ios-developer.md`
 - Basename collision across plugins → join with `-`: `.context/errors/apple-developer-ios-developer.md`
 
 #### Context delivery
 
-`metadata.context_refs` is the only context-delivery mechanism: the stage agent reads
-`state_file` plus the listed anchors, and nothing else by default. There is no whole-file
-fallback list — the ledger is mandatory, so the degraded "state.json is absent" path it
-existed to serve cannot occur.
-
-On retry the stage agent additionally reads its own `error_file`, so it can see what it
-tried before and why it failed.
-
-#### Orchestrator normalization snippet
-
-```typescript
-// Orchestrator normalization (runs before Task() delegation)
-function normalizeMetadata(meta) {
-  const basename = meta.agent.split(':').pop();
-  meta.error_file ??= `.context/errors/${basename}.md`;
-  return meta;
-}
-```
+`metadata.context_refs` is the only context-delivery mechanism — no whole-file fallback list,
+because the ledger is mandatory and the degraded "state.json is absent" path it existed to serve
+cannot occur. On retry the stage agent also reads its own `error_file`, so it sees what it tried
+before and why it failed.
 
 ## state.json Top-Level `metadata` Fields
 
-These fields live at `state.json:$.metadata` (worktask-scoped, distinct from `task.metadata` documented above). Canonical schema lives in `skills/worktask/references/handoff-protocol.md#state-json-schema`; the table below is the additive index of fields documented elsewhere in this plugin.
+Worktask-scoped fields at `state.json:$.metadata`, distinct from the `task.metadata` above. Canonical schema: `skills/worktask/references/handoff-protocol.md#state-json-schema`; the tables below index fields documented elsewhere in this plugin. All optional.
 
 ### Orchestrator-stamped fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `metadata.embedded_commands` | string (optional) | Comma-separated list of `/plugin:command` slash-command identifiers detected on the worktask trigger (e.g. `skill-creator`). Writer: orchestrator at `/worktask` parse time. Reader: DV agent before stage work begins. See `commands/worktask.md § Embedded Command Detection`. |
-| `metadata.preexisting_plan` | string (optional) | Absolute path to a user-approved plan supplied at worktask init; PL0 adopts it verbatim and reuses anchors. Writer: orchestrator. Reader: PL agent. |
-| `metadata.no_gh_issue` | boolean (optional) | When `true`, suppresses post-PL GitHub issue publishing. Writer: orchestrator at parse time (set by the `--no-gh-issue` CLI flag). Reader: `skills/worktask/scripts/publish-pl-issue.sh`. |
+| Field | Writer → Reader | Description |
+|-------|-----------------|-------------|
+| `embedded_commands` | orchestrator at `/worktask` parse time → DV agent | Comma-separated `/plugin:command` identifiers detected on the trigger (e.g. `skill-creator`). See `commands/worktask.md § Embedded Command Detection` |
+| `preexisting_plan` | orchestrator → PL agent | Absolute path to a user-approved plan supplied at init; PL0 adopts it verbatim and reuses its anchors |
+| `no_gh_issue` | orchestrator, from `--no-gh-issue` → `skills/worktask/scripts/publish-pl-issue.sh` | When `true`, suppresses post-PL GitHub issue publishing |
 
 ### Issue publishing field
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `metadata.github_issue_url` | string (optional) | GitHub issue URL written by `publish-pl-issue.sh` on the run that CREATES the issue. Pattern: `^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[0-9]+(#issuecomment-[0-9]+)?$`. The helper short-circuits (`already_published`) on a resume of that same run. **`state.json` is re-seeded on every fresh `/worktask`, so this field does NOT survive a `run_index` increment** — the run-independent `.context/gh-issue.json` anchor (below) carries the canonical `.context ↔ issue` binding across runs, so a later run comments on the existing issue instead of duplicating it (see `skills/gh-issue-dedup`). Writer: `publish-pl-issue.sh`. Readers: `publish-pl-issue.sh` (idempotency), FN PR-issue-link validator (rank-1). |
+`metadata.github_issue_url` — issue URL written by `publish-pl-issue.sh` on the run that CREATES the issue; it short-circuits (`already_published`) on a resume of that same run. Readers: `publish-pl-issue.sh` (idempotency), FN PR-issue-link validator (rank-1). Pattern: `^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[0-9]+(#issuecomment-[0-9]+)?$`.
+
+**`state.json` is re-seeded on every fresh `/worktask`, so this field does NOT survive a `run_index` increment** — the run-independent anchor below carries the binding across runs, so a later run comments on the existing issue instead of duplicating it (`skills/gh-issue-dedup`).
 
 ### Run-independent issue anchor
 
-> **Run-independent issue anchor — `.context/gh-issue.json`** (a sibling FILE, not a `state.json` field): binds one `.context/` to one GitHub issue and survives `run_index` increments (state.json is re-seeded; this is not). Schema and protocol: `skills/gh-issue-dedup`; folder placement: `skills/task-folder-organization/SKILL.md`. Written/read by `publish-pl-issue.sh`; read by the FN PR-issue-link validator (rank-2).
+> **`.context/gh-issue.json`** (a sibling FILE, not a `state.json` field): binds one `.context/` to one GitHub issue and survives `run_index` increments. Schema and protocol: `skills/gh-issue-dedup`; folder placement: `skills/task-folder-organization/SKILL.md`. Written/read by `publish-pl-issue.sh`; read by the FN PR-issue-link validator (rank-2).
 
 ## Status Values
 
@@ -297,79 +277,22 @@ These fields live at `state.json:$.metadata` (worktask-scoped, distinct from `ta
 | `in_progress` | Active work |
 | `completed` | Done |
 | `blocked` | Waiting on an unsatisfied `blocked_by` entry |
-| `skipped` | Dropped by dynamic sizing — see below |
-
-## Dropping a Stage
-
-```bash
-state-patch.sh --task-status QA0 skipped
-```
-
-Use for dynamic worktask sizing during PL/AR stages. The entry stays in the ledger as an
-audit record of what was sized out; `skipped` is terminal and never blocks a dependent.
-
-## Persistence
-
-The ledger lives at `.context/state.json` in the worktask folder, so it survives session
-end, compaction, and resume with no configuration. Nothing else needs to be set.
+| `skipped` | Dropped by dynamic sizing during PL/AR (`state-patch.sh --task-status QA0 skipped`). The entry stays as an audit record of what was sized out; terminal, and never blocks a dependent |
 
 ## Hook Events for Stage Monitoring
 
-Configure in project `settings.json` or agent frontmatter `hooks` field:
-
-### Hook event table
-
-| Hook Event | Fires When | Configuration Level |
-|------------|------------|---------------------|
-| `SubagentStart` | Stage agent spawned | settings.json (matcher: agent type) |
-| `SubagentStop` | Stage agent completes | settings.json or agent frontmatter |
-| `TeammateIdle` | Teammate finishes and idles | settings.json (agent teams only) |
-| `TaskCompleted` | Task marked completed | settings.json (agent teams only) |
-| `PostCompact` | After context compaction completes | settings.json (all modes) |
-| `Elicitation` | MCP server requests user input | settings.json |
-| `ElicitationResult` | User responds to MCP elicitation | settings.json |
-
-#### Hook event table (continued)
-
-| Hook Event | Fires When | Configuration Level |
-|------------|------------|---------------------|
-| `StopFailure` | API error causes turn end | settings.json |
-| `CwdChanged` | Working directory changes | settings.json |
-| `FileChanged` | Monitored file modified | settings.json |
-| `PermissionDenied` | Auto-mode classifier denies tool call | settings.json (all modes) |
-| `WorktreeCreate` | Worktree created | settings.json |
-
-### Hook usage notes
-
-`TeammateIdle` and `TaskCompleted` require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
-
-> Hooks support a conditional `if` field using permission rule syntax to reduce process spawning overhead.
+Stage-monitoring hooks are configured in project `settings.json` or the agent frontmatter `hooks`
+field. Canonical event catalog (subagent lifecycle, agent-teams, elicitation, matchers, payloads,
+the conditional `if` field) and configuration examples:
+`skills/agent-coordination/references/hook-monitoring.md § Project-Level Configuration`.
 
 > `SessionEnd` hook timeout is configurable via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` for worktasks requiring cleanup time (e.g., worktree pruning, orchestrator state finalization).
 
-See `agent-coordination.md § Hook-Based Stage Monitoring` for configuration examples.
-
 ## Agent Teams Integration
 
-With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, every session has **one implicit team** — spawn teammates via the **Agent tool's `name` parameter**; `team_name` is accepted but ignored. `SendMessage` remains the inter-teammate channel.
-
-| Tool | Purpose |
-|------|---------|
-| `Agent(name: …)` | Spawn a teammate into the session's implicit team |
-| `SendMessage` | Send messages between teammates |
-
-Teammates coordinate through the same `.context/state.json` ledger as every other stage.
-
-### Custom Auto-Memory Directory
-
-Configure a custom directory for worktask-specific auto-memory:
-
-```json
-{
-  "autoMemoryDirectory": ".worktask-memory/"
-}
-```
-
-Allows worktask-specific memory separate from the default `~/.claude/` location.
-
-Teammates share the ledger and can self-claim available work. See `../megatask/references/agent-teams.md` for megatask patterns.
+With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` every session has **one implicit team** — spawn
+teammates via the **Agent tool's `name` parameter** (`Agent(name: …)`; `team_name` is accepted but
+ignored), and `SendMessage` remains the inter-teammate channel. Teammates coordinate through the
+same `.context/state.json` ledger as every other stage and can self-claim available work. Megatask
+patterns: `../megatask/references/agent-teams.md`. Set `"autoMemoryDirectory": ".worktask-memory/"`
+in settings for worktask-specific auto-memory, separate from the default `~/.claude/`.

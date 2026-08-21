@@ -2,33 +2,30 @@
 TEMPLATE. Copy to the root of an integrating plugin as CORPFLOW.md and replace every
 <PLACEHOLDER>. Normative contract: corpflow skills/cross-plugin-handoff/references/plugin-contract.md.
 
-Keep this file self-contained. The point of the single-file seam is that a user can delete it and
-have a plugin with no corpflow coupling left, or add it and have one. Splitting it into a directory
-of references rebuilds the diffuse coupling this replaced.
+Keep it self-contained: a user can delete it and have a plugin with no corpflow coupling left, or add
+it and have one. Splitting it into a directory of references rebuilds the diffuse coupling it
+replaced.
 -->
 
 # corpflow Integration — <PLUGIN>
 
 This is the **only** file in <PLUGIN> that knows corpflow exists. Delete it and the plugin is
 standalone with no other edit; restore it and the plugin participates in worktasks again. Nothing in
-`agents/`, `commands/`, `skills/`, or `hooks/` references corpflow, and nothing should be added that
-does — see § Keeping the seam single.
+`agents/`, `commands/`, `skills/`, or `hooks/` may reference corpflow — see § Keeping the seam single.
 
 corpflow injects `Read CORPFLOW.md and follow it` into every delegation prompt, so agents reach this
-file without carrying a preamble of their own.
+file without a preamble of their own.
 
 ## Are we in a worktask?
 
-`.context/state.json` exists → yes. Otherwise every rule below is inert and <PLUGIN> behaves exactly
-as it does with corpflow uninstalled.
-
-Read `.context/state.json` first. It carries the current stage, `run_index`, the plan file path, and
-`metadata.*` for the dispatched task.
+`.context/state.json` exists → yes; otherwise every rule below is inert and <PLUGIN> behaves as it
+does with corpflow uninstalled. Read that file first — it carries the current stage, `run_index`, the
+plan file path, and `metadata.*` for the dispatched task.
 
 ## Pipeline
 
-Eleven stages, PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST. PL0 sizes the run and may drop AR, TL, and DC for
-small tasks, so **never assume a stage ran** — read `state.json` rather than inferring. The emergency
+Eleven stages, PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST. PL0 sizes the run and may drop AR, TL, and DC on
+small tasks, so **never assume a stage ran** — read `state.json` instead of inferring. The emergency
 pipeline is six stages (IR→DV→QA→DC→FN→ST) and skips both approval gates.
 
 ### Stages owned by <PLUGIN>
@@ -71,13 +68,13 @@ Write to `.context/`. Nothing else in the repository is yours to create.
 | QA | `.context/qa-<N>.md` |
 | IR | `.context/incident-report.md` |
 
-`<N>` is `run_index` from `state.json`. The basenames are canonical; only the suffix changes per run.
+`<N>` is `run_index` from `state.json`; basenames are canonical, only the suffix changes per run.
 Filenames are a backward-compat convenience for corpflow's `SubagentStop` hook — **the frontmatter
 below is the actual contract**, and an artifact without it breaks the three-layer recovery net
-(agent → orchestrator fallback → hook) regardless of what it is called.
+(agent → orchestrator fallback → hook) whatever it is called.
 
-Error narratives go to `.context/errors/<agent-basename>.md` — the basename of the agent file, not
-the qualified id.
+Error narratives go to `.context/errors/<agent-basename>.md` — the agent file's basename, not the
+qualified id.
 
 ## Handoff frontmatter (BINDING)
 
@@ -114,12 +111,12 @@ stage that must resolve it.
 ## Patching state.json
 
 Run corpflow's `state-patch.sh --stage <CODE> --prev <PREV>` when its path is supplied, via the
-prompt or `task.metadata.state_patch_script`. It merges `tasks.<ID>` and `handoffs[FROM→TO]` from
+prompt or `task.metadata.state_patch_script`; it merges `tasks.<ID>` and `handoffs[FROM→TO]` from
 your frontmatter.
 
-- If the path is **not** supplied, skip silently. Do not hand-roll a `jq` merge.
-- If the patch **fails**, proceed anyway and return normally. corpflow's `SubagentStop` hook
-  reconstructs the merge from your frontmatter — that is what the unconditional emission buys.
+- Path **not** supplied → skip silently. Never hand-roll a `jq` merge.
+- Patch **fails** → proceed and return normally; the `SubagentStop` hook reconstructs the merge from
+  your frontmatter — that is what unconditional emission buys.
 - Never write `state.json` directly. It is orchestrator-owned.
 
 ## Return summary (≤500 tokens)
@@ -136,15 +133,14 @@ corpflow merges your return text into the next stage's context, so it is a budge
 **For next stage**: <what the next stage needs that is not obvious from the artifact>
 ```
 
-Compress by dropping P2/P3 detail and referencing the artifact path. Never truncate mid-structure —
-a half-written table costs the next stage more than an omitted section.
+Compress by dropping P2/P3 detail and pointing at the artifact. Never truncate mid-structure — a
+half-written table costs the next stage more than an omitted section.
 
 ## Gate feedback on re-dispatch
 
-When corpflow re-dispatches you after a DR or QA rejection, `metadata.gate_blockers[]` carries the
-findings. Address every entry or explain in the artifact why one is not actionable. Do not
-re-litigate the gate's judgement; a disputed blocker is escalated via `error_escalated_to:`, not
-ignored.
+On re-dispatch after a DR or QA rejection, `metadata.gate_blockers[]` carries the findings. Address
+every entry or explain in the artifact why one is not actionable. Do not re-litigate the gate;
+a disputed blocker is escalated via `error_escalated_to:`, not ignored.
 
 ## Frontmatter templates
 
@@ -218,9 +214,9 @@ handoff:
 ## Orchestrator agent roles
 
 Some of this plugin's own commands run a multi-stage flow that borrows orchestrator agents — an
-architect for a design pass, a reviewer for a DR gate. Those commands name the **role**, not the id,
-so this table stays the only place an id appears. Resolve a role here before dispatching; if this
-file is absent, the plugin is standalone and those phases are skipped rather than failed.
+architect for a design pass, a reviewer for a DR gate. Those commands name the **role**, never the
+id, so this table stays the only place an id appears. Resolve the role here before dispatching; if
+this file is absent the plugin is standalone and those phases are skipped, not failed.
 
 ### Role table
 
@@ -241,23 +237,22 @@ file is absent, the plugin is standalone and those phases are skipped rather tha
 ### Standards are referenced by id
 
 Shared **standards** are referenced by id directly (`corpflow:code-comment-standard`,
-`corpflow:security-review-process`, `corpflow:claude-constitution`,
-`corpflow:logging-conventions`). They are shared vocabulary rather than orchestration: copying them
-into each plugin would let the wording drift, and a drifting standard is worse than a named one.
+`corpflow:security-review-process`, `corpflow:claude-constitution`, `corpflow:logging-conventions`).
+They are vocabulary rather than orchestration: copying them into each plugin lets the wording drift,
+and a drifting standard is worse than a named one.
 
 ## Keeping the seam single
 
-When a corpflow contract changes, this file changes and nothing else in <PLUGIN> does. That property
-only holds if it is defended:
+A corpflow contract change moves this file and nothing else in <PLUGIN> — a property that only holds
+if it is defended:
 
-- Do not add a corpflow reference to an agent, command, skill, or hook. If an agent needs a rule,
-  the rule belongs here and corpflow's dispatch injection delivers it.
+- Do not add a corpflow reference to an agent, command, skill, or hook. A rule an agent needs belongs
+  here, and corpflow's dispatch injection delivers it.
 - Do not split this file into a directory of references. One file is the contract.
-- Hooks that describe orchestrator interop should say "the orchestrator" generically. They work
-  under corpflow or standalone, and naming corpflow in a comment re-couples a file that had no
-  reason to be coupled.
-- <PLUGIN>'s own version does not track corpflow's. Record the corpflow version this file targets in
-  the table below and bump it when the contract changes.
+- Hooks describing orchestrator interop say "the orchestrator" generically: they work under corpflow
+  or standalone, and naming corpflow in a comment re-couples a file that had no reason to be.
+- <PLUGIN>'s own version does not track corpflow's. Record the corpflow version this file targets
+  below and bump it when the contract changes.
 
 | | |
 |---|---|

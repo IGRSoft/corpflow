@@ -43,198 +43,52 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 
 ## Output Format
 
-```markdown
+Report skeleton — sections in this order:
+
+~~~markdown
 # Prompt Ecosystem Audit
 
 ## Summary
+| Category | Total | Pass | Warn | Fail |   (rows: Agents, Commands, **Total**)
+**Health Score**: N/100 (label)
 
-| Category | Total | Pass | Warn | Fail |
-|----------|-------|------|------|------|
-| Agents | 11 | 8 | 2 | 1 |
-| Commands | 36 | 30 | 5 | 1 |
-| **Total** | **47** | **38** | **7** | **2** |
+## Critical Issues 🔴        (numbered; each: Issue / Location `file:line` / Details / Fix)
+## Warnings ⚠️              (same schema, continuing the numbering)
 
-**Health Score**: 81/100 (Good)
-**Last Audit**: 2024-01-15
-```
-
-### Report template — critical issues
-
-```markdown
-<!-- …continued: critical issues -->
-## Critical Issues 🔴
-
-### 1. Agent: workflow-engineer
-**Issue**: Outdated worktask stage references
-**Location**: `agents/workflow-engineer.md:52`
-**Details**: References removed stage "R" (Review)
-**Fix**: Update to current 9-stage system (PL→AR→TL→DV→DR→QA→DC→FN→ST — AR and TL are optional, included per PL0's Stage Inclusion Criteria)
-
-### 2. Command: estimate
-**Issue**: Missing required section
-**Location**: `commands/estimate.md`
-**Details**: No "Output Format" section defined
-**Fix**: Add output format specification
-```
-
-### Report template — warnings
-
-```markdown
-<!-- …continued: warnings -->
-## Warnings ⚠️
-
-### 3. Agent: qa-engineer
-**Issue**: Suboptimal model selection
-**Current**: sonnet
-**Recommended**: haiku (procedural task)
-**Impact**: ~60% cost reduction possible
-
-### 4. Agent: technical-writer
-**Issue**: Capability overlap with docs-architect
-**Details**: Both claim "API documentation" capability
-**Fix**: Clarify boundaries between agents
-
-### 5. Command: worktask
-**Issue**: Inconsistent option format
-**Current**: `--platform [iOS|macOS|All]`
-**Expected**: `--platform <apple|android|web|systems|backend|ai|all>`
-**Fix**: Standardize to ecosystem convention
-
-### 6. Command: test-plan
-**Issue**: Insufficient examples
-**Current**: 1 example
-**Required**: Minimum 3 examples
-**Fix**: Add diverse usage examples
-
-### 7. Commands: 3 files
-**Issue**: Missing Related section
-**Files**: arch-decision, business-report, docs-audit
-**Fix**: Add Related section with links
-```
-
-### Report template — agent analysis
-
-```markdown
-<!-- …continued: agent analysis -->
 ## Agent Analysis
-
-| Agent | Model | Clarity | Efficiency | Consistency |
-|-------|-------|---------|------------|-------------|
-| designer | sonnet | 9/10 | 8/10 | 9/10 |
-| developer | opus | 9/10 | 8/10 | 9/10 |
-| product-manager | opus | 8/10 | 7/10 | 8/10 |
-| project-manager | opus | 8/10 | 7/10 | 8/10 |
-| prompt-engineer | opus | 9/10 | 8/10 | 9/10 |
-| qa-engineer | sonnet | 8/10 | 7/10 | 9/10 |
-| software-architector | opus | 9/10 | 8/10 | 9/10 |
-| stakeholder | sonnet | 8/10 | 8/10 | 8/10 |
-| team-lead | sonnet | 7/10 | 7/10 | 8/10 |
-| technical-writer | haiku | 7/10 | 7/10 | 7/10 |
-| workflow-engineer | sonnet | 6/10 | 8/10 | 7/10 |
-```
-
-### Report template — model distribution & command analysis
-
-```markdown
-<!-- …continued: model distribution -->
-### Model Distribution
-| Model | Count | Percentage |
-|-------|-------|------------|
-| haiku | 2 | 18% |
-| sonnet | 4 | 36% |
-| opus | 5 | 45% |
+| Agent | Model | Clarity | Efficiency | Consistency |    + Model Distribution table
 
 ## Command Analysis
+| Metric | Commands | Percentage |   (has Usage / Options / 3+ Examples / Output Format / Related / platform param)
 
-| Metric | Commands | Percentage |
-|--------|----------|------------|
-| Has Usage section | 36/36 | 100% |
-| Has Options section | 34/36 | 94% |
-| Has Examples (3+) | 28/36 | 78% |
-| Has Output Format | 30/36 | 83% |
-| Has Related section | 31/36 | 86% |
-| Platform param | 18/36 | 50% |
-```
-
-### Report template — consistency checks
-
-```markdown
-<!-- …continued: consistency checks -->
 ## Consistency Checks
+| Check | Status | Issues |   + Terminology Inconsistencies (| Term A | Term B | Occurrences |)
 
-| Check | Status | Issues |
-|-------|--------|--------|
-| YAML frontmatter | ✅ Pass | 0 |
-| Section ordering | ⚠️ Warn | 3 files |
-| Option format | ⚠️ Warn | 2 files |
-| Platform values | ✅ Pass | 0 |
-| Terminology | ⚠️ Warn | 5 inconsistencies |
+## Recommendations         (Priority 1 Fix Now / 2 Fix Soon / 3 Consider)
+## Auto-Fixable Issues     (| Issue | Files | Action | — only with `--fix`)
+## Audit Metadata          (Audit Date, Files Scanned, Rules Applied, Duration)
+~~~
 
-### Terminology Inconsistencies
-| Term A | Term B | Occurrences |
-|--------|--------|-------------|
-| "test" | "testing" | 12 |
-| "check" | "validate" | 8 |
-| "PR" | "pull request" | 5 |
-```
+### Output Format — content rules
 
-### Report template — recommendations
-
-```markdown
-<!-- …continued: recommendations -->
-## Recommendations
-
-### Priority 1 (Fix Now)
-1. Update workflow-engineer stage references
-2. Add Output Format to estimate command
-3. Standardize platform option format
-
-### Priority 2 (Fix Soon)
-1. Clarify qa-engineer/technical-writer boundaries
-3. Add examples to test-plan command
-4. Add Related sections to 5 commands
-
-### Priority 3 (Consider)
-1. Standardize terminology across all files
-2. Add example interactions to all agents
-3. Create command template for consistency
-```
-
-### Report template — auto-fixable issues & metadata
-
-```markdown
-<!-- …continued: auto-fixable issues -->
-## Auto-Fixable Issues
-
-With `--fix` flag, these issues can be automatically resolved:
-
-| Issue | Files | Action |
-|-------|-------|--------|
-| Missing Related section | 5 | Add template section |
-| Option format | 2 | Standardize syntax |
-| Broken internal links | 3 | Update paths |
-
-## Audit Metadata
-
-| Field | Value |
-|-------|-------|
-| Audit Date | 2024-01-15 10:30:00 |
-| Files Scanned | 47 |
-| Rules Applied | 24 |
-| Duration | 2.3s |
-```
+- Every finding cites a concrete location (`agents/<name>.md:<line>` or the command path) and an actionable Fix line.
+- Scores are n/10; status glyphs ✅ Pass / ⚠️ Warn / 🔴 Fail.
+- `--severity` filters which findings appear; the Summary counts stay unfiltered.
+- Group identical findings across files into a single numbered entry listing the files.
 
 ## Audit Rules
 
 ### Agent Rules
+
 1. Valid YAML frontmatter (name, description, model)
 2. Model appropriate for task complexity
 3. Clear purpose statement
 4. No capability overlap with other agents
-5. Worktask stage integration documented
+5. Worktask stage integration documented, and every stage code referenced still exists in `skills/shared/stage-codes.md` (removed/renamed stages are a critical finding)
 6. Example interactions provided
 
 ### Command Rules
+
 1. Usage section with syntax
 2. Options section with types and defaults
 3. Minimum 3 diverse examples
@@ -243,40 +97,20 @@ With `--fix` flag, these issues can be automatically resolved:
 6. Consistent option format
 
 ### Consistency Rules
-1. Platform values: `<apple|android|web|systems|backend|ai|all>` — the canonical set, matching `skills/shared/platform-detection.md`. A command whose scope genuinely excludes some platforms may list a subset (the `design-*` commands are UI-only, so `<apple|android|web|all>` is correct there); what is flagged is Apple sub-platforms leaking in (`iOS|macOS`) or a platform being advertised with no content path behind it.
+
+1. Platform values: `<apple|android|web|systems|backend|ai|all>` — the canonical set, matching `skills/shared/platform-detection.md`. A command whose scope genuinely excludes some platforms may list a subset (the `design-*` commands are UI-only, so `<apple|android|web|all>` is correct there); what is flagged is Apple sub-platforms leaking in (`iOS|macOS`) or a platform advertised with no content path behind it.
 2. Option syntax: `--option <value>` or `--flag`
 3. Section ordering: Usage → Options → Examples → Output → Integration → Related
 4. Terminology standardized
 
 ### Frontmatter Parsing Convention
 
-Definition files (`agents/*.md`, `commands/*.md`, `skills/*/SKILL.md`) are matched by the
-`---`-delimited YAML block at the top of the file. When detecting or extracting that block,
-be tolerant of real-world line endings and flag a present-but-broken `description`:
+Definition files (`agents/*.md`, `commands/*.md`, `skills/*/SKILL.md`) are matched by the `---`-delimited YAML block at the top of the file. When detecting or extracting that block:
 
-#### Rule 1 — Tolerate CRLF & trailing whitespace
-
-1. **Tolerate CRLF and trailing whitespace on the delimiter lines.** A file authored on
-   Windows or saved with trailing spaces still has valid frontmatter — match `---` even when
-   followed by spaces/tabs and `\r\n`, not only a bare `---\n`. Do not report "missing
-   frontmatter" for a file whose only difference is line endings.
-
-#### Rules 2–3 — Absent vs malformed `description`
-
-2. **Distinguish absent from malformed.** A missing frontmatter block and a block that is
-   present but has a missing, empty, or unparseable `description:` are different findings:
-   - *absent frontmatter* → error (the file has no metadata at all);
-   - *present but empty/malformed `description`* → error, reported as
-     `<file> — missing or malformed description`, because an empty description silently
-     breaks skill/command triggering even though the block parses.
-3. **`description` is required and non-empty.** `description:` with no value, only
-   whitespace, or a value that fails to parse is a violation — report it distinctly from a
-   wholly missing field so the fix is unambiguous.
+1. **Tolerate CRLF and trailing whitespace on the delimiter lines.** Match `---` even when followed by spaces/tabs and `\r\n`, not only a bare `---\n`. Never report "missing frontmatter" for a file whose only difference is line endings.
+2. **Distinguish absent from malformed.** *Absent frontmatter* → error (the file has no metadata at all). *Present but empty/malformed `description:`* → error reported as `<file> — missing or malformed description`, because an empty description silently breaks skill/command triggering even though the block parses.
+3. **`description` is required and non-empty.** A `description:` with no value, only whitespace, or an unparseable value is a violation — reported distinctly from a wholly missing field so the fix is unambiguous.
 
 ## Integration
 
-This command is used:
-- For periodic ecosystem health checks
-- Before major releases
-- After adding new agents/commands
-- During prompt engineering reviews
+Run for periodic ecosystem health checks, before major releases, after adding new agents/commands, and during prompt engineering reviews.

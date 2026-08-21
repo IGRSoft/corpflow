@@ -38,32 +38,25 @@ Create or update product roadmap with timeline, milestones, and dependencies.
 /pm-roadmap
 /pm-roadmap --quarter Q1 --view timeline
 /pm-roadmap --add "Dark Mode" --quarter Q1
+/pm-roadmap --move F-12 --to Q2 --export
 ```
 
 ## Output Format
 
-### Timeline View (Default)
-```markdown
-# Product Roadmap [Year]
+### Timeline View (default)
 
-## Vision
-Become the leading platform for team collaboration with enterprise-grade security and delightful user experience.
+Open with `# Product Roadmap {Year}` and a one-paragraph `## Vision`, then one block per quarter, then the dependencies map, risk register, and status legend.
 
----
-```
-
-#### Q1 — themes and milestones
+#### Quarter block — repeat per quarter
 
 ~~~markdown
-<!-- …continued: Q1 -->
-## Q1 [Year]: Foundation & Security
+## Q1 {Year}: Foundation & Security
 
 ### Themes
 - Enterprise readiness
 - Core UX improvements
 
 ### Milestones
-
 ```
 Jan ──────────────── Feb ──────────────── Mar
 │                     │                     │
@@ -71,144 +64,45 @@ Jan ──────────────── Feb ───────�
 [SSO Integration]─────┘                     │
    └──[Security Audit]────────┘             │
          └──[Dark Mode]───────────────────┘
-              └──[Performance v1]─────────┘
 ```
-~~~
 
-#### Q1 — features and key results
-
-```markdown
-<!-- …continued: Q1 features -->
 ### Features
-
 | Feature | Status | Owner | Target | Dependencies |
 |---------|--------|-------|--------|--------------|
 | SSO Integration | 🟡 In Progress | Auth Team | Jan 31 | - |
 | Security Audit | 🔵 Planned | Security | Feb 15 | SSO |
-| Dark Mode | 🔵 Planned | Frontend | Feb 28 | Design system |
-| Performance v1 | 🔵 Planned | Platform | Mar 15 | - |
 
 ### Key Results
 - [ ] 100% enterprise security compliance
 - [ ] 40% dark mode adoption
-- [ ] 20% performance improvement
+~~~
 
----
-```
+#### Quarter block — later quarters
 
-#### Q2 — growth and collaboration
+Same shape, with Themes naming that quarter's strategic bet (growth & collaboration, intelligence & scale, polish & expansion). The ASCII milestone timeline is optional beyond the current quarter, and the Dependencies column can be dropped once nothing cross-links.
 
-```markdown
-<!-- …continued: Q2 -->
-## Q2 [Year]: Growth & Collaboration
-
-### Themes
-- Team collaboration
-- User growth features
-
-### Features
-
-| Feature | Status | Owner | Target | Dependencies |
-|---------|--------|-------|--------|--------------|
-| Real-time Collab | 🔵 Planned | Core Team | Apr 30 | - |
-| Advanced Search | 🔵 Planned | Search Team | May 15 | - |
-| Mobile App v1 | 🔵 Planned | Mobile | Jun 30 | API v2 |
-| API v2 | 🔵 Planned | Platform | May 31 | - |
-
-### Key Results
-- [ ] 50% increase in team collaboration metrics
-- [ ] 25% increase in user retention
-- [ ] Mobile app launched in App Store
-
----
-```
-
-#### Q3 and Q4
-
-```markdown
-<!-- …continued: Q3, Q4 -->
-## Q3 [Year]: Intelligence & Scale
-
-### Themes
-- AI-powered features
-- Enterprise scale
-
-### Features
-
-| Feature | Status | Owner | Target |
-|---------|--------|-------|--------|
-| AI Assistant | 🔵 Planned | AI Team | Jul 31 |
-| Enterprise Dashboard | 🔵 Planned | Enterprise | Aug 31 |
-| Advanced Analytics | 🔵 Planned | Data | Sep 15 |
-
----
-
-## Q4 [Year]: Polish & Expansion
-
-### Themes
-- Platform maturity
-- Market expansion
-
-### Features
-
-| Feature | Status | Owner | Target |
-|---------|--------|-------|--------|
-| Integrations Marketplace | 🔵 Planned | Platform | Oct 31 |
-| White-label Support | 🔵 Planned | Enterprise | Nov 30 |
-| Localization (10 languages) | 🔵 Planned | i18n | Dec 15 |
-
----
-```
-
-#### Dependencies and risks
+#### Dependencies, risks, legend
 
 ~~~markdown
-<!-- …continued: dependencies map, risk register -->
 ## Dependencies Map
+Indented tree, blocker above dependent:
 
 ```
 SSO Integration
     └── Security Audit
          └── Enterprise Dashboard
-
-Design System
-    └── Dark Mode
-         └── Mobile App v1
-
-API v2
-    └── Mobile App v1
-    └── Integrations Marketplace
 ```
-
----
 
 ## Risk Register
+Table Risk | Impact | Probability | Mitigation — roadmap-level risks only
+(delivery slips, scope creep, cost). `/pm-risk` produces the scored register.
 
-| Risk | Impact | Probability | Mitigation |
-|------|--------|-------------|------------|
-| SSO delays | High | Medium | Start security audit in parallel |
-| Mobile scope creep | Medium | High | Strict MVP definition |
-| AI model costs | Medium | Medium | Usage-based pricing model |
-
----
+## Status Legend
+🟢 Complete · 🟡 In Progress · 🔵 Planned · 🔴 At Risk · ⚪ Blocked
 ~~~
 
-#### Status legend
-
-```markdown
-<!-- …continued: status legend -->
-## Status Legend
-
-| Icon | Status |
-|------|--------|
-| 🟢 | Complete |
-| 🟡 | In Progress |
-| 🔵 | Planned |
-| 🔴 | At Risk |
-| ⚪ | Blocked |
-```
-
 ### Kanban View
+
 ```markdown
 # Roadmap Kanban
 
@@ -216,7 +110,6 @@ API v2
 |---------|-----|-----|-----|-----|------|
 | Feature X | SSO | Mobile | AI | i18n | Auth v1 |
 | Feature Y | Dark Mode | Search | Dashboard | Marketplace | Onboarding |
-| | Perf v1 | API v2 | Analytics | White-label | |
 ```
 
 ## Roadmap Item States

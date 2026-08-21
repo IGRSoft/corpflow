@@ -37,7 +37,7 @@ readonly PRIORITY_NONE=99
 
 # _priority_score_for_label <label>
 # Returns integer score for a single label via case (Bash 3.2-compatible).
-# Mirrors megatask §Priority Sorting exactly.
+# Mirrors megatask/SKILL.md § Dependency & Blocker Resolution (DAG) exactly.
 _priority_score_for_label() {
   case "$1" in
     P0 | priority:critical) printf '0' ;;

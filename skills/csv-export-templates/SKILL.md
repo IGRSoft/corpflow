@@ -6,11 +6,9 @@ effort: low
 
 # CSV Export Templates
 
-These 13 templates are the canonical export shape. /estimate (via --export csv) references this file; do not redefine the file list elsewhere.
-
-13-category export structure for Google Sheets import.
-
-For all 13 CSV template definitions, see `${CLAUDE_SKILL_DIR}/references/templates.md`
+Canonical 13-category export shape for Google Sheets import — `/estimate --export csv` and
+`/cost-report --export` reference this file; never redefine the file list or format elsewhere.
+Per-file column definitions: `${CLAUDE_SKILL_DIR}/references/templates.md`.
 
 ## Format Specification
 
@@ -42,8 +40,8 @@ For all 13 CSV template definitions, see `${CLAUDE_SKILL_DIR}/references/templat
 
 ### Platform Variants (files 10 and 11)
 
-Files 10 and 11 have no fixed name. Both the filename and the column schema resolve from
-`--platform`; no platform is the default. Keys match `skills/shared/compatible-plugins.md § Registry`.
+Files 10 and 11 have no fixed name — filename and column schema both resolve from `--platform`,
+which has no default. Keys match `skills/shared/compatible-plugins.md § Registry`.
 
 | `--platform` | File 10 | File 11 |
 |--------------|---------|---------|
@@ -57,33 +55,28 @@ Files 10 and 11 have no fixed name. Both the filename and the column schema reso
 
 ### File 12 and column schemas
 
-File 12 (`integration_specifics.csv`) keeps a stable filename across platforms; its rows
-enumerate whatever that platform integrates against — Apple SDKs, Android/Jetpack APIs, web
-SDKs, system libraries and toolchains, upstream services and datastores, or model/inference
-providers.
+File 12 (`integration_specifics.csv`) keeps a stable filename across platforms; its rows enumerate
+whatever that platform integrates against — Apple SDKs, Android/Jetpack APIs, web SDKs, system
+libraries and toolchains, upstream services and datastores, or model/inference providers.
 
-`references/templates.md` spells out the column schema for files 10 and 11 using the `apple`
-variant as its worked example. Other platforms reuse that column shape with their own rows.
+`references/templates.md` gives the column schema for files 10 and 11 using the `apple` variant as
+its worked example; other platforms reuse that column shape with their own rows.
 
 ## Validator Script
 
-**Canonical path**: `scripts/validate-export.sh`
-
-**One-line invocation**:
 ```sh
-bash scripts/validate-export.sh --dir <export-dir> [--out <report.csv>]
+bash skills/csv-export-templates/scripts/validate-export.sh --dir <export-dir> [--out <report.csv>]
 ```
 
 - Emits `<export-dir>/validation_report.csv` (columns: `check;status;detail`).
 - Exits `0` on full pass, `1` on any violation, `2` on usage/missing-file error.
 - Columns are keyed by **header name**, not position — safe against column reordering.
-- Semicolon-delimited CSVs with quoted semicolons are parsed correctly via an embedded `python3 csv` heredoc.
-- Run `--self-test` for a no-network fixture verification (matching set exits 0; mismatched set exits 1).
-
-The validation rules below are the **spec** this script implements. In the happy path, invoke the script rather than re-reading them manually.
+- Semicolon-delimited CSVs with quoted semicolons parse correctly (embedded `python3 csv` heredoc).
+- `--self-test` runs a no-network fixture check (matching set exits 0; mismatched set exits 1).
 
 ## Validation Rules
 
+The spec the validator implements — in the happy path run the script instead of checking by hand.
 After export, verify:
 
 1. **Totals match**:

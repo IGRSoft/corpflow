@@ -34,16 +34,15 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 
 ```
 /test-coverage
-/test-coverage --path src/auth --threshold 90
-/test-coverage --critical-only
+/test-coverage --path src/auth --threshold 90 --report
+/test-coverage --critical-only --platform apple
 ```
 
 ## Running the suite
 
-Coverage numbers need a run. Prefer delegating to `/<plugin>:build-test` for the detected
-platform — it knows the repo's build system, coverage flags, and report location. Fall back to
-the scoped runners in `allowed-tools` (`swift test`, `./gradlew`, `vitest`, `pytest`, `go test`,
-`ctest`, …) only when no plugin covers the repo. Never assume a Swift toolchain.
+Coverage numbers need a run. Delegate to `/<plugin>:build-test` for the detected platform — it
+knows the repo's build system, coverage flags, and report location. Fall back to the scoped
+runners in `allowed-tools` only when no plugin covers the repo. Never assume a Swift toolchain.
 
 ## Output Format
 
@@ -64,13 +63,16 @@ the scoped runners in `allowed-tools` (`swift test`, `./gradlew`, `vitest`, `pyt
 | src/auth | 45% | 38% | 60% | 🔴 High |
 | src/api | 78% | 72% | 88% | 🟡 Medium |
 | src/utils | 92% | 88% | 95% | 🟢 Low |
-| src/ui | 68% | 55% | 75% | 🟡 Medium |
 ```
 
-### Template — critical gaps
+### Template — gaps and recommended actions
+
+One entry per gap, grouped under 🔴 High / 🟡 Medium priority headings. Each names the untested
+functions or branches with line ranges, the risk it carries, and one recommendation. Ranked
+actions close the section.
 
 ```markdown
-<!-- …continued: critical gaps -->
+<!-- …continued: critical gaps, recommended actions -->
 ## Critical Gaps
 
 ### 🔴 High Priority
@@ -79,32 +81,10 @@ the scoped runners in `allowed-tools` (`swift test`, `./gradlew`, `vitest`, `pyt
 **Untested Functions:**
 - `handleCallback()` - Lines 45-78
 - `refreshToken()` - Lines 112-145
-- `validateState()` - Lines 156-170
 
 **Risk**: Security-critical authentication logic without tests
 
 **Recommendation**: Add integration tests for OAuth flow
-
-#### src/auth/session.ts (52% coverage)
-**Untested Branches:**
-- Error handling in `createSession()` - Line 34
-- Timeout logic in `validateSession()` - Lines 67-72
-
-**Risk**: Session management edge cases untested
-```
-
-#### Medium priority gaps and recommended actions
-
-```markdown
-<!-- …continued: medium priority gaps, recommended actions -->
-### 🟡 Medium Priority
-
-#### src/api/endpoints.ts (78% coverage)
-**Untested:**
-- Error responses for 4xx/5xx status codes
-- Rate limiting behavior
-
-**Recommendation**: Add error scenario tests
 
 ## Recommended Actions
 
@@ -113,7 +93,6 @@ the scoped runners in `allowed-tools` (`swift test`, `./gradlew`, `vitest`, `pyt
 | 1 | Add OAuth flow integration tests | M | High |
 | 2 | Test session error handling | S | Medium |
 | 3 | Add API error response tests | S | Medium |
-| 4 | Increase UI component coverage | L | Low |
 ```
 
 ### Template — untested files and quality metrics
@@ -140,11 +119,13 @@ the scoped runners in `allowed-tools` (`swift test`, `./gradlew`, `vitest`, `pyt
 
 ### Template — selection marker coverage
 
+Reports the share of test files annotated with markers from
+`skills/shared/test-selection-syntax.md`. Low marker coverage means selective execution defaults
+to `covers-changed-files` (filename correlation only) — degrading to `scoped` mode automatically.
+
 ```markdown
 <!-- …continued: selection marker coverage -->
 ## Selection Marker Coverage
-
-Reports the percentage of test files annotated with markers from `skills/shared/test-selection-syntax.md`. Low marker coverage means selective execution defaults to `covers-changed-files` (filename-correlation only) — degrading to `scoped` mode automatically.
 
 | Marker | Tests Annotated | % of Total | Status |
 |--------|-----------------|------------|--------|
@@ -163,39 +144,26 @@ Reports the percentage of test files annotated with markers from `skills/shared/
 | File | Tests | Recommendation |
 |------|-------|----------------|
 | tests/test_user_repository.py | 8 | Add `@depends-on: UserRepository` |
-| src/net/networkClient.test.ts | 12 | Add `@depends-on: NetworkClient` and `@test-tag: regression` |
 | Tests/AppLaunchTests.swift | 1 | Add `@test-required` (smoke test) |
 ```
 
 #### Framework compliance
 
+"Expected" means **the project's established framework** for that layer — resolved from
+`skills/shared/testing-strategy.md § Framework by platform` plus what the repo already uses. Flag
+divergence from that, never from a specific vendor's framework. Typical divergences: a second
+framework added alongside the existing one, a legacy runner on new modules, integration tests
+hitting a shared live environment, evals with no recorded threshold.
+
 ```markdown
 <!-- …continued: framework compliance -->
 ## Testing Framework Compliance
-
-"Required" means **the project's established framework** for that layer — resolved from
-`skills/shared/testing-strategy.md § Framework by platform` and from what the repo already uses.
-Flag divergence from it, never divergence from a specific vendor's framework.
 
 | Layer | Expected (this repo) | Found | Status |
 |-------|----------------------|-------|--------|
 | Unit | <e.g. Vitest / Swift Testing / JUnit 5 / pytest> | <actual> | ✅ / ⚠️ mixed frameworks |
 | Integration | <e.g. Testcontainers / Robolectric / MSW> | <actual> | ✅ |
 | UI / E2E | <e.g. Playwright / XCUITest / Compose UI test> | <actual> | ✅ |
-```
-
-#### Framework compliance — per-platform expectations
-
-```markdown
-<!-- …continued: expected frameworks by platform -->
-| Platform | Unit | UI / E2E | Common divergence to flag |
-|----------|------|----------|---------------------------|
-| apple | Swift Testing | XCTest / XCUITest | New unit tests still written in XCTest |
-| android | JUnit 5 + MockK | Espresso / Compose UI test | JUnit 4 runner left on new modules |
-| web | Vitest or Jest | Playwright | Both Vitest and Jest present in one package |
-| systems | GoogleTest/Catch2, pytest, bats | n/a | Ad-hoc `main()` test binaries outside `ctest` |
-| backend | Stack-native + Testcontainers | Contract tests | Integration tests hitting a shared live DB |
-| ai | pytest | Eval harness with thresholds | Evals with no recorded threshold to regress against |
 ```
 
 ## Integration

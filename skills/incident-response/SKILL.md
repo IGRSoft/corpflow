@@ -45,17 +45,8 @@ Guidelines for incident triage, hotfix coordination, and post-mortem facilitatio
 
 ## Emergency Worktask
 
-### Flow Diagram
-
-```
-/worktask --emergency [description]
-     │
-     ▼
-┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
-│   IR    │ → │   DV    │ → │   DR    │ → │   QA    │ → │   RE    │ → │   FN    │
-│ Triage  │    │ Hotfix  │    │ Review  │    │  Test   │    │ Release │    │ Deploy  │
-└─────────┘    └─────────┘    └─────────┘    └─────────┘    └─────────┘    └─────────┘
-```
+`/worktask --emergency [description]` runs: IR triage → DV hotfix → DR review → QA test →
+RE release → FN deploy.
 
 ### Stage Responsibilities
 
@@ -67,14 +58,13 @@ Guidelines for incident triage, hotfix coordination, and post-mortem facilitatio
 | RE | release-engineer | Prepare hotfix release |
 | FN | project-manager | Execute emergency deployment |
 
-> **DV Hotfix Tip**: Use the Monitor tool to stream build output during hotfix implementation. Combine `run_in_background` Bash with Monitor for real-time error detection instead of polling. Tee the build stream into `.context/logs/hotfix-<YYYYMMDD-HHMMSS>.log` so the evidence survives into `complete.md` / `release-prep.md`. See `${CLAUDE_SKILL_DIR}/../agent-coordination/SKILL.md §Monitor Tool` and `${CLAUDE_SKILL_DIR}/../logging-conventions/SKILL.md`.
+> **DV Hotfix Tip**: stream build output with the Monitor tool over `run_in_background` Bash instead of polling, and tee it into `.context/logs/hotfix-<YYYYMMDD-HHMMSS>.log` so the evidence survives into `complete.md` / `release-prep.md`. See `${CLAUDE_SKILL_DIR}/../agent-coordination/SKILL.md §Monitor Tool` and `${CLAUDE_SKILL_DIR}/../logging-conventions/SKILL.md`.
 
 ### IR → DV Handoff Contract
 
-`incident-report.md` MUST contain these four sections before IR can transition
-to DV. The orchestrator validates per `shared/stage-contracts.md § IR`. If any
-section is empty, DV is not dispatched and IR is re-queued with a
-`missing_input` error entry.
+`incident-report.md` MUST carry these four sections before IR transitions to DV;
+the orchestrator validates per `shared/stage-contracts.md § IR–ET`. Any empty section
+means DV is not dispatched and IR is re-queued with a `missing_input` error entry.
 
 #### Required Sections
 
@@ -87,8 +77,9 @@ section is empty, DV is not dispatched and IR is re-queued with a
 
 #### DV Delegation Prompt
 
-When IR completes and DV is dispatched, the orchestrator's prompt MUST include
-the phrase:
+The orchestrator's DV dispatch prompt MUST include this phrase — mandatory, not a
+suggestion (emergency worktasks run via `/worktask --emergency`; see
+`commands/worktask.md` Options):
 
 > Focus strictly on the Required Fix in `.context/incident-N.md`. Do NOT
 > modify files outside the listed Blast Radius. Do NOT refactor, clean up,
@@ -96,10 +87,6 @@ the phrase:
 > expansion. If the Required Fix cannot be implemented within the Blast
 > Radius, STOP and escalate back to IR via `error_escalated_to: "IR"` — do
 > NOT expand scope unilaterally.
-
-This language is mandatory, not a suggestion — the IR→DV delegation prompt above
-enforces it (emergency worktasks run via `/worktask --emergency`; see
-`commands/worktask.md` Options).
 
 ## Decision Framework
 
@@ -177,46 +164,10 @@ Production runbooks follow this structure:
 
 ## Blameless Post-Mortem Template
 
-```markdown
-# Postmortem: [Incident Title]
-
-**Date**: YYYY-MM-DD
-**Authors**: [names]
-**Severity**: P[0-3]
-**Duration**: [minutes/hours]
-
-## Executive Summary
-[1-2 sentences: what happened, impact, resolution]
-
-## Impact
-- Users affected: [count/percentage]
-- Revenue impact: [if applicable]
-- Support tickets: [count]
-
-## Timeline (UTC)
-| Time | Event |
-|------|-------|
-| HH:MM | [Event] |
-
-## Root Cause
-[Technical explanation of what caused the incident]
-
-## Contributing Factors
-- [System factor, not individual]
-- [Process gap]
-
-## What Went Well
-- [Effective response actions]
-
-## What Could Be Improved
-- [Process improvements]
-
-## Action Items
-| Priority | Action | Owner | Due |
-|----------|--------|-------|-----|
-| P1 | [Prevent recurrence] | [name] | [date] |
-| P2 | [Improve detection] | [name] | [date] |
-```
+Fill `references/templates.md § Post-Mortem Template` (Parts 1–3, concatenated into one
+`post-mortem.md`): header (date, severity, duration, author, status), executive summary,
+impact, UTC timeline, root cause via Five Whys, contributing factors, what went well / could
+be improved, action items table (priority, owner, due), lessons learned, appendix.
 
 ### Post-Mortem Triggers
 
@@ -234,6 +185,8 @@ Production runbooks follow this structure:
 | "Someone made a mistake" | "The system allowed this mistake" |
 | Punish individuals | Improve systems |
 
+Facilitation DO/DON'T list: `references/templates.md § Facilitation Tips`.
+
 ## On-Call Handoff
 
 ### Shift Transition Checklist
@@ -247,11 +200,10 @@ Production runbooks follow this structure:
 - [ ] Alerting setup verified for incoming engineer
 ```
 
-See references/ for communication templates and common incident runbooks.
+Communication templates and common incident runbooks: `references/templates.md`.
 
 ## Integration Points
 
-- **incident-responder agent**: Uses these patterns for IR stage
-- **debugger (debugging-toolkit)**: Root cause analysis
-- **five-whys skill**: Post-mortem analysis
-- **security-reviewer**: Security incident escalation
+`agents/incident-responder.md` runs these patterns at the IR stage; `debugging-toolkit:debugger`
+does root-cause analysis, `skills/shared/five-whys.md` the post-mortem analysis, and
+`agents/security-reviewer.md` takes security-incident escalations.

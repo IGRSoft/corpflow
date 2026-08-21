@@ -21,19 +21,14 @@ related:
 
 # Improve Yourself Command
 
-Manual entry point for the `self-improvement` skill. Use when you want to run the retrospective **outside** of a full worktask — e.g., after ad-hoc edits, between worktasks, or to iterate on proposals.
-
-Invokes `skills/self-improvement/SKILL.md`. The skill handles the heavy lifting; this command provides the CLI surface and wires user approval through to `prompt-engineer` for application.
+Manual entry point for the `self-improvement` skill — run the retrospective **outside** a full worktask (after ad-hoc edits, between worktasks, or to iterate on proposals). `skills/self-improvement/SKILL.md` does the work; this command is the CLI surface and wires user approval through to `prompt-engineer`.
 
 ## Usage
 
 ```
-/improve-yourself                          # auto-detect baseline; scope to in-context items
-/improve-yourself --since HEAD~5           # explicit baseline SHA/ref
-/improve-yourself --target agents          # restrict proposals to agents only
-/improve-yourself --dry-run                # produce learnings.md but never apply (read-only)
-/improve-yourself --no-scope-filter        # allow proposals to files outside in-context set (advanced)
-/improve-yourself --apply                  # after writing learnings.md, wait for user to check boxes, then apply
+/improve-yourself
+/improve-yourself [--since <ref>] [--target agents|skills|commands|all]
+/improve-yourself [--dry-run] [--no-scope-filter] [--apply]
 ```
 
 ## Options
@@ -41,25 +36,18 @@ Invokes `skills/self-improvement/SKILL.md`. The skill handles the heavy lifting;
 | Flag | Effect | Default |
 |------|--------|---------|
 | `--since <ref>` | Git ref used as diff baseline (`HEAD~N`, SHA, tag, branch) | Last commit with `Agent:` trailer; fallback HEAD |
-| `--target <kind>` | `agents`, `skills`, `commands`, or `all` — filters proposals to the listed target type(s). Comma-separated for multiple. | `all` |
-| `--dry-run` | Write `.context/learnings.md` but do not enter apply phase, even if user checks boxes. Useful for review only. | off |
-| `--no-scope-filter` | Skip the used-in-context filter (Step 4 of the skill). All mapped proposals are surfaced regardless of whether the target participated in any worktask. **Advanced — use with caution** (higher noise). | off |
+| `--target <kind>` | `agents`, `skills`, `commands`, or `all` — filters proposals to those target types. Comma-separated for multiple. | `all` |
+| `--dry-run` | Write `.context/learnings.md` but never enter the apply phase, even if the user checks boxes. Review only. | off |
+| `--no-scope-filter` | Skip the used-in-context filter (Step 4 of the skill): surface all mapped proposals regardless of whether the target participated in any worktask. **Advanced — higher noise.** | off |
 | `--apply` | After presenting `learnings.md`, block until the user checks boxes and explicitly approves, then delegate checked items to `corpflow:prompt-engineer`. | off |
 
 ## Examples
 
 ```bash
-# Typical manual retrospective after a burst of edits
-/improve-yourself
-
-# Review since the last release tag, don't apply
-/improve-yourself --since v4.0.0 --dry-run
-
-# Focus on skills only, apply after review
-/improve-yourself --target skills --apply
-
-# Allow cross-context proposals (e.g., when editing agents that didn't run)
-/improve-yourself --no-scope-filter --dry-run
+/improve-yourself                                  # manual retrospective after a burst of edits
+/improve-yourself --since v4.0.0 --dry-run         # review since the last release tag, don't apply
+/improve-yourself --target skills --apply          # skills only, apply after review
+/improve-yourself --no-scope-filter --dry-run      # include agents that didn't run this session
 ```
 
 ## Behavior
@@ -70,16 +58,16 @@ The skill owns the pipeline; this command wires flags around it:
 2. Build used-in-context set via `skills/self-improvement/scripts/build-context-set.sh`; `--no-scope-filter` marks it unbounded (mapper keeps every mapped proposal).
 3. Run the skill's classify → map → emit pipeline — writes `.context/learnings.md` when proposals survive, `.context/logs/self-improve-<ts>.log` always. Post-filter proposals by `--target`.
 4. **Step 5b — append labels** (see below).
-5. Present `learnings.md` to the user: proposal count by confidence (high/medium), deferred count, out-of-context discard count, labels appended.
+5. Present `learnings.md`: proposal count by confidence (high/medium), deferred count, out-of-context discard count, labels appended.
 6. **Apply phase** — see below.
 
 ### Step 4 — Label Append
 
-Runs `skills/self-improvement/scripts/append-labels.sh` per `skills/self-improvement/SKILL.md § Step 5b`, appending one row per kept change to the committed `evals/failure-labels.jsonl`. This is the only durable output of the run — `learnings.md` lives under the gitignored `.context/` — so skipping it discards every label the pipeline just produced.
+Runs `skills/self-improvement/scripts/append-labels.sh` per `skills/self-improvement/SKILL.md § Step 5b`, appending one row per kept change to the committed `evals/failure-labels.jsonl`. It is the run's only durable output — `learnings.md` lives under the gitignored `.context/` — so skipping it discards every label the pipeline just produced.
 
 - `--worktask-id` resolves from `.context/state.json` `worktask_id`; outside a worktask workspace, pass `--since` and the command uses `manual-<YYYYMMDD-HHMMSS>`.
 - Runs whether or not the user approves any proposal — a rejected proposal is still evidence the output needed changing.
-- **`--dry-run` does not append.** The dataset is committed, and `--dry-run` is documented as read-only; the run reports the row count it *would* have written instead. Re-run without `--dry-run` to record them.
+- **`--dry-run` does not append** (the dataset is committed and `--dry-run` is read-only); it reports the row count it *would* have written. Re-run without `--dry-run` to record them.
 - `SELF_IMPROVE_LABELS=0` makes the step a no-op.
 
 #### Aggregating the dataset
@@ -99,9 +87,7 @@ Runs only with `--apply`, never under `--dry-run`: STOP for user box-checking (`
 ```markdown
 # /improve-yourself — Results
 
-**Baseline:** <sha>
-**Scope:** <in-context | unbounded>
-**Target filter:** <all | agents | skills | commands>
+**Baseline:** <sha> — **Scope:** <in-context | unbounded> — **Target filter:** <all | agents | skills | commands>
 
 ## Summary
 - Detected diff hunks: <N>
@@ -124,16 +110,16 @@ Same skill, same `.context/learnings.md`. The ST-stage invocation is the product
 
 - DO NOT apply proposals without `--apply` and explicit user box-checking + approval message.
 - DO NOT use `--no-scope-filter` in production worktasks; it exists for diagnostics and edge cases.
-- DO NOT run this command if a worktask is active (ST has not yet completed). Wait for the worktask's own ST-triggered retrospective instead.
-- DO NOT write to `learnings.md` with the same timestamp if a prior run exists in the same second — the skill handles this by overwriting; callers must understand the file is single-slot per workspace.
+- DO NOT run this command while a worktask is active (ST not yet complete) — wait for that worktask's own ST-triggered retrospective.
+- DO NOT expect `learnings.md` to accumulate runs: it is single-slot per workspace and a re-run overwrites it.
 
 ## Error Handling
 
 | Situation | Command behavior |
 |-----------|------------------|
-| `--since <ref>` is invalid | Abort with clear message; do NOT fall back to HEAD silently. |
-| No `.context/` directory present AND no `--since` given | Abort; ask user to run from a worktask workspace or pass `--since`. |
-| Skill writes no `learnings.md` (no changes detected) | Print summary from log file; exit 0. |
-| Context set resolves empty (no `Agent:` provenance to scope against) | Report it explicitly — every change is discarded and zero labels are written, which is indistinguishable from "no edits" unless it is named. Suggest `--no-scope-filter` for a diagnostic pass. |
-| `--apply` given but user never checks any boxes | Log `applied_count: 0, skipped_count: <total>`; exit 0 without calling prompt-engineer. |
-| prompt-engineer fails mid-apply | Commit any successfully applied proposals; surface the failure for the remaining items; do NOT revert partial work. |
+| `--since <ref>` is invalid | Abort with a clear message; do NOT fall back to HEAD silently. |
+| No `.context/` present AND no `--since` given | Abort; ask the user to run from a worktask workspace or pass `--since`. |
+| Skill writes no `learnings.md` (no changes detected) | Print summary from the log file; exit 0. |
+| Context set resolves empty (no `Agent:` provenance to scope against) | Say so explicitly — every change is discarded and zero labels written, indistinguishable from "no edits" unless named. Suggest `--no-scope-filter` for a diagnostic pass. |
+| `--apply` given but no boxes ever checked | Log `applied_count: 0, skipped_count: <total>`; exit 0 without calling prompt-engineer. |
+| prompt-engineer fails mid-apply | Keep the successfully applied commits; surface the failure for the remaining items; do NOT revert partial work. |

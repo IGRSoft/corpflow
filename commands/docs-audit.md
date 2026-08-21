@@ -16,17 +16,18 @@ Audit documentation for gaps, outdated content, and quality issues.
 ## Usage
 
 ```
-/docs-audit
-/docs-audit --path <directory>
-/docs-audit --type [code|readme|api|architecture]
+/docs-audit [--path <dir>] [--type code|readme|api|architecture] [--scope full|section] [--fix] [--report]
 ```
 
 ## Options
 
-- `--path <dir>` - Audit specific directory
-- `--type <type>` - Focus on specific doc type
-- `--fix` - Auto-fix simple issues
-- `--report` - Generate detailed report
+| Option | Values | Purpose |
+|--------|--------|---------|
+| `--path <dir>` | any directory | Audit that subtree only (default: repo root) |
+| `--type <type>` | `code`, `readme`, `api`, `architecture` | Restrict to one doc type (default: all four) |
+| `--scope <scope>` | `full`, `section` | Whole-file audit vs. the addressed section only (default: `full`) |
+| `--fix` | — | Apply the mechanical fixes listed under Auto-Fix Available |
+| `--report` | — | Emit every report section; without it, emit Summary + Critical Issues only |
 
 ## Examples
 
@@ -34,192 +35,34 @@ Audit documentation for gaps, outdated content, and quality issues.
 /docs-audit
 /docs-audit --path src/auth --type code
 /docs-audit --type api --report
+/docs-audit --path packages/shared --scope section --fix
 ```
 
 ## Output Format
 
-```markdown
-# Documentation Audit Report
+One markdown report, sections in the order below. Issue tables sort by severity, then path.
+Report only what the audit found — omit a section with no findings rather than emitting an empty table.
 
-## Summary
+### Report sections — findings
 
-| Category | Files | Issues | Score |
-|----------|-------|--------|-------|
-| Code Comments | 45 | 12 | 73% |
-| README Files | 8 | 3 | 62% |
-| API Docs | 15 | 5 | 67% |
-| Architecture | 3 | 2 | 33% |
-| **Total** | **71** | **22** | **65%** |
+| Section | Shape |
+|---------|-------|
+| `## Summary` | `Category \| Files \| Issues \| Score`, one row per audit category plus a bold **Total** row |
+| `## Critical Issues 🔴` | Per issue: H3 title, `**Files Affected**`, `**Impact**` (who is blocked), an evidence table, `**Recommendation**` |
+| `## High Priority Issues ⚠️` | Undocumented functions (`File \| Function \| Lines \| Complexity`) and README gaps (`Directory \| Issue`) |
+| `## Medium Priority Issues` | Incomplete comments (`File:line \| Issue`) and inconsistent formatting (`Type \| Count \| Issue`) |
 
----
-```
+### Report sections — scores and actions
 
-### Template — critical issues
+| Section | Shape |
+|---------|-------|
+| `## Code Documentation Score` | By module (`Module \| Functions \| Documented \| Score`) and quality metrics (`Metric \| Value \| Target \| Status`) |
+| `## Recommended Actions` | Numbered lists under Immediate (this sprint), Short-term (next sprint), Long-term (backlog) |
+| `## Auto-Fix Available` | `Issue \| Count \| Command` — only rows `--fix` can actually resolve (missing `@returns`, trailing whitespace, broken relative links) |
+| `## Documentation Health Trend` | `Month \| Score \| Change`, newest first |
+| `## Next Review` | Schedule, next date, owner (Technical Writer) |
 
-```markdown
-<!-- …continued: critical issues -->
-## Critical Issues 🔴
-
-### Missing API Documentation
-**Files Affected**: 5 endpoints
-**Impact**: External developers cannot use API
-
-| Endpoint | Method | Documentation |
-|----------|--------|---------------|
-| `/api/auth/sso` | POST | ❌ Missing |
-| `/api/users/preferences` | GET | ❌ Missing |
-| `/api/users/preferences` | PUT | ❌ Missing |
-| `/api/export/csv` | POST | ❌ Missing |
-| `/api/webhooks` | POST | ❌ Missing |
-
-**Recommendation**: Add OpenAPI/Swagger documentation
-
-### Outdated Architecture Docs
-**File**: `docs/architecture/auth.md`
-**Last Updated**: 6 months ago
-**Issue**: Does not reflect SSO implementation
-
-**Recommendation**: Update with current auth flow including OAuth
-
----
-```
-
-### Template — high priority issues
-
-```markdown
-<!-- …continued: high priority issues -->
-## High Priority Issues ⚠️
-
-### Undocumented Functions
-
-| File | Function | Lines | Complexity |
-|------|----------|-------|------------|
-| `src/auth/service.ts` | `refreshToken` | 112-145 | High |
-| `src/api/handlers/export.ts` | `generateCSV` | 45-89 | Medium |
-| `src/utils/crypto.ts` | `encryptData` | 23-45 | High |
-
-**Impact**: Hard to maintain, onboarding difficulty
-
-### README Gaps
-
-| Directory | Issue |
-|-----------|-------|
-| `src/auth/` | Missing README |
-| `src/api/handlers/` | No usage examples |
-| `packages/shared/` | Outdated dependencies section |
-
----
-```
-
-### Template — medium priority issues
-
-```markdown
-<!-- …continued: medium priority issues -->
-## Medium Priority Issues
-
-### Incomplete Code Comments
-
-| File | Issue |
-|------|-------|
-| `src/auth/middleware.ts:34` | TODO without context |
-| `src/api/routes.ts:78` | Commented code block |
-| `src/utils/date.ts:12` | Outdated comment |
-
-### Inconsistent Formatting
-
-| Type | Count | Issue |
-|------|-------|-------|
-| JSDoc | 8 | Missing @returns |
-| JSDoc | 5 | Missing @param types |
-| Markdown | 3 | Broken links |
-
----
-```
-
-### Template — documentation scores
-
-```markdown
-<!-- …continued: documentation scores -->
-## Code Documentation Score
-
-### By Module
-
-| Module | Functions | Documented | Score |
-|--------|-----------|------------|-------|
-| auth | 24 | 18 | 75% |
-| api | 32 | 20 | 62% |
-| utils | 18 | 15 | 83% |
-| ui | 45 | 38 | 84% |
-
-### Quality Metrics
-
-| Metric | Value | Target | Status |
-|--------|-------|--------|--------|
-| Doc Coverage | 65% | 80% | ⚠️ |
-| Example Coverage | 45% | 60% | ⚠️ |
-| Link Health | 92% | 100% | ⚠️ |
-| Freshness | 68% | 90% | ⚠️ |
-
----
-```
-
-### Template — recommended actions and auto-fix
-
-```markdown
-<!-- …continued: recommended actions, auto-fix -->
-## Recommended Actions
-
-### Immediate (This Sprint)
-1. Document 5 missing API endpoints
-2. Add README to `src/auth/`
-3. Update architecture docs for SSO
-
-### Short-term (Next Sprint)
-1. Add JSDoc to undocumented functions
-2. Fix broken markdown links
-3. Remove commented code blocks
-
-### Long-term (Backlog)
-1. Implement documentation linting
-2. Add doc coverage to CI
-3. Create documentation style guide
-
----
-
-## Auto-Fix Available
-
-The following can be auto-fixed with `--fix`:
-
-| Issue | Count | Command |
-|-------|-------|---------|
-| Missing @returns | 8 | `/docs-audit --fix` |
-| Trailing whitespace | 15 | `/docs-audit --fix` |
-| Broken relative links | 2 | `/docs-audit --fix` |
-
----
-```
-
-### Template — health trend and next review
-
-```markdown
-<!-- …continued: health trend, next review -->
-## Documentation Health Trend
-
-| Month | Score | Change |
-|-------|-------|--------|
-| [Month] | 65% | - |
-| [Month-1] | 62% | +3% |
-| [Month-2] | 58% | +4% |
-| [Month-3] | 55% | +3% |
-
----
-
-## Next Review
-
-Schedule: Monthly
-Next: [Next Review Date]
-Owner: Technical Writer
-```
+Quality-metric targets: doc coverage 80%, example coverage 60%, link health 100%, freshness 90%. Status is ✅ at or above target, ⚠️ below.
 
 ## Audit Criteria
 
@@ -232,6 +75,6 @@ Owner: Technical Writer
 
 ## Integration
 
-This command works with:
-- `/docs-readme` - Fix README issues
-- `/worktask` DC stage - Documentation phase
+- `/docs-readme` — fix the README issues this audit reports
+- `/worktask` DC stage — documentation phase
+- `agents/technical-writer.md` — owning agent

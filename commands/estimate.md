@@ -119,211 +119,47 @@ If `--dev-rate` is omitted, the Budget row is replaced by
 
 ### Comparison Output (`--compare`)
 
-```markdown
-## Comparison: Auth implementation options
+Emit `## Comparison: <topic>` with one row per option:
 
+```markdown
 | Option | Size | SP Range | Hours Range | Complexity | Entry point |
 |--------|------|----------|-------------|------------|-------------|
 | OAuth2 | L    | 6–10     | 36–60       | 14         | `/worktask` |
-| Magic-link | M | 4–5    | 24–30       | 9          | `/worktask` |
-| Password+TOTP | M | 4–5 | 24–30       | 11         | `/worktask` |
 ```
 
 ### Stages Output (`--stages`)
 
-```markdown
-## 3-Stage Plan: Build MVP
-
-| Stage | Scope | SP | Hours | Buffer (10%) | Total |
-|-------|-------|----|-------|--------------|-------|
-| 1. Required | Core features | 20 | 120 | 12 | 132 |
-| 2. Nice-to-have | Polish | 10 | 60  | 6  | 66  |
-| 3. v1.1 | Roadmap items | 8  | 48  | 4.8 | 52.8 |
-
-See `skills/shared/three-stage-planning.md § Stage Budget Template` for column definitions.
-```
+Emit `## 3-Stage Plan: <task>` — one row per stage (Required, Nice-to-have, v1.1)
+with columns Stage, Scope, SP, Hours, Buffer (10%), Total. Column definitions:
+`skills/shared/three-stage-planning.md § Stage Budget Template`.
 
 ### Review Output (`--review`)
 
-Senior/platform-specialist review of an existing estimate. Emit
-`## Senior Developer Review: [Project]` with these sections (the fenced chunks below concatenate into one report):
-
-#### Review Output — Adjustments & Impact
-
-```markdown
-## Senior Developer Review: [Project]
-
-### Adjustment Summary
-| Category | Original (Min-Max) | Adjusted (Min-Max) | Delta | Reason |
-|----------|--------------------|--------------------|-------|--------|
-| AR SDK | L (5-10) | XL (13-21) | +8-11 | Metal pipeline complexity |
-| BLE | M (3-5) | L (5-10) | +2-5 | State machine handling |
-| Vision | M (3-5) | L (5-10) | +2-5 | Face detection + landmarks |
-
-### Total Impact
-- Original SP: 120-152
-- Adjusted SP: 150-193
-- Delta: +30-41 SP (+25-27%)
-- Hours Impact: +180-246h
-```
-
-#### Review Output — Risks & Recommendations
-
-```markdown
-### Risk Flags
-1. Third-party SDK iOS version support uncertain
-2. BLE background mode reliability concerns
-3. App Store AR review requirements
-
-### Recommendations
-1. Request SDK documentation from vendor before Phase 3
-2. Build BLE mock service for development testing
-3. Prepare App Store demo video for AR features
-```
-
-With `--update`, the adjustments are written back into the estimation files.
+Emit `## Senior Developer Review: [Project]` exactly as templated in
+`skills/senior-developer-review/SKILL.md § Output Format` — sections Adjustment
+Summary, Total Impact, Risk Flags, Recommendations. With `--update`, the
+adjustments are written back into the estimation files.
 
 ## Review Mode Reference
 
-### When to Use `--review`
-
-- Projects with complexity score >= 15
-- AR/ML/Vision framework integration
-- BLE/Hardware SDK integration
-- Real-time camera processing
-- Third-party SDK integration
-
-### Adjustment Matrix
-
-Capability-keyed and platform-neutral — it applies whatever the stack. The concrete APIs
-behind each capability live in the per-platform tables below.
-
-| Category | Trigger | Min Increase | Max Increase |
-|----------|---------|-------------|-------------|
-| Realtime graphics / camera | GPU pipeline, capture session, marker or face tracking | +3 SP | +5 SP |
-| API integration | Media processing, async orchestration, retry/backoff | +1 SP | +2 SP |
-| Hardware / peripheral I/O | Connection state machines, background execution | +2 SP | +3 SP |
-| On-device inference | Detection, landmarks, model loading and warm-up | +2 SP | +3 SP |
-| Offline sync | Conflict resolution, local persistence | +2 SP | +3 SP |
-| Third-party SDKs | Unknown documentation quality | +15% buffer | +20% buffer |
-
-### Platform-Specific Adjustments
-
-Apply only the table matching `--platform`. Rows name that platform's concrete APIs;
-the capability they instantiate is the matching Adjustment Matrix row above.
-
-#### Apple / Swift
-| Feature | Min Adjustment | Max Adjustment |
-|---------|---------------|---------------|
-| Metal rendering | +3 SP | +5 SP |
-| ARKit integration | +5 SP | +8 SP |
-| CoreBluetooth state machine | +3 SP | +5 SP |
-| Vision face detection | +2 SP | +3 SP |
-| App Store review prep | +2 SP | +3 SP |
-
-#### Android / Kotlin
-| Feature | Min Adjustment | Max Adjustment |
-|---------|---------------|---------------|
-| NDK/JNI integration | +3 SP | +5 SP |
-| BLE background services | +3 SP | +5 SP |
-| Camera2 API | +2 SP | +3 SP |
-| Play Store compliance | +1 SP | +2 SP |
-
-#### Web
-| Feature | Min Adjustment | Max Adjustment |
-|---------|---------------|---------------|
-| WebGL / WebGPU rendering | +3 SP | +5 SP |
-| WebRTC integration | +3 SP | +5 SP |
-| Service worker / offline shell | +2 SP | +3 SP |
-| Cross-browser + WCAG conformance pass | +1 SP | +2 SP |
-
-#### Backend
-| Feature | Min Adjustment | Max Adjustment |
-|---------|---------------|---------------|
-| Cross-service transaction / idempotency | +3 SP | +5 SP |
-| Schema migration against live data | +2 SP | +3 SP |
-| Public API contract + versioning | +2 SP | +3 SP |
-| AuthN/AuthZ and tenant isolation | +2 SP | +3 SP |
-
-#### Systems
-| Feature | Min Adjustment | Max Adjustment |
-|---------|---------------|---------------|
-| Manual memory ownership redesign | +3 SP | +5 SP |
-| FFI / language-boundary bindings | +2 SP | +3 SP |
-| Cross-platform build + toolchain matrix | +2 SP | +3 SP |
-| Sanitizer / UB triage on existing code | +1 SP | +2 SP |
-
-#### AI/ML
-| Feature | Min Adjustment | Max Adjustment |
-|---------|---------------|---------------|
-| Fine-tuning or training run | +5 SP | +8 SP |
-| RAG pipeline (ingest, chunk, retrieve) | +3 SP | +5 SP |
-| Eval harness + regression baselines | +2 SP | +3 SP |
-| Inference serving under a cost/latency budget | +2 SP | +3 SP |
-
-### Review Checklist
-
-Before finalizing, verify:
-
-- [ ] All SDK integrations identified
-- [ ] Background mode requirements assessed
-- [ ] Permissions flow complexity included
-- [ ] Error handling for network failures
-- [ ] Offline mode if required
-- [ ] Analytics integration
-- [ ] Push notification handling
-- [ ] Distribution-channel requirements (App Store, Play Store, package registry, deploy target)
-
-Review methodology detail: `skills/senior-developer-review/SKILL.md`.
+`skills/senior-developer-review/SKILL.md` is canonical for review mode and is not
+restated here: § When to Apply (trigger conditions), § Adjustment Matrix
+(capability-keyed SP increases), § Platform-Specific Adjustments (per-platform API
+tables — apply only the one matching `--platform`), § Review Process, § Review
+Checklist, and § Risk Flags.
 
 ## Sizing Guide
 
-### T-Shirt Sizes
+Canonical in `skills/estimation-methodology/SKILL.md`: § T-Shirt Sizing → Story
+Points (Range), § Story Points to Hours (formula and Junior/Mid/Senior/Expert
+multiplier variants), § 5-Factor Complexity Analysis (Technical Complexity,
+Integration Points, Risk Level, Unknowns, Domain Expertise), § Phase Constraints,
+§ Test Integration, and § Buffer Calculation. Do not redefine any of them here.
 
-See `skills/estimation-methodology/SKILL.md § T-Shirt Sizing → Story Points (Range) and § Story Points to Hours.`
+Command-owned rules on top of the skill:
 
-Worked-example header (canonical values live in the skill):
-
-| Size | SP Min | SP Max | Hours Min | Hours Max | Entry point |
-|------|--------|--------|-----------|-----------|-------------|
-| XS | 1 | 1 | 6 | 6 | `/worktask` |
-| S | 2 | 3 | 12 | 18 | `/worktask` |
-| M | 4 | 5 | 24 | 30 | `/worktask` |
-| L | 6 | 10 | 36 | 60 | `/worktask` |
-| XL | 13 | 21 | 78 | 126 | split first |
-
-All sizes use the single `/worktask` entry point; PL0 dynamic sizing drops stages for low-complexity work.
-
-### Complexity Factors
-- **Technical Complexity**: Algorithm difficulty, new technologies
-- **Integration Points**: APIs, services, databases affected
-- **Risk Level**: Security, data integrity, user impact
-- **Unknowns**: Unclear requirements, new domain
-- **Domain Expertise**: Specialized knowledge required (5 = niche specialty)
-
-### Story Points to Hours
-
-See `skills/estimation-methodology/SKILL.md § Story Points to Hours` for the canonical formula and multiplier variants (Junior/Mid/Senior/Expert). Do not redefine here.
-
-### Phase Constraints
-
-- Maximum 4 weeks (~160h) per phase
-- If exceeds, split into sub-phases or redistribute
-- Each phase should be independently deliverable
-
-### Test Integration
-
-- Tests MUST be included in subtasks
-- Format: "[Task] + tests"
-- No separate testing phases allowed
-
-### Buffer Calculation
-
-- Add 15% buffer to both Min and Max base hours
-- Total Min = Base Min × 1.15, Total Max = Base Max × 1.15
-- Budget Min = Total Min × Rate, Budget Max = Total Max × Rate
-
-Default buffer is 15% for single-stage estimates and 10% per stage for /estimate --stages (compounded across stages provides equivalent contingency).
+- Every size routes to the single `/worktask` entry point; PL0 dynamic sizing drops stages for low-complexity work. XL splits into ≤ L sub-tasks first.
+- Buffer is 15% for single-stage estimates, but 10% per stage under `--stages` — compounding across stages gives equivalent contingency.
 
 ## 3-Stage Sequential Model
 
@@ -331,73 +167,24 @@ See `skills/shared/three-stage-planning.md` for stage definitions, sequential ru
 
 ## Export Mode Reference (`--export csv`)
 
-`--export csv` runs the estimation, then writes 13 CSV files for Google Sheets
-import. The canonical file list, column schemas, delimiter, and validation rules
-live in `skills/csv-export-templates/SKILL.md` — do not redefine the export shape
-here. Requires `--detailed`. Bare `--export` (no value) defaults to `csv`, the
-only currently supported format.
+`--export csv` runs the estimation, then writes the 13 CSV files for Google Sheets
+import. `skills/csv-export-templates/SKILL.md` is canonical and is not restated
+here: § Export Structure (the 13-file list), § Platform Variants (how files 10–11
+resolve from `--platform`), § File 12 and column schemas, § Format Specification
+(delimiter, encoding, headers, multiline), and § Validation Rules.
 
-### Export File Tree
+Command-owned rules:
 
-Creates 13 CSV files in `--dir` (default `exports/`):
-
-```
-exports/
-├── 01_project_overview.csv     # Metadata, sizing, totals
-├── 02_complexity_analysis.csv  # 5-factor scoring
-├── 03_technology_stack.csv     # Frameworks, SDKs
-├── 04_features_breakdown.csv   # Subtasks with points/hours
-├── 05_roadmap_milestones.csv   # Week-by-week plan
-├── 06_risk_assessment.csv      # Risk register
-├── 07_budget_estimate.csv      # Cost breakdown
-├── 08_success_metrics.csv      # KPIs, acceptance criteria
-├── 09_competitive_analysis.csv # Market positioning
-├── 10_<platform>_specifics.csv     # Platform details (see --platform variants below)
-├── 11_<framework>_specifics.csv    # Framework details (varies by platform)
-├── 12_integration_specifics.csv    # SDK/API details (per-platform integrations)
-└── 13_phase_summary.csv        # Phase rollup
-```
-
-### Platform Variants (files 10, 11, 12)
-
-The naming and content of files 10–12 depend on `--platform`:
-
-| `--platform` | File 10 | File 11 |
-|--------------|---------|---------|
-| `apple`      | `10_ios_specifics.csv` | `11_swiftui_specifics.csv` |
-| `android`    | `10_android_specifics.csv` | `11_jetpack_specifics.csv` |
-| `web`        | `10_web_specifics.csv` | `11_framework_specifics.csv` |
-| `systems`    | `10_systems_specifics.csv` | `11_toolchain_specifics.csv` |
-| `backend`    | `10_backend_specifics.csv` | `11_runtime_specifics.csv` |
-| `ai`         | `10_ai_specifics.csv` | `11_model_stack_specifics.csv` |
-| `all` (default) | one set per platform in scope | — |
-
-File 12 keeps the name `12_integration_specifics.csv` on every platform; only its rows
-change. Canonical column schemas: `skills/csv-export-templates/SKILL.md`.
+- Requires `--detailed`. Bare `--export` (no value) defaults to `csv`, the only currently supported format.
+- Files land in `--dir` (default `exports/`); `--delimiter` overrides the skill's default `;`.
 
 ### Export Validation (`--validate`)
 
-Canonical validation rules live in `skills/csv-export-templates/SKILL.md § Validation Rules`. The `--validate` mode flag additionally:
+The skill defines the rules; this command defines the failure mode:
 
-- Aborts the export with a non-zero exit and a row-level diff if any rule fails (the skill defines the rules; this command defines the failure mode).
+- Aborts the export with a non-zero exit and a row-level diff if any rule fails.
 - Emits a `validation_report.csv` alongside the 13 files listing each rule and pass/fail status.
-- Is idempotent: re-running `--validate` against an existing export directory revalidates without rewriting files.
-
-### CSV Format
-
-| Setting | Value |
-|---------|-------|
-| Delimiter | Semicolon (`;`), override with `--delimiter` |
-| Encoding | UTF-8 |
-| Headers | First row always |
-| Multiline | Quote cells with line breaks |
-
-### Google Sheets Import
-
-1. Open Google Sheets
-2. File → Import → Upload CSV
-3. Select the delimiter matching `--delimiter` (default `;`)
-4. Import each file to a separate sheet
+- Idempotent: re-running `--validate` against an existing export directory revalidates without rewriting files.
 
 ## Worktask Recommendation Logic
 

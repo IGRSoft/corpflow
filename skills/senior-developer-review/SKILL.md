@@ -10,17 +10,13 @@ Technical review of estimates by platform specialists.
 
 ## When to Apply
 
-- Projects with complexity score >= 15
-- AR/ML/Vision framework integration
-- BLE/Hardware SDK integration
-- Real-time camera processing
-- Third-party SDK integration (unknown quality)
-- Background processing requirements
+Complexity score >= 15, or the estimate involves: AR/ML/Vision frameworks, BLE/hardware SDKs,
+real-time camera processing, third-party SDKs of unknown quality, background processing.
 
 ## Adjustment Matrix
 
-Capability-keyed and platform-neutral — it applies whatever the stack. The concrete APIs
-behind each capability live in the per-platform tables below.
+Capability-keyed and platform-neutral — the concrete APIs behind each capability live in the
+per-platform tables below.
 
 | Category | Trigger | Min Increase | Max Increase |
 |----------|---------|-------------|-------------|
@@ -33,8 +29,8 @@ behind each capability live in the per-platform tables below.
 
 ## Platform-Specific Adjustments
 
-Apply the table matching the reviewed platform. Rows name that platform's concrete APIs;
-the capability they instantiate is the matching Adjustment Matrix row above.
+Apply only the table matching the reviewed platform; each row instantiates an Adjustment
+Matrix capability with that platform's concrete APIs.
 
 ### Apple/SwiftUI
 | Feature | Min Adjustment | Max Adjustment |
@@ -93,29 +89,15 @@ the capability they instantiate is the matching Adjustment Matrix row above.
 
 ## Review Process
 
-1. **Read estimation artifacts**
-   - features_breakdown.csv
-   - complexity_analysis.csv
-   - integration_specifics.csv
-
-2. **Identify adjustment triggers**
-   - Check each feature against matrix
-   - Note platform-specific concerns
-
-3. **Apply adjustments**
-   - Update SP Min and SP Max for affected features
-   - Recalculate hours (Hours Min = SP Min × 6h, Hours Max = SP Max × 6h)
-   - Add buffer for unknowns (applied to both Min and Max)
-
-4. **Document changes**
-   - Original vs adjusted Min/Max values
-   - Rationale for each adjustment
-   - Risk flags identified
-
-5. **Update totals**
-   - Recalculate phase summary (Min and Max independently)
-   - Update budget range
-   - Adjust timeline range if needed
+1. **Read estimation artifacts** — `features_breakdown.csv`, `complexity_analysis.csv`,
+   `integration_specifics.csv`.
+2. **Identify adjustment triggers** — check each feature against the matrix; note
+   platform-specific concerns.
+3. **Apply adjustments** — update SP Min and SP Max per feature, recalculate hours
+   (Hours = SP × 6h, Min and Max independently), add the unknowns buffer to both.
+4. **Document changes** — original vs adjusted Min/Max, rationale per adjustment, risk flags.
+5. **Update totals** — recalculate the phase summary (Min and Max independently), the budget
+   range, and the timeline range if it shifts.
 
 ## Review Checklist
 
@@ -134,8 +116,6 @@ Before finalizing estimates, verify:
 - [ ] Accessibility requirements
 
 ## Risk Flags
-
-Watch for these during review:
 
 | Flag | Action |
 |------|--------|
@@ -172,47 +152,29 @@ Watch for these during review:
 
 ## Dependency Upgrade Review
 
-Upgrading an existing dependency is a code change, and the riskiest upgrades are the ones
-merged in bulk as "bump deps." When a review request touches a manifest (`Package.swift`,
-`Podfile`, `*.gradle`, `requirements.txt`, `package.json`, …) or its lockfile, apply the
-same senior discipline you'd apply to feature code.
+A bump is a behavior change you did not write, and bulk "bump deps" merges are the riskiest.
+When the review touches a manifest (`Package.swift`, `Podfile`, `*.gradle`,
+`requirements.txt`, `package.json`, …) or its lockfile, apply feature-code discipline.
 
-### Read, Isolate, Verify (steps 1–3)
+Advisory triage and supply-chain verdicts defer to the `security-review-process` skill: this
+is the upgrade *workflow*, that is the security *verdict*.
 
-1. **Read the changelog, not just the version number.** Semver is a promise the maintainer
-   may not have kept; a "patch" can carry a behavioral change. For a major bump, read the
-   migration notes and find what breaks.
-2. **One dependency per change.** Upgrade and merge individually (or in small related
-   groups). A bulk bump that breaks the build hides which package did it; single-package
-   changes keep the cause obvious and the revert clean.
-3. **Let the suite decide.** The upgrade is verified by a green test suite before *and*
-   after, not by "it resolved." Thin coverage around the dependency's behavior is itself
-   the finding — add a test first.
+### Upgrade rules
 
-### Transitive Graph & Lockfile (steps 4–5)
-
-4. **Mind the transitive graph.** Most resolved packages are ones nobody chose directly.
-   Review the lockfile / transitive-graph diff, not just the manifest — one direct bump can
-   pull in dozens of indirect changes.
-5. **Keep the lockfile honest.** Commit it, review its diff, and never hand-edit it; the
-   lockfile (SwiftPM `Package.resolved` and equivalents) is what actually pins what ships.
-
-For advisory triage and supply-chain verdicts, defer to the `security-review-process`
-skill — this is the upgrade *workflow*, that is the security *verdict*.
-
-### Red-flag rebuttals
-
-| Rationalization | Reality |
-|-----------------|---------|
-| "It's just a version bump" | A bump is a behavior change you didn't write. Read the changelog; semver doesn't guarantee no breakage. |
-| "I'll upgrade everything in one PR to save time" | A bulk bump that breaks the build hides which package did it. One dependency per change keeps the cause and the revert clean. |
+| Rule | Why |
+|------|-----|
+| Read the changelog, not the version number | Semver is a promise the maintainer may not have kept; a "patch" can carry behavior change. Major bump → read the migration notes |
+| One dependency per change | A bulk bump that breaks the build hides which package did it; single-package changes keep the cause and the revert clean |
+| Let the suite decide | Green before *and* after, not "it resolved". Thin coverage around the dependency's behavior is itself the finding — add a test first |
+| Mind the transitive graph | Most resolved packages nobody chose directly; review the lockfile / transitive diff, not just the manifest |
+| Keep the lockfile honest | Committed, diff reviewed, never hand-edited — `Package.resolved` and equivalents pin what ships |
 
 ## Review Feedback Hygiene
 
-When acting on review comments before re-requesting review (mirrors the PR-feedback discipline in upstream review-agent-governance pattern):
+Before re-requesting review on acted-on comments:
 
-- [ ] Every blocking comment is addressed (fixed, or explicitly justified in a reply) before re-requesting review
-- [ ] Each fix references the specific comment it resolves (commit message or PR thread reply)
-- [ ] No silent scope expansion: changes outside the original review request are flagged separately
-- [ ] Re-request review only after CI/local checks pass on the updated diff
-- [ ] If a comment is rejected, document the rationale in the thread — do not close without reply
+- [ ] Every blocking comment addressed — fixed, or explicitly justified in a reply
+- [ ] Each fix references the comment it resolves (commit message or PR thread reply)
+- [ ] No silent scope expansion: changes outside the original request are flagged separately
+- [ ] CI/local checks pass on the updated diff before re-requesting
+- [ ] Rejected comments carry their rationale in the thread — never closed without a reply

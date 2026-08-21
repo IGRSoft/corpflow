@@ -37,178 +37,77 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 /pm-sprint
 /pm-sprint --capacity 40 --duration 2
 /pm-sprint --from-backlog backlog.md --include-debt
+/pm-sprint --capacity 30 --export
 ```
 
 ## Output Format
 
+Emit in this order: overview, goals, capacity, backlog, daily breakdown, dependencies, risks, definition of done, ceremonies, notes. Point estimates are Min/Max pairs throughout — commit to Min, stretch to Max.
+
+### Overview, goals, capacity
+
 ```markdown
-# Sprint Plan: Sprint [ID]
+# Sprint Plan: Sprint {ID}
 
 ## Sprint Overview
-
 | Attribute | Min | Max |
 |-----------|-----|-----|
-| Sprint | [Sprint ID] | |
 | Duration | Jan 13 - Jan 24 (2 weeks) | |
 | Team Capacity | 36 SP | 40 SP |
 | Committed | 30 SP | 38 SP |
 | Buffer | 2 points (5%) | 2 points (5%) |
 
----
-```
-
-### Template — goals
-
-```markdown
-<!-- …continued: sprint goals -->
 ## Goals
+### Sprint Goals — 2-4 outcome statements
+### Success Criteria — checkbox list, measurable, one per goal
 
-### Sprint Goals
-1. Complete SSO integration for enterprise customers
-2. Fix critical performance issues in dashboard
-3. Ship dark mode MVP
-
-### Success Criteria
-- [ ] SSO working with Okta and Azure AD
-- [ ] Dashboard load time < 2s
-- [ ] Dark mode toggle functional
-
----
-```
-
-### Template — capacity planning
-
-```markdown
-<!-- …continued: capacity planning -->
 ## Capacity Planning
-
 ### Team Capacity
-
-| Team Member | Available Days | Capacity Min | Capacity Max | Notes |
-|-------------|----------------|-------------|-------------|-------|
-| Alice | 10 | 8 | 10 | Full capacity |
-| Bob | 8 | 6 | 8 | PTO Jan 20-21 |
-| Carol | 10 | 8 | 10 | Full capacity |
-| Dave | 6 | 5 | 6 | Conference Jan 15-16 |
-| Eve | 6 | 5 | 6 | Part-time this sprint |
-| **Total** | **40** | **32** | **40** | |
+Per member: Available Days | Capacity Min | Capacity Max | Notes (PTO,
+conference, part-time), closing on a bold Total row.
 
 ### Allocation
-
 | Category | Pts Min | Pts Max | % | Notes |
 |----------|---------|---------|---|-------|
 | Features | 22 | 28 | 70% | Sprint goals |
 | Tech Debt | 5 | 6 | 15% | Prioritized items |
 | Bugs | 3 | 4 | 10% | Critical only |
 | Buffer | 2 | 2 | 5% | Unexpected work |
-
----
 ```
 
-### Template — sprint backlog (features)
+### Backlog and schedule
 
-```markdown
-<!-- …continued: sprint backlog -->
+~~~markdown
 ## Sprint Backlog
 
 ### Features (22-28 pts)
-
 | ID | Story | SP Min | SP Max | Assignee | Priority |
 |----|-------|--------|--------|----------|----------|
 | FEAT-101 | SSO: Okta integration | 5 | 8 | Alice | P0 |
-| FEAT-102 | SSO: Azure AD integration | 3 | 5 | Alice | P0 |
-| FEAT-103 | Dark mode: Core implementation | 5 | 8 | Carol | P1 |
-| FEAT-104 | Dark mode: Settings toggle | 2 | 3 | Carol | P1 |
-| FEAT-105 | Dashboard performance: Query optimization | 3 | 4 | Dave | P1 |
-```
 
-#### Backlog — tech debt and bugs
+Same columns for `### Tech Debt (5-6 pts)` (TD-nnn) and `### Bugs (3-4 pts)` (BUG-nnn).
 
-```markdown
-<!-- …continued: tech debt, bugs -->
-### Tech Debt (5-6 pts)
-
-| ID | Item | SP Min | SP Max | Assignee | Priority |
-|----|------|--------|--------|----------|----------|
-| TD-015 | Refactor auth module | 2 | 3 | Bob | P2 |
-| TD-018 | Add missing indexes | 1 | 2 | Dave | P1 |
-| TD-021 | Update deprecated deps | 1 | 1 | Eve | P2 |
-
-### Bugs (3-4 pts)
-
-| ID | Bug | SP Min | SP Max | Assignee | Priority |
-|----|-----|--------|--------|----------|----------|
-| BUG-234 | Login timeout on slow networks | 1 | 2 | Bob | P1 |
-| BUG-238 | Chart rendering issue in Safari | 1 | 2 | Eve | P2 |
-
----
-```
-
-### Template — daily breakdown
-
-```markdown
-<!-- …continued: daily breakdown -->
 ## Daily Breakdown
+One table per week — Day | Focus | Key Activities. Week 1 Monday is sprint
+start (planning); the final Friday is demo, retro, release prep.
 
-### Week 1 (Jan 13-17)
-
-| Day | Focus | Key Activities |
-|-----|-------|----------------|
-| Mon | Sprint start | Planning, SSO kickoff |
-| Tue | Development | SSO Okta, Dark mode setup |
-| Wed | Development | SSO Okta, Dark mode core |
-| Thu | Development | SSO Okta complete, DB indexes |
-| Fri | Review | SSO Okta review, dark mode progress |
-
-### Week 2 (Jan 20-24)
-
-| Day | Focus | Key Activities |
-|-----|-------|----------------|
-| Mon | Development | SSO Azure AD, Performance fixes |
-| Tue | Development | SSO Azure AD, Bug fixes |
-| Wed | Integration | SSO testing, Dark mode settings |
-| Thu | Testing | Full integration testing |
-| Fri | Sprint end | Demo, retro, release prep |
-
----
-```
-
-### Template — dependencies and risks
-
-~~~markdown
-<!-- …continued: dependencies, risks -->
 ## Dependencies
+Indented tree, blocker above dependent:
 
 ```
 FEAT-101 (SSO Okta)
     └── FEAT-102 (SSO Azure AD) - shares auth infrastructure
-
-TD-018 (DB indexes)
-    └── FEAT-105 (Query optimization) - needs indexes first
-
-FEAT-103 (Dark mode core)
-    └── FEAT-104 (Settings toggle) - UI depends on core
 ```
 
----
-
 ## Risks
-
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| SSO provider API issues | Medium | High | Have test accounts ready |
-| Scope creep on dark mode | Medium | Medium | Strict MVP scope |
-| Team member availability | Low | Medium | Cross-training on SSO |
-
----
+Table Risk | Probability | Impact | Mitigation — top 3-5 only.
+Run `/pm-risk` for the scored register, triggers, and monitoring plan.
 ~~~
 
-### Template — definition of done, ceremonies, notes
+### Closing sections
 
 ```markdown
-<!-- …continued: DoD, ceremonies, notes -->
 ## Definition of Done
-
 - [ ] Code complete and reviewed
 - [ ] Unit tests passing (>80% coverage)
 - [ ] Integration tests passing
@@ -216,26 +115,12 @@ FEAT-103 (Dark mode core)
 - [ ] QA approved
 - [ ] No critical/high bugs
 
----
-
 ## Ceremonies
-
-| Ceremony | When | Duration |
-|----------|------|----------|
-| Sprint Planning | Jan 13, 9am | 2 hours |
-| Daily Standup | Daily, 9:30am | 15 min |
-| Backlog Refinement | Jan 16, 2pm | 1 hour |
-| Sprint Review | Jan 24, 2pm | 1 hour |
-| Retrospective | Jan 24, 3pm | 1 hour |
-
----
+Table Ceremony | When | Duration — planning 2h, daily standup 15m,
+mid-sprint backlog refinement 1h, review 1h, retrospective 1h.
 
 ## Notes
-
-- Alice leading SSO implementation
-- Carol and Eve pairing on dark mode
-- Dave focusing on performance this sprint
-- Bob handling bugs and tech debt
+Who leads which workstream, who is pairing, who absorbs bugs and tech debt.
 ```
 
 ## Capacity Guidelines
