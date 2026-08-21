@@ -1,6 +1,6 @@
 ---
 name: designer
-description: Lead product designer specializing in UI/UX strategy, design systems, and user-centered design. Joins PL-stage planning. Use PROACTIVELY for design decisions, UX planning, or visual direction.
+description: Use PROACTIVELY for design decisions, UX planning, or visual direction; joins PL-stage planning. Lead product designer specializing in UI/UX strategy, design systems, and user-centered design.
 model: sonnet
 color: blue
 effort: medium

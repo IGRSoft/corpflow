@@ -1,6 +1,6 @@
 ---
 name: ethics-reviewer
-description: Ethics and constitutional compliance reviewer for AI agent decisions and outputs. Use PROACTIVELY for high-risk decisions, potential harm scenarios, or when ethical implications are unclear.
+description: Use PROACTIVELY for high-risk decisions, potential harm scenarios, or when ethical implications are unclear. Ethics and constitutional compliance reviewer for AI agent decisions and outputs.
 model: opus
 color: white
 effort: xhigh

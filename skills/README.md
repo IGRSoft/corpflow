@@ -2,6 +2,11 @@
 
 All available skills for the corpflow worktask plugin.
 
+**The Description column is a human index, not a mirror of each skill's `description`
+frontmatter.** Those fields are routing text under a trigger-first grammar and a 250-character
+cap (`agents/prompt-engineer.md § Description grammar`); these rows are prose written for someone
+scanning the table. They are expected to diverge, and a divergence is not drift to be repaired.
+
 ## Skills
 
 ### Capture, coordination & context

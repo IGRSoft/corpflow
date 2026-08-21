@@ -1,6 +1,6 @@
 ---
 name: appstore-screenshots
-description: Device specs, layout patterns, typography, and Pencil MCP worktask for App Store screenshot generation. Use when creating App Store screenshots or marketing visuals.
+description: Use when creating App Store screenshots or marketing visuals. Device specs, layout patterns, typography, and Pencil MCP worktask for App Store screenshot generation.
 effort: high
 keep-coding-instructions: true
 paths:

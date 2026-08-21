@@ -1,6 +1,6 @@
 ---
 name: gh-issue-dedup
-description: Enforce one GitHub issue per `.context/` per worktask — never open a duplicate. Use when the PL stage publishes a plan, when a repeat `/worktask` runs in an existing `.context/`, or before any `gh issue create` / `publish-pl-issue.sh` call.
+description: Use when the PL stage publishes a plan, when a repeat `/worktask` runs in an existing `.context/`, or before any `gh issue create` / `publish-pl-issue.sh` call. Enforce one GitHub issue per `.context/` per worktask — never open a duplicate.
 effort: low
 version: 0.3.0
 related:

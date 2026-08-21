@@ -350,6 +350,47 @@ Stamp `metadata.skipped_stages` (`{stage, reason}`) for every stage of the full 
 
 **context_refs seeding**: AR0 included ⇒ DV0's `metadata.context_refs` MUST name an `architecture-${N}.md` anchor, and DV0/DR0/QA0 dispatches carry `metadata.architecture_ref` once AR completes. AR0 excluded ⇒ `architecture-${N}.md` MUST NOT appear in any `context_refs` and no `architecture_ref` is stamped.
 
+#### Announce the sizing decision
+
+Say the classification out loud before the plan is read, so the human can override it. The **first
+content of `## summary`** — above the problem statement — states the complexity score, the tier,
+the resulting stage set, and one clause per added or skipped stage, phrased as a decision the
+reader may veto ("…and any of them can be overridden at the plan gate"). The returned handoff
+`summary` opens with the same sentence.
+
+An unannounced classification cannot be overridden. `## complexity` and `## stages` are read after
+the plan body, by which point the sizing has already shaped everything above them. This rule moves
+where the information appears; it does not touch the gate — same single round-trip, same
+`decision_gate` behaviour.
+
+#### Stage-task right-sizing
+
+A stage task is the smallest unit that carries its own test cycle and is worth a fresh reviewer's
+gate. Fold setup, configuration, scaffolding, and documentation steps into the task whose
+deliverable needs them; split only where a reviewer could meaningfully reject one task while
+approving its neighbour.
+
+This is the general form of the TL0 and DV-split tests above, which are phrased in terms of
+routing authority and developer count. Where those disagree with the reviewer-gate test they are
+the specific case and win; where they are silent — two DV streams over one file set, a doc step
+with no deliverable of its own — the reviewer-gate test decides. A task no reviewer could reject
+independently is not a task, it is a step inside one.
+
+#### Mid-run escalation channel
+
+The sizing recorded here is the input to a one-way ratchet: a downstream stage that discovers a
+surface PL0 could not have seen returns `requests_stage_escalation` in its artifact frontmatter,
+and the orchestrator adds the stage through the existing `--task-create` / `--task-block`
+operations, recording `{stage, reason}` in `metadata.added_stages`. Nothing downgrades mid-run.
+
+Two consequences for PL0's own writing. First, `skipped_stages[].reason` is the sentence an
+escalation must quote and falsify, so write it as a decision about the surface ("no credentials,
+tokens, PII, payments, authn, or untrusted input is read, written, or exposed"), never as a
+restatement of the score. Second, every stage PL0 declines gets a `skipped_stages` entry — fire
+condition 3 has nothing to quote without one. Conditions, caps, and validity are canonical in
+`skills/estimation-methodology/SKILL.md § Mid-run re-sizing`, not restated here.
+
+
 #### Dependency chain & run-index stamping (steps 4–5)
 
 4. **Set dependency chain** between seeded tasks using `state-patch.sh --task-block <ID> --on <ID[,ID…]>`
@@ -380,7 +421,7 @@ Platform variant = the same role from the detected platform's plugin, per the re
 
 ##### DV0 routing override — plugin worktask-infrastructure
 
-Single source of truth — do NOT duplicate elsewhere. The DV0 default `corpflow:developer` routes *platform app-code*. Route DV to `metadata.agent: "corpflow:workflow-engineer"` (model `opus`, error_file `.context/errors/workflow-engineer.md`) when the change touches worktask infrastructure — `skills/worktask/scripts/*.sh`, the state-machine glue under `skills/worktask/**`, or `hooks/**`. Platform/app code (Swift, server, web, product source) stays `corpflow:developer` (or the `apple-developer:*` variant); a mixed worktask splits DV sub-tasks by scope and routes each independently. `stage-codes.md` keeps the unconditional DV default and points here.
+Single source of truth — do NOT duplicate elsewhere. The DV0 default `corpflow:developer` routes *platform app-code*. Route DV to `metadata.agent: "corpflow:workflow-engineer"` (model `opus`, error_file `.context/errors/workflow-engineer.md`) when the change touches worktask-infrastructure files that are **executed** — the plugin tree's `**/*.sh`, `**/*.bats`, `hooks/**`, and JSON consumed by those scripts. The anchor is the plugin/worktask tree, never the extension alone: a product repo's shell or CI script is platform code and keeps the default route (bash → `system-developer` via `corpflow:developer`, per the registry). Markdown is never routed here by directory: prompt prose under `skills/worktask/**` stays with the prompt-asset owner unless the `.md` is the normative spec of a script's or the ledger's contract (ledger keys, CLI flags, exit codes), which is infrastructure regardless of extension. Platform/app code (Swift, server, web, product source) stays `corpflow:developer` (or the `apple-developer:*` variant); a mixed worktask splits DV sub-tasks by scope and routes each independently. `stage-codes.md` keeps the unconditional DV default and points here.
 
 ###### Worked example
 
@@ -482,6 +523,21 @@ Before finalizing a plan draft, scan the task text for a **scope noun with multi
 ## Plan-Gate Open-Question Batching
 
 More than two open questions for the plan gate (explicit `open_questions[]` + unprompted refinements) consolidate into ONE numbered elicitation list in `## summary`, each item carrying a concrete recommended default (`1. Ship dark mode as an opt-in toggle? (default: yes, opt-in)`). Surface the whole list in a single gate round-trip and apply the user's amendments in one batch pass before marking PL0 complete — not one PL resume per answer.
+
+### Assumption tagging for plan-shaping questions
+
+A question whose answer would change the plan's *shape* — scope boundary, stage set, or target
+file set — cannot wait for the gate, because the plan is written against some answer either way.
+Write the plan against the stated recommended default and mark every section that answer would
+invalidate with an inline `assumes qN` tag, so the reader sees each answer's blast radius before
+answering it.
+
+The gate itself is unchanged: same single round-trip, same batching rule, same `decision_gate`
+behaviour. The tag is what turns an unvalidated assumption into a visible one — an untagged plan
+built on a default reads as settled, and the reviewer approves the default without knowing they
+did. A question whose answer invalidates no section needs no tag: it is not plan-shaping, and it
+belongs in the ordinary numbered list above.
+
 
 ### Auto-decision path (`decision_gate: "auto"`)
 

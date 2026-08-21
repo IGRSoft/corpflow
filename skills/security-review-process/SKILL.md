@@ -1,6 +1,6 @@
 ---
 name: security-review-process
-description: OWASP Top 10 security review checklist, dependency supply-chain triage, and secure coding patterns for SR stage. Use when conducting security reviews, auditing dependencies for vulnerabilities or supply-chain risk, or applying secure coding patterns.
+description: Use when conducting security reviews, auditing dependencies for vulnerabilities or supply-chain risk, or applying secure coding patterns. OWASP Top 10 security review checklist, dependency supply-chain triage, secure coding patterns for SR stage.
 effort: medium
 ---
 

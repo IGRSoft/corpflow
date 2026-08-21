@@ -1,6 +1,6 @@
 ---
 name: request-plan
-description: Turn a free-form request into a context-aware plan (goal, scope, phases, effort, risks) and recommend `/worktask`. Use when the user asks for a plan, an approach, a breakdown, "how would you tackle this", or scoping — even without the word "plan".
+description: Use when the user asks for a plan, an approach, a breakdown, "how would you tackle this", or scoping — even without the word "plan". Turn a free-form request into a context-aware plan (goal, scope, phases, effort, risks) and recommend `/worktask`.
 effort: medium
 version: 0.4.0
 ---
@@ -111,6 +111,10 @@ Follow `references/handoff.md`. Map size + complexity to an invocation with the 
 Tier Selection** logic in `skills/estimation-methodology/SKILL.md`, and emit one ready-to-paste
 command line (e.g. `/worktask "<restated goal>"`). The surface check in that section decides
 `--secure` and `--emergency` before size is considered.
+
+Recommend the leanest tier the surface check allows: sizing ratchets one way once the worktask
+runs, so a stage that finds a surface this plan could not see adds itself back through
+`skills/estimation-methodology/SKILL.md § Mid-run re-sizing`, and nothing downgrades.
 
 #### Exactly one `/worktask` line
 

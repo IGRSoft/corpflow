@@ -86,6 +86,7 @@ Report skeleton — sections in this order:
 4. No capability overlap with other agents
 5. Worktask stage integration documented, and every stage code referenced still exists in `skills/shared/stage-codes.md` (removed/renamed stages are a critical finding)
 6. Example interactions provided
+7. `description` follows the trigger-first grammar (G1-G7) and the guidance form matches the failure class — both normative in `agents/prompt-engineer.md § Description grammar` and `§ Form to failure`
 
 ### Command Rules
 

@@ -1,6 +1,6 @@
 ---
 name: milestone-helpers
-description: Reusable helper function patterns for milestone worktask operations. Use when implementing milestone workspace initialization, PR detection, or worktree management.
+description: Use when implementing milestone workspace initialization, PR detection, or worktree management. Reusable helper function patterns for milestone worktask operations.
 effort: low
 related:
   - ../../megatask/SKILL.md

@@ -1,6 +1,6 @@
 ---
 name: self-improvement
-description: Capture user post-delivery edits at ST stage, classify them, and propose scoped updates to agents/skills/commands that participated in the worktask. Human-in-the-loop; never auto-applies.
+description: Use when the ST stage runs or post-delivery user edits need classifying. Capture user edits at ST stage, classify them, propose scoped updates to agents/skills/commands that participated in the worktask; human-in-the-loop, never auto-applies.
 effort: medium
 ---
 
