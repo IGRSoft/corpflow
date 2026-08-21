@@ -382,9 +382,11 @@ function stageArtifactPath(code: string, runIndex: number): string {
 
 #### Step 6.5 — After Task() returns, enforce state.json patch (MANDATORY)
 
-After every `Task()` return and BEFORE the `completed` patch, run the three-layer check: Layer 1
-(agent self-patch) → Layer 2 (`state-patch.sh --via step6_5`) → Layer 3 (F3 derivation). Code and
-semantics: loop § Step 6.5 below.
+After every `Task()` return and BEFORE the `completed` patch, first read any
+`requests_stage_escalation` in the artifact frontmatter (§ Mid-run escalation — the orchestrator
+is the consumer), then run the three-layer check: Layer 1 (agent self-patch) → Layer 2
+(`state-patch.sh --via step6_5`) → Layer 3 (F3 derivation). Code and semantics: loop § Step 6.5
+below.
 
 ##### Completion signal (subagents run in the background by default)
 
@@ -957,6 +959,10 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 #### Step 6.5
 
 ```typescript
+    // 6.5-pre. Read handoff.requests_stage_escalation from the artifact frontmatter BEFORE any
+    //          completed stamp lands (Layer 2/3 below patch unconditionally) — validate, then
+    //          accept (--task-create/--task-block + metadata.added_stages) or reject naming the
+    //          failed condition. Semantics: § Mid-run escalation — the orchestrator is the consumer.
     // 6.5. Patch state.json from artifact frontmatter if the agent didn't — layer #3 after the
     //      in-agent atomic write and the optional SubagentStop hook.
     //      See handoff-protocol.md#fallback-paths F2/F3.

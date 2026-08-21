@@ -23,6 +23,12 @@ All notable changes to this project are documented here. The format is based on 
   ledger key) plus stage-task right-sizing. See `skills/worktask/references/pl0-procedure.md`,
   `skills/estimation-methodology/SKILL.md`, `agents/product-manager.md`, `skills/request-plan/SKILL.md`,
   `skills/worktask/SKILL.md`.
+- **DV0 routing override re-keyed from directory to file kind**: DV routes to
+  `corpflow:workflow-engineer` when the change touches worktask-infrastructure files that are
+  *executed* (the plugin tree's `**/*.sh`, `**/*.bats`, `hooks/**`, JSON consumed by those scripts)
+  rather than the old path list; markdown routes by contract, not directory. Anchored to the
+  plugin/worktask tree — a product repo's shell script keeps the platform route. See
+  `skills/worktask/references/pl0-procedure.md § DV0 routing override`.
 
 ### Fixed
 
