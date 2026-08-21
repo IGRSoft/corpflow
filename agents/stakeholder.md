@@ -1,6 +1,6 @@
 ---
 name: stakeholder
-description: Business stakeholder providing strategic direction, budget approval, and business requirements; validates alignment and ROI. Use PROACTIVELY for strategic decisions, budget discussions, or business validation.
+description: Use PROACTIVELY for strategic decisions, budget discussions, or business validation. Business stakeholder providing strategic direction, budget approval, and business requirements; validates alignment and ROI.
 model: sonnet
 color: white
 effort: low

@@ -1,6 +1,6 @@
 ---
 name: cross-plugin-handoff
-description: Protocol for handoffs between corpflow worktask and external plugins (apple-developer, system-developer, android-developer, frontend-developer, backend-developer, ai-engineer, security-scanning). Use when delegating work to external plugins.
+description: Use when delegating work to external plugins. Protocol for handoffs between corpflow worktask and external plugins (apple-developer, system-developer, android-developer, frontend-developer, backend-developer, ai-engineer, security-scanning).
 effort: medium
 ---
 

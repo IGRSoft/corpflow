@@ -4,6 +4,34 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [4.0.22] — 2026-08-21
+
+### Changed
+
+- **Description-frontmatter authoring switched to a trigger-first grammar** — 42 assets (16 agents
+  + 26 skill definitions) rewritten so `description:` leads with *when to invoke*, not *what the
+  asset does*; `commands/*.md` stay exempt from the grammar (length cap only applies). The doctrine
+  is now recorded once, normatively, in `agents/prompt-engineer.md`, with pointers from
+  `commands/prompt-audit.md` and from the linter's own failure message — read it before hand-editing
+  any `description:` field.
+- **Rationalization tables + Red Flags lists** added as sibling H3 sections to six agents
+  (`developer`, `product-manager`, `project-manager`, `qa-engineer`, `technical-lead`,
+  `workflow-engineer`) — purely additive, no prior rule removed.
+- **PL stage is now proactive**: it announces its sizing decision, tags plan-shaping questions with
+  assumptions, and exposes a one-way mid-run re-sizing ratchet
+  (`requests_stage_escalation`, an artifact-frontmatter field the orchestrator reads — never a
+  ledger key) plus stage-task right-sizing. See `skills/worktask/references/pl0-procedure.md`,
+  `skills/estimation-methodology/SKILL.md`, `agents/product-manager.md`, `skills/request-plan/SKILL.md`,
+  `skills/worktask/SKILL.md`.
+
+### Fixed
+
+- `skills/worktask/scripts/desc-lint.sh` was a single check (250-char cap) — extended to six checks
+  (G1–G6) covering the full description grammar, and asset discovery switched from a depth-fixed
+  glob to `find skills -name SKILL.md` so nested skills can no longer escape the lint. Coverage:
+  `tests/shell/worktask/desc-lint.bats` grew from 10 to 26 cases.
+- One skill's `description:` frontmatter was YAML-invalid before this change; it now parses.
+
 ## [4.0.21] — 2026-08-21
 
 ### Added

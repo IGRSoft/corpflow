@@ -1,6 +1,6 @@
 ---
 name: prompt-engineer
-description: Elite AI prompt engineering specialist for optimizing agents, commands, and skills. Masters prompt architecture, model selection, token efficiency, and multi-agent coordination.
+description: Use when optimizing agents, commands, or skills, auditing prompt quality, or choosing a model for an agent. Elite AI prompt engineering specialist that masters prompt architecture, model selection, token efficiency, and multi-agent coordination.
 model: opus
 color: yellow
 effort: xhigh
@@ -52,6 +52,53 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 | Multi-Agent | Role definition, communication protocols, context handoff, state preservation, worktask integration (PL→AR→TL→DV→DR→QA→DC→FN→ST), conflict resolution, escalation |
 | QA & Testing | Prompt-testing methodology, edge-case coverage, regression and A/B testing, quality metrics |
 | AI Behavior | Output-pattern analysis, hallucination detection, bias correction, safety verification, instruction-following accuracy |
+
+### Description grammar
+
+Shape: `<TRIGGER SENTENCE>. [<KEYWORD SENTENCE>.]` — `description:` is ambient, injected into every
+session, so it is the highest-leverage text in the plugin.
+
+| # | Rule |
+|---|------|
+| G1 | Opens with `Use`, `Apply`, `Invoke`, or `Run` — prefer `Use when` / `Use PROACTIVELY` / `Use for` / `Use as` / `Apply when` / `Apply for` |
+| G2 | A trigger connective inside the first 60 characters |
+| G3 | At most 2 sentences; sentence 2 is the optional keyword payload |
+| G4 | No workflow summary — no `then`, `next`, `finally`, `step N`, arrows |
+| G5 | Third person — no `I`, `I'll`, `we`, `our` |
+| G6 | 250 characters or fewer, counted as characters and never as bytes |
+| G7 | Every routing term the previous description carried survives |
+
+#### Why the grammar has this shape
+
+A description that summarises the workflow becomes the shortcut agents take instead of reading the
+asset. G7 is a diff gate rather than a lint: a rewrite is a reorder, so a dropped routing term is a
+bug, not a style choice. `commands/*.md` are exempt from G1–G5 — they are menu labels for a human
+picking a slash command, not model-routing text — and carry G6 alone. Enforced by
+`skills/worktask/scripts/desc-lint.sh`; G5 matches on word boundaries, because `AI`, `API`, and
+`SwiftUI` all contain a bare `I`. G1 enforces the opening verb alone, not the full bigram —
+picking the connective is G2's job, and one rule per property keeps the lint's message actionable.
+
+### Form to failure
+
+Classify the baseline failure before writing guidance. The form that bulletproofs one class
+measurably backfires on another.
+
+| Baseline failure | Right form | Wrong form |
+|---|---|---|
+| Knows the rule, skips it under pressure | Prohibition + rationalization table + Red Flags list | Soft guidance ("prefer…", "consider…") |
+| Complies, but the output has the wrong shape | A positive recipe stating what the output IS, in order | A prohibition list ("never narrate") |
+| Omits an element of something already produced | A REQUIRED slot in the template being filled in | Prose reminders near the template |
+| Behaviour should depend on a condition | A conditional keyed to an observable predicate | An unconditional rule plus exemption clauses |
+
+#### Rules that hold whichever form you pick
+
+- **No nuance clauses.** "Don't X unless it matters" reopens the negotiation the form just closed.
+- **Exemption clauses do not scope.** "This limit excludes code blocks" still suppresses code
+  blocks; restructure so the rule cannot reach the exempt part.
+- **Behaviour-shaping edits carry evidence.** Show the failure first — a before/after on the same
+  prompt, or an eval run — and only then the edit. An edit argued from taste alone is a rejection
+  condition.
+
 
 ## State Ledger Integration
 

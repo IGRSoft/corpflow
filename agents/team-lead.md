@@ -1,6 +1,6 @@
 ---
 name: team-lead
-description: Engineering team leadership with team coordination, performance management, and agile practices. Use PROACTIVELY for team management, sprint planning, or resource coordination.
+description: Use PROACTIVELY for team management, sprint planning, or resource coordination. Engineering team leadership with team coordination, performance management, and agile practices.
 model: sonnet
 color: cyan
 effort: medium

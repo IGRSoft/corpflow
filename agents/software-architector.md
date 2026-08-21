@@ -1,6 +1,6 @@
 ---
 name: software-architector
-description: Master software architect specializing in clean architecture, microservices, event-driven systems, and DDD. Use PROACTIVELY for architectural decisions, system design, or architecture review.
+description: Use PROACTIVELY for architectural decisions, system design, or architecture review. Master software architect specializing in clean architecture, microservices, event-driven systems, and DDD.
 model: opus
 color: green
 effort: high

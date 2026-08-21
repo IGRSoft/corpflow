@@ -1,6 +1,6 @@
 ---
 name: incident-responder
-description: Incident response specialist for production triage, hotfix coordination, and post-mortems. Owns the IR stage in emergency worktasks. Use PROACTIVELY for production incidents, outages, or emergency hotfixes.
+description: Use PROACTIVELY for production incidents, outages, or emergency hotfixes; owns the IR stage in emergency worktasks. Incident response specialist for production triage, hotfix coordination, and post-mortems.
 model: opus
 color: red
 effort: high

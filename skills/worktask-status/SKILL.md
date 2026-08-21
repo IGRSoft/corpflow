@@ -1,6 +1,6 @@
 ---
 name: worktask-status
-description: Show every task's current stage and status in one table — the local `.context/state.json` ledger merged with active `.worktrees/*` megatask groups. Use for "what is running right now", stage/blocker inspection, or a polled live board.
+description: Use for "what is running right now", stage/blocker inspection, or a polled live board. Show every task's current stage and status in one table — the local `.context/state.json` ledger merged with active `.worktrees/*` megatask groups.
 effort: low
 version: 0.2.0
 related:

@@ -1,6 +1,6 @@
 ---
 name: release-engineering
-description: Semantic versioning, changelog generation, and deployment readiness patterns for RE stage. Use when preparing releases, generating changelogs, or deployment readiness checks.
+description: Use when preparing releases, generating changelogs, or deployment readiness checks. Semantic versioning, changelog generation, and deployment readiness patterns for RE stage.
 effort: high
 ---
 

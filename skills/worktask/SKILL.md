@@ -1,6 +1,6 @@
 ---
 name: worktask
-description: Complete staged worktask system with dynamic sizing, task initialization, and stage management. Use when executing multi-stage worktasks, initializing tasks, or managing worktask state.
+description: Use when executing multi-stage worktasks, initializing tasks, or managing worktask state. Complete staged worktask system with dynamic sizing, task initialization, and stage management.
 effort: high
 version: 0.5.0
 ---
@@ -110,6 +110,18 @@ pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PL0 MUST stamp `metadat
 - Cryptographic operations, external API secrets, file uploads
 
 Each task includes `metadata.agent` for executor resolution. See `initialization-patterns.md § PL Creates Subsequent Tasks`.
+
+#### Mid-run escalation — the orchestrator is the consumer
+
+A stage may return `requests_stage_escalation` in its artifact `handoff:` frontmatter, and
+**nothing else reads it**. At Step 6.5, after `Task()` returns and before the `completed` patch,
+the orchestrator MUST: read the object; validate it against the four fire conditions, the
+stage-validity list, and the structural caps — canonical in
+`skills/estimation-methodology/SKILL.md § Mid-run re-sizing`, never restated here; on accept,
+create the stage with `state-patch.sh --task-create` / `--task-block` and record `{stage, reason}`
+in the existing `metadata.added_stages`; on reject, name the failed condition and continue the run
+unchanged. **One accepted per run** — a second means the plan itself is wrong, so stop at the
+human gate instead of growing the pipeline. ST0 audits `added_stages` for escalation entries.
 
 ## Workspace Mode
 

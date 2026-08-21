@@ -1,6 +1,6 @@
 ---
 name: claude-constitution
-description: Core constitutional principles, ethics, and behavioral guidelines for AI agent behavior. Use when evaluating ethical implications, applying constitutional principles, or reviewing harm potential.
+description: Use when evaluating ethical implications, applying constitutional principles, or reviewing harm potential. Core constitutional principles, ethics, and behavioral guidelines for AI agent behavior.
 effort: medium
 related:
   - agents/ethics-reviewer.md

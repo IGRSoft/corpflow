@@ -1,6 +1,6 @@
 ---
 name: estimation-methodology
-description: Standardized complexity scoring (0-50 scale) and T-shirt sizing for project estimation. Use when estimating task complexity, effort, or determining worktask tier.
+description: Use when estimating task complexity, effort, or determining worktask tier. Standardized complexity scoring (0-50 scale) and T-shirt sizing for project estimation.
 version: 0.2.0
 effort: low
 related:
@@ -203,6 +203,64 @@ Combine with marker coverage; PL0 stamps `metadata.test_mode`:
 
 Uncertain between `scoped` and `full`? Choose `scoped` — the auto-promotion safety net (DV warns,
 QA promotes if the Selected list is empty) catches under-selection.
+
+### Mid-run re-sizing (one-way ratchet)
+
+Sizing is decided once, at PL0, and the plan gate freezes it. The one sanctioned exception is a
+downstream stage discovering a *surface* PL0 could not have seen: it stops, says so, and returns a
+`requests_stage_escalation` object in its artifact `handoff:` frontmatter. It never patches the
+ledger — the orchestrator performs the write through the existing `state-patch.sh --task-create` /
+`--task-block` operations and records `{stage, reason}` in `metadata.added_stages`.
+
+Nothing downgrades mid-run: no stage is removed, and no complexity score is revised downward to
+shed one. Scores freeze at the plan gate, or every High run re-argues its way to Critical.
+
+#### Escalation schema
+
+```yaml
+requests_stage_escalation:
+  stage: SR                    # a code from skills/shared/stage-codes.md
+  falsified: "<verbatim quote from metadata.skipped_stages[].reason>"
+  discovered: "<the tree fact PL0 could not have known, with file:line>"
+  reason: "<200 chars or fewer>"
+```
+
+This is an artifact field, following the precedent of `requests_test_evidence`. It is never a
+ledger key — `state-patch.sh` gates `--facts` to a fixed key set and would reject it.
+
+#### The four fire conditions — all four, or it does not fire
+
+1. **Surface, not size.** The work touches a surface whose stage the inclusion criteria mandate:
+   credentials, authn, or untrusted input → SR; release artifacts → RE; a protected population or
+   an automated user-facing decision → ET. Surfaces are observable and binary; "it feels bigger"
+   is not a surface.
+2. **Undiscoverable at PL0.** Found in the tree, not re-derived from the plan's own text. If the
+   plan names it, the answer is "do the work", never "add a stage".
+3. **A recorded reason is falsified.** Quote the exact `skipped_stages[].reason` being refuted,
+   verbatim. A rebuttal of one recorded sentence is greppable against `state.json`; an opinion is
+   not — and a stage PL0 declined without recording a reason cannot be escalated against at all.
+4. **No planned stage can absorb it.** Right-sizing inverted: a fresh reviewer could reject this
+   work while approving its neighbour.
+
+#### Structural caps
+
+- **One per stage task, one accepted per run.** A second distinct surface discovery means the plan
+  itself is wrong, so the orchestrator stops at the human gate instead of growing the pipeline.
+- **Only stages in the canonical set** — never a second instance of a stage, a re-order, a
+  removal, or a re-scored complexity number.
+- **Valid at AR, TL, DV\*, DR, and QA only.** At PL, DC, FN, or ST the answer is a follow-up
+  issue — PL is where sizing is decided, not revised.
+- **Never where a channel already exists**: runtime evidence is `requests_test_evidence`, a second
+  opinion is DR's job. Reaching for escalation where a channel exists is itself a Red Flags row.
+- **Calibration is auditable.** ST0 reads `added_stages` for escalation entries; firing in more
+  than one run in five means PL0 sizing is mis-calibrated, not that the runs were big.
+
+#### What the ratchet is not
+
+It is not a re-plan. The plan's requirements, acceptance criteria, and scope are unchanged by an
+escalation — only the stage set grows. Work that needs the plan rewritten is not an escalation; it
+goes back to the human gate.
+
 
 ## AI Agent Cost Estimation
 

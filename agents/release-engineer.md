@@ -1,6 +1,6 @@
 ---
 name: release-engineer
-description: Release engineering specialist for versioning, changelog generation, and deployment readiness. Owns the RE stage in secure/full worktasks. Use PROACTIVELY for release prep, versioning, or deployment readiness.
+description: Use PROACTIVELY for release prep, versioning, or deployment readiness; owns the RE stage in secure/full worktasks. Release engineering specialist for versioning, changelog generation, and deployment readiness.
 model: haiku
 color: yellow
 effort: low
