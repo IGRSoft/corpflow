@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [4.0.20] — 2026-08-21
+
+### Changed
+
+- **Prompt surface compressed 19.7% (240,429 → 193,168 words) across all 38 commands, 16 agents,
+  and 111 skill files** (#313). Behavior-preserving: one canonical copy per fact — `skills/shared/`
+  and skill references are canon, commands/agents point instead of restating — tables over prose,
+  one worked example per pattern, report samples reduced to section skeletons plus content rules.
+  Frontmatter, tool grants, trigger descriptions, gate/AC language, schemas, script contracts, and
+  every test-pinned string and cited section anchor preserved verbatim (605 citations re-resolved
+  in a closing cross-file audit). Estimation run detail split to a new on-demand
+  `skills/estimation-methodology/references/estimation-run.md`.
+
+### Fixed
+
+- Defects surfaced by the compression sweep: three dead `/release-notes` links (renamed command),
+  a factually drifted stage→model lookup table in `stage-codes.md` (FN/IR swapped vs shipped
+  frontmatter), a stale atomic-merge snippet in `stage-contracts.md` missing the mandated mkdir
+  spinlock, an emergency stage list missing DR, six dangling section anchors, a stale
+  `skills/README.md` index (12 missing entries), and mis-labeled rule-range headings in
+  `self-improvement/references/target-mapping.md`.
+
 ## [4.0.19] — 2026-08-17
 
 ### Fixed
