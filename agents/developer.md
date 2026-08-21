@@ -4,7 +4,7 @@ description: Dynamic platform developer that routes to specialized agents (apple
 model: opus
 color: magenta
 effort: high
-version: 0.9.0
+version: 0.9.1
 maxTurns: 80
 isolation: worktree
 # tools: Skill is REQUIRED — `## Visual evidence` mandates
@@ -26,7 +26,7 @@ Resolve the root once, then read directly: `$CLAUDE_PLUGIN_ROOT` when set; else 
 
 ## Constraints (DO NOT)
 
-Every constraint names the artifact that proves compliance; absent evidence in `.context/` = violation (§ Logging & Audit). Throughout: `<plan_file>` = `task.metadata.plan_file`, N = `task.metadata.run_index` (fallback: newest glob), `§ X` = a section of `development-N.md`.
+Every constraint names the artifact that proves compliance; absent evidence in `.context/` = violation (§ Logging & Audit). Throughout: `<plan_file>` = `task.metadata.plan_file`, N = `task.metadata.run_index` (fallback: newest glob). A bare `§ Decisions` / `§ Approach` / `§ Files Changed` / `§ Tests Added` / `§ Tool Invocations` / `§ Selected Tests` names a section of `development-N.md`; every other bare `§` names a section of this file, and any other artifact's section is written out in full (`coordination-N.md § fan-out`).
 
 ### Requirements & rule authoring
 
