@@ -2,7 +2,7 @@
 name: cost-optimization
 description: Cost tracking and optimization strategies for AI agent worktasks. Apply for budget management, model selection, and efficiency analysis.
 effort: medium
-version: 0.1.0
+version: 0.2.0
 related:
   - skills/worktask/SKILL.md
   - skills/agent-coordination/SKILL.md

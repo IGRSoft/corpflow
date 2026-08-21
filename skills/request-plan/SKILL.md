@@ -2,7 +2,7 @@
 name: request-plan
 description: Turn a free-form request into a context-aware plan (goal, scope, phases, effort, risks) and recommend `/worktask`. Use when the user asks for a plan, an approach, a breakdown, "how would you tackle this", or scoping — even without the word "plan".
 effort: medium
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Request Plan

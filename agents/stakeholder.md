@@ -4,7 +4,7 @@ description: Business stakeholder providing strategic direction, budget approval
 model: sonnet
 color: white
 effort: low
-version: 0.2.1
+version: 0.3.0
 maxTurns: 20
 # tools: Skill is REQUIRED — `## Step 4` makes the self-improvement retrospective
 # mandatory for every ST completion, and it has no non-Skill path. Without the grant

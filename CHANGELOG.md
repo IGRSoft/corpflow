@@ -14,7 +14,10 @@ All notable changes to this project are documented here. The format is based on 
   one worked example per pattern, report samples reduced to section skeletons plus content rules.
   Frontmatter, tool grants, trigger descriptions, gate/AC language, schemas, script contracts, and
   every test-pinned string and cited section anchor preserved verbatim (605 citations re-resolved
-  in a closing cross-file audit). Estimation run detail split to a new on-demand
+  in a closing cross-file audit) — the sole frontmatter edits are the three corrected
+  `argument-hint` fields listed below. Every rewritten file carrying a `version:` field takes a minor
+  bump (`structure` category per `agents/prompt-engineer.md § Self-Improvement Patch Application`).
+  Estimation run detail split to a new on-demand
   `skills/estimation-methodology/references/estimation-run.md`.
 
 ### Fixed
@@ -25,6 +28,15 @@ All notable changes to this project are documented here. The format is based on 
   spinlock, an emergency stage list missing DR, six dangling section anchors, a stale
   `skills/README.md` index (12 missing entries), and mis-labeled rule-range headings in
   `self-improvement/references/target-mapping.md`.
+- Three `argument-hint` fields that had drifted from their command's documented options:
+  `appstore-iap` and `appstore-screenshots` gained the `--dry-run` (and `--path <dir>`) flags they
+  already accept, and `appstore-info` dropped a positional `<app name or bundle ID>` it no longer
+  takes in favour of its real `--lang` / `--path` / `--readme-only` / `--dry-run` set.
+- `milestone-helpers.sh` cited `megatask § Priority Sorting`, a heading this release folded into
+  `§ Dependency & Blocker Resolution (DAG)`. The unqualified `<skill> §` shorthand fell outside the
+  citation audit, which resolves the qualified `<path>.md §` form.
+- An unescaped `||` inside a code span in `security-review-process/SKILL.md § Secure Coding
+  Patterns` split the Authorization row into five cells, truncating the rule where it rendered.
 
 ## [4.0.19] — 2026-08-17
 

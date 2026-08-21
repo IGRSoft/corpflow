@@ -2,7 +2,7 @@
 name: worktask
 description: Initialize a new worktask task with proper folder structure and state-ledger integration
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]]'
-version: 0.5.0
+version: 0.6.0
 model: opus
 allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Task(corpflow:product-manager)
 ---

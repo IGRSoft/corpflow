@@ -4,7 +4,7 @@ description: Lead product designer specializing in UI/UX strategy, design system
 model: sonnet
 color: blue
 effort: medium
-version: 0.1.0
+version: 0.2.0
 maxTurns: 30
 # tools: no Bash grant — DS is a nested consult (`pl0-procedure.md § Designer Invocation`),
 # not a seeded ledger task, so it never runs state-patch.sh. Write covers the only artifact it

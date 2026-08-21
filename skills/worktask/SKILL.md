@@ -2,7 +2,7 @@
 name: worktask
 description: Complete staged worktask system with dynamic sizing, task initialization, and stage management. Use when executing multi-stage worktasks, initializing tasks, or managing worktask state.
 effort: high
-version: 0.4.0
+version: 0.5.0
 ---
 
 > **INVOCATION GATE**: reaching this file by a direct Read/Task/Grep instead of

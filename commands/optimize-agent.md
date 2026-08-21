@@ -1,7 +1,7 @@
 ---
 name: optimize-agent
 description: Analyze and optimize existing agent definitions for clarity, efficiency, and consistency
-version: 0.1.0
+version: 0.2.0
 argument-hint: <agent name or path>
 model: opus
 allowed-tools: Read, Glob, Grep, Write

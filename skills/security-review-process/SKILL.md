@@ -57,7 +57,7 @@ Still check manually: documentation (accidental exposure), binary assets, and fi
 |---------|------|
 | Input validation | Validate at the trust boundary before use: length bound, allowlisted character set, then sanitize — reject (throw) rather than coerce |
 | Authentication | Credentials go to the platform secret store, never `UserDefaults`/plain files; check the store's status code and fail closed |
-| Authorization | Re-check resource ownership server-side on every access (`owner == caller || caller.isAdmin`), never trust a client-supplied identity |
+| Authorization | Re-check resource ownership server-side on every access (`owner == caller \|\| caller.isAdmin`), never trust a client-supplied identity |
 
 ### Canonical example
 

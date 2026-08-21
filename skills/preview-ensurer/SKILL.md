@@ -4,7 +4,7 @@ description: |
   Detect modified SwiftUI View files lacking `#Preview`/`PreviewProvider` and auto-add a minimal
   `#Preview` block via SwiftSyntax. Use ONLY from the `dv-screenshot-capture` `apple-canvas`
   adapter, BEFORE `swift run SnapshotHost`.
-version: 1.0.0
+version: 1.1.0
 model: sonnet
 effort: medium
 tools: Read, Edit, Write, Bash, Glob, Grep
