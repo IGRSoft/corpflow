@@ -5,6 +5,10 @@ TEMPLATE. Copy to the root of an integrating plugin as CORPFLOW.md and replace e
 Keep it self-contained: a user can delete it and have a plugin with no corpflow coupling left, or add
 it and have one. Splitting it into a directory of references rebuilds the diffuse coupling it
 replaced.
+
+Do NOT add a `## Routing` heading: that heading is reserved for the project-level routing
+override read when a CORPFLOW.md sits at a *user project* root (plugin-contract.md
+§ Project-level routing override; template: PROJECT-CORPFLOW.md beside this file).
 -->
 
 # corpflow Integration — <PLUGIN>

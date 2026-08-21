@@ -1,34 +1,42 @@
 # Compatible Dev-Plugin Registry
 
 Canonical for **plugin-level** compatibility metadata: which dev plugins the orchestrator
-may route to, their entry agents, functional-role agents, command-set tier, and handoff
-defaults. **Not** canonical for agent routing — marker→platform detection and
-platform→specialist tables live in `skills/shared/platform-detection.md`, referenced here
-and never copied.
+may route to, their command-set tier, version floors, and handoff defaults. **Not**
+canonical for agent routing — alias→agent routing (entry + functional roles, plus the
+project-override mechanism) lives in `skills/shared/routing-matrix.md`; marker→platform
+detection and platform→specialist tables live in `skills/shared/platform-detection.md`.
+Both are referenced here and never copied.
 
 ## Registry
 
 ### Identity and routing
 
-| Plugin | Role | Platform key | Version floor | Entry agent |
+| Plugin | Role | Platform key | Version floor | Entry alias |
 |--------|------|--------------|---------------|-------------|
-| `apple-developer` | Apple platforms (Swift, SwiftUI, UIKit, AppKit) | `apple` | >=1.25.0 | `apple-developer:apple-developer` |
-| `system-developer` | C, C++, Python, Bash systems code | `systems` | >=1.5.0 | `system-developer:system-developer` |
-| `android-developer` | Android (Kotlin, Compose, Gradle) | `android` | >=1.4.0 | `android-developer:android-developer` |
-| `frontend-developer` | Web UI (React, Vue, Svelte, Angular, TS, CSS) | `web` | >=1.2.0 | `frontend-developer:frontend-developer` |
-| `backend-developer` | Services, APIs, persistence | `backend` | >=1.3.0 | `backend-developer:backend-developer` |
-| `ai-engineer` | AI/ML, LLM applications, MLOps | `ai` | >=1.2.0 | `ai-engineer:ai-engineer` |
+| `apple-developer` | Apple platforms (Swift, SwiftUI, UIKit, AppKit) | `apple` | >=1.25.0 | `corpflow:apple-developer` |
+| `system-developer` | C, C++, Python, Bash systems code | `systems` | >=1.5.0 | `corpflow:system-developer` |
+| `android-developer` | Android (Kotlin, Compose, Gradle) | `android` | >=1.4.0 | `corpflow:android-developer` |
+| `frontend-developer` | Web UI (React, Vue, Svelte, Angular, TS, CSS) | `web` | >=1.2.0 | `corpflow:frontend-developer` |
+| `backend-developer` | Services, APIs, persistence | `backend` | >=1.3.0 | `corpflow:backend-developer` |
+| `ai-engineer` | AI/ML, LLM applications, MLOps | `ai` | >=1.2.0 | `corpflow:ai-engineer` |
 
-### Command set and workflow skill
+Entry aliases resolve to qualified `plugin:agent` targets in
+`skills/shared/routing-matrix.md § Entry aliases` — the single copy of the target ids.
 
-| Plugin | Command set | Workflow skill |
-|--------|-------------|----------------|
-| `apple-developer` | core-parity + apple extras | `apple-developer:workflow-integration` |
-| `system-developer` | core-parity + `sanitize-check` | `system-developer:workflow-integration` |
-| `android-developer` | core-parity | `android-developer:workflow-integration` |
-| `frontend-developer` | core-parity + `gen-component` | `frontend-developer:workflow-integration` |
-| `backend-developer` | core-parity + `gen-api`, `db-migrate`, `analyze-security` | `backend-developer:workflow-integration` |
-| `ai-engineer` | **own set** + `build-test` (documented exception) | `ai-engineer:workflow-integration` |
+### Command set
+
+| Plugin | Command set |
+|--------|-------------|
+| `apple-developer` | core-parity + apple extras |
+| `system-developer` | core-parity + `sanitize-check` |
+| `android-developer` | core-parity |
+| `frontend-developer` | core-parity + `gen-component` |
+| `backend-developer` | core-parity + `gen-api`, `db-migrate`, `analyze-security` |
+| `ai-engineer` | **own set** + `build-test` (documented exception) |
+
+The integration surface is each plugin's root `CORPFLOW.md`
+(`skills/cross-plugin-handoff/references/plugin-contract.md § A.4`), which replaced the
+former `workflow-integration` skill.
 
 Apple extras: `analyze-issue`, `analyze-localization`, `gen-mock-api`, `fix-security-hardening`,
 `review-swiftui`, `review-uikit`, `review-appkit`.
@@ -36,29 +44,11 @@ Apple extras: `analyze-issue`, `analyze-localization`, `gen-mock-api`, `fix-secu
 ## Functional-role agents
 
 Used by stage agents consulting a dev plugin outside DV: AR (`software-architector`),
-SR (`security-reviewer`), QA (`qa-engineer`), DR remediation.
-
-### Architect and security auditor
-
-| Plugin | Architect (AR) | Security auditor (SR) |
-|--------|----------------|-----------------------|
-| `apple-developer` | `apple-architector` | `security-auditor` *(unprefixed)* |
-| `system-developer` | `system-architector` | `sys-security-auditor` |
-| `android-developer` | `kotlin-architector` | `and-security-auditor` |
-| `frontend-developer` | `frontend-architector` | `fe-security-auditor` |
-| `backend-developer` | `backend-architector` | `be-security-auditor` |
-| `ai-engineer` | `ai-architector` | `ai-security-auditor` |
-
-### Test generator and code fixer
-
-| Plugin | Test generator (QA) | Code fixer (DR) |
-|--------|---------------------|-----------------|
-| `apple-developer` | `test-generator` *(unprefixed)* | `code-fixer` *(unprefixed)* |
-| `system-developer` | `sys-test-generator` | `sys-code-fixer` |
-| `android-developer` | `and-test-generator` | `and-code-fixer` |
-| `frontend-developer` | `fe-test-generator` (+ `fe-accessibility-auditor`) | `fe-code-fixer` |
-| `backend-developer` | `be-test-generator` | `be-code-fixer` |
-| `ai-engineer` | `ai-test-generator` | `ai-code-fixer` |
+SR (`security-reviewer`), QA (`qa-engineer`), DR remediation. The per-platform
+architect/security-auditor/test-generator/code-fixer targets are canonical in
+`skills/shared/routing-matrix.md § Functional-role aliases` — this file keeps no copy.
+QA on web additionally consults `fe-accessibility-auditor` (review-only roster:
+`skills/shared/platform-detection.md § Review-only specialists`).
 
 ## Core-parity command set
 
@@ -100,8 +90,9 @@ core-parity pass is optional.
 `corpflow`, `debugging-toolkit`, `security-scanning`, `skill-creator`, `conductor`, `claude-in-chrome`.
 
 The plugin-prefix regex in `skills/worktask/scripts/publish-pl-issue.sh` MUST equal this
-list united with the Plugin column of § Registry. Changing either alone lets internal agent
-identifiers leak into published GitHub issues.
+list united with the Plugin column of § Registry (equivalently: the plugin set of the
+default targets in `skills/shared/routing-matrix.md`). Changing any copy alone lets
+internal agent identifiers leak into published GitHub issues.
 
 ## § Naming — plugin-unique agent prefixes
 

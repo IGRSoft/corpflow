@@ -16,7 +16,7 @@ Define the test strategy in the plan file: scope (unit/integration/E2E), framewo
 ### Key Rules
 
 1. **DV writes unit tests** as part of implementation; QA validates integration/E2E
-2. **Framework selection is platform-derived**: adopt whatever the repo's test targets already use; with no existing tests, take the detected platform's test-generator default (`skills/shared/compatible-plugins.md § Test generator and code fixer`). Name it in the plan. Never carry one platform's framework into another — the Apple Swift Testing (unit) / XCTest (UI) split in `skills/shared/testing-strategy.md` is Apple-only.
+2. **Framework selection is platform-derived**: adopt whatever the repo's test targets already use; with no existing tests, take the detected platform's test-generator default (`skills/shared/routing-matrix.md § Functional-role aliases`). Name it in the plan. Never carry one platform's framework into another — the Apple Swift Testing (unit) / XCTest (UI) split in `skills/shared/testing-strategy.md` is Apple-only.
 3. **Coverage expectations**: new features 3+ unit scenarios; bug fixes regression tests; refactors must identify all affected existing tests
 
 ### Required Metadata: Test Selection Gate
@@ -359,7 +359,7 @@ Every seeded downstream stage MUST include `metadata.run_index = N` and `metadat
 
 #### Agent mapping for `metadata.agent`
 
-Always emit fully-qualified `plugin:agent` form — bare names are not accepted. The prefix follows the owning plugin: `corpflow:` for orchestration/process agents, the detected platform's dev-plugin prefix for platform work. Resolve platform agents from the registry, never memory: entry agents in `skills/shared/compatible-plugins.md § Registry`, functional roles (architect, security auditor, test generator, code fixer) in `§ Functional-role agents`, DV specialists in `skills/shared/platform-detection.md`.
+Always emit fully-qualified `plugin:agent` form — bare names are not accepted. The prefix follows the owning plugin: `corpflow:` for orchestration/process agents, the detected platform's dev-plugin prefix for platform work. Resolve platform agents from the routing matrix, never memory: entry and functional-role aliases (architect, security auditor, test generator, code fixer) in `skills/shared/routing-matrix.md` — project `CORPFLOW.md § Routing` override wins, and the resolved map persists as `state.routing`; DV specialists in `skills/shared/platform-detection.md`.
 
 ##### Stage → agent table
 

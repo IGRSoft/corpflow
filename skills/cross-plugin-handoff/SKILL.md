@@ -21,6 +21,7 @@ corpflow's playbook for delegating worktask stages to external plugin agents.
 - **Normative contract**: `${CLAUDE_SKILL_DIR}/references/plugin-contract.md` — what an integrating plugin must satisfy and what corpflow guarantees back. Where it and this file disagree, the contract wins.
 - **Per-plugin stage→agent tables, error handling, model configuration**: `${CLAUDE_SKILL_DIR}/references/plugin-protocols.md`.
 - **Plugin-side template**: `${CLAUDE_SKILL_DIR}/templates/CORPFLOW.md`, copied to an integrating plugin's root.
+- **Alias routing + project override**: `skills/shared/routing-matrix.md` — which plugin serves each platform/role, and how a user-project-root `CORPFLOW.md § Routing` overrides it. When a user asks to set up an override, scaffold from `${CLAUDE_SKILL_DIR}/templates/PROJECT-CORPFLOW.md`.
 
 ## Dispatch Injection (BINDING)
 

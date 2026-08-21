@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [4.1.0] — 2026-08-21
+
+### Added
+
+- **`skills/shared/routing-matrix.md` — single source of truth for alias→target routing.**
+  32 virtual `corpflow:*` aliases (6 platform entry points, 24 functional roles, 2 support
+  plugins) map to qualified `plugin:agent` default targets. Stage-agent inline tables become
+  mandated copies validated by the new `tests/shell/skills/routing-matrix.bats`; the matrix's
+  default targets are additionally resolved against sibling checkouts in
+  `cross-plugin-refs.bats`.
+- **Project-level routing override.** A `CORPFLOW.md` at the *user project root* may carry a
+  `## Routing` table whose rows win over the matrix, alias by alias — resolved once at
+  worktask init into `state.routing` (`worktask/SKILL.md § Validation check 11`), with
+  `routing_override` / `routing_override_partial` audit rows. Template:
+  `skills/cross-plugin-handoff/templates/PROJECT-CORPFLOW.md`; the `## Routing` heading is
+  now reserved and forbidden in the plugin-side `templates/CORPFLOW.md`. Location decides
+  which of the two same-named files applies (`plugin-contract.md § Project-level routing
+  override`).
+- Stage-dispatching agents (`developer`, `software-architector`, `security-reviewer`,
+  `qa-engineer`) now carry a bare `Task` grant instead of ~60 literal `Task(plugin:agent)`
+  grants, so any override target dispatches; the guardrail is the mandatory delegation audit
+  row. Adding a plugin no longer touches agent frontmatter (`plugin-contract.md § C`
+  re-ordered accordingly).
+
+### Fixed
+
+- `plugin-protocols.md` android rows still used pre-1.4.0 bare agent names (`code-fixer`,
+  `security-auditor`, `test-generator`, `dependency-manager`) — dispatching those either
+  fails or silently resolves to apple-developer's agents. Now `and-*`, matrix-validated.
+- `plugin-protocols.md` apple-developer table lacked the DR row every other plugin has.
+- `commands/pm-milestone.md` defaulted `--platform apple` to `ios-developer` while every
+  other platform (and every other file) defaults to the entry router.
+- `compatible-plugins.md` still listed the retired `workflow-integration` skill column
+  (replaced by the root `CORPFLOW.md` contract in 4.0.13).
+
 ## [4.0.20] — 2026-08-21
 
 ### Changed

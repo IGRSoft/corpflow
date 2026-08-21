@@ -139,6 +139,22 @@ mk_plugin_layout() {
   echo "siblings checked: $(checked_siblings "$sibroot" | tr '\n' ' ')" >&3
 }
 
+@test "contract: routing-matrix default targets resolve against present siblings" {
+  # The stage agents now carry a bare Task grant, so skills/shared/routing-matrix.md
+  # is the canonical list of intended targets — resolve each default target the way
+  # the old frontmatter grants used to be resolved.
+  local sibroot ref plug name missing=""
+  sibroot="$(cd "$PLUGIN_ROOT/.." && pwd)"
+  while IFS= read -r ref; do
+    [ -n "$ref" ] || continue
+    plug="${ref%%:*}"; name="${ref##*:}"
+    [ -d "$sibroot/$plug/.claude-plugin" ] || continue
+    [ -f "$sibroot/$plug/agents/$name.md" ] || missing="$missing $ref"
+  done <<< "$(grep -E '^\| `corpflow:' "$PLUGIN_ROOT/skills/shared/routing-matrix.md" \
+    | sed -E 's/^\| `corpflow:[a-z0-9-]+` \| `([a-z0-9-]+:[a-z0-9-]+)`.*/\1/')"
+  [ -z "$missing" ] || { echo "unresolved matrix targets:$missing" >&2; return 1; }
+}
+
 # --- registry / sanitiser lockstep -------------------------------------------
 
 @test "contract: every registry plugin appears in each publish-pl-issue prefix regex" {

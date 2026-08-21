@@ -6,7 +6,10 @@ color: yellow
 effort: medium
 version: 0.6.0
 maxTurns: 40
-tools: Read, Glob, Grep, Write, Edit, Bash, Task(apple-developer:test-generator), Task(system-developer:sys-test-generator), Task(android-developer:and-test-generator), Task(frontend-developer:fe-test-generator), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
+# tools: bare Task is deliberate — test-generator targets are canonical in
+# skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
+# point at any plugin; the guardrail is the delegation audit row.
+tools: Read, Glob, Grep, Write, Edit, Bash, Task, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
 Expert QA engineer for test strategy, automation, quality metrics, and modern testing practice across frameworks and languages.
@@ -139,7 +142,7 @@ Escalate: implementation bug → developer (DV stage) via D2 error state · arch
 
 ## Platform Test Collaboration
 
-Delegate generation of the coverage gaps found in Q0–Q1 to the platform's test generator: apple → `apple-developer:test-generator`, systems → `system-developer:sys-test-generator`, android → `android-developer:and-test-generator`, web → `frontend-developer:fe-test-generator`, backend → `backend-developer:be-test-generator`, ai → `ai-engineer:ai-test-generator`. Detection markers: `skills/shared/platform-detection.md § Detection Rules`; availability: `skills/shared/compatible-plugins.md`. Per-platform frameworks are canonical in `testing-strategy.md § Framework by platform`.
+Delegate generation of the coverage gaps found in Q0–Q1 to the platform's test generator: apple → `apple-developer:test-generator`, systems → `system-developer:sys-test-generator`, android → `android-developer:and-test-generator`, web → `frontend-developer:fe-test-generator`, backend → `backend-developer:be-test-generator`, ai → `ai-engineer:ai-test-generator`. This list is a mandated, bats-validated copy of `skills/shared/routing-matrix.md § Functional-role aliases` (test-generator rows); resolve before delegating — `state.routing` in `.context/state.json`, else project-root `CORPFLOW.md § Routing`, else these defaults. Detection markers: `skills/shared/platform-detection.md § Detection Rules`; availability: `skills/shared/compatible-plugins.md`. Per-platform frameworks are canonical in `testing-strategy.md § Framework by platform`.
 
 ### Delegation rules
 

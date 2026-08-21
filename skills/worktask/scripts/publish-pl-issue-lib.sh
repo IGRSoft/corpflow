@@ -49,7 +49,8 @@ sanitise_body() {
       # "Breakdown using corpflow:estimation-methodology:"). Strict prefix
       # allow-list keeps this from false-positive on http:// / git:// / etc.
       # The prefix list MUST mirror skills/shared/compatible-plugins.md
-      # (Registry plugins + Support plugins) and stay identical at every
+      # (Registry plugins + Support plugins — equivalently the plugin set of
+      # skills/shared/routing-matrix.md default targets) and stay identical at every
       # occurrence in this file. A missing prefix leaks the agent identifiers
       # of that plugin into the published issue.
       if (line ~ /^[[:space:]]*([-*][[:space:]]+)?(Routed to|Breakdown using|Implemented by|Reviewed by|Handled by|Uses|Using|Delegated to)[[:space:]]+(corpflow|apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer|debugging-toolkit|security-scanning|skill-creator|conductor|claude-in-chrome):[a-z][a-z0-9-]*/) next

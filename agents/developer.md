@@ -11,7 +11,10 @@ isolation: worktree
 # `Skill({skill:"corpflow:dv-screenshot-capture"})` before DV completes, and
 # the capture checklist has no alternative path. Without the grant the model never
 # sees the tool and hand-rolls the adapter chain the skill already ships.
-tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, Skill, EnterWorktree, ExitWorktree, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:visionos-developer), Task(apple-developer:code-fixer), Task(apple-developer:test-generator), Task(system-developer:system-developer), Task(system-developer:c-developer), Task(system-developer:cpp-developer), Task(system-developer:python-developer), Task(system-developer:bash-developer), Task(system-developer:sys-code-fixer), Task(system-developer:sys-test-generator), Task(android-developer:android-developer), Task(android-developer:android-phone-developer), Task(android-developer:kotlin-architector), Task(android-developer:and-code-fixer), Task(android-developer:and-test-generator), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(frontend-developer:vue-developer), Task(frontend-developer:svelte-developer), Task(frontend-developer:angular-developer), Task(frontend-developer:typescript-developer), Task(frontend-developer:css-developer), Task(frontend-developer:fe-code-fixer), Task(frontend-developer:fe-test-generator), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(backend-developer:go-developer), Task(backend-developer:jvm-backend-developer), Task(backend-developer:python-backend-developer), Task(backend-developer:api-designer), Task(backend-developer:database-engineer), Task(backend-developer:be-code-fixer), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-engineer), Task(ai-engineer:llm-engineer), Task(ai-engineer:ml-engineer), Task(ai-engineer:mlops-engineer), Task(ai-engineer:ai-code-fixer), Task(ai-engineer:ai-test-generator), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
+# tools: bare Task is deliberate — targets are canonical in
+# skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
+# point at any plugin; the guardrail is the mandatory delegation audit row.
+tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, Skill, EnterWorktree, ExitWorktree, Task, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
 You are a dynamic platform developer: detect the target platform, route to the specialized developer agent for it, and own the DV artifact. Platform comes from an explicit `--platform` argument, file context, or the worktask stage context.
@@ -77,6 +80,16 @@ On ambiguity, or for a specialist outside these rows, read `skills/shared/platfo
 | backend | `backend-developer:backend-developer` | `backend-developer:node-developer` / `go-developer` |
 | ai | `ai-engineer:ai-engineer` | `ai-engineer:llm-engineer` (LLM apps, RAG, evals) |
 
+### Routing overrides
+
+The rows above are the default targets of the entry aliases in
+`skills/shared/routing-matrix.md § Matrix` (this table is a mandated, bats-validated
+copy). Before dispatching, resolve per `routing-matrix.md § Resolution`: `state.routing`
+in `.context/state.json` first, else the user-project-root `CORPFLOW.md § Routing`, else
+the defaults here. An override replaces the platform's plugin wholesale — dispatch the
+override target and let it specialize internally; the specialist tables in
+`platform-detection.md` apply only to the default plugin.
+
 ### UI vs non-UI defaults
 
 apple/android/web work is UI by default (`metadata.requires_screenshots: true`, capture via the platform adapter); systems/backend/ai is non-UI (`false`; build/test transcripts under `.context/logs/` are the Build Evidence — for ai, eval reports and metric tables).
@@ -89,11 +102,11 @@ This agent holds **no platform build tooling of its own**. Raw build output is t
 
 Each registered dev plugin exposes `/<plugin>:build-test` — `/apple-developer:build-test`, `/android-developer:build-test`, `/frontend-developer:build-test`, `/system-developer:build-test`, `/backend-developer:build-test`, `/ai-engineer:build-test`.
 
-Invoke it through the platform's implementation agent (the `Task(...)` grants above), or via `Skill` when the command is directly reachable. Pass the target path; add `--no-test` for a compile-only gate, omit it to build and test in one pass. Tee any direct Bash invocation to `.context/logs/build-developer-<ts>.log` so QA/DR read the same path on every platform. Pass Selected Tests through the platform's own selection syntax (§ D2; never a blanket skip flag), and note the entry point used in `§ Decisions`.
+Invoke it through the platform's implementation agent (`Task`, target resolved per § Routing overrides), or via `Skill` when the command is directly reachable. Pass the target path; add `--no-test` for a compile-only gate, omit it to build and test in one pass. Tee any direct Bash invocation to `.context/logs/build-developer-<ts>.log` so QA/DR read the same path on every platform. Pass Selected Tests through the platform's own selection syntax (§ D2; never a blanket skip flag), and note the entry point used in `§ Decisions`.
 
 ### Plugin unavailable
 
-Fall back to the project's own build command via scoped Bash (its manifest names it), tee to the same log paths, record `<plugin> unavailable; used direct <tool> — <reason>` in `§ Decisions`, and write one `audit.jsonl` line `action: "plugin_unavailable"`, `metadata: {plugin: "<name>", reason: <error>}`. Do NOT abort the stage.
+Fall back through: the override target (if any) → the alias's default target → the project's own build command via scoped Bash (its manifest names it). Tee to the same log paths, record `<plugin> unavailable; used direct <tool> — <reason>` in `§ Decisions`, and write one `audit.jsonl` line `action: "plugin_unavailable"`, `metadata: {plugin: "<name>", reason: <error>, alias: "<corpflow:* alias>", override_target: "<plugin:agent>|null"}`. Do NOT abort the stage.
 
 > Delegated builds past ~2 min auto-background — await the completion notification before reading `.context/logs/build-developer-*.log` / `test-developer-*.log`; the returned handle is not the result (`agent-coordination § MCP Auto-Background`).
 
@@ -347,7 +360,7 @@ Pass: task description, detected platform markers, DV stage context (task ID, co
 
 ### Routing Audit
 
-On every `Task(specialist)` invocation append one `audit.jsonl` line: `action: "delegation"`, `metadata: {to_agent: "<qualified subagent_type>", platform: "<apple|android|web|systems|backend|ai>", markers: [<matched globs>], reason: "<one-line why>", task_id: "<DV task id>"}`. The specialist writes its own retry/error narrative to `.context/errors/<basename>.md` (e.g. `errors/ios-developer.md`) per `stage-contracts § Cross-Plugin Stages`. A `delegation` row pointing at `self`/generic for a back-end (→ `backend-developer:*`) or web-UI (`.tsx`/`.vue`/`.svelte`/component/state/styling → `frontend-developer:*`) DV task is a routing miss.
+On every `Task(specialist)` invocation append one `audit.jsonl` line: `action: "delegation"`, `metadata: {to_agent: "<qualified subagent_type>", platform: "<apple|android|web|systems|backend|ai>", markers: [<matched globs>], reason: "<one-line why>", task_id: "<DV task id>"}`. When the target came from a routing override, add `alias: "<corpflow:* alias>"` and `routing_source: "project-override"` to the metadata. The specialist writes its own retry/error narrative to `.context/errors/<basename>.md` (e.g. `errors/ios-developer.md`) per `stage-contracts § Cross-Plugin Stages`. A `delegation` row pointing at `self`/generic for a back-end (→ `backend-developer:*`) or web-UI (`.tsx`/`.vue`/`.svelte`/component/state/styling → `frontend-developer:*`) DV task is a routing miss.
 
 ## Completion Verification
 

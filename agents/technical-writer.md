@@ -106,7 +106,9 @@ before FN, so a PL0 miss is caught here.
 
 Route API-reference generation to the detected platform's `/<plugin>:gen-docs`, and keep doc
 comments in the language's native style. Platform→plugin map: `skills/shared/compatible-plugins.md`;
-marker→platform detection: `skills/shared/platform-detection.md`.
+marker→platform detection: `skills/shared/platform-detection.md`. The `<plugin>` below is the
+platform's default — a routing override (`skills/shared/routing-matrix.md` / `state.routing`)
+swaps it for the override target's namespace.
 
 ### Apple (Swift) — `/apple-developer:gen-docs`
 

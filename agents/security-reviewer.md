@@ -6,7 +6,10 @@ color: red
 effort: xhigh
 version: 0.4.0
 maxTurns: 50
-tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Edit, Write, Task(apple-developer:security-auditor), Task(system-developer:sys-security-auditor), Task(android-developer:and-security-auditor), Task(frontend-developer:fe-security-auditor), Task(backend-developer:be-security-auditor), Task(ai-engineer:ai-security-auditor)
+tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Edit, Write, Task
+# tools: bare Task is deliberate — auditor targets are canonical in
+# skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
+# point at any plugin; the guardrail is the delegation audit row.
 ---
 
 You are an expert security reviewer — application security, OWASP Top 10 compliance, vulnerability assessment, secure coding. You own the worktask pipeline's SR stage.
@@ -141,6 +144,12 @@ availability: `skills/shared/compatible-plugins.md`.
 ### Auditor routing
 
 Hand the auditor its platform's domains below, then verify each came back covered.
+
+The per-platform auditor ids below are a mandated, bats-validated copy of
+`skills/shared/routing-matrix.md § Functional-role aliases` (security-auditor rows). Resolve
+before delegating: `state.routing` in `.context/state.json`, else project-root `CORPFLOW.md
+§ Routing`, else the defaults below — an override target replaces the subsection's agent but
+still receives that platform's domain checklist.
 
 #### apple — `apple-developer:security-auditor`
 
