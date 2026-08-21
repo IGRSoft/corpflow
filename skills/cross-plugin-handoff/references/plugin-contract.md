@@ -98,7 +98,7 @@ heading — `## Routing`, a `| Alias | Target |` table whose rows win over the d
 plugin-side `CORPFLOW.md` must never use it (guard note in `../templates/CORPFLOW.md`).
 Template and creation instructions: `../templates/PROJECT-CORPFLOW.md` and
 `routing-matrix.md § Project override`. Resolution happens once at worktask init and
-persists as `state.routing` (`skills/worktask/SKILL.md § Validation check 11`).
+persists as `state.routing` (`skills/worktask/SKILL.md § Validation check 12`).
 
 An override replaces a platform's plugin wholesale — the replacement must still satisfy
 § A; corpflow injects the same dispatch-time instruction and expects the same handoff

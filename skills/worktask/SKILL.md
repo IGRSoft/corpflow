@@ -258,10 +258,6 @@ Before executing any worktask stage, the orchestrator MUST validate:
 
 Capture **both** stdout key=value lines — `target_branch=<name>` (the name the PR head should carry) and the final `branch=<name>` (the local branch as it stands) — **verify the value matches `^[A-Za-z0-9._/-]+$` before stamping** (a failing value is stamped empty, not as-is), and stamp `facts.branch` on the ledger (the script never writes state.json — `references/handoff-protocol.md § branch`). **When `branch=` is empty or fails `--check` but `target_branch=` is non-empty, stamp the target** — the local name may be blocked from changing (upstream tracked, target exists) while the PR head is still ours to name.
 
-### Validation check 11 — Routing resolution
-
-11. **Routing resolution** (first stage only, after the state.json seed): read `CORPFLOW.md § Routing` at the project root, if present, and merge its `| Alias | Target |` rows over the defaults in `skills/shared/routing-matrix.md § Matrix`. Stamp the resolved map on the ledger as `state.routing: {"<alias>": "<plugin:agent>", …}` (only aliases that differ from the default need stamping; an absent map means all-default) plus `state.routing_source: "matrix" | "project-override"`. Emit one `routing_override` audit row per overridden alias, `metadata: {alias, default_target, override_target}`; when an entry alias is overridden but its platform's role aliases are not, add one `routing_override_partial` row. Stages resolve through `state.routing` first (`routing-matrix.md § Resolution`), so a mid-worktask edit of the project file never splits routing across stages. No `CORPFLOW.md` or no `## Routing` heading → all-default, no rows, no warning.
-
 ### Validation check 10 — post-check and the host rule
 
 Run the non-blocking post-check (`commands/worktask.md § Step 3c — post-check`): a stamped name failing `--check` emits one `branch_convention_check` warning row naming the actual and derived target, and never blocks planning. Invoking `/worktask` authorizes the rename against a host's no-rename session rule — never revert it, never re-ask (`references/workspace-modes.md § Host session authorization`).
@@ -287,6 +283,10 @@ Emit one `dispatch_depth_projected` audit row with `metadata: {projected_depth, 
 #### Never blocks; forecast, not observation
 
 A hard gate would fail that same legal chain (precedent: check 8's `artifact_path_resolved`, and `commands/megatask.md § R1 spawn-budget projections` — "warn-and-continue, never a hard gate"). When it warns, name megatask's two remediations: raise the env var, or flatten Tier-2 dispatch (`skills/megatask/SKILL.md § Depth remediations`). An unanticipated hop lands past the cap unseen by this check and is caught after the fact by the refused agent's own `dispatch_flattened` row (`agent-coordination § Depth-refusal self-report`) — complements, not redundancy.
+
+### Validation check 12 — Routing resolution
+
+12. **Routing resolution** (first stage only, after the state.json seed): read `CORPFLOW.md § Routing` at the project root, if present, and merge its `| Alias | Target |` rows over the defaults in `skills/shared/routing-matrix.md § Matrix`. Stamp the resolved map on the ledger as `state.routing: {"<alias>": "<plugin:agent>", …}` (only aliases that differ from the default need stamping; an absent map means all-default) plus `state.routing_source: "matrix" | "project-override"`. Emit one `routing_override` audit row per overridden alias, `metadata: {alias, default_target, override_target}`; when an entry alias is overridden but its platform's role aliases are not, add one `routing_override_partial` row. Stages resolve through `state.routing` first (`routing-matrix.md § Resolution`), so a mid-worktask edit of the project file never splits routing across stages. No `CORPFLOW.md` or no `## Routing` heading → all-default, no rows, no warning.
 
 ### On validation failure
 

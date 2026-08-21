@@ -16,7 +16,7 @@ All notable changes to this project are documented here. The format is based on 
   `cross-plugin-refs.bats`.
 - **Project-level routing override.** A `CORPFLOW.md` at the *user project root* may carry a
   `## Routing` table whose rows win over the matrix, alias by alias — resolved once at
-  worktask init into `state.routing` (`worktask/SKILL.md § Validation check 11`), with
+  worktask init into `state.routing` (`worktask/SKILL.md § Validation check 12`), with
   `routing_override` / `routing_override_partial` audit rows. Template:
   `skills/cross-plugin-handoff/templates/PROJECT-CORPFLOW.md`; the `## Routing` heading is
   now reserved and forbidden in the plugin-side `templates/CORPFLOW.md`. Location decides

@@ -263,7 +263,7 @@ Full code patterns: `worktask/references/initialization-patterns.md § Stage Sub
 | Status check | Self | haiku |
 | Code implementation | developer | opus |
 | Architecture question | software-architector | opus |
-| Platform architecture (apple/systems/android/web/backend/ai) | the platform's architect agent — roster in `skills/shared/compatible-plugins.md § Functional-role agents` | opus |
+| Platform architecture (apple/systems/android/web/backend/ai) | the platform's architect agent — roster in `skills/shared/routing-matrix.md § Functional-role aliases` | opus |
 | Technical decision | technical-lead | opus |
 | Test design | qa-engineer | sonnet |
 
