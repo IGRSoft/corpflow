@@ -126,6 +126,10 @@ Unknown or `"all"` platform → `cli_fallback_adapter` + audit row `screenshot_p
 
 ### Per-adapter behavior
 
+The `Task(...)` targets below are platform defaults — a routing override
+(`skills/shared/routing-matrix.md` / `state.routing`) swaps the plugin, and the capture
+request goes to the override's entry agent instead.
+
 #### apple, web, android adapters
 
 These three **delegate the capture to the platform's own agent** — corpflow holds no platform tool grants (XcodeBuildMCP and friends), the platform plugin does. Ask that agent to produce a file at the target path, then stat the path yourself to fill the `{path, bytes, ok, error}` contract.

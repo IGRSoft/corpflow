@@ -110,8 +110,8 @@ platform has an architect agent, run both passes:
 
 ### Resolving the architect agent
 
-Take the architect and its plugin prefix from `skills/shared/compatible-plugins.md §
-Functional-role agents` (`apple-architector`, `kotlin-architector`, `frontend-architector`,
+Take the architect and its plugin prefix from `skills/shared/routing-matrix.md §
+Functional-role aliases` (`apple-architector`, `kotlin-architector`, `frontend-architector`,
 `system-architector`, `backend-architector`, `ai-architector`) — never hardcode the prefix here.
 
 If the platform is ambiguous, or its plugin is not installed, run the general pass alone and

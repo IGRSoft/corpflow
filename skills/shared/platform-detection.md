@@ -3,7 +3,10 @@
 Read this on platform ambiguity, or when the common rows inline in `agents/developer.md`
 (§ Detection Rules) do not cover the specialist you need. Routing target = the qualified
 agent ID in the **Agent** column, passed as the Task `subagent_type`. Never keep a second
-copy of this map elsewhere. Plugin-level metadata — version floors, entry agents, command
+copy of this map elsewhere. Plugin-level alias routing and project overrides live in
+`skills/shared/routing-matrix.md`; the specialist tables below apply only when the
+platform's entry alias resolves to its default plugin — on override, dispatch the override
+target and let it specialize internally. Plugin-level metadata — version floors, command
 sets, handoff defaults — lives in `skills/shared/compatible-plugins.md`.
 
 ## Apple Platform Specialization

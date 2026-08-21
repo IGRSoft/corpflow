@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.0.20 · Requires Claude Code 2.1.233+**
+**Plugin 4.1.0 · Requires Claude Code 2.1.233+**
 
 ## Features
 
@@ -102,6 +102,28 @@ same way (`/plugin marketplace add IGRSoft/<name>` then `/plugin install <name>@
 | `ai-engineer` | LLM apps, RAG, fine-tuning, MLOps, evals |
 
 Version floors and the routing contract live in `skills/shared/compatible-plugins.md`.
+
+### Routing overrides
+
+Alias→plugin routing is canonical in `skills/shared/routing-matrix.md` — one row per
+platform entry point and functional role (`corpflow:apple-developer →
+apple-developer:apple-developer`, `corpflow:web-code-fixer →
+frontend-developer:fe-code-fixer`, …). A project can swap any of them: copy
+`skills/cross-plugin-handoff/templates/PROJECT-CORPFLOW.md` to the project root as
+`CORPFLOW.md`, keep only the rows you override under `## Routing`, and the next worktask
+resolves through your targets instead:
+
+```markdown
+## Routing
+
+| Alias | Target |
+|-------|--------|
+| `corpflow:apple-developer` | `my-org-apple:apple-developer` |
+| `corpflow:apple-code-fixer` | `my-org-apple:code-fixer` |
+```
+
+Overrides resolve once at worktask init (persisted as `state.routing`); uninstalled
+targets fall back to the default with a `plugin_unavailable` audit row.
 
 ### From source
 

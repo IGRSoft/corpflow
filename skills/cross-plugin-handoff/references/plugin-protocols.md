@@ -1,6 +1,9 @@
 # Plugin-Specific Protocols
 
-Per-plugin stage→agent routing. Two rules apply to every table below, so the cells do not repeat them:
+Per-plugin stage→agent routing. The *plugin* serving each platform is subject to project
+override (`skills/shared/routing-matrix.md § Project override`); the stage→agent shape
+*within* a plugin is that plugin's contract and is not overridable row-by-row. Two rules
+apply to every table below, so the cells do not repeat them:
 
 - **AR is a consultation model** everywhere — the platform architect writes `.context/<platform>-architecture.md` and returns ≤500 tokens; `corpflow:software-architector` keeps the stage.
 - **Evidence defaults** (`requires_screenshots`, Build Evidence adapter, `error_file` example) live in `skills/shared/compatible-plugins.md § Handoff defaults`. DV-support agents return findings to the parent DV agent and own no stage; their artifacts land under `.context/logs/`.
@@ -11,6 +14,7 @@ Per-plugin stage→agent routing. Two rules apply to every table below, so the c
 |---------------|----------------------|--------------|
 | AR | apple-architector | planning context + system constraints |
 | DV | ios-developer, macos-developer, etc. | planning + architecture context |
+| DR | code-fixer | `metadata.gate_blockers[]` + minimal-diff remediation |
 | SR | security-auditor | development context + Apple security checklist (Keychain, ATS, entitlements, TCC, privacy manifest) |
 | QA | test-generator | development context + test requirements |
 | DC | gen-docs (command) | development context + API surface |
@@ -50,10 +54,10 @@ Per-plugin stage→agent routing. Two rules apply to every table below, so the c
 
 | corpflow Stage | android-developer Agent | Handoff Data |
 |---------------|-------------------------|--------------|
-| DR | code-fixer | `metadata.gate_blockers[]` + ktlint/detekt minimal-diff remediation |
-| SR | security-auditor | development context + Android security checklist (EncryptedSharedPreferences/Keystore, no-cleartext, exported-component validation, no hardcoded secrets) |
-| QA | test-generator | development context + test requirements; JUnit4/5, MockK, Turbine, Roborazzi screenshot tests |
-| DV-support (dependencies) | dependency-manager | version catalog (`libs.versions.toml`) + Gradle dependency CVE audit scope |
+| DR | and-code-fixer | `metadata.gate_blockers[]` + ktlint/detekt minimal-diff remediation |
+| SR | and-security-auditor | development context + Android security checklist (EncryptedSharedPreferences/Keystore, no-cleartext, exported-component validation, no hardcoded secrets) |
+| QA | and-test-generator | development context + test requirements; JUnit4/5, MockK, Turbine, Roborazzi screenshot tests |
+| DV-support (dependencies) | and-dependency-manager | version catalog (`libs.versions.toml`) + Gradle dependency CVE audit scope |
 
 ## frontend-developer Plugin
 

@@ -58,7 +58,7 @@ The *keep/drop* criteria that decide what is finally reported live in Phase 2 โ€
 
 ## Options
 
-- `--platform <apple|android|web|systems|backend|ai|all>` - Platform context (default: auto-detect)
+- `--platform <apple|android|web|systems|backend|ai|all>` - Platform context (default: auto-detect). The platform's plugin resolves via `skills/shared/routing-matrix.md` (project `CORPFLOW.md ยง Routing` override wins)
 - `--path <dir>` - Review a specific directory (diff scoped to that path)
 - `--pr <number>` - Review the changes in a PR
 ### Depth and focus options

@@ -4,7 +4,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.20** — prompt surface compressed 19.7% behavior-preserving (#313): canonical-copy dedup into `skills/shared/` and skill references, tables over prose, all tool grants/gate language/test-pinned anchors verbatim; sweep also fixed dead links, a drifted stage→model table, and six dangling anchors
+- Plugin version: **4.1.0** — alias→target routing matrix (`skills/shared/routing-matrix.md`, 32 `corpflow:*` aliases) + project-root `CORPFLOW.md § Routing` override resolved once at init into `state.routing`; stage-dispatching agents moved to a bare `Task` grant (delegation audit row is the guardrail); fixed stale android bare names and the missing apple DR row in `plugin-protocols.md`
 - Claude Code min required: **2.1.233** (README.md is authoritative; pinned to the band top per the v3.35.0/v3.37.0 precedent — the ledger cutover itself no longer depends on any CC task tool)
 - Claude Code latest integrated band: **2.1.221→2.1.233**
 
@@ -39,6 +39,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-08-21: v4.1.0 — routing matrix + project override: `skills/shared/routing-matrix.md` is the single copy of alias→`plugin:agent` targets (inline stage-agent tables demoted to bats-validated mandated copies via `routing-matrix.bats`); a user-project-root `CORPFLOW.md § Routing` overrides per alias, persisted as `state.routing` at worktask init; bare `Task` grants replace ~60 literal grants in developer/software-architector/security-reviewer/qa-engineer; `## Routing` heading reserved (plugin-side template guard). Collateral fixes: stale android bare names + missing apple DR row in `plugin-protocols.md`, pm-milestone apple default, dead `workflow-integration` column.
 - 2026-08-21: v4.0.20 — prompt-surface compression, 145 files 240k→193k words (#313): commands −27.6%, agents −20.9%, skills −16.3%; dedup one-directional into canonical copies with 605 citations re-verified; collateral fixes include the drifted `stage-codes.md § Model Lookup` table and the stale `stage-contracts.md` atomic-merge snippet.
 - 2026-08-17: v4.0.19 — the three plugin rules the OV-184 test-strategy violation exposed: brief invocations derive from `<plan_file>` frontmatter (never a project README's core-commands snippet, which is full-suite-shaped and pre-empts QA's gate), `build-only` is selected rather than opt-in when the planned diff is comment/doc-only (and a post-QA doc-only change never re-triggers QA), and FN reverts build-tool churn as its last action before `git add`. The mechanical gate needed no change — it already denied the incident's exact `xcodebuild test -destination '…'` shape.
 - 2026-08-17: v4.0.18 — local-path leaks in published PR/issue bodies from two directions, comment-density gate vs. per-declaration DocC, `hooks/lib/` self-test selection failing closed to FULL, duplicate-issue preflight scan, test-run dedupe keyed on the tree. (Row backfilled at 4.0.19 — the 4.0.18 cut did not update this file.)
@@ -50,7 +51,6 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-08-12: v4.0.12 — activated guards already written: `metadata.workspace_path` now stamped by `/worktask`, unset is a loud failure, `dv-tree-preflight.sh` actually invoked.
 - 2026-08-10: v4.0.11 — fail-loud worktask tooling from the #431 retrospective (9 proposals).
 - 2026-08-07: v4.0.10 — eval audit (#279): held-out oracle grades each arm's binary against 30 cases.
-- 2026-08-06: v4.0.9 — opt-in change→test selection behind `./run-tests.sh --changed`.
 
 ## Token Baselines
 

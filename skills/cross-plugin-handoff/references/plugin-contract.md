@@ -88,6 +88,22 @@ file a bug against corpflow rather than working around any of them.
 | **Frontmatter is the safety net** | Unconditional `handoff:` frontmatter is what makes the three-layer recovery (agent → orchestrator fallback → hook) work. Artifact *filenames* are a backward-compat convenience; frontmatter is the contract. |
 | **Standalone operation** | No runtime dependency on corpflow is ever required. With no `.context/` present the plugin behaves exactly as it does with corpflow uninstalled. |
 
+## Project-level routing override
+
+A second file also carries the name `CORPFLOW.md`, with different semantics decided by
+location: at a *sibling plugin's* root it is that plugin's stage contract (§ A.4); at the
+*user project's* root it is project configuration, of which corpflow reads exactly one
+heading — `## Routing`, a `| Alias | Target |` table whose rows win over the defaults in
+`skills/shared/routing-matrix.md`. The heading `## Routing` is therefore **reserved**: a
+plugin-side `CORPFLOW.md` must never use it (guard note in `../templates/CORPFLOW.md`).
+Template and creation instructions: `../templates/PROJECT-CORPFLOW.md` and
+`routing-matrix.md § Project override`. Resolution happens once at worktask init and
+persists as `state.routing` (`skills/worktask/SKILL.md § Validation check 12`).
+
+An override replaces a platform's plugin wholesale — the replacement must still satisfy
+§ A; corpflow injects the same dispatch-time instruction and expects the same handoff
+schema from it.
+
 ## C. corpflow-side touchpoints when adding or swapping a plugin
 
 Every file below changes in the same commit. Ordered so later edits can reference earlier ones.
@@ -96,29 +112,33 @@ Every file below changes in the same commit. Ordered so later edits can referenc
 
 | # | File | What changes |
 |---|------|--------------|
-| 1 | `skills/shared/compatible-plugins.md` | Registry row, functional-role row, handoff-defaults row |
-| 2 | `skills/shared/platform-detection.md` | Marker rows in § Detection Rules; a per-platform specialization section; precedence notes if markers overlap an existing platform |
-| 3 | `agents/developer.md` | `tools:` `Task(...)` grants; `--platform` enum (Priority Order, Detection Logging, Routing Audit); common-rows table; UI/non-UI defaults sentence; agent `description` |
+| 1 | `skills/shared/routing-matrix.md` | Entry-alias row + four functional-role alias rows (the only copy of the target ids) |
+| 2 | `skills/shared/compatible-plugins.md` | Registry row (entry alias), command-set row, handoff-defaults row |
+| 3 | `skills/shared/platform-detection.md` | Marker rows in § Detection Rules; a per-platform specialization section; precedence notes if markers overlap an existing platform |
+| 4 | `agents/developer.md` | `--platform` enum (Priority Order, Detection Logging, Routing Audit); common-rows table; UI/non-UI defaults sentence; agent `description`. No `tools:` edit — stage agents carry a bare `Task` grant |
 
 ### Stage agents and handoff protocol
 
+Rows 5–7 are mandated-copy edits validated by `tests/shell/skills/routing-matrix.bats` —
+the test fails until each inline table matches the matrix.
+
 | # | File | What changes |
 |---|------|--------------|
-| 4 | `agents/software-architector.md` | `tools:` architect grant; per-platform architect table |
-| 5 | `agents/security-reviewer.md` | `tools:` auditor grant; platform→auditor table and checklist |
-| 6 | `agents/qa-engineer.md` | `tools:` test-generator grant; platform→generator table |
-| 7 | `skills/cross-plugin-handoff/references/plugin-protocols.md` | Per-plugin stage→agent handoff table |
-| 8 | `skills/worktask/scripts/publish-pl-issue.sh` | Plugin-prefix regex (both occurrences) **and** the leak-check greps — all four must stay byte-identical to each other and to the list in `compatible-plugins.md` |
+| 5 | `agents/software-architector.md` | Per-platform architect table row |
+| 6 | `agents/security-reviewer.md` | Platform→auditor subsection and checklist |
+| 7 | `agents/qa-engineer.md` | Platform→generator list entry |
+| 8 | `skills/cross-plugin-handoff/references/plugin-protocols.md` | Per-plugin stage→agent handoff table |
+| 9 | `skills/worktask/scripts/publish-pl-issue.sh` | Plugin-prefix regex (both occurrences) **and** the leak-check greps — all four must stay byte-identical to each other and to the list in `compatible-plugins.md` |
 
 ### Commands, scripts and release
 
 | # | File | What changes |
 |---|------|--------------|
-| 9 | `commands/pm-milestone.md` | Implementation / Test / Review agent-assignment tables; `--platform` flag docs |
-| 10 | `commands/dev-code-review.md` | `--platform` enum |
-| 11 | `skills/agent-coordination/SKILL.md` | Sub-Task Delegation model table; AR-collaboration note |
-| 12 | `README.md` | Plugin mentions and worktask examples |
-| 13 | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `CHANGELOG.md`, `MEMORY.md` | MINOR version bump + release notes. New entries always land in `CHANGELOG.md`; `CHANGELOG-3.x.md` is a frozen archive and is never appended to |
+| 10 | `commands/pm-milestone.md` | Implementation / Test / Review agent-assignment tables; `--platform` flag docs |
+| 11 | `commands/dev-code-review.md` | `--platform` enum |
+| 12 | `skills/agent-coordination/SKILL.md` | Sub-Task Delegation model table; AR-collaboration note |
+| 13 | `README.md` | Plugin mentions and worktask examples |
+| 14 | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `CHANGELOG.md`, `MEMORY.md` | MINOR version bump + release notes. New entries always land in `CHANGELOG.md`; `CHANGELOG-3.x.md` is a frozen archive and is never appended to |
 
 A plain `skills/shared/*.md` reference needs no `marketplace.json` entry — only directory skills with
 their own `SKILL.md` are listed in `skills[]`.

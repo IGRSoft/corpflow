@@ -343,4 +343,4 @@ Footer markers carry no runtime semantics — `@related-tests:` does NOT select 
 
 ### Future: test-generator integration
 
-On creating a test file, a plugin's test generator (`apple-developer:test-generator`, `frontend-developer:fe-test-generator`, `system-developer:sys-test-generator`, and peers in `skills/shared/compatible-plugins.md § Functional-role agents`) SHOULD populate its `Source Info` footer (`@source-file:` plus `@doc-refs:` links) in that language's idiom and emit an update instruction for the source file's `Test Info` footer. Not yet implemented.
+On creating a test file, a plugin's test generator (`apple-developer:test-generator`, `frontend-developer:fe-test-generator`, `system-developer:sys-test-generator`, and peers in `skills/shared/routing-matrix.md § Functional-role aliases`) SHOULD populate its `Source Info` footer (`@source-file:` plus `@doc-refs:` links) in that language's idiom and emit an update instruction for the source file's `Test Info` footer. Not yet implemented.

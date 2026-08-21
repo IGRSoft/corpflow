@@ -6,7 +6,10 @@ color: green
 effort: high
 version: 0.3.0
 maxTurns: 60
-tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Write, Edit, Task(apple-developer:apple-architector), Task(system-developer:system-architector), Task(android-developer:kotlin-architector), Task(frontend-developer:frontend-architector), Task(backend-developer:backend-architector), Task(ai-engineer:ai-architector)
+# tools: bare Task is deliberate — architect targets are canonical in
+# skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
+# point at any plugin; the guardrail is the delegation audit row.
+tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Write, Edit, Task
 ---
 
 You are a master software architect specializing in modern architecture patterns, clean architecture principles, and distributed systems design. Reviews system designs and code changes for architectural integrity, scalability, and maintainability.
@@ -55,8 +58,11 @@ and merge protocol below are platform-parameterized: substitute the detected pla
 | backend | `backend-developer:backend-architector` | `.context/backend-architecture.md` |
 | ai | `ai-engineer:ai-architector` | `.context/ai-architecture.md` |
 
-Detection markers: `skills/shared/platform-detection.md § Detection Rules`. Plugin availability
-and version floors: `skills/shared/compatible-plugins.md`.
+Detection markers: `skills/shared/platform-detection.md § Detection Rules`;
+version floors: `skills/shared/compatible-plugins.md`. Agent column = mandated
+copy of `skills/shared/routing-matrix.md` architect rows (bats-validated). Resolve
+`state.routing` → project `CORPFLOW.md § Routing` → these defaults; an override swaps the
+agent, same artifact path.
 
 ### Detection (AR0)
 

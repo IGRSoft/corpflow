@@ -55,27 +55,30 @@ Split the input into discrete units along logical boundaries (separate concerns,
 
 ## Step 3 — Implementation agent
 
-| `--platform` | Agent |
+| `--platform` | Entry alias |
 |---|---|
-| `apple` | `apple-developer:ios-developer` |
-| `android` | `android-developer:android-developer` |
-| `web` | `frontend-developer:frontend-developer` |
-| `systems` | `system-developer:system-developer` |
-| `backend` | `backend-developer:backend-developer` |
-| `ai` | `ai-engineer:ai-engineer` |
+| `apple` | `corpflow:apple-developer` |
+| `android` | `corpflow:android-developer` |
+| `web` | `corpflow:frontend-developer` |
+| `systems` | `corpflow:system-developer` |
+| `backend` | `corpflow:backend-developer` |
+| `ai` | `corpflow:ai-engineer` |
 | `all` / omitted | `corpflow:developer` — auto-routes to specialists at runtime, so it is the safe default whenever the platform is ambiguous |
 
-Always dispatch the qualified `plugin:agent` id: bare role names collide across plugins (`skills/shared/compatible-plugins.md § Naming`).
+Entry aliases resolve to a qualified `plugin:agent` id per `skills/shared/routing-matrix.md`
+(project `CORPFLOW.md § Routing` override wins); the platform default is the plugin's entry
+router. Always dispatch the resolved qualified id: bare role names collide across plugins
+(`skills/shared/compatible-plugins.md § Naming`).
 
 ### Content-based overrides
 
-When a ticket names a specific target inside a platform — macOS/watchOS/tvOS/visionOS, Swift concurrency, Compose UI, React/Vue/Svelte/Angular, CSS, C/C++/Python/Bash, API contracts, schema/query work, RAG/prompt/eval, training pipelines — assign the specialist from the marker→specialist tables in `skills/shared/platform-detection.md` instead of the platform entry agent. Automated batch fixes take that platform's code fixer (`skills/shared/compatible-plugins.md § Test generator and code fixer`), never unconditionally Apple.
+When a ticket names a specific target inside a platform — macOS/watchOS/tvOS/visionOS, Swift concurrency, Compose UI, React/Vue/Svelte/Angular, CSS, C/C++/Python/Bash, API contracts, schema/query work, RAG/prompt/eval, training pipelines — assign the specialist from the marker→specialist tables in `skills/shared/platform-detection.md` instead of the platform entry agent. Automated batch fixes take that platform's code-fixer alias (`skills/shared/routing-matrix.md § Functional-role aliases`), never unconditionally Apple.
 
 Platform-neutral roles stay in corpflow: documentation-only → `technical-writer`; agent/command/skill → `prompt-engineer`; design system or UI design → `designer`.
 
 ### Test and review agents
 
-Test agent: `corpflow:qa-engineer` by default; for a platform-specific ticket, that platform's test generator from `skills/shared/compatible-plugins.md § Test generator and code fixer` — the prefixes differ per plugin, so read the table rather than assuming the bare name.
+Test agent: `corpflow:qa-engineer` by default; for a platform-specific ticket, that platform's test-generator alias from `skills/shared/routing-matrix.md § Functional-role aliases` — the prefixes differ per plugin, so read the matrix rather than assuming the bare name.
 
 | Review trigger | Agent (corpflow) |
 |---|---|

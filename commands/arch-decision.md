@@ -204,7 +204,7 @@ When an ADR turns on a platform-level decision — app architecture pattern, nav
 management, concurrency model, module or service boundaries — consult the detected platform's
 architect for options evaluation. Detect the platform with
 `skills/shared/platform-detection.md § Detection Rules`; resolve the agent and its plugin prefix
-from `skills/shared/compatible-plugins.md § Functional-role agents` (`apple-architector`,
+from `skills/shared/routing-matrix.md § Functional-role aliases` (`apple-architector`,
 `kotlin-architector`, `frontend-architector`, `system-architector`, `backend-architector`,
 `ai-architector`).
 
