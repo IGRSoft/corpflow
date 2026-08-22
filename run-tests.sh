@@ -26,6 +26,11 @@ set -euo pipefail
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PLUGIN_ROOT"
 
+# Re-entrancy guard, 1 of 2 — read the inherited slot before claiming it. Keyed on
+# the tree, not the script: a sandbox copy has its own root and must stay runnable.
+RUN_TESTS_OUTER_ROOT="${RUN_TESTS_ACTIVE_ROOT:-}"
+export RUN_TESTS_ACTIVE_ROOT="$PLUGIN_ROOT"
+
 BATS="$PLUGIN_ROOT/tests/vendor/bats-core/bin/bats"
 COVERAGE="${COVERAGE:-0}"
 # Opt-in: a skipped Swift phase stays advisory so hosts with no Apple toolchain
@@ -192,6 +197,14 @@ if [ "$SELECT_CHANGED" -eq 1 ]; then
     fi
   fi
   rm -f "$sel_err"
+fi
+
+# Re-entrancy guard, 2 of 2 — everything above this line runs nothing and stays
+# callable from inside a run. Re-entering the execution phases for a tree already
+# under test recurses without bound and in silence, because bats captures the
+# child's output; fail loudly instead of hanging until the CI job times out.
+if [ -n "$RUN_TESTS_OUTER_ROOT" ] && [ "$RUN_TESTS_OUTER_ROOT" = "$PLUGIN_ROOT" ]; then
+  fail "re-entered for a tree already under test ($PLUGIN_ROOT). Use --print-selection, or run a sandbox copy with its own root."
 fi
 
 rc=0
