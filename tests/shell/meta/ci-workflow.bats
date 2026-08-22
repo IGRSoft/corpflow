@@ -155,3 +155,19 @@ setup() {
   run grep -q 'make bootstrap' "$WF"
   assert_failure
 }
+
+@test "the test job checks out full history; the lint job does not" {
+  # architecture-0.md's own trade-off table (fetch-depth 0 vs 1) says why: several
+  # bats shell out to git and diff against origin/master, which a shallow (depth-1)
+  # clone cannot resolve. Nothing else in the suite pins this, so a checkout step
+  # collapsed to the shared default (depth 1) would silently starve those bats of
+  # history in CI while passing everywhere this suite is exercised locally on a
+  # full clone — a regression this repo's own tests could never catch.
+  local test_job lint_job
+  test_job="$(awk '/^  test:/{f=1} /^  lint:/{f=0} f' "$WF")"
+  lint_job="$(awk '/^  lint:/{f=1} f' "$WF")"
+  grep -Eq 'fetch-depth:[[:space:]]*0' <<< "$test_job" \
+    || fail "test job must check out full history (fetch-depth: 0)"
+  grep -Eq 'fetch-depth:[[:space:]]*1' <<< "$lint_job" \
+    || fail "lint job should stay shallow (fetch-depth: 1) — it needs no git history"
+}
