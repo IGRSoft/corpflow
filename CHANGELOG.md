@@ -8,44 +8,76 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Added
 
-- **`.github/workflows/test.yml` — first CI pipeline for the plugin.** The repo had no CI; the
-  workflow runs all test phases (bats, Python, Swift) in parallel, with `fetch-depth: 0` on the
-  test job (to resolve `origin/master` for git-shelling bats) and `fetch-depth: 1` on the lint
-  job (standard action default). New `tests/shell/meta/ci-workflow.bats` validates the fetch-depth
-  split and pinned `shell: bash` keys, plus 14 existing workflow properties. Test-selection matrix
-  row R28 tracks CI workflow file (`matrix.tsv`). **DR ruling: the `shell: bash` key on every
-  piped step is critical** — without it the suite step takes `tee`'s exit status (always 0), so a
-  failing test suite reports green to the GitHub workflow engine. Added and mutation-verified
-  non-vacuous by QA.
-- One new regression test: `ci-workflow.bats` test 16 asserts `fetch-depth: 0` inside the `test`
-  job and `fetch-depth: 1` inside `lint`, independently mutation-verified non-vacuous (flipping
-  either value to 1/0 flips the test to `not ok`). Committed as `418ca04`.
+- **`.github/workflows/test.yml` — the repository's first CI pipeline.** The repo had no
+  `.github/workflows/` at all. Two jobs run in parallel: `test` runs the full deterministic suite
+  via `./run-tests.sh` with `CORPFLOW_TEST_SELECT: "0"` (selection is never the required check),
+  and `lint` runs the four repo lints on a single pass — `desc-lint.sh` and `section-lint.sh`
+  against the repo as their real subject, `cache-lint.sh` and `pr-body-lint.sh` in `--self-test`
+  mode because they consume a `prompt-log.jsonl`/PR body that nothing here emits. Checkout depth is
+  pinned per job: `fetch-depth: 0` on `test` (several bats shell out to git and diff against
+  `origin/master`) and `fetch-depth: 1` on `lint`. `permissions: contents: read`, no repository
+  secret is referenced, and `concurrency` cancels superseded PR runs only — never a `master` run,
+  which would leave `master` unverified.
+- **`tests/shell/meta/ci-workflow.bats` — the workflow's content as an executable contract**,
+  16 assertions covering the permission surface, action pinning, the four lint invocation modes,
+  the load-bearing `2>&1`, the per-job `fetch-depth` split, and the `shell: bash` keys. New
+  test-selection matrix row R28 (`tests/selection/matrix.tsv`) routes `.github/workflows/*` edits
+  to this file; without it such an edit falls through to FULL, which is safe but hides ownership.
+- **Prompt-body authoring doctrine in `agents/prompt-engineer.md`**, two sections peer to the
+  existing description grammar: a four-rule body doctrine (information hierarchy on a branching
+  test, completion criteria graded on clarity and demand, negation by diagnosis rather than by
+  default, no-op pruning) and a four-gate conjunctive invocation classification that DV2 applies
+  verbatim across the skill manifests. `commands/prompt-audit.md` gains the matching per-asset
+  checks plus a `--skills` scope so the body rules reach skill manifests;
+  `commands/optimize-agent.md` and `commands/arch-decision.md` carry their counterparts.
+- **PL0 separates facts from decisions** (`skills/worktask/references/pl0-procedure.md`): any
+  question the filesystem, git, or a tool can answer is resolved by PL0 — dispatching a subagent
+  when the lookup is slow — and never reaches the approval gate; a question that depends on another
+  still-open question defers to a later round instead of batching beside it. An ADR-warranted gate
+  was added alongside, with fixtures under
+  `skills/worktask/references/fixtures/plan-gate-questions/`.
 
 ### Changed
 
-- **Manifest keywords reduced 120 → 15.** The array had grown to include release-note tokens
-  (opus-4-8, todo-tools-removed, etc.) that CHANGELOG.md already carries. Keywords are now
-  descriptive terms for the plugin only. The keywords array in `plugin.json` is the canonical
-  list; `marketplace.json` entries for `description` and `version` are synchronized from the
-  plugin definition to ensure parity.
-- **Four stale "not wired to CI" claims removed** across `commands/arch-decision.md`,
-  `commands/docs-audit.md`, and `skills/worktask/SKILL.md` — the plugin now has CI and these
-  assertions are now false.
+- **Manifest keywords reduced 120 → 15.** The array had accumulated release-note tokens
+  (`opus-4-8`, `todo-tools-removed`, …) that CHANGELOG.md already carries; the remaining 15
+  describe the plugin. `plugin.json` is canonical and `marketplace.json` mirrors keywords,
+  `description`, and `version`, now pinned by a parity assertion in
+  `tests/shell/worktask/manifest-parity.bats`.
+- **Plugin `description` shortened 353 → 201 characters** in both `plugin.json` and the two
+  `marketplace.json` sites, dropping the enumeration of stage roles for one sentence naming the
+  pipeline, the state ledger, cross-plugin delegation, and `/megatask`.
+- **`description:` frontmatter removed from 15 non-skill shared docs** under `skills/shared/` —
+  they are reference documents read by path, not invocable skills, so the key had no consumer.
+- **Four stale "not wired to CI" claims cleared** across three documents now that CI exists:
+  `skills/context-compression/SKILL.md`, `skills/worktask/SKILL.md`, and
+  `skills/worktask/references/handoff-protocol.md` (two claims). The replacements are deliberately
+  narrow — CI runs `cache-lint.sh --self-test`, which gates the lint's own parser and fixtures; no
+  captured prompt log is checked until an emitter exists, and anchor-lint is still not a CI check.
+- **Two pipeline-only skills marked `disable-model-invocation: true`** — `skills/preview-ensurer/`
+  and `skills/csv-export-templates/` — each with the gate-G3 answer recorded as a `# G3:` comment
+  directly above the key: neither has standalone value outside the run that supplies its input.
 
 ### Fixed
 
-- **Red test suites now report red, not green (#322, DR-P0).** The `.github/workflows/test.yml`
-  suite step lacked `shell: bash`, so the step inherited the GitHub Actions default shell
-  (sh + set -e), which does not apply `pipefail`. When a piped command in the test suite failed,
-  `tee`'s successful exit status replaced the pipe's failure, and the job reported success to
-  GitHub. The `shell: bash` key activates `set -o pipefail`, gating the job's overall status on
-  the suite's actual result. DR mutation-tested both the suite-step and per-command assertions;
-  QA independently re-derived the harness and confirmed non-vacuity.
-- **`disable-model-invocation` applied to two pipeline-only skills** (`preview-ensurer`,
-  `csv-export-templates`) so they do not load in stages that cannot use them. Each carries a
-  `# G3: …` rationale comment in `SKILL.md`.
-- Disambiguated colliding gate labels (`g-int-4`, `g-label-3`) in `commands/arch-decision.md`
-  and two related files.
+- **Red test suites now report red, not green (#322, DR-P0).** The suite step ran
+  `./run-tests.sh 2>&1 | tee run-tests.log` without a `shell:` key. GitHub Actions' default shell
+  on Linux runners is `bash -e {0}` — `-o pipefail` is applied *only* when `shell: bash` is written
+  out explicitly. Without it the step exited with `tee`'s status, which is 0 whatever
+  `run-tests.sh` did, so a failing suite reported success to the workflow engine. Declaring
+  `shell: bash` on the suite step and on the skipped-phase summary step restores `pipefail` and
+  gates the job on the suite's actual result. Two assertions cover the property rather than the
+  literal string, matching an anchored YAML key inside a bounded step window (this file's own
+  comments say `shell: bash` in prose); both were mutation-checked — removing either key turns
+  them red.
+- **Colliding `G<n>` gate labels disambiguated in `agents/prompt-engineer.md`.** Its
+  `### Invocation classification` section numbers its gates G1–G4 while the adjacent
+  `### Description grammar` numbers its rules G1–G7, and an exemption rationale closing on
+  "so G1–G5 keep their purchase" sat eight lines below the table defining G1–G4, so a reader
+  resolved the nearer referent and got the wrong set. Fixed at both ends rather than by
+  relabelling — the invocation gates keep G1–G4 because DV2 consumes the procedure verbatim: the
+  section now states up front that its labels are local and that the grammar's G1–G7 are an
+  unrelated set, and the exemption sentence names its owning section inline.
 
 ## [4.0.22] — 2026-08-21
 
