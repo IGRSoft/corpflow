@@ -392,7 +392,10 @@ _ALWAYS_FLOOR="tests/shell/lib/test-helper.bats tests/shell/meta/coverage-proxy.
   printf '#!/usr/bin/env bash\nexec bash %s --changed --base HEAD --root %s\n' \
     "$SELECTOR" "$wd" > "$stub"
   chmod +x "$stub"
-  RUN_TESTS_SELECTOR="$stub" run "$PLUGIN_ROOT/run-tests.sh" --changed --print-selection
+  # Pinned: CI exports CORPFLOW_TEST_SELECT=0 for the whole suite step, under which
+  # --print-selection reports FULL/DISABLED and never reaches a floor to show.
+  CORPFLOW_TEST_SELECT=1 RUN_TESTS_SELECTOR="$stub" \
+    run "$PLUGIN_ROOT/run-tests.sh" --changed --print-selection
   assert_success
   assert_output --partial "SELECT	tests/shell/meta/coverage-proxy.bats	L3:ALWAYS"
 }
