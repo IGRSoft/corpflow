@@ -88,18 +88,30 @@ command -v python3 >/dev/null 2>&1 || fail "python3 not found (required — skil
 command -v jq      >/dev/null 2>&1 || fail "jq not found (required)"
 
 # Swift is optional: this plugin orchestrates six platforms and must be testable
-# on a host with no Apple toolchain. Presence on PATH is not usability — a
-# swiftly shim outlives the toolchain it selects — so probe the binary.
+# on a host with no Apple toolchain. Two different things can be missing, and
+# probing only the first is what let a Linux runner enter the Apple-only phases
+# and fail there: the toolchain itself (a swiftly shim outlives the toolchain it
+# selects), and the Apple frameworks benchmark/ttt-template imports, which a
+# perfectly working Linux toolchain does not ship. Compiling those imports
+# answers both questions at once.
 SWIFT_USABLE=0
-if command -v swift >/dev/null 2>&1 && swift --version >/dev/null 2>&1; then
-  SWIFT_USABLE=1
+SWIFT_SKIP_REASON="no swift toolchain on PATH"
+if command -v swiftc >/dev/null 2>&1 && swift --version >/dev/null 2>&1; then
+  swift_probe_dir="$(mktemp -d)"
+  printf 'import SwiftUI\nimport AppKit\nimport AudioToolbox\n' > "$swift_probe_dir/probe.swift"
+  if ( cd "$swift_probe_dir" && swiftc -typecheck probe.swift ) >/dev/null 2>&1; then
+    SWIFT_USABLE=1
+  else
+    SWIFT_SKIP_REASON="swift is present but the Apple frameworks the package imports (SwiftUI, AppKit, AudioToolbox) are not"
+  fi
+  rm -rf "$swift_probe_dir"
 fi
 
 note "vendored bats: $("$BATS" --version 2>/dev/null || echo '?')"
 if [ "$SWIFT_USABLE" -eq 1 ]; then
   note "swift:         $(swift --version 2>/dev/null | head -1)"
 else
-  note "swift:         unusable or absent — Swift phases will be skipped"
+  note "swift:         $SWIFT_SKIP_REASON — Swift phases will be skipped"
 fi
 note "python3:       $(python3 --version 2>&1)"
 
@@ -236,8 +248,8 @@ for pkg in "${swift_packages[@]}"; do
     note "swift test → ${pkg#$PLUGIN_ROOT/}"
     ( cd "$pkg" && swift test ) || rc=$?
   else
-    warn "SKIP swift test → ${pkg#$PLUGIN_ROOT/} (no usable swift toolchain)"
-    skipped_phases+=("swift test → ${pkg#$PLUGIN_ROOT/} (no usable swift toolchain)")
+    warn "SKIP swift test → ${pkg#$PLUGIN_ROOT/} ($SWIFT_SKIP_REASON)"
+    skipped_phases+=("swift test → ${pkg#$PLUGIN_ROOT/} ($SWIFT_SKIP_REASON)")
   fi
 done
 
@@ -249,6 +261,13 @@ note "python3 -m unittest → benchmark/harness/tests (harness suite)"
 ( cd "$PLUGIN_ROOT/benchmark/harness" \
     && PYTHONPATH="$PLUGIN_ROOT/benchmark/harness/tests" \
        python3 -m unittest discover -s tests -t . -p 'test_*.py' ) || rc=$?
+
+# unittest reports its own skips, but a skipUnless line scrolls past inside 378
+# dots. The Apple-SDK-gated classes are the same phase as the swift package above,
+# so they are declared where a reader already looks for what did not run.
+if [ "$SWIFT_USABLE" -ne 1 ]; then
+  skipped_phases+=("python harness: Apple-SDK-gated classes (test_oracle.AgainstReferenceImplementation, test_generators.Generators) — $SWIFT_SKIP_REASON")
+fi
 
 if [ "${#skipped_phases[@]}" -gt 0 ]; then
   warn "SKIPPED PHASES: ${#skipped_phases[@]}"
