@@ -1,6 +1,5 @@
 ---
 name: three-stage-planning
-description: 3-stage sequential project planning model (Required/Nice-to-have/v1.1), calendar month billing, stage budget template, and gate criteria. Reference for project planning and budget approval.
 effort: low
 ---
 

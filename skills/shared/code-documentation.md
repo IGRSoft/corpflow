@@ -1,6 +1,5 @@
 ---
 name: code-comment-standard
-description: Compact source-code comment standard for DV/DR/DC. Comment the non-obvious WHY and the contract, never the WHAT, the history, or external design provenance. Read on demand when writing, reviewing, or finalizing source comments.
 effort: low
 ---
 

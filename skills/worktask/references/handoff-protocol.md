@@ -1204,13 +1204,13 @@ Documented in `skills/cost-optimization/SKILL.md`. Without the 1h flag the defau
 
 `skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`.
 
-**Not automated.** Prefix-lint is manual-only: it consumes a `prompt-log.jsonl` (`{worktask_id, stage, prompt}` per line) that nothing here emits — the live harness assembles prompts in `benchmarklive/dispatch.py` but persists only stage stdout — and is exercised solely by `cache-lint.sh --self-test` fixtures. This repo has no `.github/workflows/`, so no lint runs on PRs. Treat this section as the spec the assembler must satisfy, not an enforced gate.
+**Fixture-gated, not log-gated.** Prefix-lint consumes a `prompt-log.jsonl` (`{worktask_id, stage, prompt}` per line) that nothing here emits — the live harness assembles prompts in `benchmarklive/dispatch.py` but persists only stage stdout — so it is exercised by `cache-lint.sh --self-test` fixtures. CI runs exactly that mode on every PR (`.github/workflows/test.yml`), which gates the lint's own parser; no captured prompt is checked until an emitter exists. Treat this section as the spec the assembler must satisfy.
 
 ---
 
 ## #anchor-allow-list
 
-All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below. Anchor-lint runs twice: proactively via the managed `PostToolUse` hook (`hooks/anchor-preflight.sh`, shipped default-on in `.claude-plugin/plugin.json`) and again at the DR gate. Neither is a CI check — this repo has no `.github/workflows/`.
+All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below. Anchor-lint runs twice: proactively via the managed `PostToolUse` hook (`hooks/anchor-preflight.sh`, shipped default-on in `.claude-plugin/plugin.json`) and again at the DR gate. Neither is a CI check: the lint job runs the four repo lints, and anchor-lint mode is deliberately not among them.
 
 ### Anchors — PL to DR
 

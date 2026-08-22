@@ -1,6 +1,5 @@
 ---
 name: state-ledger
-description: State ledger reference — the state.json tasks{} map, its metadata schema, status values, and write operations. Use when creating, reading, or updating worktask stage state.
 version: 1.1.0
 ---
 

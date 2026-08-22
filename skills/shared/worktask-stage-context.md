@@ -1,6 +1,5 @@
 ---
 name: worktask-stage-context
-description: Canonical worktask pipeline diagrams (9-stage, 11-stage, emergency) plus one-line role per stage. Read on demand for full pipeline context; agents carry their own 1-line stage marker inline.
 ---
 
 # Worktask Stage Context

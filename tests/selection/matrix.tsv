@@ -41,6 +41,9 @@ tests/fixtures/hooks/*	hooks/agent-stop,hooks/anchor-preflight,hooks/audit-subag
 tests/fixtures/README.md	NONE	R23	Reviewed: the fixture index is prose about write-access partitioning; no test parses it, so ALWAYS is the correct answer.
 .claude-plugin/plugin.json	hooks/agent-stop,hooks/anchor-preflight,hooks/audit-subagent,hooks/audit-tooluse,hooks/comment-density-gate,hooks/comment-standard-context,hooks/dv-screenshot-gate,hooks/megatask-monitor,hooks/precompact-checkpoint,hooks/state-merge,hooks/test-execution-gate	R19	Several hook tests assert their own event and matcher wiring against the manifest; only four of the eleven spell its path, so L1 sees a minority of the real edges.
 examples/canvas-fixture/*	benchmark/canvas-e2e-guards	R20	The canvas end-to-end guard drives this fixture tree directly.
+
+# --- CI workflow ------------------------------------------------------------
+.github/workflows/*	meta/ci-workflow	R28	The workflow's content is its own contract — permission surface, action pinning, the four lint invocation modes and the load-bearing 2>&1 — and nothing else in the suite reads .github/. Without this row an edit to the workflow falls through to F3/FULL, which is safe but hides which test owns it.
 # STALE-OK: .context/ is gitignored worktask scratch, so no tracked path can ever match this glob; the row exists so the silence is reviewed rather than an F3 on every worktask run.
 .context/*	NONE	R24	Reviewed: worktask run artifacts are scratch state written by the pipeline; no test reads them, so ALWAYS is the correct answer.
 skills/release-engineering/scripts/conventional-commits-lib.sh	skills/changelog-from-git,skills/version-bump-from-git	R26	The conventional-commit parser is sourced by both release scripts; neither consumer suite names the library path, so an edit confined to it selects nothing at L1 and a breaking-detection change ships untested.

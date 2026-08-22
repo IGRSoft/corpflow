@@ -1,6 +1,5 @@
 ---
 name: worktask-invocation
-description: How a worktask is launched (the /worktask command or Skill({skill:"corpflow:worktask"})), the BLOCKING first-action rule, PL0 dynamic stage sizing, and the PL/FN gate execution model. Use when launching a worktask or resolving worktask semantics.
 ---
 
 # Worktask Invocation

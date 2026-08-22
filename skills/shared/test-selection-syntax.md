@@ -1,6 +1,5 @@
 ---
 name: test-selection-syntax
-description: Inline test marker grammar for selective test execution. Reference when annotating tests, parsing markers in DV, or extending platform handlers. Defines @test-required, @depends-on, and @test-tag markers consumed by the Test Selection Gate.
 effort: low
 ---
 

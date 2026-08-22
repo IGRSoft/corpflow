@@ -1,6 +1,5 @@
 ---
 name: plugin-root-resolution
-description: Canonical, provider-agnostic rule for resolving the corpflow plugin root. Use when a skill, agent, command, or script must locate bundled helpers (hooks/, skills/*/scripts/) and CLAUDE_PLUGIN_ROOT may be unavailable.
 ---
 
 # Plugin-Root Resolution (provider-agnostic)

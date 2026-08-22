@@ -1,6 +1,5 @@
 ---
 name: pandoc-ingestion
-description: When and how to use the pandoc CLI to read rich local document formats and document URLs as markdown, with preflight, fallback order, and security notes. Reference for doc/research-reading agents.
 effort: low
 ---
 

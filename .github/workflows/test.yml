@@ -1,0 +1,72 @@
+name: test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Superseding a PR push is free; cancelling a master run would leave master unverified.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Several bats shell out to git and diff against origin/master.
+          fetch-depth: 0
+
+      - name: preflight — jq and python3
+        run: |
+          command -v jq
+          command -v python3
+
+      - name: full deterministic suite
+        env:
+          # Selection is never the required check: the gate is always the full suite.
+          CORPFLOW_TEST_SELECT: "0"
+        # 2>&1 is load-bearing: run-tests.sh prints SKIPPED PHASES to stderr, and the
+        # summary step below reads run-tests.log. Dropping it empties that block silently.
+        run: ./run-tests.sh 2>&1 | tee run-tests.log
+
+      - name: report skipped phases
+        if: always()
+        run: |
+          { echo '### Skipped phases'
+            echo
+            awk '/SKIPPED PHASES:/{f=1} f' run-tests.log | grep . \
+              || echo 'none — every phase ran'; } >> "$GITHUB_STEP_SUMMARY"
+
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Invocation modes follow one rule (architecture-0.md AD-3): a lint runs against
+      # its real subject when this repository contains one, against its built-in
+      # fixtures when it does not. cache-lint and pr-body-lint exit 2 when invoked bare.
+      - name: desc-lint (repo subject)
+        run: bash skills/worktask/scripts/desc-lint.sh
+
+      - name: section-lint (repo subject)
+        if: always()
+        run: bash skills/worktask/scripts/section-lint.sh
+
+      - name: cache-lint (self-test fixtures)
+        if: always()
+        run: bash skills/worktask/scripts/cache-lint.sh --self-test
+
+      - name: pr-body-lint (self-test fixtures)
+        if: always()
+        run: bash skills/worktask/scripts/pr-body-lint.sh --self-test
