@@ -78,6 +78,22 @@ All notable changes to this project are documented here. The format is based on 
   relabelling — the invocation gates keep G1–G4 because DV2 consumes the procedure verbatim: the
   section now states up front that its labels are local and that the grammar's G1–G7 are an
   unrelated set, and the exemption sentence names its owning section inline.
+- **The ENOSPC disk guard never fired on Linux.** `disk_guard()` in
+  `skills/worktask/scripts/state-patch.sh` — shipped runtime code every worktask executes — probed
+  free space with `df -Pg`. `-g` is BSD-only; GNU coreutils rejects it outright (`df: invalid
+  option -- 'g'`, exit 1, nothing on stdout), so `avail_gb` came back empty and the guard took its
+  "df unparseable → degrade silently, never block" path. The `DISK_MIN_GB` hard halt was therefore
+  unreachable on Linux at any threshold, and had been since the guard was introduced. Now `df -Pk`,
+  which is POSIX on both platforms, with the conversion to GiB moved into the awk program. macOS
+  behaviour is unchanged.
+- **`run-tests.sh` gained a re-entrancy guard, and the Apple-only phases now gate on frameworks.**
+  Re-entering the deterministic entry point for a tree already under test previously recursed
+  silently until the job timed out; it now fails loudly. The guard keys on the tree rather than on
+  the script and sits below the selection phase, so `--print-selection` and sandbox copies stay
+  callable from inside a run. Separately, the Swift phases gated on `swift` being on `PATH`, which
+  a Linux toolchain satisfies while not shipping the SwiftUI the benchmark template imports; all
+  three call sites now compile the template's imports instead, and every resulting skip is named
+  with its reason under `SKIPPED PHASES:` rather than passing as a quietly smaller green run.
 
 ## [4.0.22] — 2026-08-21
 
