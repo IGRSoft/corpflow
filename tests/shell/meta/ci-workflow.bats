@@ -68,6 +68,36 @@ setup() {
   assert_success
 }
 
+@test "the piped suite step declares shell: bash, so pipefail applies" {
+  # The implicit default shell on Linux is `bash -e {0}`; -o pipefail is added ONLY
+  # when `shell: bash` is written out. Without it the step exits with tee's status —
+  # always 0 — and a red suite reports green, which is the whole gate.
+  #
+  # The match must be a real YAML key, anchored and terminated: prose mentioning
+  # `shell: bash` (this file's own comments do) would otherwise satisfy it, and the
+  # window must close at the next step or the following step's key answers for it.
+  local found
+  found="$(awk '
+    /^[[:space:]]*-[[:space:]]+name:/ { inblock = ($0 ~ /full deterministic suite/) }
+    inblock && /^[[:space:]]*shell:[[:space:]]*bash[[:space:]]*$/ { print "yes" }' "$WF")"
+  [ "$found" = "yes" ] || fail "the suite step must declare 'shell: bash' or the pipeline status is lost"
+}
+
+@test "every piped run: step declares shell: bash" {
+  # Generalises the assertion above: any future `|` in a run: body inherits the same
+  # trap, so the check is on the shape, not on one known step.
+  local bad
+  bad="$(awk '
+    /^[[:space:]]*-[[:space:]]/                            { step = $0; shell = 0; inrun = 0 }
+    /^[[:space:]]*shell:[[:space:]]*bash[[:space:]]*$/     { shell = 1 }
+    /^[[:space:]]*run:/                                    { inrun = 1 }
+    # `run: |` is the YAML block indicator, not a shell pipe.
+    inrun && /\|/ && $0 !~ /run:[[:space:]]*\|[[:space:]]*$/ {
+      if (!shell) { print step; shell = 1 }
+    }' "$WF")"
+  [ -z "$bad" ] || fail "piped run: step(s) without shell: bash:$bad"
+}
+
 @test "the suite step merges stderr into the tee'd log" {
   # run-tests.sh prints SKIPPED PHASES to stderr. Without 2>&1 the summary step
   # below produces an empty block that reads as 'everything ran'.

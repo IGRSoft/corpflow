@@ -33,12 +33,19 @@ jobs:
         env:
           # Selection is never the required check: the gate is always the full suite.
           CORPFLOW_TEST_SELECT: "0"
-        # 2>&1 is load-bearing: run-tests.sh prints SKIPPED PHASES to stderr, and the
-        # summary step below reads run-tests.log. Dropping it empties that block silently.
+        # `shell: bash` is what applies -o pipefail; the implicit default is `bash -e`
+        # only, so without it the step exits with tee's status and a red suite reports
+        # green. 2>&1 is load-bearing too: run-tests.sh prints SKIPPED PHASES to stderr
+        # and the summary step below reads run-tests.log.
+        shell: bash
         run: ./run-tests.sh 2>&1 | tee run-tests.log
 
       - name: report skipped phases
         if: always()
+        # Same pipefail reasoning as the step above; here the `|| echo` fallback already
+        # absorbs an empty pipeline, so this keeps one shell contract across the job
+        # rather than two.
+        shell: bash
         run: |
           { echo '### Skipped phases'
             echo
