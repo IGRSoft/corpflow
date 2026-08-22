@@ -85,6 +85,9 @@ A skill is **pipeline-only** if and only if all four gates below answer yes. Any
 `disable-model-invocation: true` as the **last** frontmatter key, with the G3 answer recorded as a
 one-line `#` comment directly above it.
 
+The gate labels G1–G4 below are local to this section. `### Description grammar`'s G1–G7 are an
+unrelated set covering frontmatter text; the two never refer to each other.
+
 #### Gates G1–G2 — reachability and preconditions
 
 | Gate | Question | How it is answered |
@@ -105,8 +108,8 @@ one-line `#` comment directly above it.
 description-trigger finding while `skills/worktask/scripts/desc-lint.sh` deliberately does not, and
 that divergence is deliberate rather than a defect: the flag changes a skill's *reachability*, not
 its description's *readability* — that text is still what an authoring agent reads before calling
-`Skill()`, so G1–G5 keep their purchase — and with zero skills failing the lint today, an exemption
-would ship as untestable dead code.
+`Skill()`, so the grammar rules G1–G5 of `### Description grammar` keep their purchase — and with
+zero skills failing the lint today, an exemption would ship as untestable dead code.
 
 ### Form to failure
 
