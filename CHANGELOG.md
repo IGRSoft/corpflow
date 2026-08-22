@@ -4,6 +4,52 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [4.0.23] — 2026-08-22
+
+### Added
+
+- **`.github/workflows/test.yml` — first CI pipeline for the plugin.** The repo had no CI; the
+  workflow runs all test phases (bats, Python, Swift) in parallel, with `fetch-depth: 0` on the
+  test job (to resolve `origin/master` for git-shelling bats) and `fetch-depth: 1` on the lint
+  job (standard action default). New `tests/shell/meta/ci-workflow.bats` validates the fetch-depth
+  split and pinned `shell: bash` keys, plus 14 existing workflow properties. Test-selection matrix
+  row R28 tracks CI workflow file (`matrix.tsv`). **DR ruling: the `shell: bash` key on every
+  piped step is critical** — without it the suite step takes `tee`'s exit status (always 0), so a
+  failing test suite reports green to the GitHub workflow engine. Added and mutation-verified
+  non-vacuous by QA.
+- One new regression test: `ci-workflow.bats` test 16 asserts `fetch-depth: 0` inside the `test`
+  job and `fetch-depth: 1` inside `lint`, independently mutation-verified non-vacuous (flipping
+  either value to 1/0 flips the test to `not ok`). Committed as `418ca04`.
+
+### Changed
+
+- **Manifest keywords reduced 120 → 15 per marketplace specification.** The keywords array in
+  `plugin.json` is now the canonical list; `marketplace.json` entries for `description` and
+  `version` are synchronized from the plugin definition via the `c435cc7` commit to ensure
+  parity.
+- **Four stale "not wired to CI" claims removed** across `commands/arch-decision.md`,
+  `commands/docs-audit.md`, and `skills/worktask/SKILL.md` — the plugin now has CI and these
+  assertions are now false.
+
+### Fixed
+
+- **Red test suites now report red, not green (#322, DR-P0).** The `.github/workflows/test.yml`
+  suite step lacked `shell: bash`, so the step inherited the GitHub Actions default shell
+  (sh + set -e), which does not apply `pipefail`. When a piped command in the test suite failed,
+  `tee`'s successful exit status replaced the pipe's failure, and the job reported success to
+  GitHub. The `shell: bash` key activates `set -o pipefail`, gating the job's overall status on
+  the suite's actual result. DR mutation-tested both the suite-step and per-command assertions;
+  QA independently re-derived the harness and confirmed non-vacuity.
+- SKIPPED_PHASES header no longer emitted on clean runs — it was a conditional `echo` gated on
+  a non-empty bash array, not an unconditional suppression. The array is empty when every test
+  phase runs (the designed path); the header is conditional on non-empty. Clarified as a
+  documentation fix in `qa-0.md`.
+- **`disable-model-invocation` applied to two pipeline-only skills** (`preview-ensurer`,
+  `csv-export-templates`) so they do not load in stages that cannot use them. Each carries a
+  `# G3: …` rationale comment in `SKILL.md`.
+- Disambiguated colliding gate labels (`g-int-4`, `g-label-3`) in `commands/arch-decision.md`
+  and two related files.
+
 ## [4.0.22] — 2026-08-21
 
 ### Changed
