@@ -78,6 +78,36 @@ picking a slash command, not model-routing text — and carry G6 alone. Enforced
 `SwiftUI` all contain a bare `I`. G1 enforces the opening verb alone, not the full bigram —
 picking the connective is G2's job, and one rule per property keeps the lint's message actionable.
 
+### Invocation classification
+
+A skill is **pipeline-only** if and only if all four gates below answer yes. Any single no makes it
+**model-reachable** — leave its frontmatter alone. A pipeline-only skill carries
+`disable-model-invocation: true` as the **last** frontmatter key, with the G3 answer recorded as a
+one-line `#` comment directly above it.
+
+#### Gates G1–G2 — reachability and preconditions
+
+| Gate | Question | How it is answered |
+|---|---|---|
+| **G1 Invoker** | Does at least one prompt asset name it explicitly — a `Skill({skill:"<plugin>:<skill>"})` call, a `skills/<name>/SKILL.md` path reference, a stage contract, or an adapter script? | `grep -rn '<skill-name>' agents commands skills hooks`. No explicit invoker means description-matching is its only route in, so it must stay reachable. |
+| **G2 Preconditions** | Does it require state that exists only mid-run — `.context/state.json`, a stage task id, a prior stage's artifact, adapter argv? | Read its `SKILL.md` body for those inputs. |
+
+#### Gates G3–G4 — standalone value and misfire cost
+
+| Gate | Question | How it is answered |
+|---|---|---|
+| **G3 Standalone value** | Could a user get value from it with **only the inputs they already have**, outside a worktask? | Judgement — and this is the line recorded in the frontmatter comment. "A user might say something similar" is not value; needing an artifact they do not have is a no. |
+| **G4 Misfire cost** | Auto-loaded out of context, is the damage worse than wasted tokens — a wrong write, a spurious gate? | Escalator only: it breaks a G3 tie toward pipeline-only, never overrides a clear G3 yes. |
+
+#### Why the description lint gains no exemption for the flag
+
+`commands/optimize-command.md` grants a `disable-model-invocation` exemption to its
+description-trigger finding while `skills/worktask/scripts/desc-lint.sh` deliberately does not, and
+that divergence is deliberate rather than a defect: the flag changes a skill's *reachability*, not
+its description's *readability* — that text is still what an authoring agent reads before calling
+`Skill()`, so G1–G5 keep their purchase — and with zero skills failing the lint today, an exemption
+would ship as untestable dead code.
+
 ### Form to failure
 
 Classify the baseline failure before writing guidance. The form that bulletproofs one class
@@ -98,6 +128,67 @@ measurably backfires on another.
 - **Behaviour-shaping edits carry evidence.** Show the failure first — a before/after on the same
   prompt, or an eval run — and only then the edit. An edit argued from taste alone is a rejection
   condition.
+
+### Prompt-body doctrine
+
+`### Description grammar` governs the frontmatter; these four rules govern everything below it, in
+agents, commands, and skills alike. Each carries its own decidable test. Per-asset enforcement:
+`commands/prompt-audit.md § Body Rules` and `commands/optimize-agent.md § Body doctrine`.
+
+#### Information hierarchy — the branching test
+
+Three tiers, cheapest first: an **in-file step** (the instruction itself, where the reader already
+is), an **in-file reference** (a named section of the same file), and a **disclosed reference**
+behind a pointer (`see references/x.md § Y`). Put each unit at the cheapest tier every reader who
+needs it can still reach.
+
+The test is **branching**, not length: inline what *every* branch needs, disclose what only *some*
+branches reach. A long section every run executes end to end is correctly inline; a short block only
+the megatask path reaches is a disclosure candidate. Length is the symptom that makes you look;
+branching is what decides.
+
+Failing it produces one flat trunk of steps most of whose readers skip most of it — they pay the
+tokens, scan past, and miss the step that was theirs.
+
+#### Completion criteria — clarity and demand
+
+Every step ends on a criterion, and a criterion is graded on two independent axes:
+
+- **Clarity** — can the agent tell done from not-done without asking? "Reviewed the diff" cannot;
+  "every hunk in `git diff --stat` carries a verdict line" can.
+- **Demand** — how much legwork the criterion forces. "Produce a change list" is satisfied by a
+  plausible list. "Every modified file accounted for, `git status` clean" cannot be satisfied
+  without doing the work.
+
+High clarity with low demand is the dangerous pair: it reports green while proving nothing. Raise
+demand by naming the artifact the criterion is checked against, never by adding adjectives.
+
+#### Negation by diagnosis, not by default
+
+Prohibition is the right form for exactly one row of `### Form to failure`: **"knows the rule, skips
+it under pressure"** — there a `DO NOT` plus its rationalization table is what holds. The other
+three rows take a positive form instead: "complies, but the output has the wrong shape" takes a
+recipe stating what the output IS, in order; "omits an element of something already produced" takes
+a REQUIRED slot in the template being filled in; "behaviour should depend on a condition" takes a
+conditional keyed to an observable predicate.
+
+Diagnose the baseline failure first and reach for `DO NOT` only when the diagnosis lands on that
+first row. A prohibition aimed at any other row is the documented wrong form, not a stylistic
+preference.
+
+This rule governs prose written from here on. Existing `## Constraints (DO NOT)` blocks are **not**
+rewritten under it — that is a separate worktask, and opening one is a stop condition.
+
+#### No-op pruning
+
+An instruction the model already obeys by default pays context load to say nothing. The test is
+model-relative: strike the sentence, ask whether *this* model on *this* task would then behave
+differently, and keep it only when the answer is yes. A rule that earned its place against Haiku can
+be a pure no-op against Opus, and the same sentence is correct in one asset and waste in another.
+
+The fix is deleting the whole sentence, not trimming words from it. A half-pruned instruction still
+occupies a slot in the reader's attention and still reads as a requirement; the tokens are the
+cheapest part of what it costs.
 
 
 ## State Ledger Integration
