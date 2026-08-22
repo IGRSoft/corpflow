@@ -1,6 +1,5 @@
 ---
 name: stage-contracts
-description: Per-stage Inputs→Outputs→Validation contract for every worktask stage (PL/AR/TL/DV/DR/SR/QA/DC/RE/FN/ST/IR/ET). Use when authoring stage agents, implementing handoffs, or validating worktask completion.
 version: 0.3.0
 ---
 

@@ -1,6 +1,5 @@
 ---
 name: stage-codes
-description: Reference table of all worktask stage codes (PL/AR/TL/DV/DR/SR/QA/DC/RE/FN/ST/IR). Use when looking up stage codes, agents, or worktask stage sequences.
 ---
 
 # Stage Codes Reference

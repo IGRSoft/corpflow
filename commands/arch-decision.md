@@ -51,6 +51,54 @@ Technology Decision Records (`--type tdr`); they differ in scope, owner, and out
 /arch-decision --type tdr --compare "Vitest" "Jest"
 ```
 
+## Gate — is a record warranted? (run before any template)
+
+Run this first, on `--type adr` and `--type tdr` alike. The three conditions are **conjunctive**:
+miss any one and the command **declines**, names the condition that failed, and writes no file.
+
+| # | Condition | It fails when |
+|---|---|---|
+| W1 | **Hard to reverse** — undoing it later costs more than making it did: accrued dependent code, a data migration, a published contract, or a social cost once contributors have paid for it. | Reversal is a one-line change with nothing accrued against it. |
+| W2 | **Surprising without context** — a competent reader of the resulting code would guess wrong about why it is this way. | It is the obvious default for the stack, and the code reads as such. |
+| W3 | **The result of a real trade-off** — two or more options were viable and something was actually given up. | Only one option was ever viable, or nothing was surrendered. |
+
+### Short-circuit and exemptions
+
+Evaluation short-circuits: stop at the first condition that fails and decline on it.
+
+`--list`, `--update <number>`, `--supersede <number>`, `--status`, `--evaluate`, and `--compare`
+bypass the gate — the record already exists, or none is being emitted, so warrantedness is settled.
+
+### Declining — the required output
+
+Emit exactly this, and no file:
+
+~~~markdown
+**No record warranted** — <topic>
+
+| Gate | Verdict | Why |
+|---|---|---|
+| W1 Hard to reverse | ❌ | <the reversal cost, in one line> |
+| W2 Surprising without context | ✅ | <one line> |
+| W3 Real trade-off | ✅ | <one line> |
+
+**Record it as a plain decision instead**: <destination> — a `key_decisions[]` entry in the stage
+artifact, a "decisions that did not clear the bar" list beside the accepted records, or a source
+comment stating the WHY.
+~~~
+
+A declined topic is not a rejected decision. The decision is still made and still written down; it
+just does not become a numbered record every future reader has to maintain, reconcile, and supersede.
+
+### Worked decline — an easy-to-reverse change
+
+*Topic*: "Raise the HTTP client timeout from 10s to 30s."
+
+W1 fails: reverting is a one-line constant change with nothing accrued against it. W2 and W3 are
+arguable, but the gate is conjunctive and short-circuits, so the command declines on W1, names W1 as
+the failed condition, and creates no file under `docs/adr/`. The rationale goes in the commit
+message.
+
 ## Output Format (ADR — `--type adr`)
 
 Creates `docs/adr/ADR-XXX-title.md`, sections in order:

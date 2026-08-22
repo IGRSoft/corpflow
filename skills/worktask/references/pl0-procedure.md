@@ -421,7 +421,11 @@ Platform variant = the same role from the detected platform's plugin, per the re
 
 ##### DV0 routing override — plugin worktask-infrastructure
 
-Single source of truth — do NOT duplicate elsewhere. The DV0 default `corpflow:developer` routes *platform app-code*. Route DV to `metadata.agent: "corpflow:workflow-engineer"` (model `opus`, error_file `.context/errors/workflow-engineer.md`) when the change touches worktask-infrastructure files that are **executed** — the plugin tree's `**/*.sh`, `**/*.bats`, `hooks/**`, and JSON consumed by those scripts. The anchor is the plugin/worktask tree, never the extension alone: a product repo's shell or CI script is platform code and keeps the default route (bash → `system-developer` via `corpflow:developer`, per the registry). Markdown is never routed here by directory: prompt prose under `skills/worktask/**` stays with the prompt-asset owner unless the `.md` is the normative spec of a script's or the ledger's contract (ledger keys, CLI flags, exit codes), which is infrastructure regardless of extension. Platform/app code (Swift, server, web, product source) stays `corpflow:developer` (or the `apple-developer:*` variant); a mixed worktask splits DV sub-tasks by scope and routes each independently. `stage-codes.md` keeps the unconditional DV default and points here.
+Single source of truth — do NOT duplicate elsewhere. The DV0 default `corpflow:developer` routes *platform app-code*. Route DV to `metadata.agent: "corpflow:workflow-engineer"` (model `opus`, error_file `.context/errors/workflow-engineer.md`) when the change touches **executed** worktask-infrastructure in the plugin tree: `**/*.sh`, `**/*.bats`, `hooks/**`, and the JSON those scripts read. The anchor is that tree, never the extension alone — a product repo's shell or CI script is platform code and keeps the default route (bash → `system-developer` via `corpflow:developer`, per the registry). Platform/app code (Swift, server, web, product source) stays `corpflow:developer` or the `apple-developer:*` variant; a mixed worktask splits DV sub-tasks by scope and routes each independently. `stage-codes.md` keeps the unconditional DV default and points here.
+
+###### Markdown routes by role, never by directory
+
+Prompt prose under `skills/worktask/**` stays with the prompt-asset owner. The one exception is an `.md` that is the normative spec of a script's or the ledger's contract — ledger keys, CLI flags, exit codes — which is infrastructure regardless of extension.
 
 ###### Worked example
 
@@ -523,6 +527,41 @@ Before finalizing a plan draft, scan the task text for a **scope noun with multi
 ## Plan-Gate Open-Question Batching
 
 More than two open questions for the plan gate (explicit `open_questions[]` + unprompted refinements) consolidate into ONE numbered elicitation list in `## summary`, each item carrying a concrete recommended default (`1. Ship dark mode as an opt-in toggle? (default: yes, opt-in)`). Surface the whole list in a single gate round-trip and apply the user's amendments in one batch pass before marking PL0 complete — not one PL resume per answer.
+
+### Facts are PL0's job; decisions are the user's
+
+A candidate question is a **fact** when some artifact already holds its answer — the filesystem, git
+history, a manifest, a lint's exit code, `gh`, or any tool PL0 can run. Facts never reach the plan
+gate: PL0 resolves them itself and records the resolved value in the plan, marked verified. A
+candidate is a **decision** only when the answer turns on what the user *wants* rather than on what
+is *true*. `open_questions[]` may carry decisions only.
+
+Apply the test to every candidate before writing it down: name the command, file, or tool that would
+answer it. If you can name one, delete the question and run it. Worked example and its assertions:
+`skills/worktask/references/fixtures/plan-gate-questions/01-facts-only-zero-questions.md`.
+
+#### Cost is not an exemption
+
+When the lookup is slow or wide — a repo-wide sweep, a cross-plugin check, a `gh` query over many
+issues — dispatch a subagent to perform it and wait for the result. Expense promotes a fact to
+delegated work, never to a gate item. "I did not look" and "the user must choose" are different
+states, and only the second one belongs in front of a human.
+
+A fact surfaced as a question costs a full gate round-trip and returns an answer PL0 could have had
+for one tool call — and the user, lacking the repository in context, often answers it wrong.
+
+### Dependency ordering across gate rounds
+
+A question whose answer depends on another still-open question is **deferred to a later round**, not
+batched beside it. Batching a dependent pair forces the user to answer the second question under
+every branch of the first, which is how a gate list grows conditional sub-clauses nobody can answer
+cleanly.
+
+Emit only the independent questions this round. Record each deferred question in the plan text next
+to the question it waits on, so the reader can see that a second list exists and why it is not in
+front of them. After the batch pass applies the answers, re-evaluate every deferred question: the
+answer usually resolves it outright — often into a fact, which is then PL0's to look up — and only
+what survives becomes a second round.
 
 ### Assumption tagging for plan-shaping questions
 

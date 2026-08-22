@@ -1,6 +1,5 @@
 ---
 name: Git Conventions
-description: Commit message format, PR format, and git safety overrides beyond CC defaults
 category: git
 priority: high
 alwaysApply: true

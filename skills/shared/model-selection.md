@@ -1,6 +1,5 @@
 ---
 name: model-selection
-description: Model selection guidelines for haiku/sonnet/opus tier selection, cost tiers, and selection criteria. Reference when choosing models for agent delegation or task routing.
 effort: low
 ---
 

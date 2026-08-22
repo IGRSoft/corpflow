@@ -7,7 +7,6 @@ import contextlib
 import json
 import os
 import shutil
-import subprocess
 import tempfile
 import unittest
 
@@ -15,6 +14,8 @@ from benchmarkkit import oracle
 from benchmarkkit.genlib import Subprocess
 from benchmarklive.baseline import AppMeasure
 from benchmarklive.dispatch import _arm_verdict, build_live_record
+from _swiftenv import (SKIP_REASON, _TEMPLATE_FRAMEWORKS,
+                       swift_can_build_template)
 
 
 @contextlib.contextmanager
@@ -28,16 +29,6 @@ def _tmpdir():
 _HARNESS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _TEMPLATE = os.path.join(os.path.dirname(_HARNESS), "ttt-template")
 _CASES = os.path.join(os.path.dirname(_HARNESS), "oracle", "cases.json")
-
-
-def _swift_toolchain_usable():
-    if not shutil.which("swift"):
-        return False
-    try:
-        return subprocess.run(["swift", "--version"], capture_output=True,
-                              timeout=120).returncode == 0
-    except (OSError, subprocess.SubprocessError):
-        return False
 
 
 class FakeRunner:
@@ -188,7 +179,38 @@ class CasesFile(unittest.TestCase):
         self.assertGreaterEqual(tiers.count("implied"), 5)
 
 
-@unittest.skipUnless(_swift_toolchain_usable(), "working swift toolchain required (measurement instrument)")
+class SwiftGateCoversTheTemplate(unittest.TestCase):
+    """The gate is only honest while it names every Apple-only import in use.
+
+    A new `import CoreGraphics` in the template would build on macOS, fail on a
+    Linux runner, and — because the probe would still typecheck — be gated in.
+    """
+
+    # Available in the Linux toolchain (or supplied by SwiftPM / the package
+    # itself), so their presence says nothing about the host platform.
+    PORTABLE = {"Foundation", "Observation", "Testing", "PackageDescription",
+                "TicTacToeKit"}
+
+    def test_every_template_import_is_classified(self):
+        found = set()
+        for base, _dirs, files in os.walk(_TEMPLATE):
+            if ".build" in base:
+                continue
+            for name in files:
+                if not name.endswith(".swift"):
+                    continue
+                with open(os.path.join(base, name), encoding="utf-8") as f:
+                    for line in f:
+                        if line.startswith("import "):
+                            found.add(line.split()[1].strip())
+        self.assertTrue(found, "no imports found; the template moved")
+        unclassified = found - self.PORTABLE - set(_TEMPLATE_FRAMEWORKS)
+        self.assertEqual(unclassified, set(),
+                         "add these to _swiftenv._TEMPLATE_FRAMEWORKS or to "
+                         "PORTABLE, or the Apple gate silently stops covering them")
+
+
+@unittest.skipUnless(swift_can_build_template(), SKIP_REASON)
 class AgainstReferenceImplementation(unittest.TestCase):
     def test_reference_sweeps_its_own_goldens(self):
         r = oracle.grade(_TEMPLATE, cases=oracle.load_cases(_CASES))

@@ -1,7 +1,7 @@
 ---
 name: prompt-audit
-description: Comprehensive audit of agents, commands, and prompts for quality, consistency, and best practices
-argument-hint: '[--scope agents|commands|all]'
+description: Comprehensive audit of agents, commands, skills, and prompts for quality, consistency, and best practices
+argument-hint: '[--scope agents|commands|skills|all]'
 allowed-tools: Read, Glob, Grep
 model: sonnet
 related:
@@ -13,7 +13,7 @@ related:
 
 # Prompt Audit Command
 
-Comprehensive audit of agents, commands, and prompts for quality, consistency, and best practices. Identifies issues and generates improvement recommendations.
+Comprehensive audit of agents, commands, skills, and prompts for quality, consistency, and best practices. Identifies issues and generates improvement recommendations.
 
 ## Usage
 
@@ -21,6 +21,7 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 /prompt-audit
 /prompt-audit --agents
 /prompt-audit --commands
+/prompt-audit --skills
 /prompt-audit --report
 ```
 
@@ -28,6 +29,7 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 
 - `--agents` - Audit agents only
 - `--commands` - Audit commands only
+- `--skills` - Audit skill manifests only (`skills/**/SKILL.md`)
 - `--report` - Generate detailed audit report file
 - `--fix` - Auto-fix minor issues (formatting, links)
 - `--severity <level>` - Minimum severity: info, warning, error
@@ -38,6 +40,7 @@ Comprehensive audit of agents, commands, and prompts for quality, consistency, a
 /prompt-audit
 /prompt-audit --agents --report
 /prompt-audit --commands --fix
+/prompt-audit --skills --report
 /prompt-audit --severity warning
 ```
 
@@ -49,7 +52,7 @@ Report skeleton — sections in this order:
 # Prompt Ecosystem Audit
 
 ## Summary
-| Category | Total | Pass | Warn | Fail |   (rows: Agents, Commands, **Total**)
+| Category | Total | Pass | Warn | Fail |   (rows: Agents, Commands, Skills, **Total**)
 **Health Score**: N/100 (label)
 
 ## Critical Issues 🔴        (numbered; each: Issue / Location `file:line` / Details / Fix)
@@ -75,6 +78,7 @@ Report skeleton — sections in this order:
 - Scores are n/10; status glyphs ✅ Pass / ⚠️ Warn / 🔴 Fail.
 - `--severity` filters which findings appear; the Summary counts stay unfiltered.
 - Group identical findings across files into a single numbered entry listing the files.
+- Skill-manifest findings share the same numbered Critical/Warnings lists and the same `<file>:<line>` locators; the Summary carries a Skills row.
 
 ## Audit Rules
 
@@ -87,6 +91,7 @@ Report skeleton — sections in this order:
 5. Worktask stage integration documented, and every stage code referenced still exists in `skills/shared/stage-codes.md` (removed/renamed stages are a critical finding)
 6. Example interactions provided
 7. `description` follows the trigger-first grammar (G1-G7) and the guidance form matches the failure class — both normative in `agents/prompt-engineer.md § Description grammar` and `§ Form to failure`
+8. Body passes § Body Rules (disclosure, completion criteria, negation form, no-op pruning)
 
 ### Command Rules
 
@@ -96,6 +101,48 @@ Report skeleton — sections in this order:
 4. Output format specification
 5. Related section with links
 6. Consistent option format
+7. Body passes § Body Rules — the same four checks agents get
+
+### Body Rules (agents, commands, skills)
+
+Normative source: `agents/prompt-engineer.md § Prompt-body doctrine`. These four run on every asset
+class — a `SKILL.md` is a prompt body with frontmatter on top, so its body is audited here even
+though its frontmatter is audited under § Frontmatter Parsing Convention.
+
+#### Body rule 1 — disclosure (information hierarchy)
+
+Measure H2 subtree spans: `grep -n '^## ' <asset>`, difference consecutive line numbers, last span
+runs to EOF. A span over **200 lines** is a *candidate*, not yet a finding.
+
+Confirm each candidate with the doctrine's branching test. A candidate whose body is reached only on
+*some* branches is a **disclosure finding**: report `<file>:<line>`, the span in lines, the branch
+that reaches it, and a Fix line naming the reference file it belongs behind. A candidate every run
+executes end to end is correctly inline and is not a finding.
+
+Worked example, the plugin's largest manifest: `skills/worktask/SKILL.md`'s
+`## Orchestrator Execution Loop` spans ~935 lines and is reached branch-wise (auto-decision path,
+megatask mode, screenshot gate), so the audit reports it as a disclosure finding.
+
+#### Body rule 2 — completion criteria
+
+Every numbered step ends on a criterion. Flag a criterion that fails either axis:
+
+- **clarity** — done is not distinguishable from not-done ("reviewed the diff");
+- **demand** — satisfiable by a plausible assertion because no artifact is named to check it against
+  ("produce a change list").
+
+The Fix line names the artifact the criterion is checked against; it never adds adjectives.
+
+#### Body rules 3–4 — negation form and no-op pruning
+
+3. **Negation form.** For each `DO NOT` / "never" rule, name the failure class it targets against
+   `agents/prompt-engineer.md § Form to failure`. A prohibition aimed at any row but "knows the
+   rule, skips it under pressure" is a warning whose Fix line names the correct form — positive
+   recipe, REQUIRED template slot, or conditional on an observable predicate. Existing
+   `## Constraints (DO NOT)` blocks are reported, never auto-fixed: `--fix` must not touch them.
+4. **No-op instructions.** Flag an instruction the asset's own `model:` already obeys by default —
+   the test is model-relative, so the same sentence can be load-bearing in one asset and waste in
+   another. The Fix line is deletion of the whole sentence; a reworded no-op is still a no-op.
 
 ### Consistency Rules
 

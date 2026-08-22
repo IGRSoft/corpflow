@@ -7,6 +7,9 @@ effort: medium
 tools: Read, Edit, Write, Bash, Glob, Grep
 argument-hint: "<modified_files-newline-list> [--auto-add=true|false]"
 keep-coding-instructions: true
+# G3: no standalone value — it edits Swift sources mid-capture using an adapter's
+# modified-file argv, which a user outside a DV screenshot run does not have.
+disable-model-invocation: true
 ---
 
 # preview-ensurer

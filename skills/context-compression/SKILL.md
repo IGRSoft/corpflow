@@ -35,7 +35,7 @@ Second-most-effective: prefix-prefix equality with the Anthropic prompt cache tu
 
 ### Prefix stability rules
 
-Forbidden in [1][2][4]: timestamps, ENV expansions, random IDs, retry counters, file mtimes, agent-specific names beyond `worktask_id`. `skills/worktask/scripts/cache-lint.sh` asserts byte-stability, but manual-only — not wired to CI.
+Forbidden in [1][2][4]: timestamps, ENV expansions, random IDs, retry counters, file mtimes, agent-specific names beyond `worktask_id`. `skills/worktask/scripts/cache-lint.sh` asserts byte-stability. CI runs it in `--self-test` mode on every PR (`.github/workflows/test.yml`), which gates the parser and its fixtures; asserting a real captured `prompt-log.jsonl` is still a manual run, because nothing in this repo emits one.
 
 Expected `cache_read_input_tokens`: ≈20% on cross-stage transitions, ≈80% on retries within a stage, ≈60% cross-stage average — meets AC-14 threshold of `≥60%` for stages 2–N.
 

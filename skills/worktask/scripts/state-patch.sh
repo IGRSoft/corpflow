@@ -494,7 +494,9 @@ replay_audit() {
 disk_guard() {
   local root="${1:-.}"
   local avail_gb=""
-  avail_gb=$(df -Pg "$root" 2> /dev/null | awk 'NR==2 {print $4+0}') || avail_gb=""
+  # -g is BSD-only; GNU df rejects it and prints nothing, which silently degraded
+  # the guard to a no-op on Linux. -Pk is POSIX on both, so convert here instead.
+  avail_gb=$(df -Pk "$root" 2> /dev/null | awk 'NR==2 {printf "%d", $4/1048576}') || avail_gb=""
 
   [[ -z "$avail_gb" ]] && return 0 # df unparseable → degrade silently, never block
 

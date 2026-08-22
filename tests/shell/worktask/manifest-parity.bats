@@ -26,6 +26,41 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
   assert_success
 }
 
+# The two manifests are read by different consumers — plugin.json by the runtime,
+# marketplace.json by the marketplace listing — so a description or keyword edit
+# applied to one drifts silently from the other. Nothing else compares them.
+@test "AC-13: plugin.json and marketplace.json agree on description" {
+  local plugin_desc market_desc market_meta_desc
+  plugin_desc="$(jq -r '.description' "$PLUGIN_ROOT/.claude-plugin/plugin.json")"
+  market_desc="$(jq -r '.plugins[0].description' "$PLUGIN_ROOT/.claude-plugin/marketplace.json")"
+  market_meta_desc="$(jq -r '.metadata.description' "$PLUGIN_ROOT/.claude-plugin/marketplace.json")"
+
+  [ -n "$plugin_desc" ]
+  [ "$plugin_desc" = "$market_desc" ]
+  [ "$plugin_desc" = "$market_meta_desc" ]
+}
+
+@test "AC-13: plugin.json and marketplace.json agree on keywords, capped at 15" {
+  local plugin_kw market_kw count
+  plugin_kw="$(jq -c '.keywords' "$PLUGIN_ROOT/.claude-plugin/plugin.json")"
+  market_kw="$(jq -c '.plugins[0].keywords' "$PLUGIN_ROOT/.claude-plugin/marketplace.json")"
+  [ "$plugin_kw" = "$market_kw" ] || fail "keyword drift: plugin=$plugin_kw marketplace=$market_kw"
+
+  # The cap is what keeps the list a description of the plugin rather than a
+  # changelog: the array reached 120 entries, most of them release-note tokens.
+  count="$(jq -r '.keywords | length' "$PLUGIN_ROOT/.claude-plugin/plugin.json")"
+  [ "$count" -ge 1 ]
+  [ "$count" -le 15 ] || fail "keywords: $count entries, cap is 15"
+}
+
+@test "AC-13: no keyword is version- or release-note-shaped" {
+  # CHANGELOG.md already carries per-release detail; a keyword naming a model
+  # generation or a removed feature is stale the day the next version ships.
+  run bash -c "jq -r '.keywords[]' '$PLUGIN_ROOT/.claude-plugin/plugin.json' \
+    | grep -nE 'opus|sonnet|haiku|fable|[0-9]+\\.[0-9]+|removed|cleanup|default\$|deprecat'"
+  assert_failure
+}
+
 @test "AC-9: test-execution-gate.sh is registered under PreToolUse and is executable on disk" {
   [ -x "$PLUGIN_ROOT/hooks/test-execution-gate.sh" ]
   run jq -r '.hooks.PreToolUse[].hooks[].command' "$PLUGIN_ROOT/.claude-plugin/plugin.json"

@@ -308,20 +308,31 @@ STUB
   local stub; stub="$(mk_tmpworkdir)/wide-stub.sh"
   _mk_wide_stub "$stub"
 
+  # Both halves drive a sandbox copy, never $PLUGIN_ROOT/run-tests.sh: a fall-through
+  # in the real tree re-enters the whole suite from inside a test, unbounded and
+  # silent because bats captures the child's output. CORPFLOW_TEST_SELECT is pinned
+  # to 1 because both verdicts below only exist while selection is enabled, and CI
+  # exports 0 for the whole suite step.
+  local sandbox; sandbox="$(mk_tmpworkdir)"
+  _mk_runner_sandbox "$sandbox"
+
   # DV in progress: refuse and hand off, without running anything.
   local ctx; ctx="$(mk_tmpworkdir)"
   mkdir -p "$ctx/.context"
   printf '{"tasks":{"DV0":{"status":"in_progress"}}}\n' > "$ctx/.context/state.json"
-  CLAUDE_PROJECT_DIR="$ctx" RUN_TESTS_SELECTOR="$stub" \
-    run "$PLUGIN_ROOT/run-tests.sh" --changed
+  CORPFLOW_TEST_SELECT=1 CLAUDE_PROJECT_DIR="$ctx" RUN_TESTS_SELECTOR="$stub" \
+    run bash "$sandbox/run-tests.sh" --changed
   [ "$status" -eq 65 ] || fail "expected exit 65 under DV, got $status: $output"
   assert_output --partial "hand off to QA"
   refute_output --partial "bats file(s)"
+  if grep -q '\.bats' "$sandbox/bats-args"; then
+    fail "the DV refusal still started the suite: $(cat "$sandbox/bats-args")"
+  fi
 
   # No worktask state: the same widening is informational.
   local nostate; nostate="$(mk_tmpworkdir)"
-  CLAUDE_PROJECT_DIR="$nostate" RUN_TESTS_SELECTOR="$stub" \
-    run "$PLUGIN_ROOT/run-tests.sh" --changed --print-selection
+  CORPFLOW_TEST_SELECT=1 CLAUDE_PROJECT_DIR="$nostate" RUN_TESTS_SELECTOR="$stub" \
+    run bash "$sandbox/run-tests.sh" --changed --print-selection
   assert_success
   assert_output --partial "VERDICT	WIDE"
 }
@@ -381,7 +392,10 @@ _ALWAYS_FLOOR="tests/shell/lib/test-helper.bats tests/shell/meta/coverage-proxy.
   printf '#!/usr/bin/env bash\nexec bash %s --changed --base HEAD --root %s\n' \
     "$SELECTOR" "$wd" > "$stub"
   chmod +x "$stub"
-  RUN_TESTS_SELECTOR="$stub" run "$PLUGIN_ROOT/run-tests.sh" --changed --print-selection
+  # Pinned: CI exports CORPFLOW_TEST_SELECT=0 for the whole suite step, under which
+  # --print-selection reports FULL/DISABLED and never reaches a floor to show.
+  CORPFLOW_TEST_SELECT=1 RUN_TESTS_SELECTOR="$stub" \
+    run "$PLUGIN_ROOT/run-tests.sh" --changed --print-selection
   assert_success
   assert_output --partial "SELECT	tests/shell/meta/coverage-proxy.bats	L3:ALWAYS"
 }
@@ -440,6 +454,44 @@ STUB
     fail "--print-selection started the suite: $(cat "$wd/bats-args")"
   fi
   refute_output --partial "bats file(s)"
+}
+
+@test "M20: re-entering a tree already under test fails loudly instead of recursing" {
+  # The hang this pins: CI exports CORPFLOW_TEST_SELECT=0 for the whole suite step,
+  # which disables selection in any inner run-tests.sh and so skips the refusal
+  # branches a caller was relying on to run nothing. Without the guard the inner
+  # call runs the full suite, reaches this file again, and recurses until the job
+  # times out — with no output at all, because bats captures the child's stream.
+  local wd; wd="$(mk_tmpworkdir)"
+  _mk_runner_sandbox "$wd"
+
+  CORPFLOW_TEST_SELECT=0 RUN_TESTS_ACTIVE_ROOT="$wd" RUN_TESTS_SELECTOR="$wd/selector-stub.sh" \
+    run bash "$wd/run-tests.sh" --changed
+  assert_failure
+  assert_output --partial "re-entered for a tree already under test"
+  if grep -q '\.bats' "$wd/bats-args"; then
+    fail "the guard let the suite phase start: $(cat "$wd/bats-args")"
+  fi
+}
+
+@test "M21: the guard keys on the tree, so it spares --print-selection and other roots" {
+  local wd; wd="$(mk_tmpworkdir)"
+  _mk_runner_sandbox "$wd"
+
+  # A mode that runs nothing stays callable from inside a run — that is what makes
+  # a sandboxed inner invocation a workable substitute for the real tree.
+  RUN_TESTS_ACTIVE_ROOT="$wd" RUN_TESTS_SELECTOR="$wd/selector-stub.sh" \
+    run bash "$wd/run-tests.sh" --changed --print-selection
+  assert_success
+  refute_output --partial "re-entered"
+
+  # A different root is a different tree: an outer real run must not block a sandbox.
+  # Exit status is unasserted on purpose — the sandbox has no python/swift phases,
+  # so a non-zero rc there says nothing about the guard. Reaching the suite phase does.
+  RUN_TESTS_ACTIVE_ROOT="$PLUGIN_ROOT" RUN_TESTS_SELECTOR="$wd/selector-stub.sh" \
+    run bash "$wd/run-tests.sh" --changed
+  refute_output --partial "re-entered"
+  grep -q '\.bats' "$wd/bats-args" || fail "a differently-rooted run was blocked from its suite phase"
 }
 
 @test "M14: the selector does not name the plugin-root environment variable" {

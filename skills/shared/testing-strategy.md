@@ -1,6 +1,5 @@
 ---
 name: testing-strategy
-description: Cross-platform testing reference — testing pyramid, AAA pattern, per-platform framework and naming map, DV/QA boundary, and the Test Selection Gate. Reference when planning or implementing tests on any platform (apple, android, web, systems, backend, ai).
 effort: low
 version: 0.4.0
 ---

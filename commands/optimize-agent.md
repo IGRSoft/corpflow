@@ -83,6 +83,7 @@ Sections in order below. `--dry-run` omits Changes Applied.
 - **tools**: tool access, permissions, integration
 - **model**: model selection (haiku/sonnet/opus/fable)
 - **frontmatter**: description length, hooks, effort, model, tools least-privilege — see § Frontmatter Audit
+- **body**: information hierarchy, completion criteria, negation form, no-op pruning — see § Body doctrine
 - **failure-modes**: see § Failure Mode Analysis
 
 ## Optimization Criteria
@@ -94,6 +95,29 @@ Unambiguous purpose; defined capability boundaries; explicit behavioral expectat
 ### Efficiency
 
 Dense actionable instructions; no redundancy; one canonical example per behavior instead of repeated variants.
+
+### Body doctrine
+
+Runs on every agent regardless of `--focus`; findings land in Findings by Area. Normative source:
+`agents/prompt-engineer.md § Prompt-body doctrine`; measurement procedure:
+`commands/prompt-audit.md § Body Rules`.
+
+| Check | Finding when | Fix line states |
+|---|---|---|
+| **Disclosure** | An H2 subtree over 200 lines whose body only *some* branches reach | The reference file it belongs behind, and which branch reaches it |
+| **Completion criteria** | A criterion fails *clarity* (done indistinguishable from not-done) or *demand* (no artifact named to check it against) | The artifact it is checked against |
+| **Negation form** | A `DO NOT` aimed at any `§ Form to failure` row but "knows the rule, skips it under pressure" | The correct form — positive recipe, REQUIRED template slot, or observable-predicate conditional |
+| **No-op pruning** | An instruction this agent's own `model:` already obeys by default | Deletion of the whole sentence, never a rewording |
+
+#### Body doctrine — two guards
+
+An existing `## Constraints (DO NOT)` block is **reported, never rewritten in place** — recasting
+constraint blocks under the negation rule is its own worktask, so the finding is advisory and
+`--dry-run` semantics apply to it even without the flag.
+
+A disclosure finding against a section every run executes end to end is a **false positive**: length
+is the symptom that makes you look, branching is what decides, and inline is the correct tier for
+work every branch reaches.
 
 ### Model Selection
 
