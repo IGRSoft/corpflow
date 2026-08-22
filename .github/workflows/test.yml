@@ -49,8 +49,14 @@ jobs:
         run: |
           { echo '### Skipped phases'
             echo
-            awk '/SKIPPED PHASES:/{f=1} f' run-tests.log | grep . \
-              || echo 'none — every phase ran'; } >> "$GITHUB_STEP_SUMMARY"
+            # always() also fires when preflight failed or the suite was cancelled;
+            # with no log the empty-pipeline fallback would claim every phase ran.
+            if [ -f run-tests.log ]; then
+              awk '/SKIPPED PHASES:/{f=1} f' run-tests.log | grep . \
+                || echo 'none — every phase ran'
+            else
+              echo 'suite did not run — no run-tests.log'
+            fi; } >> "$GITHUB_STEP_SUMMARY"
 
   lint:
     runs-on: ubuntu-24.04

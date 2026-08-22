@@ -7,7 +7,6 @@ shared across assertions; temp dirs cleaned in tearDownClass.
 import os
 import re
 import shutil
-import subprocess
 import tempfile
 import unittest
 
