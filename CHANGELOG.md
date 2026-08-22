@@ -23,10 +23,11 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Changed
 
-- **Manifest keywords reduced 120 → 15 per marketplace specification.** The keywords array in
-  `plugin.json` is now the canonical list; `marketplace.json` entries for `description` and
-  `version` are synchronized from the plugin definition via the `c435cc7` commit to ensure
-  parity.
+- **Manifest keywords reduced 120 → 15.** The array had grown to include release-note tokens
+  (opus-4-8, todo-tools-removed, etc.) that CHANGELOG.md already carries. Keywords are now
+  descriptive terms for the plugin only. The keywords array in `plugin.json` is the canonical
+  list; `marketplace.json` entries for `description` and `version` are synchronized from the
+  plugin definition to ensure parity.
 - **Four stale "not wired to CI" claims removed** across `commands/arch-decision.md`,
   `commands/docs-audit.md`, and `skills/worktask/SKILL.md` — the plugin now has CI and these
   assertions are now false.
@@ -40,10 +41,6 @@ All notable changes to this project are documented here. The format is based on 
   GitHub. The `shell: bash` key activates `set -o pipefail`, gating the job's overall status on
   the suite's actual result. DR mutation-tested both the suite-step and per-command assertions;
   QA independently re-derived the harness and confirmed non-vacuity.
-- SKIPPED_PHASES header no longer emitted on clean runs — it was a conditional `echo` gated on
-  a non-empty bash array, not an unconditional suppression. The array is empty when every test
-  phase runs (the designed path); the header is conditional on non-empty. Clarified as a
-  documentation fix in `qa-0.md`.
 - **`disable-model-invocation` applied to two pipeline-only skills** (`preview-ensurer`,
   `csv-export-templates`) so they do not load in stages that cannot use them. Each carries a
   `# G3: …` rationale comment in `SKILL.md`.
