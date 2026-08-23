@@ -18,6 +18,7 @@ Exit codes: 0 all graded cases passed / 1 at least one case failed
 from __future__ import annotations
 
 import argparse
+import collections
 import importlib.util
 import json
 import os
@@ -70,6 +71,8 @@ def main(argv_in: list) -> int:
     p.add_argument("--split", choices=("train", "dev", "test"), default=None,
                    help="grade only this tranche; test stays unread until judge validation")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--allow-mixed", action="store_true",
+                   help="grade across skill versions anyway; the score describes no single skill")
     try:
         args = p.parse_args(argv_in)
     except SystemExit:
@@ -107,6 +110,7 @@ def main(argv_in: list) -> int:
             stale.append(cid)
             continue
         result = grade_record(eval_set, record)
+        result["skill_version"] = record.get("skill_version")
         result["dimensions"] = engine.find_case(eval_set, cid).get("dimensions", {})
         if result["status"] == "stale":
             stale.append(cid)
@@ -114,6 +118,20 @@ def main(argv_in: list) -> int:
 
     # Reported separately for visibility, but inside the denominator: asking when the
     # case wanted a plan is a wrong answer, not an abstention.
+    # One headline over two skill versions is a chimera: 75 v0.4.0 records averaged with
+    # 46 v0.5.0 records reported "89/121 passed", a number describing no skill that exists.
+    # Refused rather than warned — a warning above a plausible number gets read past.
+    versions = sorted({r.get("skill_version") for r in results if r.get("skill_version")})
+    if len(versions) > 1 and not args.allow_mixed:
+        counts = collections.Counter(r.get("skill_version") for r in results)
+        sys.stderr.write(
+            "eval-grade: responses span skill versions "
+            + ", ".join(f"{v}x{counts[v]}" for v in versions)
+            + "; one score over them describes no skill.\n"
+              "  Re-capture the older ones, grade with --case/--split, or pass "
+              "--allow-mixed if a spanning number is genuinely what you want.\n")
+        return 2
+
     clarified = [r for r in results if r.get("asked_instead")]
     graded = [r for r in results if r["status"] != "stale"]
     failed = [r for r in graded if r["status"] == "fail"]
