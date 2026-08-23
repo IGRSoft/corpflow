@@ -1,6 +1,7 @@
 {
   "skill_name": "request-plan",
-  "grading": "Binary code-checked assertions over the skill's rendered plan. Every assertion is objectively decidable from the text — no judge, no scale. Criteria needing interpretation are listed under `deferred` and are deliberately NOT graded until a validated evaluator exists.",
+  "eval_set_version": "0.1.0",
+  "grading": "Binary code-checked assertions over the skill's rendered plan. Every assertion is objectively decidable from the text — no judge, no scale. Criteria needing interpretation are listed under `deferred` and are deliberately NOT graded until a validated evaluator exists.\n\nRUBRIC (2026-08-23) — structure vs substance. A substantively correct plan still FAILS when it drops the P0/P1/P2 phase model or the T-shirt-size + 0-25 complexity pair. Those fields are a machine interface, not formatting: milestone-helpers.sh:43 and build-orchestrator.sh:109 parse the tier literally for priority ordering, and validate-export.sh pins them in the CSV schema, so a plan without them cannot be consumed by the stage that receives it. Heading syntax is NOT covered by this rule -- bold pseudo-headings satisfy template-sections-present by design. Written after cases 8, 51, 56 and 78 were labelled inconsistently on identical shape.\n\nROUTE GROUND TRUTH (case 13, decided 2026-08-23) — the tier follows the REQUEST, never what investigation later reveals. Case 13 (\"audit-tooluse.sh may be logging tool inputs verbatim\") was std and a plan emitting --secure failed, even though the hook does write to a committed audit.jsonl. (Case 13 became a `refute` case in 0.0.1 and no longer carries a route assertion; it is kept here as the worked example, because the rule is what was decided, not the case.) Hand-assigning tiers from what the code turns out to contain is what derive_route() exists to prevent; it previously failed correct plans on suspicions the code did not bear out. Do not relitigate per-case — change the markers in derive_route() or the prompt, or leave it.\n\nALREADY-SHIPS ANSWERS (decided 2026-08-23, revised after the v0.5.0 labels) — when the requested capability already exists, the correct answer refutes and STOPS: no plan template, no /worktask line, because there is no work to hand off. Case 16 is the reference shape; case 22 refuted and then rendered the full build plan anyway and fails for it. This does NOT relax SKILL.md § 4 for a disputed *defect report* — a misdiagnosed or unreproducible bug still owes the line, because triage is work. The distinction is whether anything remains to be done.\n\nBASELINE 0.0.1 (2026-08-23) — the corpus was reset. All prior labels, judgements, findings and captured responses were deleted: they spanned three skill versions and a case set that has since been repaired, so no number from them is comparable with one taken after. `eval_set_version` and SKILL.md `version:` both read 0.0.1 and move together. The rubric decisions above are kept deliberately — a labelling contract is not a result — but no TPR/TNR figure exists for the harness until the 0.0.1 capture has been human-labelled, so until then a grader pass rate is uncalibrated and means only what it literally counts.\n\nALREADY-SHIPS, NARROWED (SPEC CHANGE, SKILL.md 0.1.0, decided 2026-08-23) — this REPLACES the 0.0.1 already-ships rule above for captures at 0.1.0 and later. The 0.0.1 capture measured the old rule and found it fires far too wide: 13 responses stopped at \"this already ships\" on cases whose request was to FIND or USE a surface, and a human passed every one, while the harness failed each on 3-6 template assertions. § 4 now stops ONLY when all three hold — the request asked to build/add/fix, the thing exists as asked, and nothing remains. A request to find, reach or use an existing surface is a PLAN. A shipped headline with a live remainder is a refutation of the stale part PLUS a plan for the rest. Per the spec-change rule in evals/README.md, 0.0.1 labels are NOT re-flipped against this: those responses were correct answers to the old contract.\n\nWITHDRAWN AT 0.1.0 — `no-build-plan-for-work-that-exists`. It forbade the plan template on any refute case. Measured on the 0.0.1 capture it fired on 12 cases, all 12 human passes, and did NOT fire on case 22, the only refute case a human failed: TNR 0%, the pathology that retired the LLM judge. It also contradicts the narrowed § 4. The question it was reaching for — is this plan about the work just refuted, or about the live remainder — is now a `deferred` judge criterion, because telling those apart needs to read what the plan is ABOUT.",
   "assertion_types": {
     "contains_all": "every literal substring must be present",
     "contains_none": "no listed literal substring may be present",
@@ -24,11 +25,11 @@
     },
     {
       "id": "scope-names-in-and-out",
-      "why": "Out-of-scope is what stops scope creep; a plan with only In is half a scope",
-      "type": "contains_all",
+      "why": "Out-of-scope is what stops scope creep; a plan with only In is half a scope Matched on the literal \"**Out:**\" until case 21 wrote \"**Out (P1/P2 below):**\" and was failed for labelling the row it had correctly filled. The rubric in `grading` exempts heading syntax from the structure rule; this literal did not, so it was stricter than the rule it implements. The bold In/Out pair is what the section owes.",
+      "type": "regex_all",
       "values": [
-        "**In:**",
-        "**Out:**"
+        "\\*\\*In\\b",
+        "\\*\\*Out\\b"
       ]
     },
     {
@@ -43,10 +44,10 @@
     },
     {
       "id": "effort-sized-with-complexity",
-      "why": "Effort is a T-shirt size AND a 0-25 complexity score together; a bare digit anywhere in the text is not evidence either was given. The cell may carry an approximation marker or the 5-factor breakdown estimation-methodology asks for — rejecting either fails a plan for answering in more detail",
+      "why": "Effort is a T-shirt size AND a 0-25 complexity score together; a bare digit anywhere in the text is not evidence either was given. The cell may carry an approximation marker or the 5-factor breakdown estimation-methodology asks for — rejecting either fails a plan for answering in more detail Ranges are accepted in both cells: a plan sizing P0 and P0+P1 separately (\"XS (P0) / S (P0+P1)\", complexity \"3-6\") was reporting no size at all. The cell must START with a T-shirt size and the next cell with a 0-25 score; what qualifies them is the plan's business.",
       "type": "regex_any",
       "values": [
-        "\\|\\s*(XS|S|M|L|XL)(\\s*[-—–]\\s*(XS|S|M|L|XL))?\\s*\\|\\s*[~≈]?\\s*([0-9]|1[0-9]|2[0-5])\\b[^|]*\\|",
+        "\\|\\s*(XS|S|M|L|XL)\\b[^|]*\\|\\s*[~≈]?\\s*([0-9]|1[0-9]|2[0-5])\\b[^|]*\\|",
         "(XS|S|M|L|XL)[^\\n]*\\b([0-9]|1[0-9]|2[0-5])\\s*/\\s*25\\b"
       ]
     },
@@ -113,22 +114,32 @@
         "grounding": "obvious",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "dispatch.py was split in 18ba0c2; it is now a 352-line orchestration shim",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
+          "type": "regex_any",
           "values": [
-            1
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -136,7 +147,9 @@
         "benchmark/harness/benchmarklive/dispatch.py"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
     },
@@ -148,22 +161,32 @@
         "grounding": "obvious",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "c51ffa7 extracted the command bodies into a sourced library; 24,961 -> 8,763 B",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
+          "type": "regex_any",
           "values": [
-            1
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -171,7 +194,9 @@
         "skills/worktask/scripts/fn-preflight.sh"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "dev"
     },
@@ -183,22 +208,32 @@
         "grounding": "obvious",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "d32c8b3 split the release history into CHANGELOG-1/2/3.x.md; 183,163 -> 119,284 B",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
+          "type": "regex_any",
           "values": [
-            1
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -206,7 +241,9 @@
         "CHANGELOG.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
     },
@@ -218,22 +255,32 @@
         "grounding": "obvious",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "913d786 scores comment blocks rather than the raw ratio",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
+          "type": "regex_any",
           "values": [
-            1
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -241,44 +288,11 @@
         "hooks/dv-comment-density-gate.sh"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "train"
-    },
-    {
-      "id": 6,
-      "prompt": "add a --dry-run mode to the megatask skill. what's the plan?",
-      "dimensions": {
-        "type": "feature",
-        "grounding": "obvious",
-        "route": "std"
-      },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
-          "values": [
-            "/worktask\\s+\\\""
-          ]
-        },
-        {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
-          "values": [
-            1
-          ]
-        }
-      ],
-      "grounding": [
-        "skills/megatask/SKILL.md"
-      ],
-      "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
-      ],
-      "split": "dev"
     },
     {
       "id": 7,
@@ -288,22 +302,32 @@
         "grounding": "obvious",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "genlib.py was split in 8fe5aec; treecopy.py owns materialization",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
+          "type": "regex_any",
           "values": [
-            1
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -311,42 +335,9 @@
         "benchmark/harness/benchmarkkit/genlib.py"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
-      ],
-      "split": "test"
-    },
-    {
-      "id": 8,
-      "prompt": "branch-name.sh renames a branch that already tracks a remote. plan the fix.",
-      "dimensions": {
-        "type": "bug",
-        "grounding": "obvious",
-        "route": "std"
-      },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
-          "values": [
-            "/worktask\\s+\\\""
-          ]
-        },
-        {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
-          "values": [
-            1
-          ]
-        }
-      ],
-      "grounding": [
-        "skills/worktask/scripts/branch-name.sh"
-      ],
-      "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "dev"
     },
@@ -358,22 +349,32 @@
         "grounding": "obvious",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "171c74f added --json and ad26a1f pinned the --export CSV schema",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
+          "type": "regex_any",
           "values": [
-            1
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -381,44 +382,11 @@
         "commands/cost-report.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
-    },
-    {
-      "id": 10,
-      "prompt": "the analysis.py module has no module docs. plan the documentation.",
-      "dimensions": {
-        "type": "docs",
-        "grounding": "obvious",
-        "route": "std"
-      },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
-          "values": [
-            "/worktask\\s+\\\""
-          ]
-        },
-        {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
-          "values": [
-            1
-          ]
-        }
-      ],
-      "grounding": [
-        "benchmark/harness/benchmarkkit/analysis.py"
-      ],
-      "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
-      ],
-      "split": "train"
     },
     {
       "id": 11,
@@ -498,22 +466,32 @@
         "grounding": "obvious",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "e755c7e pinned the contract that only task_id and status derive from tool_input, guarded by audit-tooluse.bats",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
+          "type": "regex_any",
           "values": [
-            1
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -521,9 +499,11 @@
         "hooks/audit-tooluse.sh"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
-      "split": "dev"
+      "split": "train"
     },
     {
       "id": 14,
@@ -603,24 +583,32 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "/cost-report --export shipped, with cost-export-schema.bats pinning the schema",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "SKILL.md",
-            "csv-export-templates",
-            "skills/csv-export-templates/SKILL.md"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -628,7 +616,9 @@
         "skills/csv-export-templates/SKILL.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "dev"
     },
@@ -640,32 +630,43 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "8718972 added the facts.* union op the handoff channel lacked",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "hooks/state-merge.sh",
-            "state-merge",
-            "state-merge.sh"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
       "grounding": [
-        "hooks/state-merge.sh"
+        "hooks/state-merge.sh",
+        "skills/worktask/scripts/state-patch.sh"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
     },
@@ -714,24 +715,32 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "fe795df strips absolute paths from every mount and route",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "pr-body-lint",
-            "pr-body-lint.sh",
-            "skills/worktask/scripts/pr-body-lint.sh"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -739,7 +748,9 @@
         "skills/worktask/scripts/pr-body-lint.sh"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
     },
@@ -766,7 +777,6 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "SKILL.md",
             "self-improvement",
             "skills/self-improvement/SKILL.md"
           ]
@@ -788,24 +798,32 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "4196f2d unified batch branch naming with the worktask convention",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "branch-lib",
-            "branch-lib.sh",
-            "skills/worktask/scripts/branch-lib.sh"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -813,7 +831,9 @@
         "skills/worktask/scripts/branch-lib.sh"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "dev"
     },
@@ -825,24 +845,32 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "audit-subagent.sh already records agent coverage; /agent-report reads it",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "audit-subagent",
-            "audit-subagent.sh",
-            "hooks/audit-subagent.sh"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -850,7 +878,9 @@
         "hooks/audit-subagent.sh"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
     },
@@ -914,7 +944,6 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "SKILL.md",
             "estimation-methodology",
             "skills/estimation-methodology/SKILL.md"
           ]
@@ -973,24 +1002,32 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "107fc00 added the preflight issue scan that catches duplicates before the context exists",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "SKILL.md",
-            "gh-issue-dedup",
-            "skills/gh-issue-dedup/SKILL.md"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -998,7 +1035,9 @@
         "skills/gh-issue-dedup/SKILL.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "dev"
     },
@@ -1061,7 +1100,6 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "SKILL.md",
             "agent-coordination",
             "skills/agent-coordination/SKILL.md"
           ]
@@ -1098,7 +1136,6 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "SKILL.md",
             "self-improvement",
             "skills/self-improvement/SKILL.md"
           ]
@@ -1110,7 +1147,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 30,
@@ -1120,24 +1157,32 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "6db5984 added stale-check.sh, which detects stages wedged in_progress with no live agent",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "skills/worktask/scripts/state-patch.sh",
-            "state-patch",
-            "state-patch.sh"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -1145,9 +1190,11 @@
         "skills/worktask/scripts/state-patch.sh"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
-      "split": "dev"
+      "split": "train"
     },
     {
       "id": 31,
@@ -1172,14 +1219,17 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
+            "agent-coordination",
             "handoff-protocol",
             "handoff-protocol.md",
+            "skills/agent-coordination/SKILL.md",
             "skills/worktask/references/handoff-protocol.md"
           ]
         }
       ],
       "grounding": [
-        "skills/worktask/references/handoff-protocol.md"
+        "skills/worktask/references/handoff-protocol.md",
+        "skills/agent-coordination/SKILL.md"
       ],
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
@@ -1296,7 +1346,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 35,
@@ -1333,7 +1383,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "train"
     },
     {
       "id": 36,
@@ -1413,7 +1463,7 @@
       "deferred": [
         "Whether the question it asks is the most useful one — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "train"
     },
     {
       "id": 41,
@@ -1429,7 +1479,7 @@
       "deferred": [
         "Whether the question it asks is the most useful one — needs a validated judge."
       ],
-      "split": "train"
+      "split": "dev"
     },
     {
       "id": 42,
@@ -1445,7 +1495,7 @@
       "deferred": [
         "Whether the question it asks is the most useful one — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 43,
@@ -1461,11 +1511,11 @@
       "deferred": [
         "Whether the question it asks is the most useful one — needs a validated judge."
       ],
-      "split": "test"
+      "split": "dev"
     },
     {
       "id": 44,
-      "prompt": "state-patch.sh is 55KB. plan how to break it apart.",
+      "prompt": "state-patch.sh is 79KB. plan how to break it apart.",
       "dimensions": {
         "type": "refactor",
         "grounding": "obvious",
@@ -1500,7 +1550,7 @@
     },
     {
       "id": 45,
-      "prompt": "publish-pl-issue.sh is enormous. plan an extraction.",
+      "prompt": "publish-pl-issue.sh is 63KB even after an earlier split. plan a further extraction.",
       "dimensions": {
         "type": "refactor",
         "grounding": "obvious",
@@ -1531,42 +1581,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
-    },
-    {
-      "id": 46,
-      "prompt": "attachments-preseed.sh leaves temp files behind. plan a fix.",
-      "dimensions": {
-        "type": "bug",
-        "grounding": "obvious",
-        "route": "std"
-      },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
-          "values": [
-            "/worktask\\s+\\\""
-          ]
-        },
-        {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
-          "values": [
-            1
-          ]
-        }
-      ],
-      "grounding": [
-        "skills/worktask/scripts/attachments-preseed.sh"
-      ],
-      "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
-      ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 47,
@@ -1671,7 +1686,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 50,
@@ -1701,6 +1716,7 @@
         }
       ],
       "grounding": [
+        "benchmark/harness/benchmarkkit/analysis.py",
         "benchmark/harness/benchmarkkit/report.py"
       ],
       "deferred": [
@@ -1741,42 +1757,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
-    },
-    {
-      "id": 52,
-      "prompt": "rotation.py has no explanation of why it exists. plan the docs.",
-      "dimensions": {
-        "type": "docs",
-        "grounding": "obvious",
-        "route": "std"
-      },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
-          "values": [
-            "/worktask\\s+\\\""
-          ]
-        },
-        {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
-          "values": [
-            1
-          ]
-        }
-      ],
-      "grounding": [
-        "benchmark/harness/benchmarkkit/rotation.py"
-      ],
-      "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
-      ],
-      "split": "train"
+      "split": "test"
     },
     {
       "id": 53,
@@ -1786,22 +1767,32 @@
         "grounding": "obvious",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "46a1870 treats a full --stages list as a full run, not a subset",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
+          "type": "regex_any",
           "values": [
-            1
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -1809,9 +1800,11 @@
         "benchmark/harness/benchmarklive/baseline.py"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
-      "split": "dev"
+      "split": "train"
     },
     {
       "id": 54,
@@ -1850,7 +1843,7 @@
     },
     {
       "id": 55,
-      "prompt": "the developer agent file is 55KB. plan how to shrink it.",
+      "prompt": "the developer agent file is 48KB. plan how to shrink it.",
       "dimensions": {
         "type": "refactor",
         "grounding": "obvious",
@@ -1881,7 +1874,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 56,
@@ -1891,22 +1884,32 @@
         "grounding": "obvious",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "ed60cd9 extracted the PL0 procedure to a reference file; 53,902 -> 8,143 B",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
+          "type": "regex_any",
           "values": [
-            1
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -1914,44 +1917,11 @@
         "agents/product-manager.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "dev"
-    },
-    {
-      "id": 57,
-      "prompt": "the qa-engineer agent doesn't say who owns full suites. plan the docs.",
-      "dimensions": {
-        "type": "docs",
-        "grounding": "obvious",
-        "route": "std"
-      },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
-          "values": [
-            "/worktask\\s+\\\""
-          ]
-        },
-        {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
-          "values": [
-            1
-          ]
-        }
-      ],
-      "grounding": [
-        "agents/qa-engineer.md"
-      ],
-      "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
-      ],
-      "split": "train"
     },
     {
       "id": 58,
@@ -1961,22 +1931,32 @@
         "grounding": "obvious",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "488cd7a added tc_verdict for TC consults",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
+          "type": "regex_any",
           "values": [
-            1
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -1984,9 +1964,11 @@
         "agents/technical-lead.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 59,
@@ -1996,22 +1978,32 @@
         "grounding": "obvious",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "8c3d3ef added deterministic version-bump determination",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
+          "type": "regex_any",
           "values": [
-            1
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -2019,9 +2011,11 @@
         "agents/release-engineer.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
-      "split": "dev"
+      "split": "train"
     },
     {
       "id": 60,
@@ -2031,22 +2025,32 @@
         "grounding": "obvious",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "73765a1 added the STRIDE threat model to SR0",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
+          "type": "regex_any",
           "values": [
-            1
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -2054,7 +2058,9 @@
         "agents/security-reviewer.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "dev"
     },
@@ -2091,42 +2097,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
-    },
-    {
-      "id": 62,
-      "prompt": "hook-install.sh writes settings without a backup. plan a safer path.",
-      "dimensions": {
-        "type": "migration",
-        "grounding": "obvious",
-        "route": "std"
-      },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
-          "values": [
-            "/worktask\\s+\\\""
-          ]
-        },
-        {
-          "id": "cites-a-repo-path",
-          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
-          "type": "paths_resolve",
-          "values": [
-            1
-          ]
-        }
-      ],
-      "grounding": [
-        "skills/worktask/scripts/hook-install.sh"
-      ],
-      "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
-      ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 63,
@@ -2379,7 +2350,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "train"
     },
     {
       "id": 70,
@@ -2569,7 +2540,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "train"
     },
     {
       "id": 75,
@@ -2746,7 +2717,6 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "SKILL.md",
             "code-comment-standard",
             "skills/code-comment-standard/SKILL.md"
           ]
@@ -2758,7 +2728,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "train"
     },
     {
       "id": 80,
@@ -2783,7 +2753,6 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "SKILL.md",
             "security-review-process",
             "skills/security-review-process/SKILL.md"
           ]
@@ -2832,7 +2801,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 82,
@@ -2857,7 +2826,6 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "SKILL.md",
             "incident-response",
             "skills/incident-response/SKILL.md"
           ]
@@ -2906,7 +2874,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 84,
@@ -2933,17 +2901,24 @@
           "values": [
             "hooks/megatask-monitor.sh",
             "megatask-monitor",
-            "megatask-monitor.sh"
+            "megatask-monitor.sh",
+            "skills/worktask-status/SKILL.md",
+            "skills/worktask/scripts/status-view.sh",
+            "status-view",
+            "status-view.sh",
+            "worktask-status"
           ]
         }
       ],
       "grounding": [
+        "skills/worktask/scripts/status-view.sh",
+        "skills/worktask-status/SKILL.md",
         "hooks/megatask-monitor.sh"
       ],
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "train"
+      "split": "dev"
     },
     {
       "id": 85,
@@ -2953,24 +2928,32 @@
         "grounding": "adjacent",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "bde89d5 added explicit single-stage replay for failed stages",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "skills/worktask/scripts/state-patch.sh",
-            "state-patch",
-            "state-patch.sh"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -2978,9 +2961,11 @@
         "skills/worktask/scripts/state-patch.sh"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 86,
@@ -3005,7 +2990,6 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "SKILL.md",
             "estimation-methodology",
             "skills/estimation-methodology/SKILL.md"
           ]
@@ -3017,7 +3001,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "dev"
     },
     {
       "id": 87,
@@ -3042,7 +3026,6 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "SKILL.md",
             "agent-coordination",
             "skills/agent-coordination/SKILL.md"
           ]
@@ -3054,7 +3037,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 88,
@@ -3090,7 +3073,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "train"
     },
     {
       "id": 89,
@@ -3128,7 +3111,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "test"
+      "split": "dev"
     },
     {
       "id": 90,
@@ -3164,7 +3147,7 @@
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 91,
@@ -3180,7 +3163,7 @@
       "deferred": [
         "Whether the question it asks is the most useful one — needs a validated judge."
       ],
-      "split": "dev"
+      "split": "test"
     },
     {
       "id": 92,
@@ -3196,7 +3179,7 @@
       "deferred": [
         "Whether the question it asks is the most useful one — needs a validated judge."
       ],
-      "split": "test"
+      "split": "train"
     },
     {
       "id": 93,
@@ -3244,7 +3227,7 @@
       "deferred": [
         "Whether the question it asks is the most useful one — needs a validated judge."
       ],
-      "split": "train"
+      "split": "dev"
     },
     {
       "id": 96,
@@ -3260,7 +3243,852 @@
       "deferred": [
         "Whether the question it asks is the most useful one — needs a validated judge."
       ],
+      "split": "test"
+    },
+    {
+      "id": 97,
+      "prompt": "there's no way to tell which of my running tasks are still alive. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "skills/worktask/scripts/stale-check.sh",
+            "stale-check",
+            "stale-check.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/stale-check.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 98,
+      "prompt": "i want one table showing what every task is doing. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "skills/worktask/scripts/status-view.sh",
+            "status-view",
+            "status-view.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/status-view.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
       "split": "dev"
+    },
+    {
+      "id": 99,
+      "prompt": "the remote branch name stops matching the plan title once planning finishes. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "refine-branch-target",
+            "refine-branch-target.sh",
+            "skills/worktask/scripts/refine-branch-target.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/refine-branch-target.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 100,
+      "prompt": "an agent edited files in a stale checkout instead of the one it was assigned. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "dv-tree-preflight",
+            "dv-tree-preflight.sh",
+            "skills/worktask/scripts/dv-tree-preflight.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/dv-tree-preflight.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 101,
+      "prompt": "before work starts i want to know if someone already filed the same request. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "preflight-issue-scan",
+            "preflight-issue-scan.sh",
+            "skills/worktask/scripts/preflight-issue-scan.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/preflight-issue-scan.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 102,
+      "prompt": "agents re-run the whole suite when nothing changed since the last run. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "hooks/test-execution-gate.sh",
+            "test-execution-gate",
+            "test-execution-gate.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/test-execution-gate.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 103,
+      "prompt": "developers stop following our comment rules partway through an edit session. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "comment-standard-context",
+            "comment-standard-context.sh",
+            "hooks/comment-standard-context.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "hooks/comment-standard-context.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 104,
+      "prompt": "stage handoffs blow the window and nothing explains how to shrink them. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "context-compression",
+            "skills/context-compression/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/context-compression/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 105,
+      "prompt": "i want guidance on choosing a cheaper model per stage. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "cost-optimization",
+            "skills/cost-optimization/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/cost-optimization/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 106,
+      "prompt": "background build output lands in a different place every run. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "logging-conventions",
+            "skills/logging-conventions/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/logging-conventions/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 107,
+      "prompt": "artifact paths under the task directory drift between stages. plan a cleanup.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "skills/task-folder-organization/SKILL.md",
+            "task-folder-organization"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/task-folder-organization/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 108,
+      "prompt": "a stage handoff is failing schema validation and the run is stuck. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "buried",
+        "route": "emerg"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-emergency-tier",
+          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--emergency"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "handoff-harness",
+            "handoff-harness.sh",
+            "skills/worktask/scripts/handoff-harness.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/handoff-harness.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 109,
+      "prompt": "cross-plugin-handoff has no worked example for adding a new plugin. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "obvious",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/cross-plugin-handoff/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 110,
+      "prompt": "fn-preflight-cmds.sh is failing on every PR open. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "obvious",
+        "route": "emerg"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-emergency-tier",
+          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--emergency"
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/fn-preflight-cmds.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 111,
+      "prompt": "judge-traces.py feeds untrusted response text into a bypassPermissions session. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "obvious",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-secure-tier",
+          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "evals/scripts/judge-traces.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 112,
+      "prompt": "eval-capture.py stores raw model responses that may contain a password. plan a fix.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "obvious",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-secure-tier",
+          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "evals/scripts/eval-capture.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 113,
+      "prompt": "we have no written policy for what makes a release deployable. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "release-engineering",
+            "skills/release-engineering/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/release-engineering/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 114,
+      "prompt": "i want to poll a live board of in-flight work. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "skills/worktask-status/SKILL.md",
+            "worktask-status"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask-status/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 115,
+      "prompt": "the trace review page is failing to load any captures. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "adjacent",
+        "route": "emerg"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-emergency-tier",
+          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--emergency"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "build-review-page",
+            "build-review-page.py",
+            "evals/scripts/build-review-page.py"
+          ]
+        }
+      ],
+      "grounding": [
+        "evals/scripts/build-review-page.py"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 116,
+      "prompt": "the issue publishing helper duplicates logic with its selftest. plan a split.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "publish-pl-issue-lib",
+            "publish-pl-issue-lib.sh",
+            "skills/worktask/scripts/publish-pl-issue-lib.sh"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/publish-pl-issue-lib.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 117,
+      "prompt": "reviewers don't know what a senior-level estimate review must cover. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "adjacent",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "senior-developer-review",
+            "skills/senior-developer-review/SKILL.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/senior-developer-review/SKILL.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 118,
+      "prompt": "publish-pl-issue-selftest.sh is failing and blocking every plan publish. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "obvious",
+        "route": "emerg"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-emergency-tier",
+          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--emergency"
+          ]
+        },
+        {
+          "id": "cites-a-repo-path",
+          "why": "A plan that located the file cites at least one path that resolves. Matching a path's shape passed 36 of 36, including one plan citing three invented files beside the one it was handed. Two was tried and rejected: it failed 8 plans a human passed, because a plan that cites the handed file by full path and its neighbours by bare name resolves exactly one. Resolving-path count barely tracks quality (56% human-pass at zero, 71% at three), so this is a fabrication floor, not a grounding score",
+          "type": "paths_resolve",
+          "values": [
+            1
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/scripts/publish-pl-issue-selftest.sh"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 119,
+      "prompt": "the onboarding guide in our Notion workspace is out of date. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 120,
+      "prompt": "our Redis cluster is down and user sessions are dropping. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "absent",
+        "route": "emerg"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 121,
+      "prompt": "the mobile app crashes on cold start for Android 14 users. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "test"
     }
   ],
   "dimensions": {
