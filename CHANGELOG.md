@@ -4,6 +4,103 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [4.0.24] — 2026-08-23
+
+### Changed
+
+- **The `request-plan` eval corpus was reset to a `0.0.1` baseline.** The corpus had stopped being
+  readable as one thing: captured responses spanned two skill versions (`eval-grade.py` refuses to
+  average across them), labels were made under one rubric and partly re-flipped under later ones,
+  and three findings docs each recorded a different headline for the same comparison. A staleness
+  audit then found the deeper problem — the set was generated at `27e542a` and the ~20 commits that
+  shipped the same evening read like a work queue against those very prompts. `SKILL.md` `version:`
+  and a new top-level `eval_set_version` in `evals.json` both read `0.0.1` and move together from
+  here.
+- **32 of 121 cases were repaired before any re-capture**, because capturing first pays to measure
+  invalid cases. 20 ask for work that has since shipped and are now `refute` cases, each carrying
+  the commit that closed its premise (`REFUTED_PREMISE` in `gen-request-plan-cases.py`). 7 whose
+  premise was never true are retired (`RETIRED`) — `megatask --dry-run` already existed, and
+  `hook-install.sh` both backs up on overwrite and writes no settings file at all. 3 more had only
+  a stale byte count and keep their request. Retired slots stay open rather than renumbering: ids
+  are positional, and the rubric, the split manifest and a dozen comments key on them. 114 cases
+  remain, 77 plan / 20 refute / 17 clarify.
+- **Capability requests whose surface already exists stay plans.** A case becomes `refute` only
+  where it asks to *build* something that already ships; asking to find or reach an existing
+  surface is what `buried` grounding is for. `SKILL.md § 2` said a registry hit never licenses a
+  short answer while `§ 4` said an already-shipping capability must stop without a plan — a model
+  reading § 2 first failed every refute case for obeying the skill. § 2 now defers to § 4.
+- **The LLM judge is retired.** Measured against human labels it scored **TNR 0%**, catching 0 of
+  26 known failures, so `label-align.py` drops its column and `judge-traces.py` no longer claims to
+  substitute for human labelling. The script stays for its isolation technique, and for the case
+  that grounds on it.
+- **`skills/request-plan/evals/failure-taxonomy.md` is retitled historical.** The labels behind its
+  rates were deleted; the seven category rules it produced are still live in `SKILL.md`.
+
+### Fixed
+
+- **The prompt-leak lint scanned only tracked files while capture runs against the working tree**
+  (`tests/python/test_skill_evals.py`), so an uncommitted findings doc holding a table of case ids
+  beside their answers went undetected through a whole capture. It now scans untracked files too,
+  covers `.jsonl`/`.txt`/`.yml`/`.yaml`, and reports every hit per case instead of stopping at the
+  first. It remains blind to paraphrase, which is inherent to substring matching and is now
+  documented rather than chased.
+- **`gen-request-plan-cases.py` silently re-stratified every split when the manifest was
+  unreadable**, the loudest possible breach of the never-move-a-tranche rule delivered as success.
+  A missing manifest is now an error unless `--restratify` says the reshuffle is deliberate, and
+  `--restratify` writes the manifest it recomputed, so the freeze cannot be undone by the next
+  plain run. The 0.0.1 manifest records that its `test` tranche is **nominal, not held out**:
+  every case predates the reset, so a genuinely unseen tranche needs genuinely new cases.
+
+### Added
+
+- **`evals/findings/request-plan-0.0.1-baseline.md` — the calibrated 0.0.1 baseline.** 114 cases
+  captured at $71.73 and all 114 human-labelled. **Human 81%, harness 57%**; TPR 63% / TNR 68%,
+  Rogan-Gladen corrected to 81% — the correction and the human count agree to the point, which
+  says the harness's 57% is a measurement artefact. The harness false-fails 34 of the 92
+  responses a human passed, concentrated in `refute` (95% human vs 30% harness) on a
+  `disputes-the-premise` verb list that rejects "already **fixed**". `buried` search depth at
+  67% is the dominant real defect: 15 of the 22 human failures are plans that reached a
+  plausible neighbour and stopped.
+
+- **`request-plan` 0.1.0 — the already-ships rule is narrowed (spec change).** The 0.0.1 capture
+  showed `SKILL.md § 4` firing far too wide: 13 responses stopped at "this already ships" on cases
+  whose request was to *find or use* a surface, and a human passed every one while the harness
+  failed each on 3-6 template assertions. § 4 now stops only when the request asked to
+  **build/add/fix**, the thing exists as asked, **and nothing remains**. Finding a surface you were
+  asked to find is the answer to the search, not a reason to withhold the plan; a shipped headline
+  with a live remainder gets a refutation of the stale part *plus* a plan for the rest. Per the
+  spec-change rule in `evals/README.md`, 0.0.1 labels are not re-flipped — those responses were
+  correct answers to the old contract.
+- **`no-build-plan-for-work-that-exists` withdrawn** with its measurement attached: 12 firings, 12
+  human passes, **0 true positives**, and it did not fire on the one refute case a human failed.
+  TNR 0% is the pathology that retired the LLM judge. Replaced by `cites-evidence` (a path or a
+  commit SHA — a floor all 20 refute responses clear), and its real question moved to `deferred`.
+- **`disputes-the-premise` was blind to sentence-initial refutations.** `eval-engine.check` matches
+  with `re.MULTILINE` and not `re.IGNORECASE`, so a lowercase pattern could not see a response
+  opening "Already fixed — no plan needed" — which is exactly where a refutation belongs. Patterns
+  gained `(?i)`; the verb list gained the misses the capture produced. Re-grading the same 114
+  responses moves TPR 63% → 71% and the refute tranche 6/20 → 14/20, with the corrected estimate
+  unchanged at 81%.
+
+### Security
+
+- **The capture could read its own answer key.** 7 of 114 responses reached the eval corpus
+  during the run and at least 3 read the expected outcome — one quoted
+  `expected_outcome: "refute"` from `evals.json` back into its answer, another named its own
+  case id. `eval-capture.py` dispatches against the working tree, `evals.json` lives there, and
+  the prompt-leak lint exempts it by design because a case has to live somewhere. The exemption
+  that makes the lint possible is the hole, and no further lint closes it — capture has to run
+  against a tree that does not contain the eval set. Filed, not fixed: changing the capture
+  surface after a paid run is a deliberate change of its own. Bounds the baseline on 7 cases.
+
+### Removed
+
+- **All `request-plan` result artifacts**: `evals/labels/*.jsonl`, `evals/judgements/`,
+  `evals/findings/*.md`, `evals/review/*.html` and the captured responses. This also closed two
+  live prompt-contamination leaks, both of which lived in deleted files. Between the deletion and
+  the first labelled 0.0.1 capture the harness is **uncalibrated** — TPR/TNR are unknown, so no
+  grader pass rate in that window is trustworthy.
+
 ## [4.0.23] — 2026-08-22
 
 ### Added
