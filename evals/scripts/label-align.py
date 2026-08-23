@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
-"""label-align — score the harness and the judge against human labels.
+"""label-align — score the assertion harness against human labels.
 
-Both graders in this repo are themselves unmeasured. Human labels are the only
-ground truth available, so this reports TPR and TNR for each against them, plus
-the Rogan-Gladen correction for the harness's observed pass rate.
+The harness is itself unmeasured. Human labels are the only ground truth
+available, so this reports its TPR and TNR against them, plus the Rogan-Gladen
+correction for its observed pass rate.
 
 TPR/TNR rather than accuracy: with a skewed pass rate a grader that always says
 pass scores well and catches nothing, and these two rates are what the correction
 divides by.
 
+The LLM judge used to be scored here as a second column and no longer is. It
+measured TNR 0% — it caught 0 of the 26 failures the humans found — so its column
+reported nothing except that it agreed with whatever the harness already said.
+Reinstating it means re-validating it first, on a split it did not see.
+
 Labels are JSONL from the review page's Export button:
   {"case_id": 1, "verdict": "pass"|"fail", "note": "..."}
 
-Usage: label-align.py --labels PATH [--grades PATH] [--judge PATH] [--split dev]
+Usage: label-align.py --labels PATH [--grades PATH] [--split dev]
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
-
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def rates(pairs):
@@ -68,7 +70,6 @@ def main(argv) -> int:
     p = argparse.ArgumentParser(prog="label-align")
     p.add_argument("--labels", required=True, help="JSONL exported from the review page")
     p.add_argument("--grades", default="/tmp/allgrades.json", help="eval-grade --json output")
-    p.add_argument("--judge", default=os.path.join(REPO, "evals", "judgements", "request-plan.jsonl"))
     p.add_argument("--split", default=None)
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
@@ -98,16 +99,6 @@ def main(argv) -> int:
                          f"run eval-grade.py --json first\n")
         return 64
 
-    judge = {}
-    if os.path.exists(args.judge):
-        with open(args.judge, encoding="utf-8") as f:
-            for line in f:
-                try:
-                    row = json.loads(line)
-                    judge[row["case_id"]] = row["verdict"]
-                except (ValueError, KeyError):
-                    continue
-
     ids = [c for c in human
            if c in grades and (args.split is None or human[c].get("split") == args.split)]
     if not ids:
@@ -119,12 +110,6 @@ def main(argv) -> int:
               for c in ids]
     p_obs = sum(1 for r in grades.values() if r.get("status") == "pass") / max(1, len(grades))
     out = {"n_labelled": len(ids), "harness": report("HARNESS vs human", hpairs, p_obs)}
-
-    jids = [c for c in ids if c in judge]
-    if jids:
-        out["judge"] = report("JUDGE vs human", [(human[c]["verdict"], judge[c]) for c in jids])
-    else:
-        print("\nJUDGE vs human: no judged case is labelled yet")
 
     print(f"\nLabelled {len(ids)} of {len(grades)} graded cases.")
     if len(ids) < 20:
