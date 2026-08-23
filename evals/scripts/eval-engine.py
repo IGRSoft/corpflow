@@ -18,7 +18,7 @@ import json
 import re
 
 ASSERTION_TYPES = frozenset({"contains_all", "contains_none", "regex_all", "regex_any",
-                             "paths_resolve"})
+                             "regex_none", "paths_resolve"})
 
 _PATH_RE = re.compile(r"[\w.-]+(?:/[\w.-]+)+\.(?:py|sh|md|json|bats|swift|toml)")
 
@@ -39,6 +39,11 @@ def check(assertion: dict, response: str, resolver=None) -> bool:
         return all(re.search(v, response, re.MULTILINE) for v in values)
     if kind == "regex_any":
         return any(re.search(v, response, re.MULTILINE) for v in values)
+    if kind == "regex_none":
+        # contains_none over a bare literal cannot express "no trigger LINE": banning the
+        # string "/worktask" failed the two refutations that named it only to decline it
+        # ("no `/worktask` command to hand off"), which is the correct answer.
+        return not any(re.search(v, response, re.MULTILINE) for v in values)
     if kind == "paths_resolve":
         # Tests grounding without naming the target: an author's guess at WHICH file
         # the plan should reach failed three plans that reached a better one.
@@ -54,8 +59,15 @@ def find_case(eval_set: dict, case_id: int) -> dict:
 
 
 def assertions_for(eval_set: dict, case_id: int) -> list:
-    """Shared assertions apply to every case; case assertions extend them."""
+    """Shared assertions apply to every case; case assertions extend them.
+
+    Except on a `refute` case, where the shared set IS the thing that misfires: the
+    plan template cannot be satisfied by a correct "this already shipped" answer, so
+    a refute case carries only its own assertions.
+    """
     case = find_case(eval_set, case_id)
+    if case.get("expected_outcome") == "refute":
+        return list(case.get("assertions", []))
     return eval_set.get("shared_assertions", []) + case.get("assertions", [])
 
 
@@ -89,6 +101,22 @@ def grade(eval_set: dict, case_id: int, response: str, resolver=None) -> dict:
         matched = outcome == "clarify"
         return {"case_id": case_id, "total": 1, "passed": int(matched),
                 "failed": [] if matched else ["should-have-asked-not-planned"],
+                "outcome": outcome, "expected_outcome": expected}
+    if expected == "refute":
+        # The prompt's premise is false — the work already shipped, or the file it
+        # describes no longer looks like that. The right answer disputes it with
+        # evidence, so the plan template misfires wholesale: case 2 failed six
+        # assertions while being correct.
+        #
+        # Registered per case by a human who checked the premise, NEVER inferred from
+        # the response. Detecting "this looks like a refutation" would let any response
+        # opt out of the template by sounding like one, which is how CLARIFY once
+        # dropped 9 of 32 known failures out of the denominator. A refute case is
+        # scored, stays in the denominator, and fails when it plans anyway.
+        assertions = assertions_for(eval_set, case_id)
+        failed = [a["id"] for a in assertions if not check(a, response, resolver)]
+        return {"case_id": case_id, "total": len(assertions),
+                "passed": len(assertions) - len(failed), "failed": failed,
                 "outcome": outcome, "expected_outcome": expected}
     if outcome == "clarify":
         # One decision went wrong, not six. Scoring a question against the plan

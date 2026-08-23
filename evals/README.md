@@ -86,11 +86,26 @@ evals/scripts/eval-grade.py   --eval-set skills/request-plan/evals/evals.json
 - `eval-grade.py` — scores stored responses. Refuses (rc 2) when a record's
   `prompt_digest` no longer matches the eval set, since that response answers a
   question the set no longer asks. A moved `assertions_digest` is flagged, not
-  refused — the response stands, only its score went stale.
+  refused — the response stands, only its score went stale. It also refuses to
+  average across two `skill_version`s unless `--allow-mixed` is passed.
+- `build-review-page.py` → `label-align.py` — the human labelling loop. The review
+  page exports JSONL to `labels/<skill>-<eval-set-version>-human.jsonl`;
+  `label-align.py` scores the assertion harness against those labels and reports
+  TPR/TNR plus the Rogan-Gladen correction. **Until a capture has been labelled the
+  harness is uncalibrated, and no pass rate it prints is trustworthy.**
 
 `--mode` picks what is being measured: `command` (default) invokes the skill
 explicitly and grades its output; `natural` sends the bare request and so also
 grades whether the skill triggers at all.
+
+### The LLM judge is retired
+
+`judge-traces.py` still exists and still runs, but nothing reads its verdicts.
+Scored against human labels it returned **TNR 0%** — 0 of 26 known failures caught —
+so `label-align.py` dropped its column. A grader that never says fail adds no
+information to the harness it sits beside. Validating it again means measuring it on
+labels it has not seen, per the taxonomy gate above; until then its output is not a
+label. The script is kept for the isolation technique, which is the part that worked.
 
 ### Isolating a session from this repo
 
@@ -137,6 +152,53 @@ run that actually produced it. The tradeoff is real: a grade is reproducible onl
 by paying for the capture again (~$1/case), so record the numbers that matter in
 the commit or a findings doc rather than assuming the responses will be there.
 
+### Baseline 0.0.1
+
+The corpus was reset to a **0.0.1 baseline** on 2026-08-23. Everything the reset
+deleted — labels, judgements, findings, captured responses — described a case set
+that had since been repaired and a skill at three different versions, so no number
+from it can be compared against a number taken after it. `SKILL.md` `version:` and
+`evals.json` `eval_set_version` both read `0.0.1`, and both must move together with
+any capture worth comparing.
+
+What the reset does **not** do is make the cases unread. Every case in 0.0.1
+predates it, so the `test` tranche in `splits/request-plan.json` is nominal rather
+than held out. A genuinely unseen tranche needs genuinely new cases.
+
+The two subsections below are the rules that produced the reset; they still govern.
+
+### Rubric changes and labels that predate them
+
+A labelling rubric is part of the measurement instrument, so changing one raises the
+question of what happens to labels made before it existed. Two kinds, and they are handled
+oppositely.
+
+A rubric decision that **resolves an inconsistency the labels themselves already recorded**
+— two same-shaped responses labelled oppositely, or a note saying "the rubric needs a rule
+for X" — is a clarification of what correct always meant. Apply it to **every** capture and
+every case it touches, in one change, with: a dated bracket note in each flipped label
+naming the rule; recomputed headline numbers in every findings doc that cited the old
+labels; and the harness re-calibrated (TPR/TNR) against the new labels. Applying a
+clarification only to the newest capture is what corrupts the corpus — it asserts both
+shapes are correct at once and makes grader agreement meaningless.
+
+A rubric decision that **changes what behaviour is desirable** is a spec change, belongs in
+a `SKILL.md` version bump, and applies only from that version's capture forward. Old
+responses were correct answers to the old contract; relabelling them fails the skill for
+obeying its own prompt.
+
+The test for which kind you have: **did any contemporaneous label already treat the new
+rule's shape as correct?** If yes it is a clarification. Both rubrics decided on 2026-08-23
+passed that test, and both are recorded in `evals.json`'s `grading` field, which survived
+the reset because a labelling contract is not a result.
+
+One thing a clarification cannot repair: a case whose *premise* changed between captures.
+Where the work asked for has since shipped, the two columns measure different ground truth
+and cannot be compared at all — which is why 0.0.1 converts those cases to `refute` and
+retires the ones whose premise was never true, rather than footnoting them. See
+`gen-request-plan-cases.py`'s `REFUTED_PREMISE` and `RETIRED` tables. Both go stale the
+same way: a premise that becomes true again has to come back off the list.
+
 ### Splits
 
 `evals/splits/<skill>.json` freezes tranche membership. A case **never** changes
@@ -144,3 +206,9 @@ tranche: stratifying on a dimension that later gets re-derived once reshuffled d
 and test after dev had been read, quietly moving examined cases into the held-out
 set. Generation reads the manifest and stratifies only genuinely new cases.
 Anything already examined stays in `dev` — something read cannot be un-read.
+
+The 0.0.1 reset re-stratified the whole set once, deliberately, behind
+`gen-request-plan-cases.py --restratify`. Without that flag a missing or unreadable
+manifest is now a hard error rather than a silent full reshuffle, which is how the
+rule above was breached the first time. Re-stratifying does not un-read anything: see
+the manifest's own `note`.

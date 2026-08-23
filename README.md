@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.0.23 · Requires Claude Code 2.1.233+**
+**Plugin 4.0.24 · Requires Claude Code 2.1.233+**
 
 ## Features
 

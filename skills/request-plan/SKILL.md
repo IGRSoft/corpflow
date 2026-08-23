@@ -2,7 +2,7 @@
 name: request-plan
 description: Use when the user asks for a plan, an approach, a breakdown, "how would you tackle this", or scoping — even without the word "plan". Turn a free-form request into a context-aware plan (goal, scope, phases, effort, risks) and recommend `/worktask`.
 effort: medium
-version: 0.4.0
+version: 0.1.0
 ---
 
 # Request Plan
@@ -44,6 +44,49 @@ silence; a wrong assumption propagates into every later section, but so does a n
 
 Follow `references/context-gathering.md`. Read only what could change the plan: existing
 `.context/` artifacts, project memory, recent git activity, and the code the request touches.
+
+#### Start from what already ships
+
+**Run `skills/request-plan/scripts/capability-registry.sh` first, every time, before any grep.** Not
+only for "I want X" requests — deciding whether a request is about a capability is itself a guess
+made before you know the answer, and the whole list costs about 2.8k tokens. It is the complete
+inventory of this plugin's commands, agents and skills, so it is not a search and has no stop
+condition: you cannot stop too early on a list you have read to the end.
+
+The request words a *need*; the registry words a *domain* — "make the app usable one-handed" will
+never share a word with the entry that covers it. Read each description for what the capability
+*does*, not for words the request happens to repeat.
+
+##### No worked examples here
+
+Deliberately omitted. Any example concrete enough to be useful is a request someone will later
+evaluate this skill against, and printing the answer beside it turns that case into a lookup —
+which is exactly how eval cases 73 and 75 were contaminated.
+
+##### The registry precedes the search, never replaces it
+
+**The registry precedes the behaviour search; it never replaces it.** A registry hit tells you which
+surface the work belongs to — you still open that surface and read it before planning against it, and
+§ "Search by behaviour" below still applies to everything the registry does not list (scripts, hooks,
+harness modules, library code).
+
+##### A hit changes the plan's content, not its obligations
+
+**A registry hit changes the plan's content, not its obligations — with one exception, below.**
+Finding an adjacent, partial or underlying capability makes the plan about *using, verifying, or
+extending* it. It does not license a short answer: the full template still applies, and the plan
+still ends with exactly one `/worktask` line (§ 4). "This already ships, run `/x`" with no trigger is
+a failure, not a shortcut — the three ways this goes wrong are ending with a question instead of a
+plan, recommending another command *in place of* the handoff, and dropping the trigger because
+nothing seems left to do.
+
+##### The one exception: the hit *is* the request
+
+**The exception is § 4's and it is narrow**: only when the request asked to *build* the thing, the
+thing already ships as asked, and nothing is left to do. Then the answer says so, cites where, and
+stops. It does **not** cover a request to *find*, *use* or *reach* a surface that exists — that is
+still a plan, and it is the commonest way this rule gets misread. Nor does it cover a shipped
+headline with a live remainder: refute the stale part, plan the rest.
 
 #### Search by behaviour, not by filename
 
@@ -125,6 +168,33 @@ of the worktask leaves the user with no handoff. Mention it alongside the trigge
 misdiagnosed, unreproducible, or absent from the file it was blamed on still emits one — triage is
 work, and on a present-tense report `--emergency` is the tier that triages it. Prose naming the tier
 ("route this to incident response") is not the line; the line is a command the user can paste.
+
+##### One narrow exception: asked to BUILD what already exists, with nothing left
+
+All three must hold: the request asks to **build, add or fix** something; the search shows it
+already exists in the form asked for; and **nothing remains to be done**. Then say so, cite where,
+and **stop** — no plan template, no trigger. Rendering the sections anyway (a Scope for work that
+exists, a P0 reading "run the command") is a build plan wearing a refutation's opening line.
+
+##### Two shapes that resemble that exception and are not it
+
+###### Asked to find, reach or use a capability
+
+"How do I…", "I want X", "where does X live" — the surface existing is the *answer to the
+search*, not a reason to withhold the plan. Plan the using,
+verifying or extending of what you found, and end with the trigger (§ 2). Stopping at "this already
+ships, run `/x`" is the failure § 2 names, not a shortcut it licenses. A found surface makes the
+plan shorter and better grounded; it never makes the plan optional.
+
+###### A shipped premise with a live remainder
+
+The headline capability shipped, but the search finds something genuinely still missing or
+broken. Refute the stale premise *and* plan the remainder — the
+refutation replaces the wrong plan, not the plan. Say plainly which part is stale and which part is
+still open, so the user can see you did not simply accept the request as posed.
+
+The test is always whether anything remains to be done. A misdiagnosed bug still needs triage; a
+request to *use* a shipped feature still needs a plan; a shipped feature with nothing left does not.
 
 ### 5. Output
 

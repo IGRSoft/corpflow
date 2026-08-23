@@ -258,7 +258,9 @@ class CaptureCli(unittest.TestCase):
         self.assertEqual(rc, 0)
 
     def test_unknown_case_id_is_a_usage_error(self):
-        rc = capture.main(["--eval-set", _EVAL_SET, "--case", "99", "--dry-run"])
+        # Out of range on purpose. A plausible-looking id silently stops testing
+        # anything the day the eval set grows past it.
+        rc = capture.main(["--eval-set", _EVAL_SET, "--case", "999999", "--dry-run"])
         self.assertEqual(rc, 64)
 
     def test_unreadable_eval_set_is_a_usage_error(self):

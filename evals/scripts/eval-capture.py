@@ -124,8 +124,18 @@ def extract_response(stdout: str) -> tuple[str | None, dict]:
 
 
 def plugin_sha(root: str) -> str | None:
+    """HEAD, suffixed `-dirty` when the tree carries uncommitted changes.
+
+    Both the v0.4.0 and v0.5.0 captures recorded a bare `9e2cda9` because the skill edit
+    under test was never committed — two different skills, one provenance string. Only the
+    frontmatter version bump distinguished them, and that is a convention, not a guarantee.
+    """
     r = run(["git", "-C", root, "rev-parse", "--short=7", "HEAD"])
-    return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else None
+    if r.returncode != 0 or not r.stdout.strip():
+        return None
+    sha = r.stdout.strip()
+    d = run(["git", "-C", root, "status", "--porcelain", "--untracked-files=no"])
+    return f"{sha}-dirty" if d.returncode == 0 and d.stdout.strip() else sha
 
 
 def skill_version(root: str, skill_name: str) -> str | None:

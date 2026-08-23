@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
 """judge-traces — one isolated Opus task per trace, returning a pass/fail verdict.
 
-Substitutes for the human labelling pass in the review page. Each trace is judged
-by a fresh session that sees ONLY the request and the response: it runs in an
-empty temp directory with every file and exec tool denied and MCP stripped, so it
-cannot verify claims against the repo and must judge the plan on its own terms.
+NOT a substitute for the human labelling pass, and no longer wired to anything.
+Measured against the only human labels this repo has had, this judge scored
+**TNR 0%**: it caught 0 of the 26 failures the humans found, passing every one.
+A grader that never says fail carries no information, so `label-align.py` dropped
+its column and nothing downstream reads its output. It is kept for the isolation
+technique below, not for its verdicts.
+
+Before any verdict from it is used again it has to be validated on labels it did
+not see, per `evals/README.md`. Until then treat output as unlabelled.
+
+Each trace is judged by a fresh session that sees ONLY the request and the
+response: it runs in an empty temp directory with every file and exec tool denied
+and MCP stripped, so it cannot verify claims against the repo and must judge the
+plan on its own terms.
 
 Running in a temp cwd rather than the repo is deliberate. Denying tools alone did
 not hold — an isolated probe still reported an exact tracked-file census, so the
 only reliable isolation is having no repo to look at.
-
-Verdicts are model labels, NOT human ground truth. An unvalidated judge is itself
-unmeasured; treat the output as a first pass to review, not as truth.
 
 Usage: judge-traces.py [--responses DIR] [--out PATH] [--case ID]... [--limit N]
                        [--budget USD] [--concurrency N] [--model M] [--effort E]

@@ -1,8 +1,19 @@
-# request-plan failure taxonomy — v0.1.0 baseline
+# request-plan failure taxonomy — historical (v0.1.0)
 
-Open-coded from the 96 human-labelled v0.1.0 traces (`evals/labels/request-plan-human.jsonl`),
-not brainstormed. Every category came out of an annotation the reviewer wrote while reading a
-trace; nothing was added to round the list out.
+## Status: historical
+
+**Kept for the rules, not for the rates.** The v0.1.0 labels this was open-coded from were
+deleted in the 0.0.1 baseline reset (`evals/README.md § Baseline 0.0.1`), so nothing here is
+reproducible and no number below is comparable with a 0.0.1 measurement. It stays because the
+seven category rules it produced are still live in `SKILL.md`, and a rule whose justification
+has been deleted is a rule nobody can argue with.
+
+## Provenance
+
+Open-coded from the 96 human-labelled v0.1.0 traces, not brainstormed. Every category came out
+of an annotation the reviewer wrote while reading a trace; nothing was added to round the list
+out. Case ids below are v0.1.0 ids and several have since been retired or converted to `refute`
+— read them as provenance, not as an index into the current set.
 
 This is **not** the plugin-wide `evals/failure-taxonomy.md` described in `evals/README.md` —
 that one is open-coded from `failure-labels.jsonl` and is still blocked on its inputs. This file
