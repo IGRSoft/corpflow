@@ -472,6 +472,13 @@ Otherwise:
    `facts.capabilities.fable_dispatch == "credit_blocked"`, dispatch on `"opus"` and audit
    `model_resolution_constrained`.
 
+#### Step A.4 stamps no approval carrier
+
+The asymmetry with Step A.5 is deliberate: this pre-pass bypasses no gate. Resolving open questions
+answers plan content, it does not approve the plan, and every path out of here falls through to
+Step A.5, the sole stamping point. A stamp here would approve a run whose `plan_gate` is still
+`checkpoint`, before any human has seen the plan.
+
 #### Auto-decision recording contract
 
 The delegate decides every non-escalation question (default-biased — deviate from PM's recommended
@@ -603,7 +610,11 @@ the plan revision path re-derives nothing (§ Plan-revision invariants row 5).
 
 #### Plan gate approval / rejection audit rows
 
-4. **On approval**, append one line to `.context/logs/audit.jsonl`, then proceed to Step A:
+4. **On approval**, first stamp the carrier: `state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`.
+   The stamp precedes the row by contract — a crash between them leaves state approving with no row,
+   and the resume path re-prompts a human; the reverse order resumes into the stage loop with the
+   carrier unset, which is the block this stamp exists to prevent. Then append one line to
+   `.context/logs/audit.jsonl` and proceed to Step A:
    ```json
    {"ts":"<ISO>","actor":"orchestrator","action":"approval_received","subject":"PL<N>","result":"ok"}
    ```
@@ -646,10 +657,17 @@ Step A still runs exactly once per run (the issue is published after the *approv
 
 #### Plan gate bypass path
 
-**If `plan_gate == "bypass"`**: proceed directly to Step A. No prompt, no approval line. Exception:
-unresolved `escalate` items from Step A.4 force a `checkpoint`-style stop for those items first
-(§ Escalation guard) — once answered, append the standard `approval_received subject:"PL<N>"` row
-(required as the escalate resolution) and resume the bypass path.
+**If `plan_gate == "bypass"` AND Step A.4 left no unresolved `escalate` items**: stamp
+`state-patch.sh --task-meta PL0 --set '{"approved":"auto"}'`, then proceed directly to Step A. No
+prompt, no approval line, no audit row — the requested bypass carrier IS the approval, and without
+the stamp every stage agent blocks. The guard is a precondition: stamping ahead of the stop lets a
+crash resume into the stage loop with escalation-class questions unanswered and the check passing.
+
+Exception: unresolved `escalate` items force a `checkpoint`-style stop first (§ Escalation guard).
+Once answered, stamp `state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`, then append the
+standard `approval_received subject:"PL<N>"` row (required as the escalate resolution), then resume
+at Step A — NOT at the arm above, which this run can no longer reach: re-entering it would overwrite
+a real human approval with `auto`. Stamp before row, as in the approval arm.
 
 ### Step A — Publish plan to GitHub (run BEFORE the stage loop)
 

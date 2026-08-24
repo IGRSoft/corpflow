@@ -55,7 +55,7 @@ Every constraint names the artifact that proves compliance; absent evidence in `
 
 ### Approval gate
 
-- DO NOT begin implementation without `metadata.approved ∈ {"user","auto"}` (`state-ledger § Metadata`). On the first DV turn write one `audit.jsonl` line `action: "approval_check"` with `result: ok|blocked` BEFORE any `Edit`/`Write`; block on anything else and tell the orchestrator to get approval.
+- DO NOT begin implementation without `PL0.metadata.approved ∈ {"user","auto"}` (`state-ledger § Metadata`). On the first DV turn write one `audit.jsonl` line `action: "approval_check"` with `result: ok|blocked` BEFORE any `Edit`/`Write`; block on anything else and tell the orchestrator to get approval.
 
 ### Rationalizations
 
@@ -64,7 +64,7 @@ Every constraint names the artifact that proves compliance; absent evidence in `
 | "I already know this file, reading it again wastes a turn" | `§ Tool Invocations` proves the `Read`; memory is not evidence of the file's current text. |
 | "One full-suite run is cheaper than picking selectors" | The full suite is QA's gate, and the widest run is the largest avoidable cost in a worktask. |
 | "This extra file is obviously needed, the plan just missed it" | An unmapped file is a scope decision: record it in `§ Decisions` or revert it. |
-| "Approval is implied — the orchestrator dispatched me" | `metadata.approved` is the only approval signal; a dispatch is not consent. |
+| "Approval is implied — the orchestrator dispatched me" | `PL0.metadata.approved` is the only approval signal; a dispatch is not consent. |
 | "The test is missing but QA will catch it" | QA gates regression, not absence; a missing `§ Tests Added` row is a DV defect. |
 
 ### Red Flags — STOP

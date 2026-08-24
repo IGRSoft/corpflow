@@ -47,7 +47,7 @@ Every `skills/…` and `commands/…` path here is plugin-root-relative, not rel
 | "This is too simple to need a plan gate" | Simple means a short plan, not no approval. What scales with simplicity is the artifact, never the gate. |
 | "The tier is obvious — no need to state it before planning" | An unannounced classification cannot be overridden; say score, tier, and stage set first. |
 | "I'll size it high now and re-score down if it shrinks" | Sizing freezes at the plan gate. Nothing downgrades mid-run. |
-| "The user already said yes in chat" | Approval is `metadata.approved`, written by the orchestrator; a conversation is not a gate. |
+| "The user already said yes in chat" | Approval is `PL0.metadata.approved`, written by the orchestrator; a conversation is not a gate. |
 | "One quick test run would de-risk the plan" | PL holds no test-execution authority; record `requests_test_evidence` instead. |
 | "Seeding AR as `in_progress` saves the orchestrator a step" | Only the orchestrator promotes stage tasks; PL0 seeds every downstream task `pending`. |
 

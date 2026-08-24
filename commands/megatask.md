@@ -161,7 +161,8 @@ Execution loop, driven cooperatively with `hooks/megatask-monitor.sh`:
 3. Delegate to `/worktask` for that issue, **both gates pre-bypassed**, stamping `PL0.metadata`:
    `{ stage:"PL", agent:"corpflow:product-manager", model:"opus", issue_number, track,
    workspace_path:".worktrees/<group>/{issue#}", isolation:"worktree",
-   plan_gate:"bypass", decision_gate:"auto", fn_gate:"bypass", megatask_group:"<group>",
+   plan_gate:"bypass", decision_gate:"auto", fn_gate:"bypass", approved:"auto",
+   megatask_group:"<group>",
    milestone:<N|null> }`. It then runs its normal stage loop unattended and milestone-agnostic
    (`commands/worktask.md`); the presence of `workspace.json` makes it auto-skip its own
    GitHub-issue publish — the parent milestone/issue is the canonical record.

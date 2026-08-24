@@ -206,7 +206,8 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
       "enum": ["high", "medium", "low"]
     },
     "approved": {
-      "enum": ["user", "auto"]
+      "enum": ["user", "auto"],
+      "description": "Plan-approval carrier on PL0, written by the orchestrator at the Step A.5 plan gate. Absent ⇒ stage agents block."
     },
 ```
 
