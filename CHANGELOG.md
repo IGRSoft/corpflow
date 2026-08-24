@@ -4,6 +4,35 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [4.0.25] — 2026-08-24
+
+### Fixed
+
+- **The plan-approval carrier `PL0.metadata.approved` had two readers and no writer.** A real human
+  approval at the plan gate appended only an `approval_received` audit row, so the first DV turn's
+  approval check returned `blocked` and the developer agent correctly refused to start — a prior run
+  had to hand-stamp the field mid-pipeline. `commands/worktask.md` now stamps at each of the three
+  arms where approval is actually established: the approval arm (`user`), the pure-bypass arm
+  (`auto` — the explicitly requested bypass carrier is the approval), and the escalate-resolution arm
+  (`user`, because a human really answered those items and `auto` would understate it). The
+  auto-decision pre-pass at Step A.4 deliberately stamps nothing and now says so: it bypasses no gate
+  and falls through to Step A.5, the sole stamping point.
+- **The stamp precedes the audit row in every arm, and that order is load-bearing.** Two files, two
+  writes, no atomicity primitive spanning them. Stamp-first leaves a crash window with state
+  approving and no row, which the resume path answers by re-prompting a human; row-first resumes into
+  the stage loop with the carrier unset, reproducing the defect being fixed.
+- **Every batch lane hit the same block.** `commands/megatask.md`'s per-issue planning seed now
+  stamps `approved:"auto"` alongside the gate keys it already sets.
+- **Both reader sites in `agents/developer.md` and the one in `agents/product-manager.md` named the
+  field bare**, which reads as the *reading* task's own metadata and would have left the fix inert.
+  They now name the carrier, `PL0.metadata.approved`. The ledger schema entry gained a `description`
+  naming PL0 as carrier and the orchestrator as writer.
+- **New `tests/shell/worktask/approval-gate.bats`** (7 cases) extracts the writer payload, the
+  reader's accepted value set and the schema enum from their own files at test time and cross-checks
+  them, so drift on any one side fails the suite. Three guards make an empty or degenerate extraction
+  a red test rather than a vacuous green. Reachable from all five guarded paths via L1 path
+  references plus matrix rows R04, R07, R09, R10 and R15.
+
 ## [4.0.24] — 2026-08-23
 
 ### Changed
