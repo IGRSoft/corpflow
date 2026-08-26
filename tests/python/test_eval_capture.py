@@ -16,13 +16,14 @@ import tempfile
 import unittest
 
 from _scriptimport import (EVAL_CAPTURE, EVAL_ENGINE, EVAL_GRADE, LABEL_ALIGN,
-                           SAMPLE_LABELS, load_module)
+                           SAMPLE_LABELS, SCAN_CONTAM, load_module)
 
 engine = load_module(EVAL_ENGINE, "eval_engine")
 capture = load_module(EVAL_CAPTURE, "eval_capture")
 grader = load_module(EVAL_GRADE, "eval_grade")
 label_align = load_module(LABEL_ALIGN, "label_align")
 sampler = load_module(SAMPLE_LABELS, "sample_for_labelling")
+scanner = load_module(SCAN_CONTAM, "scan_contamination")
 
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _EVAL_SET = os.path.join(_REPO, "skills", "request-plan", "evals", "evals.json")
@@ -683,3 +684,50 @@ class MixedRevisionsAreVisible(unittest.TestCase):
     def test_one_revision_says_nothing(self):
         _, err = self._grade(["aaaaaaa", "aaaaaaa"])
         self.assertNotIn("span plugin revisions", err)
+
+
+class ContaminationScan(unittest.TestCase):
+    """The strip removes the answer key but cannot remove the fact of the strip, so
+    what a capture can still leak has to be measured rather than assumed."""
+
+    def _scan(self, responses, grounding=None):
+        eval_set = {"skill_name": "request-plan", "shared_assertions": [],
+                    "evals": [{"id": cid, "prompt": "p", "assertions": [],
+                               "expected_outcome": "plan",
+                               "grounding": (grounding or {}).get(cid, ["hooks/a.sh"])}
+                              for cid in responses]}
+        with tempfile.TemporaryDirectory() as tmp:
+            for cid, text in responses.items():
+                with open(os.path.join(tmp, f"{cid}.json"), "w", encoding="utf-8") as f:
+                    json.dump({"case_id": cid, "response": text}, f)
+            return scanner.scan(eval_set, tmp)
+
+    def test_an_answer_key_read_is_separated_from_the_softer_tells(self):
+        # Reading the verdict makes a case evidence of nothing; noticing the harness
+        # only bounds it. Folding them into one rate would let the fatal kind hide.
+        report = self._scan({1: "the case says expected_outcome: refute",
+                             2: "see #333 for the capture pipeline",
+                             3: "an ordinary plan"})
+        self.assertEqual(report["by_channel"]["answer-key"], [1])
+        self.assertEqual(report["by_channel"]["harness-log"], [2])
+        self.assertEqual(report["tainted"], [1, 2])
+
+    def test_a_case_grounded_on_eval_tooling_may_name_eval_paths(self):
+        # Cases 111/112/115/162/163/164 ground on evals/scripts/*.py. Naming
+        # eval-capture.py is the correct answer there, and scoring it as a leak
+        # would refuse the right response.
+        responses = {111: "plan work on eval-capture.py"}
+        self.assertEqual(
+            self._scan(responses, {111: ["evals/scripts/eval-capture.py"]})
+                ["by_channel"]["harness-log"], [])
+        self.assertEqual(self._scan(responses)["by_channel"]["harness-log"], [111])
+
+    def test_grounding_never_excuses_reading_the_verdict(self):
+        report = self._scan({111: "expected_outcome: refute, so I refute"},
+                            {111: ["evals/scripts/eval-capture.py"]})
+        self.assertEqual(report["by_channel"]["answer-key"], [111])
+
+    def test_a_clean_capture_reports_zero_and_succeeds(self):
+        report = self._scan({1: "a plan about hooks", 2: "another plan"})
+        self.assertEqual(report["tainted"], [])
+        self.assertEqual(report["rate"], 0.0)
