@@ -93,14 +93,11 @@ ANSWER_KEY_GLOBS = (
 # answering. The command set is in the model's context rather than on its disk,
 # so it cannot be answered by looking.
 PROBE_PROMPT = (
-    "Answer in exactly {lines} lines, nothing else. Report only what is in your "
-    "available commands and working directory; do not reason about what should be "
-    "there.\n"
-    "Line 1: `present: yes` or `present: no` — whether a slash command named "
-    "`/{plugin}:{present}` is available to you.\n"
-    "{absent_line}"
-    "Line {last}: `evals: <how many files match skills/request-plan/evals/"
-    "evals.json in your working directory>`"
+    "List every slash command available to you whose name begins with `{plugin}:`. "
+    "One bare name per line, no bullets and no other prose. Report what is in your "
+    "available command list, not what is on the filesystem. Then, as the final line, "
+    "`evals: <how many files match skills/request-plan/evals/evals.json in your "
+    "working directory>`."
 )
 
 MISSING_CREDENTIAL_MESSAGE = (
@@ -356,53 +353,51 @@ def capture_case(eval_set, case, *, mode, model, settings_path, timeout, cwd,
     return sent_prompt, response, usage
 
 
-def probe_discriminators(root: str, tree: str) -> tuple:
-    """(present, absent): a command the TREE ships, and one only the ambient
-    install ships. `absent` is the half that detects a pin that did not bind — if
-    the cached release still answers, its deleted-here command is still offered.
+def probe_expectations(root: str, tree: str) -> tuple:
+    """(must_offer, must_not_offer) command names for the capture tree.
 
-    Derived rather than hardcoded: 4.0.26 removed sixteen commands and added six,
-    and the next release moves them again. Returns absent=None when the installed
-    copy ships nothing the tree lacks, which is the case where the probe genuinely
-    cannot tell the two apart.
+    `must_not_offer` is what catches a pin that did not bind: if the installed
+    release answered instead of the tree, the commands this tree DELETED are still
+    on offer. Derived against the plugin cache rather than hardcoded — 4.0.26 moved
+    twenty-two commands and the next release will move more.
+
+    Skill names are subtracted from the deleted set. Both commands and skills are
+    invocable as `<plugin>:<name>` and the model lists them together, so a name that
+    became a skill would otherwise read as a deleted command still being served.
     """
     tree_cmds = {os.path.basename(f)[:-3]
                  for f in glob.glob(os.path.join(tree, "commands", "*.md"))}
-    if not tree_cmds:
-        return None, None
+    tree_skills = {os.path.basename(os.path.dirname(f))
+                   for f in glob.glob(os.path.join(tree, "skills", "*", "SKILL.md"))}
     name = plugin_name(root)
     ambient = set()
     if name:
         ambient = {os.path.basename(f)[:-3] for f in glob.glob(os.path.expanduser(
             os.path.join("~", ".claude", "plugins", "cache", "*", name, "*",
                          "commands", "*.md")))}
-    only_ambient = sorted(ambient - tree_cmds)
-    return sorted(tree_cmds)[0], (only_ambient[0] if only_ambient else None)
+    return tree_cmds, ambient - tree_cmds - tree_skills
 
 
-def build_probe_prompt(plugin: str, present: str, absent: str | None) -> str:
-    absent_line = ""
-    if absent:
-        absent_line = (f"Line 2: `absent: yes` or `absent: no` — whether a slash "
-                       f"command named `/{plugin}:{absent}` is available to you.\n")
-    return PROBE_PROMPT.format(lines=3 if absent else 2, plugin=plugin,
-                               present=present, absent_line=absent_line,
-                               last=3 if absent else 2)
+def build_probe_prompt(plugin: str) -> str:
+    return PROBE_PROMPT.format(plugin=plugin)
 
 
-def parse_probe(text: str) -> dict:
-    """The probe's answers, with None for anything unread.
+def parse_probe(text: str, plugin: str) -> dict:
+    """{'names': set, 'evals': int|None} — None for anything unread.
 
-    Fails closed by returning None rather than a guess: an unparseable probe is
-    exactly the case where proceeding would spend the whole budget on an unverified
-    surface.
+    An enumeration rather than a yes/no, because yes/no does not survive contact
+    with the model: asked whether one deleted command was available it answered
+    `yes` while that command was demonstrably absent from the list it produced
+    moments later. A set can be checked against the tree; a judgement cannot.
     """
-    def flag(key):
-        m = re.search(rf"^\s*`?{key}:\s*`?(yes|no)\b", text, re.MULTILINE | re.IGNORECASE)
-        return m.group(1).lower() == "yes" if m else None
+    names = set()
+    for line in text.splitlines():
+        m = re.match(rf"^\s*[-*]?\s*/?{re.escape(plugin)}:([a-z0-9][a-z0-9-]*)\s*$",
+                     line.strip(), re.IGNORECASE)
+        if m:
+            names.add(m.group(1).lower())
     m = re.search(r"^\s*`?evals:\s*`?(\d+)", text, re.MULTILINE)
-    return {"present": flag("present"), "absent": flag("absent"),
-            "evals": int(m.group(1)) if m else None}
+    return {"names": names, "evals": int(m.group(1)) if m else None}
 
 
 def probe_capture_surface(*, model, settings_path, timeout, cwd, plugin_dir,
@@ -544,45 +539,44 @@ def main(argv_in: list) -> int:
                 "from this run is uncomparable.\n")
 
         cwd = capture_tree or root
-        present, absent = probe_discriminators(root, cwd)
-        if present is None:
+        plugin = plugin_name(root) or "corpflow"
+        must_offer, must_not_offer = probe_expectations(root, cwd)
+        if not must_offer:
             sys.stderr.write("eval-capture: no commands/ in the capture tree\n")
             return 2
-        if absent is None:
-            print("probe: no command distinguishes this tree from the installed copy; "
-                  "the pin cannot be verified either way this run")
-        prompt = build_probe_prompt(plugin_name(root) or "corpflow", present, absent)
         try:
             probe_text = probe_capture_surface(
                 model=args.model, settings_path=settings_path, timeout=args.timeout,
-                cwd=cwd, plugin_dir=capture_tree, prompt=prompt)
+                cwd=cwd, plugin_dir=capture_tree, prompt=build_probe_prompt(plugin))
         except PreflightError as exc:
             sys.stderr.write(f"eval-capture: {exc}\n")
             return 2
-        seen = parse_probe(probe_text)
-        print(f"probe: /{present} present={seen['present']}"
-              + (f"  /{absent} present={seen['absent']}" if absent else "")
-              + f"  evals_files={seen['evals']}")
+        seen = parse_probe(probe_text, plugin)
+        missing = sorted(must_offer - seen["names"])
+        leaked = sorted(must_not_offer & seen["names"])
+        print(f"probe: {len(seen['names'])} commands offered, "
+              f"{len(must_offer)} expected, {len(missing)} missing, "
+              f"{len(leaked)} from a release this tree deleted, "
+              f"evals_files={seen['evals']}")
         if args.probe:
             print(probe_text)
             return 0
 
         if isolate:
-            required = ["present", "evals"] + (["absent"] if absent else [])
-            if any(seen[k] is None for k in required):
+            if not seen["names"] or seen["evals"] is None:
                 sys.stderr.write(
                     "eval-capture: probe unreadable; refusing to spend on an "
                     f"unverified surface. Raw: {probe_text.strip()[:300]}\n")
                 return 2
-            if seen["present"] is not True:
+            if missing:
                 sys.stderr.write(
-                    f"eval-capture: the plugin that answered does not ship /{present}, "
-                    "which this tree does. --plugin-dir did not bind.\n")
+                    f"eval-capture: the plugin that answered does not offer "
+                    f"{missing}, which this tree ships. --plugin-dir did not bind.\n")
                 return 2
-            if absent and seen["absent"] is not False:
+            if leaked:
                 sys.stderr.write(
-                    f"eval-capture: the plugin that answered still ships /{absent}, which "
-                    "this tree deleted — so the installed release answered, not the tree. "
+                    f"eval-capture: the plugin that answered still offers {leaked}, which "
+                    "this tree deleted — the installed release answered, not the tree. "
                     "The run would measure one version and stamp another.\n")
                 return 2
             if seen["evals"] != 0:
@@ -598,7 +592,8 @@ def main(argv_in: list) -> int:
             "plugin_sha": plugin_sha(root),
             "skill_version": expected_version,
             "isolated": bool(capture_tree),
-            "probe": {"present": present, "absent": absent, **seen},
+            "probe": {"commands_offered": len(seen["names"]),
+                      "commands_expected": len(must_offer), "evals_files": seen["evals"]},
         }
         return _sweep(args, eval_set, selected, out_dir, provenance,
                       settings_path=settings_path, cwd=cwd, plugin_dir=capture_tree)

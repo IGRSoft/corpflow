@@ -5,6 +5,7 @@ dispatch must raise, because a silently-empty capture would be graded as a
 genuine skill failure and pollute the numbers this directory exists to produce.
 """
 
+import glob
 import json
 import os
 import shutil
@@ -363,38 +364,41 @@ class CaptureIsolation(unittest.TestCase):
         with self.assertRaises(capture.PreflightError):
             capture.assert_clean_tree(self.parent)   # not a git repo at all
 
-    def test_the_probe_fails_closed_on_anything_unparseable(self):
-        # An unreadable probe is exactly when proceeding would spend the whole budget
-        # on an unverified surface, so it must not degrade to a guess.
-        self.assertEqual(capture.parse_probe("present: yes\nabsent: no\nevals: 0"),
-                         {"present": True, "absent": False, "evals": 0})
-        self.assertEqual(capture.parse_probe("`present: no`\n`evals: 3`"),
-                         {"present": False, "absent": None, "evals": 3})
-        self.assertEqual(capture.parse_probe("I could not determine that."),
-                         {"present": None, "absent": None, "evals": None})
+    def test_the_probe_reads_an_enumeration_and_fails_closed_otherwise(self):
+        got = capture.parse_probe(
+            "corpflow:worktask\n- /corpflow:estimate\ncorpflow:roadmap\nevals: 0",
+            "corpflow")
+        self.assertEqual(got["names"], {"worktask", "estimate", "roadmap"})
+        self.assertEqual(got["evals"], 0)
+        blank = capture.parse_probe("I could not determine that.", "corpflow")
+        self.assertEqual(blank, {"names": set(), "evals": None})
 
-    def test_the_probe_asks_which_COMMANDS_loaded_not_which_file_is_on_disk(self):
-        # The obvious version question does not work and looked like it did: the
-        # model answers it by reading SKILL.md out of the working directory, so it
-        # reported the tree's version on the un-isolated surface too — while the
-        # ambient release was demonstrably the plugin answering. The discriminator
-        # has to be something that is in the context and not on the disk.
-        tree = self._tree()
-        present, absent = capture.probe_discriminators(_REPO, tree)
-        self.assertIn(present + ".md", os.listdir(os.path.join(tree, "commands")))
-        if absent is not None:
-            self.assertNotIn(absent + ".md", os.listdir(os.path.join(tree, "commands")))
-        prompt = capture.build_probe_prompt("corpflow", present, absent)
-        self.assertIn(f"/corpflow:{present}", prompt)
+    def test_the_probe_asks_what_LOADED_not_what_is_on_disk(self):
+        # The version question does not work and looked like it did: the model
+        # answers it by reading SKILL.md out of the working directory, so it reported
+        # the tree's version on the un-isolated surface too — while the ambient
+        # release was demonstrably the plugin answering.
+        prompt = capture.build_probe_prompt("corpflow")
         self.assertNotIn("SKILL.md", prompt)
+        self.assertIn("not what is on the filesystem", prompt)
 
-    def test_the_probe_degrades_to_two_lines_when_nothing_distinguishes_the_two(self):
-        # No deleted-here command means the probe genuinely cannot tell the trees
-        # apart. It must stop asking rather than ask an unanswerable question.
-        prompt = capture.build_probe_prompt("corpflow", "worktask", None)
-        self.assertIn("exactly 2 lines", prompt)
-        self.assertNotIn("absent:", prompt)
-        self.assertIn("Line 2: `evals:", prompt)
+    def test_deleted_commands_are_what_catch_a_pin_that_did_not_bind(self):
+        tree = self._tree()
+        must_offer, must_not_offer = capture.probe_expectations(_REPO, tree)
+        self.assertTrue(must_offer)
+        self.assertFalse(must_offer & must_not_offer)
+        for name in must_not_offer:
+            self.assertFalse(os.path.exists(os.path.join(tree, "commands", name + ".md")))
+
+    def test_a_name_that_became_a_skill_is_not_read_as_a_stale_command(self):
+        # Commands and skills are both invocable as `<plugin>:<name>` and the model
+        # lists them together, so a command promoted to a skill would otherwise look
+        # like a deleted command still being served, and refuse a sound capture.
+        tree = self._tree()
+        _, must_not_offer = capture.probe_expectations(_REPO, tree)
+        skills = {os.path.basename(os.path.dirname(f))
+                  for f in glob.glob(os.path.join(tree, "skills", "*", "SKILL.md"))}
+        self.assertFalse(must_not_offer & skills)
 
 
 class LabelAlignWeighting(unittest.TestCase):
