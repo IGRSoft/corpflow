@@ -43,6 +43,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from concurrent import futures
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -62,6 +63,8 @@ CREDENTIAL_ENV = "ANTHROPIC_API_KEY"
 # configuration nobody ships.
 DEFAULT_MODEL = "claude-sonnet-5"
 DEFAULT_TIMEOUT = 300.0
+DEFAULT_RETRIES = 2
+RETRY_BACKOFF_S = 20.0
 
 # Removed from the capture tree before any dispatch. `evals.json` is the answer
 # key proper; labels/findings/splits carry verdicts and tranche membership, and
@@ -337,20 +340,38 @@ def record_for(eval_set, case, mode, model, sent_prompt, response, usage, proven
 
 
 def capture_case(eval_set, case, *, mode, model, settings_path, timeout, cwd,
-                 plugin_dir=None, dispatcher=None):
-    """Dispatch one case. Raises RuntimeError on any outcome that is not a real answer."""
+                 plugin_dir=None, dispatcher=None, retries=DEFAULT_RETRIES, sleeper=None):
+    """Dispatch one case. Raises RuntimeError on any outcome that is not a real answer.
+
+    Retries first. A sustained sweep provokes transient refusals — a run at
+    concurrency 4 lost 38 consecutive cases to `exited 1` with an empty stderr, and
+    the first of them succeeded on a bare retry minutes later. Without this the
+    capture is a coin toss against the rate limiter that costs the whole tail, and
+    re-running by hand re-pays for nothing.
+
+    Retrying does NOT weaken the never-fabricate contract: every attempt must still
+    produce a real answer, and exhausting the attempts still raises rather than
+    storing a blank.
+    """
     sent_prompt = build_prompt(case, mode, eval_set["skill_name"])
     argv = build_argv(model, settings_path, plugin_dir)
     dispatch = dispatcher or (lambda a, p: run(a, stdin_text=p, timeout=timeout, cwd=cwd))
-    result = dispatch(argv, sent_prompt)
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"case {case['id']}: claude -p exited {result.returncode}: "
-            f"{(result.stderr or '').strip()[:300]}")
-    response, usage = extract_response(result.stdout)
-    if response is None:
-        raise RuntimeError(f"case {case['id']}: no response text in CLI output")
-    return sent_prompt, response, usage
+    pause = sleeper or time.sleep
+    last = ""
+    for attempt in range(retries + 1):
+        if attempt:
+            pause(RETRY_BACKOFF_S * (2 ** (attempt - 1)))
+        result = dispatch(argv, sent_prompt)
+        if result.returncode != 0:
+            last = (f"claude -p exited {result.returncode}: "
+                    f"{(result.stderr or '').strip()[:300]}")
+            continue
+        response, usage = extract_response(result.stdout)
+        if response is None:
+            last = "no response text in CLI output"
+            continue
+        return sent_prompt, response, usage
+    raise RuntimeError(f"case {case['id']}: {last} (after {retries + 1} attempts)")
 
 
 def probe_expectations(root: str, tree: str) -> tuple:
@@ -437,6 +458,8 @@ def main(argv_in: list) -> int:
                         "Debugging only; never for a capture whose number is quoted")
     p.add_argument("--probe", action="store_true",
                    help="run only the surface probe (~$0.01) and print what answered")
+    p.add_argument("--retries", type=int, default=DEFAULT_RETRIES,
+                   help="retries per case on a transient dispatch failure")
     try:
         args = p.parse_args(argv_in)
     except SystemExit:
@@ -625,7 +648,7 @@ def _sweep(args, eval_set, selected, out_dir, provenance, *,
         sent, response, usage = capture_case(
             eval_set, case, mode=args.mode, model=args.model,
             settings_path=settings_path, timeout=args.timeout, cwd=cwd,
-            plugin_dir=plugin_dir)
+            plugin_dir=plugin_dir, retries=args.retries)
         rec = record_for(eval_set, case, args.mode, args.model, sent, response, usage, provenance)
         with open(os.path.join(out_dir, f"{cid}.json"), "w", encoding="utf-8") as f:
             json.dump(rec, f, indent=2, ensure_ascii=False)

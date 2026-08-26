@@ -6,6 +6,7 @@ genuine skill failure and pollute the numbers this directory exists to produce.
 """
 
 import glob
+import io
 import json
 import os
 import shutil
@@ -93,10 +94,15 @@ class ResponseExtraction(unittest.TestCase):
 
 
 class CaptureNeverFabricates(_Fixture):
+    """Single-shot by design: `retries=0` throughout, because what these assert is
+    that ONE bad dispatch is never turned into a stored answer. Retry behaviour is
+    a separate contract, in TransientFailuresAreRetried."""
+
     def test_successful_dispatch_returns_the_response(self):
         sent, response, usage = capture.capture_case(
             self.eval_set, self.case, mode="command", model="m", settings_path=None,
-            timeout=1, cwd=None, dispatcher=lambda a, p: _completed(0, _cli_json("# Plan")))
+            timeout=1, cwd=None, retries=0,
+            dispatcher=lambda a, p: _completed(0, _cli_json("# Plan")))
         self.assertEqual(response, "# Plan")
         self.assertTrue(sent.startswith("/corpflow:request-plan"))
         self.assertEqual(usage["cost_usd"], 0.01)
@@ -105,14 +111,16 @@ class CaptureNeverFabricates(_Fixture):
         with self.assertRaises(RuntimeError) as ctx:
             capture.capture_case(
                 self.eval_set, self.case, mode="command", model="m", settings_path=None,
-                timeout=1, cwd=None, dispatcher=lambda a, p: _completed(1, "", "boom"))
+                timeout=1, cwd=None, retries=0,
+                dispatcher=lambda a, p: _completed(1, "", "boom"))
         self.assertIn("exited 1", str(ctx.exception))
 
     def test_missing_response_text_raises(self):
         with self.assertRaises(RuntimeError) as ctx:
             capture.capture_case(
                 self.eval_set, self.case, mode="command", model="m", settings_path=None,
-                timeout=1, cwd=None, dispatcher=lambda a, p: _completed(0, "{}"))
+                timeout=1, cwd=None, retries=0,
+                dispatcher=lambda a, p: _completed(0, "{}"))
         self.assertIn("no response text", str(ctx.exception))
 
     def test_timeout_is_a_failure_not_an_empty_answer(self):
@@ -121,7 +129,7 @@ class CaptureNeverFabricates(_Fixture):
         with self.assertRaises(RuntimeError):
             capture.capture_case(
                 self.eval_set, self.case, mode="command", model="m", settings_path=None,
-                timeout=1, cwd=None, dispatcher=timing_out)
+                timeout=1, cwd=None, retries=0, dispatcher=timing_out)
 
 
 class Provenance(unittest.TestCase):
@@ -304,6 +312,59 @@ class PathsResolve(unittest.TestCase):
     def test_missing_resolver_raises_rather_than_passing(self):
         with self.assertRaises(ValueError):
             engine.check(self._a(), "hooks/state-merge.sh", None)
+
+
+class TransientFailuresAreRetried(unittest.TestCase):
+    """A sustained sweep provokes transient refusals. A run at concurrency 4 lost 38
+    consecutive cases to `exited 1` with an empty stderr, and the first of them
+    succeeded on a bare retry minutes later — so without retry the capture is a coin
+    toss against the rate limiter that costs the whole tail."""
+
+    def setUp(self):
+        self.eval_set = {
+            "skill_name": "request-plan", "shared_assertions": [],
+            "evals": [{"id": 1, "prompt": "p", "assertions": [],
+                       "expected_outcome": "plan"}],
+        }
+        self.case = engine.find_case(self.eval_set, 1)
+        self.slept = []
+
+    def _capture(self, outcomes, retries=2):
+        seq = list(outcomes)
+
+        def dispatch(argv, prompt):
+            return seq.pop(0)
+        return capture.capture_case(
+            self.eval_set, self.case, mode="command", model="m", settings_path=None,
+            timeout=1, cwd=None, dispatcher=dispatch, retries=retries,
+            sleeper=self.slept.append)
+
+    def test_a_transient_failure_is_retried_and_the_answer_kept(self):
+        _, response, _ = self._capture(
+            [_completed(1, "", ""), _completed(0, _cli_json("real answer"))])
+        self.assertEqual(response, "real answer")
+
+    def test_retries_back_off_rather_than_hammering_the_limiter(self):
+        self._capture([_completed(1), _completed(1), _completed(0, _cli_json("ok"))])
+        self.assertEqual(len(self.slept), 2)
+        self.assertLess(self.slept[0], self.slept[1])
+
+    def test_exhausting_the_retries_still_raises_and_stores_nothing(self):
+        # Retrying must not weaken the never-fabricate contract: a blank capture
+        # would be graded as a genuine skill failure.
+        with self.assertRaises(RuntimeError) as cm:
+            self._capture([_completed(1, "", "boom")] * 3)
+        self.assertIn("3 attempts", str(cm.exception))
+
+    def test_an_empty_response_is_transient_too_not_an_answer(self):
+        _, response, _ = self._capture(
+            [_completed(0, _cli_json("")), _completed(0, _cli_json("second try"))])
+        self.assertEqual(response, "second try")
+
+    def test_retries_zero_restores_the_single_shot_behaviour(self):
+        with self.assertRaises(RuntimeError):
+            self._capture([_completed(1)], retries=0)
+        self.assertEqual(self.slept, [])
 
 
 class CaptureIsolation(unittest.TestCase):
@@ -575,3 +636,50 @@ class GradesAreSelfDescribing(unittest.TestCase):
                 results = json.load(f)["results"]
         self.assertEqual({r["case_id"]: r["split"] for r in results},
                          {1: "dev", 2: "test"})
+
+
+class MixedRevisionsAreVisible(unittest.TestCase):
+    """A long sweep gets interrupted and resumed, so spanning two plugin revisions is
+    normal — and sound exactly when the diff between them leaves the measured surface
+    alone. Refusing would block a routine resume; silence would hide it."""
+
+    def _grade(self, shas):
+        eval_set = {
+            "skill_name": "request-plan", "shared_assertions": [],
+            "evals": [{"id": i, "prompt": f"p{i}", "assertions": [],
+                       "expected_outcome": "plan", "split": "dev"}
+                      for i in range(1, len(shas) + 1)],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            eval_path = os.path.join(tmp, "evals.json")
+            with open(eval_path, "w", encoding="utf-8") as f:
+                json.dump(eval_set, f)
+            responses = os.path.join(tmp, "responses")
+            os.makedirs(responses)
+            for cid, sha in enumerate(shas, start=1):
+                with open(os.path.join(responses, f"{cid}.json"), "w",
+                          encoding="utf-8") as f:
+                    json.dump({"case_id": cid, "skill_version": "0.2.0",
+                               "plugin_sha": sha,
+                               "response": "**Context** c **Goal** g **Scope** s",
+                               "prompt_digest": engine.prompt_digest(eval_set, cid),
+                               "assertions_digest":
+                                   engine.assertions_digest(eval_set, cid)}, f)
+            err = io.StringIO()
+            real_out, real_err = sys.stdout, sys.stderr
+            sys.stdout, sys.stderr = io.StringIO(), err
+            try:
+                rc = grader.main(["--eval-set", eval_path, "--responses", responses])
+            finally:
+                sys.stdout, sys.stderr = real_out, real_err
+        return rc, err.getvalue()
+
+    def test_two_revisions_are_reported_and_still_graded(self):
+        rc, err = self._grade(["aaaaaaa", "bbbbbbb"])
+        self.assertIn("span plugin revisions", err)
+        self.assertIn("aaaaaaax1", err)
+        self.assertNotEqual(rc, 2)
+
+    def test_one_revision_says_nothing(self):
+        _, err = self._grade(["aaaaaaa", "aaaaaaa"])
+        self.assertNotIn("span plugin revisions", err)
