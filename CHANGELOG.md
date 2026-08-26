@@ -13,6 +13,13 @@ name stops resolving. Shipped as a PATCH per this plugin's own precedent (`MEMOR
 load-bearing either way, because the plugin cache is version-keyed and a rename without one serves
 stale paths.
 
+Two further changes ride along, both consequences of the first. **`request-plan` 0.2.0** resolves the
+rule contradictions the 0.0.1 eval capture exposed, extends the capability registry to the executable
+surfaces every search miss grounded on, and rebuilds the eval signal that extension spends. And the
+verification pass turned up a **`megatask` defect** that had been failing `init-worktree.sh`'s own
+self-test: the base branch was resolved against the caller's repository rather than the one being
+initialised.
+
 ### Removed
 
 - **Six commands with no runtime or no reader.** `business-report`, `test-report`, `pm-prioritize`
@@ -109,6 +116,62 @@ stale paths.
   README's own count was also wrong in both directions — it claimed 36 while the tables listed 37
   and disk held 38, because `/worktask-status` was missing from the Core table; removing it settles
   the discrepancy rather than requiring a row.
+- **`capability-registry.bats`** — floor raised 40 → 120 (it was set when the registry held 79
+  lines and had been vacuous since), plus per-class presence assertions, a negative assertion on the
+  deliberately-unlisted directories, and fixture tests for each description extractor.
+- **`skills/request-plan/SKILL.md` 0.1.0 → 0.2.0**; `evals.json` `eval_set_version` 0.1.0 → 0.2.0.
+  The "found the surface → plan it" test moves from § 1's ladder into § 2 beside the registry, where
+  the evidence arrives; content unchanged.
+- **Eval case 4 reverted from `refute` to `plan`** and its byte count corrected. The `CHANGELOG.md`
+  split left the premise's *number* stale, not its *request* — it belongs with the correct-the-figure
+  cases, not the shipped-work conversions. Cases 5 and 53 were re-audited against the same test and
+  stay `refute`: both cite shipped behaviour, not a stale measurement.
+- **New eval cases** covering the search surfaces the registry deliberately does not enumerate, plus
+  the three 4.0.26 behaviours that shipped with no coverage (`/appstore` marker ambiguity,
+  `/estimate --detailed`, `release-engineer` dispatch when the platform plugin is absent).
+- **Three cases still naming surfaces 4.0.26 deleted.** Case 9 ("add a machine-readable summary to
+  cost-report") is **retired**: the command went with the whole cost-observability feature, so the
+  premise names nothing and no answer to it can be right — the same treatment 74/98/114 got, and the
+  id stays open rather than renumbering. Cases 16 and 22 stay `refute`; only their *evidence* was
+  stale, and both now cite what actually ships (`/estimate --export csv` and its 13-file pack;
+  `hooks/audit-subagent.sh` plus `audit-dedup.sh` as the reader) instead of `/cost-report --export`
+  and `/agent-report`. Corpus 157 → **156** (121 plan / 17 clarify / 18 refute).
+- **The generator fails closed on a deleted command.** `validate_named_surfaces()` rejects any case
+  whose prompt or `premise_refuted_by` names a `/command` absent from `commands/`. This table
+  carried two dead names for three days after 4.0.26 and only a hand grep found them;
+  `premise_refuted_by` is the evidence a refute case is graded against, so a dead citation lets the
+  case keep passing while proving nothing.
+
+### Added
+
+- **The capability registry enumerates executable surfaces.** `capability-registry.sh` now also
+  lists `hooks/*.sh`, `skills/*/scripts/*.{sh,py}` and `benchmark/harness/**/*.py` — 66 → 148 lines,
+  ~3.2k → ~7k tokens. Every search miss in the 0.0.1 capture grounded on one of those classes, which
+  behaviour search resolved two times in three while the markdown classes ran at 83–87%. Shell
+  descriptions come from `@description` or the first comment block after the shebang, Python from
+  the module docstring's summary paragraph; a file with no description still emits no line.
+  `tests/`, `evals/`, `skills/*/references/` and `skills/shared/*.md` stay deliberately unlisted —
+  the exclusion is on shared *canon*, not shared code. Two executable surfaces the first cut still
+  missed are now listed: `benchmark/run-benchmark.sh` (the harness entry point) and
+  `skills/shared/milestone-helpers/scripts/milestone-helpers.sh`, whose skill nests its code one
+  level deeper than the flat `skills/*/scripts/` glob reached. 66 → **148** lines; the only
+  executables left out are the four `hooks/lib/*-selftest.sh`, which are test scaffolding.
+- **Three rules for situations nothing covered.** `SKILL.md § 2` gains the six surface classes a
+  behaviour can live in (a search that has not decided which class owns it has not finished) and
+  turns "do not assert absence you did not check" into a structural requirement that every negative
+  claim carry its scope. `estimation-methodology` gains the rule that a quiet local tree — no
+  `.context/`, no live `state.json`, a green local run — is not evidence about a failure the user is
+  reporting.
+- **A required surface-check verdict in the plan template.** `references/plan-template.md` now
+  requires one line stating the tier verdict immediately before the trigger, the way
+  `P2 — v1.1: none` requires an empty phase row to be stated. Five of the graded routing failures
+  shared one shape: the check produced no visible output, so skipping it cost nothing.
+  `references/handoff.md` gains the matching consistency rule — a body arguing for a security review
+  and a plain `/worktask` line are two different recommendations.
+- **`tests/shell/skills/request-plan-contracts.bats`** — the three mechanical parts of the
+  cross-surface read: no rule surface names a command that does not resolve (the check that would
+  have caught `/pm-prioritize`), the command file makes no "no exception" claim and cites § 4, and
+  the template carries the surface-check line inside its Recommended-next-step block.
 
 ### Fixed
 
@@ -132,6 +195,29 @@ stale paths.
   every run so green is never read as verified, and CI shallow-clones the six registered sibling
   repos before the suite. A clone failure warns rather than failing the job: a sibling repo's outage
   is not a defect in this one.
+- **`request-plan` rule surfaces that contradicted each other.** `commands/request-plan.md` step 2
+  licensed routing to a sibling command *instead of* the worktask, which `SKILL.md § 4` forbids; it
+  now names no sibling at all and points at § 4 as the authority — naming one is what made the file
+  go stale twice (`/pm-requirements`, then `/pm-prioritize`). Step 3 claimed the trigger rule had
+  "no exception" while § 4 has had exactly one since 0.1.0; it now cites that exception rather than
+  denying it. `references/handoff.md` still told XL work to emit no command, contradicting both § 4
+  and step 3 — XL now names its sub-tasks and triggers the first.
+- **`init-worktree.sh` resolved the base branch against the wrong repository.** Step 7 correctly
+  uses `git -C "$repo_root"`, but `resolve_base_branch()` shelled out to `milestone-helpers.sh
+  base-branch` in the *caller's* cwd, and that helper's develop-vs-master probe is a `git ls-remote`
+  against whatever repo it is standing in. Initialising a worktree in a repo without `develop` from
+  a repo that has one picked `develop`, then fetched it in the other repo and died:
+  `fatal: couldn't find remote ref develop`, exit 128. It runs in `$repo_root` now (subshell, so the
+  no-cwd-drift discipline holds). This is what the script's own `--self-test` had been failing on.
+- **`milestone-helpers.bats` asserted a property of the developer's remote.** The base-branch
+  default test called the helper with no cwd control, so it passed or failed on whether the ambient
+  `origin` happened to carry `develop`. Both arms now run in a fixture with a controlled remote, and
+  the develop arm — which is what tells a working probe from one hardcoded to `master` — is covered
+  for the first time.
+- **The escalation canon called a live failure standard work.** `estimation-methodology/SKILL.md`
+  said "a wedged task or a runaway batch is standard work" immediately above the test that decides
+  it, so a reader who stopped at the example got the wrong answer. The example is now scoped to a
+  task that has *stopped*, and a task that is both stuck and still failing escalates.
 
 ### Notes
 
@@ -147,6 +233,20 @@ stale paths.
   successor surface there is nothing to re-ground them on, so they join the `RETIRED` table and
   their ids stay open rather than renumbering. Case 74 retires for the same reason with
   `/context-status`: nothing else in the repo reports remaining context.
+
+- **Three spec versions are unmeasured, and a capture cannot attribute between them.**
+
+  `SKILL.md` 0.1.0 shipped in PR #325 with no capture. The 4.0.26 command-surface reorganization
+  (PR #332, in this release) then removed seven commands, renamed five and repointed eight eval
+  groundings — all inside
+  the tree `eval-capture.py` reads. 0.2.0 stacks on both. Whenever a capture eventually runs it
+  measures **all three at once** and cannot separate them. Recorded here while it is cheap: a later
+  reader comparing a 0.2.0 number against the 0.0.1 baseline will otherwise attribute the whole delta
+  to whichever change they happen to be reading about.
+
+  Separately, extending the registry converts most of the `buried` tranche from a search into a
+  lookup, so **`buried` stops measuring search quality from 0.2.0 forward**. The replacement cases
+  ground only on unlisted surfaces; the note is also carried in `evals.json` `grading`.
 
 ## [4.0.25] — 2026-08-24
 
