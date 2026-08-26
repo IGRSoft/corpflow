@@ -63,7 +63,7 @@ These change how pre-fix numbers compare to current ones.
 |---|---|---|
 | `cache_creation_input_tokens` nested breakdown | 2.1.152 | Nested calls attribute to the sub-call layer; previously double-counted in the parent |
 | Bedrock/Vertex/Mantle/Foundry cache regression | 2.1.211 | Trailing system block was billed as fresh input — reconcile pre-fix dashboards against provider billing |
-| Streaming cost/token double-count | 2.1.214 | `/cost` and `/cost-report` are trustworthy on streaming turns only from here on |
+| Streaming cost/token double-count | 2.1.214 | `/cost` is trustworthy on streaming turns only from here on |
 | Mid-conversation cache block behind gateways | 2.1.212 | Bedrock/Vertex/1P and custom base URLs get direct-API cache economics |
 
 ### Behaviors worth exploiting

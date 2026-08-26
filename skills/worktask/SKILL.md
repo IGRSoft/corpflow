@@ -290,7 +290,7 @@ Emit one `dispatch_depth_projected` audit row with `metadata: {projected_depth, 
 
 ### Validation check 11 — what warns, and what stays quiet
 
-**Warn on the console only when `headroom < 0`.** At `headroom >= 0` the row is written and nothing prints. Deliberate: the canonical DV chain — session → `developer` (1) → platform router (2) → Tier-2 specialist (3) — lands on **exactly** the cap with zero headroom, so warning at `headroom == 0` would fire on every DV stage and teach the operator to skip the line that matters. The zero-headroom fact still reaches `metadata.headroom`, where `/cost-report` and incident review look. A projection that does not compute `3` for that chain is wrong regardless of whether it prints.
+**Warn on the console only when `headroom < 0`.** At `headroom >= 0` the row is written and nothing prints. Deliberate: the canonical DV chain — session → `developer` (1) → platform router (2) → Tier-2 specialist (3) — lands on **exactly** the cap with zero headroom, so warning at `headroom == 0` would fire on every DV stage and teach the operator to skip the line that matters. The zero-headroom fact still reaches `metadata.headroom`, where incident review looks. A projection that does not compute `3` for that chain is wrong regardless of whether it prints.
 
 #### Never blocks; forecast, not observation
 

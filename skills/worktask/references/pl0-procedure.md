@@ -3,8 +3,8 @@
 Read this file **first, before any other action**, when `corpflow:product-manager` is dispatched as
 the PL stage agent (PL0). It is the whole planning procedure and the only place it exists — the
 agent file carries identity and a pointer here, nothing that substitutes for this document.
-Non-PL0 invocations (`/estimate`, `/pm-requirements`, `/pm-roadmap`, `/pm-prioritize`,
-`/pm-milestone`) never need it.
+Non-PL0 invocations (`/estimate`, `/product-requirements`, `/roadmap`,
+`/milestone`) never need it.
 
 Every `skills/…` and `commands/…` path below is relative to the **corpflow plugin root**, not the
 worktask repo — resolve per `agents/product-manager.md § Plugin paths`. `<plan_file>`: see § Notation.
@@ -411,7 +411,7 @@ Platform variant = the same role from the detected platform's plugin, per the re
 | AR0 | `corpflow:software-architector` | that platform's architect |
 | TL0 | `corpflow:team-lead` | (same) |
 | DV0 | `corpflow:developer` | that platform's entry agent or specialist |
-| DR0 | `corpflow:technical-lead` | (same — invokes /dev-code-review) |
+| DR0 | `corpflow:technical-lead` | (same — invokes /tech-code-review) |
 | SR0 | `corpflow:security-reviewer` | that platform's security auditor (or `security-scanning:security-scanning-security-auditor`) |
 | QA0 | `corpflow:qa-engineer` | (same — may delegate to its test generator) |
 | DC0 | `corpflow:technical-writer` | (same) |

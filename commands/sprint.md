@@ -1,12 +1,12 @@
 ---
-name: pm-sprint
+name: sprint
 description: Plan sprint with capacity analysis, task breakdown, and resource allocation
 argument-hint: <sprint name or number>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/project-manager.md
-  - commands/pm-risk.md
+  - skills/estimation-methodology/references/estimate-review.md
   - commands/docs-release-notes.md
 ---
 
@@ -17,10 +17,10 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 ## Usage
 
 ```
-/pm-sprint
-/pm-sprint --capacity <points>
-/pm-sprint --from-backlog <file>
-/pm-sprint --duration [1|2|3|4] weeks
+/sprint
+/sprint --capacity <points>
+/sprint --from-backlog <file>
+/sprint --duration [1|2|3|4] weeks
 ```
 
 ## Options
@@ -34,10 +34,10 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 ## Examples
 
 ```
-/pm-sprint
-/pm-sprint --capacity 40 --duration 2
-/pm-sprint --from-backlog backlog.md --include-debt
-/pm-sprint --capacity 30 --export
+/sprint
+/sprint --capacity 40 --duration 2
+/sprint --from-backlog backlog.md --include-debt
+/sprint --capacity 30 --export
 ```
 
 ## Output Format
@@ -101,7 +101,7 @@ FEAT-101 (SSO Okta)
 
 ## Risks
 Table Risk | Probability | Impact | Mitigation — top 3-5 only.
-Run `/pm-risk` for the scored register, triggers, and monitoring plan.
+Score each risk per `skills/estimation-methodology/references/estimate-review.md § Risk Scoring`.
 ~~~
 
 ### Closing sections
@@ -134,6 +134,5 @@ Who leads which workstream, who is pairing, who absorbs bugs and tech debt.
 ## Integration
 
 This command works with:
-- `/pm-roadmap` - Break roadmap into sprints
-- `/pm-prioritize` - Prioritize sprint items
+- `/roadmap` - Break roadmap into sprints
 - `/estimate` - Estimate story points

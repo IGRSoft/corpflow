@@ -12,8 +12,8 @@ selection, PL0 stage sets — stays in `skills/estimation-methodology/SKILL.md`.
 4. **Feature breakdown**: subtasks with SP and hours
 5. **Phase planning**: group into ≤4-week phases
 6. **Risk assessment**: identify and mitigate
-7. **Budget calculation**: hours × rate + buffer
-8. **Senior review**: platform-specific adjustments
+7. **Estimate review**: apply `references/estimate-review.md` when its trigger fires
+8. **Budget calculation**: hours × rate + buffer — on the ADJUSTED SP, so it runs after step 7
 9. **Export**: CSVs for Google Sheets
 
 ## Phase Distribution Formula
@@ -35,7 +35,7 @@ estimate — when **any** of these occur:
 - **Complexity score change ≥ 3 points** — any of the 5 factors moves the score by 3 or more.
 - **New external SDK** not in the baseline estimate.
 - **Risk register adds a High-priority risk** — Probability × Impact crosses the High threshold
-  per the `/pm-risk` risk matrix (`commands/pm-risk.md`).
+  per `references/estimate-review.md § Risk Scoring`.
 
 ## AI Cost Factors
 

@@ -4,6 +4,150 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [4.0.26] — 2026-08-26
+
+Command-surface reorganization. **38 → 28 commands, 26 → 23 registered skills, and no deprecation
+aliases** — seven commands are gone and five are renamed, so every saved invocation of an affected
+name stops resolving. Shipped as a PATCH per this plugin's own precedent (`MEMORY.md:53` records the
+`company-workflow` → `corpflow` rename, breaking with no alias, shipping as one); the bump is
+load-bearing either way, because the plugin cache is version-keyed and a rename without one serves
+stale paths.
+
+### Removed
+
+- **Six commands with no runtime or no reader.** `business-report`, `test-report`, `pm-prioritize`
+  and `pm-risk` were prompt specs with no aggregator behind them, and the last two duplicated
+  judgement PL0 already makes. `/worktask-status` and `/agent-report` were working code that nothing
+  in the pipeline referenced — grepping `commands/worktask.md`, `commands/megatask.md`,
+  `skills/worktask/**`, every agent and every hook returns zero hits for either.
+- **`/context-status`, which could not perform any part of its own contract.** Its mandated output is
+  a `### Utilization` block (Current Usage, Window Size, Utilization %) and a `### Distribution`
+  table of tokens by source — but a model cannot observe its own token accounting, and its grants
+  were `Read, Glob` against no file in the repo that carries those figures, so every number it
+  emitted was invented. Worse than `/cost-report`, which at least read a real path that happened to
+  be empty. Separately `--compress` ("apply compression") and `--dry-run` ("without applying") were
+  the same no-op, because there was no `Write` or `Edit` grant to apply anything with, and its own
+  `## Integration` section claimed use "by `workflow-engineer` for diagnostics" while
+  `agents/workflow-engineer.md` never mentioned it. Nothing is lost:
+  `skills/context-compression/` stays (four agents, `hooks/precompact-checkpoint.sh`,
+  `skills/worktask/SKILL.md`, `references/resume.md`, and a bats suite consume it), the
+  "> 50% window → summarize completed stages" trigger lives in that skill rather than the command,
+  and surviving compaction is already automatic through the `PreCompact` hook with no command in the
+  loop.
+- **The whole cost-observability feature, not just `/cost-report`.** It aggregated
+  `.context/logs/cost-*.jsonl` and **nothing in the shipped plugin has ever written those files** —
+  no `cost-log.sh` exists in the repo, and none of the five registered `SubagentStop` hooks is a
+  cost logger. `skills/cost-optimization/SKILL.md` said so outright while still documenting the
+  hook. Getting a single row required hand-writing the capture script from a snippet and registering
+  it yourself, so the command has been inert since it shipped. The `§ Per-Stage Tracking` setup
+  instructions go with it: leaving them would keep advertising a hook whose only readers are being
+  deleted. What stays is everything that needed no data — the model cost tiers and selection matrix,
+  per-effort thinking budgets, the five reduction strategies, prompt caching, and the cost
+  estimation formula that `estimation-methodology` cites as canonical.
+- **`skills/worktask/scripts/status-view.sh` and `tests/shell/worktask/status-view.bats`**, in the
+  same commit as the command that wrapped them. They had to move together: `coverage-proxy` C2
+  reddens on a script with no `.bats` and C5 on a `.bats` orphaned from its script.
+- **`skills/worktask/scripts/attachments-preseed-test.sh`** — superseded twice over and unreachable.
+  It was a hand-rolled harness for what became `attachments-preseed.sh`, which is live, ships its
+  own `--self-test`, and has a real suite. Its only references were `tests/COVERAGE.md`, its own
+  bats (a test testing a test), and itself; it survived because commit `719d6e7` mechanically moved
+  every `references/*.sh` into `scripts/`.
+- **`skills/worktask-status/`** — the only skill directory a command removal deletes. Every other
+  skill the removed commands touched has other consumers and stays.
+
+### Changed
+
+- **The `pm-` family disappears.** `pm-milestone` → `milestone`, `pm-roadmap` → `roadmap`,
+  `pm-sprint` → `sprint`, `pm-requirements` → `product-requirements`. The prefix carried no
+  information the bare name did not.
+- **`dev-code-review` → `tech-code-review`.** The old name existed to disambiguate Claude Code's
+  built-in `/code-review`; the new one does not collide, so the disambiguation note is now a pointer
+  rather than a warning.
+- **App Store publishing moved to the plugin that ships to that store.** The three `appstore-*`
+  commands each opened with an `> **Apple-only.**` banner admitting they were misplaced in a
+  platform-neutral plugin. They are now `apple-developer` 1.30.0's `gen-appstore-listing`,
+  `gen-appstore-screenshots`, and `gen-appstore-iap`, with `skills/appstore-screenshots/` re-homed
+  as `skills/tooling/appstore-screenshots/` and its 16 layout tests migrated rather than dropped.
+  `android-developer` 1.5.0 gains `gen-playstore-listing` and `gen-playstore-screenshots` — original
+  authoring, not a port: Play's field budgets and asset rules differ field by field from App Store
+  Connect's. Play Billing IAP is deferred.
+- **New `/appstore`, a front door that writes nothing.** All three old commands held `Write`; this
+  one holds `Read, Glob, Grep, Task`. It dispatches `agents/release-engineer.md`, which owns platform
+  detection, alias resolution, and the sibling dispatch — routing policy has exactly one home
+  (`skills/shared/routing-matrix.md`) and no test reads a command body against it. Both apple and
+  android markers present, or neither, stops and reports: silently picking a store and then writing
+  to a live account is the failure this design exists to prevent.
+- **`release-engineer` absorbs store publishing rather than a new agent being added.** Its own
+  capability table already claimed "App Store (iOS), Play Store (Android)"; that claim is now real.
+  It had **no `Task` grant** and could not delegate to anything, so it gains a bare one, and the
+  `haiku` / `maxTurns: 25` budget sized for a non-delegating changelog writer becomes `sonnet` /
+  `maxTurns: 40`. Agent count is unchanged at 16.
+- **`skills/shared/routing-matrix.md` gains a Release-engineer aliases section** — a section of its
+  own, not rows inside § Functional-role aliases, whose grammar is four roles × six platforms and
+  would have demanded a web/backend/systems/ai release engineer that does not exist. There is
+  deliberately no bare `corpflow:release-engineer` alias: it would collide with the agent of that
+  name and redden the no-collision test immediately.
+- **`senior-developer-review` folds into `estimation-methodology`** as
+  `references/estimate-review.md`, and its step 8 stops being inert. `estimation-run.md:16` already
+  listed "Senior review: platform-specific adjustments" while nothing on `/estimate`'s default path
+  loaded the reference. `--detailed` now runs it inline when its existing trigger fires (complexity
+  ≥ 15, or AR/ML/Vision, BLE/hardware, real-time camera, unknown third-party SDKs, background
+  processing), with `--no-review` to opt out; `--review` stays for reviewing an *existing* estimate
+  with `--focus`/`--update`, which the in-run step cannot do. The adjusted SP feed
+  `### Budget Calculation`, so the budget is post-adjustment — `estimation-run.md`'s step order was
+  corrected to match. Two sections that arrived there by accident of the `skills/review/` rename
+  (Dependency Upgrade Review, Review Feedback Hygiene) move to `commands/tech-code-review.md`;
+  neither adjusts a story point.
+- **Content the survivors cited as canonical was inlined, not dropped.** The business-case skeleton
+  moved into `agents/stakeholder.md` (split as two H4s — it is ~1250 chars against a 1000-char leaf
+  cap), the RICE input scales and worked example into `agents/product-manager.md`, and `pm-risk`'s
+  scoring bands into `estimate-review.md § Risk Scoring`.
+- **README command taxonomy restated.** The invariant claimed every non-orchestration command
+  carries a domain prefix; after this change `milestone`, `roadmap`, `sprint` and
+  `product-requirements` are unprefixed and are not orchestration. They form a new **Planning**
+  group with `/request-plan`. The `business-`, `pm-` and `dev-` groups are empty and gone. The
+  README's own count was also wrong in both directions — it claimed 36 while the tables listed 37
+  and disk held 38, because `/worktask-status` was missing from the Core table; removing it settles
+  the discrepancy rather than requiring a row.
+
+### Fixed
+
+- **`skills/worktask/SKILL.md` ordered a skill that has never existed.** Its DR step emitted
+  `Skill("dev-code-review")` against `commands/dev-code-review.md`; there is no
+  `skills/dev-code-review/`. This is the exact defect class `tests/shell/skills/skill-refs.bats` was
+  written for — its header names this very call — but the checker could not see it:
+  `collect_skill_targets` globbed `agents/*.md` and `commands/*.md` only, and the call lives under
+  `skills/`. It silently no-opped and the DR stage fell back to the command doc via
+  `agents/technical-lead.md`. The line now names the command file, and the collector is widened to
+  `skills/**/*.md`. Widening it also required reading only the **first** quoted argument of a
+  `Skill(...)` call — `platform="apple"` in `dv-screenshot-capture` is an argument, not a target.
+- **Nothing validated a path-scoped `Bash(...)` grant against the file it names.** A grant like
+  `Bash(bash skills/foo/scripts/bar.sh:*)` does not error when its path moves — it simply stops
+  matching, and the agent silently loses the capability. `skill-refs.bats` gains a predicate
+  asserting every such path in a `tools:`/`allowed-tools:` line resolves to a real file.
+- **`cross-plugin-refs.bats` was passing while verifying nothing.** It resolved sibling plugins at
+  `$PLUGIN_ROOT/..`, which is a Conductor workspace directory locally and a bare checkout in CI —
+  neither contains siblings, so the per-plugin loop found none and both contract tests were green
+  against an empty set. It now takes `CORPFLOW_SIBLING_ROOT`, announces an empty sibling set on
+  every run so green is never read as verified, and CI shallow-clones the six registered sibling
+  repos before the suite. A clone failure warns rather than failing the job: a sibling repo's outage
+  is not a defect in this one.
+
+### Notes
+
+- **No commit in this release carries `!` or a `BREAKING CHANGE:` footer**, deliberately.
+  `version-bump-from-git.sh` computes `major` from either marker and shares
+  `conventional-commits-lib.sh` with `changelog-from-git.sh`, so a breaking marker would put the
+  release tooling in direct conflict with the chosen version number. The breakage is recorded here
+  in prose instead.
+- **Eight eval grounding paths were repointed and two cases retired**, because
+  `tests/python/test_skill_evals.py:182` asserts every case's grounding file exists and runs in CI.
+  Prompts are untouched, so no `prompt_digest` moved and no human label was invalidated. Cases 98
+  and 114 grounded solely on `status-view.sh` and `skills/worktask-status/SKILL.md`; with no
+  successor surface there is nothing to re-ground them on, so they join the `RETIRED` table and
+  their ids stay open rather than renumbering. Case 74 retires for the same reason with
+  `/context-status`: nothing else in the repo reports remaining context.
+
 ## [4.0.25] — 2026-08-24
 
 ### Fixed

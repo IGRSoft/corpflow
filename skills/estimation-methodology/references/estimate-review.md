@@ -1,12 +1,7 @@
----
-name: senior-developer-review
-description: Use when conducting senior-level code or estimate reviews. Technical review framework for estimates by platform specialists.
-effort: low
----
+# Estimate Review Reference
 
-# Senior Developer Review Guidelines
-
-Technical review of estimates by platform specialists.
+Adjustment reference for reviewing an estimate against the concrete APIs a platform actually
+requires.
 
 ## When to Apply
 
@@ -30,7 +25,8 @@ per-platform tables below.
 ## Platform-Specific Adjustments
 
 Apply only the table matching the reviewed platform; each row instantiates an Adjustment
-Matrix capability with that platform's concrete APIs.
+Matrix capability with that platform's concrete APIs. Table order mirrors the `--platform`
+enum; it is not a priority order.
 
 ### Apple/SwiftUI
 | Feature | Min Adjustment | Max Adjustment |
@@ -61,15 +57,6 @@ Matrix capability with that platform's concrete APIs.
 | Service workers | +2 SP | +3 SP |
 | IndexedDB sync | +2 SP | +3 SP |
 
-### Backend
-| Feature | Min Adjustment | Max Adjustment |
-|---------|---------------|---------------|
-| Cross-service transaction / idempotency | +3 SP | +5 SP |
-| Schema migration against live data | +2 SP | +3 SP |
-| Public API contract + versioning | +2 SP | +3 SP |
-| AuthN/AuthZ and tenant isolation | +2 SP | +3 SP |
-| Queue / event-driven fan-out | +2 SP | +3 SP |
-
 ### Systems (C/C++/Python/Bash)
 | Feature | Min Adjustment | Max Adjustment |
 |---------|---------------|---------------|
@@ -78,6 +65,15 @@ Matrix capability with that platform's concrete APIs.
 | Cross-platform build + toolchain matrix | +2 SP | +3 SP |
 | Sanitizer / UB triage on existing code | +1 SP | +2 SP |
 | ABI-stable public interface | +2 SP | +3 SP |
+
+### Backend
+| Feature | Min Adjustment | Max Adjustment |
+|---------|---------------|---------------|
+| Cross-service transaction / idempotency | +3 SP | +5 SP |
+| Schema migration against live data | +2 SP | +3 SP |
+| Public API contract + versioning | +2 SP | +3 SP |
+| AuthN/AuthZ and tenant isolation | +2 SP | +3 SP |
+| Queue / event-driven fan-out | +2 SP | +3 SP |
 
 ### AI/ML
 | Feature | Min Adjustment | Max Adjustment |
@@ -89,8 +85,9 @@ Matrix capability with that platform's concrete APIs.
 
 ## Review Process
 
-1. **Read estimation artifacts** — `features_breakdown.csv`, `complexity_analysis.csv`,
-   `integration_specifics.csv`.
+1. **Read the estimate** — its `### Breakdown` and `### Complexity Analysis` sections. When
+   `--export csv` has already run, `features_breakdown.csv`, `complexity_analysis.csv` and
+   `integration_specifics.csv` carry the same content and may be read instead.
 2. **Identify adjustment triggers** — check each feature against the matrix; note
    platform-specific concerns.
 3. **Apply adjustments** — update SP Min and SP Max per feature, recalculate hours
@@ -125,10 +122,21 @@ Before finalizing estimates, verify:
 | Health/financial data | Security audit required |
 | Real-time sync | Load testing required |
 
+## Risk Scoring
+
+Probability × Impact, each 1–5, scored per risk. The bands set what the score obliges:
+
+| Score | Level | Action Required |
+|-------|-------|-----------------|
+| 8-10 | Critical | Immediate mitigation |
+| 5-7 | High | Active management |
+| 3-4 | Medium | Monitor regularly |
+| 1-2 | Low | Accept and track |
+
 ## Output Format
 
 ```markdown
-## Senior Developer Review: [Project]
+## Estimate Review: [Project]
 
 ### Adjustment Summary
 | Category | Original (Min-Max) | Adjusted (Min-Max) | Delta | Reason |
@@ -149,32 +157,3 @@ Before finalizing estimates, verify:
 1. [Action 1]
 2. [Action 2]
 ```
-
-## Dependency Upgrade Review
-
-A bump is a behavior change you did not write, and bulk "bump deps" merges are the riskiest.
-When the review touches a manifest (`Package.swift`, `Podfile`, `*.gradle`,
-`requirements.txt`, `package.json`, …) or its lockfile, apply feature-code discipline.
-
-Advisory triage and supply-chain verdicts defer to the `security-review-process` skill: this
-is the upgrade *workflow*, that is the security *verdict*.
-
-### Upgrade rules
-
-| Rule | Why |
-|------|-----|
-| Read the changelog, not the version number | Semver is a promise the maintainer may not have kept; a "patch" can carry behavior change. Major bump → read the migration notes |
-| One dependency per change | A bulk bump that breaks the build hides which package did it; single-package changes keep the cause and the revert clean |
-| Let the suite decide | Green before *and* after, not "it resolved". Thin coverage around the dependency's behavior is itself the finding — add a test first |
-| Mind the transitive graph | Most resolved packages nobody chose directly; review the lockfile / transitive diff, not just the manifest |
-| Keep the lockfile honest | Committed, diff reviewed, never hand-edited — `Package.resolved` and equivalents pin what ships |
-
-## Review Feedback Hygiene
-
-Before re-requesting review on acted-on comments:
-
-- [ ] Every blocking comment addressed — fixed, or explicitly justified in a reply
-- [ ] Each fix references the comment it resolves (commit message or PR thread reply)
-- [ ] No silent scope expansion: changes outside the original request are flagged separately
-- [ ] CI/local checks pass on the updated diff before re-requesting
-- [ ] Rejected comments carry their rationale in the thread — never closed without a reply

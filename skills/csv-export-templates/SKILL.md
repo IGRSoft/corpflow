@@ -9,8 +9,8 @@ disable-model-invocation: true
 
 # CSV Export Templates
 
-Canonical 13-category export shape for Google Sheets import — `/estimate --export csv` and
-`/cost-report --export` reference this file; never redefine the file list or format elsewhere.
+Canonical 13-category export shape for Google Sheets import — `/estimate --export csv`
+references this file; never redefine the file list or format elsewhere.
 Per-file column definitions: `${CLAUDE_SKILL_DIR}/references/templates.md`.
 
 ## Format Specification

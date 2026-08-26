@@ -91,7 +91,7 @@ The surfaces are symmetric — the hook embeds remediation in the block JSON, th
 
 ### Background Tasks & Crons Visibility
 
-Stop/SubagentStop hook stdin includes `background_tasks` and `session_crons` arrays. The plugin captures them into audit rows for `/cost-report` cross-correlation (which cron/bg task was active when a stage spiked).
+Stop/SubagentStop hook stdin includes `background_tasks` and `session_crons` arrays. The plugin captures them into audit rows for cross-correlation (which cron/bg task was active when a stage spiked).
 
 #### Captured fields
 

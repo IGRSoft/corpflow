@@ -1,25 +1,24 @@
 ---
-name: pm-requirements
+name: product-requirements
 description: Generate a Product Requirements Document (PRD) from task description or user stories
 argument-hint: <feature or task description>
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/product-manager.md
-  - commands/pm-prioritize.md
-  - commands/pm-roadmap.md
+  - commands/roadmap.md
 ---
 
-# PM Requirements Command
+# Product Requirements Command
 
 Generate a Product Requirements Document (PRD) from task description or user stories.
 
 ## Usage
 
 ```
-/pm-requirements "Feature description"
-/pm-requirements --from-user-story "As a user..."
-/pm-requirements --template [full|lite|api]
+/product-requirements "Feature description"
+/product-requirements --from-user-story "As a user..."
+/product-requirements --template [full|lite|api]
 ```
 
 ## Options
@@ -32,10 +31,10 @@ Generate a Product Requirements Document (PRD) from task description or user sto
 ## Examples
 
 ```
-/pm-requirements "Add dark mode support to the application"
-/pm-requirements --from-user-story "As a user, I want to toggle dark mode so I can reduce eye strain"
-/pm-requirements --template api --technical "REST API for user management"
-/pm-requirements "Team dashboard" --include-metrics
+/product-requirements "Add dark mode support to the application"
+/product-requirements --from-user-story "As a user, I want to toggle dark mode so I can reduce eye strain"
+/product-requirements --template api --technical "REST API for user management"
+/product-requirements "Team dashboard" --include-metrics
 ```
 
 ## Output Format

@@ -39,7 +39,8 @@ Self-test (no network, no external deps): `--self-test` alone.
 The sections below are the specification the script implements — the canonical math path
 `commands/estimate.md` cites for its `### Budget Calculation` and `### AI Cost`. In the happy
 path read the script output instead. Estimation-run procedure, phase distribution, re-estimation
-triggers, AI cost factors: `references/estimation-run.md`.
+triggers, AI cost factors: `references/estimation-run.md`; the platform adjustment tables the
+review step applies: `references/estimate-review.md`.
 
 ## T-Shirt Sizing → Story Points (Range)
 

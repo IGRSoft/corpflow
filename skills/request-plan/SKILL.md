@@ -9,7 +9,7 @@ version: 0.1.0
 
 Produce a **lightweight, grounded plan** from a free-form request plus current repository context,
 then hand off to the worktask system. It bridges "I have an idea" and a full worktask: lighter than
-a PRD (`/pm-requirements`), broader than a sizing estimate (`/estimate`).
+a PRD (`/product-requirements`), broader than a sizing estimate (`/estimate`).
 
 The value is being **grounded** — the plan reflects this repo (in-flight work, recent commits,
 project memory, relevant code), not a generic template. Read context before planning and let it
@@ -162,7 +162,7 @@ runs, so a stage that finds a surface this plan could not see adds itself back t
 #### Exactly one `/worktask` line
 
 **Every plan ends with exactly one `/worktask` line.** Naming a more specific command
-(`/pm-prioritize`, `/estimate`) is useful context, never a replacement — recommending one *instead*
+(`/estimate`) is useful context, never a replacement — recommending one *instead*
 of the worktask leaves the user with no handoff. Mention it alongside the trigger, not in place of it.
 **Disputing the premise does not suspend the line.** A plan concluding the reported defect is
 misdiagnosed, unreproducible, or absent from the file it was blamed on still emits one — triage is
@@ -205,9 +205,9 @@ wants it kept or it will directly seed a worktask run.
 ## What this skill is not
 
 - Not a PRD generator — formal requirements, user stories, and acceptance criteria at scale route to
-  `/pm-requirements`.
+  `/product-requirements`.
 - Not a budget/CSV estimator — hours, rates, and exportable sizing route to `/estimate`.
-- Not a roadmap — multi-quarter planning belongs in `/pm-roadmap`.
+- Not a roadmap — multi-quarter planning belongs in `/roadmap`.
 
 Staying lightweight is the point; resist padding the output toward those heavier formats.
 

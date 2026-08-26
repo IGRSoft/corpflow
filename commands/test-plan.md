@@ -144,6 +144,6 @@ journeys are `Priority: Critical`.
 ## Integration
 
 This command is typically used:
-- After `/pm-requirements` - Generate tests from requirements
+- After `/product-requirements` - Generate tests from requirements
 - Before `/worktask` QA stage - Prepare test strategy
 - With `/test-coverage` - Identify gaps

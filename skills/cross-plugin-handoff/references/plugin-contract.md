@@ -108,6 +108,14 @@ schema from it.
 
 Every file below changes in the same commit. Ordered so later edits can reference earlier ones.
 
+> **Scope: adding or swapping a plugin.** Giving a plugin already in the registry a *new capability*
+> is a different, smaller change and does not owe the full checklist. The App Store move is the
+> worked example: two registered plugins gained a release engineer, so it touched rows 1 (matrix),
+> 2 (command sets), 13 (README) and 14 (manifests/CHANGELOG/MEMORY) and legitimately nothing else.
+> Read the rows, take the ones your change actually reaches, and say in the PR which you skipped and
+> why — the failure this note prevents is a reader either editing ten files that had no reason to
+> change or concluding the contract was violated.
+
 ### Registry and routing
 
 | # | File | What changes |
@@ -134,8 +142,8 @@ the test fails until each inline table matches the matrix.
 
 | # | File | What changes |
 |---|------|--------------|
-| 10 | `commands/pm-milestone.md` | Implementation / Test / Review agent-assignment tables; `--platform` flag docs |
-| 11 | `commands/dev-code-review.md` | `--platform` enum |
+| 10 | `commands/milestone.md` | Implementation / Test / Review agent-assignment tables; `--platform` flag docs |
+| 11 | `commands/tech-code-review.md` | `--platform` enum |
 | 12 | `skills/agent-coordination/SKILL.md` | Sub-Task Delegation model table; AR-collaboration note |
 | 13 | `README.md` | Plugin mentions and worktask examples |
 | 14 | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `CHANGELOG.md`, `MEMORY.md` | MINOR version bump + release notes. New entries always land in `CHANGELOG.md`; `CHANGELOG-3.x.md` is a frozen archive and is never appended to |
