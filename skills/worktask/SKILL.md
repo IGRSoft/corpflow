@@ -815,11 +815,13 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
 #### Step 5b
 
 ```typescript
-    // 5b. dev-code-review Skill invocation (DR) — APPENDED as suffix [7] so the prefix
-    //     [1][2][3][4][5] stays byte-identical with neighbour stages.
+    // 5b. tech-code-review invocation (DR) — APPENDED as suffix [7] so the prefix
+    //     [1][2][3][4][5] stays byte-identical with neighbour stages. The review is a
+    //     COMMAND, not a skill: there is no skills/tech-code-review/ to invoke, so name
+    //     the file and let the stage read it.
     if (full.metadata.stage === "DR") {
       const runIndex = full.metadata.run_index ?? 0;
-      const reviewInvocation = `IMPORTANT: Execute developer code review via Skill tool: Skill("dev-code-review"). Save findings summary to .context/developer-review-${runIndex}.md`;
+      const reviewInvocation = `IMPORTANT: Execute developer code review per commands/tech-code-review.md (plugin-root-relative). Save findings summary to .context/developer-review-${runIndex}.md`;
       full.description = full.description + "\n\n" + reviewInvocation;
     }
 ```

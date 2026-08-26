@@ -355,7 +355,7 @@ Per-invocation override: `Task({ subagent_type: "corpflow:developer", model: "op
 
 #### Skill discovery & subagent_type resolution
 
-> Subagents resolve project + user + plugin skills natively at every depth — a Level-3 child resolves `Skill("name")` like a Level-1 one — so never inline-load skill instructions before delegating. `subagent_type` matching is case- and separator-insensitive (`"Corpflow:Developer"` → `corpflow:developer`); the bare-name → `corpflow:` convention still sets resolution priority.
+> Subagents resolve project + user + plugin skills natively at every depth — a Level-3 child resolves `Skill("<name>")` like a Level-1 one — so never inline-load skill instructions before delegating. `subagent_type` matching is case- and separator-insensitive (`"Corpflow:Developer"` → `corpflow:developer`); the bare-name → `corpflow:` convention still sets resolution priority.
 
 #### Dispatch flags & /agents UI
 
