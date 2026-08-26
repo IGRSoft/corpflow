@@ -9,20 +9,39 @@ output quality.
 Usage:
   eval-capture.py --eval-set <path> [--case ID]... [--out-dir D] [--model M]
                   [--mode command|natural] [--budget USD] [--timeout S]
-                  [--settings PATH] [--force] [--dry-run]
+                  [--settings PATH] [--split S] [--concurrency N]
+                  [--no-isolate] [--probe] [--force] [--dry-run]
 
 Exit codes: 0 ok / 1 a dispatch failed / 2 pre-flight decline / 3 no credential
 / 4 budget breach (prior cases already written) / 64 bad usage.
+
+Dispatches run against an ISOLATED tree, not the repo. Two separate defects made
+that necessary and neither is visible from the recorded output:
+
+  * The plugin under test was never the tree under test. Without `--plugin-dir`
+    the CLI resolves `/corpflow:<skill>` from the ambient install, while
+    `skill_version()` below reads THIS repo's SKILL.md — so a run could exercise
+    one version and stamp another on all 156 records.
+  * The answer key was inside the searched tree. `evals.json` carries
+    `expected_outcome`, and 7 of 114 responses in the 0.0.1 capture reached the
+    corpus; at least 3 read the answer outright.
+
+`--no-isolate` restores the old behaviour for debugging. It must never be used
+for a capture whose number will be quoted.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime
+import glob
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 from concurrent import futures
 
@@ -43,6 +62,37 @@ CREDENTIAL_ENV = "ANTHROPIC_API_KEY"
 # configuration nobody ships.
 DEFAULT_MODEL = "claude-sonnet-5"
 DEFAULT_TIMEOUT = 300.0
+
+# Removed from the capture tree before any dispatch. `evals.json` is the answer
+# key proper; labels/findings/splits carry verdicts and tranche membership, and
+# the generator holds every prompt beside its expected outcome.
+ANSWER_KEY_PATHS = (
+    "evals/labels",
+    "evals/findings",
+    "evals/splits",
+    "evals/review",
+    "evals/scripts/gen-request-plan-cases.py",
+)
+ANSWER_KEY_GLOBS = (
+    "skills/*/evals/evals.json",
+    "skills/*/evals/failure-taxonomy.md",
+    "skills/*/evals/responses*",
+)
+# NOT stripped, deliberately: eval cases ground on evals/scripts/eval-*.py,
+# judge-traces.py, build-review-page.py and label-align.py. Removing the whole
+# of evals/ would make those cases unanswerable and score the strip as a skill
+# failure. The exclusion is the answer key, not the directory.
+
+# The probe that proves both fixes bound before the sweep spends anything. It
+# asks for facts the run's own provenance claims, so a mismatch is checkable
+# rather than a matter of trust.
+PROBE_PROMPT = (
+    "Answer in exactly two lines, nothing else.\n"
+    "Line 1: `version: <the version: field from the request-plan SKILL.md you "
+    "have loaded>`\n"
+    "Line 2: `evals: <the number of files matching skills/request-plan/evals/"
+    "evals.json in your working directory>`"
+)
 
 MISSING_CREDENTIAL_MESSAGE = (
     "capture requires credentials; set ANTHROPIC_API_KEY or run claude login"
@@ -84,11 +134,16 @@ def has_credential(env: dict | None = None, auth_runner=None) -> bool:
     return isinstance(parsed, dict) and parsed.get("loggedIn") is True
 
 
-def build_argv(model: str, settings_path: str | None) -> list:
+def build_argv(model: str, settings_path: str | None,
+               plugin_dir: str | None = None) -> list:
     argv = ["claude", "-p", "--model", model,
             "--permission-mode", PERMISSION_MODE, "--output-format", "json"]
     if settings_path:
         argv += ["--settings", settings_path]
+    if plugin_dir:
+        # Pins the skill to the tree under test. Without it the ambient install
+        # answers, and the recorded skill_version describes a file that never ran.
+        argv += ["--plugin-dir", plugin_dir]
     return argv
 
 
@@ -156,6 +211,108 @@ def skill_version(root: str, skill_name: str) -> str | None:
     return None
 
 
+def assert_clean_tree(root: str) -> None:
+    """Refuse to capture from a dirty tree.
+
+    The capture tree is a detached worktree at HEAD, so uncommitted work is not in
+    it — a dirty root means `plugin_sha` names a state that never ran. The 0.0.1
+    capture recorded `9e2cda9-dirty` for exactly this reason and its provenance
+    table calls that marker load-bearing. Cheaper to refuse than to footnote.
+    """
+    r = run(["git", "-C", root, "status", "--porcelain", "--untracked-files=no"])
+    if r.returncode != 0:
+        raise PreflightError(f"cannot read git status in {root}")
+    if r.stdout.strip():
+        raise PreflightError(
+            "working tree has uncommitted changes; commit them first — a capture "
+            "from a detached HEAD worktree would not contain them, and plugin_sha "
+            "would describe a tree that never ran")
+
+
+def make_capture_tree(root: str, dest: str) -> str:
+    """A detached worktree at HEAD, with the answer key removed.
+
+    Tracked-at-HEAD only, which drops `.context/`, `evals/review/` and any
+    `responses*/` for free — the prompt-leak lint sweeps `git ls-files --others`
+    and so is blind to gitignored files, which is how a per-trace failure map can
+    sit in the searched tree without tripping anything.
+    """
+    r = run(["git", "-C", root, "worktree", "add", "--detach", "--quiet", dest, "HEAD"])
+    if r.returncode != 0:
+        raise PreflightError(
+            f"cannot create capture worktree: {(r.stderr or '').strip()[:300]}")
+    return dest
+
+
+def strip_answer_keys(tree: str) -> list:
+    """Delete the answer key from a capture tree. Returns what was removed."""
+    removed = []
+    targets = [os.path.join(tree, rel) for rel in ANSWER_KEY_PATHS]
+    for pattern in ANSWER_KEY_GLOBS:
+        targets += sorted(glob.glob(os.path.join(tree, pattern)))
+    for path in targets:
+        if not os.path.exists(path):
+            continue
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        else:
+            os.remove(path)
+        removed.append(os.path.relpath(path, tree))
+    return sorted(removed)
+
+
+def remove_capture_tree(root: str, dest: str) -> None:
+    run(["git", "-C", root, "worktree", "remove", "--force", dest])
+    if os.path.exists(dest):
+        shutil.rmtree(dest, ignore_errors=True)
+    run(["git", "-C", root, "worktree", "prune"])
+
+
+def plugin_name(root: str) -> str | None:
+    try:
+        with open(os.path.join(root, ".claude-plugin", "plugin.json"),
+                  encoding="utf-8") as f:
+            return json.load(f).get("name")
+    except (OSError, ValueError):
+        return None
+
+
+def write_capture_settings(root: str, dest: str, base_path: str | None) -> str | None:
+    """Settings that disable the AMBIENT copy of the plugin under test.
+
+    `--plugin-dir` loads the capture tree, but it loads it ALONGSIDE whatever the
+    marketplace installed, and the installed copy is a published release that can
+    be several versions behind the tree. Disabling it is what makes the pin
+    exclusive. Returns None when there is nothing to disable and no base file.
+    """
+    settings = {}
+    if base_path:
+        try:
+            with open(base_path, encoding="utf-8") as f:
+                settings = json.load(f)
+        except (OSError, ValueError) as exc:
+            raise PreflightError(f"cannot read --settings {base_path}: {exc}")
+    name = plugin_name(root)
+    if name:
+        enabled = dict(settings.get("enabledPlugins") or {})
+        user = os.path.expanduser("~/.claude/settings.json")
+        try:
+            with open(user, encoding="utf-8") as f:
+                for key in (json.load(f).get("enabledPlugins") or {}):
+                    if key.split("@", 1)[0] == name:
+                        enabled[key] = False
+        except (OSError, ValueError):
+            pass
+        if enabled:
+            settings["enabledPlugins"] = enabled
+    if not settings:
+        return None
+    path = os.path.join(dest, "capture-settings.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(settings, f, indent=2)
+    return path
+
+
 def record_for(eval_set, case, mode, model, sent_prompt, response, usage, provenance) -> dict:
     return {
         "capture_contract": CAPTURE_CONTRACT,
@@ -173,10 +330,11 @@ def record_for(eval_set, case, mode, model, sent_prompt, response, usage, proven
     }
 
 
-def capture_case(eval_set, case, *, mode, model, settings_path, timeout, cwd, dispatcher=None):
+def capture_case(eval_set, case, *, mode, model, settings_path, timeout, cwd,
+                 plugin_dir=None, dispatcher=None):
     """Dispatch one case. Raises RuntimeError on any outcome that is not a real answer."""
     sent_prompt = build_prompt(case, mode, eval_set["skill_name"])
-    argv = build_argv(model, settings_path)
+    argv = build_argv(model, settings_path, plugin_dir)
     dispatch = dispatcher or (lambda a, p: run(a, stdin_text=p, timeout=timeout, cwd=cwd))
     result = dispatch(argv, sent_prompt)
     if result.returncode != 0:
@@ -187,6 +345,39 @@ def capture_case(eval_set, case, *, mode, model, settings_path, timeout, cwd, di
     if response is None:
         raise RuntimeError(f"case {case['id']}: no response text in CLI output")
     return sent_prompt, response, usage
+
+
+def parse_probe(text: str) -> tuple:
+    """(version, evals_files) from the probe's two lines; None for anything unread.
+
+    Fails closed by returning None rather than a guess: an unparseable probe is
+    exactly the case where proceeding would spend the whole budget on an unverified
+    surface.
+    """
+    version = evals = None
+    m = re.search(r"^\s*`?version:\s*`?([0-9]+\.[0-9]+\.[0-9]+)`?", text, re.MULTILINE)
+    if m:
+        version = m.group(1)
+    m = re.search(r"^\s*`?evals:\s*`?(\d+)", text, re.MULTILINE)
+    if m:
+        evals = int(m.group(1))
+    return version, evals
+
+
+def probe_capture_surface(*, model, settings_path, timeout, cwd, plugin_dir,
+                          dispatcher=None) -> str:
+    """One cheap dispatch that reports which skill answered and whether the answer
+    key is reachable. Its whole point is that the sweep must not start on trust."""
+    argv = build_argv(model, settings_path, plugin_dir)
+    dispatch = dispatcher or (lambda a, pr: run(a, stdin_text=pr, timeout=timeout, cwd=cwd))
+    result = dispatch(argv, PROBE_PROMPT)
+    if result.returncode != 0:
+        raise PreflightError(
+            f"probe dispatch exited {result.returncode}: {(result.stderr or '').strip()[:300]}")
+    text, _ = extract_response(result.stdout)
+    if text is None:
+        raise PreflightError("probe dispatch returned no response text")
+    return text
 
 
 def main(argv_in: list) -> int:
@@ -205,6 +396,11 @@ def main(argv_in: list) -> int:
                    help="capture only this tranche")
     p.add_argument("--concurrency", type=int, default=1,
                    help="parallel dispatches; the budget check trails by up to this many cases")
+    p.add_argument("--no-isolate", action="store_true",
+                   help="dispatch against the repo itself, with the eval corpus in it. "
+                        "Debugging only; never for a capture whose number is quoted")
+    p.add_argument("--probe", action="store_true",
+                   help="run only the surface probe (~$0.01) and print what answered")
     try:
         args = p.parse_args(argv_in)
     except SystemExit:
@@ -233,29 +429,131 @@ def main(argv_in: list) -> int:
         sys.stderr.write(f"eval-capture: --settings not found: {settings_path}\n")
         return 2
 
+    isolate = not args.no_isolate
+    tmp_parent = capture_tree = settings_path = None
+
     if args.dry_run:
-        for cid in selected:
-            case = engine.find_case(eval_set, cid)
-            print(json.dumps({
-                "case_id": cid, "mode": args.mode, "model": args.model,
-                "argv": build_argv(args.model, settings_path),
-                "sent_prompt": build_prompt(case, args.mode, eval_set["skill_name"]),
-                "out": os.path.join(out_dir, f"{cid}.json"),
-            }, indent=2))
+        # The argv shown must be the argv that would run, so the isolated surface is
+        # built here too. A dry run that prints the un-isolated command would advertise
+        # the very defect this refuses to ship.
+        if isolate:
+            try:
+                tmp_parent = tempfile.mkdtemp(prefix="eval-capture-")
+                capture_tree = make_capture_tree(root, os.path.join(tmp_parent, "tree"))
+                stripped = strip_answer_keys(capture_tree)
+                settings_path = write_capture_settings(root, tmp_parent, args.settings)
+                print(json.dumps({"capture_tree": capture_tree,
+                                  "stripped": stripped,
+                                  "settings": settings_path}, indent=2))
+                # Inspecting is free, so a dirty tree only warns here. The paid path
+                # refuses: the capture tree is HEAD, so uncommitted work is not in it.
+                try:
+                    assert_clean_tree(root)
+                except PreflightError as exc:
+                    sys.stderr.write(f"eval-capture: note (dry run only): {exc}\n")
+            except PreflightError as exc:
+                sys.stderr.write(f"eval-capture: {exc}\n")
+                if capture_tree:
+                    remove_capture_tree(root, capture_tree)
+                if tmp_parent:
+                    shutil.rmtree(tmp_parent, ignore_errors=True)
+                return 2
+        try:
+            for cid in selected:
+                case = engine.find_case(eval_set, cid)
+                print(json.dumps({
+                    "case_id": cid, "mode": args.mode, "model": args.model,
+                    "cwd": capture_tree or root,
+                    "argv": build_argv(args.model, settings_path, capture_tree),
+                    "sent_prompt": build_prompt(case, args.mode, eval_set["skill_name"]),
+                    "out": os.path.join(out_dir, f"{cid}.json"),
+                }, indent=2))
+        finally:
+            if capture_tree:
+                remove_capture_tree(root, capture_tree)
+            if tmp_parent:
+                shutil.rmtree(tmp_parent, ignore_errors=True)
         return 0
 
     if not has_credential():
         sys.stderr.write(MISSING_CREDENTIAL_MESSAGE + "\n")
         return 3
 
-    os.makedirs(out_dir, exist_ok=True)
-    provenance = {
-        "captured_at": datetime.datetime.now(datetime.timezone.utc)
-                               .replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-        "plugin_sha": plugin_sha(root),
-        "skill_version": skill_version(root, eval_set["skill_name"]),
-    }
+    if isolate:
+        try:
+            assert_clean_tree(root)
+        except PreflightError as exc:
+            sys.stderr.write(f"eval-capture: {exc}\n")
+            return 2
 
+    expected_version = skill_version(root, eval_set["skill_name"])
+    try:
+        if isolate:
+            tmp_parent = tempfile.mkdtemp(prefix="eval-capture-")
+            capture_tree = make_capture_tree(root, os.path.join(tmp_parent, "tree"))
+            stripped = strip_answer_keys(capture_tree)
+            settings_path = write_capture_settings(root, tmp_parent, args.settings)
+            print(f"capture tree: {capture_tree}")
+            print(f"answer-key paths removed: {len(stripped)} -> {stripped}")
+        else:
+            settings_path = args.settings
+            sys.stderr.write(
+                "eval-capture: WARNING --no-isolate: dispatching against the repo, so "
+                "the eval corpus is readable and the ambient plugin answers. Any number "
+                "from this run is uncomparable.\n")
+
+        cwd = capture_tree or root
+        try:
+            probe_text = probe_capture_surface(
+                model=args.model, settings_path=settings_path, timeout=args.timeout,
+                cwd=cwd, plugin_dir=capture_tree)
+        except PreflightError as exc:
+            sys.stderr.write(f"eval-capture: {exc}\n")
+            return 2
+        loaded_version, evals_seen = parse_probe(probe_text)
+        print(f"probe: version={loaded_version} evals_files={evals_seen}")
+        if args.probe:
+            print(probe_text)
+            return 0
+
+        if isolate:
+            if loaded_version is None or evals_seen is None:
+                sys.stderr.write(
+                    "eval-capture: probe unreadable; refusing to spend on an "
+                    f"unverified surface. Raw: {probe_text.strip()[:300]}\n")
+                return 2
+            if loaded_version != expected_version:
+                sys.stderr.write(
+                    f"eval-capture: the skill that answered is {loaded_version}, but this "
+                    f"tree is {expected_version}. --plugin-dir did not bind, so the run "
+                    "would measure one version and stamp another.\n")
+                return 2
+            if evals_seen != 0:
+                sys.stderr.write(
+                    f"eval-capture: the answer key is still reachable ({evals_seen} "
+                    "match(es) for evals.json). Refusing.\n")
+                return 2
+
+        os.makedirs(out_dir, exist_ok=True)
+        provenance = {
+            "captured_at": datetime.datetime.now(datetime.timezone.utc)
+                                   .replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            "plugin_sha": plugin_sha(root),
+            "skill_version": expected_version,
+            "skill_version_loaded": loaded_version,
+            "isolated": bool(capture_tree),
+        }
+        return _sweep(args, eval_set, selected, out_dir, provenance,
+                      settings_path=settings_path, cwd=cwd, plugin_dir=capture_tree)
+    finally:
+        if capture_tree:
+            remove_capture_tree(root, capture_tree)
+        if tmp_parent:
+            shutil.rmtree(tmp_parent, ignore_errors=True)
+
+
+def _sweep(args, eval_set, selected, out_dir, provenance, *,
+           settings_path, cwd, plugin_dir) -> int:
     pending = []
     for cid in selected:
         dest = os.path.join(out_dir, f"{cid}.json")
@@ -274,7 +572,8 @@ def main(argv_in: list) -> int:
         case = engine.find_case(eval_set, cid)
         sent, response, usage = capture_case(
             eval_set, case, mode=args.mode, model=args.model,
-            settings_path=settings_path, timeout=args.timeout, cwd=root)
+            settings_path=settings_path, timeout=args.timeout, cwd=cwd,
+            plugin_dir=plugin_dir)
         rec = record_for(eval_set, case, args.mode, args.model, sent, response, usage, provenance)
         with open(os.path.join(out_dir, f"{cid}.json"), "w", encoding="utf-8") as f:
             json.dump(rec, f, indent=2, ensure_ascii=False)

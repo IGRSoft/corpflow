@@ -7,14 +7,18 @@ genuine skill failure and pollute the numbers this directory exists to produce.
 
 import json
 import os
+import shutil
 import subprocess
+import tempfile
 import unittest
 
-from _scriptimport import EVAL_CAPTURE, EVAL_ENGINE, EVAL_GRADE, load_module
+from _scriptimport import (EVAL_CAPTURE, EVAL_ENGINE, EVAL_GRADE, LABEL_ALIGN,
+                           load_module)
 
 engine = load_module(EVAL_ENGINE, "eval_engine")
 capture = load_module(EVAL_CAPTURE, "eval_capture")
 grader = load_module(EVAL_GRADE, "eval_grade")
+label_align = load_module(LABEL_ALIGN, "label_align")
 
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _EVAL_SET = os.path.join(_REPO, "skills", "request-plan", "evals", "evals.json")
@@ -297,3 +301,148 @@ class PathsResolve(unittest.TestCase):
     def test_missing_resolver_raises_rather_than_passing(self):
         with self.assertRaises(ValueError):
             engine.check(self._a(), "hooks/state-merge.sh", None)
+
+
+class CaptureIsolation(unittest.TestCase):
+    """The capture surface, which two separate defects made load-bearing.
+
+    Neither defect is visible in a stored record. The plugin one is worse: without
+    `--plugin-dir` the CLI answers from the ambient marketplace install while
+    `skill_version()` reads this repo, so a whole sweep can measure one version and
+    stamp another on all of it — a green-looking capture of the wrong thing.
+    """
+
+    def setUp(self):
+        self.parent = tempfile.mkdtemp(prefix="capture-isolation-")
+        self.tree = None
+        self.addCleanup(shutil.rmtree, self.parent, True)
+
+    def _tree(self):
+        self.tree = capture.make_capture_tree(_REPO, os.path.join(self.parent, "tree"))
+        self.addCleanup(capture.remove_capture_tree, _REPO, self.tree)
+        return self.tree
+
+    def test_the_answer_key_is_removed_from_the_capture_tree(self):
+        tree = self._tree()
+        capture.strip_answer_keys(tree)
+        for rel in ("skills/request-plan/evals/evals.json", "evals/labels",
+                    "evals/findings", "evals/splits",
+                    "evals/scripts/gen-request-plan-cases.py"):
+            self.assertFalse(os.path.exists(os.path.join(tree, rel)), rel)
+
+    def test_gitignored_material_never_reaches_the_capture_tree(self):
+        # `.context/` held a per-trace map of every known failure. It is gitignored,
+        # so the prompt-leak lint's `git ls-files --others` sweep cannot see it — the
+        # worktree excludes it by construction rather than by another deny-list.
+        self.assertFalse(os.path.exists(os.path.join(self._tree(), ".context")))
+
+    def test_the_scripts_cases_ground_on_survive_the_strip(self):
+        # Cases 111/112/115/162/163/164 ground on these. Stripping the whole of
+        # evals/ would make them unanswerable and score the strip as a skill failure.
+        tree = self._tree()
+        capture.strip_answer_keys(tree)
+        for rel in ("eval-engine.py", "eval-capture.py", "eval-grade.py",
+                    "judge-traces.py", "build-review-page.py", "label-align.py"):
+            self.assertTrue(os.path.exists(os.path.join(tree, "evals", "scripts", rel)), rel)
+
+    def test_settings_disable_the_ambient_copy_of_the_plugin(self):
+        path = capture.write_capture_settings(_REPO, self.parent, None)
+        if path is None:
+            self.skipTest("no ambient corpflow install to disable")
+        with open(path, encoding="utf-8") as f:
+            enabled = json.load(f)["enabledPlugins"]
+        self.assertTrue(enabled)
+        self.assertTrue(all(v is False for v in enabled.values()))
+        self.assertTrue(all(k.split("@", 1)[0] == "corpflow" for k in enabled))
+
+    def test_plugin_dir_is_passed_only_when_isolating(self):
+        self.assertIn("--plugin-dir", capture.build_argv("m", None, "/tmp/tree"))
+        self.assertNotIn("--plugin-dir", capture.build_argv("m", None, None))
+
+    def test_a_dirty_tree_is_refused_before_any_spend(self):
+        with self.assertRaises(capture.PreflightError):
+            capture.assert_clean_tree(self.parent)   # not a git repo at all
+
+    def test_the_probe_fails_closed_on_anything_unparseable(self):
+        # An unreadable probe is exactly when proceeding would spend the whole budget
+        # on an unverified surface, so it must not degrade to a guess.
+        self.assertEqual(capture.parse_probe("version: 0.2.0\nevals: 0"), ("0.2.0", 0))
+        self.assertEqual(capture.parse_probe("`version: 0.2.0`\n`evals: 3`"), ("0.2.0", 3))
+        self.assertEqual(capture.parse_probe("I could not determine that."), (None, None))
+        self.assertEqual(capture.parse_probe("version: latest"), (None, None))
+
+
+class LabelAlignWeighting(unittest.TestCase):
+    """Rates must describe the corpus, not the sample that was affordable."""
+
+    def _rows(self, spec):
+        return [{"human": h, "grader": g, "weight": w, "stratum": s}
+                for h, g, w, s in spec]
+
+    def test_weighting_recovers_the_population_rate_from_an_enriched_sample(self):
+        # 1 sampled false-pass standing for 4 (weight 4) must count as 4, or
+        # over-sampling the harness-fail stratum silently inflates TNR.
+        rows = self._rows([("pass", "pass", 1.0, "a"), ("fail", "fail", 1.0, "a"),
+                           ("fail", "pass", 4.0, "b")])
+        tpr, tnr, m = label_align.weighted_rates(rows)
+        self.assertEqual(m["fp"], 4.0)
+        self.assertAlmostEqual(tnr, 1 / 5)
+        self.assertAlmostEqual(tpr, 1.0)
+
+    def test_all_weights_one_is_the_plain_unweighted_matrix(self):
+        rows = self._rows([("pass", "pass", 1.0, "a"), ("pass", "fail", 1.0, "a"),
+                           ("fail", "fail", 1.0, "a"), ("fail", "pass", 1.0, "a")])
+        tpr, tnr, _ = label_align.weighted_rates(rows)
+        self.assertAlmostEqual(tpr, 0.5)
+        self.assertAlmostEqual(tnr, 0.5)
+
+    def test_an_empty_class_yields_none_rather_than_a_zero(self):
+        tpr, tnr, _ = label_align.weighted_rates(
+            self._rows([("pass", "pass", 1.0, "a")]))
+        self.assertAlmostEqual(tpr, 1.0)
+        self.assertIsNone(tnr)
+
+    def test_the_bootstrap_ci_is_seeded_and_brackets_the_estimate(self):
+        rows = self._rows([("pass", "pass", 1.0, "a")] * 30
+                          + [("pass", "fail", 1.0, "a")] * 10
+                          + [("fail", "fail", 1.0, "b")] * 15
+                          + [("fail", "pass", 1.0, "b")] * 5)
+        lo, hi = label_align.bootstrap_ci(rows, 0.6, rounds=300)
+        again, _ = label_align.bootstrap_ci(rows, 0.6, rounds=300)
+        self.assertEqual(lo, again)                      # seeded: reproducible
+        tpr, tnr, _ = label_align.weighted_rates(rows)
+        theta = label_align.corrected(0.6, tpr, tnr)
+        self.assertLessEqual(lo, theta)
+        self.assertLessEqual(theta, hi)
+        self.assertLess(lo, hi)
+
+    def test_a_coin_flip_grader_yields_no_correction_and_no_interval(self):
+        # TPR + TNR - 1 == 0: the correction divides by ~0 and anything it returns
+        # is noise, so both the point estimate and the interval must decline.
+        rows = self._rows([("pass", "pass", 1.0, "a"), ("pass", "fail", 1.0, "a"),
+                           ("fail", "fail", 1.0, "b"), ("fail", "pass", 1.0, "b")])
+        self.assertIsNone(label_align.corrected(0.5, 0.5, 0.5))
+        self.assertEqual(label_align.bootstrap_ci(rows, 0.5, rounds=200), (None, None))
+
+
+class LabelAlignReproducesTheRecordedBaseline(unittest.TestCase):
+    """The one end-to-end check available offline: the repaired tool must still
+    produce the numbers the 0.0.1 findings doc published, or the repair moved them."""
+
+    def test_the_committed_labels_still_score_63_68(self):
+        path = os.path.join(_REPO, "evals", "labels", "request-plan-0.0.1-human.jsonl")
+        if not os.path.exists(path):
+            self.skipTest("0.0.1 labels not present")
+        rows = []
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                r = json.loads(line)
+                rows.append({"human": r["verdict"],
+                             "grader": "pass" if r["harness_status"] == "pass" else "fail",
+                             "weight": 1.0, "stratum": r["split"]})
+        tpr, tnr, m = label_align.weighted_rates(rows)
+        self.assertEqual((m["tp"], m["fn"], m["tn"], m["fp"]), (58, 34, 15, 7))
+        self.assertEqual(round(tpr * 100), 63)
+        self.assertEqual(round(tnr * 100), 68)
