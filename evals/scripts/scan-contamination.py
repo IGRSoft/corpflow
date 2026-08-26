@@ -36,9 +36,17 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Every pattern is deictic or bound to a value, because the loose version of each
+# one fires on correct work. This repo's plans routinely propose ADDING an eval case
+# and routinely name `eval-capture.py` as a surface to change; a bare `eval case` or
+# a bare script name marks those as contaminated and would have thrown out four
+# sound responses. A field NAME is not a verdict either: one response planned
+# documentation for the eval-set schema and listed `expected_outcome` among the
+# fields, having read the field list out of `eval-engine.py` — which the strip keeps
+# on purpose. Match the value, the first person, and the demonstrative.
 CHANNELS = {
     "answer-key": (
-        r"expected_outcome",
+        r"""expected_outcome[\s"'`:=]+[\s"'`]*(?:plan|clarify|refute)\b""",
         "read the case's own verdict — fatal",
     ),
     "strip": (
@@ -47,13 +55,15 @@ CHANNELS = {
         "saw the answer key removed, via git status",
     ),
     "harness-log": (
-        r"#333|eval-capture\.py|capture pipeline",
-        "read the harness work in git log",
+        r"#333",
+        "read this capture's own commits in git log",
     ),
     "self-aware": (
-        r"eval case|answer key|ground truth|being evaluated|this is an eval"
-        r"|testing the skill",
-        "said outright that it was inside an eval",
+        r"this (?:exact )?(?:prompt|request|case|task) is (?:even )?(?:an|a tracked)"
+        r"|logged as eval case|i am being (?:evaluated|tested)"
+        r"|you(?:'re| are) testing (?:the|this) skill"
+        r"|testing the skill against its own",
+        "said outright that THIS interaction was an eval",
     ),
 }
 # Only these two are about paths, so only these two are excusable by grounding.

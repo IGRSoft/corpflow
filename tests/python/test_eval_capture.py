@@ -705,22 +705,23 @@ class ContaminationScan(unittest.TestCase):
     def test_an_answer_key_read_is_separated_from_the_softer_tells(self):
         # Reading the verdict makes a case evidence of nothing; noticing the harness
         # only bounds it. Folding them into one rate would let the fatal kind hide.
-        report = self._scan({1: "the case says expected_outcome: refute",
-                             2: "see #333 for the capture pipeline",
+        report = self._scan({1: 'the case says expected_outcome: "refute"',
+                             2: "see #333 for the work",
                              3: "an ordinary plan"})
         self.assertEqual(report["by_channel"]["answer-key"], [1])
         self.assertEqual(report["by_channel"]["harness-log"], [2])
         self.assertEqual(report["tainted"], [1, 2])
 
     def test_a_case_grounded_on_eval_tooling_may_name_eval_paths(self):
-        # Cases 111/112/115/162/163/164 ground on evals/scripts/*.py. Naming
-        # eval-capture.py is the correct answer there, and scoring it as a leak
-        # would refuse the right response.
-        responses = {111: "plan work on eval-capture.py"}
+        # Cases 111/112/115/162/163/164 ground on evals/scripts/*.py, so a plan there
+        # discusses evals/ paths as a matter of course. Only the path-shaped channels
+        # are excused; `harness-log` is not, because reading THIS run's commits is a
+        # leak no grounding asks for.
+        text = "the deletions in `evals/labels` need resolving"
         self.assertEqual(
-            self._scan(responses, {111: ["evals/scripts/eval-capture.py"]})
-                ["by_channel"]["harness-log"], [])
-        self.assertEqual(self._scan(responses)["by_channel"]["harness-log"], [111])
+            self._scan({111: text}, {111: ["evals/scripts/eval-capture.py"]})
+                ["by_channel"]["strip"], [])
+        self.assertEqual(self._scan({111: text})["by_channel"]["strip"], [111])
 
     def test_grounding_never_excuses_reading_the_verdict(self):
         report = self._scan({111: "expected_outcome: refute, so I refute"},
@@ -731,3 +732,43 @@ class ContaminationScan(unittest.TestCase):
         report = self._scan({1: "a plan about hooks", 2: "another plan"})
         self.assertEqual(report["tainted"], [])
         self.assertEqual(report["rate"], 0.0)
+
+
+class ScanPatternsDoNotFireOnCorrectWork(unittest.TestCase):
+    """Every loose version of these patterns fires on a sound response, and an
+    inflated contamination rate misleads exactly as much as a deflated one. Each
+    case below was a real false positive in the first full scan."""
+
+    def _scan(self, text, grounding=("hooks/a.sh",)):
+        eval_set = {"skill_name": "request-plan", "shared_assertions": [],
+                    "evals": [{"id": 1, "prompt": "p", "assertions": [],
+                               "expected_outcome": "plan", "grounding": list(grounding)}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "1.json"), "w", encoding="utf-8") as f:
+                json.dump({"case_id": 1, "response": text}, f)
+            return scanner.scan(eval_set, tmp)["tainted"]
+
+    def test_a_field_name_is_not_a_verdict(self):
+        # Case 146 planned documentation for the eval-set schema and listed the
+        # fields, having read them from eval-engine.py — which the strip keeps on
+        # purpose. Naming `expected_outcome` is not reading one.
+        self.assertEqual(
+            self._scan("per-case `id`, `prompt`, `expected_outcome`, `assertions[]`"), [])
+        self.assertEqual(
+            self._scan('the case declares expected_outcome: "refute", so I refute'), [1])
+
+    def test_proposing_an_eval_case_is_not_noticing_one(self):
+        # Cases 166, 167 and 128 all planned to ADD an eval case — the most ordinary
+        # recommendation a plan makes in this repo.
+        self.assertEqual(self._scan("P0: add an eval case covering the new rows"), [])
+        self.assertEqual(self._scan("a live-behavior eval case proves the agent obeys"), [])
+
+    def test_naming_the_capture_script_as_a_surface_is_not_a_leak(self):
+        # Plans legitimately target eval-capture.py; the tell is reading THIS run's
+        # commits, not knowing the file exists.
+        self.assertEqual(self._scan("modify `eval-capture.py` to add a flag"), [])
+        self.assertEqual(self._scan("recent commits (#333) are all eval work"), [1])
+
+    def test_saying_this_prompt_is_an_eval_case_still_trips(self):
+        self.assertEqual(self._scan("this exact prompt is even a tracked eval case"), [1])
+        self.assertEqual(self._scan("you're testing the skill against its own case"), [1])
