@@ -112,6 +112,11 @@ def main(argv_in: list) -> int:
         result = grade_record(eval_set, record)
         result["skill_version"] = record.get("skill_version")
         result["dimensions"] = engine.find_case(eval_set, cid).get("dimensions", {})
+        # Carried so the grades file is self-describing. `label-align.py` needs it to
+        # size each stratum's population, and `sample-for-labelling.py` to keep the
+        # held-out tranche out of the pool it draws from — neither should have to
+        # re-open the eval set and risk reading a different one than was graded.
+        result["split"] = engine.find_case(eval_set, cid).get("split")
         if result["status"] == "stale":
             stale.append(cid)
         results.append(result)

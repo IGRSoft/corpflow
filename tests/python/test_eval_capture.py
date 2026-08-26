@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -533,3 +534,44 @@ class StratifiedSampling(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertLessEqual(len(self._run(tmp, "--budget", "60")), 60)
             self.assertLessEqual(len(self._run(tmp, "--budget", "30")), 30)
+
+
+class GradesAreSelfDescribing(unittest.TestCase):
+    """Both the sampler and the weighting key on `split`. Without it in the grades
+    they would re-open the eval set and could read a different one than was graded —
+    the failure mode the prompt_digest refusal exists to prevent."""
+
+    def test_the_grades_file_carries_each_case_tranche(self):
+        eval_set = {
+            "skill_name": "request-plan", "shared_assertions": [],
+            "evals": [{"id": 1, "prompt": "p", "assertions": [],
+                       "expected_outcome": "plan", "split": "dev"},
+                      {"id": 2, "prompt": "q", "assertions": [],
+                       "expected_outcome": "plan", "split": "test"}],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            eval_path = os.path.join(tmp, "evals.json")
+            with open(eval_path, "w", encoding="utf-8") as f:
+                json.dump(eval_set, f)
+            responses = os.path.join(tmp, "responses")
+            os.makedirs(responses)
+            for cid in (1, 2):
+                with open(os.path.join(responses, f"{cid}.json"), "w",
+                          encoding="utf-8") as f:
+                    json.dump({"case_id": cid, "skill_version": "0.2.0",
+                               "response": "**Context** c **Goal** g **Scope** s",
+                               "prompt_digest": engine.prompt_digest(eval_set, cid),
+                               "assertions_digest":
+                                   engine.assertions_digest(eval_set, cid)}, f)
+            out = os.path.join(tmp, "grades.json")
+            with open(out, "w", encoding="utf-8") as sink:
+                real, sys.stdout = sys.stdout, sink
+                try:
+                    grader.main(["--eval-set", eval_path, "--responses", responses,
+                                 "--json"])
+                finally:
+                    sys.stdout = real
+            with open(out, encoding="utf-8") as f:
+                results = json.load(f)["results"]
+        self.assertEqual({r["case_id"]: r["split"] for r in results},
+                         {1: "dev", 2: "test"})
