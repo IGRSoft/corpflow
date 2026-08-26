@@ -14,12 +14,13 @@ import tempfile
 import unittest
 
 from _scriptimport import (EVAL_CAPTURE, EVAL_ENGINE, EVAL_GRADE, LABEL_ALIGN,
-                           load_module)
+                           SAMPLE_LABELS, load_module)
 
 engine = load_module(EVAL_ENGINE, "eval_engine")
 capture = load_module(EVAL_CAPTURE, "eval_capture")
 grader = load_module(EVAL_GRADE, "eval_grade")
 label_align = load_module(LABEL_ALIGN, "label_align")
+sampler = load_module(SAMPLE_LABELS, "sample_for_labelling")
 
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _EVAL_SET = os.path.join(_REPO, "skills", "request-plan", "evals", "evals.json")
@@ -475,3 +476,60 @@ class LabelAlignReproducesTheRecordedBaseline(unittest.TestCase):
         self.assertEqual((m["tp"], m["fn"], m["tn"], m["fp"]), (58, 34, 15, 7))
         self.assertEqual(round(tpr * 100), 63)
         self.assertEqual(round(tnr * 100), 68)
+
+
+class StratifiedSampling(unittest.TestCase):
+    """Which cases get a human verdict, when there is budget for fewer than all."""
+
+    def test_the_budget_is_split_evenly_between_the_harness_strata(self):
+        # Not proportionally. The false-pass cell — human fail, harness pass — lives
+        # entirely in the harness-PASS stratum and is the rarest thing measured, so
+        # starving that stratum to chase false alarms leaves TNR on one or two cases.
+        take = sampler.allocate({"pass": list(range(80)), "fail": list(range(30))}, 40)
+        self.assertEqual(take["pass"], 20)
+        self.assertEqual(take["fail"], 20)
+
+    def test_a_stratum_smaller_than_its_share_gives_the_rest_away(self):
+        # Asking for 20 from a stratum of 5 would silently return 5 and lose 15
+        # labels the other stratum could have used.
+        take = sampler.allocate({"pass": list(range(80)), "fail": list(range(5))}, 40)
+        self.assertEqual(take["fail"], 5)
+        self.assertEqual(take["pass"], 35)
+        self.assertEqual(sum(take.values()), 40)
+
+    def _grades(self, tmp):
+        rows = ([{"case_id": i, "split": "dev", "status": "pass"} for i in range(1, 41)]
+                + [{"case_id": i, "split": "dev", "status": "fail"} for i in range(41, 67)]
+                + [{"case_id": i, "split": "test", "status": "pass"} for i in range(100, 122)]
+                + [{"case_id": i, "split": "test", "status": "pass"} for i in range(122, 140)]
+                + [{"case_id": i, "split": "train", "status": "pass"} for i in range(200, 228)])
+        path = os.path.join(tmp, "grades.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"results": rows}, f)
+        return path
+
+    def _run(self, tmp, *extra):
+        out = os.path.join(tmp, "ids.json")
+        rc = sampler.main(["--grades", self._grades(tmp), "--out", out, *extra])
+        self.assertEqual(rc, 0)
+        with open(out, encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_the_held_out_tranche_is_taken_whole_and_train_is_never_touched(self):
+        # Ids below the batch-4 boundary predate the reset and have been read, so the
+        # split manifest calls its own `test` membership nominal for them. Sampling
+        # the few genuinely-unseen cases would leave nothing to measure.
+        with tempfile.TemporaryDirectory() as tmp:
+            ids = self._run(tmp)
+            self.assertTrue(set(range(122, 140)).issubset(ids))   # held out, entire
+            self.assertFalse([i for i in ids if 100 <= i < 122])   # nominal test: out
+            self.assertFalse([i for i in ids if i >= 200])         # train: out
+
+    def test_the_selection_is_seeded_so_the_labelled_set_is_reproducible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self._run(tmp), self._run(tmp))
+
+    def test_the_budget_is_a_ceiling_that_counts_the_held_out_tranche(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertLessEqual(len(self._run(tmp, "--budget", "60")), 60)
+            self.assertLessEqual(len(self._run(tmp, "--budget", "30")), 30)
