@@ -137,8 +137,19 @@ a branch touches no protected asset — those are standard tier. The test is whe
 itself handles a secret or an untrusted input, not whether the word "security" appears nearby.
 Security-sensitive work runs the full 11-stage pipeline.
 
-**--emergency is not "urgent-sounding".** A wedged task or a runaway batch is standard work. The
-test is whether something is failing as you write the plan.
+**--emergency is not "urgent-sounding".** A task that has *stopped* — wedged, abandoned, a batch
+that ran away and ended — is standard work. The test is whether something is failing as you write
+the plan. A task can be both stuck and still failing; when it is, escalation wins.
+
+#### A quiet local tree is not evidence about the failure being reported
+
+**The present-tense report in the request IS the evidence.** A clean worktree, an absent
+`.context/`, no live `state.json`, or a green local test run say nothing about the environment the
+user is describing — they describe *this* checkout, which is not the one that is failing.
+
+None of them downgrade a reported live failure, and none of them settle the surface check either
+way. If a local observation genuinely changes the tier, name the observation and say what it rules
+out; absence of local wreckage rules out nothing.
 
 ## PL0 Stage-Set & Test-Mode by Complexity Score
 

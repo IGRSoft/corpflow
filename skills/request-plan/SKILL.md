@@ -2,7 +2,7 @@
 name: request-plan
 description: Use when the user asks for a plan, an approach, a breakdown, "how would you tackle this", or scoping — even without the word "plan". Turn a free-form request into a context-aware plan (goal, scope, phases, effort, risks) and recommend `/worktask`.
 effort: medium
-version: 0.1.0
+version: 0.2.0
 ---
 
 # Request Plan
@@ -23,17 +23,15 @@ State the goal in one line, in your own words, so the user can correct a misread
 
 #### Ask or plan — decide once, and default to planning
 
-Asking is the exception. Apply in order:
+Asking is the exception. The first test — *did the search find the surface?* — is applied in § 2,
+where the evidence arrives. What is left here, in order:
 
-1. **Found the surface? Plan it.** If context-gathering located the file, command, or mechanism the
-   request is about, that is enough to plan — even if a follow-up question also comes to mind. A
-   question you could have answered by planning costs a round trip and delivers nothing.
-2. **Ambiguity that changes the phases? Fold it into the plan.** Two reasonable readings usually
+1. **Ambiguity that changes the phases? Fold it into the plan.** Two reasonable readings usually
    become P0 and P1, or an explicit **Out:** line. Present the plan and name the assumption.
-3. **No surface at all? Ask — and only ask.** Available only once § 2's search has run and found
+2. **No surface at all? Ask — and only ask.** Available only once § 2's search has run and found
    nothing. Say so plainly and ask which system is meant. Never produce a full plan for a codebase
    you cannot see: plausible phases for a system nobody can point at read as real work and are not.
-4. **Genuinely incompatible readings, or no subject named? Ask 1–2 focused questions.**
+3. **Genuinely incompatible readings, or no subject named? Ask 1–2 focused questions.**
 
 ##### Never both
 
@@ -49,9 +47,11 @@ Follow `references/context-gathering.md`. Read only what could change the plan: 
 
 **Run `skills/request-plan/scripts/capability-registry.sh` first, every time, before any grep.** Not
 only for "I want X" requests — deciding whether a request is about a capability is itself a guess
-made before you know the answer, and the whole list costs about 2.8k tokens. It is the complete
-inventory of this plugin's commands, agents and skills, so it is not a search and has no stop
-condition: you cannot stop too early on a list you have read to the end.
+made before you know the answer, and the whole list costs about 7k tokens. It is the complete
+inventory of this plugin's commands, agents, skills, hooks, skill scripts and harness modules, so it
+is not a search and has no stop condition. It is long enough now to be worth reading in one pass
+rather than skimming for a keyword: the entry you need is the one whose *description* matches, and
+a skim finds only the ones whose path does.
 
 The request words a *need*; the registry words a *domain* — "make the app usable one-handed" will
 never share a word with the entry that covers it. Read each description for what the capability
@@ -67,8 +67,8 @@ which is exactly how eval cases 73 and 75 were contaminated.
 
 **The registry precedes the behaviour search; it never replaces it.** A registry hit tells you which
 surface the work belongs to — you still open that surface and read it before planning against it, and
-§ "Search by behaviour" below still applies to everything the registry does not list (scripts, hooks,
-harness modules, library code).
+§ "Search by behaviour" below still applies to everything the registry does not list: a skill's
+`references/`, the shared canon under `skills/shared/*.md`, and test or eval infrastructure.
 
 ##### A hit changes the plan's content, not its obligations
 
@@ -87,6 +87,17 @@ thing already ships as asked, and nothing is left to do. Then the answer says so
 stops. It does **not** cover a request to *find*, *use* or *reach* a surface that exists — that is
 still a plan, and it is the commonest way this rule gets misread. Nor does it cover a shipped
 headline with a live remainder: refute the stale part, plan the rest.
+
+#### Decide which class owns the behaviour
+
+A behaviour in this plugin lives in exactly one of six classes: a **command**, an **agent**, a
+**skill**, a **hook**, a skill's **`scripts/`**, or a **harness module**. The registry enumerates all
+six, but the classes are the shape of the search even for what it cannot list — a skill's
+`references/`, the shared canon, and test or eval infrastructure all sit behind one of the six.
+
+**A search that has not decided which class owns the behaviour has not finished.** Naming the class
+is the cheapest way to notice you only looked in one: three of the six are executable and none of
+them are found by grepping prose.
 
 #### Search by behaviour, not by filename
 
@@ -108,7 +119,7 @@ read**. "More reading wouldn't change the plan" is not a stop condition — a se
 reached the right file cannot tell that from the inside, which is how a confident plan ends up about
 the wrong module.
 
-The "no surface at all" branch below is available **only after this search has actually run**.
+§ 1's "no surface at all" branch is available **only after this search has actually run**.
 Asking which system is meant is right when the repo genuinely lacks it, wrong as the exit from a
 search that got hard.
 
@@ -120,12 +131,25 @@ plan ends up specific, confident, and about the wrong thing (a stage-ownership p
 opened the stage-ownership doc; a cost-comparison plan that never reached the module producing the
 costs). If you cannot confirm ownership, name the file you believe owns it and say you did not verify.
 
+#### Found the surface? Plan it
+
+**The registry or the search located the file, command, hook or mechanism the request is about?
+That is enough to plan** — even if a follow-up question also comes to mind. A question you could
+have answered by planning costs a round trip and delivers nothing.
+
+This test lives here, not in § 1, because it is decided the moment the evidence arrives. Reaching
+§ 1's "ask" branch means this one already answered *no*: the search ran and found nothing.
+
 #### Do not assert what you did not check
 
-**Do not assert absence or completeness you did not check.** "No other path exists", "that mapping
-is already complete", or a count of things you did not enumerate are the claims most likely to be
-wrong and least likely to be questioned, because they sound like the product of a search. Without
-the search, write what you did look at and mark the rest unverified.
+**Every negative claim carries its own scope.** "No other path exists", "that mapping is already
+complete", or a count of things you did not enumerate are the claims most likely to be wrong and
+least likely to be questioned, because they sound like the product of a search.
+
+Make it structural rather than a caution: name the directories you actually enumerated and scope the
+sentence to them — "nothing under `tests/`", never "nothing anywhere". **An unscoped negative is a
+claim about the whole repo** and needs a whole-repo search behind it; a negative scoped to where you
+looked is true and still useful. Whatever the scope does not cover is unverified, so say so.
 
 ### 3. Synthesize the plan
 

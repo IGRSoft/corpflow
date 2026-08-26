@@ -11,7 +11,7 @@ parallel ruleset. Summarized:
 ```
 size = T-shirt size from the estimation sizing table
 
-IF size == XL:   → split first (recommend ≤ L sub-tasks; no single command)
+IF size == XL:   → name the 2–3 sub-tasks, then emit the line for the FIRST of them
 ELSE:            → /worktask "<goal>"   (PL0 dynamic sizing drops stages for small work)
 ```
 
@@ -27,7 +27,7 @@ Emit exactly one of these, with the restated goal as the payload:
 | `--secure` | `/worktask --secure "<goal>"` | work handling credentials, tokens, secrets, PII, payments, authn/authz, or untrusted input — any size |
 | `--emergency` | `/worktask --emergency "<goal>"` | something is broken right now and still failing |
 | `/worktask` | `/worktask "<goal>"` | everything else — PL0 dynamic sizing picks the stage set |
-| split | *(no single command)* | XL — recommend splitting into ≤ L sub-tasks first, then re-plan |
+| split | `/worktask "<first sub-task>"` | XL — name the ≤ L sub-tasks, then trigger the first |
 
 ### Escalation beats size
 
@@ -36,8 +36,23 @@ ordinary work burns the security pipeline, and leaving a live failure on the sta
 Emit exactly one line: a plan recommending some other command *instead* of a worktask has not made
 the handoff.
 
-For the split case, emit no command. List the 2–3 sub-tasks the work breaks into, and note each can
-be re-planned with this skill once separated.
+XL is not an exception to that. List the 2–3 sub-tasks the work breaks into, note each can be
+re-planned with this skill once separated, and still emit one line — for the first sub-task, not the
+whole XL goal. "Split first, no command" leaves the user with nothing to paste, which is the
+`no-handoff-trigger` failure wearing a size label (`SKILL.md § 4`; `commands/request-plan.md` step 3).
+
+### The flag must match what the plan body argues
+
+**Prose and the command line are one recommendation, and the line is the part that executes.** Before
+emitting it, read back what the plan body claims:
+
+- body argues for a security review, a threat model, credential/PII handling → the line carries `--secure`
+- body argues the thing is broken right now and still failing → the line carries `--emergency`
+- body argues neither → the line is plain, and the plan says so rather than leaving it implied
+
+A plan that argues for a security review "before merge, not just standard DR" and then emits a plain
+`/worktask` has recommended two different things. Fix whichever is wrong — if the body overstated
+the surface, cut the claim; if it did not, carry the flag. Do not ship the pair.
 
 ## Phrasing the recommendation
 
