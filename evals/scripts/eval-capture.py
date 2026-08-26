@@ -83,14 +83,23 @@ ANSWER_KEY_GLOBS = (
 # of evals/ would make those cases unanswerable and score the strip as a skill
 # failure. The exclusion is the answer key, not the directory.
 
-# The probe that proves both fixes bound before the sweep spends anything. It
-# asks for facts the run's own provenance claims, so a mismatch is checkable
-# rather than a matter of trust.
+# The probe that proves both fixes bound before the sweep spends anything.
+#
+# It asks which COMMANDS are available, not which SKILL.md version is on disk.
+# The obvious version question does not work and looked like it did: the model
+# answers it by reading the file out of the working directory, so it reported the
+# tree's version whether or not the pin bound. Measured on the un-isolated surface
+# it still said 0.2.0 while the ambient 4.0.25 was demonstrably the plugin
+# answering. The command set is in the model's context rather than on its disk,
+# so it cannot be answered by looking.
 PROBE_PROMPT = (
-    "Answer in exactly two lines, nothing else.\n"
-    "Line 1: `version: <the version: field from the request-plan SKILL.md you "
-    "have loaded>`\n"
-    "Line 2: `evals: <the number of files matching skills/request-plan/evals/"
+    "Answer in exactly {lines} lines, nothing else. Report only what is in your "
+    "available commands and working directory; do not reason about what should be "
+    "there.\n"
+    "Line 1: `present: yes` or `present: no` — whether a slash command named "
+    "`/{plugin}:{present}` is available to you.\n"
+    "{absent_line}"
+    "Line {last}: `evals: <how many files match skills/request-plan/evals/"
     "evals.json in your working directory>`"
 )
 
@@ -347,30 +356,62 @@ def capture_case(eval_set, case, *, mode, model, settings_path, timeout, cwd,
     return sent_prompt, response, usage
 
 
-def parse_probe(text: str) -> tuple:
-    """(version, evals_files) from the probe's two lines; None for anything unread.
+def probe_discriminators(root: str, tree: str) -> tuple:
+    """(present, absent): a command the TREE ships, and one only the ambient
+    install ships. `absent` is the half that detects a pin that did not bind — if
+    the cached release still answers, its deleted-here command is still offered.
+
+    Derived rather than hardcoded: 4.0.26 removed sixteen commands and added six,
+    and the next release moves them again. Returns absent=None when the installed
+    copy ships nothing the tree lacks, which is the case where the probe genuinely
+    cannot tell the two apart.
+    """
+    tree_cmds = {os.path.basename(f)[:-3]
+                 for f in glob.glob(os.path.join(tree, "commands", "*.md"))}
+    if not tree_cmds:
+        return None, None
+    name = plugin_name(root)
+    ambient = set()
+    if name:
+        ambient = {os.path.basename(f)[:-3] for f in glob.glob(os.path.expanduser(
+            os.path.join("~", ".claude", "plugins", "cache", "*", name, "*",
+                         "commands", "*.md")))}
+    only_ambient = sorted(ambient - tree_cmds)
+    return sorted(tree_cmds)[0], (only_ambient[0] if only_ambient else None)
+
+
+def build_probe_prompt(plugin: str, present: str, absent: str | None) -> str:
+    absent_line = ""
+    if absent:
+        absent_line = (f"Line 2: `absent: yes` or `absent: no` — whether a slash "
+                       f"command named `/{plugin}:{absent}` is available to you.\n")
+    return PROBE_PROMPT.format(lines=3 if absent else 2, plugin=plugin,
+                               present=present, absent_line=absent_line,
+                               last=3 if absent else 2)
+
+
+def parse_probe(text: str) -> dict:
+    """The probe's answers, with None for anything unread.
 
     Fails closed by returning None rather than a guess: an unparseable probe is
     exactly the case where proceeding would spend the whole budget on an unverified
     surface.
     """
-    version = evals = None
-    m = re.search(r"^\s*`?version:\s*`?([0-9]+\.[0-9]+\.[0-9]+)`?", text, re.MULTILINE)
-    if m:
-        version = m.group(1)
+    def flag(key):
+        m = re.search(rf"^\s*`?{key}:\s*`?(yes|no)\b", text, re.MULTILINE | re.IGNORECASE)
+        return m.group(1).lower() == "yes" if m else None
     m = re.search(r"^\s*`?evals:\s*`?(\d+)", text, re.MULTILINE)
-    if m:
-        evals = int(m.group(1))
-    return version, evals
+    return {"present": flag("present"), "absent": flag("absent"),
+            "evals": int(m.group(1)) if m else None}
 
 
 def probe_capture_surface(*, model, settings_path, timeout, cwd, plugin_dir,
-                          dispatcher=None) -> str:
-    """One cheap dispatch that reports which skill answered and whether the answer
+                          prompt, dispatcher=None) -> str:
+    """One cheap dispatch that reports which plugin answered and whether the answer
     key is reachable. Its whole point is that the sweep must not start on trust."""
     argv = build_argv(model, settings_path, plugin_dir)
     dispatch = dispatcher or (lambda a, pr: run(a, stdin_text=pr, timeout=timeout, cwd=cwd))
-    result = dispatch(argv, PROBE_PROMPT)
+    result = dispatch(argv, prompt)
     if result.returncode != 0:
         raise PreflightError(
             f"probe dispatch exited {result.returncode}: {(result.stderr or '').strip()[:300]}")
@@ -503,34 +544,50 @@ def main(argv_in: list) -> int:
                 "from this run is uncomparable.\n")
 
         cwd = capture_tree or root
+        present, absent = probe_discriminators(root, cwd)
+        if present is None:
+            sys.stderr.write("eval-capture: no commands/ in the capture tree\n")
+            return 2
+        if absent is None:
+            print("probe: no command distinguishes this tree from the installed copy; "
+                  "the pin cannot be verified either way this run")
+        prompt = build_probe_prompt(plugin_name(root) or "corpflow", present, absent)
         try:
             probe_text = probe_capture_surface(
                 model=args.model, settings_path=settings_path, timeout=args.timeout,
-                cwd=cwd, plugin_dir=capture_tree)
+                cwd=cwd, plugin_dir=capture_tree, prompt=prompt)
         except PreflightError as exc:
             sys.stderr.write(f"eval-capture: {exc}\n")
             return 2
-        loaded_version, evals_seen = parse_probe(probe_text)
-        print(f"probe: version={loaded_version} evals_files={evals_seen}")
+        seen = parse_probe(probe_text)
+        print(f"probe: /{present} present={seen['present']}"
+              + (f"  /{absent} present={seen['absent']}" if absent else "")
+              + f"  evals_files={seen['evals']}")
         if args.probe:
             print(probe_text)
             return 0
 
         if isolate:
-            if loaded_version is None or evals_seen is None:
+            required = ["present", "evals"] + (["absent"] if absent else [])
+            if any(seen[k] is None for k in required):
                 sys.stderr.write(
                     "eval-capture: probe unreadable; refusing to spend on an "
                     f"unverified surface. Raw: {probe_text.strip()[:300]}\n")
                 return 2
-            if loaded_version != expected_version:
+            if seen["present"] is not True:
                 sys.stderr.write(
-                    f"eval-capture: the skill that answered is {loaded_version}, but this "
-                    f"tree is {expected_version}. --plugin-dir did not bind, so the run "
-                    "would measure one version and stamp another.\n")
+                    f"eval-capture: the plugin that answered does not ship /{present}, "
+                    "which this tree does. --plugin-dir did not bind.\n")
                 return 2
-            if evals_seen != 0:
+            if absent and seen["absent"] is not False:
                 sys.stderr.write(
-                    f"eval-capture: the answer key is still reachable ({evals_seen} "
+                    f"eval-capture: the plugin that answered still ships /{absent}, which "
+                    "this tree deleted — so the installed release answered, not the tree. "
+                    "The run would measure one version and stamp another.\n")
+                return 2
+            if seen["evals"] != 0:
+                sys.stderr.write(
+                    f"eval-capture: the answer key is still reachable ({seen['evals']} "
                     "match(es) for evals.json). Refusing.\n")
                 return 2
 
@@ -540,8 +597,8 @@ def main(argv_in: list) -> int:
                                    .replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             "plugin_sha": plugin_sha(root),
             "skill_version": expected_version,
-            "skill_version_loaded": loaded_version,
             "isolated": bool(capture_tree),
+            "probe": {"present": present, "absent": absent, **seen},
         }
         return _sweep(args, eval_set, selected, out_dir, provenance,
                       settings_path=settings_path, cwd=cwd, plugin_dir=capture_tree)

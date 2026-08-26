@@ -366,10 +366,35 @@ class CaptureIsolation(unittest.TestCase):
     def test_the_probe_fails_closed_on_anything_unparseable(self):
         # An unreadable probe is exactly when proceeding would spend the whole budget
         # on an unverified surface, so it must not degrade to a guess.
-        self.assertEqual(capture.parse_probe("version: 0.2.0\nevals: 0"), ("0.2.0", 0))
-        self.assertEqual(capture.parse_probe("`version: 0.2.0`\n`evals: 3`"), ("0.2.0", 3))
-        self.assertEqual(capture.parse_probe("I could not determine that."), (None, None))
-        self.assertEqual(capture.parse_probe("version: latest"), (None, None))
+        self.assertEqual(capture.parse_probe("present: yes\nabsent: no\nevals: 0"),
+                         {"present": True, "absent": False, "evals": 0})
+        self.assertEqual(capture.parse_probe("`present: no`\n`evals: 3`"),
+                         {"present": False, "absent": None, "evals": 3})
+        self.assertEqual(capture.parse_probe("I could not determine that."),
+                         {"present": None, "absent": None, "evals": None})
+
+    def test_the_probe_asks_which_COMMANDS_loaded_not_which_file_is_on_disk(self):
+        # The obvious version question does not work and looked like it did: the
+        # model answers it by reading SKILL.md out of the working directory, so it
+        # reported the tree's version on the un-isolated surface too — while the
+        # ambient release was demonstrably the plugin answering. The discriminator
+        # has to be something that is in the context and not on the disk.
+        tree = self._tree()
+        present, absent = capture.probe_discriminators(_REPO, tree)
+        self.assertIn(present + ".md", os.listdir(os.path.join(tree, "commands")))
+        if absent is not None:
+            self.assertNotIn(absent + ".md", os.listdir(os.path.join(tree, "commands")))
+        prompt = capture.build_probe_prompt("corpflow", present, absent)
+        self.assertIn(f"/corpflow:{present}", prompt)
+        self.assertNotIn("SKILL.md", prompt)
+
+    def test_the_probe_degrades_to_two_lines_when_nothing_distinguishes_the_two(self):
+        # No deleted-here command means the probe genuinely cannot tell the trees
+        # apart. It must stop asking rather than ask an unanswerable question.
+        prompt = capture.build_probe_prompt("corpflow", "worktask", None)
+        self.assertIn("exactly 2 lines", prompt)
+        self.assertNotIn("absent:", prompt)
+        self.assertIn("Line 2: `evals:", prompt)
 
 
 class LabelAlignWeighting(unittest.TestCase):
