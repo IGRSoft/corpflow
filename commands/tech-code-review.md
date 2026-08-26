@@ -1,5 +1,5 @@
 ---
-name: dev-code-review
+name: tech-code-review
 description: Perform platform-aware code review using specialized developer expertise; --depth deep adds full technical-review analysis
 argument-hint: '[--pr N | --path dir] [--depth surface|deep]'
 model: sonnet
@@ -14,17 +14,18 @@ related:
   - commands/ethics-review.md
   - commands/estimate.md
   - skills/claude-constitution/SKILL.md
+  - skills/security-review-process/SKILL.md
   - skills/shared/stage-contracts.md
   - skills/agent-coordination/SKILL.md
 ---
 
-# Developer Code Review Command
+# Technical Code Review Command
 
 A **recall-first, read-only** developer code review. This command IS the DR (Developer Review) quality gate: it statically reviews the change for correctness, security, data-loss, concurrency, and regression risk, records findings to the DR artifact, and routes confirmed bugs back to DV. It never runs code (tests run later in QA) and never applies fixes (DV applies them).
 
 > **Depth modes**: `--depth surface` (default) is the standard DR review below — behavior unchanged. `--depth deep` layers a technical-review analysis on top; see [Deep Mode](#deep-mode---depth-deep). For estimation-accuracy reviews use `/estimate --review`.
 
-> **Disambiguation**: use `/dev-code-review` for the corpflow governed gate (stage contracts, audit trail, read-only — DV applies the fixes); use the CC-native `/code-review` (alias `/review`, applies findings with `--fix`; `ultra` = multi-agent cloud review) or `/simplify` for ad-hoc work outside the worktask pipeline.
+> **Not the CC-native `/code-review`**: this is the corpflow governed DR gate (stage contracts, audit trail, read-only — DV applies the fixes). For ad-hoc work outside the worktask pipeline use the built-in `/code-review` (alias `/review`, applies findings with `--fix`; `ultra` = multi-agent cloud review) or `/simplify`.
 
 ## Your Job (read this first)
 
@@ -50,10 +51,10 @@ The *keep/drop* criteria that decide what is finally reported live in Phase 2 �
 ## Usage
 
 ```
-/dev-code-review
-/dev-code-review --platform apple --path src/
-/dev-code-review --pr 123
-/dev-code-review --pr 123 --depth deep
+/tech-code-review
+/tech-code-review --platform apple --path src/
+/tech-code-review --pr 123
+/tech-code-review --pr 123 --depth deep
 ```
 
 ## Options
@@ -189,16 +190,35 @@ P0/P1/P2 is the single canonical severity scheme for this command. Tag every kep
 | **P1** (high) | Likely-incorrect behavior, unhandled error/edge path, concurrency hazard, resource leak, contract risk, or an unmet stated acceptance requirement, with a **read-confirmed or directly-cited** trigger (or a hard-to-test class you are somewhat-sure-or-more about, per the routing rule). |
 | **P2** (nice-to-have / suspected) | Lower-impact issues, unproven-but-located suspicions, BLOCKED-verification concerns, change-exposed-but-not-newly-reachable pre-existing weaknesses (tagged `[verify-later]`), minor maintainability. |
 
+## Dependency Upgrade Review
+
+A bump is a behavior change you did not write, and bulk "bump deps" merges are the riskiest.
+When the review touches a manifest (`Package.swift`, `Podfile`, `*.gradle`,
+`requirements.txt`, `package.json`, …) or its lockfile, apply feature-code discipline.
+
+Advisory triage and supply-chain verdicts defer to the `security-review-process` skill: this
+is the upgrade *workflow*, that is the security *verdict*.
+
+### Upgrade rules
+
+| Rule | Why |
+|------|-----|
+| Read the changelog, not the version number | Semver is a promise the maintainer may not have kept; a "patch" can carry behavior change. Major bump → read the migration notes |
+| One dependency per change | A bulk bump that breaks the build hides which package did it; single-package changes keep the cause and the revert clean |
+| Let the suite decide | Green before *and* after, not "it resolved". Thin coverage around the dependency's behavior is itself the finding — add a test first |
+| Mind the transitive graph | Most resolved packages nobody chose directly; review the lockfile / transitive diff, not just the manifest |
+| Keep the lockfile honest | Committed, diff reviewed, never hand-edited — `Package.resolved` and equivalents pin what ships |
+
 ## Examples
 
 ```
-/dev-code-review
-/dev-code-review --platform apple --path Sources/
-/dev-code-review --pr 42 --focus security,performance
-/dev-code-review --path src/components --focus patterns
-/dev-code-review --pr 42 --severity P1
-/dev-code-review --pr 42 --depth deep --focus quality,debt --output summary
-/dev-code-review --pr 42 --ethics
+/tech-code-review
+/tech-code-review --platform apple --path Sources/
+/tech-code-review --pr 42 --focus security,performance
+/tech-code-review --path src/components --focus patterns
+/tech-code-review --pr 42 --severity P1
+/tech-code-review --pr 42 --depth deep --focus quality,debt --output summary
+/tech-code-review --pr 42 --ethics
 ```
 
 ## Output Format
@@ -259,6 +279,16 @@ A **sound bug** — a **read-confirmed P0/P1** (read-confirmed trigger OR direct
 #### Escalation step 3 — optional tracking block
 
 3. **Optional tracking block.** If you also append a `## DR[N] Retry — <ts>` block to `.context/errors/developer.md`, give it a `### Resolution Path` with one bullet per sound finding and use `**Classification**: missing_input` — the ONLY classification besides `exhausted` that the Retry/Escalate Matrix routes to the **previous stage** (DV). Do NOT use `logic` (routes to the same agent, re-running the DR reviewer, never DV) or `ambiguous_requirements` (routes to PL). The block is tracking only; step 1 is the mechanism.
+
+### Review Feedback Hygiene
+
+Before re-requesting review on acted-on comments:
+
+- [ ] Every blocking comment addressed — fixed, or explicitly justified in a reply
+- [ ] Each fix references the comment it resolves (commit message or PR thread reply)
+- [ ] No silent scope expansion: changes outside the original request are flagged separately
+- [ ] CI/local checks pass on the updated diff before re-requesting
+- [ ] Rejected comments carry their rationale in the thread — never closed without a reply
 
 ### DR3.5 reconciliation and the read-only guarantee
 
@@ -342,6 +372,6 @@ Missing test cases: one bullet each
 
 ## Integration
 
-- The DR gate in the worktask: the technical-lead reads and follows this file (`agents/technical-lead.md § DR Stage Owner`). This is a command, not a skill — there is no `skills/dev-code-review/` to invoke.
+- The DR gate in the worktask: the technical-lead reads and follows this file (`agents/technical-lead.md § DR Stage Owner`). This is a command, not a skill — there is no `skills/tech-code-review/` to invoke.
 - DV/QA stages via `--depth deep` for a technical-quality deep dive.
 - Before merging PRs, and for periodic codebase health checks.

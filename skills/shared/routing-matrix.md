@@ -67,6 +67,28 @@ test-generator | code-fixer. One subsection per platform.
 | `corpflow:ai-test-generator` | `ai-engineer:ai-test-generator` | test-generator | ai |
 | `corpflow:ai-code-fixer` | `ai-engineer:ai-code-fixer` | code-fixer | ai |
 
+### Release-engineer aliases (publishing — apple and android only)
+
+These targets are **RE-stage consultation**: corpflow's own `agents/release-engineer.md` retains the
+stage and every `state.json` write, exactly as AR works. Only platforms with a store have a row —
+there is no web, backend, systems, or ai release-engineer alias, and adding one would promise a
+target that does not exist.
+
+| Alias | Default target | Role | Platform |
+|-------|----------------|------|----------|
+| `corpflow:apple-release-engineer` | `apple-developer:apple-release-engineer` | release-engineer | apple |
+| `corpflow:android-release-engineer` | `android-developer:and-release-engineer` | release-engineer | android |
+
+#### Why these are a section of their own
+
+A separate section rather than rows inside § Functional-role aliases: that section's grammar is
+`role ∈ architect | security-auditor | test-generator | code-fixer` and its test loops all six
+platforms × four roles, so a fifth role there would demand a web/backend/systems/ai row apiece.
+
+There is deliberately **no bare `corpflow:release-engineer` alias** — corpflow ships an agent with
+that exact `name:`, and an alias basename colliding with a real agent is what the no-collision test
+in `routing-matrix.bats` exists to catch.
+
 ### Support-plugin aliases (route only when installed)
 
 | Alias | Default target | Role |

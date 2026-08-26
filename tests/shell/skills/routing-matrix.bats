@@ -39,7 +39,7 @@ matrix_target() {
   assert_output ""
 }
 
-@test "matrix: expected alias set is complete (6 entry + 24 role + 2 support)" {
+@test "matrix: expected alias set is complete (6 entry + 24 role + 2 release + 2 support)" {
   local p role count
   for p in $DEV_PLUGINS; do
     [ -n "$(matrix_target "${p}")" ] || { echo "missing entry alias corpflow:$p" >&2; return 1; }
@@ -51,7 +51,27 @@ matrix_target() {
     done
   done
   count="$(matrix_rows | wc -l | tr -d ' ')"
-  [ "$count" -eq 32 ] || { echo "expected 32 matrix rows, found $count" >&2; return 1; }
+  [ "$count" -eq 34 ] || { echo "expected 34 matrix rows, found $count" >&2; return 1; }
+}
+
+@test "matrix: release-engineer aliases exist for the two platforms with a store" {
+  # Bumping the row count above without this pair would let ANY two new rows satisfy it.
+  local p
+  for p in apple android; do
+    [ -n "$(matrix_target "${p}-release-engineer")" ] \
+      || { echo "missing corpflow:${p}-release-engineer" >&2; return 1; }
+  done
+}
+
+@test "matrix: no release-engineer alias exists for a platform with no store" {
+  # The row is a promise that the target agent exists. system-developer,
+  # frontend-developer, backend-developer and ai-engineer ship no release engineer,
+  # so an alias here would resolve to nothing at dispatch time.
+  local p
+  for p in systems web backend ai; do
+    [ -z "$(matrix_target "${p}-release-engineer")" ] \
+      || { echo "corpflow:${p}-release-engineer must not exist — no such target" >&2; return 1; }
+  done
 }
 
 @test "matrix: no alias collides with a real corpflow agent name" {

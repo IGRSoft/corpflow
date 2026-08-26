@@ -46,5 +46,5 @@ One line of rationale tied to the size/complexity you computed — e.g.:
 > **Recommended:** `/worktask --secure "add Keychain-backed settings store"` — M-sized, touches
 > credential storage (security-sensitive), so the full pipeline with its security review stage applies.
 
-If the user might want formal requirements or a budget first, name the command: `/pm-requirements`
+If the user might want formal requirements or a budget first, name the command: `/product-requirements`
 for a PRD, `/estimate --detailed` for hours and budget.

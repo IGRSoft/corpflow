@@ -1,28 +1,27 @@
 ---
-name: pm-milestone
+name: milestone
 description: Generate GitHub milestone tickets with agent assignments for implementation, test, and review
 argument-hint: '<feature description or --from-prd path> [--milestone N] [--platform apple|android|web|systems|backend|ai] [--dry-run] [--secure]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash
 related:
   - agents/product-manager.md
-  - commands/pm-requirements.md
-  - commands/pm-prioritize.md
-  - commands/pm-roadmap.md
+  - commands/product-requirements.md
+  - commands/roadmap.md
   - commands/worktask.md
 ---
 
-# PM Milestone Tickets
+# Milestone Tickets
 
 Generate GitHub milestone tickets with agent assignments for implementation, test, and review. Ticket creation only — never implementation.
 
 ## Usage
 
 ```
-/pm-milestone "Feature description" --milestone N
-/pm-milestone --from-prd .context/planning-0.md --milestone N   # any planning-N.md the PL produced
-/pm-milestone "Feature description"                             # creates the milestone too
-/pm-milestone "Feature description" --milestone N --dry-run     # preview only
+/milestone "Feature description" --milestone N
+/milestone --from-prd .context/planning-0.md --milestone N   # any planning-N.md the PL produced
+/milestone "Feature description"                             # creates the milestone too
+/milestone "Feature description" --milestone N --dry-run     # preview only
 ```
 
 ## Options
@@ -31,7 +30,7 @@ Generate GitHub milestone tickets with agent assignments for implementation, tes
 |--------|--------|
 | `<description>` | Feature description to decompose into tickets |
 | `--milestone N` | Use existing milestone N; omitted → create one from the feature title |
-| `--from-prd <path>` | Read a PRD (`/pm-requirements` output) as input |
+| `--from-prd <path>` | Read a PRD (`/product-requirements` output) as input |
 | `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Route the implementation agent (default: infer from codebase) |
 | `--dry-run` | Preview tickets as markdown, create nothing |
 | `--secure` | Add `security-reviewer` to Review on every ticket |
@@ -182,15 +181,15 @@ Same summary table keyed by issue number (`#42`) instead of ticket index and wit
 ## Examples
 
 ```bash
-/pm-milestone "Add dark mode support" --milestone 3 --platform apple
-/pm-milestone --from-prd .context/planning-0.md --milestone 5 --dry-run
-/pm-milestone "Implement OAuth2 flow" --milestone 2 --secure
-/pm-milestone "User profile management"                       # auto-creates the milestone
-/pm-milestone "API rate limiting" --milestone 4 --labels "backend,performance"
+/milestone "Add dark mode support" --milestone 3 --platform apple
+/milestone --from-prd .context/planning-0.md --milestone 5 --dry-run
+/milestone "Implement OAuth2 flow" --milestone 2 --secure
+/milestone "User profile management"                       # auto-creates the milestone
+/milestone "API rate limiting" --milestone 4 --labels "backend,performance"
 ```
 
 ## Integration
 
-Upstream: `/pm-requirements` (PRD via `--from-prd`), `/pm-prioritize` (same P0–P3 labels), `/pm-roadmap` (roadmap features to decompose).
+Upstream: `/product-requirements` (PRD via `--from-prd`), `/roadmap` (roadmap features to decompose).
 
 Downstream: `/megatask N` executes the created tickets; `skills/megatask` parses ticket bodies for agent assignments and metadata, and sorts on the `P0`–`P3` labels.

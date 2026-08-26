@@ -5,7 +5,6 @@ argument-hint: <feature or decision to review> [--lens harm|full]
 model: sonnet
 allowed-tools: Read, Glob, Grep
 related:
-  - commands/pm-risk.md
   - agents/ethics-reviewer.md
   - skills/claude-constitution/SKILL.md
 ---
@@ -226,6 +225,5 @@ AR: architecture safety and harm implications · DV: implementation harm potenti
 QA: ethics in quality criteria · ST: stakeholder review of the harm assessment
 (`--lens harm`).
 
-- `/pm-risk` — technical risk assessment
 - Analysis runs through the `ethics-reviewer` agent; complex or critical cases
   escalate to human/stakeholder review.

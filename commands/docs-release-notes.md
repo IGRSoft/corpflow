@@ -7,7 +7,7 @@ model: haiku
 related:
   - agents/project-manager.md
   - agents/technical-writer.md
-  - commands/pm-sprint.md
+  - commands/sprint.md
 ---
 
 # Release Notes Command
@@ -94,5 +94,5 @@ Highlights mirror the external Highlights section, trimmed to three bullets.
 
 - End of `/worktask` FN stage — document the release
 - Stakeholder communication and customer announcements
-- `/pm-sprint` — sprint scope feeding `--from-worktask`
+- `/sprint` — sprint scope feeding `--from-worktask`
 - `agents/project-manager.md`, `agents/technical-writer.md` — owning agents

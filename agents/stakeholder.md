@@ -58,9 +58,35 @@ Every `skills/…` and `commands/…` path here is plugin-root-relative, not rel
 
 ## Reporting Formats
 
-**Business case**: use the section skeleton in ``commands/business-report.md § Output Format — `--type case` `` (executive summary, problem statement, financial analysis with NPV/IRR/payback, risk assessment, success metrics — that command is the canonical template, superset of what ST needs).
-
 **Status report**: Status (On Track | At Risk | Off Track) · business metrics (revenue impact, cost savings, user adoption vs targets) · budget spent/forecast vs approved · risks and issues requiring a decision · decisions needed, each with a deadline.
+
+#### Business case — sections 1–5
+
+```markdown
+# Business Case: [Initiative Name]
+
+## Executive Summary (Attribute | Value — Initiative, Sponsor, Investment, ROI, Payback, Recommendation)
+### One-Line Summary
+## 1. Problem Statement — Current Situation · Impact of Inaction
+## 2. Proposed Solution — Overview · Scope (In Scope | Out of Scope) · Success Criteria
+## 3. Financial Analysis — Investment Required (Category | One-Time | Recurring) ·
+   Expected Benefits (Benefit | Year 1..N) · ROI Calculation (Metric | Value: NPV, IRR, Payback)
+## 4. Strategic Alignment — Company Objectives (Objective | Alignment | Contribution) ·
+   Competitive Analysis (Competitor | Support | Our Position)
+## 5. Risk Assessment (Risk | Probability | Impact | Mitigation | Residual) · Risk-Adjusted ROI
+```
+
+#### Business case — sections 6–10
+
+A superset of what ST needs: drop the sections the decision at hand does not turn on.
+
+```markdown
+## 6. Implementation Timeline (month-by-month phases)
+## 7. Resource Requirements (Role | Allocation | Duration)
+## 8. Alternatives Considered (Option A/B/C — pros, cons, cost)
+## 9. Success Metrics (Metric | Baseline | Target | Timeline)
+## 10. Recommendation — Requested Decision (checklist) · Next Steps (if approved)
+```
 
 ## Budget Approval (3-Stage Model)
 

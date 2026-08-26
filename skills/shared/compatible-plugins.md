@@ -27,9 +27,9 @@ Entry aliases resolve to qualified `plugin:agent` targets in
 
 | Plugin | Command set |
 |--------|-------------|
-| `apple-developer` | core-parity + apple extras |
+| `apple-developer` | core-parity + apple extras + publishing |
 | `system-developer` | core-parity + `sanitize-check` |
-| `android-developer` | core-parity |
+| `android-developer` | core-parity + publishing |
 | `frontend-developer` | core-parity + `gen-component` |
 | `backend-developer` | core-parity + `gen-api`, `db-migrate`, `analyze-security` |
 | `ai-engineer` | **own set** + `build-test` (documented exception) |
@@ -40,6 +40,15 @@ former `workflow-integration` skill.
 
 Apple extras: `analyze-issue`, `analyze-localization`, `gen-mock-api`, `fix-security-hardening`,
 `review-swiftui`, `review-uikit`, `review-appkit`.
+
+#### Publishing commands
+
+Publishing commands are store-specific and exist only where there is a store — apple
+`gen-appstore-listing`, `gen-appstore-screenshots`, `gen-appstore-iap`; android
+`gen-playstore-listing`, `gen-playstore-screenshots` (Play Billing IAP is not ported). They are
+reached through `/appstore`, which resolves the platform's release engineer via
+`skills/shared/routing-matrix.md § Release-engineer aliases`; they are deliberately **not**
+core-parity, since a store command is meaningless on a platform with no store.
 
 ## Functional-role agents
 

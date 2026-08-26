@@ -78,7 +78,6 @@ CLI smoke tests:
 | Script | Tests | Coverage approach |
 |--------|-------|-------------------|
 | `skills/estimation-methodology/scripts/estimate-calc.py` | **21** in-process behaviors | importlib + CLI argparse smoke |
-| `skills/appstore-screenshots/scripts/layout-calc.py` | **16** in-process behaviors | importlib + CLI argparse smoke |
 
 In-process testing asserts true contracts (unknown-model → sonnet fallback,
 unknown-layout → ValueError) rather than approximating via subprocess; each

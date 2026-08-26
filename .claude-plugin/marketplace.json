@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Staged worktask pipeline (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) with a durable state ledger, cross-plugin delegation, and /megatask dependency-DAG orchestration of many worktasks across a GitHub milestone.",
-    "version": "4.0.25"
+    "version": "4.0.26"
   },
   "plugins": [
     {
       "name": "corpflow",
       "source": "./",
       "description": "Staged worktask pipeline (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) with a durable state ledger, cross-plugin delegation, and /megatask dependency-DAG orchestration of many worktasks across a GitHub milestone.",
-      "version": "4.0.25",
+      "version": "4.0.26",
       "author": {
         "name": "igrsoft",
         "url": "https://github.com/igrsoft"
@@ -39,22 +39,15 @@
       "category": "worktasks",
       "strict": true,
       "commands": [
-        "./commands/agent-report.md",
-        "./commands/appstore-iap.md",
-        "./commands/appstore-info.md",
-        "./commands/appstore-screenshots.md",
+        "./commands/appstore.md",
         "./commands/arch-debt.md",
         "./commands/arch-decision.md",
         "./commands/arch-review.md",
-        "./commands/business-report.md",
         "./commands/cc-update.md",
-        "./commands/context-status.md",
-        "./commands/cost-report.md",
         "./commands/create-agent.md",
         "./commands/design-accessibility.md",
         "./commands/design-review.md",
         "./commands/design-specs.md",
-        "./commands/dev-code-review.md",
         "./commands/docs-audit.md",
         "./commands/docs-readme.md",
         "./commands/docs-release-notes.md",
@@ -62,20 +55,17 @@
         "./commands/ethics-review.md",
         "./commands/improve-yourself.md",
         "./commands/megatask.md",
+        "./commands/milestone.md",
         "./commands/optimize-agent.md",
         "./commands/optimize-command.md",
-        "./commands/pm-milestone.md",
-        "./commands/pm-prioritize.md",
-        "./commands/pm-requirements.md",
-        "./commands/pm-risk.md",
-        "./commands/pm-roadmap.md",
-        "./commands/pm-sprint.md",
+        "./commands/product-requirements.md",
         "./commands/prompt-audit.md",
         "./commands/request-plan.md",
+        "./commands/roadmap.md",
+        "./commands/sprint.md",
+        "./commands/tech-code-review.md",
         "./commands/test-coverage.md",
         "./commands/test-plan.md",
-        "./commands/test-report.md",
-        "./commands/worktask-status.md",
         "./commands/worktask.md"
       ],
       "agents": [
@@ -98,7 +88,6 @@
       ],
       "skills": [
         "./skills/agent-coordination",
-        "./skills/appstore-screenshots",
         "./skills/claude-constitution",
         "./skills/code-comment-standard",
         "./skills/context-compression",
@@ -115,13 +104,11 @@
         "./skills/preview-ensurer",
         "./skills/release-engineering",
         "./skills/request-plan",
-        "./skills/senior-developer-review",
         "./skills/security-review-process",
         "./skills/self-improvement",
         "./skills/shared/milestone-helpers",
         "./skills/task-folder-organization",
         "./skills/worktask",
-        "./skills/worktask-status",
         "./skills/worktask-testing-strategy"
       ]
     }

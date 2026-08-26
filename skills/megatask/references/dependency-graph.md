@@ -9,7 +9,7 @@ the executable implementation of everything below.
 
 ## 1. Edge Extraction
 
-Each issue body carries a `## Dependencies` section (the format `/pm-milestone` writes:
+Each issue body carries a `## Dependencies` section (the format `/milestone` writes:
 `- Depends on: #41` / `- Blocks: #57`). Parse both keywords case-insensitively, accepting comma- or
 space-separated lists across multiple lines.
 

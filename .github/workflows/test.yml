@@ -29,6 +29,24 @@ jobs:
           command -v jq
           command -v python3
 
+      # tests/shell/skills/cross-plugin-refs.bats resolves every `/<plugin>:<command>`
+      # and `Task(<plugin>:<agent>)` this repo names against the sibling that owns it.
+      # A bare checkout has no siblings, so without this the contract passed while
+      # checking nothing. Best-effort by design: a sibling repo being unreachable is
+      # that repo's outage, not a defect in this one, so a failed clone warns and the
+      # bats reports the reduced coverage rather than reddening the job.
+      - name: shallow-clone sibling plugins
+        shell: bash
+        run: |
+          root="$RUNNER_TEMP/siblings"
+          mkdir -p "$root"
+          for p in apple-developer system-developer android-developer \
+                   frontend-developer backend-developer ai-engineer; do
+            git clone --depth 1 --quiet "https://github.com/IGRSoft/$p.git" "$root/$p" \
+              || echo "::warning::could not clone $p; cross-plugin refs into it stay unverified"
+          done
+          echo "CORPFLOW_SIBLING_ROOT=$root" >> "$GITHUB_ENV"
+
       - name: full deterministic suite
         env:
           # Selection is never the required check: the gate is always the full suite.

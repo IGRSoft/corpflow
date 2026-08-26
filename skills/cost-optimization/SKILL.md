@@ -88,64 +88,6 @@ When the location is known (grep hit, error line, prior read), pass `offset`/`li
 
 Cost by size (PL0-sized): trivial ~1-4 stages $0.01-0.10 · standard 9 stages $0.20-0.40 · complex 9 + iterations $0.50-1.00+.
 
-## Per-Stage Tracking
-
-A `SubagentStop` hook writes the per-stage JSONL trail that `/cost-report` and the FN timing recap consume. **Opt-in**: the plugin ships no `cost-log.sh`, so without the setup below no JSONL exists and `/cost-report` has nothing to aggregate.
-
-### SubagentStop Hook
-
-Add to project `settings.json`:
-
-```json
-{
-  "hooks": {
-    "SubagentStop": [
-      {
-        "matcher": "corpflow:.*",
-        "command": ".claude/hooks/cost-log.sh",
-        "if": "$CLAUDE_TASK_METADATA_STAGE != ''"
-      }
-    ]
-  }
-}
-```
-
-### Capture Script — create it yourself (conventional path `.claude/hooks/cost-log.sh`)
-
-```bash
-#!/usr/bin/env bash
-mkdir -p .context/logs
-STAGE="${CLAUDE_TASK_METADATA_STAGE:-unknown}"
-TS=$(date -u +%Y%m%d-%H%M%S)
-LOG=".context/logs/cost-${STAGE}-${TS}.jsonl"
-jq -cn --arg ts "$(date -u +%FT%TZ)" '{
-  ts: $ts,
-  agent_type: env.CLAUDE_SUBAGENT_TYPE,
-  task_id: env.CLAUDE_TASK_ID,
-  stage: env.CLAUDE_TASK_METADATA_STAGE,
-  model: env.CLAUDE_TASK_METADATA_MODEL,
-  input_tokens: (env.CLAUDE_INPUT_TOKENS // "0" | tonumber),
-  output_tokens: (env.CLAUDE_OUTPUT_TOKENS // "0" | tonumber),
-  cache_read_input_tokens: (env.CLAUDE_CACHE_READ_INPUT_TOKENS // "0" | tonumber),
-  cache_creation_input_tokens: (env.CLAUDE_CACHE_CREATION_INPUT_TOKENS // "0" | tonumber),
-  duration_ms: (env.CLAUDE_DURATION_MS // "0" | tonumber),
-  effort: (env.CLAUDE_EFFORT // "unknown"),
-  status: env.CLAUDE_SUBAGENT_STATUS
-}' >> "$LOG"
-```
-
-#### Env Vars & Fallbacks
-
-`CLAUDE_CACHE_READ_INPUT_TOKENS`, `CLAUDE_CACHE_CREATION_INPUT_TOKENS`, and `CLAUDE_EFFORT` are exported on SubagentStop alongside `CLAUDE_INPUT_TOKENS`/`CLAUDE_OUTPUT_TOKENS` (hook stdin JSON also carries `effort.level`). The `// "0"`/`"unknown"` fallbacks keep the line valid when one is absent — `/cost-report` flags such rows (`n/a` hit ratio, `unknown` effort).
-
-### Schema
-
-One line per invocation, fields exactly as the jq filter emits them (`ts` is ISO-8601 UTC, `task_id` the ledger key such as `DV0`). Enums: `stage` per `skills/shared/stage-codes.md`, `model` `opus|sonnet|haiku`, `effort` `low|medium|high|xhigh|max|unknown`, `status` `completed|error|cancelled`. `cache_read_input_tokens` is served from the prompt cache, `cache_creation_input_tokens` seeded into it that turn.
-
-### Aggregation
-
-`/cost-report` reads all `.context/logs/cost-*.jsonl`, groups by `stage`, and renders `### By Stage` plus `### Cache Performance` — the latter validates AC-14 (`cache_read_input_tokens` ≥ 60% cross-stage average). See `commands/cost-report.md § Data Source`, `§ Cache Performance`.
-
 ## Prompt Caching (1h TTL) & Handoff Protocol
 
 The handoff protocol (`skills/worktask/references/handoff-protocol.md`) is built around the Anthropic prompt cache. Its `state-merge.sh` SubagentStop hook needs no wiring — it ships default-on in `.claude-plugin/plugin.json`, contract in the handoff protocol.
@@ -187,7 +129,15 @@ Estimated Cost = Base Tokens × Model Cost × (1 + Retry Factor) × Complexity M
 
 ### Budget Alert Thresholds
 
-Ladder: 50% warning · 75% notify · 90% critical · 100% pause. The `level` and `action` strings are canonical in `commands/cost-report.md § Alert Thresholds` (emitted verbatim in `--json`) — cite them from there rather than restating.
+Canonical ladder — `level` and `action` are these strings verbatim:
+
+| Threshold | Level | Action | Visual |
+|-----------|-------|--------|--------|
+| < 50% | normal | Normal | Green |
+| 50-74% | warning | Warning logged | Yellow |
+| 75-89% | notify | User notified | Orange |
+| 90-99% | critical | Compression suggested | Red |
+| 100% | pause | Worktask paused | Critical |
 
 ## Optimization Checklist
 

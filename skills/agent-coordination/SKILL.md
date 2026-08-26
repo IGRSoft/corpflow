@@ -152,7 +152,7 @@ One row per test **invocation**, keyed on the invocation's shape rather than the
 
 | Actor | Action Examples |
 |-------|-----------------|
-| `hook:audit-subagent` (SubagentStop, plugin) | `subagent_stopped`, paired with a cost-*.jsonl entry |
+| `hook:audit-subagent` (SubagentStop, plugin) | `subagent_stopped` |
 | `hook:audit-tooluse` (PostToolUse, plugin) | `tool_invoked` for `Bash\|Write\|Edit` (ledger patches recognised by command) with `duration_ms` + `effort` |
 | `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) | `stage_transition` with `task_id` + `metadata.{verdict, via, dedupe_key}` |
 | `hook:precompact` (PreCompact, plugin) | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` |
@@ -174,7 +174,7 @@ Every row above is **authoritative**. `audit-subagent` and `agent-stop` rows als
 
 #### Hook authority + dedupe rule
 
-Hook-emitted rows carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action stay forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are **advisory**. Readers (`/cost-report`, resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`.
+Hook-emitted rows carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action stay forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are **advisory**. Readers (resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`.
 
 #### Hook authority — canonical vs mirrored writers
 
@@ -275,7 +275,7 @@ Full code patterns: `worktask/references/initialization-patterns.md § Stage Sub
 
 ##### Depth budget sharing
 
-> Foreground and background subagents share one depth budget — a foreground chain plus a backgrounded child count against the same cap. Each level summarizes upward, and `/cost-report`'s `dispatch_depth` column makes depth visible.
+> Foreground and background subagents share one depth budget — a foreground chain plus a backgrounded child count against the same cap. Each level summarizes upward, and the audit trail's `dispatch_depth` makes depth visible.
 
 > **`/megatask` consumes a level**: a batch run dispatches a per-issue `/worktask` orchestrator as its own sub-agent (depth 1), pushing that same DV chain to depth 4 — one past the default. Raise `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` before the batch, or accept a flattened Tier-2 dispatch. See `skills/megatask/SKILL.md § Nesting-depth budget`.
 
@@ -355,7 +355,7 @@ Per-invocation override: `Task({ subagent_type: "corpflow:developer", model: "op
 
 #### Skill discovery & subagent_type resolution
 
-> Subagents resolve project + user + plugin skills natively at every depth — a Level-3 child resolves `Skill("name")` like a Level-1 one — so never inline-load skill instructions before delegating. `subagent_type` matching is case- and separator-insensitive (`"Corpflow:Developer"` → `corpflow:developer`); the bare-name → `corpflow:` convention still sets resolution priority.
+> Subagents resolve project + user + plugin skills natively at every depth — a Level-3 child resolves `Skill("<name>")` like a Level-1 one — so never inline-load skill instructions before delegating. `subagent_type` matching is case- and separator-insensitive (`"Corpflow:Developer"` → `corpflow:developer`); the bare-name → `corpflow:` convention still sets resolution priority.
 
 #### Dispatch flags & /agents UI
 

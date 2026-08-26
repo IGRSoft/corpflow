@@ -224,9 +224,9 @@ occurrence cost a manual remediation, and a one-line backlog entry discards that
 
 #### complete-summary-N.md Stage Timings
 
-Aggregate from `.context/logs/cost-*.jsonl` (written by the SubagentStop hook — see
-`skills/cost-optimization/SKILL.md § Per-Stage Tracking`). Hook absent → omit the table and note
-"cost hook not configured".
+Source the rows from the state ledger's per-stage entries. Cost is an estimate, not a
+measurement — derive it per `skills/cost-optimization/SKILL.md § Cost Estimation Formula` and say
+so. Omit any column the ledger cannot support rather than inventing a number for it.
 
 ```markdown
 ## Stage Timings
@@ -236,7 +236,6 @@ Aggregate from `.context/logs/cost-*.jsonl` (written by the SubagentStop hook �
 | DV | developer | opus | 8200 / 4600 | 3m08s | $0.47 | 1 |
 | **Total** | — | — | **23,400 / 12,000** | **6m40s** | **$0.90** | **1** |
 
-Generated from `.context/logs/cost-*.jsonl` via `/cost-report`.
 ```
 
 #### Workspace mode
@@ -282,7 +281,7 @@ Story Points: X-Y (Min-Max) | Complexity: [Low/Medium/High]
 
 ## Estimation & Budget Integration
 
-Complexity scoring: `skills/estimation-methodology/SKILL.md`. Cost tracking: `/cost-report`.
+Complexity scoring: `skills/estimation-methodology/SKILL.md`. Cost model: `skills/cost-optimization/SKILL.md`.
 3-stage model, calendar-month billing, stage budget template, gate criteria:
 `skills/shared/three-stage-planning.md`.
 

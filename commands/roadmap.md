@@ -1,26 +1,25 @@
 ---
-name: pm-roadmap
+name: roadmap
 description: Create or update product roadmap with timeline, milestones, and dependencies
 argument-hint: '[--quarter Q1-Q4] [--format timeline|list]'
 model: sonnet
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/product-manager.md
-  - commands/pm-prioritize.md
-  - commands/pm-requirements.md
+  - commands/product-requirements.md
 ---
 
-# PM Roadmap Command
+# Roadmap Command
 
 Create or update product roadmap with timeline, milestones, and dependencies.
 
 ## Usage
 
 ```
-/pm-roadmap
-/pm-roadmap --quarter [Q1|Q2|Q3|Q4]
-/pm-roadmap --add "Feature" --quarter Q2
-/pm-roadmap --view [timeline|kanban|list]
+/roadmap
+/roadmap --quarter [Q1|Q2|Q3|Q4]
+/roadmap --add "Feature" --quarter Q2
+/roadmap --view [timeline|kanban|list]
 ```
 
 ## Options
@@ -35,10 +34,10 @@ Create or update product roadmap with timeline, milestones, and dependencies.
 ## Examples
 
 ```
-/pm-roadmap
-/pm-roadmap --quarter Q1 --view timeline
-/pm-roadmap --add "Dark Mode" --quarter Q1
-/pm-roadmap --move F-12 --to Q2 --export
+/roadmap
+/roadmap --quarter Q1 --view timeline
+/roadmap --add "Dark Mode" --quarter Q1
+/roadmap --move F-12 --to Q2 --export
 ```
 
 ## Output Format
@@ -95,7 +94,8 @@ SSO Integration
 
 ## Risk Register
 Table Risk | Impact | Probability | Mitigation — roadmap-level risks only
-(delivery slips, scope creep, cost). `/pm-risk` produces the scored register.
+(delivery slips, scope creep, cost). Score them per
+`skills/estimation-methodology/references/estimate-review.md § Risk Scoring`.
 
 ## Status Legend
 🟢 Complete · 🟡 In Progress · 🔵 Planned · 🔴 At Risk · ⚪ Blocked
@@ -126,6 +126,5 @@ Table Risk | Impact | Probability | Mitigation — roadmap-level risks only
 ## Integration
 
 This command works with:
-- `/pm-prioritize` - Prioritize before adding to roadmap
-- `/pm-requirements` - Detail features on roadmap
-- `/pm-sprint` - Break roadmap into sprints
+- `/product-requirements` - Detail features on roadmap
+- `/sprint` - Break roadmap into sprints

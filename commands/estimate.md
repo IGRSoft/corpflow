@@ -7,7 +7,7 @@ allowed-tools: Read, Glob, Grep, Write
 related:
   - skills/worktask/SKILL.md
   - skills/estimation-methodology/SKILL.md
-  - skills/senior-developer-review/SKILL.md
+  - skills/estimation-methodology/references/estimate-review.md
   - skills/csv-export-templates/SKILL.md
   - agents/product-manager.md
   - agents/project-manager.md
@@ -24,7 +24,7 @@ mode — do not cross-apply them:
 
 | Mode | Trigger | Purpose | Mode-scoped flags |
 |------|---------|---------|-------------------|
-| **Estimate** (default) | no mode flag | Produce a sizing/effort/budget estimate | `--quick`, `--detailed`, `--stages`, `--sequential`, `--compare`, `--multiplier`, `--ai-rate`, `--dev-rate` |
+| **Estimate** (default) | no mode flag | Produce a sizing/effort/budget estimate | `--quick`, `--detailed`, `--stages`, `--sequential`, `--compare`, `--multiplier`, `--ai-rate`, `--dev-rate`, `--no-review` |
 | **Review** | `--review` | Senior/platform-specialist review of an existing estimate | `--focus`, `--update` |
 | **Export** | `--export csv` | Emit the 13-CSV estimation pack for Google Sheets | `--dir`, `--delimiter`, `--validate` |
 
@@ -50,9 +50,13 @@ platform keys of `skills/shared/compatible-plugins.md § Registry`.
 - `--stages` - Emits the 3-stage breakdown (Required, Nice-to-have, v1.1) using the template in `skills/shared/three-stage-planning.md § Stage Budget Template`. See Output Format below.
 - `--sequential` - Flag-only; documents that stages cannot run in parallel. See `skills/shared/three-stage-planning.md` for the sequential-only rules.
 - `--compare` - Accepts `"opt1 | opt2 | opt3"`; emits a comparison table with size, SP range, hours range, complexity score, and recommended worktask per option. See Output Format below.
+
+#### Estimate mode — rates and review
+
 - `--multiplier <hours>` - Override SP multiplier (default: 6)
 - `--ai-rate <amount>` - AI agent monthly rate (no default — if omitted, AI cost row shows [ai-cost skipped: --ai-rate not set])
 - `--dev-rate <amount>` - Developer hourly rate (no default — required for budget calculation; estimate runs without budget if omitted)
+- `--no-review` - Skip the inline review step even when its trigger fires (see Review Step below). `--quick` never reviews, so the flag is a no-op there
 
 ### Review mode (`--review`)
 
@@ -106,6 +110,7 @@ Emit `## Detailed Estimate: <task>` with these sections, in order:
 | `### Resource Requirements` | Skills needed, dependencies, blockers |
 | `### Breakdown` | Per-component table: Component, Size, SP Min, SP Max, Notes — tests included per component |
 | `### Risk Assessment` | Risk, Probability, Impact, Mitigation |
+| `### Review Adjustments` | Emitted only when the inline review step fires (see Review Step below); omitted entirely otherwise |
 
 #### Detailed Estimation — Budget & AI Cost Sections
 
@@ -133,17 +138,39 @@ Emit `## 3-Stage Plan: <task>` — one row per stage (Required, Nice-to-have, v1
 with columns Stage, Scope, SP, Hours, Buffer (10%), Total. Column definitions:
 `skills/shared/three-stage-planning.md § Stage Budget Template`.
 
+## Review Step (inline, `--detailed`)
+
+`--detailed` runs the platform review as **part of the estimate**, not behind a flag, when the
+trigger in `skills/estimation-methodology/references/estimate-review.md § When to Apply` fires:
+complexity ≥ 15, or the scope names AR/ML/Vision, BLE/hardware, real-time camera, third-party
+SDKs of unknown quality, or background processing. `--no-review` suppresses it; `--quick` never
+reviews, having no breakdown to adjust.
+
+Always-on was rejected: firing the platform machinery on every trivial estimate inflates all of
+them, and the trigger above is already calibrated for the cases where the adjustment is real.
+
+### Applying the adjustment
+
+When it fires: select the one platform table matching `--platform` (`--platform all` → the table
+for the platform the scope's markers indicate; ambiguous → say so and skip the adjustment rather
+than picking one), apply the per-feature SP deltas, and emit `### Review Adjustments` with the
+Adjustment Summary and Total Impact tables from § Output Format.
+
+**The adjusted SP Min/Max are what `### Budget Calculation` consumes** — the budget, hours and
+timeline are all post-adjustment. An estimate that reports a pre-adjustment budget beside an
+adjusted breakdown is the failure this ordering exists to prevent.
+
 ### Review Output (`--review`)
 
-Emit `## Senior Developer Review: [Project]` exactly as templated in
-`skills/senior-developer-review/SKILL.md § Output Format` — sections Adjustment
+Emit `## Estimate Review: [Project]` exactly as templated in
+`skills/estimation-methodology/references/estimate-review.md § Output Format` — sections Adjustment
 Summary, Total Impact, Risk Flags, Recommendations. With `--update`, the
 adjustments are written back into the estimation files.
 
 ## Review Mode Reference
 
-`skills/senior-developer-review/SKILL.md` is canonical for review mode and is not
-restated here: § When to Apply (trigger conditions), § Adjustment Matrix
+`skills/estimation-methodology/references/estimate-review.md` is canonical for both the
+inline review step and `--review` mode, and is not restated here: § When to Apply (trigger conditions), § Adjustment Matrix
 (capability-keyed SP increases), § Platform-Specific Adjustments (per-platform API
 tables — apply only the one matching `--platform`), § Review Process, § Review
 Checklist, and § Risk Flags.
@@ -204,8 +231,7 @@ See `skills/estimation-methodology/SKILL.md § Worktask Tier Selection` for the 
 
 This command works well with:
 - `/worktask` - Use estimate to choose correct worktask tier
-- `/pm-prioritize` - Estimation feeds into RICE calculations
-- `/pm-sprint` - Story points for capacity planning
-- `/pm-roadmap` - Roadmap milestones feed the CSV export
+- `/sprint` - Story points for capacity planning
+- `/roadmap` - Roadmap milestones feed the CSV export
 - `/estimate --review` - Platform-specific review adjustments of an estimate
 - `/estimate --export csv` - Generate CSVs from the estimation

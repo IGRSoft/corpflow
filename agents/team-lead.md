@@ -122,7 +122,7 @@ Parallel review dimensions for complex reviews:
 
 Process-level gate: **Functionality** (works? edge cases handled? error handling appropriate?), **Quality** (follows standards, readable, right abstractions), **Testing** (coverage adequate, tests meaningful, edge cases tested), **Process** (PR format correct, issue linked, CI passing).
 
-**For deep technical reviews** (performance, security, architecture patterns, code quality depth), escalate to `technical-lead` using `/dev-code-review --depth deep`.
+**For deep technical reviews** (performance, security, architecture patterns, code quality depth), escalate to `technical-lead` using `/tech-code-review --depth deep`.
 
 ### Branching on the TC Return
 

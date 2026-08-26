@@ -379,7 +379,7 @@
         }
       ],
       "grounding": [
-        "commands/cost-report.md"
+        "skills/cost-optimization/SKILL.md"
       ],
       "deferred": [
         "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
@@ -1259,15 +1259,13 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "/cost-report",
-            "commands/cost-report.md",
-            "cost-report",
-            "cost-report.md"
+            "cost-optimization",
+            "skills/cost-optimization/SKILL.md"
           ]
         }
       ],
       "grounding": [
-        "commands/cost-report.md"
+        "skills/cost-optimization/SKILL.md"
       ],
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
@@ -2375,15 +2373,14 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "/pm-prioritize",
-            "commands/pm-prioritize.md",
-            "pm-prioritize",
-            "pm-prioritize.md"
+            "agents/product-manager.md",
+            "product-manager",
+            "product-manager.md"
           ]
         }
       ],
       "grounding": [
-        "commands/pm-prioritize.md"
+        "agents/product-manager.md"
       ],
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
@@ -2505,44 +2502,6 @@
       "split": "test"
     },
     {
-      "id": 74,
-      "prompt": "nobody can tell how much context is left before a compaction. plan a fix.",
-      "dimensions": {
-        "type": "bug",
-        "grounding": "buried",
-        "route": "std"
-      },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
-          "values": [
-            "/worktask\\s+\\\""
-          ]
-        },
-        {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
-          "type": "regex_any",
-          "values": [
-            "/context-status",
-            "commands/context-status.md",
-            "context-status",
-            "context-status.md"
-          ]
-        }
-      ],
-      "grounding": [
-        "commands/context-status.md"
-      ],
-      "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
-      ],
-      "split": "train"
-    },
-    {
       "id": 75,
       "prompt": "i want an outside opinion on whether a feature is worth building. plan it.",
       "dimensions": {
@@ -2565,15 +2524,13 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "/business-report",
-            "business-report",
-            "business-report.md",
-            "commands/business-report.md"
+            "agents/stakeholder.md",
+            "stakeholder.md"
           ]
         }
       ],
       "grounding": [
-        "commands/business-report.md"
+        "agents/stakeholder.md"
       ],
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
@@ -2901,18 +2858,11 @@
           "values": [
             "hooks/megatask-monitor.sh",
             "megatask-monitor",
-            "megatask-monitor.sh",
-            "skills/worktask-status/SKILL.md",
-            "skills/worktask/scripts/status-view.sh",
-            "status-view",
-            "status-view.sh",
-            "worktask-status"
+            "megatask-monitor.sh"
           ]
         }
       ],
       "grounding": [
-        "skills/worktask/scripts/status-view.sh",
-        "skills/worktask-status/SKILL.md",
         "hooks/megatask-monitor.sh"
       ],
       "deferred": [
@@ -3098,15 +3048,15 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "/pm-requirements",
-            "commands/pm-requirements.md",
-            "pm-requirements",
-            "pm-requirements.md"
+            "/product-requirements",
+            "commands/product-requirements.md",
+            "product-requirements",
+            "product-requirements.md"
           ]
         }
       ],
       "grounding": [
-        "commands/pm-requirements.md"
+        "commands/product-requirements.md"
       ],
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
@@ -3281,43 +3231,6 @@
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
       ],
       "split": "train"
-    },
-    {
-      "id": 98,
-      "prompt": "i want one table showing what every task is doing. plan it.",
-      "dimensions": {
-        "type": "feature",
-        "grounding": "buried",
-        "route": "std"
-      },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
-          "values": [
-            "/worktask\\s+\\\""
-          ]
-        },
-        {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
-          "type": "regex_any",
-          "values": [
-            "skills/worktask/scripts/status-view.sh",
-            "status-view",
-            "status-view.sh"
-          ]
-        }
-      ],
-      "grounding": [
-        "skills/worktask/scripts/status-view.sh"
-      ],
-      "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
-      ],
-      "split": "dev"
     },
     {
       "id": 99,
@@ -3862,42 +3775,6 @@
       "split": "dev"
     },
     {
-      "id": 114,
-      "prompt": "i want to poll a live board of in-flight work. plan it.",
-      "dimensions": {
-        "type": "feature",
-        "grounding": "adjacent",
-        "route": "std"
-      },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
-          "values": [
-            "/worktask\\s+\\\""
-          ]
-        },
-        {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
-          "type": "regex_any",
-          "values": [
-            "skills/worktask-status/SKILL.md",
-            "worktask-status"
-          ]
-        }
-      ],
-      "grounding": [
-        "skills/worktask-status/SKILL.md"
-      ],
-      "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
-      ],
-      "split": "test"
-    },
-    {
       "id": 115,
       "prompt": "the trace review page is failing to load any captures. plan the response.",
       "dimensions": {
@@ -3994,13 +3871,14 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "senior-developer-review",
-            "skills/senior-developer-review/SKILL.md"
+            "estimate-review",
+            "estimate-review.md",
+            "skills/estimation-methodology/references/estimate-review.md"
           ]
         }
       ],
       "grounding": [
-        "skills/senior-developer-review/SKILL.md"
+        "skills/estimation-methodology/references/estimate-review.md"
       ],
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."

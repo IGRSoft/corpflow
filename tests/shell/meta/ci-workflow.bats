@@ -156,6 +156,29 @@ setup() {
   assert_failure
 }
 
+@test "the test job provisions a sibling root for cross-plugin resolution" {
+  # cross-plugin-refs.bats resolves this repo's `/<plugin>:<command>` and
+  # `Task(<plugin>:<agent>)` references against the sibling repos that own them. On a
+  # bare runner there are no siblings, so the contract passed while verifying nothing.
+  # The clone step is what makes it real, and the export is what the bats reads —
+  # either one dropped puts CI back to a green that means nothing.
+  local test_job
+  test_job="$(awk '/^  test:/{f=1} /^  lint:/{f=0} f' "$WF")"
+  grep -q 'git clone --depth 1' <<< "$test_job" \
+    || fail "the test job must shallow-clone the sibling plugins"
+  grep -q 'CORPFLOW_SIBLING_ROOT=' <<< "$test_job" \
+    || fail "the clone step must export CORPFLOW_SIBLING_ROOT for the suite"
+  # Best-effort: a sibling repo's outage must not redden this repo's suite.
+  grep -q '::warning::' <<< "$test_job" \
+    || fail "a failed sibling clone must warn and continue, never fail the job"
+  # The clone must precede the suite, or the export lands after the reader.
+  local clone_line suite_line
+  clone_line="$(grep -n 'shallow-clone sibling plugins' "$WF" | cut -d: -f1)"
+  suite_line="$(grep -n 'full deterministic suite' "$WF" | cut -d: -f1)"
+  [ "$clone_line" -lt "$suite_line" ] \
+    || fail "the sibling clone must run before the suite step"
+}
+
 @test "the test job checks out full history; the lint job does not" {
   # architecture-0.md's own trade-off table (fetch-depth 0 vs 1) says why: several
   # bats shell out to git and diff against origin/master, which a shallow (depth-1)

@@ -60,6 +60,9 @@ RETIRED = {
     52: "rotation.py opens with a module docstring giving the retention and atomicity rationale",
     57: "qa-engineer.md:99 already states QA is the sole holder of full-suite authority",
     62: "hook-install.sh backs up on overwrite, and writes no settings file at all",
+    74: "context-status was removed; nothing in the repo reports remaining context to plan against",
+    98: "status-view.sh was removed with /worktask-status; no live-status table remains to plan",
+    114: "worktask-status was removed; its only grounding surface no longer exists",
 }
 
 # (type, grounding, route, prompt, grounding_paths, discovery_values)
@@ -81,7 +84,7 @@ CASES = [
      ["benchmark/harness/benchmarkkit/genlib.py"], ["oracle", "deterministic", "generators"]),
     None,  # 8 — retired; see RETIRED
     ("feature", "obvious", "std", "add a machine-readable summary to cost-report. plan it.",
-     ["commands/cost-report.md"], ["csv-export", "token", "usage"]),
+     ["skills/cost-optimization/SKILL.md"], ["csv-export", "token", "usage"]),
     None,  # 10 — retired; see RETIRED
     ("migration", "obvious", "secure", "credentials.py still accepts an env key. plan dropping that path.",
      ["benchmark/harness/benchmarklive/credentials.py"], ["login", "probe", "boolean"]),
@@ -137,7 +140,7 @@ CASES = [
      ["skills/worktask/references/handoff-protocol.md", "skills/agent-coordination/SKILL.md"],
      ["handoff-protocol", "escalate"]),
     ("feature", "adjacent", "std", "put a spend ceiling on a task so it can't run away. plan it.",
-     ["commands/cost-report.md"], ["cost-report", "budget"]),
+     ["skills/cost-optimization/SKILL.md"], ["cost-optimization", "budget"]),
     ("feature", "adjacent", "std", "i want a per-stage timeout so nothing hangs forever. plan it.",
      ["hooks/megatask-monitor.sh"], ["megatask-monitor", "monitor"]),
     ("migration", "adjacent", "secure", "move the audit trail into something encrypted at rest. plan it.",
@@ -209,17 +212,16 @@ CASES = [
     ("feature", "buried", "std", "i want a written record of every architectural choice. plan it.",
      ["commands/arch-decision.md"], ["arch-decision", "ADR", "TDR"]),
     ("feature", "buried", "std", "i need to rank a backlog objectively. plan it.",
-     ["commands/pm-prioritize.md"], ["pm-prioritize", "RICE", "WSJF"]),
+     ["agents/product-manager.md"], ["product-manager", "RICE"]),
     ("bug", "buried", "std", "our docs drift out of sync with the code. plan a fix.",
      ["commands/docs-audit.md"], ["docs-audit", "gap", "outdated"]),
     ("feature", "buried", "std", "i want release notes written from what actually shipped. plan it.",
      ["commands/docs-release-notes.md"], ["release-notes", "changelog"]),
     ("feature", "buried", "std", "i want to check a screen works for people using a reader. plan it.",
      ["commands/design-accessibility.md"], ["accessibility", "audit", "WCAG"]),
-    ("bug", "buried", "std", "nobody can tell how much context is left before a compaction. plan a fix.",
-     ["commands/context-status.md"], ["context-status", "compression", "utilization"]),
+    None,  # 74 — retired; see RETIRED
     ("feature", "buried", "std", "i want an outside opinion on whether a feature is worth building. plan it.",
-     ["commands/business-report.md"], ["business-report", "ROI", "case"]),
+     ["agents/stakeholder.md"], ["stakeholder", "business case", "ROI"]),
     ("refactor", "buried", "std", "our agent definitions have drifted apart in structure. plan a cleanup.",
      ["commands/prompt-audit.md"], ["prompt-audit", "consistency"]),
     ("bug", "buried", "std", "test coverage numbers look fine but bugs still ship. plan a fix.",
@@ -238,12 +240,11 @@ CASES = [
      ["agents/incident-responder.md"], ["incident-responder", "emergency", "triage"]),
 
     # ---- batch 2: adjacent ----
-    # Grounds match cases 98 and 114, which ask the same thing in different words and
-    # ground on the status surfaces. Three sibling prompts must not have three grounds:
-    # megatask-monitor.sh is a reconciliation hook, not the live-status view.
+    # Once /worktask-status and status-view.sh were removed, megatask-monitor.sh is the
+    # only live-status surface left, so it is the whole ground rather than one of three.
+    # Its siblings 98 and 114 grounded ONLY on the removed surfaces and are retired.
     ("feature", "adjacent", "std", "i want a dashboard showing every task's live status. plan it.",
-     ["skills/worktask/scripts/status-view.sh", "skills/worktask-status/SKILL.md",
-      "hooks/megatask-monitor.sh"], ["megatask-monitor", "monitor"]),
+     ["hooks/megatask-monitor.sh"], ["megatask-monitor", "monitor"]),
     ("feature", "adjacent", "std", "let me replay a failed stage without rerunning the whole task. plan it.",
      ["skills/worktask/scripts/state-patch.sh"], ["state-patch", "ledger"]),
     ("migration", "adjacent", "std", "move our estimates into a real database. plan it.",
@@ -253,7 +254,7 @@ CASES = [
     ("feature", "adjacent", "secure", "i want every credential the harness touches rotated. plan it.",
      ["benchmark/harness/benchmarklive/credentials.py"], ["auth status", "login", "probe"]),
     ("refactor", "adjacent", "std", "the plan template and the PRD template overlap. plan a merge.",
-     ["commands/pm-requirements.md"], ["pm-requirements", "PRD"]),
+     ["commands/product-requirements.md"], ["product-requirements", "PRD"]),
     ("incident", "adjacent", "emerg", "a batch run is burning budget with no way to stop it. plan it.",
      ["benchmark/harness/benchmarklive/budget.py"], ["running tally", "breach", "ceiling"]),
 
@@ -275,8 +276,7 @@ CASES = [
     # buried: the prompt names no surface, so the search has to reach it
     ("feature", "buried", "std", "there's no way to tell which of my running tasks are still alive. plan it.",
      ["skills/worktask/scripts/stale-check.sh"], []),
-    ("feature", "buried", "std", "i want one table showing what every task is doing. plan it.",
-     ["skills/worktask/scripts/status-view.sh"], []),
+    None,  # 98 — retired; see RETIRED
     ("bug", "buried", "std", "the remote branch name stops matching the plan title once planning finishes. plan a fix.",
      ["skills/worktask/scripts/refine-branch-target.sh"], []),
     ("bug", "buried", "std", "an agent edited files in a stale checkout instead of the one it was assigned. plan a fix.",
@@ -311,14 +311,13 @@ CASES = [
     # adjacent: the near-miss surface exists and the plan must name it
     ("docs", "adjacent", "std", "we have no written policy for what makes a release deployable. plan the documentation.",
      ["skills/release-engineering/SKILL.md"], []),
-    ("feature", "adjacent", "std", "i want to poll a live board of in-flight work. plan it.",
-     ["skills/worktask-status/SKILL.md"], []),
+    None,  # 114 — retired; see RETIRED
     ("incident", "adjacent", "emerg", "the trace review page is failing to load any captures. plan the response.",
      ["evals/scripts/build-review-page.py"], []),
     ("refactor", "adjacent", "std", "the issue publishing helper duplicates logic with its selftest. plan a split.",
      ["skills/worktask/scripts/publish-pl-issue-lib.sh"], []),
     ("docs", "adjacent", "std", "reviewers don't know what a senior-level estimate review must cover. plan the documentation.",
-     ["skills/senior-developer-review/SKILL.md"], []),
+     ["skills/estimation-methodology/references/estimate-review.md"], []),
     ("incident", "obvious", "emerg", "publish-pl-issue-selftest.sh is failing and blocking every plan publish. plan the response.",
      ["skills/worktask/scripts/publish-pl-issue-selftest.sh"], []),
 

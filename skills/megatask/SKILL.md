@@ -132,7 +132,7 @@ directed acyclic graph rather than a flat priority list.
 | `A blocked_by B` | `Depends on: #B` on issue A | A cannot start until B is `completed` |
 | `A blocks B` | `Blocks: #B` on issue A | reverse of `B Depends on A` |
 
-Both formats are what `/pm-milestone` emits under `## Dependencies`. The two directions **normalize**
+Both formats are what `/milestone` emits under `## Dependencies`. The two directions **normalize**
 into one edge set (`A blocks B` ⇔ `B blocked_by A`); duplicates collapse. Edges leaving the resolved
 issue set become `external_dependency` warnings — surfaced, never gating (out of batch scope).
 
