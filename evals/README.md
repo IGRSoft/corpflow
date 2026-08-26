@@ -158,12 +158,23 @@ The corpus was reset to a **0.0.1 baseline** on 2026-08-23. Everything the reset
 deleted — labels, judgements, findings, captured responses — described a case set
 that had since been repaired and a skill at three different versions, so no number
 from it can be compared against a number taken after it. `SKILL.md` `version:` and
-`evals.json` `eval_set_version` both read `0.0.1`, and both must move together with
-any capture worth comparing.
+`evals.json` `eval_set_version` both read `0.0.1` **at the baseline**, and the rule is
+that they move together — not that they stay at `0.0.1`. Both are `0.2.0` today: 0.1.0
+shipped in PR #325 and 0.2.0 on 2026-08-26. `0.0.1` names the last **captured** state,
+which is what a number is compared against; the pair names the current **spec**. When
+they disagree, the spec versions are wrong, not this paragraph.
+
+**Three spec versions are unmeasured and a capture cannot separate them.** 0.1.0
+shipped with no capture; the 4.0.26 command-surface reorganization then changed the
+tree `eval-capture.py` reads (seven commands removed, five renamed, eight groundings
+repointed); 0.2.0 stacks on both. Any future number is a delta against that whole
+stack.
 
 What the reset does **not** do is make the cases unread. Every case in 0.0.1
 predates it, so the `test` tranche in `splits/request-plan.json` is nominal rather
-than held out. A genuinely unseen tranche needs genuinely new cases.
+than held out for those ids. Ids 122+ were written after the manifest and pinned to a
+tranche before any capture read them — those are the first genuinely held-out cases
+this corpus has had.
 
 The two subsections below are the rules that produced the reset; they still govern.
 

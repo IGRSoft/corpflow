@@ -25,6 +25,7 @@ import argparse
 import collections
 import json
 import os
+import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -55,6 +56,8 @@ ROUTE_ASSERTION = {
 RETIRED = {
     6: "megatask --dry-run shipped 2026-06-22; init-worktree.sh takes it and writes nothing",
     8: "branch-name.sh:464 already no-ops on a tracked upstream, so the rename never happens",
+    9: "cost-report was removed with the whole cost-observability feature; there is no command "
+       "left to add a machine-readable summary to",
     10: "analysis.py has carried a module docstring since f03065f",
     46: "attachments-preseed.sh makes no temp file outside its selftest, which traps its own cleanup",
     52: "rotation.py opens with a module docstring giving the retention and atomicity rationale",
@@ -75,7 +78,11 @@ CASES = [
      ["benchmark/harness/benchmarklive/dispatch.py"], ["preamble", "baseline", "budget"]),
     ("refactor", "obvious", "std", "fn-preflight.sh is 24KB in one file. plan an extraction.",
      ["skills/worktask/scripts/fn-preflight.sh"], ["pr-body-lint", "branch-lib", "section-lint"]),
-    ("docs", "obvious", "std", "CHANGELOG.md is 183KB and unreadable. what's the plan to split it?",
+    # The figure has now gone stale three times (183 -> 123 -> 145) and each drift silently
+    # changes what the case tests. If the corpus is ever re-cut, prefer a premise that does
+    # not embed a number the repo keeps moving; changing it here invalidates the human label,
+    # which is why it is corrected rather than removed.
+    ("docs", "obvious", "std", "CHANGELOG.md is 145KB and unreadable. what's the plan to split it?",
      ["CHANGELOG.md"], ["release", "version", "semver"]),
     ("bug", "obvious", "std", "the comment density gate rejects DocC that looks fine to me. plan a fix.",
      ["hooks/dv-comment-density-gate.sh"], ["comment-standard", "code-comment", "DocC ratio"]),
@@ -83,8 +90,7 @@ CASES = [
     ("refactor", "obvious", "std", "genlib.py mixes a subprocess wrapper with tree copying. plan a split.",
      ["benchmark/harness/benchmarkkit/genlib.py"], ["oracle", "deterministic", "generators"]),
     None,  # 8 — retired; see RETIRED
-    ("feature", "obvious", "std", "add a machine-readable summary to cost-report. plan it.",
-     ["skills/cost-optimization/SKILL.md"], ["csv-export", "token", "usage"]),
+    None,  # 9 — retired; see RETIRED
     None,  # 10 — retired; see RETIRED
     ("migration", "obvious", "secure", "credentials.py still accepts an env key. plan dropping that path.",
      ["benchmark/harness/benchmarklive/credentials.py"], ["login", "probe", "boolean"]),
@@ -325,6 +331,121 @@ CASES = [
     ("docs", "absent", "std", "the onboarding guide in our Notion workspace is out of date. plan the documentation.", [], []),
     ("incident", "absent", "emerg", "our Redis cluster is down and user sessions are dropping. plan the response.", [], []),
     ("bug", "absent", "std", "the mobile app crashes on cold start for Android 14 users. plan a fix.", [], []),
+
+    # ---- batch 4 (ids 122+): rebuilding the search signal the registry spent ----
+    # capability-registry.sh now enumerates hooks, skill scripts and harness modules, which
+    # converts 42 of the 44 standing `buried` cases from a search into a lookup. From 0.2.0
+    # forward the `buried` rate on those cases measures reading a list, not searching a tree.
+    # These replace the lost denominator and ground ONLY on classes the registry deliberately
+    # does not list: skills/*/references/, skills/shared/, and evals/scripts/. That exclusion
+    # is pinned by capability-registry.bats, so widening the registry's globs breaks a test
+    # before it silently answers these.
+    #
+    # Held out by construction: written after the frozen manifest, so whatever the generator
+    # assigns to `test` is the first genuinely unseen tranche this corpus has had. Do not read
+    # it before a capture, and do not pass --restratify, which would move already-read cases in.
+
+    # buried: shared canon — behaviour that lives in a doc no registry line points at
+    ("refactor", "buried", "std", "every agent picks its own model name and they have drifted apart. plan a cleanup.",
+     ["skills/shared/model-selection.md"], []),
+    ("docs", "buried", "std", "the two-letter abbreviations for pipeline steps mean different things in different files. plan the documentation.",
+     ["skills/shared/stage-codes.md"], []),
+    ("docs", "buried", "std", "nobody can tell what one step of the pipeline owes the next. plan the documentation.",
+     ["skills/shared/stage-contracts.md"], []),
+    ("docs", "buried", "std", "there is no written schema for the run record every step reads and writes. plan the documentation.",
+     ["skills/shared/state-ledger.md"], []),
+    ("docs", "buried", "std", "we have no agreed split between unit, integration and end-to-end coverage. plan the documentation.",
+     ["skills/shared/testing-strategy.md"], []),
+    ("bug", "buried", "std", "developers mark which tests to run in source comments and no two files agree on the format. plan a fix.",
+     ["skills/shared/test-selection-syntax.md"], []),
+    ("bug", "buried", "std", "a request for a niche platform falls through to the generic implementer. plan a fix.",
+     ["skills/shared/platform-detection.md"], []),
+    ("bug", "buried", "std", "the same role name resolves to a different specialist depending on which file you read. plan a fix.",
+     ["skills/shared/routing-matrix.md"], []),
+    ("feature", "buried", "std", "i want a single record of which external plugins we support and from which version. plan it.",
+     ["skills/shared/compatible-plugins.md"], []),
+    ("bug", "buried", "std", "our scripts break when the plugin is installed somewhere other than where we develop it. plan a fix.",
+     ["skills/shared/plugin-root-resolution.md"], []),
+    ("bug", "buried", "std", "people start a task by pasting a phrase instead of running the entry point, and it half-works. plan a fix.",
+     ["skills/shared/worktask-invocation.md"], []),
+    ("refactor", "buried", "std", "each agent restates the whole pipeline in its own words and the copies have drifted. plan a cleanup.",
+     ["skills/shared/worktask-stage-context.md"], []),
+    ("bug", "buried", "std", "our post-mortems stop at the first plausible cause and never reach the systemic one. plan a fix.",
+     ["skills/shared/five-whys.md"], []),
+    ("feature", "buried", "std", "i want to hand the planner a Word document and have it read as text. plan it.",
+     ["skills/shared/pandoc-ingestion.md"], []),
+    ("bug", "buried", "std", "a design link pasted into a request is ignored unless someone also says the word design. plan a fix.",
+     ["skills/shared/figma-capture.md"], []),
+
+    # buried: a skill's references/ — the half of a skill the registry line does not describe
+    ("feature", "buried", "std", "i want to launch one pipeline step from a CI runner with no interactive session. plan it.",
+     ["skills/agent-coordination/references/headless-dispatch.md"], []),
+    ("docs", "buried", "std", "there is no written procedure for weighing a change that could hurt someone. plan the documentation.",
+     ["skills/claude-constitution/references/harm-framework.md"], []),
+    ("feature", "buried", "std", "nobody knows what a normal per-step spend looks like, so nothing can be called excessive. plan it.",
+     ["skills/cost-optimization/references/token-baselines.md"], []),
+    ("docs", "buried", "std", "we have nothing written down about which agent inside each external plugin serves each step. plan the documentation.",
+     ["skills/cross-plugin-handoff/references/plugin-protocols.md"], []),
+    ("feature", "buried", "std", "we cannot get UI evidence for a target that has no runnable simulator. plan it.",
+     ["skills/dv-screenshot-capture/references/apple-canvas.md"], []),
+    ("incident", "buried", "emerg", "every run is failing to attach any visual evidence because the capture tooling is missing. plan the response.",
+     ["skills/dv-screenshot-capture/references/cli-fallback.md"], []),
+    ("bug", "buried", "std", "two people sizing the same work get different numbers because they do the steps in a different order. plan a fix.",
+     ["skills/estimation-methodology/references/estimation-run.md"], []),
+    ("feature", "buried", "std", "i want the issues in a batch to run as one coordinated team rather than isolated sessions. plan it.",
+     ["skills/megatask/references/agent-teams.md"], []),
+    ("bug", "buried", "std", "batch issues start before the ones they are waiting on have finished. plan a fix.",
+     ["skills/megatask/references/dependency-graph.md"], []),
+    ("docs", "buried", "std", "the file that drives a batch run has no written schema. plan the documentation.",
+     ["skills/megatask/references/schemas.md"], []),
+    ("bug", "buried", "std", "designers keep hardcoding hex values instead of reusing the variable system. plan a fix.",
+     ["skills/pencil-design-worktask/references/design-tokens.md"], []),
+    ("bug", "buried", "std", "generated previews fail to compile because nothing knows what arguments the view needs. plan a fix.",
+     ["skills/preview-ensurer/references/mock-data-strategy.md"], []),
+    ("bug", "buried", "std", "we cannot reliably tell which types in a Swift file are actually renderable screens. plan a fix.",
+     ["skills/preview-ensurer/references/view-detection.md"], []),
+    ("incident", "buried", "emerg", "the release we shipped an hour ago is failing in production and we have no written way back. plan the response.",
+     ["skills/release-engineering/references/rollback-template.md"], []),
+    ("bug", "buried", "secure", "every reviewer checks a different subset of the standard vulnerability classes. plan a fix.",
+     ["skills/security-review-process/references/owasp-checklist.md"], []),
+    ("docs", "buried", "std", "a one-off review of our code comes out in a different shape every time, with no fixed sections. plan the documentation.",
+     ["skills/security-review-process/references/review-template.md"], []),
+    ("bug", "buried", "std", "we record what the user changed but nothing says how to classify each change. plan a fix.",
+     ["skills/self-improvement/references/change-categories.md"], []),
+    ("docs", "buried", "std", "the learnings file a run leaves behind comes out differently every time. plan the documentation.",
+     ["skills/self-improvement/references/retrospective-template.md"], []),
+    ("bug", "buried", "std", "we know the user rewrote something but not which agent should have gotten it right. plan a fix.",
+     ["skills/self-improvement/references/target-mapping.md"], []),
+    ("refactor", "buried", "std", "the test-strategy block in a plan is written from scratch every run. plan a cleanup.",
+     ["skills/worktask-testing-strategy/references/stage-templates.md"], []),
+    ("feature", "buried", "std", "the two files our review tool expects are hand-written on every run. plan it.",
+     ["skills/worktask/references/conductor-attachments.md"], []),
+    ("docs", "buried", "std", "there is no written checklist for the human approval that happens before a PR opens. plan the documentation.",
+     ["skills/worktask/references/fn-gate.md"], []),
+    ("docs", "buried", "std", "the planning step has no written procedure and every run improvises it. plan the documentation.",
+     ["skills/worktask/references/pl0-procedure.md"], []),
+    ("feature", "buried", "std", "when a long run is interrupted there is no way to reattach and carry on. plan it.",
+     ["skills/worktask/references/resume.md"], []),
+    ("feature", "buried", "std", "nobody compares the screen we built against the design it came from. plan it.",
+     ["skills/worktask/references/visual-qa.md"], []),
+
+    # buried: eval infrastructure — real behaviour, and the registry lists none of evals/
+    ("feature", "buried", "std", "our graded checks are applied by eye and nobody can reproduce a score. plan it.",
+     ["evals/scripts/eval-engine.py"], []),
+    ("feature", "buried", "std", "we have captured responses sitting on disk and nothing turns them into a pass rate. plan it.",
+     ["evals/scripts/eval-grade.py"], []),
+    ("bug", "buried", "std", "human judgements and machine scores disagree and nobody reconciles the two. plan a fix.",
+     ["evals/scripts/label-align.py"], []),
+
+    # obvious: the three 4.0.26 behaviours that shipped with no case at all. Framed as
+    # coverage requests because each behaviour already ships as specified — asking to BUILD
+    # one would be a refute case, and asking to VERIFY one is the plan SKILL.md § 4 owes.
+    ("feature", "obvious", "std", "/appstore has no test proving it stops instead of guessing when a repo carries markers for both stores. plan it.",
+     ["commands/appstore.md"], []),
+    ("feature", "obvious", "std", "nothing checks that /estimate --detailed bases its budget on the post-review story points. plan a test.",
+     ["commands/estimate.md"], []),
+    ("feature", "obvious", "std", "nothing verifies the release-engineer agent hands off instead of working inline when its platform plugin is absent. plan it.",
+     ["agents/release-engineer.md"], []),
 ]
 
 
@@ -380,27 +501,36 @@ REFUTED_PREMISE = {
         "dispatch.py was split in 18ba0c2; it is now a 352-line orchestration shim"),
     3: ("shipped", "fn-preflight.sh is 24KB",
         "c51ffa7 extracted the command bodies into a sourced library; 24,961 -> 8,763 B"),
-    4: ("shipped", "CHANGELOG.md is 183KB",
-        "d32c8b3 split the release history into CHANGELOG-1/2/3.x.md; 183,163 -> 119,284 B"),
+    # NOT here, deliberately: case 4 ("CHANGELOG.md is <N>KB"). d32c8b3 split the release
+    # history, but the file has since regrown past the size the premise names, so what went
+    # stale was the NUMBER, not the request — it belongs with the correct-the-figure cases,
+    # not the shipped-work conversions. 5 and 53 were re-audited against the same test and
+    # stay: both cite shipped behaviour, and a shipped capability is not a stale measurement.
     5: ("shipped", "the comment density gate rejects DocC",
         "913d786 scores comment blocks rather than the raw ratio"),
     7: ("shipped", "genlib.py mixes a subprocess wrapper",
         "genlib.py was split in 8fe5aec; treecopy.py owns materialization"),
-    9: ("shipped", "add a machine-readable summary to cost-report",
-        "171c74f added --json and ad26a1f pinned the --export CSV schema"),
     13: ("shipped", "audit-tooluse.sh may be logging tool inputs",
          "e755c7e pinned the contract that only task_id and status derive from tool_input, "
          "guarded by audit-tooluse.bats"),
+    # Evidence repointed 2026-08-26: the original cited /cost-report --export, which 4.0.26
+    # deleted along with the rest of cost observability. The capability still ships, and now
+    # through the case's own grounding surface rather than a neighbouring command.
     16: ("shipped", "cost numbers exportable into a spreadsheet",
-         "/cost-report --export shipped, with cost-export-schema.bats pinning the schema"),
+         "/estimate --export csv emits the 13-file pack defined by "
+         "skills/csv-export-templates/SKILL.md, whose 07_budget_estimate.csv is the cost "
+         "breakdown; the schema is pinned by validate-export.sh and validate-export.bats"),
     17: ("shipped", "stage handoffs silently lose facts",
          "8718972 added the facts.* union op the handoff channel lacked"),
     19: ("shipped", "leaking absolute paths from my machine",
          "fe795df strips absolute paths from every mount and route"),
     21: ("shipped", "branches come out with inconsistent names",
          "4196f2d unified batch branch naming with the worktask convention"),
+    # Evidence repointed 2026-08-26: /agent-report was removed in 4.0.26. Only the packaged
+    # reader went — the recording hook and the canonical read path both survive it.
     22: ("shipped", "which agents actually ran during a task",
-         "audit-subagent.sh already records agent coverage; /agent-report reads it"),
+         "hooks/audit-subagent.sh writes one subagent_stopped row per agent, and "
+         "skills/agent-coordination/scripts/audit-dedup.sh is the canonical reader over it"),
     26: ("shipped", "duplicate tickets for the same piece of work",
          "107fc00 added the preflight issue scan that catches duplicates before the context exists"),
     30: ("shipped", "wedged in_progress and nothing will pick it up",
@@ -653,6 +783,39 @@ def validate_tables() -> list:
         elif anchor.lower() not in CASES[cid - 1][3].lower():
             errors.append(f"case {cid}: REFUTED_PREMISE anchor {anchor!r} is not in that "
                           f"case's prompt — the ids have shifted under this table")
+    errors += validate_named_surfaces()
+    return errors
+
+
+# Claude Code ships these; they resolve to no file in commands/ and never will.
+BUILTIN_COMMANDS = {"/clear", "/compact", "/config", "/context", "/cost", "/help",
+                    "/init", "/model", "/plugins", "/agents"}
+_SLASH = re.compile(r"(?<![A-Za-z0-9/._*!-])/([a-z][a-z0-9-]{2,})\b")
+
+
+def validate_named_surfaces() -> list:
+    """Fail closed on a prompt or a refutation that names a deleted command.
+
+    `premise_refuted_by` is the EVIDENCE a refute case is graded against, so a command
+    removed from the tree turns it into a citation of nothing while the case keeps
+    passing. 4.0.26 deleted eight commands and this table kept naming two of them for
+    three days; only a hand grep found it. A prompt naming one is worse — the case has
+    no correct answer at all, and belongs in RETIRED rather than here.
+    """
+    errors = []
+    live = {p[:-3] for p in os.listdir(os.path.join(REPO, "commands")) if p.endswith(".md")}
+    for cid, spec in enumerate(CASES, start=1):
+        if spec is None:
+            continue
+        fields = [("prompt", spec[3])]
+        if cid in REFUTED_PREMISE:
+            fields.append(("premise_refuted_by", REFUTED_PREMISE[cid][2]))
+        for field, text in fields:
+            for name in {m.group(1) for m in _SLASH.finditer(text)}:
+                if name in live or f"/{name}" in BUILTIN_COMMANDS:
+                    continue
+                errors.append(f"case {cid}: {field} names /{name}, which is not a command "
+                              f"in this tree")
     return errors
 
 
