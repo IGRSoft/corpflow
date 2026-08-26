@@ -82,7 +82,8 @@ evals/scripts/eval-grade.py   --eval-set skills/request-plan/evals/evals.json
 - `eval-capture.py` — dispatches each case `prompt` through headless `claude -p`
   and writes `<eval-set-dir>/responses/<case_id>.json`. A failed or empty
   dispatch **raises and stores nothing**; a fabricated blank would be graded as a
-  genuine skill failure.
+  genuine skill failure. Dispatches run against an **isolated tree**, never the
+  repo — see § The capture surface.
 - `eval-grade.py` — scores stored responses. Refuses (rc 2) when a record's
   `prompt_digest` no longer matches the eval set, since that response answers a
   question the set no longer asks. A moved `assertions_digest` is flagged, not
@@ -106,6 +107,45 @@ so `label-align.py` dropped its column. A grader that never says fail adds no
 information to the harness it sits beside. Validating it again means measuring it on
 labels it has not seen, per the taxonomy gate above; until then its output is not a
 label. The script is kept for the isolation technique, which is the part that worked.
+
+### The capture surface
+
+Dispatches run in a detached worktree at HEAD with the answer key removed, pinned
+with `--plugin-dir` and with the ambient marketplace copy disabled. Two separate
+defects made that necessary, and neither was visible in a stored record.
+
+**The plugin under test was not the tree under test.** Without `--plugin-dir` the
+CLI resolves `/corpflow:<skill>` from the installed release while `skill_version()`
+reads this repo, so a run could exercise one version and stamp another on every
+record. Measured rather than argued — same prompt, same model, empty cwd:
+
+| flags | `/corpflow:roadmap` | `/corpflow:cost-report` |
+|---|---|---|
+| none (what 0.0.1 used) | no | **yes** |
+| `--plugin-dir` + ambient disabled | **yes** | no |
+
+`roadmap` ships only in this tree; `cost-report` only in the installed 4.0.25. The
+un-isolated capture really was answered by the published release.
+
+**The answer key was inside the searched tree.** `evals.json` carries
+`expected_outcome`, and 7 of 114 responses in the 0.0.1 capture reached the corpus.
+The strip is the answer key, not the directory: cases ground on
+`evals/scripts/*.py`, so removing all of `evals/` would make them unanswerable and
+score the strip as a skill failure. A worktree rather than a copy, because it
+excludes gitignored material by construction — `.context/` held a per-trace map of
+every known failure, and the prompt-leak lint sweeps `git ls-files --others`, so it
+could never have seen it.
+
+#### Ask for the enumeration, not a yes/no
+
+Two refusals guard the spend: a dirty tree, and a probe dispatch whose enumeration
+of available commands must match the tree's exactly.
+
+Asked whether one deleted command was available, the model answered `yes`; asked to
+list its commands moments later it produced exactly the tree's 28, without that one.
+A set can be checked against the tree; a judgement cannot. The version question is
+worse than useless — the model answers it by reading `SKILL.md` out of the working
+directory, so it reports the tree's version whether or not the pin bound.
 
 ### Isolating a session from this repo
 
@@ -169,6 +209,13 @@ shipped with no capture; the 4.0.26 command-surface reorganization then changed 
 tree `eval-capture.py` reads (seven commands removed, five renamed, eight groundings
 repointed); 0.2.0 stacks on both. Any future number is a delta against that whole
 stack.
+
+**0.0.1 is retired as a comparison point.** It was captured without `--plugin-dir`,
+so the installed release answered and its records cannot say which skill version
+actually ran — the `0.0.1` they carry describes a file in the repo, not the plugin
+that produced the response. Its *labels* remain sound and are still the reference
+for what a human verdict looks like; its *rates* measure an unknown version. The
+next capture is a fresh baseline, and no delta against 81% should be quoted.
 
 What the reset does **not** do is make the cases unread. Every case in 0.0.1
 predates it, so the `test` tranche in `splits/request-plan.json` is nominal rather
