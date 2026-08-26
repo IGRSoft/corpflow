@@ -112,7 +112,13 @@ ul{margin:6px 0;padding-left:20px}
 <script id="data" type="application/json">__DATA__</script>
 <script>
 const TRACES = JSON.parse(document.getElementById('data').textContent);
-const KEY = 'request-plan-labels-v1';
+// Keyed on the eval-set version, not just the skill. Browsers share one
+// localStorage partition across file:// pages, so a version-blind key let notes
+// from an older capture restore into a newer labelling session: 8 notes came back
+// tagged [v050] and 10 named assertions the capture never fired. The verdicts were
+// regenerated and matched; only the free text was stale, which is the hard kind to
+// notice.
+const KEY = 'request-plan-labels-__EVAL_SET_VERSION__';
 let labels = JSON.parse(localStorage.getItem(KEY) || '{}');
 let history = [];
 let idx = 0;
@@ -286,9 +292,11 @@ def main(argv) -> int:
         return 1
 
     payload = json.dumps(traces, ensure_ascii=False).replace("</script>", "<\\/script>")
+    version = str(eval_set.get("eval_set_version") or "unversioned")
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
-        f.write(PAGE.replace("__DATA__", payload))
+        f.write(PAGE.replace("__DATA__", payload)
+                    .replace("__EVAL_SET_VERSION__", version))
     print(f"{len(traces)} traces -> {args.out}")
     return 0
 
