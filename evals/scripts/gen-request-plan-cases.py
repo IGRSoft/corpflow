@@ -69,7 +69,12 @@ RETIRED = {
 }
 
 # (type, grounding, route, prompt, grounding_paths, discovery_values)
-# discovery_values must NOT appear in the prompt — enforced below.
+#
+# discovery_values is DEAD: unpacked in build_case and used by nothing. Do not wire it
+# up. 73 cases fill it with vocabulary — `budget`, `atomic`, `release`, `scan` — and
+# `finds-the-real-surface` accepting those would pass any plan that happened to use the
+# word, which is the leak `surface_tokens` exists to close. The assertion is derived
+# from grounding_paths on purpose; repoint the path when a case grades the wrong file.
 CASES = [
     # ---- exists-obvious: prompt names the surface; discovery targets a relative ----
     ("bug", "obvious", "std", "state-merge.sh is dropping keys when two stages patch at once. plan a fix.",
@@ -121,8 +126,12 @@ CASES = [
      ["skills/worktask/scripts/branch-lib.sh"], ["branch-lib", "derive_type", "conventional"]),
     ("feature", "buried", "std", "i need to know which agents actually ran during a task. plan it.",
      ["hooks/audit-subagent.sh"], ["audit-subagent", "coverage", "manifest"]),
+    # Ground was section-lint.sh, which caps SECTION LENGTH and has nothing to do with
+    # anchors. anchor-preflight.sh is the anchor lint — it runs cache-lint --anchor-lint
+    # on stage artifacts so a bad H2 surfaces at the producing stage, which is the
+    # reported drift exactly. The 0.2.0 capture reached it and was scored a miss.
     ("bug", "buried", "std", "the doc anchors in stage artifacts drift from the templates. plan a fix.",
-     ["skills/worktask/scripts/section-lint.sh"], ["section-lint", "anchor-preflight"]),
+     ["hooks/anchor-preflight.sh"], ["section-lint", "anchor-preflight"]),
     ("feature", "buried", "std", "i want an estimate broken down by phase and budget. plan it.",
      ["skills/estimation-methodology/SKILL.md"], ["estimation-methodology", "complexity"]),
     ("refactor", "buried", "std", "the prompt cache keeps missing between stages. plan an investigation.",
@@ -211,8 +220,11 @@ CASES = [
      ["benchmark/harness/benchmarkkit/analysis.py"], ["analysis", "era", "comparab"]),
     ("bug", "buried", "std", "the generated app passes its own tests but is still wrong. plan a fix.",
      ["benchmark/harness/benchmarkkit/oracle.py"], ["oracle", "golden", "conformance"]),
+    # Ground was rotation.py, which rotates history.json and never compares anything.
+    # "compared fairly" is pairing.py: the comparability gate that refuses to join two
+    # arm records taken under different conditions. The 0.2.0 capture grounded on it.
     ("feature", "buried", "std", "i want the same task run twice and compared fairly. plan it.",
-     ["benchmark/harness/benchmarkkit/rotation.py"], ["rotation", "order", "arm"]),
+     ["benchmark/harness/benchmarkkit/pairing.py"], ["rotation", "order", "arm"]),
     ("bug", "buried", "std", "our headless runs can reach the network when they shouldn't. plan a fix.",
      ["benchmark/live/settings/benchmark-settings.json"], ["deny", "settings", "permission"]),
     ("feature", "buried", "std", "i want a written record of every architectural choice. plan it.",
@@ -408,8 +420,14 @@ CASES = [
      ["skills/release-engineering/references/rollback-template.md"], []),
     ("bug", "buried", "secure", "every reviewer checks a different subset of the standard vulnerability classes. plan a fix.",
      ["skills/security-review-process/references/owasp-checklist.md"], []),
+    # Two surfaces genuinely own this and neither subsumes the other: review-template.md
+    # is the standalone-review shape but only for SECURITY reviews, while
+    # tech-code-review.md owns the code-review output format. The request says "our
+    # code", so a plan that reaches either has found the surface. Both listed rather
+    # than one picked — the 0.0.1 doc set that precedent for case 3.
     ("docs", "buried", "std", "a one-off review of our code comes out in a different shape every time, with no fixed sections. plan the documentation.",
-     ["skills/security-review-process/references/review-template.md"], []),
+     ["commands/tech-code-review.md",
+      "skills/security-review-process/references/review-template.md"], []),
     ("bug", "buried", "std", "we record what the user changed but nothing says how to classify each change. plan a fix.",
      ["skills/self-improvement/references/change-categories.md"], []),
     ("docs", "buried", "std", "the learnings file a run leaves behind comes out differently every time. plan the documentation.",

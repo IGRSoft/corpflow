@@ -848,14 +848,14 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "section-lint",
-            "section-lint.sh",
-            "skills/worktask/scripts/section-lint.sh"
+            "anchor-preflight",
+            "anchor-preflight.sh",
+            "hooks/anchor-preflight.sh"
           ]
         }
       ],
       "grounding": [
-        "skills/worktask/scripts/section-lint.sh"
+        "hooks/anchor-preflight.sh"
       ],
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
@@ -2203,13 +2203,13 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
-            "benchmark/harness/benchmarkkit/rotation.py",
-            "rotation.py"
+            "benchmark/harness/benchmarkkit/pairing.py",
+            "pairing.py"
           ]
         }
       ],
       "grounding": [
-        "benchmark/harness/benchmarkkit/rotation.py"
+        "benchmark/harness/benchmarkkit/pairing.py"
       ],
       "deferred": [
         "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
@@ -5041,13 +5041,18 @@
           "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
           "type": "regex_any",
           "values": [
+            "/tech-code-review",
+            "commands/tech-code-review.md",
             "review-template",
             "review-template.md",
-            "skills/security-review-process/references/review-template.md"
+            "skills/security-review-process/references/review-template.md",
+            "tech-code-review",
+            "tech-code-review.md"
           ]
         }
       ],
       "grounding": [
+        "commands/tech-code-review.md",
         "skills/security-review-process/references/review-template.md"
       ],
       "deferred": [
