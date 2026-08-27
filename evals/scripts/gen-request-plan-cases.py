@@ -464,6 +464,118 @@ CASES = [
      ["commands/estimate.md"], []),
     ("feature", "obvious", "std", "nothing verifies the release-engineer agent hands off instead of working inline when its platform plugin is absent. plan it.",
      ["agents/release-engineer.md"], []),
+    # ---- batch 5 (ids 168+): a held-out tranche built to contain failures ----
+    # Batch 4's tranche came back degenerate: 18 cases, all `pass`, so held-out TPR read
+    # 100% on an all-positive set and held-out TNR was unmeasurable — and TNR is the rate
+    # that missed its 80% floor (69% at 0.2.0). Sampling the model's strongest cells
+    # produced no failures for the grader to be scored against.
+    #
+    # These sample where the 0.2.0 dimension tables say the model actually fails, so the
+    # tranche contains failures by natural occurrence. A failure cannot be constructed,
+    # only made likely: 18 `absent` (harness 71%, human 2/6 — the weakest column measured,
+    # and it doubles that column from 17 to 35), 9 `refute`, 10 `adjacent` (16 in corpus,
+    # none held out), 8 `buried` weighted to incident/migration/feature, and route weighted
+    # to `emerg` (79%) over `std` (81%).
+    #
+    # Weighting to `absent` also dissolves batch 4's surface problem: an `absent` case
+    # grounds on nothing by definition, so 18 of the 45 spend no scarce surface. The 18
+    # plan cases that need one draw from what the registry still excludes and no case had
+    # claimed — skills/*/references/, skills/shared/*.md, and the tests/ tree, which
+    # capability-registry.sh excludes for the same reason and batch 4 never touched. The
+    # 9 refute cases ground on registry-LISTED scripts on purpose: the model is meant to
+    # find the shipped capability and dispute the premise, so a lookup is the right
+    # affordance there and it spends none of the search pool.
+    #
+    # Held out by construction, the same way batch 4 succeeded batch 3's 97-121: written
+    # after the frozen manifest, pinned before any capture reads them. Batch 4's 18 are
+    # REPLACED, not grown — they were read during 0.2.0 labelling, and per RESTRATIFY_NOTE
+    # re-stratifying does not make a case unread. Do not pass --restratify.
+
+    # absent: nothing in this repo to ground on, so the case expects a clarification.
+    # The weakest cell measured, and the negative-generating engine for this tranche.
+    ("incident", "absent", "emerg", "our primary database server is down and every write is failing. plan the response.", [], []),
+    ("incident", "absent", "emerg", "the payment provider is returning 503 on every charge right now. plan the response.", [], []),
+    ("incident", "absent", "emerg", "our load balancer is rejecting half the inbound traffic. plan the response.", [], []),
+    ("incident", "absent", "emerg", "the nightly ETL job is hanging and yesterday's figures never landed. plan the response.", [], []),
+    ("incident", "absent", "emerg", "our CDN is blocking image requests from European users right now. plan the response.", [], []),
+    ("incident", "absent", "emerg", "the search cluster is failing every query and the storefront shows empty results. plan the response.", [], []),
+    ("migration", "absent", "std", "we are moving our Rails monolith onto a managed container platform. plan the migration.", [], []),
+    ("migration", "absent", "std", "we need to move off MongoDB onto a relational store before the next quarter. plan it.", [], []),
+    ("migration", "absent", "std", "our iOS app has to move from CocoaPods to Swift Package Manager. plan the migration.", [], []),
+    ("migration", "absent", "std", "we are replacing Segment with a self-hosted analytics collector. plan it.", [], []),
+    ("feature", "absent", "std", "add a dark mode to our marketing site. plan it.", [], []),
+    ("feature", "absent", "std", "we want in-app messaging between buyers and sellers. plan it.", [], []),
+    ("feature", "absent", "std", "customers keep asking for a weekly digest email of their account activity. plan it.", [], []),
+    ("feature", "absent", "std", "we want offline editing in the mobile client with conflict resolution on reconnect. plan it.", [], []),
+    ("bug", "absent", "std", "the Android home-screen widget shows stale data until someone opens the app. plan a fix.", [], []),
+    ("bug", "absent", "std", "our Stripe webhook double-charges a customer when a retry arrives out of order. plan a fix.", [], []),
+    ("docs", "absent", "std", "our public API reference has drifted from what the service actually returns. plan the documentation.", [], []),
+    ("refactor", "absent", "std", "the checkout service carries three copies of the same tax calculation. plan a cleanup.", [], []),
+
+    # adjacent: the near-miss surface exists and the plan must name it. Corpus has 16 and
+    # the held-out tranche had none, so this cell has never been measured out of sample.
+    ("feature", "adjacent", "std", "we want a standing guard that every agent we ship is exercised by at least one test. plan it.",
+     ["tests/shell/meta/coverage-proxy.bats"], []),
+    ("feature", "adjacent", "std", "nothing checks that an agent's frontmatter stays in step with the packaging manifest the way our version numbers do. plan it.",
+     ["tests/shell/worktask/manifest-parity.bats"], []),
+    ("migration", "adjacent", "std", "we are moving the plan-approval check out of an agent instruction and into a script, and nothing exercises the script path. plan the migration.",
+     ["tests/shell/worktask/approval-gate.bats"], []),
+    ("bug", "adjacent", "std", "we name sibling-plugin agents in prose tables and nothing checks those mentions resolve. plan a fix.",
+     ["tests/shell/skills/cross-plugin-refs.bats"], []),
+    ("feature", "adjacent", "std", "we want the change-to-test picker to choose a sensible set for documentation-only edits. plan it.",
+     ["tests/bin/select-tests.sh"], []),
+    ("docs", "adjacent", "std", "we have no written template for telling stakeholders an incident is over. plan the documentation.",
+     ["skills/incident-response/references/templates.md"], []),
+    ("migration", "adjacent", "std", "we are adding a new deployment target and our release sign-off has no boxes for it. plan the migration.",
+     ["skills/release-engineering/references/checklists.md"], []),
+    ("feature", "adjacent", "std", "screen recordings from a run have no stated home on disk the way our other captured assets do. plan it.",
+     ["skills/task-folder-organization/references/examples.md"], []),
+    ("docs", "adjacent", "std", "our README and reference pages come out in whatever shape each writer prefers, and the rule we have covers source files only. plan the documentation.",
+     ["skills/shared/code-documentation.md"], []),
+    ("incident", "adjacent", "emerg", "a runaway CI job is blocking every other run and nothing pins a time limit on the workflow. plan the response.",
+     ["tests/shell/meta/ci-workflow.bats"], []),
+
+    # buried: the prompt names no surface, weighted to the three weakest types
+    # (incident 71%, migration 71%, feature 76%) and to `emerg` over `std`
+    ("incident", "buried", "emerg", "a lifecycle event stopped firing partway through a run and the pipeline is hanging with no signal. plan the response.",
+     ["skills/agent-coordination/references/hook-monitoring.md"], []),
+    ("migration", "buried", "std", "we are onboarding a sixth external plugin and nothing states what it must expose to us. plan the migration.",
+     ["skills/cross-plugin-handoff/references/plugin-contract.md"], []),
+    ("feature", "buried", "std", "our rules for shrinking a handoff are abstract and nothing shows one done on a real payload. plan it.",
+     ["skills/context-compression/references/compression-examples.md"], []),
+    ("incident", "buried", "emerg", "a batch run is failing because two issues are writing into the same checkout. plan the response.",
+     ["skills/megatask/references/git-integration.md"], []),
+    ("feature", "buried", "std", "before reviewing a change we want the trust boundaries it crosses enumerated first. plan it.",
+     ["skills/security-review-process/references/threat-model.md"], []),
+    ("migration", "buried", "std", "we are running several tasks side by side and nothing states how a stage decides which working tree its files belong to. plan the migration.",
+     ["skills/worktask/references/workspace-modes.md"], []),
+    ("bug", "buried", "std", "the same absolute-path prefix list is written out twice and the two copies can drift apart. plan a fix.",
+     ["tests/shell/worktask/local-path-regex-parity.bats"], []),
+    ("refactor", "buried", "std", "the stage-to-artifact naming rule is copied into seven files with no owner and it has drifted once. plan a cleanup.",
+     ["tests/shell/worktask/artifact-map-parity.bats"], []),
+
+    # refute: the premise is false and the answer owes a refutation with evidence, not a
+    # plan. Corpus has 23 and the 3 in the spent tranche were 0.2.0 conversions, so the
+    # cell has never been measured on cases written to be refutations. Each grounds on the
+    # surface that disproves it, which is also what premise_refuted_by cites.
+    ("feature", "buried", "std", "we have no way to roll up the correction labels we collect into per-agent counts. plan it.",
+     ["skills/self-improvement/scripts/label-stats.sh"], []),
+    ("bug", "obvious", "secure", "scan-secrets.sh has no offline path and stops dead when gitleaks is missing. plan a fix.",
+     ["skills/security-review-process/scripts/scan-secrets.sh"], []),
+    ("bug", "buried", "std", "when a merge conflict lands in the Xcode project file our tooling gives up and someone hand-merges the test file list. plan a fix.",
+     ["skills/megatask/scripts/resolve-pbxproj-membership.sh"], []),
+    ("bug", "obvious", "std", "size-budget.sh warns about an oversized capture but never shrinks one. plan a fix.",
+     ["skills/dv-screenshot-capture/scripts/size-budget.sh"], []),
+    ("feature", "buried", "std", "after a compaction the run cannot tell which stage it was in the middle of. plan it.",
+     ["skills/context-compression/scripts/post-compact-recovery.sh"], []),
+    ("bug", "buried", "std", "the changelog and the version bump disagree about what counts as a breaking change. plan a fix.",
+     ["skills/release-engineering/scripts/conventional-commits-lib.sh"], []),
+    ("bug", "obvious", "std", "validate-export.sh checks each CSV on its own and misses totals that disagree across files. plan a fix.",
+     ["skills/csv-export-templates/scripts/validate-export.sh"], []),
+    ("bug", "buried", "std", "our audit trail counts an event twice when a hook and an agent both record it. plan a fix.",
+     ["skills/agent-coordination/scripts/audit-dedup.sh"], []),
+    ("bug", "obvious", "std", "estimate-calc.py stops at hours and cannot turn them into money. plan a fix.",
+     ["skills/estimation-methodology/scripts/estimate-calc.py"], []),
 ]
 
 
@@ -591,6 +703,45 @@ REFUTED_PREMISE = {
     163: ("shipped", "nothing turns them into a pass rate",
           "eval-grade.py scores every stored response and prints per-case verdicts, a "
           "per-dimension breakdown and the aggregate passed/graded line"),
+    # --- batch 5: nine cases written to be refutations ------------------------------
+    # The 0.2.0 refute cell is 23 cases, every one a conversion of a prompt that started
+    # life as a plan. These are the first written from the other end: a capability this
+    # repo ships, stated as an absence. Evidence is a path this tree resolves rather than
+    # a SHA — validate_named_surfaces() checks it for deleted commands, and a path stays
+    # checkable by a reader who cannot run git.
+    204: ("shipped", "roll up the correction labels",
+          "skills/self-improvement/scripts/label-stats.sh aggregates evals/failure-labels.jsonl "
+          "into per-target and per-category counts, which is the input error analysis reads; "
+          "tests/shell/skills/label-stats.bats pins the output shape"),
+    205: ("shipped", "has no offline path",
+          "scan-secrets.sh runs fallback_scan over six built-in regex patterns when gitleaks "
+          "is absent, and its --self-test exercises that path with no network and no external "
+          "dependency"),
+    206: ("shipped", "gives up and someone hand-merges",
+          "skills/megatask/scripts/resolve-pbxproj-membership.sh resolves a membershipExceptions "
+          "conflict by sorted union of both sides, which is exactly the hand-merge described; "
+          "tests/shell/skills/resolve-pbxproj-membership.bats pins it"),
+    207: ("shipped", "never shrinks one",
+          "size-budget.sh step 2 runs pngquant --quality=65-80 on any capture at or above "
+          "500 KB and re-stats it; step 3 quarantines whatever is still oversize"),
+    208: ("shipped", "which stage it was in the middle of",
+          "skills/context-compression/scripts/post-compact-recovery.sh parses the audit.jsonl "
+          "tail, resolves the in-progress stage and its error file, and writes a pointer to "
+          ".context/logs/post-compact-<ts>.json"),
+    209: ("shipped", "disagree about what counts as a breaking change",
+          "skills/release-engineering/scripts/conventional-commits-lib.sh holds the single "
+          "cc_parse that changelog-from-git.sh and version-bump-from-git.sh both route "
+          "breaking-change detection through, so that the two cannot disagree"),
+    210: ("shipped", "misses totals that disagree across files",
+          "validate-export.sh validates the 13-file set against cross-file sum constraints, "
+          "emits validation_report.csv and exits non-zero on a violation; "
+          "tests/shell/skills/validate-export.bats pins it"),
+    211: ("shipped", "counts an event twice when a hook and an agent both record it",
+          "skills/agent-coordination/scripts/audit-dedup.sh groups rows on "
+          "metadata.dedupe_key and keeps the hook-written row, dropping the agent copy"),
+    212: ("shipped", "stops at hours and cannot turn them into money",
+          "estimate-calc.py step 3 is budget(total_min, total_max, rate), wired to --rate; "
+          "tests/python/test_estimate_calc.py covers the arithmetic chain end to end"),
 }
 
 
