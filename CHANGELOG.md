@@ -4,6 +4,54 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Fixed
+
+- **The eval capture measured the installed plugin, not the tree under test.** `eval-capture.py`
+  passed no `--plugin-dir`, so the CLI resolved `/corpflow:request-plan` from the marketplace
+  release while `skill_version()` read this repo — a sweep could exercise one version and stamp
+  another on all 156 records. Measured, not argued: with the old flags a command shipping only in
+  the installed 4.0.25 was offered and one shipping only here was not. Dispatches now run in a
+  detached worktree at HEAD, pinned with `--plugin-dir` and with the ambient copy disabled.
+- **The answer key was inside the searched tree.** `evals.json` carries `expected_outcome`, and 7
+  of 114 responses in the 0.0.1 capture reached the corpus. The capture tree strips the answer key
+  — but not `evals/scripts/*.py`, which six cases ground on. A worktree rather than a copy, because
+  it excludes gitignored material by construction: `.context/` held a per-trace map of every known
+  failure that the prompt-leak lint could never have seen.
+- **`label-align.py` could not run.** Its `--grades` default pointed at a `/tmp` path nothing
+  produces, so the only calibration tool in the repo was unusable.
+- **A rate-limited sweep lost 38 consecutive cases.** Capture now retries transient dispatches with
+  backoff; the never-fabricate contract is unchanged.
+- **`eval-grade.py --json` omitted `split`**, which both calibration tools key on.
+- **Five eval cases whose premise the repo had already answered** converted to `refute`; three
+  repointed where the declared ground file did not own the behaviour. `prompt_digest` untouched, so
+  nothing needed re-capturing.
+
+### Added
+
+- **Stratum-weighted calibration.** A labelling budget smaller than the corpus forces an enriched
+  sample, and selecting on the grader's own verdict while measuring agreement with it biases both
+  rates. Each case now carries `population/sampled`; verified against the 0.0.1 labels, an enriched
+  sample reads TPR 42% unweighted against a population truth of 63%, and 63% weighted.
+- **Seeded bootstrap confidence interval**, stdlib only — no point estimate, no interval.
+- **`sample-for-labelling.py`** — picks the labelling sample by design: even split across harness
+  strata, held-out tranche taken whole, seeded.
+- **`scan-contamination.py`** — measures what a capture still leaks after the strip, by channel.
+  The scan was itself wrong in both directions before being pinned by tests: 12% on false
+  positives, then 2% on missed phrasings.
+
+### Notes
+
+- **First calibrated measurement of `request-plan` 0.2.0.** Harness 127/156 = 81%; corrected 77%,
+  95% CI [65%, 85%]; dev TPR 93% / TNR 69%. TPR clears the 90% target, TNR misses the 80% floor and
+  is reported rather than tuned. `missed-the-real-surface` — 15 of 22 failures in 0.0.1 — is now
+  zero. Full record in `evals/findings/request-plan-0.2.0.md`.
+- **The 0.0.1 baseline is retired as a comparison point.** It ran on the un-isolated surface, so its
+  records cannot say which skill version produced them. Its labels stay sound; its rates do not.
+- **The LLM judge is refuted a second time.** Re-validated on labels it had not seen: TNR 0%, 0 of
+  10 failures caught. Verdicts committed as evidence.
+- **The held-out tranche has no negatives left**, because its only three failures were among the
+  five corrected cases. Held-out failure detection is still unmeasured.
+
 ## [4.0.26] — 2026-08-26
 
 Command-surface reorganization. **38 → 28 commands, 26 → 23 registered skills, and no deprecation
