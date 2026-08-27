@@ -712,16 +712,18 @@ class ContaminationScan(unittest.TestCase):
         self.assertEqual(report["by_channel"]["harness-log"], [2])
         self.assertEqual(report["tainted"], [1, 2])
 
-    def test_a_case_grounded_on_eval_tooling_may_name_eval_paths(self):
-        # Cases 111/112/115/162/163/164 ground on evals/scripts/*.py, so a plan there
-        # discusses evals/ paths as a matter of course. Only the path-shaped channels
-        # are excused; `harness-log` is not, because reading THIS run's commits is a
-        # leak no grounding asks for.
-        text = "the deletions in `evals/labels` need resolving"
+    def test_grounding_excuses_naming_eval_paths_but_not_reading_the_strip(self):
+        # Cases 111/112/115/162/163/164 ground on evals/scripts/*.py, so naming the
+        # harness is their job. Reading that the eval files are DELETED is not: case
+        # 115 grounds on the review page and reported `git status` showing six eval
+        # files removed, which is the strip itself and shaped its whole answer.
+        grounded = {111: ["evals/scripts/eval-capture.py"]}
         self.assertEqual(
-            self._scan({111: text}, {111: ["evals/scripts/eval-capture.py"]})
-                ["by_channel"]["strip"], [])
-        self.assertEqual(self._scan({111: text})["by_channel"]["strip"], [111])
+            self._scan({111: "modify eval-capture.py and eval-engine.py"}, grounded)
+                ["tainted"], [])
+        self.assertEqual(
+            self._scan({111: "git status shows six eval files deleted and uncommitted"},
+                       grounded)["by_channel"]["strip"], [111])
 
     def test_grounding_never_excuses_reading_the_verdict(self):
         report = self._scan({111: "expected_outcome: refute, so I refute"},
