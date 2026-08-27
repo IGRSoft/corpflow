@@ -65,6 +65,16 @@ Recovering a real held-out number needs roughly 20 more labels from the 51-case
 `test`/harness-pass stratum. Until then this corpus has never measured held-out failure
 detection.
 
+### Resolved at 0.3.0
+
+> **Resolved at 0.3.0** (`evals/findings/request-plan-0.3.0.md`). Batch 5 replaced this
+> tranche rather than growing it — these 18 were read during the labelling below, and
+> re-stratifying does not make a case unread. Its successor is 18 fresh cases at ids 168+
+> (7 clarify / 7 plan / 4 refute) carrying **3 harness failures on 3 distinct mechanisms**,
+> so held-out TNR is measurable once labelled. Note the engine missed: the `absent` cell
+> nominated as the negative generator passed 7 of 7, and the negatives came from
+> `adjacent`, `buried` and `refute`.
+
 ## Contamination: 6 of 156 (4%), zero answer-key reads
 
 Against 0.0.1's 7 of 114 with at least 3 reading `expected_outcome` outright. The fatal
@@ -221,3 +231,24 @@ provably measured this tree; a clean answer-key channel; the disappearance of th
    failing cases costs about $12. Not a measurement — not a random sample, and the grader is
    calibrated on the full set — but it shows whether the contradictions stopped producing the
    same answer.
+
+## Forward reference: what the 0.3.0 capture measured
+
+Actions 1 and 3 were taken; action 2 was superseded by replacing the tranche. The 0.3.0
+capture (201 cases, $164.08, `plugin_sha 0e1dcfc`) re-graded these responses against the
+grown eval set and reproduced this document exactly — **127/156**, every dimension matching
+to the rounding — which is what makes the comparison per-case paired.
+
+**The paired delta is +1 (127 → 128 on the 156 shared cases), with 25 of them flipping.**
+The two contradictions fixed at 0.3.0 are therefore **not measurable** above run-to-run
+variance from a single paired capture. Pairing controls for case identity, not for model
+stochasticity, and the 16% flip rate says stochasticity dominates. The recommendation in
+action 3 above — that responses under the new rule would show whether it worked — held only
+if the effect exceeded that noise floor, and it does not.
+
+### `disputes-the-premise` understates both captures
+
+One finding needs reading back into this document: **`disputes-the-premise` fails 7 of
+32 refute cases in the 0.3.0 capture and 3 of the paired ids here**, every one on an
+`already <verb>` construction whose verb the enumerated list omits. The rate above is
+understated by that amount, in both captures equally.
