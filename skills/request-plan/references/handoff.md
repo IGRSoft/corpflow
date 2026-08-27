@@ -46,13 +46,24 @@ whole XL goal. "Split first, no command" leaves the user with nothing to paste, 
 **Prose and the command line are one recommendation, and the line is the part that executes.** Before
 emitting it, read back what the plan body claims:
 
-- body argues for a security review, a threat model, credential/PII handling → the line carries `--secure`
+- body argues the **request** asked for security review, threat modelling, or credential/PII
+  handling → the line carries `--secure`
 - body argues the thing is broken right now and still failing → the line carries `--emergency`
 - body argues neither → the line is plain, and the plan says so rather than leaving it implied
 
 A plan that argues for a security review "before merge, not just standard DR" and then emits a plain
 `/worktask` has recommended two different things. Fix whichever is wrong — if the body overstated
-the surface, cut the claim; if it did not, carry the flag. Do not ship the pair.
+what the request asked for, cut the claim; if it did not, carry the flag. Do not ship the pair.
+
+#### Reporting a surface you found is not arguing for the flag
+
+The tier is decided by the request (`estimation-methodology § A surface you discover does not raise
+the tier`), so a plan may name a credential path the search turned up — it usually should — without
+that naming becoming a reason to escalate.
+
+The check above compares the flag against what the body says the **request** needs, never against
+everything the body mentions. Read the other way it escalates any plan whose search walked past a
+secret, which in a plugin is most of them.
 
 ## Phrasing the recommendation
 

@@ -2,7 +2,7 @@
 name: request-plan
 description: Use when the user asks for a plan, an approach, a breakdown, "how would you tackle this", or scoping — even without the word "plan". Turn a free-form request into a context-aware plan (goal, scope, phases, effort, risks) and recommend `/worktask`.
 effort: medium
-version: 0.2.0
+version: 0.3.0
 ---
 
 # Request Plan
@@ -26,11 +26,14 @@ State the goal in one line, in your own words, so the user can correct a misread
 Asking is the exception. The first test — *did the search find the surface?* — is applied in § 2,
 where the evidence arrives. What is left here, in order:
 
-1. **Ambiguity that changes the phases? Fold it into the plan.** Two reasonable readings usually
-   become P0 and P1, or an explicit **Out:** line. Present the plan and name the assumption.
-2. **No surface at all? Ask — and only ask.** Available only once § 2's search has run and found
+1. **No surface at all? Ask — and only ask.** Available once § 2's search has run and found
    nothing. Say so plainly and ask which system is meant. Never produce a full plan for a codebase
    you cannot see: plausible phases for a system nobody can point at read as real work and are not.
+2. **Surface found, but two readings of it change the phases? Fold it into the plan.** They
+   usually become P0 and P1, or an explicit **Out:** line. Present the plan and name the
+   assumption. This branch needs a surface to be ambiguous *about* — reaching it from a request
+   whose subject the repo does not contain is how a full plan gets written for a system that
+   isn't there.
 3. **Genuinely incompatible readings, or no subject named? Ask 1–2 focused questions.**
 
 ##### Never both

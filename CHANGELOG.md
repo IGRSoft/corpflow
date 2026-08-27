@@ -39,6 +39,29 @@ All notable changes to this project are documented here. The format is based on 
   The scan was itself wrong in both directions before being pinned by tests: 12% on false
   positives, then 2% on missed phrasings.
 
+### Changed
+
+- **`request-plan` 0.2.0 → 0.3.0 and `estimation-methodology` 0.2.0 → 0.3.0**, resolving the two
+  rule contradictions the 0.2.0 calibration measured. Both are fixed at the surface rather than by
+  restating the losing rule, which is what created the contradictions in the first place.
+  - **The tier surface check reads the request, not the findings.** It asked whether "the work"
+    handles a secret, which escalates on discovery: three plans took `--secure` for a webhook URL,
+    a CI login and a dependency scan that none of their requests named. It also left the tier
+    undecidable at planning time, since two searches of one repo find different things. Now aligned
+    with `derive_route()`, which can only ever see the prompt.
+  - **`SKILL.md § 1`'s branches are reordered.** The fold-the-ambiguity branch was listed first and
+    was broader than the no-surface branch, so it consumed the cases that branch exists for — four
+    responses on `absent` grounding named the ambiguity and planned anyway, executing the first rule
+    correctly. The no-surface branch now precedes it, and folding is bounded to requests whose
+    surface was found.
+  - **`references/handoff.md` reconciled with both.** Its flag-matches-the-body check keyed on
+    anything the body argued, so a plan naming a credential path its search turned up would carry
+    `--secure` — reintroducing the same escalation one layer down. It now compares the flag against
+    what the body says the *request* needs. Found by the contradiction cross-read, not by a test.
+
+  Per the spec-change rule these apply from a 0.3.0 capture forward; 0.2.0 labels are not
+  re-flipped. Until that capture runs, the effect of all three is argued, not measured.
+
 ### Notes
 
 - **First calibrated measurement of `request-plan` 0.2.0.** Harness 127/156 = 81%; corrected 77%,
