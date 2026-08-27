@@ -129,7 +129,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -176,7 +178,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -258,7 +262,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -305,7 +311,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -422,7 +430,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -539,7 +549,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -586,7 +598,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -619,24 +633,34 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "attach-visual-evidence.sh embeds DV captures into the PR body and the issue on any run with metadata.requires_screenshots=true; dv-screenshot-capture drives it",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "attach-visual-evidence",
-            "attach-visual-evidence.sh",
-            "skills/worktask/scripts/attach-visual-evidence.sh"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -644,7 +668,9 @@
         "skills/worktask/scripts/attach-visual-evidence.sh"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "dev"
     },
@@ -671,7 +697,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -754,7 +782,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -801,7 +831,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -958,7 +990,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -1113,7 +1147,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -1721,7 +1757,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -1838,7 +1876,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -1885,7 +1925,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -1932,7 +1974,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -1979,7 +2023,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -2834,7 +2880,9 @@
             "(?i)does not exist",
             "(?i)is not (present|there)",
             "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
-            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB"
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
@@ -4028,24 +4076,34 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "skills/shared/state-ledger.md carries the run-record JSON Schema, including the task.metadata properties, across five documented parts",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "skills/shared/state-ledger.md",
-            "state-ledger",
-            "state-ledger.md"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -4053,7 +4111,9 @@
         "skills/shared/state-ledger.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
     },
@@ -5068,24 +5128,34 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "skills/self-improvement/references/change-categories.md is the classification taxonomy: category table, first-match decision tree, and a confidence table",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "change-categories",
-            "change-categories.md",
-            "skills/self-improvement/references/change-categories.md"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -5093,7 +5163,9 @@
         "skills/self-improvement/references/change-categories.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
     },
@@ -5290,24 +5362,34 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "skills/worktask/references/pl0-procedure.md is 713 lines of PL0 procedure, cited from product-manager.md and commands/worktask.md",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "pl0-procedure",
-            "pl0-procedure.md",
-            "skills/worktask/references/pl0-procedure.md"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -5315,7 +5397,9 @@
         "skills/worktask/references/pl0-procedure.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "dev"
     },
@@ -5437,24 +5521,34 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "eval-grade.py scores every stored response and prints per-case verdicts, a per-dimension breakdown and the aggregate passed/graded line",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "eval-grade",
-            "eval-grade.py",
-            "evals/scripts/eval-grade.py"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -5462,7 +5556,9 @@
         "evals/scripts/eval-grade.py"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
     },

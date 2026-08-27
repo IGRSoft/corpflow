@@ -571,6 +571,26 @@ REFUTED_PREMISE = {
     # guarantee capture" — the mechanism is advisory, with no hook behind it. A plan for
     # the enforcing hook is therefore still a correct answer, so both outcomes are
     # defensible and the case cannot serve as ground truth for either. It stays a plan.
+    # --- 0.2.0 capture: five cases whose premise the repo had already answered ------
+    # Each states an absence the search disproves outright, so the plan they ask for is
+    # work that exists. Converted rather than relabelled: `evals/README.md` is explicit
+    # that a case whose PREMISE changed cannot be repaired by a rubric note, because the
+    # two captures then measure different ground truth.
+    18: ("shipped", "screenshots attached to the PR",
+         "attach-visual-evidence.sh embeds DV captures into the PR body and the issue on "
+         "any run with metadata.requires_screenshots=true; dv-screenshot-capture drives it"),
+    125: ("shipped", "no written schema for the run record",
+          "skills/shared/state-ledger.md carries the run-record JSON Schema, including the "
+          "task.metadata properties, across five documented parts"),
+    153: ("shipped", "nothing says how to classify each change",
+          "skills/self-improvement/references/change-categories.md is the classification "
+          "taxonomy: category table, first-match decision tree, and a confidence table"),
+    159: ("shipped", "the planning step has no written procedure",
+          "skills/worktask/references/pl0-procedure.md is 713 lines of PL0 procedure, cited "
+          "from product-manager.md and commands/worktask.md"),
+    163: ("shipped", "nothing turns them into a pass rate",
+          "eval-grade.py scores every stored response and prints per-case verdicts, a "
+          "per-dimension breakdown and the aggregate passed/graded line"),
 }
 
 
@@ -609,7 +629,14 @@ def build_case(index: int, spec) -> dict:
                         r"(?i)no longer", r"(?i)does not exist", r"(?i)is not (present|there)",
                         r"(?i)(premise|claim) (is|was) "
                         r"(stale|false|wrong|outdated|no longer true)",
-                        r"(?i)not\s+\d+(\.\d+)?\s*KB"]},
+                        r"(?i)not\s+\d+(\.\d+)?\s*KB",
+             # A refutation that never uses the verb. Both were misses in the 0.2.0
+             # capture: one opened "the premise doesn't hold", the other "Already built."
+             # Widened only now — the 0.0.1 doc forbade touching this regex while the
+             # already-ships boundary was unsettled, because anything tuned against the
+             # labels would have been fitted to a contradiction. That boundary is decided.
+             r"(?i)the premise (?:doesn't|does not|no longer) holds?",
+             r"(?i)already\s+built",]},
             # Replaces no-build-plan-for-work-that-exists, withdrawn at 0.1.0. That criterion
             # forbade the plan template on any refute case. The 0.0.1 capture measured it:
             # it fired on 12 cases, ALL 12 of which a human passed, and did NOT fire on case
