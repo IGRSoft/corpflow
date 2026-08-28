@@ -12,10 +12,21 @@
 #   An asset with no description is omitted rather than emitted half-formed.
 #   tests/, evals/, skills/*/references/ and skills/shared/ are never enumerated —
 #     the eval corpus grounds its remaining search cases there.
+#   stdout closes with a fixed trailer naming those excluded CLASSES and no file,
+#     so the list is not read as a complete inventory of the repo.
 #   Runs from any cwd: it resolves the plugin root from BASH_SOURCE.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 SCRIPT="skills/request-plan/scripts/capability-registry.sh"
+
+# stdout closes with a fixed trailer naming the excluded CLASSES (never a file).
+# It is not an inventory line, so every inventory assertion below is scoped past
+# it — otherwise the honesty marker reads as a malformed capability.
+TRAILER_PREFIX="## not enumerated"
+
+is_trailer() {
+  case "$1" in "${TRAILER_PREFIX}"*) return 0 ;; *) return 1 ;; esac
+}
 
 # --- inventory ---------------------------------------------------------------
 
@@ -44,6 +55,7 @@ SCRIPT="skills/request-plan/scripts/capability-registry.sh"
   local bad=0
   for l in "${lines[@]}"; do
     [ -z "$l" ] && continue
+    is_trailer "$l" && continue
     case "$l" in
       *.md\ —\ ?*|*.sh\ —\ ?*|*.py\ —\ ?*) ;;
       *) bad=$((bad + 1)); echo "malformed: $l" >&2 ;;
@@ -58,6 +70,7 @@ SCRIPT="skills/request-plan/scripts/capability-registry.sh"
   local missing=0 p
   for l in "${lines[@]}"; do
     [ -z "$l" ] && continue
+    is_trailer "$l" && continue
     p="${l%% — *}"
     [ -f "${PLUGIN_ROOT}/${p}" ] || { missing=$((missing + 1)); echo "unresolved: $p" >&2; }
   done
@@ -84,6 +97,8 @@ SCRIPT="skills/request-plan/scripts/capability-registry.sh"
   local leaked=0 p
   for l in "${lines[@]}"; do
     [ -z "$l" ] && continue
+    # The trailer NAMES these directories on purpose; it lists no path in them.
+    is_trailer "$l" && continue
     p="${l%% — *}"
     case "$p" in
       tests/*|evals/*|skills/*/references/*|skills/shared/*.md|*/tests/*)
@@ -91,6 +106,66 @@ SCRIPT="skills/request-plan/scripts/capability-registry.sh"
     esac
   done
   [ "$leaked" -eq 0 ] || fail "$leaked path(s) from a deliberately-unlisted directory"
+}
+
+# --- the excluded-classes trailer ---------------------------------------------
+
+@test "trailer: stdout closes by naming the classes it does not enumerate" {
+  # The list is complete by construction for the six classes it covers, and silent
+  # about the rest — which reads as "complete, full stop". The trailer is the only
+  # marker in stdout that anything was left out.
+  run_script "$SCRIPT"
+  assert_success
+  local trailer="${lines[$((${#lines[@]} - 1))]}"
+  is_trailer "$trailer" \
+    || fail "last stdout line is not the excluded-classes trailer: $trailer"
+  local class
+  for class in 'skills/\*/references/' 'skills/shared/\*.md' 'tests/' 'evals/'; do
+    printf '%s\n' "$trailer" | grep -q -- "$class" \
+      || fail "trailer does not name the excluded class: $class"
+  done
+}
+
+# Prints every stdin token that is neither a glob nor a bare directory — i.e. every
+# token that could name one concrete file. Globbing stays off: `skills/shared/*.md`
+# must be compared as itself, not as whatever it happens to expand to today.
+non_class_tokens() {
+  local tok was_noglob=1
+  case "$-" in *f*) ;; *) was_noglob=0; set -f ;; esac
+  while read -r tok; do
+    [ -n "$tok" ] || continue
+    case "$tok" in
+      *'*'*|*/) ;;
+      *) printf '%s\n' "$tok" ;;
+    esac
+  done
+  [ "$was_noglob" -eq 1 ] || set +f
+}
+
+@test "trailer: names classes only, never a file — the exclusion stays an exclusion" {
+  # The whole point of not enumerating these directories is that eval cases ground
+  # there; a trailer naming one FILE hands back exactly the lookup the exclusion
+  # prevents. Class-level globs and bare directories only.
+  run_script "$SCRIPT"
+  assert_success
+  local trailer="${lines[$((${#lines[@]} - 1))]}"
+  local toks bad
+  toks="$(printf '%s\n' "${trailer#*: }" | tr ',' '\n' | tr -d ' ')"
+  [ "$(printf '%s\n' "$toks" | grep -c .)" -ge 4 ] \
+    || fail "fewer than 4 trailer tokens collected; the splitter regressed"
+  bad="$(printf '%s\n' "$toks" | non_class_tokens)"
+  [ -z "$bad" ] || fail "trailer names something file-shaped, not a class:
+$bad"
+}
+
+@test "the class-only check can actually fail" {
+  # Non-vacuity for the PREDICATE: a checker that accepts everything would pass the
+  # test above whatever the trailer said.
+  local bad
+  bad="$(printf '%s\n' 'skills/shared/*.md' 'tests/' 'skills/shared/testing-strategy.md' \
+           | non_class_tokens)"
+  [ "$bad" = "skills/shared/testing-strategy.md" ] \
+    || fail "checker did not single out the file-shaped token; got: ${bad:-<nothing>}"
 }
 
 # --- description extraction --------------------------------------------------
@@ -103,6 +178,7 @@ SCRIPT="skills/request-plan/scripts/capability-registry.sh"
   local leaked=0 l
   for l in "${lines[@]}"; do
     [ -z "$l" ] && continue
+    is_trailer "$l" && continue
     # Inspect only the description half; a PATH may legitimately contain a colon.
     case "${l#* — }" in
       *allowed-tools:*|*argument-hint:*|*"model:"*|*"version:"*|*"effort:"*|*"tools:"*)
@@ -116,17 +192,28 @@ SCRIPT="skills/request-plan/scripts/capability-registry.sh"
   run_script "$SCRIPT"
   assert_success
   # A leaked body would drag a markdown heading onto the line; frontmatter has none.
-  refute_output --regexp '— .*#{1,6} '
+  # Asserted per line, not over $output: `.` matches a newline inside `[[ =~ ]]`, so a
+  # whole-output regex pairs an em-dash on one line with the trailer's `##` on another.
+  local l
+  for l in "${lines[@]}"; do
+    [ -z "$l" ] && continue
+    is_trailer "$l" && continue
+    printf '%s\n' "$l" | grep -qE -- '— .*#{1,6} ' \
+      && fail "a body heading leaked into a description: $l"
+  done
+  return 0
 }
 
 @test "description: a multi-line folded description collapses to one line" {
   run_script "$SCRIPT"
   assert_success
   # One line per asset: the count of emitted lines must equal the count of paths.
-  local paths
+  # Scoped past the trailer, which carries no path by design.
+  local paths inventory
+  inventory="$(printf '%s\n' "${lines[@]}" | grep -vc "^${TRAILER_PREFIX}" || true)"
   paths="$(printf '%s\n' "${lines[@]}" | grep -cE '\.(md|sh|py) — ' || true)"
-  [ "$paths" -eq "${#lines[@]}" ] \
-    || fail "${#lines[@]} lines but only $paths carry a path — a description wrapped"
+  [ "$paths" -eq "$inventory" ] \
+    || fail "$inventory inventory lines but only $paths carry a path — a description wrapped"
 }
 
 @test "description: shell takes the first comment block after the shebang" {

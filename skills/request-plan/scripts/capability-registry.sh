@@ -25,7 +25,9 @@
 #   search cases on; listing them would convert that measurement into a lookup, exactly as
 #   the executable classes did to the tranche they replaced. The exclusion is on shared
 #   CANON, not on shared code — a script under skills/shared/*/scripts/ is a capability like
-#   any other and is listed.
+#   any other and is listed. stdout closes with a fixed trailer naming those excluded classes:
+#   complete-by-construction over six classes reads as complete over the repo unless the output
+#   says otherwise, and the trailer is the only place it can say so.
 #
 #   Description source, per class: markdown takes frontmatter `description:` only — never
 #   body text; shell takes `@description` when present, else the first comment block after
@@ -33,6 +35,9 @@
 #   yields no description emits NO line rather than a half-formed one — a capability that
 #   cannot say what it is for is a bug to fix at the source, not to paper over here.
 set -euo pipefail
+
+# Class-level, never file-level: see the note at main()'s tail.
+TRAILER='## not enumerated — search these by behaviour: skills/*/references/, skills/shared/*.md, tests/, evals/'
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
@@ -123,6 +128,12 @@ main() {
   while IFS= read -r f; do
     emit_line "$f" "$(desc_python "$f")"
   done < <(find benchmark/harness -type f -name '*.py' -not -path '*/tests/*' | sort)
+
+  # Without this line the output is complete-by-construction AND indistinguishable from a
+  # complete inventory of the repo, which it is not. Naming the excluded CLASSES keeps the
+  # reader honest about what still needs a behaviour search; naming a FILE would hand back
+  # the lookup the exclusion above exists to prevent, so the trailer stays class-level.
+  printf '%s\n' "$TRAILER"
 }
 
 # Sourceable so the extractors can be tested against fixtures without a tree that
