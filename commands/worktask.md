@@ -778,9 +778,9 @@ three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Ste
 
 ### Step B — AR-reference check at DV completion
 
-Runs only when `.context/state.json` has a `tasks.AR0` entry (AR is optional —
-`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`). After DV0 completes and before
-dispatching DR0:
+The AR-reference arm fires only when `.context/state.json` has a `tasks.AR0` entry (AR is optional —
+`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`). The invocation itself is the
+§ Step B.1 call every stage makes; at DV completion, before dispatching DR0, it is:
 
 ```bash
 STRICT_FLAG=""
@@ -806,13 +806,36 @@ each as an audit row and carry it into the DR dispatch prompt so DR checks the l
 three closing-sweep checks (stub shape, `ref` anchor resolution, ledger parity), which **hard-fail
 regardless of `--strict`** — the sweep obligation is strict from its first release
 (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`). A non-zero exit here is therefore
-not necessarily an AR-reference failure, and a sweep failure does block the transition; its `fail:`
-line names a `sw-` id.
+not necessarily an AR-reference failure; a sweep failure blocks the transition per § Step B.1 — on
+failure, and its `fail:` line names a `sw-` id.
 
 **Early opt-in — `CORPFLOW_AR_REF_STRICT=1`.** The orchestrator passes `--strict`; violations become
 `fail:` lines with exit 1 and block the DR dispatch until DV fixes the reference. Use it to shake out
 dangling references before the next minor flips `--strict` to the default. The inverse guard (an
 architecture reference with no `tasks.AR0` entry) warns in both modes and never fails.
+
+### Step B.1 — Sweep checks at every stage completion
+
+The harness is not a DV-only tool. After **any** stage `<CODE><N>` lands its `completed` patch (loop
+step 6.5) and before § Step C.0 renders its blocking items or the next stage is dispatched, run:
+
+```bash
+ART=$(jq -r --arg id "<CODE><N>" '.tasks[$id].artifact // empty' .context/state.json)
+skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$ART" --state .context/state.json
+```
+
+`$STRICT_FLAG` from § Step B may be appended; it affects only the AR-reference arm, which fires for DV
+alone. For DV this **is** the § Step B invocation — run it once, not twice. An artifact with no
+class-bearing stub passes untouched, so this never fails an artifact written before the sweep existed.
+
+#### Step B.1 — on failure
+
+Exit 0 → append `{"action":"sweep_check","subject":"<CODE><N>","result":"ok"}` and continue to
+§ Step C.0. Non-zero with a `fail:` line naming a `sw-` id (or `sweep ledger parity cannot be
+verified`) → append the same row with `result:"fail"` and the line as `reason`, then treat it as a
+`missing_input` contract violation on `<CODE><N>`: do **not** run Step C.0, do **not** dispatch the
+next stage; re-dispatch the stage with the `fail:` line verbatim so it writes the missing stub, `ref`
+anchor, or `--facts` entry. There is no advisory tier here — the unreadable-ledger case fails too.
 
 ### Step C — Closing-sweep collection and render (loop step 4.9)
 

@@ -654,12 +654,12 @@ stage's ledger row. It is the channel's ONLY scripted writer.
 
 ##### #facts-union — who writes open_questions
 
-**`open_questions` is agent-written, exactly like the other three.** A stage's closing-sweep stubs
-reach the ledger only if that stage passes them in its own `--facts` payload; the frontmatter and
-the ledger are separate transports with no derivation between them, so a stub written to
-frontmatter alone is dropped before the FN gate ever reads it. `handoff-harness.sh
---validate-frontmatter --state` fails the stage when a class-bearing stub is missing from
-`facts.open_questions[]`.
+**`open_questions` is agent-written.** A stage's closing-sweep stubs reach the ledger only if that
+stage passes them in its own `--facts` payload; the two are separate transports with
+no derivation between them, so a stub written to frontmatter alone never reaches the FN gate.
+`handoff-harness.sh --validate-frontmatter --state`, run at each stage completion
+(`commands/worktask.md § Step B.1`), fails the stage when a class-bearing stub is missing from
+`facts.open_questions[]`, and fails when the ledger is unreadable.
 
 The merge is a union, never `. * $patch`: jq object-merge REPLACES arrays, which is exactly how a
 downstream stage silently dropped an upstream stage's entries.

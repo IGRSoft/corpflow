@@ -1075,3 +1075,45 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
     --anchor-lint "$d/developer-review-0.md"
   assert_failure
 }
+
+# --- review: the harness has a per-stage call site, and parity never skips ----
+
+@test "review-1: the orchestrator invokes the harness at every stage completion, not only DV" {
+  grep -q '^### Step B.1 — Sweep checks at every stage completion' "$PLUGIN_ROOT/$WORKTASK_CMD" \
+    || fail "Step B.1 is absent"
+  local body
+  body="$(awk '/^### Step B.1 — Sweep/{f=1;next} f && /^### /{f=0} f' "$PLUGIN_ROOT/$WORKTASK_CMD")"
+  printf '%s\n' "$body" | grep -q 'handoff-harness.sh --validate-frontmatter' || fail "B.1 does not call the harness"
+  printf '%s\n' "$body" | grep -q -- '--state' || fail "B.1 omits --state, so ledger parity never runs"
+  printf '%s\n' "$body" | grep -q 'sweep_check' || fail "B.1 records no audit row"
+  grep -q 'Step 6.5c' "$PLUGIN_ROOT/$WORKTASK_SKILL" || fail "the loop has no step for the per-stage harness call"
+  local b1 c0
+  b1=$(grep -n '^### Step B.1' "$PLUGIN_ROOT/$WORKTASK_CMD" | head -1 | cut -d: -f1)
+  c0=$(grep -n '^#### Step C.0' "$PLUGIN_ROOT/$WORKTASK_CMD" | head -1 | cut -d: -f1)
+  [ "$b1" -lt "$c0" ] || fail "the harness call is documented after the render it guards"
+}
+
+@test "review-2: ledger parity fails, not skips, when --state is unreadable and a stub exists" {
+  local d
+  d="$(mk_tmpworkdir)"
+  sweep_fixture "$d" "documentation-0.md#elicitation-sweep"
+  run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md" --state "$d/nope.json"
+  assert_failure
+  assert_output --partial "cannot be verified"
+  printf 'not json {{' > "$d/corrupt.json"
+  run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md" --state "$d/corrupt.json"
+  assert_failure
+  assert_output --partial "cannot be verified"
+}
+
+@test "review-2 twin: no class-bearing stub + unreadable --state on a non-DV stage still passes (non-retroactive)" {
+  local d
+  d="$(mk_tmpworkdir)"
+  {
+    printf -- '---\nhandoff:\n  stage: DC\n  verdict: ok\n  summary: "legacy"\n'
+    printf '  files_touched: [a.md]\n  open_questions: []\n'
+    printf '  refs: { dev: development-0.md#files-changed }\n---\n\n# Documentation\n'
+  } > "$d/documentation-0.md"
+  run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md" --state "$d/nope.json"
+  assert_success
+}

@@ -55,8 +55,10 @@ All notable changes to this project are documented here. The format is based on 
 - Sweep stubs reach the ledger because each stage writes them: `open_questions` is now part of
   every agent's `state-patch.sh --facts` example, and
   `handoff-harness.sh --validate-frontmatter --state` fails a stage whose class-bearing frontmatter
-  stub never reached `facts.open_questions[]`. Without that pairing the sweep was schema-valid,
-  harness-clean, and silently dropped before the FN gate for 12 of 13 stages.
+  stub never reached `facts.open_questions[]`. The orchestrator runs that invocation at **every**
+  stage completion (`commands/worktask.md § Step B.1`, loop step 6.5c), not only at DV, and an
+  unreadable ledger fails the parity check instead of skipping it. Without that pairing the sweep
+  was schema-valid, harness-clean, and silently dropped before the FN gate for 12 of 13 stages.
 - A closing-sweep stub's `ref` anchor is now verified to exist: `handoff-harness.sh` resolves each
   class-bearing stub's `ref` against the artifact it names and fails on a dangling one. The stub
   carries no `options[]`, so that anchor is the only transport of what the FN gate renders — a

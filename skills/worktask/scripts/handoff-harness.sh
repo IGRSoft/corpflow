@@ -37,6 +37,11 @@
 #       The inverse guard (an architecture reference with no tasks.AR<N> entry)
 #       always warns and never fails, in either mode.
 #
+#       The three closing-sweep checks (stub shape, ref anchor, ledger parity)
+#       ride on the same invocation for EVERY stage and hard-fail in both modes.
+#       Ledger parity needs --state; when --state is unreadable and the artifact
+#       carries a class-bearing stub it fails rather than skips.
+#
 #       Exception: an unreadable --state (file missing, jq unavailable, or
 #       invalid JSON) is itself a gate violation, not a silent skip -- it
 #       warns by default and, unlike every other case above where --strict
@@ -185,13 +190,29 @@ check_sweep_ref_anchor() {
 # whose sweep never reaches the FN gate. Fires only with --state, like check_ar_ref.
 # No warn arm: the sweep obligation is strict (stage-contracts.md § Closing Elicitation
 # Sweep), so a dropped item fails rather than whispers.
+#
+# An unreadable --state is a FAILURE here whenever there is a stub to compare, not a
+# skip: check_ar_ref makes that case loud for DV only, and the other twelve stages
+# would otherwise pass parity by never running it. With no class-bearing stub there is
+# nothing to compare, so a legacy artifact keeps passing.
 check_sweep_ledger() {
   local fmfile="$1"
-  [[ -r "$STATE_ARG" ]] || return 0        # unreadable state is check_ar_ref's business
-  command -v jq > /dev/null 2>&1 || return 0
   local ids id
   ids=$(yq eval '[.handoff.open_questions[]? | select(type == "!!map") | select(has("class")) | .id] | .[]' \
         "$fmfile" 2> /dev/null) || return 0
+  [[ -n "$ids" ]] || return 0
+  local unreadable=""
+  if [[ ! -f "$STATE_ARG" ]]; then
+    unreadable="state file not found: $STATE_ARG"
+  elif ! command -v jq > /dev/null 2>&1; then
+    unreadable="jq unavailable; cannot read $STATE_ARG"
+  elif ! jq empty "$STATE_ARG" > /dev/null 2>&1; then
+    unreadable="state file is not valid JSON: $STATE_ARG"
+  fi
+  if [[ -n "$unreadable" ]]; then
+    echo "fail: sweep ledger parity cannot be verified for $(echo "$ids" | tr '\n' ' ')— $unreadable" >&2
+    return 1
+  fi
   for id in $ids; do
     [[ -n "$id" && "$id" != "null" ]] || continue
     if ! jq -e --arg id "$id" \
@@ -717,6 +738,24 @@ self_test_ar_gate() {
   _ar_case "badstate/missing/strict"  "$ctx/nope.json"     1 1 "fail: AR-ref check skipped" "$ctx/dv-no-ref.md"
   _ar_case "badstate/corrupt/default" "$ctx/state-corrupt.json" 0 0 "warn: AR-ref check skipped" "$ctx/dv-no-ref.md"
   _ar_case "badstate/corrupt/strict"  "$ctx/state-corrupt.json" 1 1 "fail: AR-ref check skipped" "$ctx/dv-no-ref.md"
+
+  # Sweep ledger parity rides on the same invocation: a class-bearing stub must be in the
+  # ledger, and an unreadable ledger fails (never skips) when there is a stub to compare.
+  {
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'
+    echo '  summary: "Implemented."'; echo '  files_touched: [a.md]'
+    echo '  next_stage_focus: "DR reviews"'
+    echo '  open_questions:'
+    echo '    - { id: sw-DV0-1, class: decision, ref: "dv-stub.md#elicitation-sweep" }'
+    echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
+    echo '# Development'; echo; echo '## elicitation-sweep'; echo; echo 'q'
+  } > "$ctx/dv-stub.md"
+  jq '.facts.open_questions += [{"id":"sw-DV0-1"}]' "$ctx/state-no-ar.json" > "$ctx/state-stub.json"
+  _ar_case "sweep/stub+ledger"        "$ctx/state-stub.json"    0 0 -                                              "$ctx/dv-stub.md"
+  _ar_case "sweep/stub+not-in-ledger" "$ctx/state-no-ar.json"   0 1 "fail: sweep stub sw-DV0-1 is in the frontmatter" "$ctx/dv-stub.md"
+  _ar_case "sweep/stub+missing-state" "$ctx/nope.json"          0 1 "fail: sweep ledger parity cannot be verified"  "$ctx/dv-stub.md"
+  _ar_case "sweep/stub+corrupt-state" "$ctx/state-corrupt.json" 0 1 "fail: sweep ledger parity cannot be verified"  "$ctx/dv-stub.md"
+  _ar_case "sweep/nostub+missing-state" "$ctx/nope.json"        0 0 "warn: AR-ref check skipped"                    "$ctx/dv-no-ref.md"
 }
 
 # ---------- main ----------

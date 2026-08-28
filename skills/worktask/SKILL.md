@@ -1153,6 +1153,19 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
     }
 ```
 
+#### Step 6.5c — sweep checks, before anything reads the sweep
+
+```typescript
+    // 6.5c. After 6.5b and BEFORE 6.6: run the handoff harness on this stage's artifact with
+    //       --state (commands/worktask.md § Step B.1). It hard-fails a class-bearing stub with
+    //       no ref, a dangling ref anchor, a stub absent from facts.open_questions[] — the
+    //       transport 6.6 and step 4.9(a1) read — and an unreadable ledger. Exit 0 → audit
+    //       `sweep_check` ok. Non-zero with a `fail:` line → audit `sweep_check` fail and treat
+    //       it as a missing_input contract violation on this stage: skip 6.6, do NOT dispatch
+    //       the next stage, re-dispatch this stage with the fail line verbatim. For DV this is
+    //       the same call as § Step B (the AR-reference arm rides on it); run it once.
+```
+
 #### Step 6.6 — blocking sweep items, before the next dispatch
 
 ```typescript
