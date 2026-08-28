@@ -122,6 +122,7 @@ dv_artifact() {
     printf '  summary: "gate fixture"\n'
     printf '  files_touched: [a.md]\n'
     printf '  next_stage_focus: "DR reviews"\n'
+    printf '  open_questions: []\n'
     printf '  refs:\n'
     printf '    %s\n' "$refs"
     printf -- '---\n\n# Development\n'

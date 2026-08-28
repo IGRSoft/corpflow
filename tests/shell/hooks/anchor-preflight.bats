@@ -102,6 +102,10 @@ none
 ## follow-ups
 
 none
+
+## elicitation-sweep
+
+nothing to elicit
 EOF
   run env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN_ROOT/$SCRIPT" \
     <<< "{\"tool_input\":{\"file_path\":\"$WD/.context/development-1.md\"}}"
