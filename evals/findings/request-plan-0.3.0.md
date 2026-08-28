@@ -269,8 +269,12 @@ assessed against a plan that was never stored, which is why the label is `defer`
 
 Bounded, not systemic: five other responses open with a continuation-style preamble
 (19, 32, 59, 71, 203) and every one of them contains the full template underneath. **1 of
-201.** Worth a look at how `eval-capture.py` records a multi-turn result before the next
-sweep, but it does not put this capture in question.
+201**, so this capture stands.
+
+**Fixed for the next sweep.** The defect reproduces on demand — a prompt that says one word,
+runs a command, then says another word returns only the second word under
+`--output-format json` — and the capture path now uses `stream-json`, keeping every
+assistant block. It cannot be repaired retroactively: 187's plan was never stored.
 
 ### The stated engine did not fire
 
@@ -357,10 +361,11 @@ consistent with "easier" and does not distinguish it from "correctly answered". 
 1. **Do not touch `disputes-the-premise`.** Measured above: every repair is worse than the
    defect. Read `refute` grades as a floor instead, and record the false-negative rate
    alongside any refute number quoted from this capture.
-2. **Fix the capture path before the next sweep.** `extract_response()` should take all
-   assistant text from a `stream-json` dispatch rather than the last message from
-   `--output-format json`. Cheap detector in the meantime: flag any record whose
-   `output_tokens` greatly exceeds its stored `response` length for a non-`clarify` case.
+2. ~~Fix the capture path before the next sweep.~~ **Done.** `build_argv` now dispatches
+   `--output-format stream-json --verbose` and `extract_response` concatenates every
+   assistant text block. Validated against real CLI output, not only mocks; the legacy
+   envelope still parses so stored dispatches read back unchanged. This does **not**
+   retroactively repair case 187 — the discarded plan was never written to disk.
 3. **Label 17, 22, 59 and 125** if the refute cell is ever quoted precisely. They no longer
    gate a rewrite — nothing is being rewritten — so this is now optional rather than
    blocking.
