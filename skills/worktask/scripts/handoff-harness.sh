@@ -101,19 +101,19 @@ toks_str() {
 }
 
 # ---------- Frontmatter validation ----------
-PL_REQ="stage verdict summary refs key_decisions next_stage_focus"
+PL_REQ="stage verdict summary refs key_decisions next_stage_focus open_questions"
 AR_REQ="stage verdict summary refs key_decisions next_stage_focus open_questions"
-TL_REQ="stage verdict summary refs next_stage_focus"
-DV_REQ="stage verdict summary refs files_touched next_stage_focus"
-DR_REQ="stage verdict summary refs key_decisions"
-SR_REQ="stage verdict summary refs key_decisions"
-QA_REQ="stage verdict summary refs files_touched key_decisions"
-DC_REQ="stage verdict summary refs files_touched"
-RE_REQ="stage verdict summary refs files_touched key_decisions"
-FN_REQ="stage verdict summary refs next_stage_focus files_touched"
-ST_REQ="stage verdict summary refs key_decisions"
-IR_REQ="stage verdict summary refs key_decisions next_stage_focus"
-ET_REQ="stage verdict summary refs key_decisions"
+TL_REQ="stage verdict summary refs next_stage_focus open_questions"
+DV_REQ="stage verdict summary refs files_touched next_stage_focus open_questions"
+DR_REQ="stage verdict summary refs key_decisions open_questions"
+SR_REQ="stage verdict summary refs key_decisions open_questions"
+QA_REQ="stage verdict summary refs files_touched key_decisions open_questions"
+DC_REQ="stage verdict summary refs files_touched open_questions"
+RE_REQ="stage verdict summary refs files_touched key_decisions open_questions"
+FN_REQ="stage verdict summary refs next_stage_focus files_touched open_questions"
+ST_REQ="stage verdict summary refs key_decisions open_questions"
+IR_REQ="stage verdict summary refs key_decisions next_stage_focus open_questions"
+ET_REQ="stage verdict summary refs key_decisions open_questions"
 
 required_for() {
   case "$1" in
@@ -124,6 +124,83 @@ required_for() {
     ET) echo "$ET_REQ" ;;
     *) echo "" ;;
   esac
+}
+
+# A sweep stub carrying `class` but no `ref` matches NO oneOf branch: `class` trips the
+# legacy branch's `not` guard and `ref` is required by SweepStub. That is intended — a stub
+# with no anchor cannot be resolved to its options[] at render time — but a bare schema
+# rejection names no cause, so the harness says it plainly.
+check_sweep_stub_shape() {
+  local fmfile="$1" bad
+  bad=$(yq eval '[.handoff.open_questions[]? | select(type == "!!map") | select(has("class")) | select(has("ref") | not) | .id] | .[]' \
+        "$fmfile" 2> /dev/null) || return 0
+  if [[ -n "$bad" ]]; then
+    echo "fail: sweep stub(s) $(echo "$bad" | tr '\n' ' ')carry class but no ref — such an object matches no open_questions branch; add ref: \"<artifact>-N.md#elicitation-sweep\"" >&2
+    return 1
+  fi
+  return 0
+}
+
+# The stub's `ref` anchor is the SOLE transport of the options[] the FN gate renders —
+# SweepStub carries none. A dangling anchor therefore has no failure arm anywhere in
+# Step C: C.4 either skips the item or invents options, which is silent degradation of
+# exactly the kind the ledger-parity check above exists to prevent. Verifying the FIELD
+# exists is not enough; check_sweep_stub_shape's own error message hands the agent the
+# literal to paste. Non-retroactive by construction: only class-bearing stubs are walked,
+# and no artifact predating the sweep carries one.
+check_sweep_ref_anchor() {
+  local artifact="$1" fmfile="$2"
+  local dir rows line id ref file anchor target
+  dir=$(dirname "$artifact")
+  rows=$(yq eval '[.handoff.open_questions[]? | select(type == "!!map") | select(has("class")) | .id + " " + (.ref // "")] | .[]' \
+         "$fmfile" 2> /dev/null) || return 0
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    id="${line%% *}"
+    ref="${line#* }"
+    [[ -n "$ref" && "$ref" != "$id" ]] || continue   # missing ref is check_sweep_stub_shape's failure
+    anchor="${ref##*#}"
+    file="${ref%%#*}"
+    if [[ -z "$anchor" || "$anchor" == "$ref" ]]; then
+      echo "fail: sweep stub $id ref \"$ref\" names no #anchor — it must point at the artifact heading carrying this item's options[]" >&2
+      return 1
+    fi
+    target="$dir/$file"
+    [[ -n "$file" ]] || target="$artifact"           # anchor-only ref resolves to this artifact
+    if [[ ! -f "$target" ]]; then
+      echo "fail: sweep stub $id ref \"$ref\" names a file that does not exist: $target" >&2
+      return 1
+    fi
+    if ! grep -qE "^## +${anchor}[[:space:]]*\$" "$target"; then
+      echo "fail: sweep stub $id ref \"$ref\" is dangling — $(basename "$target") has no '## $anchor' heading, so the FN gate has no options[] to render" >&2
+      return 1
+    fi
+  done <<< "$rows"
+  return 0
+}
+
+# Sweep-stub ledger parity. The frontmatter stub and facts.open_questions[] are two
+# transports with two writers and no derivation between them, so a stage that writes
+# the stub but omits it from `state-patch.sh --facts` produces a schema-valid artifact
+# whose sweep never reaches the FN gate. Fires only with --state, like check_ar_ref.
+# No warn arm: the sweep obligation is strict (stage-contracts.md § Closing Elicitation
+# Sweep), so a dropped item fails rather than whispers.
+check_sweep_ledger() {
+  local fmfile="$1"
+  [[ -r "$STATE_ARG" ]] || return 0        # unreadable state is check_ar_ref's business
+  command -v jq > /dev/null 2>&1 || return 0
+  local ids id
+  ids=$(yq eval '[.handoff.open_questions[]? | select(type == "!!map") | select(has("class")) | .id] | .[]' \
+        "$fmfile" 2> /dev/null) || return 0
+  for id in $ids; do
+    [[ -n "$id" && "$id" != "null" ]] || continue
+    if ! jq -e --arg id "$id" \
+         '[.facts.open_questions[]? | .id] | index($id) != null' "$STATE_ARG" > /dev/null 2>&1; then
+      echo "fail: sweep stub $id is in the frontmatter but not in facts.open_questions[] — pass it in the state-patch.sh --facts payload, or the FN gate never sees it" >&2
+      return 1
+    fi
+  done
+  return 0
 }
 
 ARCH_REF_RE='^architecture-[0-9]+\.md(#[a-z-]+)?$'
@@ -247,6 +324,23 @@ validate_frontmatter() {
     fi
   fi
 
+  if ! check_sweep_stub_shape "$fmfile"; then
+    rm -f "$fmfile"
+    return 1
+  fi
+
+  if ! check_sweep_ref_anchor "$f" "$fmfile"; then
+    rm -f "$fmfile"
+    return 1
+  fi
+
+  if [[ -n "$STATE_ARG" ]]; then
+    if ! check_sweep_ledger "$fmfile"; then
+      rm -f "$fmfile"
+      return 1
+    fi
+  fi
+
   # Token budget check (≤200 cl100k_base proxy)
   local tcount
   tcount=$(toks "$fmfile")
@@ -336,6 +430,7 @@ handoff:
   key_decisions:
     - { id: pd1, summary: "9-stage", anchor: "planning-0.md#stages" }
   next_stage_focus: "AR designs schema"
+  open_questions: []
   refs: { plan: planning-0.md#requirements }
 ---
 
@@ -429,6 +524,7 @@ handoff:
   summary: "Implemented."
   files_touched: [a.md, b.md]
   next_stage_focus: "DR reviews"
+  open_questions: []
   refs: { dev: development.md#files-changed }
 ---
 
@@ -568,6 +664,7 @@ self_test_ar_gate() {
       echo '  summary: "Implemented."'
       echo '  files_touched: [a.md]'
       echo '  next_stage_focus: "DR reviews"'
+      echo '  open_questions: []'
       echo '  refs:'
       printf '%s\n' "$refs_block"
       echo '---'

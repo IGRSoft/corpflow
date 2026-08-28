@@ -85,6 +85,16 @@ anchors_for_stage() {
   esac
 }
 
+# Anchors ALLOWED in any stage artifact but required in none, so neither retroactively
+# fails an older artifact nor is reported as unexpected in a newer one:
+#   elicitation-sweep  the closing sweep's artifact-body transport; the obligation is
+#                      enforced on the frontmatter stub by handoff-harness.sh, not here.
+#   rework-<N>         the scope-addition re-entry section agents/technical-lead.md reads
+#                      at the DR gate — a shipped convention this lint used to reject.
+#   re-review          the DR second-pass section, same class as rework-<N>: a review that
+#                      re-runs after rework records it here rather than rewriting its verdict.
+OPTIONAL_ANCHOR_RE='^(elicitation-sweep|rework-[0-9]+|re-review)$'
+
 # ---------- Frontmatter stage extractor ----------
 # Prints stage code on stdout; empty if not found.
 extract_stage() {
@@ -145,7 +155,8 @@ anchor_lint() {
   done
 
   local extras
-  extras=$(comm -23 <(echo "$found") <(printf '%s\n' $expected | sort -u))
+  extras=$(comm -23 <(echo "$found" | grep -Ev "$OPTIONAL_ANCHOR_RE" || true) \
+                    <(printf '%s\n' $expected | sort -u))
 
   if [[ ${#missing[@]} -gt 0 || -n "$extras" ]]; then
     echo "anchor-lint: $artifact (stage=$stage) FAIL" >&2
@@ -575,6 +586,10 @@ none
 ## follow-ups
 
 none
+
+## elicitation-sweep
+
+nothing to elicit
 EOF
   if "$0" --anchor-lint "$td/development.md" >/dev/null 2>&1; then
     echo "self-test: anchor-lint pass: ok"
