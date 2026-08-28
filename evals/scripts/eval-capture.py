@@ -145,8 +145,17 @@ def has_credential(env: dict | None = None, auth_runner=None) -> bool:
 
 def build_argv(model: str, settings_path: str | None,
                plugin_dir: str | None = None) -> list:
+    # stream-json, NOT json: `--output-format json` returns only the FINAL assistant
+    # message in `result`. A turn that answers and then emits a second message — after a
+    # background check returns, say — has its answer silently discarded and the follow-up
+    # stored in its place. That is case 187 of the 0.3.0 capture: a plan was written, a
+    # follow-up asked whether to save it, and only the follow-up reached disk, where it
+    # graded as a failure to plan. Reproduced deliberately: a prompt that says one word,
+    # runs a command, then says another word yields result == the second word alone.
+    # `--verbose` is required for stream-json under `-p`.
     argv = ["claude", "-p", "--model", model,
-            "--permission-mode", PERMISSION_MODE, "--output-format", "json"]
+            "--permission-mode", PERMISSION_MODE,
+            "--output-format", "stream-json", "--verbose"]
     if settings_path:
         argv += ["--settings", settings_path]
     if plugin_dir:
@@ -163,28 +172,74 @@ def build_prompt(case: dict, mode: str, skill_name: str) -> str:
     return f'/corpflow:{skill_name} "{case["prompt"]}"'
 
 
-def extract_response(stdout: str) -> tuple[str | None, dict]:
-    """Return (response_text, usage). Text is None when the CLI yielded none — a
-    capture that invents an empty answer would be graded as a real failure."""
-    try:
-        obj = json.loads(stdout)
-    except (ValueError, TypeError):
-        return None, {}
-    if not isinstance(obj, dict):
-        return None, {}
-    if obj.get("is_error") is True or obj.get("subtype") not in (None, "success"):
-        return None, {}
-    text = obj.get("result")
-    if not isinstance(text, str) or not text.strip():
-        return None, {}
+def _usage_from(obj: dict) -> dict:
     usage = obj.get("usage") if isinstance(obj.get("usage"), dict) else {}
-    return text, {
+    return {
         "input_tokens": usage.get("input_tokens"),
         "output_tokens": usage.get("output_tokens"),
         "cache_read_input_tokens": usage.get("cache_read_input_tokens"),
         "cache_creation_input_tokens": usage.get("cache_creation_input_tokens"),
         "cost_usd": obj.get("total_cost_usd"),
     }
+
+
+def extract_response(stdout: str) -> tuple[str | None, dict]:
+    """Return (response_text, usage). Text is None when the CLI yielded none — a
+    capture that invents an empty answer would be graded as a real failure.
+
+    Two shapes are accepted. A bare JSON object is the legacy `--output-format json`
+    envelope, kept so a stored dispatch from before the stream-json switch still parses.
+    NDJSON is the current shape: EVERY assistant text block is concatenated, because the
+    envelope's `result` carries only the last message and drops any answer that was
+    followed by a second one (see build_argv).
+    """
+    stripped = stdout.strip()
+    if not stripped:
+        return None, {}
+    try:
+        obj = json.loads(stripped)
+    except (ValueError, TypeError):
+        obj = None
+    if isinstance(obj, dict):  # legacy single-envelope form
+        if obj.get("is_error") is True or obj.get("subtype") not in (None, "success"):
+            return None, {}
+        text = obj.get("result")
+        if not isinstance(text, str) or not text.strip():
+            return None, {}
+        return text, _usage_from(obj)
+    if obj is not None:
+        return None, {}
+
+    blocks, terminal = [], None
+    for line in stripped.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except (ValueError, TypeError):
+            continue  # a non-JSON line is noise, not a reason to lose the answer
+        if not isinstance(row, dict):
+            continue
+        if row.get("type") == "assistant":
+            content = row.get("message", {}).get("content")
+            if isinstance(content, list):
+                for block in content:
+                    if (isinstance(block, dict) and block.get("type") == "text"
+                            and isinstance(block.get("text"), str)
+                            and block["text"].strip()):
+                        blocks.append(block["text"].strip())
+        elif row.get("type") == "result":
+            terminal = row
+    if terminal is None:
+        return None, {}  # no terminal event: the dispatch did not finish cleanly
+    if terminal.get("is_error") is True or terminal.get("subtype") not in (None, "success"):
+        return None, {}
+    if not blocks:
+        return None, {}
+    # Blank line between blocks: they were separate messages, and a plan whose heading
+    # ran into the previous sentence would fail template-sections-present on a join.
+    return "\n\n".join(blocks), _usage_from(terminal)
 
 
 def plugin_sha(root: str) -> str | None:

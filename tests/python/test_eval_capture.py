@@ -63,11 +63,14 @@ class PromptAssembly(_Fixture):
         self.assertEqual(capture.build_prompt(self.case, "natural", "request-plan"),
                          self.case["prompt"])
 
-    def test_argv_pins_model_and_json_output(self):
+    def test_argv_pins_model_and_stream_json_output(self):
+        """stream-json, not json: the plain envelope drops every assistant message but
+        the last, which is how a written plan reached disk as its own follow-up."""
         argv = capture.build_argv("claude-sonnet-5", None)
         self.assertEqual(argv[:2], ["claude", "-p"])
         self.assertIn("--output-format", argv)
-        self.assertEqual(argv[argv.index("--output-format") + 1], "json")
+        self.assertEqual(argv[argv.index("--output-format") + 1], "stream-json")
+        self.assertIn("--verbose", argv)  # stream-json under -p requires it
         self.assertEqual(argv[argv.index("--model") + 1], "claude-sonnet-5")
         self.assertNotIn("--settings", argv)
 
@@ -92,6 +95,72 @@ class ResponseExtraction(unittest.TestCase):
     def test_error_object_yields_no_text(self):
         payload = json.dumps({"result": "partial", "is_error": True})
         self.assertEqual(capture.extract_response(payload)[0], None)
+
+
+def _stream(*texts, cost=0.01, subtype="success", is_error=False, terminal=True):
+    """NDJSON in the shape `--output-format stream-json --verbose` emits."""
+    rows = [{"type": "system", "subtype": "init"}]
+    for t in texts:
+        rows.append({"type": "assistant",
+                     "message": {"content": [{"type": "text", "text": t}]}})
+    if terminal:
+        rows.append({"type": "result", "subtype": subtype, "is_error": is_error,
+                     "result": texts[-1] if texts else "",
+                     "usage": {"input_tokens": 10, "output_tokens": 20},
+                     "total_cost_usd": cost})
+    return "\n".join(json.dumps(r) for r in rows) + "\n"
+
+
+class StreamExtraction(unittest.TestCase):
+    """The case-187 defect: an answer followed by a second message was discarded.
+
+    `--output-format json` puts only the final assistant message in `result`, so a turn
+    that wrote a plan and then asked whether to save it stored the question alone. It
+    graded as a failure to plan, and only a human label caught it.
+    """
+
+    def test_every_assistant_block_is_kept_not_just_the_last(self):
+        text, usage = capture.extract_response(_stream("# Plan: x", "Shall I save it?"))
+        self.assertEqual(text, "# Plan: x\n\nShall I save it?")
+        self.assertEqual(usage["output_tokens"], 20)
+        self.assertEqual(usage["cost_usd"], 0.01)
+
+    def test_single_message_is_unchanged(self):
+        self.assertEqual(capture.extract_response(_stream("# Plan: x"))[0], "# Plan: x")
+
+    def test_tool_blocks_and_user_rows_are_ignored(self):
+        rows = [{"type": "assistant",
+                 "message": {"content": [{"type": "text", "text": "A"},
+                                         {"type": "tool_use", "name": "Bash", "input": {}}]}},
+                {"type": "user", "message": {"content": [{"type": "tool_result"}]}},
+                {"type": "assistant", "message": {"content": [{"type": "text", "text": "B"}]}},
+                {"type": "result", "subtype": "success", "usage": {}, "total_cost_usd": 0.02}]
+        text, _ = capture.extract_response("\n".join(json.dumps(r) for r in rows))
+        self.assertEqual(text, "A\n\nB")
+
+    def test_blank_blocks_do_not_become_separators(self):
+        self.assertEqual(capture.extract_response(_stream("A", "   ", "B"))[0], "A\n\nB")
+
+    def test_error_terminal_yields_no_text(self):
+        self.assertIsNone(capture.extract_response(_stream("partial", is_error=True))[0])
+
+    def test_nonsuccess_subtype_yields_no_text(self):
+        self.assertIsNone(
+            capture.extract_response(_stream("partial", subtype="error_max_turns"))[0])
+
+    def test_missing_terminal_event_yields_no_text(self):
+        """A truncated stream is an incomplete dispatch, not a short answer."""
+        self.assertIsNone(capture.extract_response(_stream("# Plan", terminal=False))[0])
+
+    def test_no_assistant_text_yields_no_text(self):
+        self.assertIsNone(capture.extract_response(_stream())[0])
+
+    def test_unparseable_line_does_not_lose_the_answer(self):
+        self.assertEqual(capture.extract_response("garbage\n" + _stream("# Plan"))[0], "# Plan")
+
+    def test_legacy_single_envelope_still_parses(self):
+        """Stored dispatches predate the switch; they must still read back."""
+        self.assertEqual(capture.extract_response(_cli_json("# Plan"))[0], "# Plan")
 
 
 class CaptureNeverFabricates(_Fixture):
