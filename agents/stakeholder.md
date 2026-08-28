@@ -142,6 +142,8 @@ Before marking ST stage complete, verify:
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-st`. Prev→this label: `FN→ST`.
 
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage ST --prev FN` (`skills/worktask/scripts/`) to atomically patch `tasks.ST0` + the `FN→ST` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.

@@ -485,6 +485,8 @@ There is exactly one DV0 task even under fan-out; the split is an agent-level sp
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template: `stage-contracts.md#tpl-dv`. Prev→this label: `TL→DV` (or `AR→DV` when TL was skipped, `PL→DV` when both AR and TL were, `IR→DV` on the emergency pipeline).
 
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
 ### DV frontmatter block
 
 Paste at the top of `.context/development-N.md`; N per `stage-contracts.md#run-index-resolution`.
@@ -498,17 +500,19 @@ handoff:
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
   worktree: true               # MUST be true — see the worktree field notes below
-  worktree_path: <abs path>    # OPTIONAL (additive) — see field notes
-  worktree_branch: <branch>    # OPTIONAL (additive) — see field notes
+  worktree_path: <abs path>    # OPTIONAL — see field notes
+  worktree_branch: <branch>    # OPTIONAL — see field notes
   files_touched:
     - path/to/file1.md
     - path/to/file2.md
   next_stage_focus: "<imperative: what DR/QA must focus on>"
+  open_questions:
+    - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep" }
   refs:
-    decisions: architecture-N.md#decisions      # ONLY when AR ran; omit otherwise
-    coordination: coordination-N.md#fan-out  # ONLY when TL ran; omit otherwise
+    decisions: architecture-N.md#decisions     # ONLY when AR ran; omit
+    coordination: coordination-N.md#fan-out   # ONLY when TL ran; omit
     tests: development-N.md#tests-added
-  architecture:                # ONLY when AR ran; omit the whole object otherwise
+  architecture:                # ONLY when AR ran; omit the object otherwise
     ref: architecture-N.md#decisions
     applied: true              # truthful; see the architecture field notes below
 ---
@@ -537,7 +541,8 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 state-patch.sh --stage DV --prev <PREV> --facts '{
   "files_modified": ["Sources/Foo.swift"],
   "tests_added": ["Tests/FooTests.swift"],
-  "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}]}'
+  "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}],
+  "open_questions": [{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep"}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail): it never clobbers an upstream stage's entries and a re-run is byte-identical. Omitting it loses the fact silently. Canonical rule: `handoff-protocol.md#facts-union`.
