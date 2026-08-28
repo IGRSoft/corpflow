@@ -534,7 +534,7 @@ A candidate question is a **fact** when some artifact already holds its answer โ
 history, a manifest, a lint's exit code, `gh`, or any tool PL0 can run. Facts never reach the plan
 gate: PL0 resolves them itself and records the resolved value in the plan, marked verified. A
 candidate is a **decision** only when the answer turns on what the user *wants* rather than on what
-is *true*. `open_questions[]` may carry decisions only.
+is *true*. `open_questions[]` may carry decisions only. This rule is not PL-specific: every stage's closing sweep is bound by it (`skills/shared/stage-contracts.md ยง Closing Elicitation Sweep`, which points back here rather than restating it).
 
 Apply the test to every candidate before writing it down: name the command, file, or tool that would
 answer it. If you can name one, delete the question and run it. Worked example and its assertions:

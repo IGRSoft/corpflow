@@ -189,6 +189,13 @@ audit row, so the monitor frees the track and dependents stay `blocked`, and the
 each parked issue with its unanswered questions. Mechanics:
 `../../commands/megatask.md § Step 3 — parking mechanics`.
 
+##### Parking — non-planning stages
+
+The same path covers non-planning stages: an escalate-class closing-sweep item parks the issue
+identically, with the audit subject set to the boundary that surfaced it — `FN<N>` for a batched
+item, the emitting stage's own `<CODE><N>` for one marked `blocks_next_stage`
+(`skills/shared/stage-contracts.md § Closing Elicitation Sweep`).
+
 > For headless `-p` runs, set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait;
 > with `--mcp-config`, server connections are bounded at 5s rather than blocking on the slowest.
 
