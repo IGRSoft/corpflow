@@ -271,7 +271,9 @@ Bounded, not systemic: five other responses open with a continuation-style pream
 (19, 32, 59, 71, 203) and every one of them contains the full template underneath. **1 of
 201**, so this capture stands.
 
-**Fixed for the next sweep.** The defect reproduces on demand — a prompt that says one word,
+##### Fixed for the next sweep
+
+The defect reproduces on demand — a prompt that says one word,
 runs a command, then says another word returns only the second word under
 `--output-format json` — and the capture path now uses `stream-json`, keeping every
 assistant block. It cannot be repaired retroactively: 187's plan was never stored.
