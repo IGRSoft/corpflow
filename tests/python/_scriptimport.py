@@ -23,6 +23,9 @@ ESTIMATE_CALC = os.path.join(
 EVAL_ENGINE = os.path.join(REPO_ROOT, "evals", "scripts", "eval-engine.py")
 EVAL_CAPTURE = os.path.join(REPO_ROOT, "evals", "scripts", "eval-capture.py")
 EVAL_GRADE = os.path.join(REPO_ROOT, "evals", "scripts", "eval-grade.py")
+LABEL_ALIGN = os.path.join(REPO_ROOT, "evals", "scripts", "label-align.py")
+SAMPLE_LABELS = os.path.join(REPO_ROOT, "evals", "scripts", "sample-for-labelling.py")
+SCAN_CONTAM = os.path.join(REPO_ROOT, "evals", "scripts", "scan-contamination.py")
 
 
 def load_module(path: str, name: str):

@@ -34,14 +34,14 @@ Thin entry point to the **`request-plan` skill**, which holds the full workflow 
 
 1. Load the `request-plan` skill (`skills/request-plan/SKILL.md`) and follow its 5 steps:
    restate the goal → gather context (lean) → synthesize the plan → recommend the handoff → output.
-2. Keep it lightweight. If the user actually needs formal requirements, route to `/product-requirements`;
-   if they need hours and budget, route to `/estimate`.
+2. Keep it lightweight. A heavier sibling command may be named **alongside** the handoff, never in
+   place of it — `SKILL.md § 4` holds the list and is the authority. Naming one here is what made
+   this file go stale twice; a looser restatement of that rule licensed the punts § 4 forbids.
 3. End with a single ready-to-paste `/worktask` command line (PL0 dynamic sizing handles small tasks
-   by dropping stages) — **always exactly one, with no exception**. XL-sized work still gets its
-   trigger: name the 2–3 sub-tasks to split into per `references/handoff.md` and emit the line for
-   the first of them. The previous "for XL, emit no command" exception contradicted SKILL.md § 4 and
-   the `single-worktask-trigger` gate, leaving a licence for the taxonomy's `no-handoff-trigger`
-   failures to hide behind.
+   by dropping stages) — exactly one, with the single narrow exception `SKILL.md § 4` states and no
+   other. XL-sized work still gets its trigger: name the 2–3 sub-tasks per `references/handoff.md`
+   and emit the line for the first of them. "For XL, emit no command" leaves the user nothing to
+   paste — the `no-handoff-trigger` failure wearing a size label.
 
 ## Output Format
 

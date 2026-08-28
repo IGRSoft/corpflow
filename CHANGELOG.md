@@ -4,6 +4,108 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Fixed
+
+- **The eval capture measured the installed plugin, not the tree under test.** `eval-capture.py`
+  passed no `--plugin-dir`, so the CLI resolved `/corpflow:request-plan` from the marketplace
+  release while `skill_version()` read this repo — a sweep could exercise one version and stamp
+  another on all 156 records. Measured, not argued: with the old flags a command shipping only in
+  the installed 4.0.25 was offered and one shipping only here was not. Dispatches now run in a
+  detached worktree at HEAD, pinned with `--plugin-dir` and with the ambient copy disabled.
+- **The answer key was inside the searched tree.** `evals.json` carries `expected_outcome`, and 7
+  of 114 responses in the 0.0.1 capture reached the corpus. The capture tree strips the answer key
+  — but not `evals/scripts/*.py`, which six cases ground on. A worktree rather than a copy, because
+  it excludes gitignored material by construction: `.context/` held a per-trace map of every known
+  failure that the prompt-leak lint could never have seen.
+- **`label-align.py` could not run.** Its `--grades` default pointed at a `/tmp` path nothing
+  produces, so the only calibration tool in the repo was unusable.
+- **A rate-limited sweep lost 38 consecutive cases.** Capture now retries transient dispatches with
+  backoff; the never-fabricate contract is unchanged.
+- **`eval-grade.py --json` omitted `split`**, which both calibration tools key on.
+- **Five eval cases whose premise the repo had already answered** converted to `refute`; three
+  repointed where the declared ground file did not own the behaviour. `prompt_digest` untouched, so
+  nothing needed re-capturing.
+
+### Added
+
+- **Stratum-weighted calibration.** A labelling budget smaller than the corpus forces an enriched
+  sample, and selecting on the grader's own verdict while measuring agreement with it biases both
+  rates. Each case now carries `population/sampled`; verified against the 0.0.1 labels, an enriched
+  sample reads TPR 42% unweighted against a population truth of 63%, and 63% weighted.
+- **Seeded bootstrap confidence interval**, stdlib only — no point estimate, no interval.
+- **`sample-for-labelling.py`** — picks the labelling sample by design: even split across harness
+  strata, held-out tranche taken whole, seeded.
+- **`scan-contamination.py`** — measures what a capture still leaks after the strip, by channel.
+  The scan was itself wrong in both directions before being pinned by tests: 12% on false
+  positives, then 2% on missed phrasings.
+
+### Changed
+
+- **`request-plan` 0.3.0 → 0.4.0 — three drifted rule copies reconciled.** The 0.3.0 capture's 13
+  graded failures were first diagnosed as a missing rule each. That was wrong: the skill states
+  each of these rules more than once and the copies contradict each other, so every failure is a
+  model correctly following the wrong copy. All three fixes remove a copy; none adds a fourth.
+  - **`SKILL.md § 4`'s "absent from the file it was blamed on" is bounded.** It licensed a plan for
+    a defect the repo does not contain, which `§ 1`'s ask branch prohibits. It now covers only a
+    file that exists whose defect sits elsewhere; anything else is `§ 1`'s, and `§ 1` wins.
+  - **`references/context-gathering.md` no longer states a stop condition.** It carried the
+    refuted 0.2.0 rule verbatim for a whole version while `SKILL.md` rejected it in as many words;
+    eight responses stopped at a plausible neighbour. The section points at `SKILL.md` instead.
+  - **All three tier-trigger copies reconciled to canon.** `handoff.md` listed "security review,
+    threat modelling" — topic flavour that `estimation-methodology` rules out by name — its
+    `--secure` table row still framed the trigger as "work handling" a protected asset, the
+    discovery reading canon replaced at 0.3.0, and `plan-template.md` said a security-sensitive
+    surface *forces* the tier, contradicting canon's "a surface you discover does not raise the
+    tier". The asset list is now enumerated in exactly one place under `skills/request-plan/`.
+  - **Pinned by new parity contracts** in `tests/shell/skills/request-plan-contracts.bats` —
+    stop-condition single-sourcing, asset-enumeration-exists-once, and a subset check whose two
+    sides are both *extracted* (canon's surface-check pseudocode; `handoff.md`'s `--secure` row)
+    rather than restated in the test, so a novel non-canon term fails on membership and not on a
+    deny-list. Each has a paired can-actually-fail test. The absence of any of them let the drift in.
+  - **`capability-registry.sh` closes stdout with a class-level trailer** naming what it does not
+    enumerate. Complete-by-construction over six classes reads as complete over the repo unless the
+    output says otherwise. Classes only, never a file, so no eval case becomes a lookup.
+
+  Per the spec-change rule this applies from a 0.4.0 capture forward; 0.3.0 labels are not
+  re-flipped. It will not fix all eight stop-at-a-neighbour failures and **cannot be cleanly
+  measured** — cases 202 and 203 are structurally identical and split, which is variance, not a
+  rule difference. Repairing verified drift stands on its own merits; no re-capture should be
+  commissioned to prove it.
+
+- **`request-plan` 0.2.0 → 0.3.0 and `estimation-methodology` 0.2.0 → 0.3.0**, resolving the two
+  rule contradictions the 0.2.0 calibration measured. Both are fixed at the surface rather than by
+  restating the losing rule, which is what created the contradictions in the first place.
+  - **The tier surface check reads the request, not the findings.** It asked whether "the work"
+    handles a secret, which escalates on discovery: three plans took `--secure` for a webhook URL,
+    a CI login and a dependency scan that none of their requests named. It also left the tier
+    undecidable at planning time, since two searches of one repo find different things. Now aligned
+    with `derive_route()`, which can only ever see the prompt.
+  - **`SKILL.md § 1`'s branches are reordered.** The fold-the-ambiguity branch was listed first and
+    was broader than the no-surface branch, so it consumed the cases that branch exists for — four
+    responses on `absent` grounding named the ambiguity and planned anyway, executing the first rule
+    correctly. The no-surface branch now precedes it, and folding is bounded to requests whose
+    surface was found.
+  - **`references/handoff.md` reconciled with both.** Its flag-matches-the-body check keyed on
+    anything the body argued, so a plan naming a credential path its search turned up would carry
+    `--secure` — reintroducing the same escalation one layer down. It now compares the flag against
+    what the body says the *request* needs. Found by the contradiction cross-read, not by a test.
+
+  Per the spec-change rule these apply from a 0.3.0 capture forward; 0.2.0 labels are not
+  re-flipped. Until that capture runs, the effect of all three is argued, not measured.
+
+### Notes
+
+- **First calibrated measurement of `request-plan` 0.2.0.** Harness 127/156 = 81%; corrected 77%,
+  95% CI [65%, 85%]; dev TPR 93% / TNR 69%. TPR clears the 90% target, TNR misses the 80% floor and
+  is reported rather than tuned. `missed-the-real-surface` — 15 of 22 failures in 0.0.1 — is now
+  zero. Full record in `evals/findings/request-plan-0.2.0.md`.
+- **The 0.0.1 baseline is retired as a comparison point.** It ran on the un-isolated surface, so its
+  records cannot say which skill version produced them. Its labels stay sound; its rates do not.
+- **The LLM judge is refuted a second time.** Re-validated on labels it had not seen: TNR 0%, 0 of
+  10 failures caught. Verdicts committed as evidence.
+- **The held-out tranche has no negatives left**, because its only three failures were among the
+  five corrected cases. Held-out failure detection is still unmeasured.
+
 ## [4.0.26] — 2026-08-26
 
 Command-surface reorganization. **38 → 28 commands, 26 → 23 registered skills, and no deprecation
@@ -12,6 +114,13 @@ name stops resolving. Shipped as a PATCH per this plugin's own precedent (`MEMOR
 `company-workflow` → `corpflow` rename, breaking with no alias, shipping as one); the bump is
 load-bearing either way, because the plugin cache is version-keyed and a rename without one serves
 stale paths.
+
+Two further changes ride along, both consequences of the first. **`request-plan` 0.2.0** resolves the
+rule contradictions the 0.0.1 eval capture exposed, extends the capability registry to the executable
+surfaces every search miss grounded on, and rebuilds the eval signal that extension spends. And the
+verification pass turned up a **`megatask` defect** that had been failing `init-worktree.sh`'s own
+self-test: the base branch was resolved against the caller's repository rather than the one being
+initialised.
 
 ### Removed
 
@@ -109,6 +218,62 @@ stale paths.
   README's own count was also wrong in both directions — it claimed 36 while the tables listed 37
   and disk held 38, because `/worktask-status` was missing from the Core table; removing it settles
   the discrepancy rather than requiring a row.
+- **`capability-registry.bats`** — floor raised 40 → 120 (it was set when the registry held 79
+  lines and had been vacuous since), plus per-class presence assertions, a negative assertion on the
+  deliberately-unlisted directories, and fixture tests for each description extractor.
+- **`skills/request-plan/SKILL.md` 0.1.0 → 0.2.0**; `evals.json` `eval_set_version` 0.1.0 → 0.2.0.
+  The "found the surface → plan it" test moves from § 1's ladder into § 2 beside the registry, where
+  the evidence arrives; content unchanged.
+- **Eval case 4 reverted from `refute` to `plan`** and its byte count corrected. The `CHANGELOG.md`
+  split left the premise's *number* stale, not its *request* — it belongs with the correct-the-figure
+  cases, not the shipped-work conversions. Cases 5 and 53 were re-audited against the same test and
+  stay `refute`: both cite shipped behaviour, not a stale measurement.
+- **New eval cases** covering the search surfaces the registry deliberately does not enumerate, plus
+  the three 4.0.26 behaviours that shipped with no coverage (`/appstore` marker ambiguity,
+  `/estimate --detailed`, `release-engineer` dispatch when the platform plugin is absent).
+- **Three cases still naming surfaces 4.0.26 deleted.** Case 9 ("add a machine-readable summary to
+  cost-report") is **retired**: the command went with the whole cost-observability feature, so the
+  premise names nothing and no answer to it can be right — the same treatment 74/98/114 got, and the
+  id stays open rather than renumbering. Cases 16 and 22 stay `refute`; only their *evidence* was
+  stale, and both now cite what actually ships (`/estimate --export csv` and its 13-file pack;
+  `hooks/audit-subagent.sh` plus `audit-dedup.sh` as the reader) instead of `/cost-report --export`
+  and `/agent-report`. Corpus 157 → **156** (121 plan / 17 clarify / 18 refute).
+- **The generator fails closed on a deleted command.** `validate_named_surfaces()` rejects any case
+  whose prompt or `premise_refuted_by` names a `/command` absent from `commands/`. This table
+  carried two dead names for three days after 4.0.26 and only a hand grep found them;
+  `premise_refuted_by` is the evidence a refute case is graded against, so a dead citation lets the
+  case keep passing while proving nothing.
+
+### Added
+
+- **The capability registry enumerates executable surfaces.** `capability-registry.sh` now also
+  lists `hooks/*.sh`, `skills/*/scripts/*.{sh,py}` and `benchmark/harness/**/*.py` — 66 → 148 lines,
+  ~3.2k → ~7k tokens. Every search miss in the 0.0.1 capture grounded on one of those classes, which
+  behaviour search resolved two times in three while the markdown classes ran at 83–87%. Shell
+  descriptions come from `@description` or the first comment block after the shebang, Python from
+  the module docstring's summary paragraph; a file with no description still emits no line.
+  `tests/`, `evals/`, `skills/*/references/` and `skills/shared/*.md` stay deliberately unlisted —
+  the exclusion is on shared *canon*, not shared code. Two executable surfaces the first cut still
+  missed are now listed: `benchmark/run-benchmark.sh` (the harness entry point) and
+  `skills/shared/milestone-helpers/scripts/milestone-helpers.sh`, whose skill nests its code one
+  level deeper than the flat `skills/*/scripts/` glob reached. 66 → **148** lines; the only
+  executables left out are the four `hooks/lib/*-selftest.sh`, which are test scaffolding.
+- **Three rules for situations nothing covered.** `SKILL.md § 2` gains the six surface classes a
+  behaviour can live in (a search that has not decided which class owns it has not finished) and
+  turns "do not assert absence you did not check" into a structural requirement that every negative
+  claim carry its scope. `estimation-methodology` gains the rule that a quiet local tree — no
+  `.context/`, no live `state.json`, a green local run — is not evidence about a failure the user is
+  reporting.
+- **A required surface-check verdict in the plan template.** `references/plan-template.md` now
+  requires one line stating the tier verdict immediately before the trigger, the way
+  `P2 — v1.1: none` requires an empty phase row to be stated. Five of the graded routing failures
+  shared one shape: the check produced no visible output, so skipping it cost nothing.
+  `references/handoff.md` gains the matching consistency rule — a body arguing for a security review
+  and a plain `/worktask` line are two different recommendations.
+- **`tests/shell/skills/request-plan-contracts.bats`** — the three mechanical parts of the
+  cross-surface read: no rule surface names a command that does not resolve (the check that would
+  have caught `/pm-prioritize`), the command file makes no "no exception" claim and cites § 4, and
+  the template carries the surface-check line inside its Recommended-next-step block.
 
 ### Fixed
 
@@ -132,6 +297,29 @@ stale paths.
   every run so green is never read as verified, and CI shallow-clones the six registered sibling
   repos before the suite. A clone failure warns rather than failing the job: a sibling repo's outage
   is not a defect in this one.
+- **`request-plan` rule surfaces that contradicted each other.** `commands/request-plan.md` step 2
+  licensed routing to a sibling command *instead of* the worktask, which `SKILL.md § 4` forbids; it
+  now names no sibling at all and points at § 4 as the authority — naming one is what made the file
+  go stale twice (`/pm-requirements`, then `/pm-prioritize`). Step 3 claimed the trigger rule had
+  "no exception" while § 4 has had exactly one since 0.1.0; it now cites that exception rather than
+  denying it. `references/handoff.md` still told XL work to emit no command, contradicting both § 4
+  and step 3 — XL now names its sub-tasks and triggers the first.
+- **`init-worktree.sh` resolved the base branch against the wrong repository.** Step 7 correctly
+  uses `git -C "$repo_root"`, but `resolve_base_branch()` shelled out to `milestone-helpers.sh
+  base-branch` in the *caller's* cwd, and that helper's develop-vs-master probe is a `git ls-remote`
+  against whatever repo it is standing in. Initialising a worktree in a repo without `develop` from
+  a repo that has one picked `develop`, then fetched it in the other repo and died:
+  `fatal: couldn't find remote ref develop`, exit 128. It runs in `$repo_root` now (subshell, so the
+  no-cwd-drift discipline holds). This is what the script's own `--self-test` had been failing on.
+- **`milestone-helpers.bats` asserted a property of the developer's remote.** The base-branch
+  default test called the helper with no cwd control, so it passed or failed on whether the ambient
+  `origin` happened to carry `develop`. Both arms now run in a fixture with a controlled remote, and
+  the develop arm — which is what tells a working probe from one hardcoded to `master` — is covered
+  for the first time.
+- **The escalation canon called a live failure standard work.** `estimation-methodology/SKILL.md`
+  said "a wedged task or a runaway batch is standard work" immediately above the test that decides
+  it, so a reader who stopped at the example got the wrong answer. The example is now scoped to a
+  task that has *stopped*, and a task that is both stuck and still failing escalates.
 
 ### Notes
 
@@ -147,6 +335,20 @@ stale paths.
   successor surface there is nothing to re-ground them on, so they join the `RETIRED` table and
   their ids stay open rather than renumbering. Case 74 retires for the same reason with
   `/context-status`: nothing else in the repo reports remaining context.
+
+- **Three spec versions are unmeasured, and a capture cannot attribute between them.**
+
+  `SKILL.md` 0.1.0 shipped in PR #325 with no capture. The 4.0.26 command-surface reorganization
+  (PR #332, in this release) then removed seven commands, renamed five and repointed eight eval
+  groundings — all inside
+  the tree `eval-capture.py` reads. 0.2.0 stacks on both. Whenever a capture eventually runs it
+  measures **all three at once** and cannot separate them. Recorded here while it is cheap: a later
+  reader comparing a 0.2.0 number against the 0.0.1 baseline will otherwise attribute the whole delta
+  to whichever change they happen to be reading about.
+
+  Separately, extending the registry converts most of the `buried` tranche from a search into a
+  lookup, so **`buried` stops measuring search quality from 0.2.0 forward**. The replacement cases
+  ground only on unlisted surfaces; the note is also carried in `evals.json` `grading`.
 
 ## [4.0.25] — 2026-08-24
 

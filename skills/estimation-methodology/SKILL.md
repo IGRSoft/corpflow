@@ -1,7 +1,7 @@
 ---
 name: estimation-methodology
 description: Use when estimating task complexity, effort, or determining worktask tier. Standardized complexity scoring (0-50 scale) and T-shirt sizing for project estimation.
-version: 0.2.0
+version: 0.3.0
 effort: low
 related:
   - cost-optimization.md
@@ -116,9 +116,9 @@ by *what the work touches* first, and only then by size — size alone sent ordi
 security pipeline and left live incidents on the standard one.
 
 ```
-# 1. Surface check — beats size in both directions
-IF the work reads, writes, or exposes credentials, tokens, secrets, PII,
-   payments, authn/authz, or executes untrusted input:
+# 1. Surface check — beats size, and reads the REQUEST
+IF the request names credentials, tokens, secrets, PII, payments,
+   authn/authz, or untrusted input as part of what it asks for:
   → /worktask --secure     (regardless of size)
 ELIF the request describes something broken RIGHT NOW and still failing:
   → /worktask --emergency  (regardless of size)
@@ -133,12 +133,38 @@ ELSE:
 ### What the two escalations are not
 
 **--secure is not "security-adjacent".** Hardening a lint, adding a deny-list guard, or renaming
-a branch touches no protected asset — those are standard tier. The test is whether the work
-itself handles a secret or an untrusted input, not whether the word "security" appears nearby.
+a branch touches no protected asset — those are standard tier. The test is whether the request
+names a secret or an untrusted input, not whether the word "security" appears nearby.
 Security-sensitive work runs the full 11-stage pipeline.
 
-**--emergency is not "urgent-sounding".** A wedged task or a runaway batch is standard work. The
-test is whether something is failing as you write the plan.
+**--emergency is not "urgent-sounding".** A task that has *stopped* — wedged, abandoned, a batch
+that ran away and ended — is standard work. The test is whether something is failing as you write
+the plan. A task can be both stuck and still failing; when it is, escalation wins.
+
+#### A surface you discover does not raise the tier
+
+**The tier follows the request, never the findings.** A search that reaches a secret-handling
+file has learned something about the repo, not about what was asked for — and almost every
+file in a plugin sits near one. Reading the check the other way escalates on discovery, which
+is how three plans in the 0.2.0 capture took `--secure` for a webhook URL, a CI login and a
+dependency scan that none of their requests mentioned.
+
+It also makes the tier undecidable when the plan is written: two searches of the same repo
+find different things, so the same request would route differently on different days. A tier
+that cannot be derived from the request is not a rule, it is a coin toss with a rationale.
+
+Name what you found in the plan body — a discovered credential path is worth stating and may
+well change the work. It does not change the flag.
+
+#### A quiet local tree is not evidence about the failure being reported
+
+**The present-tense report in the request IS the evidence.** A clean worktree, an absent
+`.context/`, no live `state.json`, or a green local test run say nothing about the environment the
+user is describing — they describe *this* checkout, which is not the one that is failing.
+
+None of them downgrade a reported live failure, and none of them settle the surface check either
+way. If a local observation genuinely changes the tier, name the observation and say what it rules
+out; absence of local wreckage rules out nothing.
 
 ## PL0 Stage-Set & Test-Mode by Complexity Score
 
