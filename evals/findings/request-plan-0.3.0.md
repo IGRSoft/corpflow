@@ -3,6 +3,10 @@
 The first per-case-paired A/B this corpus has had. It measures the three 0.3.0 rule edits
 against the 0.2.0 responses on a fixed grading surface, and it comes back **null**.
 
+The labelling pass that followed is the more useful half: TNR clears its floor for the first
+time, every human/harness disagreement runs one way, and the held-out tranche yielded one
+negative rather than the three the harness reported.
+
 ## Provenance
 
 | | |
@@ -14,7 +18,7 @@ against the 0.2.0 responses on a fixed grading surface, and it comes back **null
 | `plugin_sha` | `0e1dcfc` ×201 — one sha, **no `-dirty`** |
 | probe | 45 commands offered, 28 expected, 0 missing, `evals_files=0` |
 | captured | 2026-08-27 |
-| cases | 201 (134 plan / 35 clarify / 32 refute); **0 human-labelled so far** |
+| cases | 201 (134 plan / 35 clarify / 32 refute); **60 human-labelled**, 59 usable |
 | cost | **$164.08**, $0.82/case, 0 retries, 0 rate-limit failures |
 
 Provenance is tighter than 0.2.0's, which smeared across `86f5aef ×109, fb8020d ×35,
@@ -23,10 +27,44 @@ Provenance is tighter than 0.2.0's, which smeared across `86f5aef ×109, fb8020d
 
 ## Headline
 
-**Harness 162/201 = 81%.** No calibration yet: the 60-case labelling sample is cut
-(`evals/review/request-plan-0.3.0.html`) but unlabelled, so **no TPR, TNR or corrected rate
-exists for this capture**. A raw harness rate is uncalibrated and means only what it
-literally counts.
+**Harness 162/201 = 81%. Corrected 87%, 95% CI [82%, 92%]. TPR 93%, TNR 100%.**
+
+60 labels, 59 usable (one deferred). The raw labelled count is not a corpus rate — the
+sample is enriched toward harness failures — so only the weighted correction compares to
+anything.
+
+### Calibration
+
+| | TPR | TNR | corrected |
+|---|--:|--:|--:|
+| all 59 labelled (weighted) | **93%** | **100%** | 87% [82–92] |
+| held-out 17 (`test` ∧ id≥168) | 92% | 100% | 88% [81–88] |
+| — 0.2.0, for comparison | 96% | **69%** | 77% [65–85] |
+
+**TNR clears the 80% floor for the first time**, against 69% at 0.2.0. The reason is
+categorical, not marginal: **there are zero false passes in this sample.** Every one of the
+six human/harness disagreements runs the other way — the grader failed something the human
+passed. The two false passes that held 0.2.0's TNR down were both the already-ships
+boundary, and no case in this sample reproduces them.
+
+Read the held-out row with care; see § The held-out tranche.
+
+## Every disagreement is a false fail
+
+| case | expected | harness failed on | human |
+|---|---|---|---|
+| 210 | refute | `disputes-the-premise` | pass |
+| 211 | refute | `disputes-the-premise` | pass |
+| 212 | refute | `disputes-the-premise` | pass |
+| 67 | plan | `finds-the-real-surface` | pass |
+| 193 | plan | `finds-the-real-surface` | pass |
+| 191 | plan | 6 template assertions | pass |
+
+Three of the six are the `disputes-the-premise` defect predicted below — **the labels
+confirm it rather than merely permitting it**, which is what the prediction was waiting on.
+The grader is now measurably too strict and not at all too lenient, which is the safe
+direction to be wrong in but still costs 39 recorded failures of which at least 6 are not
+failures.
 
 ## The paired A/B is null
 
@@ -93,8 +131,14 @@ for a refutation, and it was scored a failure. Cases 210 and 211 refute a stale 
 then plan the live remainder behind it, which SKILL.md § 4 has defined as the *best* answer
 since 0.1.0; both were scored failures on the same regex. Cases 17 and 125 look like the
 same shape. Case 22 is a genuine failure on the 0.2.0 human labels (it refuted and then
-rendered the full build plan anyway) and case 59 is unclear from its opening — both need a
-label, not a reading.
+rendered the full build plan anyway) and case 59 is unclear from its opening.
+
+### Labels settled three of the seven
+
+**Labels settled three of the seven.** 210, 211 and 212 were drawn into the 60-case sample
+and all three came back `pass` — the reading above is confirmed, not merely permitted. The
+remaining four (17, 22, 59, 125) were **not sampled**, so they stay unresolved; deciding
+them needs a targeted pass, not another sweep.
 
 ### Why it keeps recurring
 
@@ -106,11 +150,15 @@ The pattern of repair is itself the evidence that enumeration is the wrong mecha
 
 ### Not changed here
 
-**Not changed here, deliberately.** Widening the regex now would (a) fit the grader to the
-cases that exposed it, which `evals/README.md` forbids and which is exactly how the LLM
-judge was talked into a 0% TNR twice, and (b) invalidate the paired comparison above by
-changing the grading surface mid-analysis. The 60 labels resolve which of the seven are
-genuine misses; the fix belongs after that, as a spec change with a version move.
+**Still not changed here.** Widening the regex would invalidate the paired comparison above
+by moving the grading surface mid-analysis, so it belongs in a separate change with a
+version move — not in the document that measures the current surface.
+
+What has changed is the justification. The fix is no longer argued from reading the regex;
+it is now carried by three human labels that say the grader was wrong and the model was
+right. That is the condition `evals/README.md` sets, and it is met. Rewriting the assertion
+around the construction rather than a verb list is the obvious repair, and it should be
+validated against the four unsampled cases rather than against 210–212.
 
 Note the direction of the bias: this mode **understates** the pass rate in both captures,
 so it does not distort the paired delta. It does inflate the failure count in each — the
@@ -136,9 +184,9 @@ n=13 that is not a finding — but it is the right direction for a contaminated 
 behave, and it is one more reason to read the +1 delta as churn rather than effect. A
 capture whose `git log` does not describe the eval corpus would remove the channel entirely.
 
-## The held-out tranche contains failures again
+## The held-out tranche: one negative, not three
 
-This was the point of batch 5, and it worked.
+This was the point of batch 5. It half worked, and the labels are what show the difference.
 
 | | batch 4 (spent) | batch 5 (this capture) |
 |---|---|---|
@@ -148,15 +196,45 @@ This was the point of batch 5, and it worked.
 | harness | 18/18 = **100%** | 15/18 = 83% |
 | harness failures | **0** | **3**, on 3 distinct mechanisms |
 
-The three: case 187 asked where a plan was owed, 199 missed the real surface, 212 is the
-`disputes-the-premise` false negative above. Held-out TNR is measurable for the first time
-once these are labelled — which was the entire objective, and it is met.
+### Labels cut three harness failures down to one
+
+The three harness failures did not survive labelling as three:
+
+| case | harness | human | what it turned out to be |
+|---|---|---|---|
+| 199 | fail | **fail** | a real miss — the only genuine held-out negative |
+| 212 | fail | pass | the `disputes-the-premise` grader defect |
+| 187 | fail | **defer** | a capture defect — see below |
+
+So held-out TNR is **100% on a single labelled negative**, and `label-align.py` prints its
+own warning on the row: *under 20 labels, directional only, a single case moves these
+rates.* Take that seriously. Batch 5 moved held-out negatives from **0 to 1**. That is a
+real improvement over an unmeasurable rate and it is nowhere near a measured one.
+
+I wrote "the objective is met" in this document before the labels existed. That was wrong,
+and the correction is the point: a tranche designed to contain failures produced one, which
+is what the design could deliver rather than what it promised.
+
+### Case 187 is a capture defect
+
+Its stored response holds only a **follow-up turn** — it opens by reporting a background
+check coming back, refers to "the plan" as already written, and closes by asking whether to
+save it. The plan itself is not in the record: 1,339 chars against 1,872 output tokens, and
+no Context/Goal/Phases/Effort heading anywhere. `asked-instead-of-planning` cannot be
+assessed against a plan that was never stored, which is why the label is `defer`.
+
+Bounded, not systemic: five other responses open with a continuation-style preamble
+(19, 32, 59, 71, 203) and every one of them contains the full template underneath. **1 of
+201.** Worth a look at how `eval-capture.py` records a multi-turn result before the next
+sweep, but it does not put this capture in question.
 
 ### The stated engine did not fire
 
 The design nominated the `absent`→`clarify` cell as the negative generator, on the 0.2.0
 evidence that it was the weakest column (harness 71%, human 2/6). **All 7 held-out `clarify`
 cases passed.** The negatives came from `adjacent`, `buried` and `refute` instead.
+
+#### Are the new `absent` cases just easier?
 
 Across all 18 new `absent` cases the harness scored 17/18 (94%) against 13/17 (76%) on the
 17 pre-existing ones in the same capture. Fisher's exact on that split is p ≈ 0.17 — not
@@ -165,8 +243,9 @@ significant, but the direction says the `absent` cases written for batch 5 are p
 absorbed. Anyone re-cutting this cell should sample the existing prompts for difficulty
 rather than writing fresh ones from the same template.
 
-The tranche is non-degenerate regardless, so the objective holds. It was met by a mechanism
-the plan did not predict, which is worth more than the prediction.
+The labels sharpen this rather than soften it: all 7 held-out `clarify` cases passed on the
+human read too, so the cell produced no negatives by either measure. The nominated engine
+did not fire, and the single negative that did arrive came from `buried`.
 
 ## Batch 5 by cell
 
@@ -205,34 +284,43 @@ denominators of 20 and 15 and both are inside the flip band; neither is a findin
 
 ### Establishes
 
-The 0.2.0 responses are preserved and re-grade identically, so a paired
-baseline exists and is durable. The held-out tranche contains failures on three mechanisms
-and can measure TNR once labelled. `disputes-the-premise` has a systematic, reproducible
-false-negative mode with a named cause. The capture surface was clean: one sha, no dirty
-tree, zero retries, `evals_files=0`.
+The 0.2.0 responses are preserved and re-grade identically, so a paired baseline exists and
+is durable. **TNR is 100% with zero false passes**, clearing the 80% floor 0.2.0 missed at
+69% — the grader errs strict, never lenient. Corrected rate 87% [82–92] on 59 labels.
+`disputes-the-premise` has a false-negative mode with a named cause, now confirmed by three
+human labels rather than argued. The capture surface was clean: one sha, no dirty tree, zero
+retries, `evals_files=0`.
 
 ### Does not establish
 
-Anything about the three 0.3.0 edits — the delta is +1 on 156 with a
-16% flip rate, which is a null result, not a confirmation and not a refutation. Any
-calibrated rate for 0.3.0: TPR, TNR and the Rogan-Gladen correction all await the 60 labels.
-Attribution between the three edits, which one capture could never separate. Anything about
-`natural` mode.
+Anything about the three 0.3.0 edits — the delta is +1 on 156 with a 16% flip rate, which is
+a null result, not a confirmation and not a refutation. **A held-out TNR worth the name**:
+the tranche yielded exactly one human negative, so 100% rests on n=1 and the alignment tool
+says so itself. Attribution between the three edits, which one capture could never separate.
+Anything about `natural` mode.
 
 ### Open
 
-Whether the `absent` cases written for batch 5 are easier than the corpus's
-existing ones (p ≈ 0.17, underpowered). Whether `adjacent` at 50% on batch 5 is case
-difficulty or a real regression. Whether the seven `disputes-the-premise` failures are
-grader artifacts or model failures — three are verified artifacts, four need labels.
+Whether the `absent` cases written for batch 5 are easier than the corpus's existing ones
+(p ≈ 0.17, underpowered) — the labels agree with the harness on all of them, which is
+consistent with "easier" and does not distinguish it from "correctly answered". Whether
+`adjacent` at 50% on batch 5 is case difficulty or a real regression. Cases 17, 22, 59 and
+125: four `disputes-the-premise` failures that went unsampled and are still undecided. How
+`eval-capture.py` came to store only a follow-up turn for case 187.
 
 ## Next
 
-1. Label the 60 in `evals/review/request-plan-0.3.0.html` — the fresh held-out tranche whole
-   (18) plus the enriched dev sample (42: all 17 dev failures, 25 of 69 dev passes at weight
-   2.76). This is the real non-money cost.
-2. `label-align.py --labels … --grades … --min-id 168` for held-out TPR/TNR, and without
-   `--min-id` for the weighted full-set rates and the Rogan-Gladen correction.
-3. Decide `disputes-the-premise` on the labels, not on this document.
-4. If the three 0.3.0 edits need an actual verdict, budget repeated captures at one version
-   to size the noise band first. A second single capture will not answer it.
+1. **Rewrite `disputes-the-premise` around the construction, not a verb list.** Three labels
+   carry it. Validate the rewrite against 17, 22, 59 and 125 — the unsampled four — rather
+   than against the three that justified it, or it is fitted. Spec change; moves the version
+   pair.
+2. **Label those four.** Cheap, no capture needed, and they decide how wide the rewrite has
+   to be.
+3. **Look at case 187's capture path** before the next sweep. One in 201 stored a follow-up
+   turn instead of the answer; whatever allowed that can happen again.
+4. **Do not re-capture to settle the 0.3.0 edits with a single run.** Repeated captures at
+   one version, to size the noise band, or leave the question open. A second single capture
+   will not answer it.
+5. Held-out negatives are still the scarce resource: 1 from 18. A tranche that reliably
+   produces them is the open design problem, and weighting toward a historically weak cell
+   did not solve it.
