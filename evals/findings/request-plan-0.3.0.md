@@ -148,17 +148,54 @@ enumerated list cannot close it. This is the fourth time the list has been found
 patterns after two more — and each widening was a response to the previous capture's misses.
 The pattern of repair is itself the evidence that enumeration is the wrong mechanism.
 
-### Not changed here
+### The obvious repair was measured, and it does not work
 
-**Still not changed here.** Widening the regex would invalidate the paired comparison above
-by moving the grading surface mid-analysis, so it belongs in a separate change with a
-version move — not in the document that measures the current surface.
+The labels justify a fix, so the fix was attempted. Every variant was measured over all 201
+responses before being applied, and **none is worth applying.** Recall on `refute` against
+firing on `plan` — the latter is the false-pass proxy, since a pattern that matches ordinary
+planning prose would pass a refute case that never refuted:
 
-What has changed is the justification. The fix is no longer argued from reading the regex;
-it is now carried by three human labels that say the grader was wrong and the model was
-right. That is the condition `evals/README.md` sets, and it is met. Rewriting the assertion
-around the construction rather than a verb list is the obvious repair, and it should be
-validated against the four unsampled cases rather than against 210–212.
+| variant | fires on refute | fires on plan | rescues of 7 |
+|---|--:|--:|--:|
+| current | 78% | **57%** | 0 |
+| + open-class `already <verb>` | **100%** | **87%** | 7 |
+| + open-class, first 400 chars | 78% | 49% | 6 |
+| + open-class, first 250 chars | 75% | 41% | 5 |
+
+#### Why widening backfires
+
+The baseline row is the finding: **the current criterion already fires on 57% of responses
+that are not refutations at all.** Widening it to catch all seven takes that to 87% — a
+criterion true of seven answers in eight grades nothing, and on a refute case it becomes a
+false pass. That is the shape that gave the LLM judge a 0% TNR twice and withdrew
+`no-build-plan-for-work-that-exists` at 0.1.0. Position-scoping is the best of the family
+and still fires on 41% of plans for 75% recall.
+
+### Withdrawal does not work either
+
+The other option is to drop the criterion, as 0.1.0 dropped its predecessor. But refute
+cases would then be graded on `cites-evidence` alone, and **that fires on 32 of 32 refute
+responses** — every refute case would pass unconditionally. Withdrawal grades nothing, which
+is worse than grading badly.
+
+### Conclusion: leave it, and read refute grades as a floor
+
+No regex over this text separates a refutation from a plan, because the two correct
+refutation shapes are textually opposite: one **stops** without a template (212), and one
+**refutes then plans the live remainder** (210, 211), which § 4 has required since 0.1.0.
+Nothing lexical spans both while excluding a plan that merely describes what the repo
+already does — and describing that is *good grounding*, not refutation.
+
+#### What is recorded instead
+
+The criterion therefore stays exactly as it is, and the reading is recorded instead:
+**`refute` grades are a floor with a measured false-negative rate of at least 3 of 32
+(labelled) and plausibly 7 of 32.** This is a judge criterion, as the eval set already says
+of its sibling; reaching it needs an evaluator that can read what an answer is *about*.
+
+The recommendation in the previous revision — rewrite it around the construction — was
+wrong. Measuring it before applying it is the only reason that is visible here rather than
+shipped.
 
 Note the direction of the bias: this mode **understates** the pass rate in both captures,
 so it does not distort the paired delta. It does inflate the failure count in each — the
@@ -215,7 +252,14 @@ I wrote "the objective is met" in this document before the labels existed. That 
 and the correction is the point: a tranche designed to contain failures produced one, which
 is what the design could deliver rather than what it promised.
 
-### Case 187 is a capture defect
+### Case 187 is a capture defect, and the mechanism is known
+
+`extract_response()` stores `obj["result"]` from `claude -p --output-format json`. That field
+carries **only the final assistant message**, not all of the turn's assistant output. When
+the model emits its answer and then emits a second message — here, after a background check
+came back — the first is discarded and the second is stored as the whole response.
+
+#### What 187 shows
 
 Its stored response holds only a **follow-up turn** — it opens by reporting a background
 check coming back, refers to "the plan" as already written, and closes by asking whether to
@@ -310,17 +354,21 @@ consistent with "easier" and does not distinguish it from "correctly answered". 
 
 ## Next
 
-1. **Rewrite `disputes-the-premise` around the construction, not a verb list.** Three labels
-   carry it. Validate the rewrite against 17, 22, 59 and 125 — the unsampled four — rather
-   than against the three that justified it, or it is fitted. Spec change; moves the version
-   pair.
-2. **Label those four.** Cheap, no capture needed, and they decide how wide the rewrite has
-   to be.
-3. **Look at case 187's capture path** before the next sweep. One in 201 stored a follow-up
-   turn instead of the answer; whatever allowed that can happen again.
+1. **Do not touch `disputes-the-premise`.** Measured above: every repair is worse than the
+   defect. Read `refute` grades as a floor instead, and record the false-negative rate
+   alongside any refute number quoted from this capture.
+2. **Fix the capture path before the next sweep.** `extract_response()` should take all
+   assistant text from a `stream-json` dispatch rather than the last message from
+   `--output-format json`. Cheap detector in the meantime: flag any record whose
+   `output_tokens` greatly exceeds its stored `response` length for a non-`clarify` case.
+3. **Label 17, 22, 59 and 125** if the refute cell is ever quoted precisely. They no longer
+   gate a rewrite — nothing is being rewritten — so this is now optional rather than
+   blocking.
+### Then
+
 4. **Do not re-capture to settle the 0.3.0 edits with a single run.** Repeated captures at
-   one version, to size the noise band, or leave the question open. A second single capture
+   one version to size the noise band, or leave the question open. A second single capture
    will not answer it.
-5. Held-out negatives are still the scarce resource: 1 from 18. A tranche that reliably
+5. Held-out negatives remain the scarce resource: 1 from 18. A tranche that reliably
    produces them is the open design problem, and weighting toward a historically weak cell
    did not solve it.
