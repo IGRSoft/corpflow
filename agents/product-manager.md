@@ -130,5 +130,16 @@ hygiene, design / Figma / ethics gate detection, open-question batching, version
 PL0 completion checklist, and the required `state-patch.sh` handoff. Nothing in this agent file
 substitutes for it, and no part of PL0 is safe to run from memory.
 
-Non-PL0 invocations (`/estimate`, `/product-requirements`, `/roadmap`, `/milestone`) do not
-need it.
+### Non-PL0 invocations
+
+The `/estimate`, `/product-requirements`, `/roadmap` and `/milestone` entry points do not need it.
+
+## Handoff Protocol
+
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-pl`. Prev→this label: `USER→PL`.
+
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
+### State Patch — REQUIRED before return
+
+PL0's `state-patch.sh` call, the seed payload and every downstream propagation field are specified in `skills/worktask/references/pl0-procedure.md § Handoff Protocol` and `§ Completion Verification` — the only place they exist. This section points there and restates none of it.
