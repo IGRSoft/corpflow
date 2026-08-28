@@ -69,7 +69,8 @@ the tooling is correct; it is not a measurement of any skill's output quality.**
 ## Capture and grading
 
 `scripts/` holds the loop. Capture costs money and needs a credential; grading is
-free and offline.
+free and offline. Human labelling — the step that turns a harness rate into a
+calibrated one — has its own guide in [`labelling.md`](labelling.md).
 
 ```sh
 evals/scripts/eval-capture.py --eval-set skills/request-plan/evals/evals.json --dry-run
