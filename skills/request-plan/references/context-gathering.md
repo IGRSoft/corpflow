@@ -1,12 +1,13 @@
 # Context Gathering
 
-The plan is only as good as the context behind it. Aim for **grounding, not exhaustiveness**: read
-enough that the plan reflects this repo's reality, then stop. Over-reading burns budget and rarely
-changes the recommendation.
+The plan is only as good as the context behind it. Aim for **grounding, not exhaustiveness** — but
+only in the sense SKILL.md gives it: *lean governs how much you read, never how hard you look*.
+Over-reading burns budget and rarely changes the recommendation; under-searching changes which file
+the plan is about, which is the more expensive of the two.
 
 ## Sources, in priority order
 
-Read top-down; stop early once the picture supports scoping, phasing, and sizing.
+Read top-down. Where to stop is not decided here — see `SKILL.md § When you may stop searching`.
 
 ### Sources 1–3 — state, memory, git
 
@@ -27,13 +28,15 @@ Read top-down; stop early once the picture supports scoping, phasing, and sizing
 
 ## When to stop
 
-Stop when the next read wouldn't change **scope, phases, or effort** — concretely, when you can name
-the files/areas that change and roughly how much, know whether an existing utility or command
-already does part of the work, and can place the work on the T-shirt + complexity scale with a
-defensible range.
+**Single-sourced to `SKILL.md § When you may stop searching`.** This file states no termination
+condition of its own, and no other file should either.
 
-If the request is still ambiguous on outcome after a reasonable pass, that is a signal to ask a
-clarifying question — not to keep reading.
+It used to state one, and that copy contradicted SKILL.md for a whole version: it let a search
+end on the searcher's own sense that more reading would not help, which is the judgement a search
+that never reached the owning file is least able to make. Two surfaces answering the stop question
+differently is how a plan ends up confident and about the wrong module.
+
+Ambiguity is § 1's question, not this file's: see `SKILL.md § Ask or plan`.
 
 ## Anti-patterns
 

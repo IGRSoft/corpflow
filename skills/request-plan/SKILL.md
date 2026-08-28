@@ -2,7 +2,7 @@
 name: request-plan
 description: Use when the user asks for a plan, an approach, a breakdown, "how would you tackle this", or scoping — even without the word "plan". Turn a free-form request into a context-aware plan (goal, scope, phases, effort, risks) and recommend `/worktask`.
 effort: medium
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Request Plan
@@ -196,6 +196,10 @@ misdiagnosed, unreproducible, or absent from the file it was blamed on still emi
 work, and on a present-tense report `--emergency` is the tier that triages it. Prose naming the tier
 ("route this to incident response") is not the line; the line is a command the user can paste.
 
+"Absent from the file it was blamed on" bounds this to a file that exists whose defect sits
+elsewhere. A request whose *subject system* the repo does not contain is § 1's "no surface at
+all" branch instead, and § 1 wins: ask, emit no line.
+
 ##### One narrow exception: asked to BUILD what already exists, with nothing left
 
 All three must hold: the request asks to **build, add or fix** something; the search shows it
@@ -242,6 +246,6 @@ Staying lightweight is the point; resist padding the output toward those heavier
 
 | File | Read when |
 |------|-----------|
-| `references/context-gathering.md` | Step 2 — deciding what context to read and when to stop |
+| `references/context-gathering.md` | Step 2 — which sources to read, in priority order |
 | `references/plan-template.md` | Step 3 — the exact output structure to fill |
 | `references/handoff.md` | Step 4 — mapping effort to a worktask trigger |

@@ -379,3 +379,17 @@ consistent with "easier" and does not distinguish it from "correctly answered". 
 5. Held-out negatives remain the scarce resource: 1 from 18. A tranche that reliably
    produces them is the open design problem, and weighting toward a historically weak cell
    did not solve it.
+6. **The 13 graded failures were re-diagnosed, and the first diagnosis was wrong.** They
+   were read as a missing rule each. They are not: `request-plan` states each of those
+   rules more than once and the copies contradict each other, so every one is a model
+   correctly following the wrong copy — `SKILL.md § 4` against `§ 1` for the four
+   name-the-absence-then-plan answers, `references/context-gathering.md` carrying the
+   refuted 0.2.0 stop condition against `SKILL.md` for the eight neighbour-stops, and
+   `references/handoff.md`'s topic-flavour `--secure` bullet against canon for case 80.
+   All three are reconciled at SKILL.md 0.4.0 and pinned by parity contracts; see the
+   `evals.json` `grading` entry. Consistent with item 4 above: **no re-capture was
+   commissioned to prove it**, and none should be. Two theories were tested and disproved
+   and should not be revived — that the capability registry hid the excluded file classes
+   (5 of the 8 neighbour-stops ground on registry-*enumerated* files), and that the tier
+   drift needed a new prohibition (`handoff.md` already carried one, undone by the drifted
+   bullet 15 lines above it).

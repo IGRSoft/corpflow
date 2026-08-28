@@ -24,7 +24,7 @@ Emit exactly one of these, with the restated goal as the payload:
 
 | Tier | Line to emit | For |
 |------|--------------|-----|
-| `--secure` | `/worktask --secure "<goal>"` | work handling credentials, tokens, secrets, PII, payments, authn/authz, or untrusted input — any size |
+| `--secure` | `/worktask --secure "<goal>"` | the request names credentials, tokens, secrets, PII, payments, authn/authz, or untrusted input — any size |
 | `--emergency` | `/worktask --emergency "<goal>"` | something is broken right now and still failing |
 | `/worktask` | `/worktask "<goal>"` | everything else — PL0 dynamic sizing picks the stage set |
 | split | `/worktask "<first sub-task>"` | XL — name the ≤ L sub-tasks, then trigger the first |
@@ -46,14 +46,22 @@ whole XL goal. "Split first, no command" leaves the user with nothing to paste, 
 **Prose and the command line are one recommendation, and the line is the part that executes.** Before
 emitting it, read back what the plan body claims:
 
-- body argues the **request** asked for security review, threat modelling, or credential/PII
-  handling → the line carries `--secure`
+- body argues the **request** names one of the assets in the `--secure` row above (canon's list,
+  from `skills/estimation-methodology/SKILL.md § Worktask Tier Selection`) → the line carries
+  `--secure`
 - body argues the thing is broken right now and still failing → the line carries `--emergency`
 - body argues neither → the line is plain, and the plan says so rather than leaving it implied
 
-A plan that argues for a security review "before merge, not just standard DR" and then emits a plain
+A plan whose body says the request puts user tokens in a new store and then emits a plain
 `/worktask` has recommended two different things. Fix whichever is wrong — if the body overstated
 what the request asked for, cut the claim; if it did not, carry the flag. Do not ship the pair.
+
+#### The claim to read back is an asset, not a topic
+
+The `--secure` row asks which **asset** the request names, never how security-flavoured the topic
+sounds. Canon rules the topic reading out (`estimation-methodology § What the two escalations are
+not`), so a request to review, audit or threat-model something names no asset by itself. The row
+above quotes canon's list; this file states it once and keeps no second copy.
 
 #### Reporting a surface you found is not arguing for the flag
 
@@ -69,8 +77,8 @@ secret, which in a plugin is most of them.
 
 One line of rationale tied to the size/complexity you computed — e.g.:
 
-> **Recommended:** `/worktask --secure "add Keychain-backed settings store"` — M-sized, touches
-> credential storage (security-sensitive), so the full pipeline with its security review stage applies.
+> **Recommended:** `/worktask --secure "add Keychain-backed settings store"` — M-sized, and the
+> request names credential storage, so the full 11-stage pipeline applies.
 
 If the user might want formal requirements or a budget first, name the command: `/product-requirements`
 for a PRD, `/estimate --detailed` for hours and budget.

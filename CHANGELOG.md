@@ -41,6 +41,37 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Changed
 
+- **`request-plan` 0.3.0 → 0.4.0 — three drifted rule copies reconciled.** The 0.3.0 capture's 13
+  graded failures were first diagnosed as a missing rule each. That was wrong: the skill states
+  each of these rules more than once and the copies contradict each other, so every failure is a
+  model correctly following the wrong copy. All three fixes remove a copy; none adds a fourth.
+  - **`SKILL.md § 4`'s "absent from the file it was blamed on" is bounded.** It licensed a plan for
+    a defect the repo does not contain, which `§ 1`'s ask branch prohibits. It now covers only a
+    file that exists whose defect sits elsewhere; anything else is `§ 1`'s, and `§ 1` wins.
+  - **`references/context-gathering.md` no longer states a stop condition.** It carried the
+    refuted 0.2.0 rule verbatim for a whole version while `SKILL.md` rejected it in as many words;
+    eight responses stopped at a plausible neighbour. The section points at `SKILL.md` instead.
+  - **All three tier-trigger copies reconciled to canon.** `handoff.md` listed "security review,
+    threat modelling" — topic flavour that `estimation-methodology` rules out by name — its
+    `--secure` table row still framed the trigger as "work handling" a protected asset, the
+    discovery reading canon replaced at 0.3.0, and `plan-template.md` said a security-sensitive
+    surface *forces* the tier, contradicting canon's "a surface you discover does not raise the
+    tier". The asset list is now enumerated in exactly one place under `skills/request-plan/`.
+  - **Pinned by new parity contracts** in `tests/shell/skills/request-plan-contracts.bats` —
+    stop-condition single-sourcing, asset-enumeration-exists-once, and a subset check whose two
+    sides are both *extracted* (canon's surface-check pseudocode; `handoff.md`'s `--secure` row)
+    rather than restated in the test, so a novel non-canon term fails on membership and not on a
+    deny-list. Each has a paired can-actually-fail test. The absence of any of them let the drift in.
+  - **`capability-registry.sh` closes stdout with a class-level trailer** naming what it does not
+    enumerate. Complete-by-construction over six classes reads as complete over the repo unless the
+    output says otherwise. Classes only, never a file, so no eval case becomes a lookup.
+
+  Per the spec-change rule this applies from a 0.4.0 capture forward; 0.3.0 labels are not
+  re-flipped. It will not fix all eight stop-at-a-neighbour failures and **cannot be cleanly
+  measured** — cases 202 and 203 are structurally identical and split, which is variance, not a
+  rule difference. Repairing verified drift stands on its own merits; no re-capture should be
+  commissioned to prove it.
+
 - **`request-plan` 0.2.0 → 0.3.0 and `estimation-methodology` 0.2.0 → 0.3.0**, resolving the two
   rule contradictions the 0.2.0 calibration measured. Both are fixed at the surface rather than by
   restating the losing rule, which is what created the contradictions in the first place.

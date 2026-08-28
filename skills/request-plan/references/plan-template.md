@@ -48,8 +48,9 @@ T-shirt size + 5-factor complexity (0–25) per `skills/estimation-methodology/S
 | <XS–XL> | <score> | key drivers (new tech, integration points, unknowns) |
 
 ## Risks & Dependencies
-The 2–4 things most likely to derail this, each with a one-line mitigation. Flag any
-security-sensitive surface (auth / PII / payments) explicitly — it forces the worktask tier.
+The 2–4 things most likely to derail this, each with a one-line mitigation. Name any credential,
+PII or payment surface you found — it does not move the tier; only an asset the **request** names
+does (`skills/estimation-methodology/SKILL.md`).
 
 ## Recommended next step
 **Surface check:** the verdict, then why — e.g. `no credential, untrusted-input or live-failure
