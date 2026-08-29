@@ -172,6 +172,15 @@ relevant directories — less per-worktree disk, faster init:
 { "worktree": { "sparsePaths": ["src/", "tests/", "Package.swift"] } }
 ```
 
+#### Including gitignored paths (`.worktreeinclude`)
+
+`.worktreeinclude` names paths to carry into a new worktree even when gitignored. A pattern
+starting with `**/` no longer silently matches nothing when its target lives inside a gitignored
+directory — before that fix such a line looked correct and copied nothing.
+
+A background session and its subagents can now edit files inside a worktree the session created
+itself with `git worktree add`; the isolation check used to block that and stall the lane.
+
 ### Unattended Execution
 
 A batch cannot stop for one issue's approvals, so every per-issue `PL0` is stamped

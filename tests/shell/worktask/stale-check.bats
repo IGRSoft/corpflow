@@ -74,6 +74,67 @@ agents_file() {
   assert_output --partial "[alive-parked]"
 }
 
+@test "hook-config-broken: a hook schema error is operator-owned, not a SendMessage nudge" {
+  local w; w="$(mk_tmpworkdir)"
+  mk_ledger "$w" "$(in_progress DV0 DV)" "$(dispatch DV0 DV sess-dv0)"
+  agents_file "$w/agents.json" \
+    '[{"id":"sess-dv0","state":"blocked","hookError":"PreToolUse hook returned invalid JSON"}]'
+
+  run_script_env --cwd "$w" "$SCRIPT" --agents-json "$w/agents.json"
+  assert_failure 1
+  assert_output --partial "[hook-config-broken]"
+  assert_output --partial "fix the hook"
+  # The remedy must NOT be the ordinary parked one: a nudge is rejected again.
+  refute_output --partial "[alive-parked]"
+}
+
+@test "reattach-undeliverable: a refused send outranks the parked verdict" {
+  local w; w="$(mk_tmpworkdir)"
+  mk_ledger "$w" "$(in_progress DV0 DV)" "$(dispatch DV0 DV sess-dv0)"
+  agents_file "$w/agents.json" '[{"id":"sess-dv0","state":"blocked"}]'
+  printf '%s\n' \
+    '{"actor":"orchestrator","action":"reattach_send_result","subject":"DV0","task_id":"DV0","result":"blocked","metadata":{"reason":"refused"}}' \
+    > "$w/.context/logs/audit.jsonl"
+
+  run_script_env --cwd "$w" "$SCRIPT" --agents-json "$w/agents.json"
+  assert_failure 1
+  assert_output --partial "[reattach-undeliverable]"
+  assert_output --partial "still parked, not nudged"
+}
+
+@test "reattach-undeliverable: a later successful send clears the override" {
+  # ANTI-VACUITY: without last-wins semantics every stage that ever had a failed
+  # send would stay flagged forever, and the class would be noise.
+  local w; w="$(mk_tmpworkdir)"
+  mk_ledger "$w" "$(in_progress DV0 DV)" "$(dispatch DV0 DV sess-dv0)"
+  agents_file "$w/agents.json" '[{"id":"sess-dv0","state":"blocked"}]'
+  {
+    printf '%s\n' '{"action":"reattach_send_result","task_id":"DV0","result":"blocked"}'
+    printf '%s\n' '{"action":"reattach_send_result","task_id":"DV0","result":"ok"}'
+  } > "$w/.context/logs/audit.jsonl"
+
+  run_script_env --cwd "$w" "$SCRIPT" --agents-json "$w/agents.json"
+  assert_failure 1
+  assert_output --partial "[alive-parked]"
+  refute_output --partial "[reattach-undeliverable]"
+}
+
+@test "reattach-undeliverable: a settled dispatch keeps its reconcile remedy" {
+  # The override applies only where a nudge is the remedy. A dispatch record that is
+  # already terminal never sends again, so a stale failed row must not hide
+  # dispatch-settled behind delivery advice that can no longer apply.
+  local w; w="$(mk_tmpworkdir)"
+  mk_ledger "$w" "$(in_progress DV0 DV)" "$(dispatch DV0 DV sess-dv0 completed)"
+  agents_file "$w/agents.json" '[{"id":"sess-dv0","state":"blocked"}]'
+  printf '%s\n' '{"action":"reattach_send_result","task_id":"DV0","result":"blocked"}' \
+    > "$w/.context/logs/audit.jsonl"
+
+  run_script_env --cwd "$w" "$SCRIPT" --agents-json "$w/agents.json"
+  assert_failure 1
+  assert_output --partial "[dispatch-settled]"
+  refute_output --partial "[reattach-undeliverable]"
+}
+
 @test "gone: an absent agent_id yields re-delegate (single stage stays 'gone')" {
   local w; w="$(mk_tmpworkdir)"
   mk_ledger "$w" "$(in_progress DV0 DV)" "$(dispatch DV0 DV sess-dv0)"

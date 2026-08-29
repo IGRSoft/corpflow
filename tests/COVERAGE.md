@@ -156,6 +156,9 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `hooks/dv-comment-density-gate.sh` | `tests/shell/hooks/comment-density-gate.bats` (aliased) | — | — | — |
 | `hooks/test-execution-gate.sh` | `tests/shell/hooks/test-execution-gate.bats` | — | — | — |
 | `hooks/state-merge.sh` | `tests/shell/hooks/state-merge.bats` | — | — | — |
+| `hooks/model-switch-lib.sh` | `tests/shell/hooks/model-switch-lib.bats` | — | — | — |
+| `hooks/model-switch-gate.sh` | `tests/shell/hooks/model-switch-gate.bats` | — | — | — |
+| `hooks/model-switch-audit.sh` | `tests/shell/hooks/model-switch-audit.bats` | — | — | — |
 
 ### Shell scripts — dv-screenshot (DV0c, kcov)
 

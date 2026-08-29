@@ -28,6 +28,8 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 | `MessageDisplay` | A message is displayed to the user | — | `message`, `role` (`user`/`assistant`), `display_type` |
 | `SessionStart` | Session begins | — | `session_id`, `session_title`, `reloadSkills` (bool), `source` (session origin — a forked session reports `"fork"`, not `"resume"`) |
 | `Notification` | Background agent needs input or finishes; also permission prompts (incl. Claude Desktop / VS Code, fixed CC 2.1.233) | — | reason ∈ `agent_needs_input` / `agent_completed` |
+| `PreModelSwitch` | A model switch is about to apply (CC 2.1.251) | — | UNCONFIRMED — see § Model-Switch Hooks |
+| `PostModelSwitch` | A model switch has applied (CC 2.1.251) | — | UNCONFIRMED — see § Model-Switch Hooks |
 
 ### Notification as resume wake-up
 
@@ -39,6 +41,10 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 - `reloadSkills: true` reloads plugin skills mid-session (e.g. after `/reload-skills`), re-announcing **only changed skills** — listeners must re-apply skill-specific initialization idempotently, never assuming every skill re-announces. `sessionTitle` (UI session title) rides alongside it.
 - Events stream in headless sessions, so a headless run cannot idle-reap remote workers mid-hook before the handler finishes.
+- Resume hooks additionally receive the session's **staleness and an estimated re-cache cost** (field names unconfirmed), which is what lets the resume loop weigh reattach against re-dispatch instead of assuming reattach is cheaper — policy: `skills/worktask/references/resume.md § Step 0 notes — reattach vs re-dispatch has a price`.
+
+#### SessionStart — form & grant floor
+
 - Plugin hooks use `${CLAUDE_PLUGIN_ROOT}` exec-form (`type: command` + `args`); `${user_config.*}` shell-form hook commands are rejected at load, which does not affect them.
 - A `PreToolUse` auto-allow inside a background agent task (summaries, compaction, renames) can no longer grant tools the agent's own `tools:` list denies — the grant list is the floor.
 
@@ -48,7 +54,11 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 - Parent agents reliably recover subagent results after compaction; background agents that are killed or interrupted preserve partial results in context. `PostCompact` can re-inject critical state.
 #### Payload, monitor & stall notes
 
-- Hook output over 50K characters is saved to disk with a file path + preview injected instead of the full output, protecting the context budget.
+- Hook output over 50K characters is saved to disk with a file path + preview injected instead of the full output, protecting the context budget. A hook or background agent emitting **megabytes** of error output can no longer overflow the conversation and wedge the session on "Prompt is too long".
+- A hook whose stdout is a `{…}` object that is **not valid JSON** is reported as a hook error naming the parse failure, instead of being silently read as plain text — a malformed gate verdict now fails loudly rather than passing as prose.
+
+##### Payload fields, monitors & stalls
+
 - PreToolUse/PostToolUse hooks receive `file_path` as an absolute path for Write/Edit/Read tools; `UserPromptSubmit` hooks receive `hookSpecificOutput.sessionTitle`, so a hook can react to or log the session title.
 - Plugins declare long-running background monitors via the `monitors` manifest key — they stream events into the session without occupying a foreground tool call.
 - Stalled subagents fail with a clear error after 10 minutes; surface it and retry or escalate rather than waiting (`skills/agent-coordination/SKILL.md § Stall Timeout`).
@@ -83,7 +93,7 @@ The surfaces are symmetric — the hook embeds remediation in the block JSON, th
 
 ### OTEL Dispatch Tree Parenting
 
-`claude_code.tool` spans carry `agent_id` and `parent_agent_id`, and subagent spans nest under the dispatching `Agent` tool span instead of orphaning. **Plugin impact**: with a collector wired via `settings.json` → `otelExporter`, the PL→…→ST dispatch becomes one nested trace tree, and an orphan span identifies a subagent that escaped the chain.
+`claude_code.tool` spans carry `agent_id` and `parent_agent_id`, and subagent spans nest under the dispatching `Agent` tool span instead of orphaning. **Plugin impact**: with a collector wired via `settings.json` → `otelExporter`, the PL→…→ST dispatch becomes one nested trace tree, and an orphan span identifies a subagent that escaped the chain. A tool execution deferred by a `PreToolUse` hook resumes in the **original turn's** trace rather than starting a new one, so a gated call stays attributed to the stage that made it.
 
 #### Hook-stdin forward-compat
 
@@ -160,7 +170,7 @@ One canonical `settings.json` block covering every hook shape — `matcher`, the
 
 ## Conditional Hook Execution
 
-The `if` field uses permission-rule syntax to avoid unnecessary process spawning. It handles compound commands (`ls && git push`) and env-var prefixes (`FOO=bar git push`), and path-conditional matchers on `Read`/`Edit`/`Write` match the target file path. Path-glob anchoring: a single-segment `dir/**` matches only `<cwd>/dir` — write `**/dir/**` for any-depth matching.
+The `if` field uses permission-rule syntax to avoid unnecessary process spawning. It handles compound commands (`ls && git push`) and env-var prefixes (`FOO=bar git push`), and path-conditional matchers on `Read`/`Edit`/`Write` match the target file path. Path-glob anchoring: a single-segment `dir/**` matches only `<cwd>/dir` — write `**/dir/**` for any-depth matching. A condition like `Bash(cat *)` no longer false-positives on an unrelated Bash command that merely contains `$()` or backticks followed by further arguments.
 
 ### Matcher semantics
 
@@ -196,6 +206,11 @@ Hook payloads include `effort.level` and the `$CLAUDE_EFFORT` env var carries th
 - A hook-callback timeout is reported as a timeout and infrastructure errors as such — never as a user rejection. Route them as transient failures, not refusals.
 - Unrecognized hook event names in `settings.json` do not break the file, so forward-compatible configs survive CC downgrades.
 
+#### Deleted cwd & broken-hook parks
+
+- Hooks no longer fail with `posix_spawn ENOENT` after the session's working directory was deleted; they run from the project root or home directory instead. A hook must therefore not assume its cwd still exists — resolve paths from an explicit root, as `hooks/model-switch-lib.sh` and `hooks/state-merge.sh` do.
+- A background session parked because a `PermissionRequest`/`PreToolUse` hook printed an **invalid answer** now shows a `claude agents` row naming the hook and the schema error rather than waiting silently. Read it as an operator-owned park, not a stage to re-dispatch (`skills/worktask/references/resume.md § Live-agent rows — broken hook configuration`).
+
 #### Config-error hints & main-thread agents
 
 - Configuring a prompt-type or agent-type hook for `SessionStart`, `Setup`, or `SubagentStart` is rejected at load with a "use a command-type hook instead" message rather than a silent runtime no-op: stage-lifecycle hooks that must react before any session message exists MUST be `type: "command"` (or `type: "mcp_tool"`).
@@ -205,13 +220,30 @@ Hook payloads include `effort.level` and the `$CLAUDE_EFFORT` env var carries th
 
 Hook JSON output accepts `terminalSequence` — `{"hookSpecificOutput": {"terminalSequence": "\u001b]9;Stage QA complete\u0007"}}` — emitting desktop notifications (OSC 9 / OSC 99), window-title updates (OSC 0/2), and bells (BEL `\x07`) without owning a controlling terminal. Use it on `SubagentStop`, `StopFailure`, and `Stop` in headless or background sessions where the parent UI should still notify; pair with the `monitors` manifest key for plugin-level notifications that survive a missing TTY (CI, `claude agents` dispatch).
 
+## Model-Switch Hooks
+
+`PreModelSwitch` can **block, confirm, or annotate** a model switch; `PostModelSwitch` observes one that already applied. corpflow uses the pair to keep a stage on the tier it was dispatched with: `hooks/model-switch-gate.sh` refuses a mid-worktask re-tier away from `metadata.model`, and `hooks/model-switch-audit.sh` records `model_switched` so cost is attributed to the model that actually ran rather than the one requested.
+
+| Registered hook | Event | Decision |
+|---|---|---|
+| `hooks/model-switch-gate.sh` | `PreModelSwitch` | `block` on an unexplained family change, `confirm` on an explicit user switch, `annotate` on a fallback or an unreadable payload, silent otherwise |
+| `hooks/model-switch-audit.sh` | `PostModelSwitch` | none — appends one `model_switched` row, gated on an existing ledger |
+
+### Payload schema — read defensively
+
+The payload shape is **unconfirmed**: these events postdate every doc in this repo and no live payload has been observed. Only `session_id` and `agent_id` are assumed present by analogy with the other hook payloads; destination model, origin model and trigger are each read through a first-match coalesce over several candidate spellings. The reference implementation and its CONFIRMED/ASSUMED split live in `hooks/model-switch-gate.sh`'s header — update both together when a live payload pins the real names, per § Schema Versioning Watch in `headless-dispatch.md`.
+
+#### Why this gate fails open
+
+The gate's pin is **not** guessed: it reads `.facts.dispatched_agents[].model_requested` (`skills/worktask/references/handoff-protocol.md § facts — dispatched_agents`). That asymmetry is what makes it fail open — a block is reachable only once the destination coalesce matches a real field, so a wholly wrong guess degrades to annotate-or-silent rather than to a spurious block. A model-switch gate that failed closed on a malformed payload would wedge every session that switches models, which is why it does not follow the fail-closed posture used for the completion sweeps.
+
 ## Agent Teams Lifecycle Hooks
 
 With agent teams enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), two more events support event-driven orchestration in megatask mode, where the lead reacts to teammate progress automatically:
 
 | Hook Event | Fires When | Payload Fields | Use Case |
 |------------|------------|----------------|----------|
-| `TeammateIdle` | Teammate finishes work and becomes idle | `agent_id`, `agent_type` | Assign next task, reassign work |
+| `TeammateIdle` | Teammate finishes work and becomes idle | `agent_id`, `agent_type`; the notification now carries the teammate's **final answer** | Read the lane's result directly; assign next task |
 | `TaskCompleted` | A task in the shared task list is completed | `agent_id`, `agent_type` | Trigger dependent stages, update orchestrator |
 
 ### Stopping teammates programmatically

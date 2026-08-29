@@ -140,6 +140,10 @@ In any cc-update whose CC version delta touches the `claude agents` CLI surface,
 
 > Interactive-row variant returned `{cwd, kind, name, pid, sessionId, startedAt}` — the same camelCase shape as 2.1.175 plus a new optional **`name`** key (readable default session names; also the `SendMessage`/`/rename` address — `/rename` on background sessions persists across restarts). Agent-row variant still unconfirmed. Baseline-shift rule not triggered — additive optional key on the interactive variant only.
 
+#### Watch run — CC 2.1.234→2.1.251 band (from release notes, not observed)
+
+> Behaviour confirmed, JSON shape **not**: live **teammates** now appear in `ListAgents`/`claude agents --json` (previously absent, so a reachable teammate read as gone), a session can identify **its own row** by name, and the pre-warmed idle worker no longer appears until a task claims it — removing a phantom row from the resume pre-check. Next live watch run must confirm the teammate row's `kind` discriminator and whether own-name reuses the existing `name` key (2026-07-07 baseline) or arrives as a new one. Baseline-shift rule not triggered on the strength of release notes alone.
+
 #### Defensive jq pattern
 
 Canonical for any plugin code reading this output:
@@ -162,6 +166,12 @@ On a baseline shift (new required field, renamed field, type change), the next c
 #### Child tool grants: `--tools`, MCP denials & WebSearch
 
 > `--tools` listing `Grep`/`Glob` wires up dedicated native search tools rather than shelling out — relevant only to a runner hand-building the `--tools` set; the in-process `Task()` path inherits agent-frontmatter `tools:` unchanged. A subagent's `disallowedTools` honors MCP **server-level** specs (`mcp__server`, `mcp__*`), so a cross-plugin dispatch can deny a whole server to a child instead of enumerating tools. `WebSearch` works inside subagents (~200 calls/session, `CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION` tunes it). Auth-capable MCP servers hide auth-stub tools from headless / SDK runs, so a child never sees stubs it cannot complete.
+
+## Session Lifecycle CLI (attach / logs / stop / respawn / rm)
+
+`claude attach <id>` attaches a terminal to a **running** background session; `--resume` is for a **stopped** conversation. The two are not interchangeable, and the `--resume` message now prints the exact `attach` command when the target is still running. `logs`, `stop`, `respawn`, and `rm` complete the surface, all documented in `claude --help`.
+
+These are **operator** tools. The orchestrator's own reattach path stays `SendMessage` (`skills/worktask/references/resume.md`) — `attach` changes what a human debugging alongside a run can do, not what the loop does. Two lifecycle fixes worth relying on: `claude agents`/`claude rm` no longer refuse to delete a session whose worktree branch was merged locally but not pushed, and a weeks-old background session is no longer resurrected after the machine was off — it shows as stopped at its real end and asks before resuming.
 
 ## Permission-Mode Pinning (in-process)
 

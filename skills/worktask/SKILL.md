@@ -1076,7 +1076,10 @@ never on the shape of the return message, so a normally-completed stage still ta
       const incHandoff = fs.existsSync(incArtifact) ? parseFrontmatter(incArtifact) : null;
       const selfPatched = post.tasks?.[task.id]?.status === "completed"
                           && Boolean(post.tasks[task.id].verdict);
-      const incomplete = !selfPatched && !incHandoff?.verdict;
+      // Incomplete even WITH a verdict: a maxTurns stop can land after the frontmatter is
+      // written. Field name unconfirmed — read defensively, re-check at the next /cc-update.
+      const maxTurnsPartial = Boolean(launchAck?.partial);
+      const incomplete = maxTurnsPartial || (!selfPatched && !incHandoff?.verdict);
 ```
 
 ##### Step 6.5a2 — mark & audit
@@ -1091,7 +1094,8 @@ never on the shape of the return message, so a normally-completed stage still ta
           metadata: {
             artifact: incArtifact,
             artifact_present: fs.existsSync(incArtifact),
-            reason: fs.existsSync(incArtifact) ? "handoff_verdict_missing" : "artifact_absent",
+            reason: maxTurnsPartial ? "max_turns_partial"
+                    : fs.existsSync(incArtifact) ? "handoff_verdict_missing" : "artifact_absent",
           },
         });
 ```
@@ -1108,6 +1112,51 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
         continue;   // never falls through to the completion patch
       }
 ```
+
+##### Step 6.5a3 — why a cross-session ask needs its own arm
+
+A stage that needs another **session's** answer cannot get it: a subagent's `SendMessage` to a
+session delivers the reply into the *parent* conversation, so a stage agent that sent its own ask
+would wait for something that structurally never arrives. The stage therefore returns
+`verdict:"blocked"` naming who to ask and what, and the orchestrator — which *is* the session that
+receives the reply — sends on its behalf. Without this arm the return reads as an ordinary blocked
+verdict and burns a retry on a stage that never failed.
+
+##### Step 6.5a3 — cross-session ask (blocked-on-peer return)
+
+```typescript
+      // …continued: after the 6.5a2 block
+      const ask = incHandoff?.cross_session_ask;
+      if (!incomplete && incHandoff?.verdict === "blocked" && ask) {
+        atomicMergeStateJson({ tasks: { [task.id]: { status: "in_progress" } } });
+        // notify_when_idle: one-shot wake instead of polling `claude agents --json`.
+        // Same-machine peers only; a remote peer simply never wakes us and the row stays deferred.
+        SendMessage({ to: ask.to, notify_when_idle: true, message: ask.question });
+        appendAudit({
+          actor: "orchestrator", action: "cross_session_ask", subject: task.id,
+          result: "deferred",
+          metadata: { to: ask.to, question: ask.question, leg: "ask" },
+        });
+        continue;   // siblings keep moving; this stage is parked, not failed
+      }
+```
+
+##### Step 6.5a3 — relaying the answer
+
+The reply arrives in the orchestrator's own conversation on a later turn. Relay it and log the
+second leg; the `deferred`/`ok` pair is what `references/resume.md § Reply routing` branches on.
+
+```typescript
+        SendMessage({ to: dispatchEntry(state, task.id).agent_id ?? subagentType, message: reply });
+        appendAudit({
+          actor: "orchestrator", action: "cross_session_ask", subject: task.id,
+          result: "ok", metadata: { to: ask.to, leg: "relay" },
+        });
+```
+
+Check the send result on both legs (`references/resume.md § Reattach rows — the SendMessage has a
+result too`): anything but delivered leaves the stage parked rather than awaiting an answer that
+was never asked for.
 
 ##### Step 6.5 — Layer 2 (synchronous patch)
 
@@ -1145,6 +1194,9 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
       // 6.5b. Flip the dispatch entry to "completed", backfilling model_resolved when the runtime
       //       surfaced it. Re-read state here (not the stale step-4.0 snapshot) so this maps over
       //       the fresh dispatched_agents[] that step 6a appended the `launched` entry to.
+      //       Two paths make resolved differ from requested: a managed-allowlist step-down, and a
+      //       first-call 404 falling through the session's fallback-model chain. Attribute this
+      //       stage's cost to model_resolved, never to model_requested.
       const stateForDispatch = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
       atomicMergeStateJson({
         facts: {

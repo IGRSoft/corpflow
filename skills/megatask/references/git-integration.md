@@ -66,11 +66,13 @@ worktree when resuming from background.
 | Milestone complete | `git worktree prune` to remove all stale entries |
 | PR created (context) | Archive `.context/` to `.context.archive/{timestamp}/`; keep workspace.json + handoff.md |
 
+A **running** backgrounded lane holds its worktree's lock for the duration, so the `PR created` row cannot race a lane still working in the same worktree — no liveness probe is needed before `git worktree remove`. The removal either succeeds or fails loudly against a live lock.
+
 ### Edge Cases
 
 1. **Uncommitted changes**: `removeIssueWorktree()` checks `git status --porcelain` and refuses removal by default; `force=true` overrides.
 2. **Failed issues**: worktree preserved with `status: "failed"` in orchestrator — inspect and retry.
-3. **Stale worktrees**: interrupted parallel runs are auto-cleaned on startup; manual fallback `git worktree prune`.
+3. **Stale worktrees**: interrupted parallel runs are auto-cleaned on startup; manual fallback `git worktree prune`. The background retention sweep no longer removes `.claude/worktrees/` trees you created yourself when a stale background-session record pointed at them, so a hand-made worktree survives an unrelated session's cleanup.
 4. **Disk space**: each worktree duplicates the working tree — on large repos monitor `du -sh .worktrees/`.
 
 ## Conflict Recovery
