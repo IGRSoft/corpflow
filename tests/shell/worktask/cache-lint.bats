@@ -77,6 +77,125 @@ EOF
   assert_output ""
 }
 
+# --- the universal `## elicitation-sweep` anchor ------------------------------
+
+@test "failure: --anchor-lint rejects a DV artifact whose only gap is the sweep anchor" {
+  # Every DV table anchor present; only the universal one is missing, so the diagnostic
+  # cannot be satisfied by an unrelated omission.
+  cat > "$WD/no-sweep.md" <<'EOF'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "all four DV anchors, no sweep heading"
+  refs: { dev: development.md#files-changed }
+---
+# Development
+
+## files-changed
+
+x
+
+## tests-added
+
+x
+
+## deviations
+
+none
+
+## follow-ups
+
+none
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/no-sweep.md"
+  assert_failure 1
+  [[ "$stderr" == *"missing: elicitation-sweep"* ]]
+  assert_output ""
+}
+
+@test "happy: the same artifact passes once ## elicitation-sweep is appended (twin)" {
+  cp "$WD/development-0.md" "$WD/twin.md"
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/twin.md"
+  assert_success
+  # Strip the sweep heading and it must fail — the fixture's pass is not incidental.
+  grep -v '^## elicitation-sweep$' "$WD/twin.md" > "$WD/twin-stripped.md"
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/twin-stripped.md"
+  assert_failure 1
+  [[ "$stderr" == *"missing: elicitation-sweep"* ]]
+}
+
+# Per-stage anchor rows come from the script itself, so a new stage cannot be added
+# without this loop covering it.
+_anchors_for_stage() {  # <stage>
+  awk -v s="$1" '
+    /^anchors_for_stage\(\) \{/ { f = 1; next }
+    f && /^\}/ { exit }
+    f && $0 ~ "^    " s "\\) echo " {
+      sub(/^[^"]*"/, ""); sub(/".*$/, ""); print; exit
+    }
+  ' "$PLUGIN_ROOT/$SCRIPT"
+}
+
+@test "contract: for all 13 stages the exact table anchors fail without the sweep heading and pass with it" {
+  local stage anchors a n=0
+  for stage in PL AR TL DV DR SR QA DC RE FN ST IR ET; do
+    anchors="$(_anchors_for_stage "$stage")"
+    [ -n "$anchors" ] || fail "non-vacuity: no anchor row extracted for $stage"
+    n=$((n + 1))
+    {
+      printf -- '---\nhandoff:\n  stage: %s\n  verdict: ok\n  summary: "s"\n' "$stage"
+      printf '  refs: { dev: development.md#files-changed }\n---\n\n'
+      for a in $anchors; do printf '## %s\n\nx\n\n' "$a"; done
+    } > "$WD/loop-$stage.md"
+    run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/loop-$stage.md"
+    assert_failure 1
+    [[ "$stderr" == *"missing: elicitation-sweep"* ]] \
+      || fail "$stage: expected a missing-sweep diagnostic, got: $stderr"
+    printf '## elicitation-sweep\n\nnothing to elicit\n' >> "$WD/loop-$stage.md"
+    run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/loop-$stage.md"
+    assert_success
+  done
+  [ "$n" -eq 13 ] || fail "non-vacuity: only $n stages exercised"
+}
+
+# --- PL: ## summary is mandatory; design-preview / test-strategy are optional ---
+
+_pl_artifact() {  # _pl_artifact <path> <extra-headings...>
+  local path="$1" h
+  shift
+  {
+    printf -- '---\nhandoff:\n  stage: PL\n  verdict: ok\n  summary: "s"\n'
+    printf '  refs: { plan: planning-0.md#requirements }\n---\n\n'
+    for h in requirements acceptance-criteria scope out-of-scope risks complexity stages \
+             elicitation-sweep "$@"; do
+      printf '## %s\n\nx\n\n' "$h"
+    done
+  } > "$path"
+}
+
+@test "failure: --anchor-lint rejects a PL plan with no ## summary" {
+  # pl0-procedure.md mandates `## summary` unconditionally; anchor-lint used to call it
+  # unexpected, so every real plan file failed the lint its own procedure demands.
+  _pl_artifact "$WD/pl-no-summary.md"
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/pl-no-summary.md"
+  assert_failure 1
+  [[ "$stderr" == *"missing: summary"* ]]
+}
+
+@test "happy: a PL plan with ## summary, ## design-preview and ## test-strategy passes" {
+  _pl_artifact "$WD/pl-full.md" summary design-preview test-strategy
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/pl-full.md"
+  assert_success
+}
+
+@test "failure: the PL allowance is scoped — an invented heading is still rejected" {
+  _pl_artifact "$WD/pl-invented.md" summary design-preview test-strategy not-an-anchor
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/pl-invented.md"
+  assert_failure 1
+  [[ "$stderr" == *"unexpected: not-an-anchor"* ]]
+}
+
 @test "happy: prefix-lint with stable sections reports no drift (exit 0)" {
   run_script_env --separate-stderr -- "$SCRIPT" "$WD/stable.jsonl"
   assert_success

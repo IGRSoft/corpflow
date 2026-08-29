@@ -8,8 +8,8 @@
 # also what lets the can-actually-fail twin re-run it against a planted copy.
 #
 # No JSON-Schema validator is vendored in this suite, so AC-3 asserts the schema
-# FACTS (branch disjointness; exactly-one-recommended as contains/minContains/
-# maxContains) rather than executing the schema against instances.
+# FACTS (one item shape and no residual disjunction; exactly-one-recommended as
+# contains/minContains/maxContains) rather than executing the schema against instances.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 CONTRACTS="skills/shared/stage-contracts.md"
@@ -83,17 +83,29 @@ check_pointer_once() {  # <agents-dir> <contracts>
   return $rc
 }
 
-check_schema_branches() {  # <handoff>
-  local blk defs
+# The stub is the ONLY item shape. Non-vacuity is the presence of exactly one
+# `$ref: '#/$defs/SweepStub'` under `items:` — an extraction that silently returned nothing
+# would otherwise satisfy every "must not contain" assertion below.
+check_schema_shape() {  # <handoff>
+  local blk defs n
   blk="$(open_questions_schema "$1")"
-  [ "$(printf '%s\n' "$blk" | grep -c '^            - ' || true)" -ge 3 ] \
-    || { echo "non-vacuity: fewer than 3 oneOf branches extracted"; return 1; }
-  printf '%s\n' "$blk" | grep -q 'oneOf' || { echo "open_questions is not a oneOf"; return 1; }
-  printf '%s\n' "$blk" | grep -qE '^ *- type: string' || { echo "legacy string form dropped"; return 1; }
-  printf '%s\n' "$blk" | grep -qE '^ *required: \[id, summary\]' || { echo "legacy bare-object form dropped"; return 1; }
-  printf '%s\n' "$blk" | grep -qE '^ *not: \{ required: \[class\] \}' \
-    || { echo "legacy bare-object branch lacks the disjointness guard: a sweep stub would match two branches and oneOf then fails every existing handoff"; return 1; }
-  printf '%s\n' "$blk" | grep -q 'SweepStub' || { echo "no additive sweep branch"; return 1; }
+  n=$(printf '%s\n' "$blk" | grep -cF "\$ref: '#/\$defs/SweepStub'" || true)
+  [ "$n" -eq 1 ] \
+    || { echo "non-vacuity: expected exactly 1 \$ref to SweepStub under items:, found $n"; return 1; }
+  printf '%s\n' "$blk" | grep -qE '^ *items:' \
+    || { echo "non-vacuity: open_questions declares no items: key"; return 1; }
+  if printf '%s\n' "$blk" | grep -q 'oneOf'; then
+    echo "open_questions is a disjunction again; the stub is the only item shape"; return 1
+  fi
+  if printf '%s\n' "$blk" | grep -qE '^ *- type: string'; then
+    echo "the legacy free-text branch was re-admitted"; return 1
+  fi
+  if printf '%s\n' "$blk" | grep -qE '^ *required: \[id, summary\]'; then
+    echo "the legacy bare-object branch was re-admitted"; return 1
+  fi
+  if printf '%s\n' "$blk" | grep -q 'not:'; then
+    echo "a disjointness guard reappeared; with one shape there is nothing to discriminate"; return 1
+  fi
 
   defs="$(sweep_defs "$1")"
   [ -n "$defs" ] || { echo "non-vacuity: \$defs block not extracted"; return 1; }
@@ -291,40 +303,106 @@ plant() {  # plant <src> <sed-expr> -> prints the mutated copy's path
   assert_failure
 }
 
-# --- AC-3: additive schema branch, both legacy forms still valid -------------
+# --- AC-3: one item shape, and exactly-one-recommended still pinned ----------
 
-@test "AC-3: open_questions keeps both legacy forms, adds a disjoint sweep branch, and pins exactly-one-recommended" {
-  run check_schema_branches "$PLUGIN_ROOT/$HANDOFF"
+@test "AC-3: open_questions accepts the sweep stub and nothing else, and pins exactly-one-recommended" {
+  run check_schema_shape "$PLUGIN_ROOT/$HANDOFF"
   assert_success
 }
 
-@test "AC-3 twin: removing the not:{required:[class]} guard fails (two branches would match)" {
+@test "AC-3 twin: re-adding the not:{required:[class]} guard fails (nothing left to discriminate)" {
   local planted
-  planted="$(plant "$PLUGIN_ROOT/$HANDOFF" '/not: { required: \[class\] }/d')"
-  run check_schema_branches "$planted"
+  planted="$(plant "$PLUGIN_ROOT/$HANDOFF" \
+    "s|^        items: { \\\$ref: '#/\\\$defs/SweepStub' }.*|        items: { not: { required: [class] }, \\$ref: '#/\\$defs/SweepStub' }|")"
+  run check_schema_shape "$planted"
   assert_failure
-  assert_output --partial "disjointness guard"
+  assert_output --partial "disjointness guard reappeared"
+}
+
+@test "AC-3 twin: re-admitting the legacy string form via a oneOf fails" {
+  local planted
+  planted="$(plant "$PLUGIN_ROOT/$HANDOFF" \
+    "s|^        items: { \\\$ref: '#/\\\$defs/SweepStub' }.*|        items: { oneOf: [{ type: string }, { \\$ref: '#/\\$defs/SweepStub' }] }|")"
+  run check_schema_shape "$planted"
+  assert_failure
+  assert_output --partial "disjunction again"
+}
+
+@test "AC-3 twin: dropping the \$ref fails non-vacuity rather than passing silently" {
+  local planted
+  planted="$(plant "$PLUGIN_ROOT/$HANDOFF" \
+    "s|^        items: { \\\$ref: '#/\\\$defs/SweepStub' }.*|        items: { type: object }|")"
+  run check_schema_shape "$planted"
+  assert_failure
+  assert_output --partial "non-vacuity"
 }
 
 @test "AC-3 twin: dropping maxContains would let a two-recommended item pass, and fails" {
   local planted
   planted="$(plant "$PLUGIN_ROOT/$HANDOFF" '/maxContains: 1/d')"
-  run check_schema_branches "$planted"
+  run check_schema_shape "$planted"
   assert_failure
 }
 
 @test "AC-3 twin: dropping minContains would let a zero-recommended item pass, and fails" {
   local planted
   planted="$(plant "$PLUGIN_ROOT/$HANDOFF" '/minContains: 1/d')"
-  run check_schema_branches "$planted"
+  run check_schema_shape "$planted"
   assert_failure
 }
 
-@test "AC-3 twin: dropping the legacy string branch fails (existing producers would break)" {
+# --- AC-3b: the other two transports carry the same single shape -------------
+
+# Every typed-return schema must reach SweepItem through a bare `items: { "$ref": ... }`.
+# Counted against the number of *Handoff titles so a dropped schema cannot pass by absence.
+check_typed_return_shape() {  # <handoff>
+  local titles refs oneofs
+  titles=$(grep -cE '^  "title": "[A-Z]{2}Handoff",$' "$1" || true)
+  [ "$titles" -ge 13 ] || { echo "non-vacuity: only $titles Handoff titles found"; return 1; }
+  oneofs=$(grep -cF '"open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }' "$1" || true)
+  [ "$oneofs" -eq 0 ] || { echo "$oneofs typed-return schemas still admit the legacy string form"; return 1; }
+  refs=$(grep -cF '"open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }' "$1" || true)
+  [ "$refs" -eq "$titles" ] \
+    || { echo "$refs of $titles typed-return schemas use items:{\$ref SweepItem}"; return 1; }
+}
+
+@test "AC-3b: all 13 typed-return schemas carry items:{\$ref SweepItem} and no oneOf" {
+  run check_typed_return_shape "$PLUGIN_ROOT/$HANDOFF"
+  assert_success
+}
+
+@test "AC-3b twin: schemas reverting to the legacy oneOf fail" {
   local planted
-  planted="$(plant "$PLUGIN_ROOT/$HANDOFF" '/- type: string  *# legacy free-text form/d')"
-  run check_schema_branches "$planted"
+  planted="$(plant "$PLUGIN_ROOT/$HANDOFF" \
+    's|"open_questions": { "type": "array", "items": { "\$ref": "#/\$defs/SweepItem" } }|"open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }|')"
+  run check_typed_return_shape "$planted"
   assert_failure
+  assert_output --partial "legacy string form"
+}
+
+# The ledger mirrors SweepStub inline (it is a different document), so the two `required:`
+# lines are compared rather than assumed equal.
+ledger_oq_required() {  # <handoff>
+  awk '/^#### facts — open_questions$/{f=1;next} f && /^#{2,6} /{f=0} f' "$1" \
+    | grep -m1 'required:'
+}
+
+@test "AC-3b: the ledger open_questions item requires the same set as SweepStub" {
+  local ledger stub
+  ledger="$(ledger_oq_required "$PLUGIN_ROOT/$HANDOFF" | sed 's/^ *//')"
+  [ -n "$ledger" ] || fail "non-vacuity: the ledger required: line was not extracted"
+  stub="$(sweep_stub_defs "$PLUGIN_ROOT/$HANDOFF" | grep -m1 'required:' | sed 's/^ *//')"
+  [ -n "$stub" ] || fail "non-vacuity: SweepStub required: line was not extracted"
+  [ "$ledger" = "$stub" ] || fail "ledger requires '$ledger'; SweepStub requires '$stub'"
+}
+
+@test "AC-3b twin: a ledger that reverts to required: [id] fails the comparison" {
+  local planted ledger stub
+  planted="$(plant "$PLUGIN_ROOT/$HANDOFF" \
+    's/^          required: \[id, class, ref\]$/          required: [id]/')"
+  ledger="$(ledger_oq_required "$planted" | sed 's/^ *//')"
+  stub="$(sweep_stub_defs "$planted" | grep -m1 'required:' | sed 's/^ *//')"
+  [ "$ledger" != "$stub" ] || fail "the planted divergence was not observable: '$ledger' vs '$stub'"
 }
 
 # --- AC-4: every template carries the field; empty obligation stated once ----
@@ -582,18 +660,25 @@ check_facts_examples() {  # <agents-dir>
 }
 
 # The harness cross-check is what makes the obligation non-memory-dependent.
-sweep_fixture() {  # sweep_fixture <dir> <ref-or-empty>
+sweep_fixture() {  # sweep_fixture <dir> <ref-or-empty> [with-anchor|no-anchor]
   local d="$1" ref="$2"
+  if [ -n "$ref" ]; then
+    sweep_fixture_items "$d" "$(printf '    - { id: sw-DC0-1, summary: "q", class: decision, ref: "%s" }' "$ref")" "${3:-with-anchor}"
+  else
+    sweep_fixture_items "$d" '    - { id: sw-DC0-1, summary: "q", class: decision }' "${3:-with-anchor}"
+  fi
+}
+
+# The same fixture with the open_questions[] items supplied verbatim, so a test can plant
+# any item shape — including the ones the harness must now reject.
+sweep_fixture_items() {  # sweep_fixture_items <dir> <items-yaml> [with-anchor|no-anchor]
+  local d="$1" items="$2"
   mkdir -p "$d"
   {
     printf -- '---\nhandoff:\n  stage: DC\n  verdict: ok\n'
     printf '  summary: "fixture"\n  files_touched: [a.md]\n'
     printf '  open_questions:\n'
-    if [ -n "$ref" ]; then
-      printf '    - { id: sw-DC0-1, summary: "q", class: decision, ref: "%s" }\n' "$ref"
-    else
-      printf '    - { id: sw-DC0-1, summary: "q", class: decision }\n'
-    fi
+    printf '%s\n' "$items"
     printf '  refs: { dev: development-0.md#files-changed }\n'
     printf -- '---\n\n# Documentation\n'
     # The anchor the stub points at: present by default so each test isolates one contract.
@@ -601,7 +686,7 @@ sweep_fixture() {  # sweep_fixture <dir> <ref-or-empty>
   } > "$d/documentation-0.md"
 }
 
-@test "P1-1: the harness fails a class-bearing stub that never reached facts.open_questions[]" {
+@test "P1-1: the harness fails a stub that never reached facts.open_questions[]" {
   local d
   d="$(mk_tmpworkdir)"
   sweep_fixture "$d" "documentation-0.md#elicitation-sweep"
@@ -615,18 +700,18 @@ sweep_fixture() {  # sweep_fixture <dir> <ref-or-empty>
   local d
   d="$(mk_tmpworkdir)"
   sweep_fixture "$d" "documentation-0.md#elicitation-sweep"
-  printf '{"facts":{"open_questions":[{"id":"sw-DC0-1","summary":"q"}]}}\n' > "$d/state.json"
+  printf '{"facts":{"open_questions":[{"id":"sw-DC0-1","class":"decision","ref":"documentation-0.md#elicitation-sweep"}]}}\n' > "$d/state.json"
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md" --state "$d/state.json"
   assert_success
 }
 
-@test "the class-without-ref hole fails legibly rather than as a bare schema mismatch" {
+@test "a stub with no ref fails legibly rather than as a bare schema mismatch" {
   local d
   d="$(mk_tmpworkdir)"
   sweep_fixture "$d" ""
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
   assert_failure
-  assert_output --partial "carry class but no ref"
+  assert_output --partial "carries no ref"
 }
 
 # --- sw-DR0-2: the stage filter reads a field that may be absent -------------
@@ -688,9 +773,9 @@ bounds_filter() { sed -n "/^_STATE_BOUNDS_FILTER='/,/'$/p" "$1" | sed "1s/^_STAT
   [ "$out" = '{"facts":{"open_questions":[{"id":"a"},{"id":"b"}]}}' ] || fail "no-op path mutated state: $out"
 }
 
-# --- P2-7: the new anchor must not fail artifacts written before it existed --
+# --- P2-7: the sweep anchor is required in every artifact ---------------------
 
-@test "P2-7: the elicitation-sweep anchor is allowed but not required (non-retroactive)" {
+@test "P2-7: the elicitation-sweep anchor is required — fails without it, passes with it" {
   local d
   d="$(mk_tmpworkdir)"
   {
@@ -698,16 +783,17 @@ bounds_filter() { sed -n "/^_STATE_BOUNDS_FILTER='/,/'$/p" "$1" | sed "1s/^_STAT
     printf '  refs: { dev: development-0.md#files-changed }\n---\n\n'
     printf '## files-changed\n\nx\n\n## cross-references\n\nx\n\n## follow-ups\n\nx\n'
   } > "$d/documentation-0.md"
-  # Written before the sweep existed: no elicitation-sweep anchor at all.
+  # Every DC anchor present, sweep heading absent: the universal anchor is the only defect.
   run env PATH="/usr/bin:/bin" bash "$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh" \
     --anchor-lint "$d/documentation-0.md"
-  assert_success
-  # And the anchor is accepted when present, rather than reported as unexpected.
+  assert_failure
+  assert_output --partial "missing: elicitation-sweep"
+  # And it is accepted when present, rather than reported as unexpected.
   printf '\n## elicitation-sweep\n\nnothing to elicit\n' >> "$d/documentation-0.md"
   run env PATH="/usr/bin:/bin" bash "$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh" \
     --anchor-lint "$d/documentation-0.md"
   assert_success
-  # rework-<N> rides the same allowance: agents/technical-lead.md reads it at the DR gate,
+  # rework-<N> keeps its allowance: agents/technical-lead.md reads it at the DR gate,
   # and anchor-lint used to reject the very section its own contract asks for.
   printf '\n## rework-1\n\nx\n' >> "$d/documentation-0.md"
   run env PATH="/usr/bin:/bin" bash "$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh" \
@@ -722,11 +808,41 @@ bounds_filter() { sed -n "/^_STATE_BOUNDS_FILTER='/,/'$/p" "$1" | sed "1s/^_STAT
     printf -- '---\nhandoff:\n  stage: DC\n  verdict: ok\n  summary: "s"\n'
     printf '  refs: { dev: development-0.md#files-changed }\n---\n\n'
     printf '## files-changed\n\nx\n\n## cross-references\n\nx\n\n## follow-ups\n\nx\n'
+    printf '\n## elicitation-sweep\n\nnothing to elicit\n'
     printf '\n## not-an-anchor\n\nx\n'
   } > "$d/documentation-0.md"
   run env PATH="/usr/bin:/bin" bash "$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh" \
     --anchor-lint "$d/documentation-0.md"
   assert_failure
+  assert_output --partial "unexpected: not-an-anchor"
+}
+
+# --- P2-7b: the obligation is ONE constant, not thirteen table rows ----------
+
+CACHE_LINT="skills/worktask/scripts/cache-lint.sh"
+
+@test "P2-7b: elicitation-sweep is a universal anchor and no longer an optional one" {
+  grep -q "^UNIVERSAL_ANCHORS='elicitation-sweep'\$" "$PLUGIN_ROOT/$CACHE_LINT" \
+    || fail "UNIVERSAL_ANCHORS is not the single source of the obligation"
+  grep -q "^OPTIONAL_ANCHOR_RE=.*elicitation-sweep" "$PLUGIN_ROOT/$CACHE_LINT" \
+    && fail "elicitation-sweep is still in OPTIONAL_ANCHOR_RE, which would make it not-required"
+  # The append must reach BOTH the missing loop and the comm, i.e. \$expected itself.
+  grep -q 'expected="\$expected \$UNIVERSAL_ANCHORS"' "$PLUGIN_ROOT/$CACHE_LINT" \
+    || fail "UNIVERSAL_ANCHORS is declared but never folded into \$expected"
+}
+
+@test "P2-7b twin: a copy that moves the anchor back to optional accepts the no-sweep fixture" {
+  local planted d
+  planted="$(plant "$PLUGIN_ROOT/$CACHE_LINT" \
+    "s/^OPTIONAL_ANCHOR_RE='\^(/OPTIONAL_ANCHOR_RE='^(elicitation-sweep|/; /UNIVERSAL_ANCHORS\"/d")"
+  d="$(mk_tmpworkdir)"
+  {
+    printf -- '---\nhandoff:\n  stage: DC\n  verdict: ok\n  summary: "s"\n'
+    printf '  refs: { dev: development-0.md#files-changed }\n---\n\n'
+    printf '## files-changed\n\nx\n\n## cross-references\n\nx\n\n## follow-ups\n\nx\n'
+  } > "$d/documentation-0.md"
+  run env PATH="/usr/bin:/bin" bash "$planted" --anchor-lint "$d/documentation-0.md"
+  assert_success   # the planted regression is real: without it the fixture must fail
 }
 
 # --- sw-DR0-5 / sw-DV0-5: the ref anchor is the only transport of options[] ---
@@ -758,18 +874,42 @@ bounds_filter() { sed -n "/^_STATE_BOUNDS_FILTER='/,/'$/p" "$1" | sed "1s/^_STAT
   assert_output --partial "does not exist"
 }
 
-@test "sw-DV0-5: the anchor check is non-retroactive — a legacy artifact with no class-bearing stub passes" {
+# --- the stub is the ONLY item shape: each pre-sweep form is rejected by name ----
+
+@test "shape gate: the legacy free-text form is rejected, naming the shape it must take" {
   local d
   d="$(mk_tmpworkdir)"
-  {
-    printf -- '---\nhandoff:\n  stage: DC\n  verdict: ok\n  summary: "legacy"\n'
-    printf '  files_touched: [a.md]\n'
-    printf '  open_questions:\n'
-    printf '    - "q1: legacy free-text form"\n'
-    printf '    - { id: q2, summary: "legacy bare object" }\n'
-    printf '  refs: { dev: development-0.md#files-changed }\n'
-    printf -- '---\n\n# Documentation\n'
-  } > "$d/documentation-0.md"
+  sweep_fixture_items "$d" '    - "q1: hook lang (AR to decide)"'
+  run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
+  assert_failure
+  assert_output --partial "is not a sweep stub"
+}
+
+@test "shape gate: the legacy bare object is rejected, naming the id shape" {
+  local d
+  d="$(mk_tmpworkdir)"
+  sweep_fixture_items "$d" '    - { id: q2, summary: "bare object" }'
+  run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
+  assert_failure
+  assert_output --partial 'id "q2" is not sw-'
+}
+
+@test "shape gate: a class outside {decision, escalate} is rejected" {
+  local d
+  d="$(mk_tmpworkdir)"
+  sweep_fixture_items "$d" \
+    '    - { id: sw-DC0-1, class: advisory, ref: "documentation-0.md#elicitation-sweep" }'
+  run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
+  assert_failure
+  assert_output --partial "class is not decision|escalate"
+}
+
+@test "shape gate twin: an all-stub artifact with its anchor passes (the gate is not unconditional)" {
+  local d
+  d="$(mk_tmpworkdir)"
+  sweep_fixture_items "$d" \
+    '    - { id: sw-DC0-1, class: decision, ref: "documentation-0.md#elicitation-sweep" }
+    - { id: sw-DC0-2, summary: "optional", class: escalate, ref: "documentation-0.md#elicitation-sweep" }'
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
   assert_success
 }
@@ -836,16 +976,28 @@ sweep_stub_defs() {
     || fail "summary was removed entirely; it must stay legal-but-optional"
 }
 
-@test "q10 TRAP: summary is not a second discriminator — the not:{required:[class]} guard survives" {
-  # {id, summary, class, ref} matches branch 2 AND branch 3 unless the guard fires, which
-  # is why shortening `required` does not make the guard redundant. Both halves asserted.
-  local blk
+@test "q10 TRAP: no disjointness guard remains, and summary is still legal-optional" {
+  # With one item shape there is nothing to discriminate, so the guard must be gone —
+  # while `summary` stays a legal optional field, which is the half q10 was about.
+  local blk defs
   blk="$(open_questions_schema "$PLUGIN_ROOT/$HANDOFF")"
-  printf '%s\n' "$blk" | grep -qE '^ *not: \{ required: \[class\] \}' \
-    || fail "the disjointness guard was dropped as redundant after q10 — it is not"
-  # And the reasoning is written down where the next reader will look.
-  grep -q 'why the .not. guard survives q10' "$PLUGIN_ROOT/$HANDOFF" \
-    || fail "nothing records why the guard is still load-bearing after q10"
+  [ -n "$blk" ] || fail "non-vacuity: the open_questions block was not extracted"
+  printf '%s\n' "$blk" | grep -q 'not:' \
+    && fail "a disjointness guard survives; with one item shape it discriminates nothing"
+  defs="$(sweep_stub_defs "$PLUGIN_ROOT/$HANDOFF")"
+  printf '%s\n' "$defs" | grep -q 'summary:' \
+    || fail "summary was removed entirely; it must stay legal-but-optional"
+  printf '%s\n' "$defs" | grep -q 'required: \[id, class, ref\]' \
+    || fail "summary was made mandatory again"
+}
+
+@test "q10 TRAP twin: a planted guard is observable (the check can actually fail)" {
+  local planted blk
+  planted="$(plant "$PLUGIN_ROOT/$HANDOFF" \
+    "s|^        items: { \\\$ref: '#/\\\$defs/SweepStub' }.*|        items: { not: { required: [class] }, \\$ref: '#/\\$defs/SweepStub' }|")"
+  blk="$(open_questions_schema "$planted")"
+  printf '%s\n' "$blk" | grep -q 'not:' \
+    || fail "the planted guard was not observable through the extraction helper"
 }
 
 @test "q10 twin: a stub schema that keeps summary required fails the check" {
@@ -928,13 +1080,14 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
     || fail "decisions no longer take the last writer: $out"
 }
 
-@test "q8 union: a legacy entry merges byte-identically (no null status/resolution keys)" {
-  local filter out
+@test "q8 union: a stub with no status/resolution merges byte-identically (no null keys added)" {
+  local filter out stub
+  stub='{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}'
   filter="$(union_filter "$PLUGIN_ROOT/$STATE_PATCH")"
-  out="$(printf '%s' '{"facts":{"open_questions":[{"id":"q1","summary":"legacy"}]}}' \
-        | jq -c --argjson f '{"open_questions":[{"id":"q1","summary":"legacy"}]}' "$filter")"
-  [ "$out" = '{"facts":{"open_questions":[{"id":"q1","summary":"legacy"}]}}' ] \
-    || fail "the union mutated a legacy entry: $out"
+  out="$(printf '%s' "{\"facts\":{\"open_questions\":[$stub]}}" \
+        | jq -c --argjson f "{\"open_questions\":[$stub]}" "$filter")"
+  [ "$out" = "{\"facts\":{\"open_questions\":[$stub]}}" ] \
+    || fail "the union mutated an unanswered stub: $out"
 }
 
 @test "q8 artifact side: § Item shape requires a re-emitted stub to carry its answer forward" {
@@ -1055,6 +1208,7 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
     printf -- '---\nhandoff:\n  stage: DR\n  verdict: pass\n  summary: "s"\n'
     printf '  refs: { dev: development-0.md#files-changed }\n---\n\n'
     printf '## findings\n\nx\n\n## verdict\n\npass\n\n## blockers\n\nnone\n\n## follow-ups\n\nx\n'
+    printf '\n## elicitation-sweep\n\nnothing to elicit\n'
     printf '\n## re-review\n\nsecond pass\n'
   } > "$d/developer-review-0.md"
   run env PATH="/usr/bin:/bin" bash "$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh" \
@@ -1069,6 +1223,7 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
     printf -- '---\nhandoff:\n  stage: DR\n  verdict: pass\n  summary: "s"\n'
     printf '  refs: { dev: development-0.md#files-changed }\n---\n\n'
     printf '## findings\n\nx\n\n## verdict\n\npass\n\n## blockers\n\nnone\n\n## follow-ups\n\nx\n'
+    printf '\n## elicitation-sweep\n\nnothing to elicit\n'
     printf '\n## re-re-review\n\nnope\n'
   } > "$d/developer-review-0.md"
   run env PATH="/usr/bin:/bin" bash "$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh" \
@@ -1106,14 +1261,146 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
   assert_output --partial "cannot be verified"
 }
 
-@test "review-2 twin: no class-bearing stub + unreadable --state on a non-DV stage still passes (non-retroactive)" {
+@test "review-2 twin: an empty sweep + unreadable --state on a non-DV stage still passes" {
   local d
   d="$(mk_tmpworkdir)"
   {
-    printf -- '---\nhandoff:\n  stage: DC\n  verdict: ok\n  summary: "legacy"\n'
+    printf -- '---\nhandoff:\n  stage: DC\n  verdict: ok\n  summary: "empty sweep"\n'
     printf '  files_touched: [a.md]\n  open_questions: []\n'
     printf '  refs: { dev: development-0.md#files-changed }\n---\n\n# Documentation\n'
   } > "$d/documentation-0.md"
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md" --state "$d/nope.json"
   assert_success
+}
+
+# --- PL speaks the sweep contract ---------------------------------------------
+
+FIGMA="skills/shared/figma-capture.md"
+FIGMA_FIXTURE="skills/worktask/references/fixtures/figma-capture/03-auth-failure.md"
+RESUME="skills/worktask/references/resume.md"
+
+# The two live PL-side producers plus the PL procedure. A legacy id in any of them
+# re-introduces a shape the harness and --facts now reject by name.
+PL_PRODUCERS="$FIGMA $FIGMA_FIXTURE $PL0_PROC"
+
+check_no_legacy_pl_ids() {  # <repo-root> <files...>
+  local root="$1"; shift
+  local f n=0 rc=0
+  for f in "$@"; do
+    [ -f "$root/$f" ] || { echo "non-vacuity: $f is absent"; return 1; }
+    n=$((n + 1))
+    if grep -qE '(^|[^a-z-])q[0-9]+:|"id" *: *"q[0-9]+"|id: q[0-9]+' "$root/$f"; then
+      echo "$f still writes a legacy q<N> open-question id"
+      rc=1
+    fi
+    grep -q 'sw-PL' "$root/$f" || { echo "$f names no sw-PL<N>-<n> id at all"; rc=1; }
+  done
+  [ "$n" -ge 3 ] || { echo "non-vacuity: only $n PL producers checked"; return 1; }
+  return $rc
+}
+
+@test "PL-1: no PL-side producer writes a legacy q<N> open-question id" {
+  run check_no_legacy_pl_ids "$PLUGIN_ROOT" $PL_PRODUCERS
+  assert_success
+}
+
+@test "PL-1 twin: a producer that reverts to q1: fails" {
+  local d f
+  d="$(mk_tmpworkdir)"
+  for f in $PL_PRODUCERS; do
+    mkdir -p "$d/$(dirname "$f")"
+    cp "$PLUGIN_ROOT/$f" "$d/$f"
+  done
+  printf '\nAppend `q1: Figma MCP auth pending` to `facts.open_questions[]`.\n' >> "$d/$FIGMA"
+  run check_no_legacy_pl_ids "$d" $PL_PRODUCERS
+  assert_failure
+  assert_output --partial "legacy q<N>"
+}
+
+# One resolution idiom: PL used to DELETE answered items while the other twelve stages
+# marked them. A deleted item takes its ref anchor and its recorded answer with it.
+PL_RESOLVERS="$WORKTASK_CMD $WORKTASK_SKILL $PL0_PROC"
+
+check_resolved_not_dropped() {  # <repo-root> <files...>
+  local root="$1"; shift
+  local f n=0 rc=0
+  for f in "$@"; do
+    [ -f "$root/$f" ] || { echo "non-vacuity: $f is absent"; return 1; }
+    n=$((n + 1))
+    grep -q 'status: "resolved"' "$root/$f" \
+      || { echo "$f never states the mark-resolved idiom"; rc=1; }
+    if grep -qE '(remove|removes|removing|drop|drops|dropped|dropping) the resolved|resolved entries (from|dropped)' "$root/$f"; then
+      echo "$f still describes deleting answered open_questions entries"
+      rc=1
+    fi
+  done
+  [ "$n" -ge 3 ] || { echo "non-vacuity: only $n resolver files checked"; return 1; }
+  return $rc
+}
+
+@test "PL-2: every PL-side resolver marks answered items resolved and none deletes them" {
+  run check_resolved_not_dropped "$PLUGIN_ROOT" $PL_RESOLVERS
+  assert_success
+}
+
+@test "PL-2 twin: a file that reverts to deleting answered entries fails" {
+  local d f
+  d="$(mk_tmpworkdir)"
+  for f in $PL_RESOLVERS; do
+    mkdir -p "$d/$(dirname "$f")"
+    cp "$PLUGIN_ROOT/$f" "$d/$f"
+  done
+  printf '\nThe orchestrator then drops the resolved entries from `facts.open_questions[]`.\n' \
+    >> "$d/$WORKTASK_CMD"
+  run check_resolved_not_dropped "$d" $PL_RESOLVERS
+  assert_failure
+  assert_output --partial "deleting answered"
+}
+
+step_a4_body() {  # <worktask-cmd>
+  awk '/^### Step A.4 — Auto-Decision Pre-Pass/{f=1;next} f && /^### /{f=0} f' "$1"
+}
+
+@test "PL-3: Step A.4 reads the sweep anchor the way Step C.4 does" {
+  local body
+  body="$(step_a4_body "$PLUGIN_ROOT/$WORKTASK_CMD")"
+  [ -n "$body" ] || fail "non-vacuity: Step A.4 body not extracted"
+  printf '%s\n' "$body" | grep -q '#elicitation-sweep' \
+    || fail "A.4 does not resolve the question text from the sweep anchor"
+  printf '%s\n' "$body" | grep -q 'Step C.4' \
+    || fail "A.4 does not reuse the C.4 resolution rule"
+  printf '%s\n' "$body" | grep -q 'sw-PL' || fail "A.4 does not key on sw-PL<N>-* ids"
+  printf '%s\n' "$body" | grep -qi 'numbered' \
+    && fail "A.4 still describes a numbered elicitation list"
+}
+
+@test "PL-3 twin: restoring the numbered-list wording fails" {
+  local planted body
+  planted="$(plant "$PLUGIN_ROOT/$WORKTASK_CMD" \
+    's|unresolved `sw-PL<N>-\*` items|unresolved items (the numbered elicitation list)|')"
+  body="$(step_a4_body "$planted")"
+  printf '%s\n' "$body" | grep -qi 'numbered' \
+    || fail "the planted wording was not observable through the extraction helper"
+}
+
+@test "PL-4: Signal 2b and the resume row key on status, not on a non-empty array" {
+  local body
+  body="$(awk '/^##### Signal 2b \(decision gate\)/{f=1;next} f && /^#{2,5} /{f=0} f' \
+        "$PLUGIN_ROOT/$WORKTASK_SKILL")"
+  [ -n "$body" ] || fail "non-vacuity: Signal 2b body not extracted"
+  printf '%s\n' "$body" | grep -q 'status != "resolved"' \
+    || fail "Signal 2b does not key on status != resolved"
+  grep -q 'status != "resolved"' "$PLUGIN_ROOT/$RESUME" \
+    || fail "the resume auto-decision row does not key on status != resolved"
+}
+
+@test "PL-4 twin: keying Signal 2b back on a non-empty array is observable" {
+  local planted body
+  planted="$(plant "$PLUGIN_ROOT/$WORKTASK_SKILL" \
+    's|`status != "resolved"`|a non-empty `open_questions[]`|')"
+  body="$(awk '/^##### Signal 2b \(decision gate\)/{f=1;next} f && /^#{2,5} /{f=0} f' "$planted")"
+  printf '%s\n' "$body" | grep -q 'status != "resolved"' \
+    && fail "the planted regression was not observable through the extraction helper"
+  printf '%s\n' "$body" | grep -q 'non-empty' \
+    || fail "non-vacuity: the plant did not land in the extracted body"
 }
