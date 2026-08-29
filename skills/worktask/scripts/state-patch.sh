@@ -614,9 +614,11 @@ _STATE_BOUNDS_FILTER='
 # re-emitted stub carrying `status: open` destroy an answer already recorded against that id, and
 # since sw-DR0-3 moved sweep answers out of facts.decisions[] that element is the ONLY record of it.
 # `open < resolved` is joined monotonically — a later write may raise, never downgrade — the same
-# lattice shape this feature already ships for `decision < escalate`. The two fields are guarded
+# lattice shape this feature already ships for `decision < escalate`. The fields are guarded
 # INDEPENDENTLY: an incoming stub that omits `resolution` inherits the incumbent's even when both
-# sides say `resolved`, because dropping the answer body is a downgrade too. Scoped to
+# sides say `resolved`, because dropping the answer body is a downgrade too, and
+# `blocks_next_stage` joins by OR (`false < true`) so a rework round that re-emits the bare stub
+# cannot silently demote a boundary-blocking item to an FN-batched one. Scoped to
 # open_questions alone: _union_keyed stays untouched for facts.decisions, whose semantics do not
 # change.
 #
@@ -636,7 +638,9 @@ _FACTS_UNION_FILTER='
         + (if (($prev.status // "open") == "resolved") and (($new.status // "open") != "resolved")
            then { status: "resolved" } else {} end)
         + (if ($new.resolution // null) == null and ($prev.resolution // null) != null
-           then { resolution: $prev.resolution } else {} end);
+           then { resolution: $prev.resolution } else {} end)
+        + (if ($prev.blocks_next_stage // false) == true and ($new.blocks_next_stage // false) != true
+           then { blocks_next_stage: true } else {} end);
       def _union_sweep:
         reduce .[] as $e ([];
           ((map(select(.id == $e.id)) | first) // null) as $prev
@@ -1395,6 +1399,18 @@ EOSTATE
       printf 'T19: decisions payload was rejected: FAIL\n' >&2
       exit 1
     }
+
+  # ---- T20: blocks_next_stage is raise-only across the union ----
+  # A rework round re-emits the bare stub; the flag the agent set earlier must survive it.
+  make_state
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":true}]}' > /dev/null
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep"}]}' > /dev/null
+  if jq -e '.facts.open_questions[0].blocks_next_stage == true' .context/state.json > /dev/null; then
+    printf 'T20: blocks_next_stage survives a bare re-emit: ok\n'
+  else
+    printf 'T20: blocks_next_stage was cleared by a bare re-emit: FAIL\n' >&2
+    exit 1
+  fi
 
   printf 'self-test: ALL PASS\n'
   exit 0
