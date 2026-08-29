@@ -459,10 +459,14 @@ wait for approval before the stage loop; on `bypass` proceed directly.
 
 ### Step A.4 — Auto-Decision Pre-Pass (runs before Step A.5)
 
-Read `tasks.PL0.metadata.decision_gate` (default `"user"`) and PL0's `open_questions[]` (the numbered
-elicitation list from `pl0-procedure.md § Plan-Gate Open-Question Batching`). **No-op** when
-`decision_gate == "user"` or `open_questions[]` is empty/absent — fall through to Step A.5.
-Otherwise:
+Read `tasks.PL0.metadata.decision_gate` (default `"user"`) and, from `facts.open_questions[]`, PL's
+unresolved `sw-PL<N>-*` items — those whose `status` is not `"resolved"`
+(`pl0-procedure.md § Plan-Gate Open-Question Batching`). Resolve each item's question text and
+`options[]` from `planning-N.md#elicitation-sweep` exactly as § Step C.4 does; the stub carries
+neither. **No-op** when `decision_gate == "user"` or no such item exists — fall through to
+Step A.5. Otherwise, run § Step A.4 — the delegate dispatch.
+
+#### Step A.4 — the delegate dispatch
 
 1. Append an `auto_decision_dispatched` audit row (`subject:"PL<N>"`, `metadata.questions: <count>`).
 2. Re-dispatch PM as a decision delegate on the **Fable model**:
@@ -490,10 +494,17 @@ items. It adds NO new anchor (`handoff-protocol.md § #anchor-allow-list`) and d
 
 #### Auto-decision ledger merge (orchestrator)
 
-3. On return the ORCHESTRATOR — not the delegate — merges via `atomicMergeStateJson`: append each
-   decided item to `facts.decisions[]` marked `(auto-decided)` and remove the resolved entries from
-   `facts.open_questions[]`. This is what makes the decisions visible to AR/TL/DV, which read both on
-   stage entry (`skills/shared/stage-contracts.md`).
+3. On return the ORCHESTRATOR — not the delegate — merges via `atomicMergeStateJson`: mark each
+   answered `facts.open_questions[]` item `status: "resolved"` with its `resolution` (the § Step C.5
+   write — the whole stub, never `{id, status, resolution}` alone), and **also** append each decided
+   item to `facts.decisions[]` marked `(auto-decided)`. That second write is a deliberate deviation
+   from § Step C.5, which sends sweep answers to `resolution` only: AR/TL/DV read `facts.decisions[]`
+   on stage entry (`skills/shared/stage-contracts.md`), and at most 4 PL items cannot evict AR's
+   newest-8 ring before AR has written to it. Entries are marked resolved, **never removed** — a
+   deleted item takes its `ref` anchor and its answer with it.
+
+##### Auto-decision ledger merge — the audit row
+
 4. Append one `auto_decision_resolved` audit row (`subject:"PL<N>"`, `metadata: { decided: <count>,
    escalated: <count>, model_resolved: <alias>, decisions: [{question, answer, rationale}] }`) — the
    per-question rationale is carried there, one line each.
@@ -589,6 +600,17 @@ Read `tasks.PL0.metadata.plan_gate` (default `"checkpoint"`). Resolve the run in
    plan_file shape boundary`).
 2. Present the plan summary: complexity score, stages created (with agents), dependency chain, key
    decisions, and both inclusion decisions (below).
+
+##### Plan gate checkpoint path — the sweep render
+
+2b. Render PL's unresolved sweep items FIRST — every `facts.open_questions[]` item whose id matches
+   `sw-PL<N>-*` and whose `status` is not `"resolved"` — through § Step C.4 (question text and
+   `options[]` from `planning-N.md#elicitation-sweep`) and record the answers through § Step C.5,
+   with `subject:"PL<N>"` on every audit row. These are separate `AskUserQuestion` calls; the
+   approve/reject call in step 3 fires **last and unmodified**, exactly as at the FN gate.
+
+##### Plan gate checkpoint path — the approval call
+
 3. `AskUserQuestion`: *"Here is the generated plan for your worktask. Approve to begin
    implementation, or describe any changes you want first."* The gate holds until a human answers.
    Keep the `/config` idle-timeout opt-in OFF on hosts running gated worktasks — an idle auto-answer
@@ -825,8 +847,8 @@ skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$ART" --state
 ```
 
 `$STRICT_FLAG` from § Step B may be appended; it affects only the AR-reference arm, which fires for DV
-alone. For DV this **is** the § Step B invocation — run it once, not twice. An artifact with no
-class-bearing stub passes untouched, so this never fails an artifact written before the sweep existed.
+alone. For DV this **is** the § Step B invocation — run it once, not twice. An artifact whose
+`open_questions` is the empty array passes untouched; any item in it must be a full sweep stub.
 
 #### Step B.1 — on failure
 
@@ -865,7 +887,7 @@ record, never prompt — so no unattended run can deadlock on it.
 
 #### Step C.1 — collect everything not already answered
 
-1. **C.1 — Collect.** Read `facts.open_questions[]` and keep the class-bearing items whose `status`
+1. **C.1 — Collect.** Read `facts.open_questions[]` and keep the items whose `status`
    is not `"resolved"`. That status test is the whole filter: an item already answered at its own
    boundary (C.0) or at the plan gate is resolved, so it is excluded by the same rule that excludes
    PL's. Do **not** filter on stage — under `blocks_next_stage` any stage can be answered at its own
@@ -910,6 +932,13 @@ approval carrier, and the gate's own `AskUserQuestion` still fires last and unmo
    once is enough. Answers do **not** go to
    `facts.decisions[]`: that array clamps to the newest 8, and a 13-stage run's sweep answers would
    evict the architectural decisions the ring exists to keep.
+
+##### Step C.5 — the write-back is a whole stub
+
+The write goes through `state-patch.sh --facts` as the **complete** item — `id`, `class` and `ref`
+alongside `status` and `resolution` — never as `{id, status, resolution}`. The union REPLACES the
+incumbent object for that id, so a partial item would drop the very anchor C.4 resolves its
+question text from; `--facts` now rejects one by name rather than persisting it.
 
 ##### Step C.5 — the unattended lanes
 

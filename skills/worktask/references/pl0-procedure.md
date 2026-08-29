@@ -300,7 +300,9 @@ Only if NEITHER resolves: append one audit row `action: "pr_issue_link", result:
 
 ### Mandatory Plan-File Anchor Schema
 
-`<plan_file>` MUST include all seven H2 anchors from `skills/worktask/references/handoff-protocol.md#anchor-allow-list § PL`. AR/TL/DV/DR read them selectively; a missing anchor forces expensive full-file re-reads (`stage-contracts § Required Inputs` step 3) and breaks the cache-friendly handoff layout.
+`<plan_file>` MUST include all eight PL H2 anchors from `skills/worktask/references/handoff-protocol.md#anchor-allow-list § PL` plus the universal `## elicitation-sweep`. AR/TL/DV/DR read them selectively; a missing anchor forces expensive full-file re-reads (`stage-contracts § Required Inputs` step 3) and breaks the cache-friendly handoff layout.
+
+#### Mandatory Plan-File Anchor Schema — the table
 
 Required anchors (kebab-case, no underscores, no spaces):
 
@@ -313,6 +315,8 @@ Required anchors (kebab-case, no underscores, no spaces):
 | `## risks` | Known unknowns, mitigations | AR, TL |
 | `## complexity` | Score 0–50 + factor breakdown | TL (sizing), FN (recap) |
 | `## stages` | Per-stage task list | TL, FN |
+| `## summary` | Complexity/tier line, vetoable assumptions, gate-question preview | user (plan gate), FN (recap) |
+| `## elicitation-sweep` | The plan-gate sweep items, or the explicit empty statement | orchestrator (§ Step C.4) |
 
 #### Anchor-lint enforcement
 
@@ -526,7 +530,16 @@ Before finalizing a plan draft, scan the task text for a **scope noun with multi
 
 ## Plan-Gate Open-Question Batching
 
-More than two open questions for the plan gate (explicit `open_questions[]` + unprompted refinements) consolidate into ONE numbered elicitation list in `## summary`, each item carrying a concrete recommended default (`1. Ship dark mode as an opt-in toggle? (default: yes, opt-in)`). Surface the whole list in a single gate round-trip and apply the user's amendments in one batch pass before marking PL0 complete — not one PL resume per answer.
+Every plan-gate question is a closing-sweep item like any other stage's: a full `SweepItem` under
+`## elicitation-sweep` (`id: sw-PL<N>-<n>`, `class`, 2–4 `options[]` with exactly one
+`recommended: true`, one-line `rationale`), with its stub in both `handoff.open_questions[]` and the
+PL `--facts` payload. `## summary` keeps only a one-line-per-item preview so the reader meets the
+questions before the plan body; the option bodies live under the anchor, never duplicated.
+
+At most **4** items per stage — the ask tool's per-call ceiling. A surplus defers to a later round
+per § Dependency ordering rather than spilling into a second call. Surface the batch in a single
+gate round-trip and apply the user's amendments in one batch pass before marking PL0 complete — not
+one PL resume per answer.
 
 ### Facts are PL0's job; decisions are the user's
 
@@ -593,9 +606,9 @@ to the plan's EXISTING mandatory anchors (`## requirements` / `## acceptance-cri
 `## scope`) in ONE batch pass. Never add a `## decisions` anchor to `<plan_file>`, whose anchor set
 is exact (`handoff-protocol.md#anchor-allow-list § PL`; `## decisions` belongs to AR's
 `architecture-N.md`). Return every decision as a `key_decisions[]` entry prefixed
-`(auto-decided)`; the orchestrator merges them into `state.json facts.decisions[]`, drops the
-resolved `facts.open_questions[]` entries, and carries each rationale in its
-`auto_decision_resolved` audit row. Do NOT re-run `state-patch.sh` — PL0 is already `completed`,
+`(auto-decided)`; the orchestrator merges them into `state.json facts.decisions[]`, marks each
+answered `facts.open_questions[]` item `status: "resolved"` with its `resolution` — never deletes
+it — and carries each rationale in its `auto_decision_resolved` audit row. Do NOT re-run `state-patch.sh` — PL0 is already `completed`,
 so the plan amendments are your only writes.
 
 #### Escalation-class questions (never auto-decided)
@@ -700,7 +713,7 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 ```bash
 state-patch.sh --stage PL --prev USER --facts '{
   "decisions": [{"id":"pl-1","summary":"≤160 chars","ref":"planning-0.md#stages"}],
-  "open_questions": [{"id":"q1","summary":"…","stage":"PL"}]}'
+  "open_questions": [{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail): never clobbers an upstream stage's entries, and a re-run is byte-identical. Omitting it loses the fact silently. Canonical rule: `handoff-protocol.md#facts-union`.

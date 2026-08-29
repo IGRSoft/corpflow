@@ -438,9 +438,10 @@ Before entering this loop, verify:
 `PL0.metadata.decision_gate` (default `"user"`) selects WHO answers PL0's `open_questions[]` at the
 plan gate; `"auto"` (stamped by `--auto=[decision]`) routes them through the Fable-model
 auto-decision pre-pass (`commands/worktask.md § Step A.4` is canon). Verify before loop entry: when
-`decision_gate == "auto"` and PL0's handoff carried a non-empty `open_questions[]`, an
-`auto_decision_resolved` audit row with `subject:"PL<run_index>"` MUST exist, and any `escalate`
-items MUST have an `approval_received` resolution — absent → STOP and return to Step A.4. The
+`decision_gate == "auto"` and `facts.open_questions[]` holds any `sw-PL<N>-*` item with
+`status != "resolved"`, an `auto_decision_resolved` audit row with `subject:"PL<run_index>"` MUST
+exist, and any `escalate` items MUST have an `approval_received` resolution — absent → STOP and
+return to Step A.4. The
 carrier bypasses neither `plan_gate` nor `fn_gate`.
 
 ##### Signal 3 (FN gate)
@@ -1336,10 +1337,11 @@ already `completed`; the plan amendments are its only writes.
 
 ### Orchestrator ledger merge
 
-On the delegate's return the ORCHESTRATOR atomic-merges the ledger: decided items appended to
-`state.json facts.decisions[]` marked `(auto-decided)`, resolved entries dropped from
-`facts.open_questions[]` — that merge is what makes the decisions visible to AR/TL/DV, which read
-those two fields on stage entry (`skills/shared/stage-contracts.md`). Audit rows:
+On the delegate's return the ORCHESTRATOR atomic-merges the ledger: each answered
+`facts.open_questions[]` item marked `status: "resolved"` with its `resolution` — never dropped —
+and decided items also appended to `state.json facts.decisions[]` marked `(auto-decided)`, which is
+what makes them visible to AR/TL/DV, which read those two fields on stage entry
+(`skills/shared/stage-contracts.md`). Audit rows:
 `auto_decision_dispatched` → `auto_decision_resolved` (`subject:"PL<N>"`), the latter carrying each
 question's rationale in `metadata.decisions[]` (`{question, answer, rationale}` one-liners).
 

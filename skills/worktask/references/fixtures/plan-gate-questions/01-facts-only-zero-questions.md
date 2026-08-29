@@ -32,7 +32,9 @@ No candidate turns on what the user *wants*, so none is a decision.
 ## Expected gate output
 
 - `handoff.open_questions[]` — **0 entries**.
-- `## summary` numbered elicitation list — **absent** (nothing to elicit).
+- `## elicitation-sweep` — heading **present** (mandatory in every artifact) carrying the explicit
+  empty statement and **0 items**.
+- `## summary` question preview — **absent** (nothing to elicit).
 - PL0 completes without a gate round-trip for questions. The plan-approval checkpoint itself is
   unaffected: it still fires, it just carries no question list.
 
@@ -53,6 +55,7 @@ a subagent to run it and waits. Expected gate output stays **0 entries**.
 ## Assertions (QA)
 
 - [ ] Exactly 0 entries in `handoff.open_questions[]`.
-- [ ] No numbered elicitation list in `## summary`.
+- [ ] `## elicitation-sweep` heading present with 0 items under it and the explicit empty statement.
+- [ ] No question preview in `## summary`.
 - [ ] All four candidates appear in the plan as resolved facts, each naming its resolver.
 - [ ] No candidate is dropped without a recorded answer.
