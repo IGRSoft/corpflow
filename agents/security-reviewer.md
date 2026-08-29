@@ -66,7 +66,7 @@ Cheapest-first when only a judgment on the delta is needed (full reads stay avai
 
 ### Output Artifact
 
-Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `security-review-*.md`). H2 headings are the four mandatory anchors and nothing else (`handoff-protocol.md#anchor-allow-list`, enforced at the write by `hooks/anchor-preflight.sh` and again at the DR gate); everything else nests as H3.
+Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `security-review-*.md`). H2 headings are the five mandatory anchors — the four SR anchors plus the universal `## elicitation-sweep` — and nothing else (`handoff-protocol.md#anchor-allow-list`, enforced at the write by `hooks/anchor-preflight.sh` and again at the DR gate); everything else nests as H3.
 
 ```markdown
 # Security Review — [feature]
@@ -115,6 +115,10 @@ No material threat surface: [what the diff changes and why nothing crosses a bou
 ## blockers
 
 - [Critical/High finding blocking release, or "none"]
+
+## elicitation-sweep
+
+- [sw-SR<N>-<n> item, or "nothing to elicit"]
 ```
 
 ### Invocation

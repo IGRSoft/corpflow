@@ -54,7 +54,7 @@ Read the full file ONLY when the above is insufficient, documenting the reason i
 Every stage's output artifact MUST (full checklist: **Completion Verification** below):
 
 1. Start with a `---\nhandoff:\n` block — ≤30 lines, ≤200 tokens, per-stage template `#tpl-<CODE>`.
-2. Use H2 anchors from the per-stage allow-list in `handoff-protocol.md#anchor-allow-list` (kebab-case, no spaces, no underscores).
+2. Use H2 anchors from the per-stage allow-list in `handoff-protocol.md#anchor-allow-list` (kebab-case, no spaces, no underscores), plus the universal `## elicitation-sweep` anchor every artifact carries.
 3. Atomically patch `tasks.<ID>` and the `handoffs["<PREV>→<CODE>"]` edge into `.context/state.json`.
 
 ## Contract Table
@@ -171,7 +171,7 @@ Canonical contract for the pipeline's end-of-stage asking logic. Every other fil
 
 Before it hands off, every stage runs one closing pass over its own output and asks what it decided on the user's behalf that the user would rather decide. Each surviving question becomes a typed `open_questions[]` item (§ Item shape).
 
-**Mandatory for every stage.** A stage with nothing to ask emits an explicit `open_questions: []` plus a one-line "nothing to elicit" statement in its artifact — silence is a contract violation, because an omitted sweep and an empty one are otherwise indistinguishable.
+**Mandatory for every stage.** A stage with nothing to ask emits an explicit `open_questions: []` plus a one-line "nothing to elicit" statement under its `## elicitation-sweep` heading — a mandatory H2 anchor in every artifact (`handoff-protocol.md#anchor-allow-list`). Silence is a contract violation, because an omitted sweep and an empty one are otherwise indistinguishable.
 
 #### Agents emit; the orchestrator asks
 
@@ -196,7 +196,7 @@ One shape over three transports — the stub-plus-anchor split `key_decisions` /
 
 | Transport | Carries |
 |---|---|
-| artifact body `## elicitation-sweep` | the FULL item: `options[]`, `recommended`, `rationale`. Canonical. |
+| artifact body `## elicitation-sweep` | the FULL item: `options[]`, `recommended`, `rationale`. Canonical; mandatory anchor. |
 | `handoff.open_questions[]` frontmatter | a STUB: `{id, class, ref}` |
 | `facts.open_questions[]` ledger | the stub plus `stage`, `blocks_next_stage`, `status: open\|resolved` and `resolution` |
 | typed return `open_questions[]` | the full item inline |
@@ -205,7 +205,7 @@ Schemas: `handoff-protocol.md#frontmatter-schema` `$defs/SweepItem` (full) and `
 
 #### The stub carries no summary
 
-`summary` is **optional** on the stub and canonical in the artifact body: the render reads the question text from the `ref` anchor, whose existence `handoff-harness.sh` verifies. Optional, not forbidden — a stub carrying one still matches only the sweep branch, and that is precisely why `not: { required: [class] }` stays load-bearing (`handoff-protocol.md § $defs — SweepStub, why the not guard survives q10`).
+`summary` is **optional** on the stub and canonical in the artifact body: the render reads the question text from the `ref` anchor, whose existence `handoff-harness.sh` verifies. Optional, not forbidden — the stub is the only accepted item shape, so an optional field needs no discriminator to keep it apart from anything else.
 
 The driver is the **200-token budget on the whole `handoff:` block**, enforced by `handoff-harness.sh` over the extracted frontmatter. It is a property of the block, not of the sweep: on a review stage `key_decisions` dominates, and shortening the stub alone will not bring an over-budget block back under.
 

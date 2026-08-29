@@ -125,30 +125,7 @@ properties:
 # …continued: handoff.properties
       open_questions:
         type: array
-        items:
-          oneOf:
-            - type: string                    # legacy free-text form
-            - type: object                    # legacy bare object
-              required: [id, summary]
-              # Without this, a sweep stub matches BOTH this branch and the next,
-              # and oneOf's exactly-one rule then fails every existing handoff.
-              not: { required: [class] }
-              properties:
-                id: { type: string }
-                summary: { type: string }
-                stage: { type: string }
-            - $ref: '#/$defs/SweepStub'       # closing elicitation sweep
-```
-
-#### Schema — open_questions, the class-without-ref hole
-
-An object carrying `class` but no `ref` matches **no** branch: `class` trips branch 2's `not` guard
-and branch 3 requires `ref`. Intended — a stub with no anchor cannot be resolved to its `options[]`
-at render time — but a bare `oneOf` rejection names no cause, so `handoff-harness.sh` reports that
-one explicitly.
-
-```yaml
-# …continued: handoff.properties
+        items: { $ref: '#/$defs/SweepStub' }   # closing elicitation sweep, the only item shape
       refs:
         type: object
         additionalProperties: { type: string }
@@ -161,7 +138,7 @@ constraints:
 
 Closing elicitation sweep item, defined once for all three transports (contract:
 `skills/shared/stage-contracts.md § Closing Elicitation Sweep`). The frontmatter and ledger
-branches carry `SweepStub`; the artifact body and the typed return carry the full `SweepItem`.
+arrays carry `SweepStub`; the artifact body and the typed return carry the full `SweepItem`.
 
 #### $defs — SweepItem (full item)
 
@@ -208,9 +185,8 @@ $defs:
 $defs:
   SweepStub:
     type: object
-    # q10: `summary` is NOT required here — the question text is read from the `ref`
-    # anchor body, which check_sweep_ref_anchor guarantees exists. It stays a legal
-    # optional field, which is exactly why the branch-2 `not` guard is still load-bearing.
+    # `summary` is optional: the question text is read from the `ref` anchor body,
+    # which check_sweep_ref_anchor guarantees exists (q10).
     required: [id, class, ref]
     properties:
       id:      { type: string, pattern: '^sw-[A-Z]{2}[0-9]+-[0-9]+$' }
@@ -231,14 +207,6 @@ $defs:
       status:            { type: string, enum: [open, resolved] }
       resolution:        { type: string, maxLength: 160 }
 ```
-
-##### $defs — SweepStub, why the `not` guard survives q10
-
-Dropping `summary` from `required` makes it *look* like a second discriminator — `{id, summary}`
-matches branch 2, `{id, class, ref}` matches branch 3. It is not one. Nothing forbids a stub from
-carrying an optional `summary`, and `{id, summary, class, ref}` then matches **both** branches
-unless `not: { required: [class] }` fires. `class` remains the sole discriminator; the guard is not
-redundant and must not be removed.
 
 ### Schema — subagents_spawned (B2 governance)
 
@@ -342,7 +310,7 @@ The stage schemas below are printed without it, so the item shape is never resta
     "complexity": { "type": "integer", "minimum": 0, "maximum": 50 },
     "key_decisions": { "type": "array", "items": { "type": "string" } },
     "next_stage_focus": { "type": "string" },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -360,7 +328,7 @@ The stage schemas below are printed without it, so the item shape is never resta
     "summary": { "type": "string", "maxLength": 200 },
     "key_decisions": { "type": "array", "items": { "type": "string" } },
     "next_stage_focus": { "type": "string" },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -378,7 +346,7 @@ The stage schemas below are printed without it, so the item shape is never resta
     "summary": { "type": "string", "maxLength": 200 },
     "next_stage_focus": { "type": "string" },
     "fanout": { "type": "array", "items": { "type": "string" } },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -405,7 +373,7 @@ The stage schemas below are printed without it, so the item shape is never resta
       },
       "required": ["ref", "applied"]
     },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -435,7 +403,7 @@ fails an undeclared one.
     "findings": { "type": "array", "items": { "type": "string" } },
     "blockers": { "type": "array", "items": { "type": "string" } },
     "p2_only": { "type": "boolean" },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -453,7 +421,7 @@ fails an undeclared one.
     "findings": { "type": "array", "items": { "type": "string" } },
     "blockers": { "type": "array", "items": { "type": "string" } },
     "threat_model": { "type": "string" },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -471,7 +439,7 @@ fails an undeclared one.
     "tests_passed": { "type": "integer", "minimum": 0 },
     "tests_failed": { "type": "integer", "minimum": 0 },
     "blocking_defects": { "type": "array", "items": { "type": "string" } },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -488,7 +456,7 @@ fails an undeclared one.
     "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
     "files_modified": { "type": "array", "items": { "type": "string" } },
     "cross_references": { "type": "array", "items": { "type": "string" } },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -506,7 +474,7 @@ fails an undeclared one.
     "version": { "type": "string" },
     "files_modified": { "type": "array", "items": { "type": "string" } },
     "changelog": { "type": "array", "items": { "type": "string" } },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -525,7 +493,7 @@ fails an undeclared one.
     "next_stage_focus": { "type": "string" },
     "files_modified": { "type": "array", "items": { "type": "string" } },
     "pr_url": { "type": "string" },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -542,7 +510,7 @@ fails an undeclared one.
     "verdict": { "type": "string", "enum": ["approve", "reject"] },
     "key_decisions": { "type": "array", "items": { "type": "string" } },
     "follow_ups": { "type": "array", "items": { "type": "string" } },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -560,7 +528,7 @@ fails an undeclared one.
     "root_cause": { "type": "string" },
     "next_stage_focus": { "type": "string" },
     "blast_radius": { "type": "string" },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -577,7 +545,7 @@ fails an undeclared one.
     "verdict": { "type": "string", "enum": ["pass", "fail"] },
     "findings": { "type": "array", "items": { "type": "string" } },
     "mitigations": { "type": "array", "items": { "type": "string" } },
-    "open_questions": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/SweepItem" }] } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -658,15 +626,18 @@ stage's ledger row. It is the channel's ONLY scripted writer.
 stage passes them in its own `--facts` payload; the two are separate transports with
 no derivation between them, so a stub written to frontmatter alone never reaches the FN gate.
 `handoff-harness.sh --validate-frontmatter --state`, run at each stage completion
-(`commands/worktask.md § Step B.1`), fails the stage when a class-bearing stub is missing from
+(`commands/worktask.md § Step B.1`), fails the stage when a sweep stub is missing from
 `facts.open_questions[]`, and fails when the ledger is unreadable.
+
+###### #facts-union — the merge table
 
 The merge is a union, never `. * $patch`: jq object-merge REPLACES arrays, which is exactly how a
 downstream stage silently dropped an upstream stage's entries.
 
 | Array | Identity | Collision | Order |
 |---|---|---|---|
-| `decisions`, `open_questions` | `.id` | last writer wins | survivor moves to the TAIL |
+| `decisions` | `.id` | last writer wins | survivor moves to the TAIL |
+| `open_questions` | `.id` | monotone join (`_union_sweep`): `status` `open < resolved`, `resolution` never dropped | survivor moves to the TAIL |
 | `files_modified`, `tests_added` | the string itself | duplicate dropped | first-seen position kept |
 
 ##### Ordering and idempotency
@@ -885,14 +856,14 @@ edges keep bare **stage codes** (`PL→AR`); only the ledger key is numbered.
         maxItems: 12
         description: "Bounded (B3): newest 12 survive, `status: resolved` evicted first. Clamped at the single write chokepoint state-patch.sh atomic_merge() (AD-7) — every stage writes its closing sweep here. Matches eviction-order rule 2."
         items:
+          # Mirrors $defs/SweepStub — the sweep stub is the only accepted item shape here
+          # too, so the ledger and the frontmatter cannot disagree about what an entry is.
           type: object
-          # Only `id` is required: it is the union key, and q10 removed `summary` from
-          # the sweep stub. Legacy bare objects still carry summary and stay valid.
-          required: [id]
+          required: [id, class, ref]
           properties:
-            id: { type: string }
-            summary: { type: string }
-            stage: { type: string }
+            id: { type: string, pattern: '^sw-[A-Z]{2}[0-9]+-[0-9]+$' }
+            summary: { type: string, maxLength: 160 }   # OPTIONAL; the artifact body is canonical
+            stage: { type: string }                     # derived from the id when absent
 ```
 
 ##### facts — open_questions, the ledger-only fields
@@ -1370,21 +1341,28 @@ Documented in `skills/cost-optimization/SKILL.md`. Without the 1h flag the defau
 
 ## #anchor-allow-list
 
-All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below. Anchor-lint runs twice: proactively via the managed `PostToolUse` hook (`hooks/anchor-preflight.sh`, shipped default-on in `.claude-plugin/plugin.json`) and again at the DR gate. Neither is a CI check: the lint job runs the four repo lints, and anchor-lint mode is deliberately not among them.
+All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below plus the one universal anchor. Anchor-lint runs twice: proactively via the managed `PostToolUse` hook (`hooks/anchor-preflight.sh`, shipped default-on in `.claude-plugin/plugin.json`) and again at the DR gate. Neither is a CI check: the lint job runs the four repo lints, and anchor-lint mode is deliberately not among them.
+
+### Anchors — required in every artifact
+
+One anchor is **universal**: mandatory in all thirteen stage artifacts on top of that stage's own row below.
+
+- `## elicitation-sweep` — the closing elicitation sweep's canonical transport (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`), the target the frontmatter and ledger stubs point at by `ref`. It carries either the full items or the explicit empty statement; a stage with nothing to ask still writes the heading. Enforced by `cache-lint.sh --anchor-lint` for all 13 stages, with no grace for older artifacts.
 
 ### Anchors — allowed but never required
 
-Two anchors are **allowed in every artifact and required in none**, so neither retroactively fails an artifact written before it existed and neither is reported as unexpected:
+These anchors are **allowed in every artifact and required in none**, so none retroactively fails an artifact written before it existed and none is reported as unexpected:
 
 - `## rework-<N>` — the scope-addition re-entry section the DR gate reads (`agents/technical-lead.md`).
 - `## re-review` — a review stage's second pass over reworked output, recorded beside its original findings rather than overwriting them.
-- `## elicitation-sweep` — the closing elicitation sweep's canonical transport (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`), the target the frontmatter and ledger stubs point at by `ref`. What is mandatory is the frontmatter stub, enforced by `handoff-harness.sh`.
+- `## design-preview` — PL's Figma capture block, written only when the task carries a Figma URL (`skills/shared/figma-capture.md`); absent otherwise.
+- `## test-strategy` — PL's optional test-strategy section; `pl0-procedure.md` never mandates it.
 
 ### Anchors — PL to DR
 
 | Stage | Artifact | Mandatory H2 anchors |
 |-------|----------|-----------------------|
-| PL | planning-N.md | `## requirements`, `## acceptance-criteria`, `## scope`, `## out-of-scope`, `## risks`, `## complexity`, `## stages` |
+| PL | planning-N.md | `## requirements`, `## acceptance-criteria`, `## scope`, `## out-of-scope`, `## risks`, `## complexity`, `## stages`, `## summary` |
 | AR | architecture-N.md | `## decisions`, `## trade-offs`, `## patterns`, `## integration-points`, `## schemas`, `## open-questions`, `## risks` |
 | TL | coordination-N.md | `## fan-out`, `## shared-snippets`, `## sequence`, `## risks` |
 | DV | development-N.md | `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups` |
