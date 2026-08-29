@@ -122,12 +122,6 @@ EOF
   assert_output --partial "Closes #<N>"
 }
 
-@test "P5: an AI-attribution footer is caught" {
-  printf 'Co-Authored-By: Claude <noreply@anthropic.com>\n' >> "$CLEAN"
-  run bash "$PLUGIN_ROOT/$SCRIPT" --body "$CLEAN"
-  assert_output --partial "warn: P5"
-}
-
 @test "edge: --strict promotes findings to a blocking exit 1" {
   printf 'Manifest: `.context/images/x/screenshots.md`\n' >> "$CLEAN"
   run bash "$PLUGIN_ROOT/$SCRIPT" --body "$CLEAN" --strict

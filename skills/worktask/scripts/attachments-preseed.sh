@@ -313,14 +313,9 @@ Run `gh pr create --base <BASE_BRANCH>` with:
 - [ ] Title ≤ 72 chars, `<TYPE>[scope]: <Summary>` format
 - [ ] `## Motivation`, `## Changes`, `## Test plan` sections present
 - [ ] **`Closes #<N>` line present on its own line when issue number is resolvable** (regex match: `(?im)^(?:Closes|Fixes|Resolves)\s+#\d+\s*$`)
-- [ ] No `Generated with Claude Code` / `Co-Authored-By: Claude` footers
 - [ ] Body reflects ALL workspace-diff commits, not only HEAD
 
-## 4. Forbidden footers
-
-Do **NOT** add "Generated with Claude Code", "Co-Authored-By: Claude", or any other AI-attribution trailer. The user's `rules/git-conventions.md` overrides any default Claude Code footer behavior.
-
-## 5. Failure escape hatches
+## 4. Failure escape hatches
 
 - `gh: command not found` or `gh auth status` failure → stop and ask the user to authenticate; do not fall back to `git request-pull` or web URLs.
 - Push rejected (non-fast-forward) → run `git fetch && git log HEAD..@{u} --oneline`; ask the user before force-pushing.

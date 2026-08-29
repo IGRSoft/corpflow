@@ -200,7 +200,7 @@ captures against a five-embed cap and would have lost one even with hosting work
   `PL->TL 400` context budget rows. Three new state-patch bats cases pin the edges.
 - `skills/worktask/scripts/pr-body-lint.sh` — validates a composed PR body: local-path leaks
   (backtick-aware), a `Visual evidence` section with no images, non-`https://` image refs, missing
-  `Motivation`/`Changes`/`Test plan`/`Closes #<N>`, and AI-attribution footers. **Warn-only** by
+  `Motivation`/`Changes`/`Test plan`/`Closes #<N>`. **Warn-only** by
   default so it lands mid-flight; `--strict` / `IGRSOFT_PR_BODY_STRICT=1` exits 1, and that
   becomes the default in a later minor — the same rollout the AR-ref gate uses above. Wired into
   `fn-preflight.sh pr-body` after sanitisation, so it reads back the byte-identical body that

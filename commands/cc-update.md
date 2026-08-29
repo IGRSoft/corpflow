@@ -134,7 +134,7 @@ Changelog entries are categorized by keyword and routed to the file types below.
 | Category | Keywords | Affected files |
 |----------|----------|----------------|
 | **Commands** | slash command, /clear, /reload-plugins, Tool(param:value) permission syntax | worktask + relevant command files, agent-coordination |
-| **Security** | auto mode, destructive git block, commit --amend guard, IaC destroy block, trigger delivery can't auto-approve, attribution.sessionUrl, auth-stub tools headless | git-conventions, resume reference, security-reviewer agent |
+| **Security** | auto mode, destructive git block, commit --amend guard, IaC destroy block, trigger delivery can't auto-approve, auth-stub tools headless | git-conventions, resume reference, security-reviewer agent |
 
 ## Output Format
 

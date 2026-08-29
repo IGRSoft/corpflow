@@ -150,8 +150,8 @@ line plus the audit reason) to `.context/errors/project-manager.md`, and do NOT 
   row and — when it reports `result: "ok"` — a `## Visual evidence` section. A `skipped` row
   legitimately produced nothing, so no section is required.
 - **Reads back** via `pr-body-lint.sh` (warn-only): local-path leaks including inside code spans,
-  an empty `Visual evidence` section, non-https image refs, missing sections, AI-attribution
-  footers. Warnings never change the verdict — report them, do not act on them.
+  an empty `Visual evidence` section, non-https image refs, missing sections. Warnings never
+  change the verdict — report them, do not act on them.
 
 ##### Issue resolution (ranked, first match wins)
 
