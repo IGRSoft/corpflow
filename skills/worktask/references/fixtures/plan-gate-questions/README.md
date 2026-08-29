@@ -13,6 +13,7 @@ the assertions in each fixture.
 ## How QA uses these
 
 1. Read the fixture's **Input** block and run the PL0 stage against it.
-2. Count the entries in the produced plan's `handoff.open_questions[]` and in its `## summary`
-   elicitation list. Both counts must match **Expected gate output**.
+2. Count the entries in the produced plan's `handoff.open_questions[]` and the items under its
+   `## elicitation-sweep` heading. Both counts must match **Expected gate output**; the heading
+   itself is mandatory even at zero items.
 3. Confirm each resolved fact appears in the plan with the command that resolved it.

@@ -49,6 +49,8 @@
 #                           atomic window, so one call patches both the ledger row and the
 #                           facts a stage recorded; standalone it exits 0 after the merge.
 #                           Union, never replace — identity rule at § Facts union below.
+#                           open_questions items must be FULL sweep stubs (string .id, .class
+#                           and .ref); a partial one exits 2 with state.json untouched.
 #
 #   Ledger ops — direct tasks{} writes.  Each short-circuits the artifact path and exits.
 #   --task-create is the ONLY op that may introduce a key; the rest reject an unknown ID
@@ -580,22 +582,46 @@ _lock_release() {
 trap '_lock_release' EXIT
 
 # B3 state bounds are enforced HERE (the single write chokepoint, AD-7) rather than
-# scattered across the 13 stage agents: after every mutation the two unbounded
-# arrays are clamped so a long run cannot grow state.json past its ~500-token budget.
+# scattered across the 13 stage agents: after every mutation the unbounded arrays are
+# clamped so a long run cannot grow state.json past its ~500-token budget.
 #   facts.decisions          → newest 8 (tail, matches the eviction-order rule).
+#   facts.open_questions     → newest 12, resolved-evicted-first. Every stage now writes
+#                              its closing sweep here, so the array grows ~13x faster than
+#                              it did; resolved items go first because eviction-order rule 2
+#                              already drops them and only unresolved ones still have to
+#                              reach the FN gate.
 #   facts.dispatched_agents  → 6, launched-survive-first (live agents resume needs are
 #                              retained ahead of terminal rows, which are eviction bait).
-# Both clamps fire ONLY when the array already exists AND exceeds its bound, so a normal
+# Every clamp fires ONLY when the array already exists AND exceeds its bound, so a normal
 # small state is byte-identical to an unbounded merge (idempotency + no-op paths hold).
 _STATE_BOUNDS_FILTER='
       (if ((.facts.decisions? // []) | length) > 8
        then .facts.decisions |= .[-8:] else . end)
+    | (if ((.facts.open_questions? // []) | length) > 12
+       then .facts.open_questions |=
+            (([ .[] | select((.status // "open") != "resolved") ] | .[-12:]) as $keep
+             | $keep
+               + ([ .[] | select((.status // "open") == "resolved") ]
+                  | .[ ((length - (12 - ($keep | length))) | if . < 0 then 0 else . end) : ]))
+       else . end)
     | (if ((.facts.dispatched_agents? // []) | length) > 6
        then .facts.dispatched_agents |=
             (([ .[] | select(.status == "launched") ]
             + [ .[] | select(.status != "launched") ])[0:6])
        else . end)'
 
+# open_questions unions through _union_sweep, not _union_keyed: last-writer-wins would let a
+# re-emitted stub carrying `status: open` destroy an answer already recorded against that id, and
+# since sw-DR0-3 moved sweep answers out of facts.decisions[] that element is the ONLY record of it.
+# `open < resolved` is joined monotonically — a later write may raise, never downgrade — the same
+# lattice shape this feature already ships for `decision < escalate`. The fields are guarded
+# INDEPENDENTLY: an incoming stub that omits `resolution` inherits the incumbent's even when both
+# sides say `resolved`, because dropping the answer body is a downgrade too, and
+# `blocks_next_stage` joins by OR (`false < true`) so a rework round that re-emits the bare stub
+# cannot silently demote a boundary-blocking item to an FN-batched one. Scoped to
+# open_questions alone: _union_keyed stays untouched for facts.decisions, whose semantics do not
+# change.
+#
 # Union semantics for the facts.* arrays. Object-merge (`. * $patch`) REPLACES arrays, so
 # a downstream stage's patch would silently drop every entry an upstream stage recorded.
 # Identity is `.id` for the keyed arrays and the string itself for the scalar ones.
@@ -607,13 +633,25 @@ _FACTS_UNION_FILTER='
         reduce .[] as $e ([]; map(select((. | k) != ($e | k))) + [$e]);
       def _union_scalar:
         reduce .[] as $e ([]; if (index($e) != null) then . else . + [$e] end);
+      def _sweep_join($prev; $new):
+        $new
+        + (if (($prev.status // "open") == "resolved") and (($new.status // "open") != "resolved")
+           then { status: "resolved" } else {} end)
+        + (if ($new.resolution // null) == null and ($prev.resolution // null) != null
+           then { resolution: $prev.resolution } else {} end)
+        + (if ($prev.blocks_next_stage // false) == true and ($new.blocks_next_stage // false) != true
+           then { blocks_next_stage: true } else {} end);
+      def _union_sweep:
+        reduce .[] as $e ([];
+          ((map(select(.id == $e.id)) | first) // null) as $prev
+          | map(select(.id != $e.id)) + [ _sweep_join($prev; $e) ]);
       .facts = ((.facts // {})
         | (if ($f.decisions // null) != null
            then .decisions = (((.decisions // []) + $f.decisions) | _union_keyed(.id))
            else . end)
         | (if ($f.open_questions // null) != null
            then .open_questions =
-                (((.open_questions // []) + $f.open_questions) | _union_keyed(.id))
+                (((.open_questions // []) + $f.open_questions) | _union_sweep)
            else . end)
         | (if ($f.files_modified // null) != null
            then .files_modified = (((.files_modified // []) + $f.files_modified) | _union_scalar)
@@ -624,6 +662,9 @@ _FACTS_UNION_FILTER='
 
 # Shape gate for --facts, run BEFORE the lock: a malformed payload is a caller bug, and the
 # union filter would otherwise persist an array no downstream reader can parse.
+# open_questions is held to the FULL sweep stub (.id, .class, .ref), not just .id: a partial
+# item reaches the FN render with no anchor to resolve its options[] from, and the union would
+# have already replaced the incumbent object that did carry one. decisions stays id-only.
 _FACTS_VALIDATE_FILTER='
       def _allowed: ["decisions","files_modified","open_questions","tests_added"];
       if type != "object" then "must be a JSON object"
@@ -631,11 +672,19 @@ _FACTS_VALIDATE_FILTER='
       else
         (keys - _allowed) as $unknown
         | [ to_entries[]
-            | select(.key == "decisions" or .key == "open_questions")
+            | select(.key == "decisions")
             | select((.value | type) != "array"
                      or ((.value | map(select((type != "object")
                                               or ((.id | type) != "string")))) | length) > 0)
             | .key ] as $badkeyed
+        | [ to_entries[]
+            | select(.key == "open_questions")
+            | select((.value | type) != "array"
+                     or ((.value | map(select((type != "object")
+                                              or ((.id | type) != "string")
+                                              or ((.class | type) != "string")
+                                              or ((.ref | type) != "string")))) | length) > 0)
+            | .key ] as $badstub
         | [ to_entries[]
             | select(.key == "files_modified" or .key == "tests_added")
             | select((.value | type) != "array"
@@ -647,6 +696,8 @@ _FACTS_VALIDATE_FILTER='
           elif ($badkeyed | length) > 0
           then "bad shape for " + ($badkeyed | join(", "))
                + " (expected an array of objects each with a string .id)"
+          elif ($badstub | length) > 0
+          then "bad shape for open_questions (expected an array of sweep stubs, each with string .id, .class and .ref)"
           elif ($badscalar | length) > 0
           then "bad shape for " + ($badscalar | join(", "))
                + " (expected an array of strings)"
@@ -1320,6 +1371,44 @@ EOSTATE
     printf 'T18: live target refuses with exit 4, state byte-unchanged: ok\n'
   else
     printf 'T18: live-target guard (rc=%s): FAIL\n' "$st18_rc" >&2
+    exit 1
+  fi
+
+  # ---- T19: a partial sweep stub via --facts is rejected before the lock ----
+  # The union REPLACES the incumbent object for that id, so admitting {id} alone would
+  # silently drop the class/ref the FN render resolves options[] through.
+  make_state
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}]}' \
+    > /dev/null || {
+      printf 'T19: a full sweep stub was rejected\n' >&2
+      exit 1
+    }
+  cp .context/state.json .context/state.json.snap19
+  st19_rc=0
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-PL0-1"}]}' > /dev/null 2>&1 || st19_rc=$?
+  if [[ "$st19_rc" -eq 2 ]] \
+    && diff -q .context/state.json .context/state.json.snap19 > /dev/null; then
+    printf 'T19: partial sweep stub exits 2, state byte-unchanged: ok\n'
+  else
+    printf 'T19: partial-stub guard (rc=%s): FAIL\n' "$st19_rc" >&2
+    exit 1
+  fi
+  # decisions keeps the id-only contract: the tightening is scoped to open_questions.
+  bash "$SELF" --facts '{"decisions":[{"id":"d1","summary":"s","ref":"planning-0.md#stages"}]}' \
+    > /dev/null || {
+      printf 'T19: decisions payload was rejected: FAIL\n' >&2
+      exit 1
+    }
+
+  # ---- T20: blocks_next_stage is raise-only across the union ----
+  # A rework round re-emits the bare stub; the flag the agent set earlier must survive it.
+  make_state
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":true}]}' > /dev/null
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep"}]}' > /dev/null
+  if jq -e '.facts.open_questions[0].blocks_next_stage == true' .context/state.json > /dev/null; then
+    printf 'T20: blocks_next_stage survives a bare re-emit: ok\n'
+  else
+    printf 'T20: blocks_next_stage was cleared by a bare re-emit: FAIL\n' >&2
     exit 1
   fi
 

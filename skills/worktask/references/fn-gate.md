@@ -11,6 +11,13 @@ Imperative procedure for the FN stage, read at gate time from `skills/worktask/S
 1. Run the **Pre-gate Conductor-attachments writer** (below), then `test -f` both attachment files.
 2. Append the `fn_gate_waiting` audit line.
 3. Present the pre-FN summary: branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`.
+
+#### Step 3b — the closing sweep, before the approve/reject call
+
+3b. Render the batched closing sweep in `AskUserQuestion` calls of ≤4 questions, grouped by originating stage — collected and classified per `commands/worktask.md § Step C`. These precede step 4 and never merge into it.
+
+#### Steps 4–6 — approve, reject, and the writer trip-wire
+
 4. `AskUserQuestion`. Approve → append `approval_received`, then delegate FN (commit, push, PR).
 5. Reject → append `approval_rejected` and STOP; do NOT delegate FN. Surface the user's feedback, then resume per `skills/worktask/SKILL.md § FN gate rejection — resume path` (route each item to its owning stage, `run_index` frozen, re-present this gate on completion).
 6. `test -f` both attachment files once more immediately before the gate returns — a partially-completed writer must never reach `return`.

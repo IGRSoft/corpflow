@@ -308,6 +308,8 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact
 top): `stage-contracts.md#tpl-fn`. Prev→this label: `RE→FN` (or `DC→FN` when RE is absent).
 
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage FN --prev RE` (`skills/worktask/scripts/`; `--prev DC` when RE is

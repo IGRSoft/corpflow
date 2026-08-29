@@ -333,6 +333,8 @@ Before marking DR complete, verify (supplement to `stage-contracts.md § Complet
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dr`. Prev→this label: `DV→DR`.
 
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage DR --prev DV` (`skills/worktask/scripts/`) to atomically patch `tasks.DR0` + the `DV→DR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
@@ -343,7 +345,8 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 
 ```bash
 state-patch.sh --stage DR --prev DV --facts '{
-  "decisions": [{"id":"dr-1","summary":"≤160 chars","ref":"developer-review-0.md#findings"}]}'
+  "decisions": [{"id":"dr-1","summary":"≤160 chars","ref":"developer-review-0.md#findings"}],
+  "open_questions": [{"id":"sw-DR0-1","class":"decision","ref":"developer-review-0.md#elicitation-sweep"}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail): never clobbers an upstream stage's entries, and a re-run is byte-identical. Omitting it loses the finding silently. Canonical: `handoff-protocol.md#facts-union`.

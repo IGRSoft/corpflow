@@ -36,8 +36,17 @@ Before the Capture Workflow, match `figma.com` (case-insensitive substring) in t
 Error string matches (case-insensitive) any of `authenticate` / `OAuth` / `unauthorized` / `401`:
 
 1. Emit exactly one user-facing line: `Figma MCP not authenticated. Authorize at <OAUTH_URL_FROM_ERROR> and paste callback to continue, or reply 'skip' to proceed without screenshot.` (OAuth URL from the error payload; if absent, drop the placeholder and say `Authorize the Figma MCP server`.)
-2. Append `q1: Figma MCP auth pending; PM proceeded without screenshot capture (URLs: <comma-separated list>)` to `state.json facts.open_questions[]`, mirrored into the plan's `handoff.open_questions` frontmatter.
-3. **Soft halt**: skip the Capture Workflow entirely and write the plan as if no Figma URL were present — it ships with the open question, and the user decides whether to authorize and re-run.
+2. Write one closing-sweep item for it (§ Auth failure — the sweep item, below).
+3. **Soft halt**: skip the Capture Workflow entirely and write the plan as if no Figma URL were present — it ships with the sweep item, and the user decides whether to authorize and re-run.
+
+#### Auth failure — the sweep item
+
+Same contract as every other stage's (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`): the full `SweepItem` under `planning-<N>.md#elicitation-sweep`, and its stub in BOTH `handoff.open_questions[]` and the PL `--facts` payload — the two transports have no derivation between them, so a stub written to only one never reaches the gate.
+
+- `id: sw-PL<N>-<n>`, `class: decision`, `ref: "planning-<N>.md#elicitation-sweep"`, no `blocks_next_stage` — PL's boundary already is the plan gate.
+- `summary`: `Figma MCP auth pending; proceed without screenshot capture? (URLs: <comma-separated list>)`
+- `options[]`: `Proceed without screenshots` (`recommended: true`; the QA design gate is skipped for this run) / `Authorize and re-run capture`.
+- `rationale`: one line on why proceeding is the default here.
 
 ## Capture Workflow
 
@@ -69,7 +78,7 @@ curl -sf -o ".context/designs/<basename>" "<image_url>"
 
 #### Verify and record (3d–3e)
 
-d. **Verify** before recording success: `file "<target_path>"` reports a PNG **and** byte size > 0. On failure (curl non-zero, missing file, zero bytes, not a PNG) append `figma persist failed: <nodeId> → <target_path> (<reason>)` to `.context/errors/product-manager.md`, record an open question in `state.json facts.open_questions[]`, and **continue** — persist failures never block the worktask.
+d. **Verify** before recording success: `file "<target_path>"` reports a PNG **and** byte size > 0. On failure (curl non-zero, missing file, zero bytes, not a PNG) append `figma persist failed: <nodeId> → <target_path> (<reason>)` to `.context/errors/product-manager.md`, record it as a sweep item exactly as § Auth failure — the sweep item specifies — full item under `planning-<N>.md#elicitation-sweep`, stub in the frontmatter AND in `--facts`, `id: sw-PL<N>-<n>`, `class: decision`, options `Proceed without screenshots` (recommended) / `Authorize and re-run capture` — and **continue**: persist failures never block the worktask.
 e. Record `{nodeId, name, state, image_url, target_path}` into `state.json facts.figma_assets[]`; only verified rows count toward registry success, failed rows carry `failed: true`.
 
 ### Step 4 — Filename grammar
@@ -128,7 +137,7 @@ After persistence and the registry write — **in this same PL turn**, the PM be
 
 1. Keep the captured Figma source URL line(s) at the top of the anchor, verbatim.
 2. Per **persisted** file (verified non-zero PNG): a `{{asset:<basename>}}` token line (basename only, no path) **immediately followed** by a `- <description>` bullet — state mapping plus build notes (shape/geometry, badge/label text, control deltas versus the other states). The Overview gets its own token + bullet, marked as the container reference, not a per-state target.
-3. Failed/skipped frames (`failed: true` in `state.json facts.figma_assets[]`) get a plain bullet naming their open question — no `{{asset:...}}` token (nothing verified to host), never a satisfied target.
+3. Failed/skipped frames (`failed: true` in `state.json facts.figma_assets[]`) get a plain bullet naming their sweep item by `sw-PL<N>-<n>` id — no `{{asset:...}}` token (nothing verified to host), never a satisfied target.
 
 The registry rows, not one combined screenshot, are QA's authoritative per-state targets.
 

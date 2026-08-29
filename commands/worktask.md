@@ -4,7 +4,7 @@ description: Initialize a new worktask task with proper folder structure and sta
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]]'
 version: 0.6.0
 model: opus
-allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Task(corpflow:product-manager)
+allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Task(corpflow:product-manager)
 ---
 
 > **EXECUTION MODEL (BINDING)** — every worktask is worktree-isolated, so the PR is the review
@@ -459,10 +459,14 @@ wait for approval before the stage loop; on `bypass` proceed directly.
 
 ### Step A.4 — Auto-Decision Pre-Pass (runs before Step A.5)
 
-Read `tasks.PL0.metadata.decision_gate` (default `"user"`) and PL0's `open_questions[]` (the numbered
-elicitation list from `pl0-procedure.md § Plan-Gate Open-Question Batching`). **No-op** when
-`decision_gate == "user"` or `open_questions[]` is empty/absent — fall through to Step A.5.
-Otherwise:
+Read `tasks.PL0.metadata.decision_gate` (default `"user"`) and, from `facts.open_questions[]`, PL's
+unresolved `sw-PL<N>-*` items — those whose `status` is not `"resolved"`
+(`pl0-procedure.md § Plan-Gate Open-Question Batching`). Resolve each item's question text and
+`options[]` from `planning-N.md#elicitation-sweep` exactly as § Step C.4 does; the stub carries
+neither. **No-op** when `decision_gate == "user"` or no such item exists — fall through to
+Step A.5. Otherwise, run § Step A.4 — the delegate dispatch.
+
+#### Step A.4 — the delegate dispatch
 
 1. Append an `auto_decision_dispatched` audit row (`subject:"PL<N>"`, `metadata.questions: <count>`).
 2. Re-dispatch PM as a decision delegate on the **Fable model**:
@@ -490,10 +494,17 @@ items. It adds NO new anchor (`handoff-protocol.md § #anchor-allow-list`) and d
 
 #### Auto-decision ledger merge (orchestrator)
 
-3. On return the ORCHESTRATOR — not the delegate — merges via `atomicMergeStateJson`: append each
-   decided item to `facts.decisions[]` marked `(auto-decided)` and remove the resolved entries from
-   `facts.open_questions[]`. This is what makes the decisions visible to AR/TL/DV, which read both on
-   stage entry (`skills/shared/stage-contracts.md`).
+3. On return the ORCHESTRATOR — not the delegate — merges via `atomicMergeStateJson`: mark each
+   answered `facts.open_questions[]` item `status: "resolved"` with its `resolution` (the § Step C.5
+   write — the whole stub, never `{id, status, resolution}` alone), and **also** append each decided
+   item to `facts.decisions[]` marked `(auto-decided)`. That second write is a deliberate deviation
+   from § Step C.5, which sends sweep answers to `resolution` only: AR/TL/DV read `facts.decisions[]`
+   on stage entry (`skills/shared/stage-contracts.md`), and at most 4 PL items cannot evict AR's
+   newest-8 ring before AR has written to it. Entries are marked resolved, **never removed** — a
+   deleted item takes its `ref` anchor and its answer with it.
+
+##### Auto-decision ledger merge — the audit row
+
 4. Append one `auto_decision_resolved` audit row (`subject:"PL<N>"`, `metadata: { decided: <count>,
    escalated: <count>, model_resolved: <alias>, decisions: [{question, answer, rationale}] }`) — the
    per-question rationale is carried there, one line each.
@@ -506,6 +517,23 @@ description, security-posture-weakening, or spend-authorizing. Those return as `
 any exist, Step A.5 runs as a **`checkpoint`** gate for those items even under `plan_gate ==
 "bypass"` — the user answers only the escalated questions, the batch amendment pass applies their
 answers, then the bypass path resumes. Auto-decision never widens what runs unattended.
+
+##### Escalation guard — raise-only self-labels
+
+A closing-sweep item arrives carrying its emitting stage's own `class`. The orchestrator computes
+`effective = max(agent_label, orchestrator_label)` over the ordered lattice `decision < escalate`.
+Because that join is monotone, raising is honoured and lowering is refused **by construction**, not
+by a rule someone must remember: agent `decision` + orchestrator `escalate` → `escalate`; agent
+`escalate` + orchestrator `decision` → `escalate`. The classes are the four enumerated directly
+above — this sub-heading adds no second copy of them. It runs at § Step C.2, strictly before any
+auto-answer, so no item reaches the delegate un-reclassified.
+
+###### Escalation guard — the blocking axis
+
+`blocks_next_stage` joins by the same rule on the 2-element lattice `false < true`: `effective =
+agent_flag OR orchestrator_flag`. The orchestrator may raise an item to blocking; it may never clear
+the emitting agent's flag. The two axes are orthogonal and are evaluated independently — an
+`escalate` item may or may not block, and a blocking item may be an ordinary `decision`.
 
 ##### Escalation guard — unattended `/megatask` per-issue runs (PARK)
 
@@ -572,6 +600,17 @@ Read `tasks.PL0.metadata.plan_gate` (default `"checkpoint"`). Resolve the run in
    plan_file shape boundary`).
 2. Present the plan summary: complexity score, stages created (with agents), dependency chain, key
    decisions, and both inclusion decisions (below).
+
+##### Plan gate checkpoint path — the sweep render
+
+2b. Render PL's unresolved sweep items FIRST — every `facts.open_questions[]` item whose id matches
+   `sw-PL<N>-*` and whose `status` is not `"resolved"` — through § Step C.4 (question text and
+   `options[]` from `planning-N.md#elicitation-sweep`) and record the answers through § Step C.5,
+   with `subject:"PL<N>"` on every audit row. These are separate `AskUserQuestion` calls; the
+   approve/reject call in step 3 fires **last and unmodified**, exactly as at the FN gate.
+
+##### Plan gate checkpoint path — the approval call
+
 3. `AskUserQuestion`: *"Here is the generated plan for your worktask. Approve to begin
    implementation, or describe any changes you want first."* The gate holds until a human answers.
    Keep the `/config` idle-timeout opt-in OFF on hosts running gated worktasks — an idle auto-answer
@@ -761,9 +800,9 @@ three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Ste
 
 ### Step B — AR-reference check at DV completion
 
-Runs only when `.context/state.json` has a `tasks.AR0` entry (AR is optional —
-`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`). After DV0 completes and before
-dispatching DR0:
+The AR-reference arm fires only when `.context/state.json` has a `tasks.AR0` entry (AR is optional —
+`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`). The invocation itself is the
+§ Step B.1 call every stage makes; at DV completion, before dispatching DR0, it is:
 
 ```bash
 STRICT_FLAG=""
@@ -783,10 +822,132 @@ each as an audit row and carry it into the DR dispatch prompt so DR checks the l
 {"ts":"<ISO>","actor":"orchestrator","action":"ar_ref_check","subject":"DV<N>","result":"warn"}
 ```
 
+##### Step B — what the sweep checks do to this rollout
+
+**The warn-only rollout covers the AR-reference check only.** The same invocation also runs the
+three closing-sweep checks (stub shape, `ref` anchor resolution, ledger parity), which **hard-fail
+regardless of `--strict`** — the sweep obligation is strict from its first release
+(`skills/shared/stage-contracts.md § Closing Elicitation Sweep`). A non-zero exit here is therefore
+not necessarily an AR-reference failure; a sweep failure blocks the transition per § Step B.1 — on
+failure, and its `fail:` line names a `sw-` id.
+
 **Early opt-in — `CORPFLOW_AR_REF_STRICT=1`.** The orchestrator passes `--strict`; violations become
 `fail:` lines with exit 1 and block the DR dispatch until DV fixes the reference. Use it to shake out
 dangling references before the next minor flips `--strict` to the default. The inverse guard (an
 architecture reference with no `tasks.AR0` entry) warns in both modes and never fails.
+
+### Step B.1 — Sweep checks at every stage completion
+
+The harness is not a DV-only tool. After **any** stage `<CODE><N>` lands its `completed` patch (loop
+step 6.5) and before § Step C.0 renders its blocking items or the next stage is dispatched, run:
+
+```bash
+ART=$(jq -r --arg id "<CODE><N>" '.tasks[$id].artifact // empty' .context/state.json)
+skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$ART" --state .context/state.json
+```
+
+`$STRICT_FLAG` from § Step B may be appended; it affects only the AR-reference arm, which fires for DV
+alone. For DV this **is** the § Step B invocation — run it once, not twice. An artifact whose
+`open_questions` is the empty array passes untouched; any item in it must be a full sweep stub.
+
+#### Step B.1 — on failure
+
+Exit 0 → append `{"action":"sweep_check","subject":"<CODE><N>","result":"ok"}` and continue to
+§ Step C.0. Non-zero with a `fail:` line naming a `sw-` id (or `sweep ledger parity cannot be
+verified`) → append the same row with `result:"fail"` and the line as `reason`, then treat it as a
+`missing_input` contract violation on `<CODE><N>`: do **not** run Step C.0, do **not** dispatch the
+next stage; re-dispatch the stage with the `fail:` line verbatim so it writes the missing stub, `ref`
+anchor, or `--facts` entry. There is no advisory tier here — the unreadable-ledger case fails too.
+
+### Step C — Closing-sweep collection and render (loop step 4.9)
+
+Step C is to the FN gate what Step A.4 is to the plan gate: it resolves questions, it approves
+nothing, and every path out of it falls through to the gate's own approve/reject call. Contract:
+`skills/shared/stage-contracts.md § Closing Elicitation Sweep`.
+
+It has **two firing points**, selected per item by `blocks_next_stage`, never by stage:
+
+- **C.0** runs at *every* stage boundary, immediately after that stage's `completed` patch and
+  before the next stage is dispatched, over that stage's **blocking** items only.
+- **C.1–C.5** run once, immediately before the FN `Task()` delegation, over everything else.
+
+#### Step C.0 — blocking items, at their own boundary
+
+After any stage `<CODE><N>` completes, read the items it just wrote whose `blocks_next_stage` is
+true and whose `status` is not `"resolved"`. If none — the overwhelmingly common case — Step C.0 is
+a no-op and the loop proceeds unchanged. Otherwise run C.2 through C.5 on exactly those items, with
+`subject:"<CODE><N>"` on every audit row, and only then dispatch the next stage. The next stage would
+otherwise build on a guess, which is the whole reason the flag exists.
+
+##### Step C.0 — no new gate, and no deadlock
+
+This creates **no new gate**: it is the same render the FN gate performs, moved earlier for items
+whose answers the next stage needs. Under a bypassed lane it degrades exactly as C.5 specifies —
+record, never prompt — so no unattended run can deadlock on it.
+
+#### Step C.1 — collect everything not already answered
+
+1. **C.1 — Collect.** Read `facts.open_questions[]` and keep the items whose `status`
+   is not `"resolved"`. That status test is the whole filter: an item already answered at its own
+   boundary (C.0) or at the plan gate is resolved, so it is excluded by the same rule that excludes
+   PL's. Do **not** filter on stage — under `blocks_next_stage` any stage can be answered at its own
+   boundary, so a stage-name exclusion would be both wrong and incomplete. **Derive the stage from
+   the item id**, whose `sw-<TASK_ID>-<n>` shape is pinned by the schema, for *grouping* — an
+   explicit `stage` field takes precedence when present, but it is optional and absent from every
+   template, so nothing may depend on it. Resolve each item's `ref` anchor to its full `options[]`
+   body in the emitting stage's artifact.
+#### Step C.2 — classify before anything answers
+
+2. **C.2 — Classify.** Apply § Escalation guard — raise-only self-labels to every collected item.
+   Strictly before C.3.
+
+#### Step C stamps no approval carrier
+
+The asymmetry with the FN gate itself is deliberate and mirrors Step A.4: answering a sweep item
+settles plan or implementation content, it does not approve finalization. Nothing here writes an
+approval carrier, and the gate's own `AskUserQuestion` still fires last and unmodified.
+
+#### Step C.3–C.4 — auto-answer, then render
+
+3. **C.3 — Auto-answer.** Only when `decision_gate == "auto"`: re-dispatch the PM decision delegate
+   on `model: "fable"` over the `effective_class == "decision"` items — the same single authority as
+   Step A.4, with the same `facts.capabilities.fable_dispatch == "credit_blocked"` → `"opus"`
+   fallback. Audit `auto_decision_dispatched` → `auto_decision_resolved`, `subject:"FN<N>"`.
+##### Step C.4 — where the question text comes from
+
+4. **C.4 — Render.** Present the remaining items through `AskUserQuestion`, grouped by originating
+   stage, in calls of **at most 4 questions** (the tool's per-call ceiling). The question text comes
+   from the **resolved `ref` anchor body**, not from the stub — the stub carries no `summary`, and
+   `handoff-harness.sh check_sweep_ref_anchor` is what guarantees that anchor exists. Options are
+   `options[]` with the `recommended: true` entry marked, and the `rationale` is shown with them. These calls **precede** the gate's approve/reject call and never
+   merge into it: a merged call overflows at four-plus items and entangles sweep answers with the
+   gate's reject/resume path.
+
+#### Step C.5 — record, and the unattended lanes
+
+5. **C.5 — Record.** Write each answer back into the item itself:
+   `facts.open_questions[].status = "resolved"` and `facts.open_questions[].resolution = "<answer>"`,
+   plus a `sweep_resolved` audit row whose subject is the boundary that rendered it — `FN<N>` from
+   C.1–C.5, `<CODE><N>` from C.0. The union refuses a later downgrade of either field, so recording
+   once is enough. Answers do **not** go to
+   `facts.decisions[]`: that array clamps to the newest 8, and a 13-stage run's sweep answers would
+   evict the architectural decisions the ring exists to keep.
+
+##### Step C.5 — the write-back is a whole stub
+
+The write goes through `state-patch.sh --facts` as the **complete** item — `id`, `class` and `ref`
+alongside `status` and `resolution` — never as `{id, status, resolution}`. The union REPLACES the
+incumbent object for that id, so a partial item would drop the very anchor C.4 resolves its
+question text from; `--facts` now rejects one by name rather than persisting it.
+
+##### Step C.5 — the unattended lanes
+
+Recording never stops; only prompting does. Under `fn_gate: "bypass"` skip C.4 and record only —
+`sweep_recorded`, plus `sweep_escalation_unprompted` for every effective-`escalate` item. Under a
+`/megatask` per-issue run an effective-`escalate` item PARKS the issue exactly as § Escalation
+guard — unattended `/megatask` per-issue runs (PARK) specifies. Every one of those audit subjects is
+the rendering boundary, `<CODE><N>` — `FN<N>` for a batched item, the emitting stage's own id for a
+blocking one. Full carrier table: `skills/shared/stage-contracts.md § Unattended fallbacks`.
 
 ## Phase 3: Post-Worktask Self-Improvement
 

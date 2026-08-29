@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Fixed
 
+- **`cache-lint --anchor-lint` rejected `## summary`, which `pl0-procedure.md` requires**, and the
+  conditional `## design-preview` it mandates whenever the task carries a Figma URL. `## summary` is
+  now a mandatory PL anchor; `## design-preview` and PL's unmandated `## test-strategy` joined the
+  allowed-but-never-required set.
+- **`cache-lint --anchor-lint` rejected a review's own `## re-review` section** — the same gap that
+  `## rework-<N>` had. Both are shipped conventions the DR gate reads; both are now allowed anchors.
+- **The `$defs` note attributed the schema injection to a section that does not perform it.** It now
+  states the obligation and says plainly that no shipped file implements it, rather than reading as
+  verified. `commands/worktask.md § Step B` likewise no longer describes its harness call as
+  uniformly advisory: the three sweep checks inside it hard-fail regardless of `--strict`.
+- **`agents/product-manager.md` had no `## Handoff Protocol` section**, so
+  `cache-lint.sh --frontmatter-template-lint` failed on it repo-wide — a pre-existing gap unrelated
+  to the sweep, fixed here on an explicit user decision. It now carries the same pointer-only
+  section the other thirteen stage agents use, citing `stage-contracts.md#tpl-pl`; no template copy
+  was inlined.
+
 - **The eval capture measured the installed plugin, not the tree under test.** `eval-capture.py`
   passed no `--plugin-dir`, so the CLI resolved `/corpflow:request-plan` from the marketplace
   release while `skill_version()` read this repo — a sweep could exercise one version and stamp
@@ -28,6 +44,45 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Added
 
+- **Closing elicitation sweep — every stage now has to ask.** Before handing off, all thirteen
+  stages emit a typed `open_questions[]` sweep: 2–4 options with exactly one marked `recommended`,
+  a one-line rationale, and a `decision`/`escalate` class. A stage with nothing to ask emits an
+  explicit empty array plus a "nothing to elicit" line — silence is a contract violation, because
+  an omitted sweep and an empty one are otherwise indistinguishable. Contract:
+  `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; schema: `$defs/SweepItem` /
+  `$defs/SweepStub` in `handoff-protocol.md`. Strict from this release: no warn-only mode, no
+  opt-in environment variable, no per-stage exemption.
+- Agents emit; the orchestrator alone asks. Non-planning sweeps accumulate in the ledger and render
+  at the **existing** FN gate in batches of ≤4, grouped by originating stage, immediately before
+  the approve/reject call — which fires last and unmodified. No new gate, no per-stage round-trip
+  (`commands/worktask.md § Step C`; loop step 4.9 (a1)(a2)(c+)).
+- Sweep stubs reach the ledger because each stage writes them: `open_questions` is now part of
+  every agent's `state-patch.sh --facts` example, and
+  `handoff-harness.sh --validate-frontmatter --state` fails a stage whose frontmatter
+  stub never reached `facts.open_questions[]`. The orchestrator runs that invocation at **every**
+  stage completion (`commands/worktask.md § Step B.1`, loop step 6.5c), not only at DV, and an
+  unreadable ledger fails the parity check instead of skipping it. Without that pairing the sweep
+  was schema-valid, harness-clean, and silently dropped before the FN gate for 12 of 13 stages.
+- A closing-sweep stub's `ref` anchor is now verified to exist: `handoff-harness.sh` resolves each
+  stub's `ref` against the artifact it names and fails on a dangling one. The stub
+  carries no `options[]`, so that anchor is the only transport of what the FN gate renders — a
+  dangling ref would have made the orchestrator skip the item or invent its options. The three
+  sweep checks are fail-closed: a yq read error, a non-string id, or a scalar `open_questions`
+  each fail by name rather than pass, and a ref spelled with the artifact's own directory
+  (`.context/<artifact>-N.md#…`, the `refs:` convention) resolves to the artifact itself.
+- `## elicitation-sweep` is a **mandatory** H2 anchor in every stage artifact — the full items or
+  the explicit empty statement — enforced by `cache-lint.sh --anchor-lint` for all 13 stages with
+  no grace for artifacts written before this release. It is a single universal-anchor constant, not
+  thirteen per-stage rows.
+- **A sweep item can be answered at its own stage boundary.** `blocks_next_stage: true` on an item
+  routes it to a render immediately after its emitting stage completes, before the next stage is
+  dispatched — because a next stage that builds on a guess is what the sweep exists to prevent.
+  Everything else still batches at the FN gate. This adds no gate and changes no gate's firing
+  condition; the flag is set per item, never per stage. It is orthogonal to `class`, and joins
+  raise-only by OR, the same monotone idiom `decision < escalate` already uses
+  (`commands/worktask.md § Step C.0`; loop step 6.6).
+- `commands/worktask.md` and `commands/megatask.md` now declare `AskUserQuestion` in
+  `allowed-tools`; both called it from their bodies without declaring it.
 - **Stratum-weighted calibration.** A labelling budget smaller than the corpus forces an enriched
   sample, and selecting on the grader's own verdict while measuring agreement with it biases both
   rates. Each case now carries `population/sampled`; verified against the 0.0.1 labels, an enriched
@@ -39,7 +94,51 @@ All notable changes to this project are documented here. The format is based on 
   The scan was itself wrong in both directions before being pinned by tests: 12% on false
   positives, then 2% on missed phrasings.
 
+### Removed
+
+- **Both pre-sweep `open_questions[]` item shapes are gone.** The free-text string
+  (`"q1: … (AR to decide)"`) and the bare `{id, summary}` object are no longer valid in any
+  transport, and the `not: { required: [class] }` disjointness guard that kept them apart from the
+  stub went with them — with one shape there is nothing to discriminate. `handoff-harness.sh`
+  `check_sweep_stub_shape` is now the shape gate and rejects each defect by name (not a map, id not
+  `sw-<TASK_ID>-<n>`, class not `decision|escalate`, no `ref`), and `state-patch.sh --facts`
+  rejects an `open_questions` item lacking a string `.class` or `.ref`. Existing artifacts carrying
+  a legacy item must be migrated; there is no non-retroactive tolerance left anywhere.
+
 ### Changed
+
+- **PL speaks the same sweep contract as every other stage.** `skills/shared/figma-capture.md`'s
+  auth-pending and persist-failure questions are full sweep items under
+  `planning-<N>.md#elicitation-sweep` with `id: sw-PL<N>-<n>`, and the plan-gate batching section
+  now describes items under that anchor rather than a numbered list in `## summary`, which keeps a
+  one-line-per-item preview only. One resolution idiom across the pipeline: an answered item is
+  marked `status: "resolved"` with its `resolution`, **never deleted** — PL's plan-gate path used
+  to delete while all twelve other stages marked. Step A.4 still also appends `(auto-decided)` to
+  `facts.decisions[]`, a stated deviation from § Step C.5: AR/TL/DV read that array on stage entry,
+  and ≤4 PL items cannot evict AR's newest-8 ring.
+- **The sweep stub no longer carries `summary`.** `$defs/SweepStub` requires `[id, class, ref]`;
+  the question text is read from the item's `ref` anchor body, whose existence the harness verifies.
+  `summary` stays legal but optional; with the stub the only accepted item shape, an optional field
+  needs no discriminator. The driver is the 200-token budget on the whole `handoff:` block, a
+  property of the block rather than of the sweep.
+- **`facts.open_questions[]` merges monotonically.** A re-emitted stub carrying `status: open` can no
+  longer destroy a recorded `resolution`: `open < resolved` is joined, never overwritten, and the
+  matching writer-side rule is stated in `§ Item shape`. Scoped to `open_questions` only —
+  `facts.decisions` keeps last-writer-wins. Both arms are needed: the ledger clamp can evict the
+  incumbent a ledger-only fix would have refused against, and the artifact rule survives eviction.
+- Sweep answers are recorded in `facts.open_questions[].resolution`, never appended to
+  `facts.decisions[]` — that ring keeps only the newest 8, and a 13-stage run's sweep answers were
+  evicting the architectural decisions it exists to hold. `facts.open_questions[]` is itself now
+  clamped to the newest 12 with `status: resolved` entries evicted first, matching the existing
+  single-chokepoint clamp idiom.
+
+- `open_questions` moved from Optional to **Required** for all thirteen stages in the per-stage
+  required-field matrix, with the matching `*_REQ` lists in `handoff-harness.sh` updated in the same
+  change. `facts.open_questions[]` gained the optional `status: open|resolved` that eviction rule 2
+  already referenced but no schema defined.
+- `skills/agent-coordination/SKILL.md § Gate prompts` said the plan gate was the *one* checkpoint
+  while the same file's comparison table said two. Reconciled to two; the FN gate is where the
+  sweep renders.
 
 - **`request-plan` 0.3.0 → 0.4.0 — three drifted rule copies reconciled.** The 0.3.0 capture's 13
   graded failures were first diagnosed as a missing rule each. That was wrong: the skill states

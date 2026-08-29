@@ -66,7 +66,7 @@ Cheapest-first when only a judgment on the delta is needed (full reads stay avai
 
 ### Output Artifact
 
-Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `security-review-*.md`). H2 headings are the four mandatory anchors and nothing else (`handoff-protocol.md#anchor-allow-list`, enforced at the write by `hooks/anchor-preflight.sh` and again at the DR gate); everything else nests as H3.
+Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `security-review-*.md`). H2 headings are the five mandatory anchors — the four SR anchors plus the universal `## elicitation-sweep` — and nothing else (`handoff-protocol.md#anchor-allow-list`, enforced at the write by `hooks/anchor-preflight.sh` and again at the DR gate); everything else nests as H3.
 
 ```markdown
 # Security Review — [feature]
@@ -115,6 +115,10 @@ No material threat surface: [what the diff changes and why nothing crosses a bou
 ## blockers
 
 - [Critical/High finding blocking release, or "none"]
+
+## elicitation-sweep
+
+- [sw-SR<N>-<n> item, or "nothing to elicit"]
 ```
 
 ### Invocation
@@ -232,6 +236,8 @@ rules or mid-pattern file rules like `Read(secrets-*/config.json)`.
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic writes: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Frontmatter template to paste verbatim at artifact top: `stage-contracts.md#tpl-sr`. Prev→this label: `DR→SR`.
 
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage SR --prev DR` (`skills/worktask/scripts/`): it atomically patches `tasks.SR0` + the `DR→SR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter. Exit 3 means the artifact is not on disk — write it and re-run, never continue as if the ledger were patched. If the tool cannot run, do NOT skip silently: apply the Edit-direct fallback `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
@@ -242,7 +248,8 @@ Pass `--facts` in the **same call** — `state.json → facts.*` is the channel 
 
 ```bash
 state-patch.sh --stage SR --prev DR --facts '{
-  "decisions": [{"id":"sr-1","summary":"≤160 chars","ref":"security-review-0.md#findings"}]}'
+  "decisions": [{"id":"sr-1","summary":"≤160 chars","ref":"security-review-0.md#findings"}],
+  "open_questions": [{"id":"sw-SR0-1","class":"decision","ref":"security-review-0.md#elicitation-sweep"}]}'
 ```
 
 Union by `.id` (last writer wins, newest at tail): it never clobbers DR's entries and a re-run is byte-identical. Omitting it loses the finding silently. Canonical rule: `handoff-protocol.md#facts-union`.

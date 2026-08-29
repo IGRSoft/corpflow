@@ -260,6 +260,8 @@ A literal-string match is not a legal block boundary: before inserting a heading
 
 **Applies only in DV-execution mode** (PL0 routed DV0 here per § Stage Code: WE — Dual role). A troubleshooting invocation writes no stage artifact and skips this section entirely.
 
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim atop `.context/development-N.md`): `stage-contracts.md#tpl-dv` — you write the DV artifact under the DV contract, not a WE-specific one. Prev→this label: `TL→DV` (`AR→DV` when TL was skipped, `PL→DV` when both AR and TL were).
 
 ### State Patch — REQUIRED before return
@@ -274,7 +276,8 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 state-patch.sh --stage DV --prev <PREV> --facts '{
   "files_modified": ["skills/worktask/scripts/state-patch.sh"],
   "tests_added": ["tests/state-patch.bats"],
-  "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}]}'
+  "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}],
+  "open_questions": [{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep"}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail), so a re-run is byte-identical. Omitting it silently loses the change set — DR and QA read it from here. Canonical rule: `handoff-protocol.md#facts-union`.

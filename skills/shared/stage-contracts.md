@@ -54,7 +54,7 @@ Read the full file ONLY when the above is insufficient, documenting the reason i
 Every stage's output artifact MUST (full checklist: **Completion Verification** below):
 
 1. Start with a `---\nhandoff:\n` block — ≤30 lines, ≤200 tokens, per-stage template `#tpl-<CODE>`.
-2. Use H2 anchors from the per-stage allow-list in `handoff-protocol.md#anchor-allow-list` (kebab-case, no spaces, no underscores).
+2. Use H2 anchors from the per-stage allow-list in `handoff-protocol.md#anchor-allow-list` (kebab-case, no spaces, no underscores), plus the universal `## elicitation-sweep` anchor every artifact carries.
 3. Atomically patch `tasks.<ID>` and the `handoffs["<PREV>→<CODE>"]` edge into `.context/state.json`.
 
 ## Contract Table
@@ -163,6 +163,156 @@ When TL splits DV into DV0/DV1/DV2 (parallel streams):
 - All write to the same `.context/errors/developer.md` with distinct section headers (`## DV0 Retry 1 — …`, `## DV1 Retry 1 — …`)
 - Output artifact is a single `.context/development-N.md` — each sub-task appends its "Files Changed" block
 
+## Closing Elicitation Sweep
+
+Canonical contract for the pipeline's end-of-stage asking logic. Every other file points here; none restates it.
+
+### What it is and when it fires
+
+Before it hands off, every stage runs one closing pass over its own output and asks what it decided on the user's behalf that the user would rather decide. Each surviving question becomes a typed `open_questions[]` item (§ Item shape).
+
+**Mandatory for every stage.** A stage with nothing to ask emits an explicit `open_questions: []` plus a one-line "nothing to elicit" statement under its `## elicitation-sweep` heading — a mandatory H2 anchor in every artifact (`handoff-protocol.md#anchor-allow-list`). Silence is a contract violation, because an omitted sweep and an empty one are otherwise indistinguishable.
+
+#### Agents emit; the orchestrator asks
+
+Each stage writes its own stubs into `facts.open_questions[]` itself, in the `state-patch.sh --facts` payload of its self-patch call — nothing derives them from the frontmatter, and a stub that skips `--facts` never reaches a render (`handoff-protocol.md#facts-union`). No stage agent holds `AskUserQuestion`; the orchestrator alone renders.
+
+#### Where an item is answered
+
+Two destinations, selected per item by `blocks_next_stage` — never by stage:
+
+- **`blocks_next_stage: true`** → answered at **its own stage boundary**, before the next stage is dispatched, because the next stage would otherwise build on a guess. PL's sweep is the long-standing instance of this, answered at the plan gate.
+- **absent or `false`** → accumulates in the ledger and renders at the **FN gate**, grouped by originating stage, in batches of ≤4, immediately *before* the existing approve/reject call (`commands/worktask.md § Step C`; `skills/worktask/SKILL.md` loop step 4.9).
+
+**No new gate is created**, and the FN and plan gates keep their existing firing conditions. A blocking item does add a round-trip at its own boundary — that is the point of the flag, and it is why the flag is set per item rather than per stage.
+
+#### Facts are not sweep items
+
+A question whose answer some artifact already holds is the agent's to resolve, not the user's to answer; cost is not an exemption — an expensive lookup is delegated work. The rule is stated once at `skills/worktask/references/pl0-procedure.md § Facts are PL0's job; decisions are the user's` and binds every stage, not only PL.
+
+### Item shape
+
+One shape over three transports — the stub-plus-anchor split `key_decisions` / `facts.decisions` already uses, because the 30-line frontmatter budget cannot hold option bodies.
+
+| Transport | Carries |
+|---|---|
+| artifact body `## elicitation-sweep` | the FULL item: `options[]`, `recommended`, `rationale`. Canonical; mandatory anchor. |
+| `handoff.open_questions[]` frontmatter | a STUB: `{id, class, ref}` |
+| `facts.open_questions[]` ledger | the stub plus `stage`, `blocks_next_stage`, `status: open\|resolved` and `resolution` |
+| typed return `open_questions[]` | the full item inline |
+
+Schemas: `handoff-protocol.md#frontmatter-schema` `$defs/SweepItem` (full) and `$defs/SweepStub` (stub). `options[]` holds 2–4 `{label, detail}` entries with exactly one `recommended: true`; `class` is `decision` or `escalate`; `rationale` is one line; `ref` anchors into the emitting stage's own artifact, which the orchestrator resolves at render time.
+
+#### The stub carries no summary
+
+`summary` is **optional** on the stub and canonical in the artifact body: the render reads the question text from the `ref` anchor, whose existence `handoff-harness.sh` verifies. Optional, not forbidden — the stub is the only accepted item shape, so an optional field needs no discriminator to keep it apart from anything else.
+
+The driver is the **200-token budget on the whole `handoff:` block**, enforced by `handoff-harness.sh` over the extracted frontmatter. It is a property of the block, not of the sweep: on a review stage `key_decisions` dominates, and shortening the stub alone will not bring an over-budget block back under.
+
+#### A re-emitted stub carries its answer forward
+
+When a stage re-emits an item it already emitted — a rework round, a retry — it MUST carry the existing `status` and `resolution` forward rather than re-emitting the item as open. `open < resolved` is monotone in both transports: the ledger union refuses the downgrade (`state-patch.sh`), and this rule is the artifact-side half, which is the one that survives ledger eviction. Re-marking a settled item "open" has already destroyed a recorded answer once in this repository.
+
+#### Ledger bounds
+
+At most **4 items per stage** (the ask tool's questions-per-call ceiling, so one stage never needs
+splitting). `state-patch.sh` clamps `facts.open_questions[]` to the **newest 12**, and the clamp is
+**resolved-first**: every unresolved item survives ahead of every resolved one, because an
+unresolved item is still owed a render at the FN gate while a resolved one is already eviction bait
+under eviction-order rule 2. Same single-chokepoint idiom as `facts.decisions` (newest 8) and
+`facts.dispatched_agents` (6, launched-survive-first).
+
+##### Ledger bounds — why 12
+
+12 is a **deliberate bound, not a default**: it is three stages' worth at the per-stage cap, chosen
+against a ~500-token ledger budget that a 13-stage run would otherwise blow. It is reachable — more
+than 12 simultaneously-unresolved items will drop the oldest — and that trade was made knowingly
+rather than discovered.
+
+Sweep answers are recorded in the item's own `resolution` field, **not** appended to
+`facts.decisions[]`: that ring holds 8 and a 13-stage run would evict architectural decisions with
+sweep answers.
+
+#### Item ids
+
+`sw-<TASK_ID>-<n>` — `sw-AR0-1`, `sw-DV1-2`. Task-scoped, because the ledger unions `open_questions[]` on `.id` (`handoff-protocol.md#facts-union`): an unscoped `q1` would silently replace PL's. Deterministic, so a stage re-run is byte-identical.
+
+### Sweep obligation matrix
+
+One row per stage code, the vocabulary being `stage-codes.md § Primary Stages` UNION the `handoff-protocol.md § Handoff Schemas` titles. The obligation is identical for all thirteen; the row set is what makes "all cases" enumerable instead of asserted. No stage is exempt and there is no lower tier: a missing sweep fails the run.
+
+The **Surfaced by** column reads *non-blocking / blocking*: which side applies is decided per item by `blocks_next_stage` (§ Where an item is answered), never by the stage code. `commands/worktask.md § Step C` renders the non-blocking side; § Step C.0 renders the blocking side at each boundary.
+
+#### Matrix — PL to DR
+
+| Code | Obligation | Surfaced by (non-blocking / blocking) | Unattended fallback |
+|---|---|---|---|
+| PL | Required | plan gate / plan gate (PL's boundary IS the plan gate) | auto-decided at § Step A.4, else recorded |
+| AR | Required | FN gate / this stage's own boundary | recorded, not prompted |
+| TL | Required | FN gate / this stage's own boundary | recorded, not prompted |
+| DV | Required | FN gate / this stage's own boundary | recorded, not prompted |
+| DR | Required | FN gate / this stage's own boundary | recorded, not prompted |
+
+#### Matrix — SR to RE
+
+| Code | Obligation | Surfaced by (non-blocking / blocking) | Unattended fallback |
+|---|---|---|---|
+| SR | Required | FN gate / this stage's own boundary | recorded, not prompted |
+| QA | Required | FN gate / this stage's own boundary | recorded, not prompted |
+| DC | Required | FN gate / this stage's own boundary | recorded, not prompted |
+| RE | Required | FN gate / this stage's own boundary | recorded, not prompted |
+
+#### Matrix — FN to ET
+
+| Code | Obligation | Surfaced by (non-blocking / blocking) | Unattended fallback |
+|---|---|---|---|
+| FN | Required | recorded for ST / FN's own boundary, before ST | recorded, not prompted |
+| ST | Required | recorded as follow-ups / ST's own boundary | recorded, not prompted |
+| IR | Required | FN gate / this stage's own boundary | `--emergency` bypasses both gates: recorded |
+| ET | Required | FN gate / this stage's own boundary | recorded, not prompted |
+
+### Auto-answer boundary
+
+Auto-answerable: `class: decision` items whose recommendation is reversible, in-scope, posture-neutral and spend-free. Never auto-answerable: the **escalation class**, enumerated once at `commands/worktask.md § Escalation guard (BINDING)` and deliberately not re-listed here.
+
+There is exactly one auto-answer authority — the existing Fable decision delegate, widened to sweep items (`skills/worktask/SKILL.md § Auto-Decision Delegation`), running only under `decision_gate: "auto"`. A deterministic non-model hook is deferred to a follow-up; its mechanism would be the `PreToolUse` `{"updatedInput": …}` path in `skills/agent-coordination/references/hook-monitoring.md`.
+
+#### Self-labels raise, never lower
+
+`class` is the ordered lattice `decision < escalate`, and the orchestrator's effective class is `max(agent label, orchestrator label)` — computed before any auto-answer, so raising is honoured and lowering is refused by construction. `blocks_next_stage` is the 2-element lattice `false < true` and joins the same way, by OR: the orchestrator may raise an item to blocking, never clear the agent's flag. One idiom, two axes, and they are orthogonal — an `escalate` item may or may not block. Mechanism: `commands/worktask.md § Escalation guard — raise-only self-labels`. Escalation-class items keep today's behaviour: they stop for the user even under a bypassed gate, and park under `/megatask`.
+
+### Not the sweep
+
+The sweep carries decisions a person would want to make. Four cases already own a channel; routing them through the sweep duplicates a contract instead of reusing it. Never where a channel already exists.
+
+| Case | Use this instead | Defined at |
+|---|---|---|
+| runtime evidence is needed | `requests_test_evidence:` in the stage artifact | `skills/shared/testing-strategy.md § Test-Execution Authority` |
+| a stage PL0 skipped is needed | `requests_stage_escalation:` in the stage artifact | `skills/estimation-methodology/SKILL.md § Escalation schema` |
+| a stage verdict | `handoff.verdict` + `facts.verdicts` | `skills/worktask/references/handoff-protocol.md` § Per-stage required-field matrix |
+| an ethics decision | `ethics-review-N.md` `Decision ∈ {pass, block, conditional}` | `skills/shared/stage-contracts.md` § #tpl-et |
+
+### Unattended fallbacks
+
+Recording never stops; only prompting does. One behaviour row per carrier, each carrier detected from its own defining field.
+
+#### Fallbacks — gate carriers
+
+| Carrier | Detected by | Sweep behaviour |
+|---|---|---|
+| plan gate bypassed | `PL0.metadata.plan_gate == "bypass"` | PL's sweep recorded, not prompted; non-PL sweeps still batch at FN |
+| FN gate bypassed | `PL0.metadata.fn_gate == "bypass"` | collect and audit `sweep_recorded`; escalate-class items also audit `sweep_escalation_unprompted`. Subject is the boundary that would have rendered — `FN<N>` for a batched item, `<CODE><N>` for a blocking one |
+| auto decision gate | `PL0.metadata.decision_gate == "auto"` | `decision` items answered by the delegate; `escalate` items still hold the FN checkpoint |
+
+#### Fallbacks — unattended lanes
+
+| Carrier | Detected by | Sweep behaviour |
+|---|---|---|
+| `--emergency` | no PL task in `tasks` | both gates bypass, so every sweep is record-only |
+| `/megatask` per issue | `PL0.metadata.megatask_group` | PARK on any escalate item, at whichever boundary it surfaces: `workspace.json.execution.status: "failed"`, `execution.reason: "parked_escalation"`, `escalation_parked` audit row with that boundary's `<CODE><N>` subject |
+| `CORPFLOW_NONINTERACTIVE=1` | environment | record, never prompt |
+| headless dispatch | external runner | data-only by construction — no stage agent holds the ask tool |
+
 ## Per-Stage Frontmatter Templates
 
 Canonical YAML templates for the `handoff:` block atop every stage artifact. Each agent's `## Handoff Protocol` pastes the matching block verbatim (with substitutions) into `.context/<artifact>-N.md` (N per [#run-index-resolution](#run-index-resolution)). These are the single source of truth — agents MUST NOT diverge from the field shape below. To change a template, edit here, then re-run `cache-lint.sh --frontmatter-template-lint agents/*.md` to revalidate every agent's inline copy.
@@ -187,7 +337,7 @@ handoff:
     - { id: pd1, summary: "<decision>", anchor: "planning-N.md#scope" }
   next_stage_focus: "<imperative: what AR must grep/design>"
   open_questions:
-    - "q1: <question text> (AR to decide)"
+    - { id: sw-PL0-1, class: decision, ref: "planning-N.md#elicitation-sweep" }
   refs:
     spec: .context/attachments/<spec-file>
     plan: .context/planning-N.md#requirements
@@ -195,6 +345,8 @@ handoff:
 ```
 
 Prev→this label: `USER→PL`.
+
+#### rejection_reason — after a plan-gate rejection
 
 After a plan-gate rejection, the revised `planning-N.md` MUST set `rejection_reason:` to the user's gate feedback (verbatim or condensed) — distinct from the `## Key Decisions` narrative — so downstream stages and ST retrospectives can cite it without reconstructing it from `audit.jsonl`. Omit the field on a first, un-rejected draft.
 
@@ -210,7 +362,7 @@ handoff:
     - { id: ad1, summary: "<decision>", anchor: "architecture-N.md#decisions" }
   next_stage_focus: "<imperative — addressed to TL when TL is in the plan, else to DV>"
   open_questions:
-    - "q3: <question text> (TL to decide; DV when TL is not in the plan)"
+    - { id: sw-AR0-1, class: decision, ref: "architecture-N.md#elicitation-sweep" }
   refs:
     plan: .context/planning-N.md#requirements
     decisions: architecture-N.md#decisions
@@ -230,6 +382,8 @@ handoff:
   verdict: ok                  # ok / blocked / escalate
   summary: "<one-line coordination summary ≤200 chars>"
   next_stage_focus: "<imperative: DV batch order + parallelization>"
+  open_questions:
+    - { id: sw-TL0-1, class: decision, ref: "coordination-N.md#elicitation-sweep" }
   refs:
     plan: .context/planning-N.md#requirements
     arch: .context/architecture-N.md#decisions   # ONLY when AR ran; omit otherwise
@@ -251,11 +405,13 @@ handoff:
     - path/to/file1.md
     - path/to/file2.md
   next_stage_focus: "<imperative: what DR/QA must focus on>"
+  open_questions:
+    - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep" }
   refs:
-    decisions: architecture-N.md#decisions      # ONLY when AR ran; omit otherwise
-    coordination: coordination-N.md#fan-out  # ONLY when TL ran; omit otherwise
+    decisions: architecture-N.md#decisions     # ONLY when AR ran; omit
+    coordination: coordination-N.md#fan-out   # ONLY when TL ran; omit
     tests: development-N.md#tests-added
-  architecture:                # ONLY when AR ran; omit the whole object otherwise
+  architecture:                # ONLY when AR ran; omit the object otherwise
     ref: architecture-N.md#decisions
     applied: true              # truthful; see the architecture reference contract below
 ---
@@ -293,6 +449,8 @@ handoff:
   summary: "<N files reviewed. M findings, all addressed / K blockers remain>"
   key_decisions:
     - { id: dr1, summary: "<finding or approval>", anchor: "developer-review-N.md#findings" }
+  open_questions:
+    - { id: sw-DR0-1, class: decision, ref: "developer-review-N.md#elicitation-sweep" }
   refs:
     dev: development-N.md#files-changed
     findings: developer-review-N.md#findings
@@ -311,6 +469,8 @@ handoff:
   summary: "<N files reviewed. M security findings>"
   key_decisions:
     - { id: sr1, summary: "<security finding>", anchor: "security-review-N.md#findings" }
+  open_questions:
+    - { id: sw-SR0-1, class: decision, ref: "security-review-N.md#elicitation-sweep" }
   refs:
     dev: development-N.md#files-changed
     findings: security-review-N.md#findings
@@ -331,6 +491,8 @@ handoff:
     - tests/added/test-file.sh
   key_decisions:
     - { id: qa1, summary: "Coverage X%, target met", anchor: "testing-N.md#coverage" }
+  open_questions:
+    - { id: sw-QA0-1, class: decision, ref: "testing-N.md#elicitation-sweep" }
   refs:
     dev: development-N.md#files-changed
     results: testing-N.md#results
@@ -349,6 +511,8 @@ handoff:
   summary: "Updated N documentation files. Cross-references added."
   files_touched:
     - docs/file1.md
+  open_questions:
+    - { id: sw-DC0-1, class: decision, ref: "documentation-N.md#elicitation-sweep" }
   refs:
     dev: development-N.md#files-changed
     docs: documentation-N.md#files-changed
@@ -370,6 +534,8 @@ handoff:
     - MEMORY.md
   key_decisions:
     - { id: re1, summary: "Version X.Y.Z", anchor: "release-N.md#version" }
+  open_questions:
+    - { id: sw-RE0-1, class: decision, ref: "release-N.md#elicitation-sweep" }
   refs:
     artifacts: release-N.md#artifacts
     version: release-N.md#version
@@ -389,6 +555,8 @@ handoff:
   files_touched:
     - .context/complete-summary-N.md
   next_stage_focus: "ST approves merge and confirms MEMORY.md version bump"
+  open_questions:
+    - { id: sw-FN0-1, class: decision, ref: "complete-summary-N.md#elicitation-sweep" }
   refs:
     summary: .context/complete-summary-N.md
     ledger: .context/state.json
@@ -407,6 +575,8 @@ handoff:
   summary: "Approved. <N follow-ups filed or 'No follow-ups'>."
   key_decisions:
     - { id: st1, summary: "Approve merge", anchor: "complete-summary-N.md#decision" }
+  open_questions:
+    - { id: sw-ST0-1, class: decision, ref: "retrospective-N.md#elicitation-sweep" }
   refs:
     summary: .context/complete-summary-N.md
 ---
@@ -425,6 +595,8 @@ handoff:
   key_decisions:
     - { id: ir1, summary: "Root cause identified", anchor: "incident-N.md#root-cause" }
   next_stage_focus: "DV implements fix; QA runs regression"
+  open_questions:
+    - { id: sw-IR0-1, class: decision, ref: "incident-N.md#elicitation-sweep" }
   refs:
     root_cause: incident-N.md#root-cause
     fix_plan: incident-N.md#fix-plan
@@ -444,6 +616,8 @@ handoff:
   key_decisions:
     - { id: et1, summary: "Compliance verdict", anchor: "ethics-review-N.md#findings" }
   next_stage_focus: "Invoking stage resumes after ET verdict"
+  open_questions:
+    - { id: sw-ET0-1, class: decision, ref: "ethics-review-N.md#elicitation-sweep" }
   refs:
     review: .context/ethics-review-N.md
     ledger: .context/state.json

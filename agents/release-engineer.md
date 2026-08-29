@@ -199,6 +199,8 @@ version, reviews the changelog, executes the release, and executes the rollback 
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-re`. Prev→this label: `DC→RE` (or `QA→RE` on the emergency pipeline, `IR→DV→DR→QA→RE→FN`, where DC does not run).
 
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage RE --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `DC` normally and `QA` on the emergency pipeline — pick it from the `stages` keys actually present in `.context/state.json` — to atomically patch `tasks.RE0` + the corresponding `DC→RE` / `QA→RE` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
@@ -210,7 +212,8 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 ```bash
 state-patch.sh --stage RE --prev <PREV> --facts '{
   "decisions": [{"id":"re-version","summary":"v4.1.0 (minor: facts-union op)","ref":"release-0.md#version"}],
-  "files_modified": ["CHANGELOG.md"]}'
+  "files_modified": ["CHANGELOG.md"],
+  "open_questions": [{"id":"sw-RE0-1","class":"decision","ref":"release-0.md#elicitation-sweep"}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail): it never clobbers an upstream stage's entries and a re-run is byte-identical. Omitting it loses the version silently — FN reads it from here. Canonical rule: `handoff-protocol.md#facts-union`.

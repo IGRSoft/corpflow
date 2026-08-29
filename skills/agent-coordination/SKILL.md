@@ -576,4 +576,8 @@ They compose: a DV agent inside a worktask may spin up a native dynamic workflow
 
 ### Gate prompts (AskUserQuestion)
 
-> `AskUserQuestion` prompts are reserved for genuine decisions needing user input: the PL plan-approval gate is the one such checkpoint; intra-loop transitions proceed without confirmation. These dialogs do not auto-continue on idle, so a PL/FN gate park holds indefinitely until the operator answers — the idle-timeout auto-continue is an explicit `/config` opt-in and MUST stay off on hosts running gated worktasks.
+> `AskUserQuestion` prompts are reserved for genuine decisions needing user input. Two **gates** exist and only two — the PL plan-approval gate and the FN finalization gate — and the FN gate additionally renders the batched closing elicitation sweep (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`) immediately before its approve/reject call. Intra-loop stage transitions still proceed without confirmation, with one bounded exception: a sweep item marked `blocks_next_stage` is rendered at its own stage boundary, because the next stage would otherwise build on a guess. That is a render, not a gate — it creates no new approval carrier and changes no gate's firing condition — and it is opt-in per item, so the ordinary transition is unchanged.
+
+#### Gate prompts — idle behaviour
+
+These dialogs do not auto-continue on idle, so a PL/FN gate park holds indefinitely until the operator answers — the idle-timeout auto-continue is an explicit `/config` opt-in and MUST stay off on hosts running gated worktasks.

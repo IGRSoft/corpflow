@@ -68,7 +68,7 @@ usage() {
 # POSIX-compatible lookup (bash 3.2 has no associative arrays).
 anchors_for_stage() {
   case "$1" in
-    PL) echo "requirements acceptance-criteria scope out-of-scope risks complexity stages" ;;
+    PL) echo "requirements acceptance-criteria scope out-of-scope risks complexity stages summary" ;;
     AR) echo "decisions trade-offs patterns integration-points schemas open-questions risks" ;;
     TL) echo "fan-out shared-snippets sequence risks" ;;
     DV) echo "files-changed tests-added deviations follow-ups" ;;
@@ -84,6 +84,22 @@ anchors_for_stage() {
     *) echo "" ;;
   esac
 }
+
+# Anchors REQUIRED in every stage artifact, on top of that stage's own row. Stage-independent
+# obligations live here rather than in thirteen copies of anchors_for_stage:
+#   elicitation-sweep  the closing sweep's artifact-body transport — the full items or the
+#                      explicit empty statement. Mandatory for all 13 stages, no grace.
+UNIVERSAL_ANCHORS='elicitation-sweep'
+
+# Anchors ALLOWED in any stage artifact but required in none, so neither retroactively
+# fails an older artifact nor is reported as unexpected in a newer one:
+#   rework-<N>         the scope-addition re-entry section agents/technical-lead.md reads
+#                      at the DR gate — a shipped convention this lint used to reject.
+#   re-review          the DR second-pass section, same class as rework-<N>: a review that
+#                      re-runs after rework records it here rather than rewriting its verdict.
+#   design-preview     PL's Figma capture block, written only when a Figma URL is present.
+#   test-strategy      PL's test-strategy section; pl0-procedure.md never mandates it.
+OPTIONAL_ANCHOR_RE='^(rework-[0-9]+|re-review|design-preview|test-strategy)$'
 
 # ---------- Frontmatter stage extractor ----------
 # Prints stage code on stdout; empty if not found.
@@ -123,6 +139,10 @@ anchor_lint() {
     echo "anchor-lint: $artifact: unknown stage '$stage' (no anchor allow-list)" >&2
     exit 1
   fi
+  # Appended AFTER the unknown-stage check so an unrecognised stage still reports as such
+  # rather than as a missing sweep heading. Both the missing loop and the `comm` below read
+  # $expected, so one append makes the anchor required and accepted in a single stroke.
+  expected="$expected $UNIVERSAL_ANCHORS"
 
   # Extract H2 headings (skip H2 inside fenced code blocks).
   local found
@@ -145,7 +165,8 @@ anchor_lint() {
   done
 
   local extras
-  extras=$(comm -23 <(echo "$found") <(printf '%s\n' $expected | sort -u))
+  extras=$(comm -23 <(echo "$found" | grep -Ev "$OPTIONAL_ANCHOR_RE" || true) \
+                    <(printf '%s\n' $expected | sort -u))
 
   if [[ ${#missing[@]} -gt 0 || -n "$extras" ]]; then
     echo "anchor-lint: $artifact (stage=$stage) FAIL" >&2
@@ -575,11 +596,55 @@ none
 ## follow-ups
 
 none
+
+## elicitation-sweep
+
+nothing to elicit
 EOF
   if "$0" --anchor-lint "$td/development.md" >/dev/null 2>&1; then
     echo "self-test: anchor-lint pass: ok"
   else
     echo "self-test: anchor-lint pass: FAIL" >&2; exit 1
+  fi
+
+  # Negative anchor lint: the four DV anchors are all present, the universal one is not.
+  # Keyed on the sweep heading alone so a regression in the UNIVERSAL_ANCHORS append cannot
+  # hide behind a stage anchor that is also missing.
+  cat > "$td/no-sweep.md" <<'EOF'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "no sweep heading"
+  refs: { plan: planning-0.md#requirements }
+---
+
+# Development
+
+## files-changed
+
+x
+
+## tests-added
+
+x
+
+## deviations
+
+none
+
+## follow-ups
+
+none
+EOF
+  # Captured rather than piped: `pipefail` would otherwise read the (expected) non-zero
+  # lint exit as the pipeline's verdict and fail the case it is meant to pass.
+  local no_sweep_out=""
+  no_sweep_out=$("$0" --anchor-lint "$td/no-sweep.md" 2>&1) || true
+  if grep -q 'missing: elicitation-sweep' <<< "$no_sweep_out"; then
+    echo "self-test: anchor-lint universal sweep anchor: ok"
+  else
+    echo "self-test: anchor-lint universal sweep anchor: FAIL (missing heading accepted)" >&2; exit 1
   fi
 
   # Negative anchor lint: missing anchor
